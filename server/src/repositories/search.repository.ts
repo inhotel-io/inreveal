@@ -109,6 +109,10 @@ export interface SearchAlbumOptions {
   albumIds?: string[];
 }
 
+export interface SearchSpaceOptions {
+  spaceId?: string;
+}
+
 export interface SearchOrderOptions {
   orderDirection?: 'asc' | 'desc';
 }
@@ -128,7 +132,8 @@ type BaseAssetSearchOptions = SearchDateOptions &
   SearchPeopleOptions &
   SearchTagOptions &
   SearchAlbumOptions &
-  SearchOcrOptions;
+  SearchOcrOptions &
+  SearchSpaceOptions;
 
 export type AssetSearchOptions = Omit<BaseAssetSearchOptions, 'visibility'> &
   SearchRelationOptions & { visibility?: AssetVisibility | 'not-locked' };
@@ -160,7 +165,8 @@ export type SmartSearchOptions = SearchDateOptions &
   SearchUserIdOptions &
   SearchPeopleOptions &
   SearchTagOptions &
-  SearchOcrOptions & { visibility?: AssetVisibility | 'not-locked'; viewingUserId?: string };
+  SearchOcrOptions &
+  SearchSpaceOptions & { visibility?: AssetVisibility | 'not-locked'; viewingUserId?: string };
 
 export type LargeAssetSearchOptions = AssetSearchOptions & { minFileSize?: number };
 
