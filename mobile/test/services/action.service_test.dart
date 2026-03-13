@@ -8,6 +8,7 @@ import 'package:immich_mobile/entities/store.entity.dart';
 import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
 import 'package:immich_mobile/repositories/download.repository.dart';
+import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
 import 'package:immich_mobile/services/action.service.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -15,6 +16,8 @@ import '../infrastructure/repository.mock.dart';
 import '../repository.mocks.dart';
 
 class MockDownloadRepository extends Mock implements DownloadRepository {}
+
+class MockSharedSpaceApiRepository extends Mock implements SharedSpaceApiRepository {}
 
 void main() {
   late ActionService sut;
@@ -28,6 +31,7 @@ void main() {
   late MockAssetMediaRepository assetMediaRepository;
   late MockDownloadRepository downloadRepository;
   late MockTagService tagService;
+  late MockSharedSpaceApiRepository sharedSpaceApiRepository;
 
   late Drift db;
 
@@ -55,6 +59,7 @@ void main() {
     assetMediaRepository = MockAssetMediaRepository();
     downloadRepository = MockDownloadRepository();
     tagService = MockTagService();
+    sharedSpaceApiRepository = MockSharedSpaceApiRepository();
 
     sut = ActionService(
       assetApiRepository,
@@ -66,6 +71,7 @@ void main() {
       assetMediaRepository,
       downloadRepository,
       tagService,
+      sharedSpaceApiRepository,
     );
   });
 
