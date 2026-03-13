@@ -24,7 +24,7 @@
     type AlbumResponseDto,
     type AssetResponseDto,
   } from '@immich/sdk';
-  import { Icon, IconButton, LoadingSpinner, Text } from '@immich/ui';
+  import { Icon, IconButton, modalManager, Text } from '@immich/ui';
   import {
     mdiCamera,
     mdiCameraIris,
@@ -43,6 +43,7 @@
   import ImageThumbnail from '../assets/thumbnail/ImageThumbnail.svelte';
   import PersonSidePanel from '../faces-page/PersonSidePanel.svelte';
   import OnEvents from '../OnEvents.svelte';
+  import LoadingSpinner from '$lib/components/shared-components/LoadingSpinner.svelte';
   import UserAvatar from '../shared-components/UserAvatar.svelte';
   import AlbumListItemDetails from './AlbumListItemDetails.svelte';
 
