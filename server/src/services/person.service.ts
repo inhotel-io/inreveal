@@ -40,7 +40,7 @@ import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { BaseService } from 'src/services/base.service';
 import { JobItem, JobOf } from 'src/types';
 import { getDimensions } from 'src/utils/asset.util';
-import { ImmichFileResponse } from 'src/utils/file';
+import { ImmichMediaResponse } from 'src/utils/file';
 import { mimeTypes } from 'src/utils/mime-types';
 import { batched, findOrFail, isFacialRecognitionEnabled } from 'src/utils/misc';
 import { Point, transformPoints } from 'src/utils/transform';
@@ -159,18 +159,18 @@ export class PersonService extends BaseService {
     return this.personRepository.getStatistics(id);
   }
 
-  async getThumbnail(auth: AuthDto, id: string): Promise<ImmichFileResponse> {
+  async getThumbnail(auth: AuthDto, id: string): Promise<ImmichMediaResponse> {
     await this.requireAccess({ auth, permission: Permission.PersonRead, ids: [id] });
     const person = await this.personRepository.getById(id);
     if (!person || !person.thumbnailPath) {
       throw new NotFoundException();
     }
 
-    return new ImmichFileResponse({
-      path: person.thumbnailPath,
-      contentType: mimeTypes.lookup(person.thumbnailPath),
-      cacheControl: CacheControl.PrivateWithoutCache,
-    });
+    return this.serveFromBackend(
+      person.thumbnailPath,
+      mimeTypes.lookup(person.thumbnailPath),
+      CacheControl.PrivateWithoutCache,
+    );
   }
 
   async create(auth: AuthDto, dto: PersonCreateDto): Promise<PersonResponseDto> {
@@ -251,7 +251,8 @@ export class PersonService extends BaseService {
 
   @Chunked()
   private async removeAllPeople(people: { id: string; thumbnailPath: string }[]) {
-    await Promise.all(people.map((person) => this.storageRepository.unlink(person.thumbnailPath)));
+    const files = people.map((person) => person.thumbnailPath);
+    await this.jobRepository.queue({ name: JobName.FileDelete, data: { files } });
     await this.personRepository.delete(people.map((person) => person.id));
     this.logger.debug(`Deleted ${people.length} people`);
   }
@@ -521,6 +522,15 @@ export class PersonService extends BaseService {
     if (personId) {
       this.logger.debug(`Assigning face ${id} to person ${personId}`);
       await this.personRepository.reassignFaces({ faceIds: [id], newPersonId: personId });
+    }
+
+    // Queue shared space face matching for any spaces containing this asset
+    const spaceIds = await this.sharedSpaceRepository.getSpaceIdsForAsset(face.assetId);
+    for (const { spaceId } of spaceIds) {
+      await this.jobRepository.queue({
+        name: JobName.SharedSpaceFaceMatch,
+        data: { spaceId, assetId: face.assetId },
+      });
     }
 
     return JobStatus.Success;
