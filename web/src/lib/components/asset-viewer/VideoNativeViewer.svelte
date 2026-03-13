@@ -4,10 +4,15 @@
   import { assetViewerFadeDuration } from '$lib/constants';
   import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
   import { castManager } from '$lib/managers/cast-manager.svelte';
-  import { autoPlayVideo, loopVideo as loopVideoPreference } from '$lib/stores/preferences.store';
+  import {
+    autoPlayVideo,
+    loopVideo as loopVideoPreference,
+    videoViewerMuted,
+    videoViewerVolume,
+  } from '$lib/stores/preferences.store';
   import { getAssetMediaUrl, getAssetPlaybackUrl } from '$lib/utils';
   import { AssetMediaSize, type AssetResponseDto } from '@immich/sdk';
-  import { Icon, LoadingSpinner } from '@immich/ui';
+  import { Icon } from '@immich/ui';
   import {
     mdiCheck,
     mdiChevronLeft,
@@ -38,6 +43,7 @@
   import { useSwipe, type SwipeCustomEvent } from 'svelte-gestures';
   import { t } from 'svelte-i18n';
   import { fade } from 'svelte/transition';
+  import LoadingSpinner from '$lib/components/shared-components/LoadingSpinner.svelte';
 
   interface Props {
     asset: AssetResponseDto;
@@ -74,6 +80,7 @@
       ? getAssetMediaUrl({ id: assetId, size: AssetMediaSize.Original, cacheKey })
       : getAssetPlaybackUrl({ id: assetId, cacheKey }),
   );
+  let isScrubbing = $state(false);
   const aspectRatio = $derived(asset.width && asset.height ? `${asset.width} / ${asset.height}` : undefined);
   let showVideo = $state(false);
   let hasFocused = $state(false);
@@ -98,7 +105,7 @@
 
   const handleCanPlay = async (video: HTMLVideoElement) => {
     try {
-      if (!video.paused) {
+      if (!video.paused && !isScrubbing) {
         await video.play();
         onVideoStarted();
       }
@@ -182,6 +189,9 @@
           class="h-full object-contain"
           oncanplay={(e) => handleCanPlay(e.currentTarget)}
           onended={onVideoEnded}
+          onvolumechange={(e) => ($videoViewerMuted = e.currentTarget.muted)}
+          onseeking={() => (isScrubbing = true)}
+          onseeked={() => (isScrubbing = false)}
           onplaying={(e) => {
             if (!hasFocused) {
               e.currentTarget.focus();
@@ -189,6 +199,8 @@
             }
           }}
           onclose={onClose}
+          muted={$videoViewerMuted}
+          bind:volume={$videoViewerVolume}
           poster={getAssetMediaUrl({ id: asset.id, size: AssetMediaSize.Preview, cacheKey })}
           src={assetFileUrl}
         ></video>
