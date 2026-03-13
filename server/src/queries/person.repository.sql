@@ -120,6 +120,7 @@ where
 -- PersonRepository.getFaceForFacialRecognitionJob
 select
   "asset_face"."id",
+  "asset_face"."assetId",
   "asset_face"."personId",
   "asset_face"."sourceType",
   (
@@ -176,7 +177,9 @@ select
     where
       "asset_file"."assetId" = "asset"."id"
       and "asset_file"."type" = 'preview'
-      and "asset_file"."isEdited" = false
+      and "asset_file"."isEdited" = $1
+    limit
+      $2
   ) as "previewPath"
 from
   "person"
@@ -184,7 +187,7 @@ from
   inner join "asset" on "asset_face"."assetId" = "asset"."id"
   left join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
 where
-  "person"."id" = $1
+  "person"."id" = $3
   and "asset_face"."deletedAt" is null
 
 -- PersonRepository.reassignFace
@@ -200,10 +203,13 @@ select
 from
   "person"
 where
-  "person"."ownerId" = $1
-  and f_unaccent ("person"."name") %>> f_unaccent ($2)
-order by
-  f_unaccent ("person"."name") <->>> f_unaccent ($3)
+  (
+    "person"."ownerId" = $1
+    and (
+      lower("person"."name") like $2
+      or lower("person"."name") like $3
+    )
+  )
 limit
   $4
 
@@ -225,12 +231,12 @@ select
 from
   "asset_face"
   left join "asset" on "asset"."id" = "asset_face"."assetId"
+  and "asset_face"."personId" = $1
   and "asset"."visibility" = 'timeline'
   and "asset"."deletedAt" is null
 where
   "asset_face"."deletedAt" is null
   and "asset_face"."isVisible" is true
-  and "asset_face"."personId" = $1
 
 -- PersonRepository.getNumberOfPeople
 select
