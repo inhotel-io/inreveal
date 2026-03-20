@@ -172,6 +172,7 @@ describe(ServerService.name, () => {
         mapDarkStyleUrl: 'https://tiles.immich.cloud/v1/style/dark.json',
         mapLightStyleUrl: 'https://tiles.immich.cloud/v1/style/light.json',
         maintenanceMode: false,
+        demoMode: false,
       });
       expect(mocks.systemMetadata.get).toHaveBeenCalled();
     });
