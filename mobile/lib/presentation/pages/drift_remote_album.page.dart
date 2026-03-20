@@ -145,7 +145,7 @@ class _RemoteAlbumPageState extends ConsumerState<RemoteAlbumPage> {
 
         ImmichToast.show(context: context, msg: context.t.album_deleted, toastType: ToastType.success);
 
-        unawaited(context.pushRoute(const DriftAlbumsRoute()));
+        unawaited(context.pushRoute(const DriftLibraryRoute()));
       } catch (e) {
         if (!context.mounted) {
           return;
