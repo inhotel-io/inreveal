@@ -52,7 +52,7 @@ class DriftAlbumOptionsPage extends HookConsumerWidget {
           return;
         }
 
-        unawaited(context.navigateTo(const DriftAlbumsRoute()));
+        unawaited(context.navigateTo(const DriftLibraryRoute()));
       } catch (_) {
         showErrorMessage();
       }
