@@ -41,17 +41,15 @@
 
 <UserPageLayout title={data.meta.title}>
   {#snippet buttons()}
-    {#if !authManager.isDemo}
-      <Button shape="round" size="small" leadingIcon={mdiPlus} onclick={handleCreate}>
-        {$t('spaces_create')}
-      </Button>
-    {/if}
+    <Button shape="round" size="small" leadingIcon={mdiPlus} onclick={handleCreate}>
+      {$t('spaces_create')}
+    </Button>
   {/snippet}
 
   {#if spaces.length === 0}
     <EmptyPlaceholder
       text={$t('spaces_empty')}
-      onClick={authManager.isDemo ? undefined : handleCreate}
+      onClick={handleCreate}
       class="mt-10 mx-auto"
     />
   {:else}
