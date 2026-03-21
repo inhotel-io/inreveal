@@ -227,6 +227,11 @@ export enum Permission {
   SharedSpaceAssetRead = 'sharedSpaceAsset.read',
   SharedSpaceAssetDelete = 'sharedSpaceAsset.delete',
 
+  UserGroupCreate = 'userGroup.create',
+  UserGroupRead = 'userGroup.read',
+  UserGroupUpdate = 'userGroup.update',
+  UserGroupDelete = 'userGroup.delete',
+
   PersonCreate = 'person.create',
   PersonRead = 'person.read',
   PersonUpdate = 'person.update',
@@ -1040,6 +1045,7 @@ export enum ApiTag {
   Trash = 'Trash',
   UsersAdmin = 'Users (admin)',
   Users = 'Users',
+  UserGroups = 'User Groups',
   Views = 'Views',
   Workflows = 'Workflows',
 }
