@@ -208,13 +208,11 @@
       <SpaceLinkedLibraries {space} onChanged={onLibrariesChanged} />
     {:else}
       <!-- Members content -->
-      {#if isOwner}
-        <div class="border-b border-gray-100 px-5 py-3 dark:border-gray-800/50" data-testid="add-member-button">
-          <Button size="small" leadingIcon={mdiAccountPlusOutline} onclick={handleAddMember}>
-            {$t('spaces_add_member')}
-          </Button>
-        </div>
-      {/if}
+      <div class="border-b border-gray-100 px-5 py-3 dark:border-gray-800/50" data-testid="add-member-button">
+        <Button size="small" leadingIcon={mdiAccountPlusOutline} onclick={handleAddMember}>
+          {$t('spaces_add_member')}
+        </Button>
+      </div>
 
       <div data-testid="member-list">
         {#each members as member (member.userId)}
