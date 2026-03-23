@@ -52,7 +52,6 @@ class JobName {
   static const librarySyncFilesQueueAll = JobName._(r'LibrarySyncFilesQueueAll');
   static const librarySyncFiles = JobName._(r'LibrarySyncFiles');
   static const libraryScanQueueAll = JobName._(r'LibraryScanQueueAll');
-  static const hlsSessionCleanup = JobName._(r'HlsSessionCleanup');
   static const memoryCleanup = JobName._(r'MemoryCleanup');
   static const memoryGenerate = JobName._(r'MemoryGenerate');
   static const notificationsCleanup = JobName._(r'NotificationsCleanup');
@@ -78,7 +77,15 @@ class JobName {
   static const versionCheck = JobName._(r'VersionCheck');
   static const ocrQueueAll = JobName._(r'OcrQueueAll');
   static const ocr = JobName._(r'Ocr');
-  static const workflowAssetTrigger = JobName._(r'WorkflowAssetTrigger');
+  static const petDetectionQueueAll = JobName._(r'PetDetectionQueueAll');
+  static const petDetection = JobName._(r'PetDetection');
+  static const workflowAssetCreate = JobName._(r'WorkflowAssetCreate');
+  static const storageBackendMigrationQueueAll = JobName._(r'StorageBackendMigrationQueueAll');
+  static const storageBackendMigrationSingle = JobName._(r'StorageBackendMigrationSingle');
+  static const sharedSpaceFaceMatch = JobName._(r'SharedSpaceFaceMatch');
+  static const sharedSpaceFaceMatchAll = JobName._(r'SharedSpaceFaceMatchAll');
+  static const sharedSpacePersonThumbnail = JobName._(r'SharedSpacePersonThumbnail');
+  static const sharedSpaceLibraryFaceSync = JobName._(r'SharedSpaceLibraryFaceSync');
 
   /// List of all possible values in this [enum][JobName].
   static const values = <JobName>[
@@ -111,7 +118,6 @@ class JobName {
     librarySyncFilesQueueAll,
     librarySyncFiles,
     libraryScanQueueAll,
-    hlsSessionCleanup,
     memoryCleanup,
     memoryGenerate,
     notificationsCleanup,
@@ -137,7 +143,15 @@ class JobName {
     versionCheck,
     ocrQueueAll,
     ocr,
-    workflowAssetTrigger,
+    petDetectionQueueAll,
+    petDetection,
+    workflowAssetCreate,
+    storageBackendMigrationQueueAll,
+    storageBackendMigrationSingle,
+    sharedSpaceFaceMatch,
+    sharedSpaceFaceMatchAll,
+    sharedSpacePersonThumbnail,
+    sharedSpaceLibraryFaceSync,
   ];
 
   static JobName? fromJson(dynamic value) => JobNameTypeTransformer().decode(value);
@@ -205,7 +219,6 @@ class JobNameTypeTransformer {
         case r'LibrarySyncFilesQueueAll': return JobName.librarySyncFilesQueueAll;
         case r'LibrarySyncFiles': return JobName.librarySyncFiles;
         case r'LibraryScanQueueAll': return JobName.libraryScanQueueAll;
-        case r'HlsSessionCleanup': return JobName.hlsSessionCleanup;
         case r'MemoryCleanup': return JobName.memoryCleanup;
         case r'MemoryGenerate': return JobName.memoryGenerate;
         case r'NotificationsCleanup': return JobName.notificationsCleanup;
@@ -231,7 +244,15 @@ class JobNameTypeTransformer {
         case r'VersionCheck': return JobName.versionCheck;
         case r'OcrQueueAll': return JobName.ocrQueueAll;
         case r'Ocr': return JobName.ocr;
-        case r'WorkflowAssetTrigger': return JobName.workflowAssetTrigger;
+        case r'PetDetectionQueueAll': return JobName.petDetectionQueueAll;
+        case r'PetDetection': return JobName.petDetection;
+        case r'WorkflowAssetCreate': return JobName.workflowAssetCreate;
+        case r'StorageBackendMigrationQueueAll': return JobName.storageBackendMigrationQueueAll;
+        case r'StorageBackendMigrationSingle': return JobName.storageBackendMigrationSingle;
+        case r'SharedSpaceFaceMatch': return JobName.sharedSpaceFaceMatch;
+        case r'SharedSpaceFaceMatchAll': return JobName.sharedSpaceFaceMatchAll;
+        case r'SharedSpacePersonThumbnail': return JobName.sharedSpacePersonThumbnail;
+        case r'SharedSpaceLibraryFaceSync': return JobName.sharedSpaceLibraryFaceSync;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
@@ -244,4 +265,3 @@ class JobNameTypeTransformer {
   /// Singleton [JobNameTypeTransformer] instance.
   static JobNameTypeTransformer? _instance;
 }
-
