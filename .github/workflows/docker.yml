@@ -91,12 +91,20 @@ jobs:
           echo "Version: $version (major: v${major})"
 
   build-server:
-    name: Build & Push Server
+    name: Build Server (${{ matrix.platform }})
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -118,28 +126,82 @@ jobs:
         with:
           version: ${{ needs.version.outputs.latest_tag }}
 
-      - name: Build and push
+      - name: Prepare platform pair
+        id: prepare
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: echo "platform-pair=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: server/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/open-noodle/gallery-server:${{ needs.version.outputs.version }}
-            ghcr.io/open-noodle/gallery-server:${{ needs.version.outputs.major }}
-            ghcr.io/open-noodle/gallery-server:release
+          platforms: ${{ matrix.platform }}
           build-args: |
             DEVICE=cpu
             BUILD_ID=${{ github.run_id }}
             BUILD_SOURCE_REF=${{ github.ref_name }}
             BUILD_SOURCE_COMMIT=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          outputs: type=image,"name=ghcr.io/open-noodle/gallery-server",push-by-digest=true,name-resolution=short,push=true
+          cache-from: type=gha,scope=server-${{ steps.prepare.outputs.platform-pair }}
+          cache-to: type=gha,scope=server-${{ steps.prepare.outputs.platform-pair }},mode=max
+
+      - name: Export digest
+        run: | # zizmor: ignore[template-injection]
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: server-digests-${{ steps.prepare.outputs.platform-pair }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-server:
+    name: Merge Server Manifest
+    needs: [version, build-server]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: server-digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: ghcr.io/open-noodle/gallery-server
+          VERSION: ${{ needs.version.outputs.version }}
+          MAJOR: ${{ needs.version.outputs.major }}
+        run: |
+          tags="-t ${IMAGE}:${VERSION} -t ${IMAGE}:${MAJOR} -t ${IMAGE}:release"
+          sources=$(printf "${IMAGE}@sha256:%s " *)
+          docker buildx imagetools create ${tags} ${sources}
 
   build-ml:
-    name: Build & Push ML (${{ matrix.device }})
+    name: Build ML ${{ matrix.device }} (${{ matrix.platform }})
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -148,9 +210,14 @@ jobs:
       matrix:
         include:
           - device: cpu
-            suffix: ''
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - device: cpu
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
           - device: cuda
-            suffix: '-cuda'
+            platform: linux/amd64
+            runner: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -172,24 +239,87 @@ jobs:
         with:
           version: ${{ needs.version.outputs.latest_tag }}
 
-      - name: Build and push
+      - name: Prepare platform pair
+        id: prepare
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: echo "platform-pair=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: machine-learning
           file: machine-learning/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/open-noodle/gallery-ml:${{ needs.version.outputs.version }}${{ matrix.suffix }}
-            ghcr.io/open-noodle/gallery-ml:${{ needs.version.outputs.major }}${{ matrix.suffix }}
-            ghcr.io/open-noodle/gallery-ml:release${{ matrix.suffix }}
+          platforms: ${{ matrix.platform }}
           build-args: |
             DEVICE=${{ matrix.device }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          outputs: type=image,"name=ghcr.io/open-noodle/gallery-ml",push-by-digest=true,name-resolution=short,push=true
+          cache-from: type=gha,scope=ml-${{ matrix.device }}-${{ steps.prepare.outputs.platform-pair }}
+          cache-to: type=gha,scope=ml-${{ matrix.device }}-${{ steps.prepare.outputs.platform-pair }},mode=max
+
+      - name: Export digest
+        run: | # zizmor: ignore[template-injection]
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: ml-${{ matrix.device }}-digests-${{ steps.prepare.outputs.platform-pair }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-ml:
+    name: Merge ML Manifest (${{ matrix.device }})
+    needs: [version, build-ml]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - device: cpu
+            suffix: ''
+          - device: cuda
+            suffix: '-cuda'
+            # CUDA only builds for linux/amd64 — nvidia/cuda base image is amd64-only
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: ml-${{ matrix.device }}-digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: ghcr.io/open-noodle/gallery-ml
+          VERSION: ${{ needs.version.outputs.version }}
+          MAJOR: ${{ needs.version.outputs.major }}
+          SUFFIX: ${{ matrix.suffix }}
+        run: |
+          tags="-t ${IMAGE}:${VERSION}${SUFFIX} -t ${IMAGE}:${MAJOR}${SUFFIX} -t ${IMAGE}:release${SUFFIX}"
+          sources=$(printf "${IMAGE}@sha256:%s " *)
+          docker buildx imagetools create ${tags} ${sources}
 
   tag:
     name: Create Git Tag
-    needs: [version, build-server, build-ml]
+    needs: [version, merge-server, merge-ml]
     runs-on: ubuntu-latest
     permissions:
       contents: write
