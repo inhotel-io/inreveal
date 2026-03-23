@@ -25,8 +25,8 @@ export class DemoInterceptor implements NestInterceptor {
     }
 
     const request = context.switchToHttp().getRequest<AuthRequest>();
-    const userEmail = request.user?.user?.email;
-    if (!userEmail || userEmail !== demo.email) {
+    const isAdmin = request.user?.user?.isAdmin;
+    if (isAdmin) {
       return next.handle();
     }
 
