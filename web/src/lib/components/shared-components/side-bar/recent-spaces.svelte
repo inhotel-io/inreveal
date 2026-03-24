@@ -12,7 +12,6 @@
   const DEMO_SPACE_CLICKED_KEY = 'demo-space-clicked';
   const DEMO_SPACE_ID = '3c5807bd-748a-49c6-8cdc-55be96d14dd2';
   let dismissed = $state(!!globalThis.localStorage?.getItem(DEMO_SPACE_CLICKED_KEY));
-
   let showGlow = $derived(authManager.isDemo && !dismissed);
 
   function onDemoSpaceClick() {
@@ -21,6 +20,20 @@
       dismissed = true;
     }
   }
+
+  $effect(() => {
+    if (!showGlow) {
+      return;
+    }
+    const id = 'demo-glow-keyframes';
+    if (document.getElementById(id)) {
+      return;
+    }
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = `@keyframes demo-glow-pulse{0%,100%{box-shadow:0 0 4px 1px oklch(.65 .2 250/.3)}50%{box-shadow:0 0 12px 3px oklch(.65 .2 250/.5)}}`;
+    document.head.append(style);
+  });
 
   const bgClasses: Record<string, string> = {
     [UserAvatarColor.Primary]: 'bg-immich-primary',
@@ -96,17 +109,3 @@
     </div>
   </a>
 {/each}
-
-<svelte:head>
-  <style>
-    @keyframes demo-glow-pulse {
-      0%,
-      100% {
-        box-shadow: 0 0 4px 1px oklch(0.65 0.2 250 / 0.3);
-      }
-      50% {
-        box-shadow: 0 0 12px 3px oklch(0.65 0.2 250 / 0.5);
-      }
-    }
-  </style>
-</svelte:head>
