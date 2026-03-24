@@ -13,6 +13,8 @@
   const DEMO_SPACE_ID = '3c5807bd-748a-49c6-8cdc-55be96d14dd2';
   let dismissed = $state(!!globalThis.localStorage?.getItem(DEMO_SPACE_CLICKED_KEY));
 
+  let showGlow = $derived(authManager.isDemo && !dismissed);
+
   function onDemoSpaceClick() {
     if (!dismissed) {
       globalThis.localStorage?.setItem(DEMO_SPACE_CLICKED_KEY, 'true');
@@ -67,16 +69,17 @@
 
 {#each spaces as space (space.id)}
   {@const active = page.url.pathname.startsWith(`/spaces/${space.id}`)}
-  {@const shouldGlow = authManager.isDemo && !dismissed && space.id === DEMO_SPACE_ID}
+  {@const shouldGlow = showGlow && space.id === DEMO_SPACE_ID}
   <a
     href={Route.viewSpace({ id: space.id })}
     title={space.name}
     aria-current={active ? 'page' : undefined}
     data-testid="sidebar-space-{space.id}"
     onclick={shouldGlow ? onDemoSpaceClick : undefined}
+    style={shouldGlow ? 'animation: demo-glow-pulse 2s ease-in-out infinite' : ''}
     class="flex w-full place-items-center gap-4 rounded-e-full py-3 transition-[padding] delay-100 duration-100 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary ps-10 group-hover:sm:px-10 md:px-10 {active
       ? 'bg-primary/10 text-immich-primary dark:text-immich-dark-primary'
-      : ''} {shouldGlow ? 'demo-glow' : ''}"
+      : ''}"
   >
     <div>
       {#if space.newAssetCount && space.newAssetCount > 0}
@@ -94,18 +97,18 @@
   </a>
 {/each}
 
-<style>
-  :global(.demo-glow) {
-    animation: glow-pulse 2s ease-in-out infinite;
-  }
-
-  @keyframes glow-pulse {
-    0%,
-    100% {
-      box-shadow: 0 0 4px 1px oklch(0.65 0.2 250 / 0.3);
-    }
-    50% {
-      box-shadow: 0 0 12px 3px oklch(0.65 0.2 250 / 0.5);
-    }
-  }
-</style>
+{#if showGlow}
+  <svelte:head>
+    <style>
+      @keyframes demo-glow-pulse {
+        0%,
+        100% {
+          box-shadow: 0 0 4px 1px oklch(0.65 0.2 250 / 0.3);
+        }
+        50% {
+          box-shadow: 0 0 12px 3px oklch(0.65 0.2 250 / 0.5);
+        }
+      }
+    </style>
+  </svelte:head>
+{/if}
