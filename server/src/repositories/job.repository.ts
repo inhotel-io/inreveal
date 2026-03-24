@@ -236,6 +236,9 @@ export class JobRepository {
       case JobName.VersionCheck: {
         return { jobId: JobName.VersionCheck };
       }
+      case JobName.SharedSpaceBulkAddAssets: {
+        return { jobId: `bulk-add-${item.data.spaceId}-${item.data.userId}` };
+      }
       default: {
         return null;
       }
