@@ -2739,6 +2739,8 @@ export type SharedSpaceResponseDto = {
     name: string;
     /** Number of new assets since last viewed */
     newAssetCount?: number;
+    /** Whether pets are shown in space people list */
+    petsEnabled?: boolean;
     /** Recent asset IDs for collage display (up to 4) */
     recentAssetIds?: string[];
     /** Thumbhashes for recent assets (parallel array) */
@@ -2767,6 +2769,8 @@ export type SharedSpaceUpdateDto = {
     faceRecognitionEnabled?: boolean;
     /** Space name */
     name?: string;
+    /** Show pets in space people list */
+    petsEnabled?: boolean;
     /** Thumbnail asset ID */
     thumbnailAssetId?: string | null;
     /** Vertical crop position for cover photo (0-100) */
@@ -2841,6 +2845,8 @@ export type SharedSpacePersonResponseDto = {
     spaceId: string;
     /** Thumbnail path */
     thumbnailPath: string;
+    /** Person type (person or pet) */
+    "type"?: string;
     /** Last update date */
     updatedAt: string;
 };
