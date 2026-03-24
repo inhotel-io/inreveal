@@ -25390,6 +25390,10 @@
             "description": "Thumbnail path",
             "type": "string"
           },
+          "type": {
+            "description": "Person type (person or pet)",
+            "type": "string"
+          },
           "updatedAt": {
             "description": "Last update date",
             "type": "string"
@@ -25528,6 +25532,10 @@
             "description": "Number of new assets since last viewed",
             "type": "number"
           },
+          "petsEnabled": {
+            "description": "Whether pets are shown in space people list",
+            "type": "boolean"
+          },
           "recentAssetIds": {
             "description": "Recent asset IDs for collage display (up to 4)",
             "items": {
@@ -25598,6 +25606,10 @@
             "description": "Space name",
             "maxLength": 100,
             "type": "string"
+          },
+          "petsEnabled": {
+            "description": "Show pets in space people list",
+            "type": "boolean"
           },
           "thumbnailAssetId": {
             "description": "Thumbnail asset ID",
