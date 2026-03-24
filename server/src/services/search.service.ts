@@ -119,6 +119,10 @@ export class SearchService extends BaseService {
       requireElevatedPermission(auth);
     }
 
+    if (dto.spaceId) {
+      await this.requireAccess({ auth, permission: Permission.SharedSpaceRead, ids: [dto.spaceId] });
+    }
+
     const userIds = await this.getUserIdsToSearch(auth, dto.visibility);
     const items = await this.searchRepository.searchRandom(dto.size || 250, { ...dto, userIds });
     return items.map((item) => mapAsset(item, { auth }));
@@ -127,6 +131,10 @@ export class SearchService extends BaseService {
   async searchLargeAssets(auth: AuthDto, dto: LargeAssetSearchDto): Promise<AssetResponseDto[]> {
     if (dto.visibility === AssetVisibility.Locked) {
       requireElevatedPermission(auth);
+    }
+
+    if (dto.spaceId) {
+      await this.requireAccess({ auth, permission: Permission.SharedSpaceRead, ids: [dto.spaceId] });
     }
 
     const userIds = await this.getUserIdsToSearch(auth, dto.visibility);
