@@ -1448,6 +1448,8 @@ export type DownloadInfoDto = {
     archiveSize?: number;
     /** Asset IDs to download */
     assetIds?: string[];
+    /** Shared space ID to download all assets from */
+    spaceId?: string;
     /** User ID to download assets from */
     userId?: string;
 };
