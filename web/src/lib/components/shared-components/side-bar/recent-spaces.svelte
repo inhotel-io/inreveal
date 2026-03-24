@@ -97,18 +97,16 @@
   </a>
 {/each}
 
-{#if showGlow}
-  <svelte:head>
-    <style>
-      @keyframes demo-glow-pulse {
-        0%,
-        100% {
-          box-shadow: 0 0 4px 1px oklch(0.65 0.2 250 / 0.3);
-        }
-        50% {
-          box-shadow: 0 0 12px 3px oklch(0.65 0.2 250 / 0.5);
-        }
+<svelte:head>
+  <style>
+    @keyframes demo-glow-pulse {
+      0%,
+      100% {
+        box-shadow: 0 0 4px 1px oklch(0.65 0.2 250 / 0.3);
       }
-    </style>
-  </svelte:head>
-{/if}
+      50% {
+        box-shadow: 0 0 12px 3px oklch(0.65 0.2 250 / 0.5);
+      }
+    }
+  </style>
+</svelte:head>
