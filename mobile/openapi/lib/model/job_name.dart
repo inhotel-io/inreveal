@@ -86,6 +86,7 @@ class JobName {
   static const sharedSpaceFaceMatchAll = JobName._(r'SharedSpaceFaceMatchAll');
   static const sharedSpacePersonThumbnail = JobName._(r'SharedSpacePersonThumbnail');
   static const sharedSpaceLibraryFaceSync = JobName._(r'SharedSpaceLibraryFaceSync');
+  static const sharedSpaceBulkAddAssets = JobName._(r'SharedSpaceBulkAddAssets');
 
   /// List of all possible values in this [enum][JobName].
   static const values = <JobName>[
@@ -152,6 +153,7 @@ class JobName {
     sharedSpaceFaceMatchAll,
     sharedSpacePersonThumbnail,
     sharedSpaceLibraryFaceSync,
+    sharedSpaceBulkAddAssets,
   ];
 
   static JobName? fromJson(dynamic value) => JobNameTypeTransformer().decode(value);
@@ -253,6 +255,7 @@ class JobNameTypeTransformer {
         case r'SharedSpaceFaceMatchAll': return JobName.sharedSpaceFaceMatchAll;
         case r'SharedSpacePersonThumbnail': return JobName.sharedSpacePersonThumbnail;
         case r'SharedSpaceLibraryFaceSync': return JobName.sharedSpaceLibraryFaceSync;
+        case r'SharedSpaceBulkAddAssets': return JobName.sharedSpaceBulkAddAssets;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
