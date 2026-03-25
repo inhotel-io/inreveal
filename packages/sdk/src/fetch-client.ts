@@ -2037,6 +2037,8 @@ export type MetadataSearchDto = {
     size?: number;
     /** Shared space ID to filter by */
     spaceId?: string;
+    /** Shared space person IDs to filter by */
+    spacePersonIds?: string[];
     /** Filter by state/province name */
     state?: string | null;
     /** Filter by tag IDs */
@@ -2155,6 +2157,8 @@ export type RandomSearchDto = {
     size?: number;
     /** Shared space ID to filter by */
     spaceId?: string;
+    /** Shared space person IDs to filter by */
+    spacePersonIds?: string[];
     /** Filter by state/province name */
     state?: string | null;
     /** Filter by tag IDs */
@@ -2233,6 +2237,8 @@ export type SmartSearchDto = {
     size?: number;
     /** Shared space ID to filter by */
     spaceId?: string;
+    /** Shared space person IDs to filter by */
+    spacePersonIds?: string[];
     /** Filter by state/province name */
     state?: string | null;
     /** Filter by tag IDs */
@@ -2299,6 +2305,8 @@ export type StatisticsSearchDto = {
     rating?: number | null;
     /** Shared space ID to filter by */
     spaceId?: string;
+    /** Shared space person IDs to filter by */
+    spacePersonIds?: string[];
     /** Filter by state/province name */
     state?: string | null;
     /** Filter by tag IDs */
@@ -6266,7 +6274,7 @@ export function getExploreData(opts?: Oazapfts.RequestOpts) {
 /**
  * Search large assets
  */
-export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, deviceId, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, spaceId, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
+export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, deviceId, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, spaceId, spacePersonIds, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
     albumIds?: string[];
     city?: string | null;
     country?: string | null;
@@ -6288,6 +6296,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
     rating?: number | null;
     size?: number;
     spaceId?: string;
+    spacePersonIds?: string[];
     state?: string | null;
     tagIds?: string[] | null;
     takenAfter?: string;
@@ -6326,6 +6335,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
         rating,
         size,
         spaceId,
+        spacePersonIds,
         state,
         tagIds,
         takenAfter,
