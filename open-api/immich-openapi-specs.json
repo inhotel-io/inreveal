@@ -9590,6 +9590,19 @@
             }
           },
           {
+            "name": "spacePersonIds",
+            "required": false,
+            "in": "query",
+            "description": "Shared space person IDs to filter by",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
             "name": "state",
             "required": false,
             "in": "query",
@@ -21639,6 +21652,14 @@
             "format": "uuid",
             "type": "string"
           },
+          "spacePersonIds": {
+            "description": "Shared space person IDs to filter by",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
           "state": {
             "description": "Filter by state/province name",
             "nullable": true,
@@ -23456,6 +23477,14 @@
             "description": "Shared space ID to filter by",
             "format": "uuid",
             "type": "string"
+          },
+          "spacePersonIds": {
+            "description": "Shared space person IDs to filter by",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
           },
           "state": {
             "description": "Filter by state/province name",
@@ -25440,6 +25469,14 @@
             "format": "uuid",
             "type": "string"
           },
+          "spacePersonIds": {
+            "description": "Shared space person IDs to filter by",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
           "state": {
             "description": "Filter by state/province name",
             "nullable": true,
@@ -25698,6 +25735,14 @@
             "description": "Shared space ID to filter by",
             "format": "uuid",
             "type": "string"
+          },
+          "spacePersonIds": {
+            "description": "Shared space person IDs to filter by",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
           },
           "state": {
             "description": "Filter by state/province name",
