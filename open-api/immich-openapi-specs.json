@@ -20880,7 +20880,6 @@
           "StorageBackendMigrationSingle",
           "SharedSpaceFaceMatch",
           "SharedSpaceFaceMatchAll",
-          "SharedSpacePersonThumbnail",
           "SharedSpaceLibraryFaceSync",
           "SharedSpaceBulkAddAssets"
         ],
