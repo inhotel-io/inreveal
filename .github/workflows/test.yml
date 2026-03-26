@@ -483,7 +483,10 @@ jobs:
         working-directory: ./e2e
     strategy:
       matrix:
-        runner: [ubuntu-latest, ubuntu-24.04-arm]
+        # ARM runner disabled — Playwright tests are architecture-independent
+        # and the ARM runner causes frequent timeouts on timing-sensitive UI tests.
+        # To re-enable: runner: [ubuntu-latest, ubuntu-24.04-arm]
+        runner: [ubuntu-latest]
     steps:
       - id: token
         uses: immich-app/devtools/actions/create-workflow-token@433085f27f7e8ac3b09283a260e69eb7dff1e856 # create-workflow-token-action-v1.0.3
