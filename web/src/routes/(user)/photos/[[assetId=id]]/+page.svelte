@@ -54,9 +54,36 @@
   import { mdiDotsVertical } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import { SvelteMap } from 'svelte/reactivity';
+  import { authManager } from '$lib/managers/auth-manager.svelte';
 
   let { isViewing: showAssetViewer } = assetViewingStore;
   let timelineManager = $state<TimelineManager>() as TimelineManager;
+
+  // Demo mode: glow effect on filter panel to draw attention
+  const DEMO_FILTER_CLICKED_KEY = 'demo-filter-panel-clicked';
+  let filterDismissed = $state(!!globalThis.localStorage?.getItem(DEMO_FILTER_CLICKED_KEY));
+  let showFilterGlow = $derived(authManager.isDemo && !filterDismissed);
+
+  function onFilterPanelClick() {
+    if (showFilterGlow) {
+      filterDismissed = true;
+      globalThis.localStorage?.setItem(DEMO_FILTER_CLICKED_KEY, 'true');
+    }
+  }
+
+  $effect(() => {
+    if (!showFilterGlow) {
+      return;
+    }
+    const id = 'demo-glow-keyframes';
+    if (document.getElementById(id)) {
+      return;
+    }
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = `@keyframes demo-glow-pulse{0%,100%{box-shadow:0 0 4px 1px oklch(.65 .2 250/.3)}50%{box-shadow:0 0 12px 3px oklch(.65 .2 250/.5)}}`;
+    document.head.append(style);
+  });
 
   const assetInteraction = new AssetInteraction();
 
@@ -185,17 +212,24 @@
 
 <UserPageLayout hideNavbar={assetInteraction.selectionActive} scrollbar={false}>
   <div class="ml-4 flex h-full">
-    <FilterPanel
-      bind:filters
-      config={filterConfig}
-      timeBuckets={timelineManager?.months?.map((m) => ({
-        timeBucket: `${m.yearMonth.year}-${String(m.yearMonth.month).padStart(2, '0')}-01T00:00:00.000Z`,
-        count: m.assetsCount,
-      })) ?? []}
-      initialCollapsed={true}
-      storageKey="gallery-filter-visible-sections-photos"
-      hidden={isTimelineEmpty}
-    />
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div
+      class="h-full"
+      onclick={onFilterPanelClick}
+      style={showFilterGlow ? 'animation: demo-glow-pulse 2s ease-in-out infinite; border-radius: 0' : ''}
+    >
+      <FilterPanel
+        bind:filters
+        config={filterConfig}
+        timeBuckets={timelineManager?.months?.map((m) => ({
+          timeBucket: `${m.yearMonth.year}-${String(m.yearMonth.month).padStart(2, '0')}-01T00:00:00.000Z`,
+          count: m.assetsCount,
+        })) ?? []}
+        initialCollapsed={true}
+        storageKey="gallery-filter-visible-sections-photos"
+        hidden={isTimelineEmpty}
+      />
+    </div>
     <div class="flex-1 overflow-hidden pl-4">
       {#if hasActiveFilters}
         <ActiveFiltersBar
