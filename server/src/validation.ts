@@ -250,5 +250,3 @@ export const hexColor = z
   .string()
   .regex(hexColorRegex)
   .transform((val) => (val.startsWith('#') ? val : `#${val}`));
-
-export const sanitizeFilename = z.string().transform((val) => sanitize(val.replaceAll('.', '')));
