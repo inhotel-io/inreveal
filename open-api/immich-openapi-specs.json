@@ -17928,7 +17928,8 @@
         "enum": [
           "crop",
           "rotate",
-          "mirror"
+          "mirror",
+          "trim"
         ],
         "type": "string"
       },
@@ -17947,6 +17948,9 @@
               },
               {
                 "$ref": "#/components/schemas/MirrorParameters"
+              },
+              {
+                "$ref": "#/components/schemas/TrimParameters"
               }
             ],
             "description": "List of edit actions to apply (crop, rotate, or mirror)"
@@ -17979,6 +17983,9 @@
               },
               {
                 "$ref": "#/components/schemas/MirrorParameters"
+              },
+              {
+                "$ref": "#/components/schemas/TrimParameters"
               }
             ],
             "description": "List of edit actions to apply (crop, rotate, or mirror)"
@@ -27929,6 +27936,25 @@
         },
         "required": [
           "count"
+        ],
+        "type": "object"
+      },
+      "TrimParameters": {
+        "properties": {
+          "endTime": {
+            "description": "End time in seconds",
+            "minimum": 0,
+            "type": "number"
+          },
+          "startTime": {
+            "description": "Start time in seconds",
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "endTime",
+          "startTime"
         ],
         "type": "object"
       },
