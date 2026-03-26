@@ -8535,7 +8535,6 @@ export enum JobName {
     StorageBackendMigrationSingle = "StorageBackendMigrationSingle",
     SharedSpaceFaceMatch = "SharedSpaceFaceMatch",
     SharedSpaceFaceMatchAll = "SharedSpaceFaceMatchAll",
-    SharedSpacePersonThumbnail = "SharedSpacePersonThumbnail",
     SharedSpaceLibraryFaceSync = "SharedSpaceLibraryFaceSync",
     SharedSpaceBulkAddAssets = "SharedSpaceBulkAddAssets"
 }
