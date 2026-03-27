@@ -105,6 +105,7 @@ const SystemConfigJobSchema = z
     workflow: JobSettingsSchema,
     editor: JobSettingsSchema,
     storageBackendMigration: JobSettingsSchema,
+    classification: JobSettingsSchema,
   })
   .meta({ id: 'SystemConfigJobDto' });
 
