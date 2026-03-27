@@ -271,3 +271,4 @@ class JobNameTypeTransformer {
   /// Singleton [JobNameTypeTransformer] instance.
   static JobNameTypeTransformer? _instance;
 }
+
