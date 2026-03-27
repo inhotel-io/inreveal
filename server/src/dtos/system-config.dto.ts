@@ -140,6 +140,7 @@ const SystemConfigJobSchema = z
     editor: JobSettingsSchema,
     integrityCheck: JobSettingsSchema,
     storageBackendMigration: JobSettingsSchema,
+    classification: JobSettingsSchema,
   })
   .meta({ id: 'SystemConfigJobDto' });
 
