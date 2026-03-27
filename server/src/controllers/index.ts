@@ -6,6 +6,7 @@ import { AssetMediaController } from 'src/controllers/asset-media.controller';
 import { AssetController } from 'src/controllers/asset.controller';
 import { AuthAdminController } from 'src/controllers/auth-admin.controller';
 import { AuthController } from 'src/controllers/auth.controller';
+import { ClassificationController } from 'src/controllers/classification.controller';
 import { ClusterGroupController } from 'src/controllers/cluster-group.controller';
 import { ConfigAdminController } from 'src/controllers/config-admin.controller';
 import { ConfigPublicController } from 'src/controllers/config-public.controller';
@@ -58,6 +59,7 @@ export const controllers = [
   AuthController,
   AuthAdminController,
   ClusterGroupController,
+  ClassificationController,
   ConfigUserController,
   ConfigAdminController,
   ConfigPublicController,
