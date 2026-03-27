@@ -25,6 +25,7 @@ import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetEditRepository } from 'src/repositories/asset-edit.repository';
 import { AssetJobRepository } from 'src/repositories/asset-job.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { ClassificationRepository } from 'src/repositories/classification.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { CronRepository } from 'src/repositories/cron.repository';
 import { CryptoRepository } from 'src/repositories/crypto.repository';
@@ -556,6 +557,7 @@ const newRealRepository = <T extends BaseServiceDeps[number]>(key: T, db: Kysely
       return new key(LoggingRepository.create()) as InstanceType<T>;
     }
 
+    case ClassificationRepository:
     case TagRepository: {
       return new key(db, LoggingRepository.create()) as InstanceType<T>;
     }
@@ -576,6 +578,7 @@ const newMockRepository = <T>(key: ClassConstructor<T>) => {
     case AlbumRepository:
     case AssetRepository:
     case AssetJobRepository:
+    case ClassificationRepository:
     case ConfigRepository:
     case CryptoRepository:
     case MemoryRepository:
