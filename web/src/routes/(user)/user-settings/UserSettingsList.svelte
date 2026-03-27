@@ -1,12 +1,9 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import ChangePinCodeSettings from './PinCodeSettings.svelte';
-  import DownloadSettings from './DownloadSettings.svelte';
-  import FeatureSettings from './FeatureSettings.svelte';
-  import NotificationsSettings from './NotificationsSettings.svelte';
-  import UserPurchaseSettings from './UserPurchaseSettings.svelte';
-  import UserUsageStatistic from './UserUsageStatistic.svelte';
+  import ClassificationSettings from '$lib/components/user-settings-page/classification-settings.svelte';
+  import GroupSettings from '$lib/components/user-settings-page/group-settings.svelte';
   import { OpenQueryParam, QueryParameter } from '$lib/constants';
+  import { authManager } from '$lib/managers/auth-manager.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { oauth } from '$lib/utils';
   import { type ApiKeyResponseDto, type SessionResponseDto } from '@immich/sdk';
@@ -23,6 +20,7 @@
     mdiFormTextboxPassword,
     mdiKeyOutline,
     mdiLockSmart,
+    mdiMagnifyScan,
     mdiServerOutline,
     mdiTwoFactorAuthentication,
   } from '@mdi/js';
@@ -36,6 +34,12 @@
   import PartnerSettings from './PartnerSettings.svelte';
   import UserApiKeyList from './UserApiKeyList.svelte';
   import UserProfileSettings from './UserProfileSettings.svelte';
+  import ChangePinCodeSettings from './PinCodeSettings.svelte';
+  import DownloadSettings from './DownloadSettings.svelte';
+  import FeatureSettings from './FeatureSettings.svelte';
+  import NotificationsSettings from './NotificationsSettings.svelte';
+  import UserPurchaseSettings from './UserPurchaseSettings.svelte';
+  import UserUsageStatistic from './UserUsageStatistic.svelte';
 
   interface Props {
     keys?: ApiKeyResponseDto[];
@@ -104,6 +108,15 @@
   </SettingAccordion>
 
   <SettingAccordion
+    icon={mdiMagnifyScan}
+    key="auto-classification"
+    title="Auto-Classification"
+    subtitle="Automatically tag and archive photos by category"
+  >
+    <ClassificationSettings />
+  </SettingAccordion>
+
+  <SettingAccordion
     icon={mdiBellOutline}
     key={OpenQueryParam.NOTIFICATIONS}
     title={$t('notifications')}
@@ -148,7 +161,7 @@
     title={$t('user_groups')}
     subtitle={$t('manage_user_groups')}
   >
-    <GroupSettings user={$user} />
+    <GroupSettings user={authManager.user} />
   </SettingAccordion>
 
   <SettingAccordion
