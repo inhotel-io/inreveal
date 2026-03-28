@@ -37,8 +37,16 @@
     type PersonResponseDto,
     type StackResponseDto,
   } from '@immich/sdk';
-  import { ActionButton, CommandPaletteDefaultProvider, Tooltip, type ActionItem } from '@immich/ui';
-  import { mdiArrowLeft, mdiArrowRight, mdiCompare, mdiDotsVertical, mdiImageSearch, mdiVideoOutline } from '@mdi/js';
+  import { ActionButton, CommandPaletteDefaultProvider, Icon, Tooltip, type ActionItem } from '@immich/ui';
+  import {
+    mdiArrowLeft,
+    mdiArrowRight,
+    mdiCompare,
+    mdiDotsVertical,
+    mdiImageSearch,
+    mdiPencilOutline,
+    mdiVideoOutline,
+  } from '@mdi/js';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -101,6 +109,12 @@
     class="dark -m-1 flex items-center gap-2 overflow-x-auto p-1 *:shrink-0"
     data-testid="asset-viewer-navbar-actions"
   >
+    {#if asset.isEdited}
+      <div class="flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 text-xs text-white">
+        <Icon icon={mdiPencilOutline} size="14" />
+        <span>{$t('edited')}</span>
+      </div>
+    {/if}
     {#if assetViewerManager.isImageLoading}
       <Tooltip text={$t('loading')}>
         {#snippet child({ props })}
