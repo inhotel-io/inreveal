@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        suffix: ['', '-cuda', '-rocm', '-openvino', '-armnn', '-rknn']
+        suffix: ['', '-cuda', '-openvino', '-armnn', '-rknn']
     steps:
       - name: Login to GitHub Container Registry
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
@@ -128,10 +128,6 @@ jobs:
           - device: rknn
             suffixes: '-rknn'
             platforms: linux/arm64
-          - device: rocm
-            suffixes: '-rocm'
-            platforms: linux/amd64
-            runner-mapping: '{"linux/amd64": "pokedex-large"}'
     uses: immich-app/devtools/.github/workflows/multi-runner-build.yml@db54dcf16fbb12c43479a23749ceea0ad1b4a704 # multi-runner-build-workflow-v3.0.0
     permissions:
       contents: read
