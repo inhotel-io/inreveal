@@ -5286,6 +5286,7 @@
         "tags": [
           "Classification"
         ],
+        "x-immich-admin-only": true,
         "x-immich-history": [
           {
             "version": "v1",
@@ -5314,10 +5315,11 @@
             "api_key": []
           }
         ],
-        "summary": "Scan library for classification",
+        "summary": "Scan all libraries for classification",
         "tags": [
           "Classification"
         ],
+        "x-immich-admin-only": true,
         "x-immich-history": [
           {
             "version": "v1",
@@ -5360,6 +5362,7 @@
         "tags": [
           "Classification"
         ],
+        "x-immich-admin-only": true,
         "x-immich-history": [
           {
             "version": "v1",
@@ -5417,6 +5420,7 @@
         "tags": [
           "Classification"
         ],
+        "x-immich-admin-only": true,
         "x-immich-history": [
           {
             "version": "v1",
@@ -20811,10 +20815,6 @@
           "similarity": {
             "type": "number"
           },
-          "tagId": {
-            "nullable": true,
-            "type": "string"
-          },
           "updatedAt": {
             "type": "string"
           }
@@ -20827,7 +20827,6 @@
           "name",
           "prompts",
           "similarity",
-          "tagId",
           "updatedAt"
         ],
         "type": "object"
