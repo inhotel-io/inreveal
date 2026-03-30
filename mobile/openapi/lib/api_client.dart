@@ -865,6 +865,8 @@ class ApiClient {
           return TagCreateDto.fromJson(value);
         case 'TagResponseDto':
           return TagResponseDto.fromJson(value);
+        case 'TagSuggestionResponseDto':
+          return TagSuggestionResponseDto.fromJson(value);
         case 'TagUpdateDto':
           return TagUpdateDto.fromJson(value);
         case 'TagUpsertDto':
