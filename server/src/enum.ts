@@ -960,6 +960,7 @@ export enum JobName {
   SharedSpaceFaceMatch = 'SharedSpaceFaceMatch',
   SharedSpaceFaceMatchAll = 'SharedSpaceFaceMatchAll',
   SharedSpaceLibraryFaceSync = 'SharedSpaceLibraryFaceSync',
+  SharedSpacePersonDedup = 'SharedSpacePersonDedup',
 
   // Shared Space Bulk Operations
   SharedSpaceBulkAddAssets = 'SharedSpaceBulkAddAssets',
