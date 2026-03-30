@@ -6574,7 +6574,7 @@ export function searchAssetStatistics({ statisticsSearchDto }: {
 /**
  * Retrieve search suggestions
  */
-export function getSearchSuggestions({ country, includeNull, lensModel, make, model, spaceId, state, takenAfter, takenBefore, $type }: {
+export function getSearchSuggestions({ country, includeNull, lensModel, make, model, spaceId, state, takenAfter, takenBefore, $type, withSharedSpaces }: {
     country?: string;
     includeNull?: boolean;
     lensModel?: string;
@@ -6585,6 +6585,7 @@ export function getSearchSuggestions({ country, includeNull, lensModel, make, mo
     takenAfter?: string;
     takenBefore?: string;
     $type: SearchSuggestionType;
+    withSharedSpaces?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
@@ -6599,7 +6600,8 @@ export function getSearchSuggestions({ country, includeNull, lensModel, make, mo
         state,
         takenAfter,
         takenBefore,
-        "type": $type
+        "type": $type,
+        withSharedSpaces
     }))}`, {
         ...opts
     }));
