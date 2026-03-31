@@ -3538,6 +3538,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "spaceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -24121,6 +24129,10 @@
           },
           "name": {
             "description": "Person name",
+            "type": "string"
+          },
+          "spacePersonId": {
+            "description": "Space person ID (when viewed through a space)",
             "type": "string"
           },
           "species": {
