@@ -1,6 +1,5 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import ClassificationSettings from '$lib/components/user-settings-page/classification-settings.svelte';
   import GroupSettings from '$lib/components/user-settings-page/group-settings.svelte';
   import { OpenQueryParam, QueryParameter } from '$lib/constants';
   import { authManager } from '$lib/managers/auth-manager.svelte';
@@ -20,7 +19,6 @@
     mdiFormTextboxPassword,
     mdiKeyOutline,
     mdiLockSmart,
-    mdiMagnifyScan,
     mdiServerOutline,
     mdiTwoFactorAuthentication,
   } from '@mdi/js';
@@ -106,17 +104,6 @@
   >
     <FeatureSettings />
   </SettingAccordion>
-
-  {#if !$user.isAdmin}
-    <SettingAccordion
-      icon={mdiMagnifyScan}
-      key="auto-classification"
-      title="Auto-Classification"
-      subtitle="View classification categories configured by your administrator"
-    >
-      <ClassificationSettings />
-    </SettingAccordion>
-  {/if}
 
   <SettingAccordion
     icon={mdiBellOutline}
