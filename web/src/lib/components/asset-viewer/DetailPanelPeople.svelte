@@ -4,7 +4,7 @@
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { Route } from '$lib/route';
   import { locale } from '$lib/stores/preferences.store';
-  import { getPeopleThumbnailUrl } from '$lib/utils';
+  import { createUrl, getPeopleThumbnailUrl } from '$lib/utils';
   import { type AssetResponseDto } from '@immich/sdk';
   import { IconButton, Text } from '@immich/ui';
   import { mdiEye, mdiEyeOff, mdiPencil, mdiPlus } from '@mdi/js';
@@ -15,10 +15,12 @@
     asset: AssetResponseDto;
     isOwner: boolean;
     previousRoute: string;
+    spaceId?: string;
   };
 
-  const { asset, isOwner, previousRoute }: Props = $props();
+  const { asset, isOwner, previousRoute, spaceId }: Props = $props();
 
+  const isSpaceMember = $derived(!!spaceId);
   const unassignedFaces = $derived(asset.unassignedFaces || []);
   const people = $derived(asset.people || []);
   const visiblePeople = $derived(
@@ -56,42 +58,44 @@
   );
 </script>
 
-{#if !authManager.isSharedLink && isOwner}
+{#if !authManager.isSharedLink && (isOwner || isSpaceMember)}
   <section class="px-4 pt-4 text-sm">
     <div class="flex h-10 w-full items-center justify-between">
       <Text size="small" color="muted">{$t('people')}</Text>
       <div class="flex items-center gap-2">
-        {#if people.some((person) => person.isHidden)}
+        {#if isOwner}
+          {#if people.some((person) => person.isHidden)}
+            <IconButton
+              aria-label={$t('show_hidden_people')}
+              icon={assetViewerManager.isShowingHiddenPeople ? mdiEyeOff : mdiEye}
+              size="medium"
+              shape="round"
+              color="secondary"
+              variant="ghost"
+              onclick={() => assetViewerManager.toggleHiddenPeople()}
+            />
+          {/if}
           <IconButton
-            aria-label={$t('show_hidden_people')}
-            icon={assetViewerManager.isShowingHiddenPeople ? mdiEyeOff : mdiEye}
+            aria-label={$t('tag_people')}
+            icon={mdiPlus}
             size="medium"
             shape="round"
             color="secondary"
             variant="ghost"
-            onclick={() => assetViewerManager.toggleHiddenPeople()}
+            onclick={() => assetViewerManager.toggleFaceEditMode()}
           />
-        {/if}
-        <IconButton
-          aria-label={$t('tag_people')}
-          icon={mdiPlus}
-          size="medium"
-          shape="round"
-          color="secondary"
-          variant="ghost"
-          onclick={() => assetViewerManager.toggleFaceEditMode()}
-        />
 
-        {#if people.length > 0 || unassignedFaces.length > 0}
-          <IconButton
-            aria-label={$t('edit_people')}
-            icon={mdiPencil}
-            size="medium"
-            shape="round"
-            color="secondary"
-            variant="ghost"
-            onclick={() => assetViewerManager.openEditFacesPanel()}
-          />
+          {#if people.length > 0 || unassignedFaces.length > 0}
+            <IconButton
+              aria-label={$t('edit_people')}
+              icon={mdiPencil}
+              size="medium"
+              shape="round"
+              color="secondary"
+              variant="ghost"
+              onclick={() => assetViewerManager.openEditFacesPanel()}
+            />
+          {/if}
         {/if}
       </div>
     </div>
@@ -103,7 +107,9 @@
         )}
         <a
           class="group outline-none"
-          href={Route.viewPerson(person, { previousRoute })}
+          href={spaceId && person.spacePersonId
+            ? Route.viewSpacePerson(spaceId, person.spacePersonId)
+            : Route.viewPerson(person, { previousRoute })}
           onfocus={() => assetViewerManager.setHighlightedFaces(person.faces)}
           onblur={() => assetViewerManager.clearHighlightedFaces()}
           onpointerenter={() => assetViewerManager.setHighlightedFaces(person.faces)}
@@ -112,7 +118,11 @@
           <ImageThumbnail
             curve
             shadow
-            url={getPeopleThumbnailUrl(person)}
+            url={spaceId && person.spacePersonId
+              ? createUrl(`/shared-spaces/${spaceId}/people/${person.spacePersonId}/thumbnail`, {
+                  updatedAt: person.updatedAt,
+                })
+              : getPeopleThumbnailUrl(person)}
             altText={person.name}
             title={person.name}
             widthStyle="100%"
