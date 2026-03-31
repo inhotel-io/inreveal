@@ -13,7 +13,7 @@
   import { boundingBoxesArray } from '$lib/stores/people.store';
   import { locale } from '$lib/stores/preferences.store';
   import { preferences, user } from '$lib/stores/user.store';
-  import { getAssetMediaUrl, getPeopleThumbnailUrl } from '$lib/utils';
+  import { createUrl, getAssetMediaUrl, getPeopleThumbnailUrl } from '$lib/utils';
   import { delay, getDimensions } from '$lib/utils/asset-utils';
   import { getByteUnitString } from '$lib/utils/byte-units';
   import { handleError } from '$lib/utils/handle-error';
@@ -52,9 +52,11 @@
   interface Props {
     asset: AssetResponseDto;
     currentAlbum?: AlbumResponseDto | null;
+    spaceId?: string;
   }
 
-  let { asset, currentAlbum = null }: Props = $props();
+  let { asset, currentAlbum = null, spaceId }: Props = $props();
+  let isSpaceMember = $derived(!!spaceId);
 
   let showAssetPath = $state(false);
   let showEditFaces = $state(false);
@@ -121,7 +123,7 @@
   };
 
   const handleRefreshPeople = async () => {
-    asset = await getAssetInfo({ id: asset.id });
+    asset = await getAssetInfo({ id: asset.id, spaceId });
     showEditFaces = false;
   };
 
@@ -185,20 +187,31 @@
   <DetailPanelDescription {asset} {isOwner} />
   <DetailPanelRating {asset} {isOwner} />
 
-  {#if !authManager.isSharedLink && isOwner}
+  {#if !authManager.isSharedLink && (isOwner || isSpaceMember)}
     <section class="px-4 pt-4 text-sm">
       <div class="flex h-10 w-full items-center justify-between">
         <Text size="small" color="muted">{$t('people')}</Text>
         <div class="flex gap-2 items-center">
-          {#if people.some((person) => person.isHidden)}
+          {#if isOwner}
+            {#if people.some((person) => person.isHidden)}
+              <IconButton
+                aria-label={$t('show_hidden_people')}
+                icon={showingHiddenPeople ? mdiEyeOff : mdiEye}
+                size="medium"
+                shape="round"
+                color="secondary"
+                variant="ghost"
+                onclick={() => (showingHiddenPeople = !showingHiddenPeople)}
+              />
+            {/if}
             <IconButton
-              aria-label={$t('show_hidden_people')}
-              icon={showingHiddenPeople ? mdiEyeOff : mdiEye}
+              aria-label={$t('tag_people')}
+              icon={mdiPlus}
               size="medium"
               shape="round"
               color="secondary"
               variant="ghost"
-              onclick={() => (showingHiddenPeople = !showingHiddenPeople)}
+              onclick={() => (isFaceEditMode.value = !isFaceEditMode.value)}
             />
           {/if}
           <IconButton
@@ -211,16 +224,17 @@
             onclick={() => assetViewerManager.toggleFaceEditMode()}
           />
 
-          {#if people.length > 0 || unassignedFaces.length > 0}
-            <IconButton
-              aria-label={$t('edit_people')}
-              icon={mdiPencil}
-              size="medium"
-              shape="round"
-              color="secondary"
-              variant="ghost"
-              onclick={() => (showEditFaces = true)}
-            />
+            {#if people.length > 0 || unassignedFaces.length > 0}
+              <IconButton
+                aria-label={$t('edit_people')}
+                icon={mdiPencil}
+                size="medium"
+                shape="round"
+                color="secondary"
+                variant="ghost"
+                onclick={() => (showEditFaces = true)}
+              />
+            {/if}
           {/if}
         </div>
       </div>
@@ -231,7 +245,9 @@
             {@const isHighlighted = people[index].faces.some((f) => $boundingBoxesArray.some((b) => b.id === f.id))}
             <a
               class="group w-22 outline-none"
-              href={Route.viewPerson(person, { previousRoute })}
+              href={spaceId && person.spacePersonId
+                ? Route.viewSpacePerson(spaceId, person.spacePersonId)
+                : Route.viewPerson(person, { previousRoute })}
               onfocus={() => ($boundingBoxesArray = people[index].faces)}
               onblur={() => ($boundingBoxesArray = [])}
               onmouseover={() => ($boundingBoxesArray = people[index].faces)}
@@ -241,7 +257,11 @@
                 <ImageThumbnail
                   curve
                   shadow
-                  url={getPeopleThumbnailUrl(person)}
+                  url={spaceId && person.spacePersonId
+                    ? createUrl(`/shared-spaces/${spaceId}/people/${person.spacePersonId}/thumbnail`, {
+                        updatedAt: person.updatedAt,
+                      })
+                    : getPeopleThumbnailUrl(person)}
                   altText={person.name}
                   title={person.name}
                   widthStyle="90px"
@@ -569,7 +589,7 @@
 
 {#if $preferences?.tags?.enabled}
   <section class="relative px-2 pb-12 dark:bg-immich-dark-bg dark:text-immich-dark-fg">
-    <DetailPanelTags {asset} {isOwner} />
+    <DetailPanelTags {asset} {isOwner} {spaceId} />
   </section>
 {/if}
 
