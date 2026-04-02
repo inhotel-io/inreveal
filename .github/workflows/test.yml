@@ -16,17 +16,11 @@ jobs:
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Check what should run
         id: check
         uses: immich-app/devtools/actions/pre-job@91f342bb4477c4bc10c576ae739da875d85aa164 # pre-job-action-v2.0.4
         with:
-          github-token: ${{ steps.token.outputs.token }}
+          github-token: ${{ github.token }}
           filters: |
             i18n:
               - 'i18n/**'
@@ -66,17 +60,11 @@ jobs:
       run:
         working-directory: ./server
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
@@ -111,17 +99,11 @@ jobs:
       run:
         working-directory: ./cli
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
       - name: Setup Node
@@ -158,17 +140,11 @@ jobs:
       run:
         working-directory: ./cli
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
       - name: Setup Node
@@ -200,17 +176,11 @@ jobs:
       run:
         working-directory: ./web
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
       - name: Setup Node
@@ -244,17 +214,11 @@ jobs:
       run:
         working-directory: ./web
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
       - name: Setup Node
@@ -282,17 +246,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
       - name: Setup Node
@@ -330,17 +288,11 @@ jobs:
       run:
         working-directory: ./e2e
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
       - name: Setup Node
@@ -376,18 +328,12 @@ jobs:
       run:
         working-directory: ./server
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           submodules: 'recursive'
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
       - name: Setup Node
@@ -419,18 +365,12 @@ jobs:
       matrix:
         runner: [ubuntu-latest, ubuntu-24.04-arm]
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           submodules: 'recursive'
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
       - name: Setup Node
@@ -494,18 +434,12 @@ jobs:
         # To re-enable: runner: [ubuntu-latest, ubuntu-24.04-arm]
         runner: [ubuntu-latest]
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           submodules: 'recursive'
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
       - name: Setup Node
@@ -588,16 +522,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Setup Flutter SDK
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
@@ -623,16 +551,10 @@ jobs:
       run:
         working-directory: ./machine-learning
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
 
       - name: Setup Mise
         uses: immich-app/devtools/actions/use-mise@01a4d354b70f99a6baf4a1b72827f6d4922e4978 # use-mise-action-v2.0.0
@@ -661,17 +583,11 @@ jobs:
       run:
         working-directory: ./.github
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
       - name: Setup Node
@@ -691,16 +607,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Run ShellCheck
         uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
         with:
@@ -712,17 +622,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
       - name: Setup Node
@@ -774,17 +678,11 @@ jobs:
       run:
         working-directory: ./server
     steps:
-      - id: token
-        uses: immich-app/devtools/actions/create-workflow-token@caa599d954228439ea3e8ce1c3328f41ab120ee6 # create-workflow-token-action-v2.0.0
-        with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
       - name: Setup Node
