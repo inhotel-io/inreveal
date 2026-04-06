@@ -15,6 +15,7 @@ import {
 
 class AuthManager {
   isPurchased = $state(false);
+  isDemo = $state(false);
   isSharedLink = $derived(isSharedLinkRoute(page.route?.id));
   params = $derived(this.isSharedLink ? { key: page.params.key, slug: page.params.slug } : {});
 
@@ -103,6 +104,7 @@ class AuthManager {
 
     if (redirectUri.startsWith('/')) {
       this.isPurchased = false;
+      this.isDemo = false;
 
       this.reset();
       eventManager.emit('AuthLogout');

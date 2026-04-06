@@ -173,6 +173,7 @@ describe(ServerService.name, () => {
   describe('getSystemConfig', () => {
     it('should respond the server configuration', async () => {
       await expect(sut.getSystemConfig()).resolves.toEqual({
+        demoMode: false,
         loginPageMessage: '',
         oauthButtonText: 'Login with OAuth',
         trashDays: 30,

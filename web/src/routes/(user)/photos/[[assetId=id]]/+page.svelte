@@ -67,14 +67,53 @@
     SearchSuggestionType,
     type SmartSearchFacetsResponseDto,
   } from '@immich/sdk';
-  import { ActionButton, CommandPaletteDefaultProvider, ImageCarousel } from '@immich/ui';
+  import { ActionButton, CommandPaletteDefaultProvider, ImageCarousel, type CarouselImageItem } from '@immich/ui';
   import { mdiDotsVertical } from '@mdi/js';
   import { untrack } from 'svelte';
   import { t } from 'svelte-i18n';
   import { SvelteMap } from 'svelte/reactivity';
 
+  type DemoMemoryCarouselItem = CarouselImageItem & { shouldGlow: boolean };
+
   let timelineManager = $state<TimelineManager>() as TimelineManager;
 
+  // Demo mode: glow effect on filter panel to draw attention
+  const DEMO_FILTER_CLICKED_KEY = 'demo-filter-panel-clicked';
+  const DEMO_MEMORY_CLICKED_KEY = 'demo-south-africa-memory-clicked';
+  const DEMO_MEMORY_TITLE = 'Your recent trip to South Africa';
+  let filterDismissed = $state(!!globalThis.localStorage?.getItem(DEMO_FILTER_CLICKED_KEY));
+  let memoryDismissed = $state(!!globalThis.localStorage?.getItem(DEMO_MEMORY_CLICKED_KEY));
+  let showFilterGlow = $derived(authManager.isDemo && !filterDismissed);
+  let showMemoryGlow = $derived(authManager.isDemo && !memoryDismissed);
+  let showDemoGlow = $derived(showFilterGlow || showMemoryGlow);
+
+  function onFilterPanelClick() {
+    if (showFilterGlow) {
+      filterDismissed = true;
+      globalThis.localStorage?.setItem(DEMO_FILTER_CLICKED_KEY, 'true');
+    }
+  }
+
+  function onMemoryClick(item: DemoMemoryCarouselItem) {
+    if (item.shouldGlow) {
+      memoryDismissed = true;
+      globalThis.localStorage?.setItem(DEMO_MEMORY_CLICKED_KEY, 'true');
+    }
+  }
+
+  $effect(() => {
+    if (!showDemoGlow) {
+      return;
+    }
+    const id = 'demo-glow-keyframes';
+    if (document.getElementById(id)) {
+      return;
+    }
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = `@keyframes demo-glow-pulse{0%,100%{box-shadow:0 0 4px 1px oklch(.65 .2 250/.3)}50%{box-shadow:0 0 12px 3px oklch(.65 .2 250/.5)}}`;
+    document.head.append(style);
+  });
   // Filter state
   const initialSearchState = getSearchablePageState(page.url);
   let filters = $state<FilterState>({
@@ -382,28 +421,41 @@
     });
   });
 
-  const items = $derived(
-    memoryManager.memories.map((memory) => ({
-      id: memory.id,
-      title: $memoryLaneTitle(memory),
-      href: Route.memoryViewer({ id: memory.assets[0].id }),
-      alt: $t('memory_lane_title', { values: { title: $getAltText(toTimelineAsset(memory.assets[0])) } }),
-      src: getAssetMediaUrl({ id: memory.assets[0].id }),
-    })),
+  const items = $derived.by((): DemoMemoryCarouselItem[] =>
+    memoryManager.memories.map((memory) => {
+      const title = $memoryLaneTitle(memory);
+
+      return {
+        id: memory.id,
+        title,
+        href: Route.memoryViewer({ id: memory.assets[0].id }),
+        alt: $t('memory_lane_title', { values: { title: $getAltText(toTimelineAsset(memory.assets[0])) } }),
+        src: getAssetMediaUrl({ id: memory.assets[0].id }),
+        shouldGlow: showMemoryGlow && title === DEMO_MEMORY_TITLE,
+      };
+    }),
   );
 </script>
 
 <UserPageLayout hideNavbar={assetMultiSelectManager.selectionActive} scrollbar={false}>
   <div class="flex h-full">
-    {#key showSearchResults ? `photos-search-${committedQuery.trim()}:${$lang}` : 'photos-browse'}
-      <FilterPanel
-        bind:filters
-        config={filterConfig}
-        timeBuckets={smartFacetBuckets}
-        storageKey="gallery-filter-visible-sections-photos"
-        hidden={isTimelineEmpty}
-      />
-    {/key}
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div
+      class="h-full"
+      role="presentation"
+      onclick={onFilterPanelClick}
+      style={showFilterGlow ? 'animation: demo-glow-pulse 2s ease-in-out infinite; border-radius: 0' : ''}
+    >
+      {#key showSearchResults ? `photos-search-${committedQuery.trim()}:${$lang}` : 'photos-browse'}
+        <FilterPanel
+          bind:filters
+          config={filterConfig}
+          timeBuckets={smartFacetBuckets}
+          storageKey="gallery-filter-visible-sections-photos"
+          hidden={isTimelineEmpty}
+        />
+      {/key}
+    </div>
     <div class="flex flex-1 flex-col overflow-hidden pl-4">
       {#if hasActiveFilters}
         <ActiveFiltersBar
@@ -442,7 +494,33 @@
           withStacked
         >
           {#if authManager.preferences.memories.enabled && !hasActiveFilters}
-            <ImageCarousel {items} />
+            <ImageCarousel {items}>
+              {#snippet child(item: DemoMemoryCarouselItem)}
+                <a
+                  class="demo-memory-card relative me-2 inline-block aspect-3/4 h-54 rounded-xl last:me-0 max-md:h-37.5 md:me-4 md:aspect-4/3 xl:aspect-video {item.shouldGlow
+                    ? 'demo-memory-glow'
+                    : ''}"
+                  href={item.href}
+                  onclick={() => onMemoryClick(item)}
+                  style={item.shouldGlow ? 'animation: demo-glow-pulse 2s ease-in-out infinite' : ''}
+                >
+                  <img
+                    class="h-full w-full rounded-xl object-cover"
+                    src={item.src}
+                    alt={item.alt ?? item.title}
+                    draggable="false"
+                  />
+                  <div
+                    class="absolute start-0 top-0 h-full w-full rounded-xl bg-linear-to-t from-black/40 via-transparent to-transparent transition-all hover:bg-black/20"
+                  ></div>
+                  <p
+                    class="absolute start-4 bottom-2 w-[calc(100%-2rem)] whitespace-normal text-lg text-white max-md:text-sm"
+                  >
+                    {item.title}
+                  </p>
+                </a>
+              {/snippet}
+            </ImageCarousel>
           {/if}
           {#snippet empty()}
             <EmptyPlaceholder
@@ -516,3 +594,11 @@
     {/if}
   </AssetSelectControlBar>
 {/if}
+
+<style>
+  .demo-memory-card {
+    box-shadow:
+      rgba(60, 64, 67, 0.3) 0px 1px 2px 0px,
+      rgba(60, 64, 67, 0.15) 0px 1px 3px 1px;
+  }
+</style>

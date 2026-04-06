@@ -39,6 +39,37 @@
   } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import { fly } from 'svelte/transition';
+
+  const DEMO_MEMORIES_CLICKED_KEY = 'demo-memories-clicked';
+  let memoriesDismissed = $state(!!globalThis.localStorage?.getItem(DEMO_MEMORIES_CLICKED_KEY));
+  let showMemoriesGlow = $derived(authManager.isDemo && !memoriesDismissed);
+
+  function onMemoriesClick() {
+    if (showMemoriesGlow) {
+      memoriesDismissed = true;
+      globalThis.localStorage?.setItem(DEMO_MEMORIES_CLICKED_KEY, 'true');
+    }
+  }
+
+  $effect(() => {
+    if (!showMemoriesGlow) {
+      return;
+    }
+    const glowId = 'demo-glow-keyframes';
+    if (!document.getElementById(glowId)) {
+      const style = document.createElement('style');
+      style.id = glowId;
+      style.textContent = `@keyframes demo-glow-pulse{0%,100%{box-shadow:0 0 4px 1px oklch(.65 .2 250/.3)}50%{box-shadow:0 0 12px 3px oklch(.65 .2 250/.5)}}`;
+      document.head.append(style);
+    }
+    const shineId = 'demo-shine-keyframes';
+    if (!document.getElementById(shineId)) {
+      const style = document.createElement('style');
+      style.id = shineId;
+      style.textContent = `@keyframes demo-shine-sweep{0%{transform:translateX(-140%) skewX(-18deg);opacity:0}20%{opacity:.45}55%,100%{transform:translateX(170%) skewX(-18deg);opacity:0}}`;
+      document.head.append(style);
+    }
+  });
 </script>
 
 <Sidebar ariaLabel={$t('primary')}>
@@ -70,7 +101,7 @@
     <NavbarItem title={$t('people')} href={Route.people()} icon={mdiAccountOutline} activeIcon={mdiAccount} />
   {/if}
 
-  {#if authManager.preferences.sharedLinks.enabled && authManager.preferences.sharedLinks.sidebarWeb}
+  {#if authManager.preferences.sharedLinks.enabled && authManager.preferences.sharedLinks.sidebarWeb && !authManager.isDemo}
     <NavbarItem title={$t('shared_links')} href={Route.sharedLinks()} icon={mdiLink} />
   {/if}
 
@@ -86,7 +117,14 @@
   <NavbarItem title={$t('favorites')} href={Route.favorites()} icon={mdiHeartOutline} activeIcon={mdiHeart} />
 
   {#if authManager.preferences.memories.enabled}
-    <NavbarItem title={$t('memories')} href={Route.memories()} icon={mdiHistory} />
+    <span onclick={onMemoriesClick} role="presentation">
+      <NavbarItem
+        title={$t('memories')}
+        href={Route.memories()}
+        icon={mdiHistory}
+        class={showMemoriesGlow ? 'demo-memories-glow' : ''}
+      />
+    </span>
   {/if}
 
   <NavbarItem
@@ -112,7 +150,9 @@
 
   <NavbarItem title={$t('utilities')} href={Route.utilities()} icon={mdiToolboxOutline} activeIcon={mdiToolbox} />
 
-  <NavbarItem title={$t('import')} href={Route.import()} icon={mdiDatabaseImportOutline} />
+  {#if !authManager.isDemo}
+    <NavbarItem title={$t('import')} href={Route.import()} icon={mdiDatabaseImportOutline} />
+  {/if}
 
   <NavbarItem
     title={$t('archive')}
@@ -123,9 +163,28 @@
 
   <NavbarItem title={$t('locked_folder')} href={Route.locked()} icon={mdiLockOutline} activeIcon={mdiLock} />
 
-  {#if featureFlagsManager.value.trash}
+  {#if featureFlagsManager.value.trash && !authManager.isDemo}
     <NavbarItem title={$t('trash')} href={Route.trash()} icon={mdiTrashCanOutline} activeIcon={mdiTrashCan} />
   {/if}
 
   <BottomInfo />
 </Sidebar>
+
+<style>
+  :global(.demo-memories-glow) {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    animation: demo-glow-pulse 2s ease-in-out infinite;
+  }
+
+  :global(.demo-memories-glow::after) {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(105deg, transparent 30%, oklch(0.88 0.12 250 / 0.38) 48%, transparent 66%);
+    animation: demo-shine-sweep 2.8s ease-in-out infinite;
+    pointer-events: none;
+  }
+</style>

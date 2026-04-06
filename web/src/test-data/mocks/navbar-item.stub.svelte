@@ -6,12 +6,14 @@
     href?: string;
     expanded?: boolean;
     items?: Snippet;
+    class?: string;
+    onclick?: () => void;
   }
 
-  let { title, href = '#', expanded = $bindable(false), items }: Props = $props();
+  let { title, href = '#', expanded = $bindable(false), items, class: className, onclick }: Props = $props();
 </script>
 
-<a {href} data-expanded={expanded}>{title}</a>
+<a {href} data-expanded={expanded} class={className} {onclick}>{title}</a>
 
 {#if items}
   {@render items()}

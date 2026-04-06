@@ -6,6 +6,7 @@ import { AssetTypeEnum } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
+import { readable } from 'svelte/store';
 import PhotosPage from './+page.svelte';
 
 const { mockPage, mockAssetMultiSelectManager, mockAuthManager, mockMemoryManager, mockRegisterSelectionContext } =
@@ -22,6 +23,7 @@ const { mockPage, mockAssetMultiSelectManager, mockAuthManager, mockMemoryManage
       isAllUserOwned: true,
     },
     mockAuthManager: {
+      isDemo: false,
       preferences: { memories: { enabled: false } },
     },
     mockMemoryManager: {
@@ -176,7 +178,7 @@ vi.mock('$lib/services/asset.service', () => ({
 vi.mock('$lib/utils', () => ({
   createUrl: vi.fn(() => ''),
   getAssetMediaUrl: vi.fn(() => ''),
-  memoryLaneTitle: vi.fn(() => 'memory'),
+  memoryLaneTitle: readable((memory: { title?: string }) => memory.title ?? 'memory'),
 }));
 
 vi.mock('$lib/utils/file-uploader', () => ({
@@ -189,7 +191,7 @@ vi.mock('$lib/utils/photos-filter-options', () => ({
 }));
 
 vi.mock('$lib/utils/thumbnail-util', () => ({
-  getAltText: vi.fn(() => 'alt'),
+  getAltText: readable(() => 'alt'),
 }));
 
 vi.mock('$lib/utils/timeline-util', () => ({
@@ -210,6 +212,8 @@ describe('Photos page search URL state', () => {
     lang.set('de');
     mockAssetMultiSelectManager.selectionActive = false;
     mockAssetMultiSelectManager.assets = [];
+    mockAuthManager.isDemo = false;
+    mockAuthManager.preferences = { memories: { enabled: false } };
     mockMemoryManager.memories = [];
     sdkMock.getFilterSuggestions.mockResolvedValue({
       people: [],
@@ -465,5 +469,22 @@ describe('Photos page search URL state', () => {
     expect(options.getOnUndoDelete()).toEqual(expect.any(Function));
     options.clearSelection();
     expect(mockAssetMultiSelectManager.clear).toHaveBeenCalledOnce();
+  });
+
+  it('highlights the South Africa memory card in demo mode', () => {
+    mockPage.url = new URL('https://gallery.test/photos');
+    mockAuthManager.isDemo = true;
+    mockAuthManager.preferences = { memories: { enabled: true } };
+    mockMemoryManager.memories = [
+      {
+        id: 'south-africa-memory',
+        title: 'Your recent trip to South Africa',
+        assets: [{ id: 'asset-1' }],
+      },
+    ];
+
+    renderPage();
+
+    expect(screen.getByText('Your recent trip to South Africa').closest('a')).toHaveClass('demo-memory-glow');
   });
 });

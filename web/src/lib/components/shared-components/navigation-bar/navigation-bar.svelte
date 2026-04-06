@@ -37,6 +37,32 @@
   let innerWidth: number = $state(0);
   const hasUnreadNotifications = $derived(notificationManager.notifications.length > 0);
 
+  // Demo mode: glow effect on the cmdk quick-search pill to draw attention on first visit.
+  const DEMO_CMDK_CLICKED_KEY = 'demo-cmdk-clicked';
+  let cmdkDismissed = $state(!!globalThis.localStorage?.getItem(DEMO_CMDK_CLICKED_KEY));
+  const showCmdkGlow = $derived(authManager.isDemo && !cmdkDismissed);
+
+  function onCmdkTriggerClick() {
+    if (showCmdkGlow) {
+      cmdkDismissed = true;
+      globalThis.localStorage?.setItem(DEMO_CMDK_CLICKED_KEY, 'true');
+    }
+  }
+
+  $effect(() => {
+    if (!showCmdkGlow) {
+      return;
+    }
+    const id = 'demo-glow-keyframes';
+    if (document.querySelector(`#${id}`)) {
+      return;
+    }
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = `@keyframes demo-glow-pulse{0%,100%{box-shadow:0 0 4px 1px oklch(.65 .2 250/.3)}50%{box-shadow:0 0 12px 3px oklch(.65 .2 250/.5)}}`;
+    document.head.append(style);
+  });
+
   onMount(async () => {
     try {
       await notificationManager.refresh();
@@ -83,7 +109,14 @@
     </div>
     <div class="flex justify-between gap-4 lg:gap-8 pe-6">
       <div class="hidden w-full max-w-5xl flex-1 tall:ps-0 sm:block">
-        <GlobalSearchInputTrigger />
+        <div
+          class="rounded-lg"
+          role="presentation"
+          onclick={showCmdkGlow ? onCmdkTriggerClick : undefined}
+          style={showCmdkGlow ? 'animation: demo-glow-pulse 2s ease-in-out infinite' : ''}
+        >
+          <GlobalSearchInputTrigger />
+        </div>
       </div>
 
       <section class="flex place-items-center justify-end gap-1 md:gap-2 w-full sm:w-auto">
@@ -99,7 +132,7 @@
           aria-label={$t('go_to_search')}
         />
 
-        {#if !page.url.pathname.includes('/admin') && onUploadClick}
+        {#if !page.url.pathname.includes('/admin') && onUploadClick && !authManager.isDemo}
           <Button
             leadingIcon={mdiTrayArrowUp}
             onclick={onUploadClick}
