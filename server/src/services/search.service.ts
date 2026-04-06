@@ -211,6 +211,7 @@ export class SearchService extends BaseService {
         userIds: await userIds,
         viewingUserId: auth.user.id,
         embedding,
+        orderDirection: dto.order,
         visibility: dto.visibility ?? (auth.session?.hasElevatedPermission ? undefined : 'not-locked'),
       },
     );
