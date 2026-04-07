@@ -201,6 +201,7 @@ export class SearchService extends BaseService {
         userIds: await userIds,
         embedding,
         orderDirection: dto.order,
+        maxDistance: machineLearning.clip.maxDistance,
         visibility: dto.visibility ?? (auth.session?.hasElevatedPermission ? undefined : 'not-locked'),
       },
     );
