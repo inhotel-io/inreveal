@@ -591,11 +591,13 @@ describe(PersonService.name, () => {
 
       mocks.assetJob.streamForDetectFacesJob.mockReturnValue(makeStream([asset]));
       mocks.person.getAllWithoutFaces.mockResolvedValue([person]);
+      mocks.sharedSpace.deleteAllOrphanedPersons.mockResolvedValue(void 0 as any);
 
       await sut.handleQueueDetectFaces({ force: true });
 
       expect(mocks.person.deleteFaces).toHaveBeenCalledWith({ sourceType: SourceType.MachineLearning });
       expect(mocks.person.delete).toHaveBeenCalledWith([person.id]);
+      expect(mocks.sharedSpace.deleteAllOrphanedPersons).toHaveBeenCalled();
       expect(mocks.person.vacuum).toHaveBeenCalledWith({ reindexVectors: true });
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.FileDelete,
@@ -619,6 +621,7 @@ describe(PersonService.name, () => {
       expect(mocks.person.delete).not.toHaveBeenCalled();
       expect(mocks.person.deleteFaces).not.toHaveBeenCalled();
       expect(mocks.person.vacuum).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.deleteAllOrphanedPersons).not.toHaveBeenCalled();
       expect(mocks.storage.unlink).not.toHaveBeenCalled();
       expect(mocks.assetJob.streamForDetectFacesJob).toHaveBeenCalledWith(undefined);
       expect(mocks.job.queueAll).toHaveBeenCalledWith([
@@ -640,6 +643,7 @@ describe(PersonService.name, () => {
       mocks.assetJob.streamForDetectFacesJob.mockReturnValue(makeStream([asset]));
       mocks.person.getAllWithoutFaces.mockResolvedValue([person]);
       mocks.person.deleteFaces.mockResolvedValue();
+      mocks.sharedSpace.deleteAllOrphanedPersons.mockResolvedValue(void 0 as any);
 
       await sut.handleQueueDetectFaces({ force: true });
 
@@ -651,6 +655,7 @@ describe(PersonService.name, () => {
         },
       ]);
       expect(mocks.person.delete).toHaveBeenCalledWith([person.id]);
+      expect(mocks.sharedSpace.deleteAllOrphanedPersons).toHaveBeenCalled();
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.FileDelete,
         data: { files: [person.thumbnailPath] },
