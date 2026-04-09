@@ -192,7 +192,7 @@ const updatedConfig = Object.freeze<SystemConfig>({
     extractEmbedded: false,
   },
   newVersionCheck: {
-    enabled: false,
+    enabled: true,
     channel: ReleaseChannel.Stable,
   },
   trash: {
