@@ -643,7 +643,7 @@ describe(LibraryService.name, () => {
         const assetId = newUuid();
 
         mocks.library.get.mockResolvedValue(library);
-        mocks.asset.createAll.mockResolvedValue([{ id: assetId } as any]);
+        mocks.asset.createAll.mockResolvedValue([assetId]);
         mocks.sharedSpace.getSpacesLinkedToLibrary.mockResolvedValue([
           { spaceId, libraryId, addedById: null, createdAt: newDate(), faceRecognitionEnabled: true },
         ]);
@@ -664,7 +664,7 @@ describe(LibraryService.name, () => {
         const assetId = newUuid();
 
         mocks.library.get.mockResolvedValue(library);
-        mocks.asset.createAll.mockResolvedValue([{ id: assetId } as any]);
+        mocks.asset.createAll.mockResolvedValue([assetId]);
         mocks.sharedSpace.getSpacesLinkedToLibrary.mockResolvedValue([
           { spaceId: space1, libraryId, addedById: null, createdAt: newDate(), faceRecognitionEnabled: true },
           { spaceId: space2, libraryId, addedById: null, createdAt: newDate(), faceRecognitionEnabled: true },
@@ -687,7 +687,7 @@ describe(LibraryService.name, () => {
         const library = factory.library({ id: libraryId });
 
         mocks.library.get.mockResolvedValue(library);
-        mocks.asset.createAll.mockResolvedValue([{ id: newUuid() } as any]);
+        mocks.asset.createAll.mockResolvedValue([newUuid()]);
         mocks.sharedSpace.getSpacesLinkedToLibrary.mockResolvedValue([]);
 
         await sut.handleSyncFiles({ libraryId, paths: ['/photos/test.jpg'], progressCounter: 1, totalAssets: 1 });
@@ -702,7 +702,7 @@ describe(LibraryService.name, () => {
         const library = factory.library({ id: libraryId });
 
         mocks.library.get.mockResolvedValue(library);
-        mocks.asset.createAll.mockResolvedValue([{ id: newUuid() } as any]);
+        mocks.asset.createAll.mockResolvedValue([newUuid()]);
         mocks.sharedSpace.getSpacesLinkedToLibrary.mockResolvedValue([
           { spaceId: newUuid(), libraryId, addedById: null, createdAt: newDate(), faceRecognitionEnabled: false },
         ]);
