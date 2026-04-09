@@ -28,8 +28,8 @@ final Map<String, Map<String, Object?>> openApiPatches = {
     'albums': {'defaultAssetOrder': 'desc'},
   },
   'ServerConfigDto': {
-    'mapLightStyleUrl': 'https://tiles.immich.cloud/v1/style/light.json',
-    'mapDarkStyleUrl': 'https://tiles.immich.cloud/v1/style/dark.json',
+    'mapLightStyleUrl': 'https://tiles.openfreemap.org/styles/positron',
+    'mapDarkStyleUrl': 'https://tiles.openfreemap.org/styles/dark',
     'minFaces': 3,
   },
   'UserResponseDto': {'profileChangedAt': _now},
