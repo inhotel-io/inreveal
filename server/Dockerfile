@@ -41,7 +41,8 @@ COPY ./packages/sdk ./packages/sdk/
 COPY ./packages/cli ./packages/cli/
 RUN --mount=type=cache,id=pnpm-cli,target=/buildcache/pnpm-store \
   pnpm --filter @immich/sdk --filter @immich/cli install --frozen-lockfile && \
-  pnpm --filter @immich/sdk --filter @immich/cli build && \
+  pnpm --filter @immich/sdk build && \
+  pnpm --filter @immich/cli build && \
   pnpm --filter @immich/cli --prod --no-optional deploy /output/cli-pruned
 
 FROM builder AS plugins
