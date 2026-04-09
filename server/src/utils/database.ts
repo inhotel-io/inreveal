@@ -440,7 +440,7 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
         : qb.where('asset.visibility', '=', options.visibility!),
     )
     .$if(!!options.albumIds && options.albumIds.length > 0, (qb) => inAlbums(qb, options.albumIds!))
-    .$if(!!options.spaceId, (qb) =>
+    .$if(!!options.spaceId && !options.timelineSpaceIds, (qb) =>
       qb.where((eb) =>
         eb.or([
           eb.exists(
@@ -454,6 +454,25 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
               .selectFrom('shared_space_library')
               .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
               .where('shared_space_library.spaceId', '=', asUuid(options.spaceId!)),
+          ),
+        ]),
+      ),
+    )
+    .$if(!!options.timelineSpaceIds && !!options.userIds, (qb) =>
+      qb.where((eb) =>
+        eb.or([
+          eb('asset.ownerId', '=', anyUuid(options.userIds!)),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .whereRef('shared_space_asset.assetId', '=', 'asset.id')
+              .where('shared_space_asset.spaceId', '=', anyUuid(options.timelineSpaceIds!)),
+          ),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+              .where('shared_space_library.spaceId', '=', anyUuid(options.timelineSpaceIds!)),
           ),
         ]),
       ),
@@ -514,7 +533,9 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
     .$if(!!options.checksum, (qb) => qb.where('asset.checksum', '=', options.checksum!))
     .$if(!!options.id, (qb) => qb.where('asset.id', '=', asUuid(options.id!)))
     .$if(!!options.libraryId, (qb) => qb.where('asset.libraryId', '=', asUuid(options.libraryId!)))
-    .$if(!!options.userIds && !options.spaceId, (qb) => qb.where('asset.ownerId', '=', anyUuid(options.userIds!)))
+    .$if(!!options.userIds && !options.spaceId && !options.timelineSpaceIds, (qb) =>
+      qb.where('asset.ownerId', '=', anyUuid(options.userIds!)),
+    )
     .$if(!!options.encodedVideoPath, (qb) =>
       qb
         .innerJoin('asset_file', (join) =>
