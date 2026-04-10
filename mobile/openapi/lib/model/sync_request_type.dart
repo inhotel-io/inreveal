@@ -10,7 +10,7 @@
 
 part of openapi.api;
 
-/// Sync request type
+/// Sync request types
 class SyncRequestType {
   /// Instantiate a new enum with the provided [value].
   const SyncRequestType._(this.value);
@@ -24,7 +24,6 @@ class SyncRequestType {
   String toJson() => value;
 
   static const albumsV1 = SyncRequestType._(r'AlbumsV1');
-  static const albumsV2 = SyncRequestType._(r'AlbumsV2');
   static const albumUsersV1 = SyncRequestType._(r'AlbumUsersV1');
   static const albumToAssetsV1 = SyncRequestType._(r'AlbumToAssetsV1');
   static const albumAssetsV1 = SyncRequestType._(r'AlbumAssetsV1');
@@ -46,11 +45,19 @@ class SyncRequestType {
   static const assetFacesV1 = SyncRequestType._(r'AssetFacesV1');
   static const assetFacesV2 = SyncRequestType._(r'AssetFacesV2');
   static const userMetadataV1 = SyncRequestType._(r'UserMetadataV1');
+  static const sharedSpacesV1 = SyncRequestType._(r'SharedSpacesV1');
+  static const sharedSpaceMembersV1 = SyncRequestType._(r'SharedSpaceMembersV1');
+  static const sharedSpaceAssetsV1 = SyncRequestType._(r'SharedSpaceAssetsV1');
+  static const sharedSpaceAssetExifsV1 = SyncRequestType._(r'SharedSpaceAssetExifsV1');
+  static const sharedSpaceToAssetsV1 = SyncRequestType._(r'SharedSpaceToAssetsV1');
+  static const librariesV1 = SyncRequestType._(r'LibrariesV1');
+  static const libraryAssetsV1 = SyncRequestType._(r'LibraryAssetsV1');
+  static const libraryAssetExifsV1 = SyncRequestType._(r'LibraryAssetExifsV1');
+  static const sharedSpaceLibrariesV1 = SyncRequestType._(r'SharedSpaceLibrariesV1');
 
   /// List of all possible values in this [enum][SyncRequestType].
   static const values = <SyncRequestType>[
     albumsV1,
-    albumsV2,
     albumUsersV1,
     albumToAssetsV1,
     albumAssetsV1,
@@ -72,6 +79,15 @@ class SyncRequestType {
     assetFacesV1,
     assetFacesV2,
     userMetadataV1,
+    sharedSpacesV1,
+    sharedSpaceMembersV1,
+    sharedSpaceAssetsV1,
+    sharedSpaceAssetExifsV1,
+    sharedSpaceToAssetsV1,
+    librariesV1,
+    libraryAssetsV1,
+    libraryAssetExifsV1,
+    sharedSpaceLibrariesV1,
   ];
 
   static SyncRequestType? fromJson(dynamic value) => SyncRequestTypeTypeTransformer().decode(value);
@@ -111,7 +127,6 @@ class SyncRequestTypeTypeTransformer {
     if (data != null) {
       switch (data) {
         case r'AlbumsV1': return SyncRequestType.albumsV1;
-        case r'AlbumsV2': return SyncRequestType.albumsV2;
         case r'AlbumUsersV1': return SyncRequestType.albumUsersV1;
         case r'AlbumToAssetsV1': return SyncRequestType.albumToAssetsV1;
         case r'AlbumAssetsV1': return SyncRequestType.albumAssetsV1;
@@ -133,6 +148,15 @@ class SyncRequestTypeTypeTransformer {
         case r'AssetFacesV1': return SyncRequestType.assetFacesV1;
         case r'AssetFacesV2': return SyncRequestType.assetFacesV2;
         case r'UserMetadataV1': return SyncRequestType.userMetadataV1;
+        case r'SharedSpacesV1': return SyncRequestType.sharedSpacesV1;
+        case r'SharedSpaceMembersV1': return SyncRequestType.sharedSpaceMembersV1;
+        case r'SharedSpaceAssetsV1': return SyncRequestType.sharedSpaceAssetsV1;
+        case r'SharedSpaceAssetExifsV1': return SyncRequestType.sharedSpaceAssetExifsV1;
+        case r'SharedSpaceToAssetsV1': return SyncRequestType.sharedSpaceToAssetsV1;
+        case r'LibrariesV1': return SyncRequestType.librariesV1;
+        case r'LibraryAssetsV1': return SyncRequestType.libraryAssetsV1;
+        case r'LibraryAssetExifsV1': return SyncRequestType.libraryAssetExifsV1;
+        case r'SharedSpaceLibrariesV1': return SyncRequestType.sharedSpaceLibrariesV1;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
