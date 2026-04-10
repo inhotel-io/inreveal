@@ -7,6 +7,7 @@ import 'package:immich_mobile/infrastructure/entities/asset_edit.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/asset_face.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/auth_user.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/exif.entity.dart';
+import 'package:immich_mobile/infrastructure/entities/library.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/local_album.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/local_album_asset.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/local_asset.entity.dart';
@@ -21,6 +22,10 @@ import 'package:immich_mobile/infrastructure/entities/remote_album_user.entity.d
 import 'package:immich_mobile/infrastructure/entities/remote_asset.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/remote_asset.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/remote_asset_cloud_id.entity.dart';
+import 'package:immich_mobile/infrastructure/entities/shared_space.entity.dart';
+import 'package:immich_mobile/infrastructure/entities/shared_space_asset.entity.dart';
+import 'package:immich_mobile/infrastructure/entities/shared_space_library.entity.dart';
+import 'package:immich_mobile/infrastructure/entities/shared_space_member.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/stack.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/store.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/trashed_local_asset.entity.dart';
@@ -45,6 +50,11 @@ import 'package:immich_mobile/infrastructure/repositories/db.repository.steps.da
     RemoteAlbumAssetEntity,
     RemoteAlbumUserEntity,
     RemoteAssetCloudIdEntity,
+    SharedSpaceEntity,
+    SharedSpaceMemberEntity,
+    SharedSpaceAssetEntity,
+    LibraryEntity,
+    SharedSpaceLibraryEntity,
     MemoryEntity,
     MemoryAssetEntity,
     StackEntity,
@@ -84,7 +94,7 @@ class Drift extends $Drift {
   }
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -226,29 +236,42 @@ class Drift extends $Drift {
             await m.createIndex(v22.idxAssetEditAssetId);
           },
           from22To23: (m, v23) async {
-            await m.renameColumn(v23.localAssetEntity, 'duration_in_seconds', v23.localAssetEntity.durationMs);
-            await m.renameColumn(v23.remoteAssetEntity, 'duration_in_seconds', v23.remoteAssetEntity.durationMs);
+            await m.createTable(v23.sharedSpaceEntity);
+            await m.createTable(v23.sharedSpaceMemberEntity);
+            await m.createTable(v23.sharedSpaceAssetEntity);
+            await m.createIndex(v23.idxSharedSpaceCreatedById);
+            await m.createIndex(v23.idxSharedSpaceAssetSpaceAsset);
+          },
+          from23To24: (m, v24) async {
+            await m.createTable(v24.libraryEntity);
+            await m.createTable(v24.sharedSpaceLibraryEntity);
+            await m.createIndex(v24.idxSharedSpaceLibrarySpaceId);
+            await m.createIndex(v24.idxRemoteAssetLibraryCreated);
+          },
+          from24To25: (m, v25) async {
+            await m.renameColumn(v25.localAssetEntity, 'duration_in_seconds', v25.localAssetEntity.durationMs);
+            await m.renameColumn(v25.remoteAssetEntity, 'duration_in_seconds', v25.remoteAssetEntity.durationMs);
             await m.renameColumn(
-              v23.trashedLocalAssetEntity,
+              v25.trashedLocalAssetEntity,
               'duration_in_seconds',
-              v23.trashedLocalAssetEntity.durationMs,
+              v25.trashedLocalAssetEntity.durationMs,
             );
 
             await localAssetEntity.update().write(
-              LocalAssetEntityCompanion.custom(durationMs: v23.localAssetEntity.durationMs * const Constant(1000)),
+              LocalAssetEntityCompanion.custom(durationMs: v25.localAssetEntity.durationMs * const Constant(1000)),
             );
             await remoteAssetEntity.update().write(
-              RemoteAssetEntityCompanion.custom(durationMs: v23.remoteAssetEntity.durationMs * const Constant(1000)),
+              RemoteAssetEntityCompanion.custom(durationMs: v25.remoteAssetEntity.durationMs * const Constant(1000)),
             );
             await trashedLocalAssetEntity.update().write(
               TrashedLocalAssetEntityCompanion.custom(
-                durationMs: v23.trashedLocalAssetEntity.durationMs * const Constant(1000),
+                durationMs: v25.trashedLocalAssetEntity.durationMs * const Constant(1000),
               ),
             );
           },
-          from23To24: (m, v24) async {
+          from25To26: (m, v26) async {
             await customStatement('DROP INDEX IF EXISTS idx_remote_album_owner_id');
-            await m.alterTable(TableMigration(v24.remoteAlbumEntity));
+            await m.alterTable(TableMigration(v26.remoteAlbumEntity));
           },
         ),
       );
