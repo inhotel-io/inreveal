@@ -8,6 +8,7 @@ import 'package:immich_mobile/infrastructure/entities/asset_edit.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/asset_face.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/auth_user.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/exif.entity.dart';
+import 'package:immich_mobile/infrastructure/entities/library.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/local_album.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/local_album_asset.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/local_asset.entity.dart';
@@ -20,6 +21,10 @@ import 'package:immich_mobile/infrastructure/entities/remote_album_asset.entity.
 import 'package:immich_mobile/infrastructure/entities/remote_album_user.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/remote_asset.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/remote_asset_cloud_id.entity.dart';
+import 'package:immich_mobile/infrastructure/entities/shared_space.entity.dart';
+import 'package:immich_mobile/infrastructure/entities/shared_space_asset.entity.dart';
+import 'package:immich_mobile/infrastructure/entities/shared_space_library.entity.dart';
+import 'package:immich_mobile/infrastructure/entities/shared_space_member.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/stack.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/store.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/trashed_local_asset.entity.dart';
@@ -59,6 +64,11 @@ class IsarDatabaseRepository implements IDatabaseRepository {
     RemoteAlbumAssetEntity,
     RemoteAlbumUserEntity,
     RemoteAssetCloudIdEntity,
+    SharedSpaceEntity,
+    SharedSpaceMemberEntity,
+    SharedSpaceAssetEntity,
+    LibraryEntity,
+    SharedSpaceLibraryEntity,
     MemoryEntity,
     MemoryAssetEntity,
     StackEntity,
@@ -98,7 +108,7 @@ class Drift extends $Drift implements IDatabaseRepository {
   }
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -238,6 +248,19 @@ class Drift extends $Drift implements IDatabaseRepository {
           from21To22: (m, v22) async {
             await m.createTable(v22.assetEditEntity);
             await m.createIndex(v22.idxAssetEditAssetId);
+          },
+          from22To23: (m, v23) async {
+            await m.createTable(v23.sharedSpaceEntity);
+            await m.createTable(v23.sharedSpaceMemberEntity);
+            await m.createTable(v23.sharedSpaceAssetEntity);
+            await m.createIndex(v23.idxSharedSpaceCreatedById);
+            await m.createIndex(v23.idxSharedSpaceAssetSpaceAsset);
+          },
+          from23To24: (m, v24) async {
+            await m.createTable(v24.libraryEntity);
+            await m.createTable(v24.sharedSpaceLibraryEntity);
+            await m.createIndex(v24.idxSharedSpaceLibrarySpaceId);
+            await m.createIndex(v24.idxRemoteAssetLibraryCreated);
           },
         ),
       );
