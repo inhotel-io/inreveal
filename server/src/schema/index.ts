@@ -55,6 +55,7 @@ import { GeodataPlacesTable } from 'src/schema/tables/geodata-places.table';
 import { IntegrityReportTable } from 'src/schema/tables/integrity-report.table';
 import { LibraryAssetAuditTable } from 'src/schema/tables/library-asset-audit.table';
 import { LibraryAuditTable } from 'src/schema/tables/library-audit.table';
+import { LibraryUserTable } from 'src/schema/tables/library-user.table';
 import { LibraryTable } from 'src/schema/tables/library.table';
 import { MemoryAssetAuditTable } from 'src/schema/tables/memory-asset-audit.table';
 import { MemoryAssetTable } from 'src/schema/tables/memory-asset.table';
@@ -140,6 +141,7 @@ export class ImmichDatabase {
     IntegrityReportTable,
     LibraryTable,
     LibraryAuditTable,
+    LibraryUserTable,
     LibraryAssetAuditTable,
     MemoryTable,
     MemoryAuditTable,
@@ -267,6 +269,7 @@ export interface DB {
 
   library: LibraryTable;
   library_audit: LibraryAuditTable;
+  library_user: LibraryUserTable;
   library_asset_audit: LibraryAssetAuditTable;
 
   memory: MemoryTable;
