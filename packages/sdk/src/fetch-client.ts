@@ -2535,6 +2535,10 @@ export type ServerMediaTypesResponseDto = {
     /** Supported video MIME types */
     video: string[];
 };
+export type ServerMlHealthResponseDto = {
+    /** Whether the ML server is currently reachable and healthy for smart search */
+    smartSearchHealthy: boolean;
+};
 export type ServerPingResponse = {};
 export type ServerPingResponseRead = {
     res: string;
@@ -6905,6 +6909,17 @@ export function getSupportedMediaTypes(opts?: Oazapfts.RequestOpts) {
         status: 200;
         data: ServerMediaTypesResponseDto;
     }>("/server/media-types", {
+        ...opts
+    }));
+}
+/**
+ * Smart search health
+ */
+export function getMlHealth(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: ServerMlHealthResponseDto;
+    }>("/server/ml-health", {
         ...opts
     }));
 }
