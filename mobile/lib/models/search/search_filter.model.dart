@@ -1,6 +1,7 @@
 // ignore_for_file: public_member_api_docs, sort_constructors_first
 import 'dart:convert';
 
+import 'package:collection/collection.dart';
 import 'package:immich_mobile/domain/models/person.model.dart';
 import 'package:immich_mobile/entities/asset.entity.dart';
 
@@ -242,6 +243,19 @@ class SearchFilter {
     required this.mediaType,
   });
 
+  static SearchFilter empty() => SearchFilter(
+    people: const {},
+    location: SearchLocationFilter(),
+    camera: SearchCameraFilter(),
+    date: SearchDateFilter(),
+    display: SearchDisplayFilters(isFavorite: false, isArchive: false, isNotInAlbum: false),
+    rating: SearchRatingFilter(),
+    mediaType: AssetType.other,
+  );
+
+  static const _setEq = SetEquality<PersonDto>();
+  static const _listEq = ListEquality<String>();
+
   bool get isEmpty {
     return (context == null || (context != null && context!.isEmpty)) &&
         (filename == null || (filename!.isEmpty)) &&
@@ -313,8 +327,8 @@ class SearchFilter {
         other.language == language &&
         other.ocr == ocr &&
         other.assetId == assetId &&
-        other.people == people &&
-        other.tagIds == tagIds &&
+        _setEq.equals(other.people, people) &&
+        _listEq.equals(other.tagIds, tagIds) &&
         other.location == location &&
         other.camera == camera &&
         other.date == date &&
@@ -331,8 +345,8 @@ class SearchFilter {
         language.hashCode ^
         ocr.hashCode ^
         assetId.hashCode ^
-        people.hashCode ^
-        tagIds.hashCode ^
+        _setEq.hash(people) ^
+        _listEq.hash(tagIds) ^
         location.hashCode ^
         camera.hashCode ^
         date.hashCode ^
