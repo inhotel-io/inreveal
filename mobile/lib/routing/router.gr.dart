@@ -2292,6 +2292,22 @@ class PermissionOnboardingRoute extends PageRouteInfo<void> {
 }
 
 /// generated route for
+/// [PersonPickerPage]
+class PersonPickerRoute extends PageRouteInfo<void> {
+  const PersonPickerRoute({List<PageRouteInfo>? children})
+    : super(PersonPickerRoute.name, initialChildren: children);
+
+  static const String name = 'PersonPickerRoute';
+
+  static PageInfo page = PageInfo(
+    name,
+    builder: (data) {
+      return const PersonPickerPage();
+    },
+  );
+}
+
+/// generated route for
 /// [PersonResultPage]
 class PersonResultRoute extends PageRouteInfo<PersonResultRouteArgs> {
   PersonResultRoute({
@@ -2974,6 +2990,22 @@ class TrashRoute extends PageRouteInfo<void> {
     name,
     builder: (data) {
       return const TrashPage();
+    },
+  );
+}
+
+/// generated route for
+/// [WhenPickerPage]
+class WhenPickerRoute extends PageRouteInfo<void> {
+  const WhenPickerRoute({List<PageRouteInfo>? children})
+    : super(WhenPickerRoute.name, initialChildren: children);
+
+  static const String name = 'WhenPickerRoute';
+
+  static PageInfo page = PageInfo(
+    name,
+    builder: (data) {
+      return const WhenPickerPage();
     },
   );
 }
