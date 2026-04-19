@@ -44,6 +44,7 @@ import 'package:immich_mobile/pages/common/settings.page.dart';
 import 'package:immich_mobile/pages/common/splash_screen.page.dart';
 import 'package:immich_mobile/pages/common/tab_controller.page.dart';
 import 'package:immich_mobile/pages/common/tab_shell.page.dart';
+import 'package:immich_mobile/presentation/pages/common/gallery_tab_shell.page.dart';
 import 'package:immich_mobile/pages/editing/crop.page.dart';
 import 'package:immich_mobile/pages/editing/edit.page.dart';
 import 'package:immich_mobile/pages/editing/filter.page.dart';
@@ -194,6 +195,18 @@ class AppRouter extends RootStackRouter {
         AutoRoute(page: DriftLibraryRoute.page, guards: [_authGuard, _duplicateGuard]),
       ],
     ),
+    // >>> fork-only gallery-bottom-nav — rollback: remove this block and
+    // point the 5 callsites of GalleryTabShellRoute() back at TabShellRoute().
+    AutoRoute(
+      page: GalleryTabShellRoute.page,
+      guards: [_authGuard, _duplicateGuard],
+      children: [
+        AutoRoute(page: MainTimelineRoute.page, guards: [_authGuard, _duplicateGuard]),
+        AutoRoute(page: DriftAlbumsRoute.page, guards: [_authGuard, _duplicateGuard]),
+        AutoRoute(page: DriftLibraryRoute.page, guards: [_authGuard, _duplicateGuard]),
+      ],
+    ),
+    // <<< fork-only gallery-bottom-nav
     CustomRoute(
       page: GalleryViewerRoute.page,
       guards: [_authGuard, _galleryGuard],
@@ -268,6 +281,12 @@ class AppRouter extends RootStackRouter {
     AutoRoute(page: TrashRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: SharedLinkRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: SharedLinkEditRoute.page, guards: [_authGuard, _duplicateGuard]),
+    // >>> fork-only gallery-bottom-nav — expose Spaces as a top-level
+    // fullscreen route so pushes from GalleryTabShellRoute (Library card +
+    // list item) don't fall back to the legacy TabShellRoute's Spaces tab
+    // (which would render the old 4-tab nav).
+    AutoRoute(page: SpacesRoute.page, guards: [_authGuard, _duplicateGuard]),
+    // <<< fork-only
     CustomRoute(
       page: ActivitiesRoute.page,
       guards: [_authGuard, _duplicateGuard],
