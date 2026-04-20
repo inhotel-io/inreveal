@@ -15,7 +15,6 @@ export const servers = {
     server1: "/api"
 };
 export type UserResponseDto = {
-    /** Avatar color */
     avatarColor: UserAvatarColor;
     /** User email */
     email: string;
@@ -37,7 +36,6 @@ export type ActivityResponseDto = {
     createdAt: string;
     /** Activity ID */
     id: string;
-    /** Activity type */
     "type": ReactionType;
     user: UserResponseDto;
 };
@@ -48,7 +46,6 @@ export type ActivityCreateDto = {
     assetId?: string;
     /** Comment text (required if type is comment) */
     comment?: string;
-    /** Activity type (like or comment) */
     "type": ReactionType;
 };
 export type ActivityStatisticsResponseDto = {
@@ -58,21 +55,26 @@ export type ActivityStatisticsResponseDto = {
     likes: number;
 };
 export type DatabaseBackupDeleteDto = {
+    /** Backup filenames to delete */
     backups: string[];
 };
 export type DatabaseBackupDto = {
+    /** Backup filename */
     filename: string;
+    /** Backup file size */
     filesize: number;
+    /** Backup timezone */
     timezone: string;
 };
 export type DatabaseBackupListResponseDto = {
+    /** List of backups */
     backups: DatabaseBackupDto[];
 };
 export type DatabaseBackupUploadDto = {
+    /** Database backup file */
     file?: Blob;
 };
 export type SetMaintenanceModeDto = {
-    /** Maintenance action */
     action: MaintenanceAction;
     /** Restore backup filename */
     restoreBackupFilename?: string;
@@ -80,7 +82,6 @@ export type SetMaintenanceModeDto = {
 export type MaintenanceDetectInstallStorageFolderDto = {
     /** Number of files in the folder */
     files: number;
-    /** Storage folder */
     folder: StorageFolder;
     /** Whether the folder is readable */
     readable: boolean;
@@ -99,7 +100,6 @@ export type MaintenanceAuthDto = {
     username: string;
 };
 export type MaintenanceStatusResponseDto = {
-    /** Maintenance action */
     action: MaintenanceAction;
     active: boolean;
     error?: string;
@@ -108,16 +108,16 @@ export type MaintenanceStatusResponseDto = {
 };
 export type NotificationCreateDto = {
     /** Additional notification data */
-    data?: object;
+    data?: {
+        [key: string]: any;
+    };
     /** Notification description */
     description?: string | null;
-    /** Notification level */
     level?: NotificationLevel;
     /** Date when notification was read */
     readAt?: string | null;
     /** Notification title */
     title: string;
-    /** Notification type */
     "type"?: NotificationType;
     /** User ID to send notification to */
     userId: string;
@@ -126,18 +126,18 @@ export type NotificationDto = {
     /** Creation date */
     createdAt: string;
     /** Additional notification data */
-    data?: object;
+    data?: {
+        [key: string]: any;
+    };
     /** Notification description */
     description?: string;
     /** Notification ID */
     id: string;
-    /** Notification level */
     level: NotificationLevel;
     /** Date when notification was read */
     readAt?: string;
     /** Notification title */
     title: string;
-    /** Notification type */
     "type": NotificationType;
 };
 export type TemplateDto = {
@@ -182,11 +182,10 @@ export type UserLicense = {
     activatedAt: string;
     /** Activation key */
     activationKey: string;
-    /** License key */
+    /** License key (format: /^IM(SV|CL)(-[\dA-Za-z]{4}){8}$/) */
     licenseKey: string;
 };
 export type UserAdminResponseDto = {
-    /** Avatar color */
     avatarColor: UserAvatarColor;
     /** Creation date */
     createdAt: string;
@@ -198,7 +197,6 @@ export type UserAdminResponseDto = {
     id: string;
     /** Is admin user */
     isAdmin: boolean;
-    /** User license */
     license: (UserLicense) | null;
     /** User name */
     name: string;
@@ -214,7 +212,6 @@ export type UserAdminResponseDto = {
     quotaUsageInBytes: number | null;
     /** Require password change on next login */
     shouldChangePassword: boolean;
-    /** User status */
     status: UserStatus;
     /** Storage label */
     storageLabel: string | null;
@@ -222,7 +219,6 @@ export type UserAdminResponseDto = {
     updatedAt: string;
 };
 export type UserAdminCreateDto = {
-    /** Avatar color */
     avatarColor?: (UserAvatarColor) | null;
     /** User email */
     email: string;
@@ -248,7 +244,6 @@ export type UserAdminDeleteDto = {
     force?: boolean;
 };
 export type UserAdminUpdateDto = {
-    /** Avatar color */
     avatarColor?: (UserAvatarColor) | null;
     /** User email */
     email?: string;
@@ -282,7 +277,6 @@ export type CalendarHeatmapResponseDto = {
     totalCount: number;
 };
 export type AlbumsResponse = {
-    /** Default asset order for albums */
     defaultAssetOrder: AssetOrder;
 };
 export type CastResponse = {
@@ -359,11 +353,9 @@ export type UserPreferencesResponseDto = {
     tags: TagsResponse;
 };
 export type AlbumsUpdate = {
-    /** Default asset order for albums */
     defaultAssetOrder?: AssetOrder;
 };
 export type AvatarUpdate = {
-    /** Avatar color */
     color?: UserAvatarColor;
 };
 export type CastUpdate = {
@@ -469,7 +461,6 @@ export type AssetStatsResponseDto = {
     videos: number;
 };
 export type AlbumUserResponseDto = {
-    /** Album user role */
     role: AlbumUserRole;
     user: UserResponseDto;
 };
@@ -536,6 +527,15 @@ export type AlbumsAddAssetsResponseDto = {
     error?: BulkIdErrorReason;
     /** Operation success */
     success: boolean;
+};
+export type AlbumNameDto = {
+    albumName: string;
+    albumThumbnailAssetId: string | null;
+    assetCount: number;
+    endDate?: string;
+    id: string;
+    shared: boolean;
+    startDate?: string;
 };
 export type AlbumStatisticsResponseDto = {
     /** Number of non-shared albums */
@@ -829,7 +829,6 @@ export type AssetFaceWithoutPersonResponseDto = {
     imageHeight: number;
     /** Image width in pixels */
     imageWidth: number;
-    /** Face detection source type */
     sourceType?: SourceType;
 };
 export type PersonWithFacesResponseDto = {
@@ -837,7 +836,6 @@ export type PersonWithFacesResponseDto = {
     birthDate: string | null;
     /** Person color (hex) */
     color?: string;
-    /** Face detections */
     faces: AssetFaceWithoutPersonResponseDto[];
     /** Person ID */
     id: string;
@@ -854,7 +852,7 @@ export type PersonWithFacesResponseDto = {
     /** Thumbnail path */
     thumbnailPath: string;
     /** Entity type (person or pet) */
-    "type": string;
+    "type"?: string;
     /** Last update date */
     updatedAt?: string;
 };
@@ -887,10 +885,6 @@ export type AssetResponseDto = {
     checksum: string;
     /** The UTC timestamp when the asset was originally uploaded to Immich. */
     createdAt: string;
-    /** Device asset ID */
-    deviceAssetId: string;
-    /** Device ID */
-    deviceId: string;
     /** Duplicate group ID */
     duplicateId?: string | null;
     /** Video/gif duration in milliseconds (null for static images) */
@@ -940,328 +934,13 @@ export type AssetResponseDto = {
     tags?: TagResponseDto[];
     /** Thumbhash for thumbnail generation (base64) also used as the c query param for thumbnail cache busting. */
     thumbhash: string | null;
-    /** Asset type */
     "type": AssetTypeEnum;
     unassignedFaces?: AssetFaceWithoutPersonResponseDto[];
     /** The UTC timestamp when the asset record was last updated in the database. This is automatically maintained by the database and reflects when any field in the asset was last modified. */
     updatedAt: string;
-    /** Asset visibility */
     visibility: AssetVisibility;
     /** Asset width */
     width: number | null;
-};
-export type ContributorCountResponseDto = {
-    /** Number of assets contributed */
-    assetCount: number;
-    /** User ID */
-    userId: string;
-};
-export type AlbumResponseDto = {
-    /** Album name */
-    albumName: string;
-    /** Thumbnail asset ID */
-    albumThumbnailAssetId: string | null;
-    albumUsers: AlbumUserResponseDto[];
-    /** Number of assets */
-    assetCount: number;
-    assets: AssetResponseDto[];
-    contributorCounts?: ContributorCountResponseDto[];
-    /** Creation date */
-    createdAt: string;
-    /** Album description */
-    description: string;
-    /** End date (latest asset) */
-    endDate?: string;
-    /** Has shared link */
-    hasSharedLink: boolean;
-    /** Album ID */
-    id: string;
-    /** Activity feed enabled */
-    isActivityEnabled: boolean;
-    /** Last modified asset timestamp */
-    lastModifiedAssetTimestamp?: string;
-    /** Asset sort order */
-    order?: AssetOrder;
-    owner: UserResponseDto;
-    /** Owner user ID */
-    ownerId: string;
-    /** Is shared album */
-    shared: boolean;
-    /** Start date (earliest asset) */
-    startDate?: string;
-    /** Last update date */
-    updatedAt: string;
-};
-export type AlbumUserCreateDto = {
-    /** Album user role */
-    role: AlbumUserRole;
-    /** User ID */
-    userId: string;
-};
-export type CreateAlbumDto = {
-    /** Album name */
-    albumName: string;
-    /** Album users */
-    albumUsers?: AlbumUserCreateDto[];
-    /** Initial asset IDs */
-    assetIds?: string[];
-    /** Album description */
-    description?: string;
-};
-export type AlbumsAddAssetsDto = {
-    /** Album IDs */
-    albumIds: string[];
-    /** Asset IDs */
-    assetIds: string[];
-};
-export type AlbumsAddAssetsResponseDto = {
-    /** Error reason */
-    error?: BulkIdErrorReason;
-    /** Operation success */
-    success: boolean;
-};
-export type AlbumNameDto = {
-    albumName: string;
-    albumThumbnailAssetId: string | null;
-    assetCount: number;
-    endDate?: string;
-    id: string;
-    shared: boolean;
-    startDate?: string;
-};
-export type AlbumStatisticsResponseDto = {
-    /** Number of non-shared albums */
-    notShared: number;
-    /** Number of owned albums */
-    owned: number;
-    /** Number of shared albums */
-    shared: number;
-};
-export type UpdateAlbumDto = {
-    /** Album name */
-    albumName?: string;
-    /** Album thumbnail asset ID */
-    albumThumbnailAssetId?: string;
-    /** Album description */
-    description?: string;
-    /** Enable activity feed */
-    isActivityEnabled?: boolean;
-    /** Asset sort order */
-    order?: AssetOrder;
-};
-export type BulkIdsDto = {
-    /** IDs to process */
-    ids: string[];
-};
-export type BulkIdResponseDto = {
-    /** Error reason if failed */
-    error?: Error;
-    errorMessage?: string;
-    /** ID */
-    id: string;
-    /** Whether operation succeeded */
-    success: boolean;
-};
-export type UpdateAlbumUserDto = {
-    /** Album user role */
-    role: AlbumUserRole;
-};
-export type AlbumUserAddDto = {
-    /** Album user role */
-    role?: AlbumUserRole;
-    /** User ID */
-    userId: string;
-};
-export type AddUsersDto = {
-    /** Album users to add */
-    albumUsers: AlbumUserAddDto[];
-};
-export type ApiKeyResponseDto = {
-    /** Creation date */
-    createdAt: string;
-    /** API key ID */
-    id: string;
-    /** API key name */
-    name: string;
-    /** List of permissions */
-    permissions: Permission[];
-    /** Last update date */
-    updatedAt: string;
-};
-export type ApiKeyCreateDto = {
-    /** API key name */
-    name?: string;
-    /** List of permissions */
-    permissions: Permission[];
-};
-export type ApiKeyCreateResponseDto = {
-    apiKey: ApiKeyResponseDto;
-    /** API key secret (only shown once) */
-    secret: string;
-};
-export type ApiKeyUpdateDto = {
-    /** API key name */
-    name?: string;
-    /** List of permissions */
-    permissions?: Permission[];
-};
-export type AssetBulkDeleteDto = {
-    /** Force delete even if in use */
-    force?: boolean;
-    /** IDs to process */
-    ids: string[];
-};
-export type AssetMetadataUpsertItemDto = {
-    /** Metadata key */
-    key: string;
-    /** Metadata value (object) */
-    value: object;
-};
-export type AssetMediaCreateDto = {
-    /** Asset file data */
-    assetData: Blob;
-    /** Device asset ID */
-    deviceAssetId: string;
-    /** Device ID */
-    deviceId: string;
-    /** Duration (for videos) */
-    duration?: string;
-    /** File creation date */
-    fileCreatedAt: string;
-    /** File modification date */
-    fileModifiedAt: string;
-    /** Filename */
-    filename?: string;
-    /** Mark as favorite */
-    isFavorite?: boolean;
-    /** Live photo video ID */
-    livePhotoVideoId?: string;
-    /** Asset metadata items */
-    metadata?: AssetMetadataUpsertItemDto[];
-    /** Sidecar file data */
-    sidecarData?: Blob;
-    /** Asset visibility */
-    visibility?: AssetVisibility;
-};
-export type AssetMediaResponseDto = {
-    /** Asset media ID */
-    id: string;
-    /** Upload status */
-    status: AssetMediaStatus;
-};
-export type AssetBulkUpdateDto = {
-    /** Original date and time */
-    dateTimeOriginal?: string;
-    /** Relative time offset in seconds */
-    dateTimeRelative?: number;
-    /** Asset description */
-    description?: string;
-    /** Duplicate ID */
-    duplicateId?: string | null;
-    /** Asset IDs to update */
-    ids: string[];
-    /** Mark as favorite */
-    isFavorite?: boolean;
-    /** Latitude coordinate */
-    latitude?: number;
-    /** Longitude coordinate */
-    longitude?: number;
-    /** Rating in range [1-5], or null for unrated */
-    rating?: number | null;
-    /** Time zone (IANA timezone) */
-    timeZone?: string;
-    /** Asset visibility */
-    visibility?: AssetVisibility;
-};
-export type AssetBulkUploadCheckItem = {
-    /** Base64 or hex encoded SHA1 hash */
-    checksum: string;
-    /** Asset ID */
-    id: string;
-};
-export type AssetBulkUploadCheckDto = {
-    /** Assets to check */
-    assets: AssetBulkUploadCheckItem[];
-};
-export type AssetBulkUploadCheckResult = {
-    /** Upload action */
-    action: Action;
-    /** Existing asset ID if duplicate */
-    assetId?: string;
-    /** Asset ID */
-    id: string;
-    /** Whether existing asset is trashed */
-    isTrashed?: boolean;
-    /** Rejection reason if rejected */
-    reason?: Reason;
-};
-export type AssetBulkUploadCheckResponseDto = {
-    /** Upload check results */
-    results: AssetBulkUploadCheckResult[];
-};
-export type AssetCopyDto = {
-    /** Copy album associations */
-    albums?: boolean;
-    /** Copy favorite status */
-    favorite?: boolean;
-    /** Copy shared links */
-    sharedLinks?: boolean;
-    /** Copy sidecar file */
-    sidecar?: boolean;
-    /** Source asset ID */
-    sourceId: string;
-    /** Copy stack association */
-    stack?: boolean;
-    /** Target asset ID */
-    targetId: string;
-};
-export type CheckExistingAssetsDto = {
-    /** Device asset IDs to check */
-    deviceAssetIds: string[];
-    /** Device ID */
-    deviceId: string;
-};
-export type CheckExistingAssetsResponseDto = {
-    /** Existing asset IDs */
-    existingIds: string[];
-};
-export type AssetJobsDto = {
-    /** Asset IDs */
-    assetIds: string[];
-    /** Job name */
-    name: AssetJobName;
-};
-export type AssetMetadataBulkDeleteItemDto = {
-    /** Asset ID */
-    assetId: string;
-    /** Metadata key */
-    key: string;
-};
-export type AssetMetadataBulkDeleteDto = {
-    /** Metadata items to delete */
-    items: AssetMetadataBulkDeleteItemDto[];
-};
-export type AssetMetadataBulkUpsertItemDto = {
-    /** Asset ID */
-    assetId: string;
-    /** Metadata key */
-    key: string;
-    /** Metadata value (object) */
-    value: object;
-};
-export type AssetMetadataBulkUpsertDto = {
-    /** Metadata items to upsert */
-    items: AssetMetadataBulkUpsertItemDto[];
-};
-export type AssetMetadataBulkResponseDto = {
-    /** Asset ID */
-    assetId: string;
-    /** Metadata key */
-    key: string;
-    /** Last update date */
-    updatedAt: string;
-    /** Metadata value (object) */
-    value: object;
 };
 export type UpdateAssetDto = {
     /** Original date and time */
@@ -1278,7 +957,6 @@ export type UpdateAssetDto = {
     longitude?: number;
     /** Rating in range [1-5] (starred), -1 (rejected), or null (unrated) */
     rating?: number | null;
-    /** Asset visibility */
     visibility?: AssetVisibility;
 };
 export type CropParameters = {
@@ -1296,7 +974,6 @@ export type RotateParameters = {
     angle: number;
 };
 export type MirrorParameters = {
-    /** Axis to mirror along */
     axis: MirrorAxis;
 };
 export type TrimParameters = {
@@ -1306,10 +983,10 @@ export type TrimParameters = {
     startTime: number;
 };
 export type AssetEditActionItemResponseDto = {
-    /** Type of edit action to perform */
     action: AssetEditAction;
+    /** Asset edit ID */
     id: string;
-    /** List of edit actions to apply (crop, rotate, or mirror) */
+    /** List of edit actions to apply (crop, rotate, mirror, or trim) */
     parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters;
 };
 export type AssetEditsResponseDto = {
@@ -1319,13 +996,12 @@ export type AssetEditsResponseDto = {
     edits: AssetEditActionItemResponseDto[];
 };
 export type AssetEditActionItemDto = {
-    /** Type of edit action to perform */
     action: AssetEditAction;
-    /** List of edit actions to apply (crop, rotate, or mirror) */
+    /** List of edit actions to apply (crop, rotate, mirror, or trim) */
     parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters;
 };
 export type AssetEditsCreateDto = {
-    /** List of edit actions to apply (crop, rotate, or mirror) */
+    /** List of edit actions to apply (crop, rotate, mirror, or trim) */
     edits: AssetEditActionItemDto[];
 };
 export type AssetMetadataResponseDto = {
@@ -1334,7 +1010,9 @@ export type AssetMetadataResponseDto = {
     /** Last update date */
     updatedAt: string;
     /** Metadata value (object) */
-    value: object;
+    value: {
+        [key: string]: any;
+    };
 };
 export type AssetMetadataUpsertDto = {
     /** Metadata items to upsert */
@@ -1365,22 +1043,6 @@ export type AssetOcrResponseDto = {
     y3: number;
     /** Normalized y coordinate of box corner 4 (0-1) */
     y4: number;
-};
-export type AssetMediaReplaceDto = {
-    /** Asset file data */
-    assetData: Blob;
-    /** Device asset ID */
-    deviceAssetId: string;
-    /** Device ID */
-    deviceId: string;
-    /** Duration (for videos) */
-    duration?: string;
-    /** File creation date */
-    fileCreatedAt: string;
-    /** File modification date */
-    fileModifiedAt: string;
-    /** Filename */
-    filename?: string;
 };
 export type SignUpDto = {
     /** User email */
@@ -1535,7 +1197,7 @@ export type PersonResponseDto = {
     /** Thumbnail path */
     thumbnailPath: string;
     /** Entity type (person or pet) */
-    "type": string;
+    "type"?: string;
     /** Last update date */
     updatedAt?: string;
 };
@@ -1554,9 +1216,7 @@ export type AssetFaceResponseDto = {
     imageHeight: number;
     /** Image width in pixels */
     imageWidth: number;
-    /** Person associated with face */
     person: (PersonResponseDto) | null;
-    /** Face detection source type */
     sourceType?: SourceType;
 };
 export type AssetFaceCreateDto = {
@@ -1584,20 +1244,6 @@ export type AssetFaceDeleteDto = {
 export type FaceDto = {
     /** Face ID */
     id: string;
-};
-export type MapMarkerResponseDto = {
-    /** City name */
-    city: string | null;
-    /** Country name */
-    country: string | null;
-    /** Asset ID */
-    id: string;
-    /** Latitude */
-    lat: number;
-    /** Longitude */
-    lon: number;
-    /** State/Province name */
-    state: string | null;
 };
 export type QueueStatisticsDto = {
     /** Number of active jobs */
@@ -1647,11 +1293,9 @@ export type QueuesResponseLegacyDto = {
     workflow: QueueResponseLegacyDto;
 };
 export type JobCreateDto = {
-    /** Job name */
     name: ManualJobName;
 };
 export type QueueCommandDto = {
-    /** Queue command to execute */
     command: QueueCommand;
     /** Force the command execution (if applicable) */
     force?: boolean;
@@ -1755,7 +1399,6 @@ export type MemoryResponseDto = {
     seenAt?: string;
     /** Date when memory should be shown */
     showAt?: string;
-    /** Memory type */
     "type": MemoryType;
     /** Last update date */
     updatedAt: string;
@@ -1774,7 +1417,6 @@ export type MemoryCreateDto = {
     seenAt?: string;
     /** Date when memory should be shown */
     showAt?: string;
-    /** Memory type */
     "type": MemoryType;
 };
 export type MemoryStatisticsResponseDto = {
@@ -1815,6 +1457,10 @@ export type OAuthAuthorizeResponseDto = {
     /** OAuth authorization URL */
     url: string;
 };
+export type OAuthBackchannelLogoutDto = {
+    /** OAuth logout token */
+    logout_token: string;
+};
 export type OAuthCallbackDto = {
     /** OAuth code verifier (PKCE) */
     codeVerifier?: string;
@@ -1824,7 +1470,6 @@ export type OAuthCallbackDto = {
     url: string;
 };
 export type PartnerResponseDto = {
-    /** Avatar color */
     avatarColor: UserAvatarColor;
     /** User email */
     email: string;
@@ -1852,7 +1497,6 @@ export type PeopleResponseDto = {
     hasNextPage?: boolean;
     /** Number of hidden people */
     hidden: number;
-    /** List of people */
     people: PersonResponseDto[];
     /** Total number of people */
     total: number;
@@ -1982,7 +1626,6 @@ export type PluginTemplateResponseDto = {
 export type QueueResponseDto = {
     /** Whether the queue is paused */
     isPaused: boolean;
-    /** Queue name */
     name: QueueName;
     statistics: QueueStatisticsDto;
 };
@@ -1996,10 +1639,11 @@ export type QueueDeleteDto = {
 };
 export type QueueJobResponseDto = {
     /** Job data payload */
-    data: object;
+    data: {
+        [key: string]: any;
+    };
     /** Job ID */
     id?: string;
-    /** Job name */
     name: JobName;
     /** Job creation timestamp */
     timestamp: number;
@@ -2029,10 +1673,6 @@ export type MetadataSearchDto = {
     createdBefore?: string;
     /** Filter by description text */
     description?: string;
-    /** Filter by device asset ID */
-    deviceAssetId?: string;
-    /** Device ID to filter by */
-    deviceId?: string;
     /** Filter by encoded video file path */
     encodedVideoPath?: string;
     /** Filter by asset ID */
@@ -2052,7 +1692,7 @@ export type MetadataSearchDto = {
     /** Library ID to filter by */
     libraryId?: string | null;
     /** Filter by camera make */
-    make?: string;
+    make?: string | null;
     /** Filter by camera model */
     model?: string | null;
     /** Filter by OCR text content */
@@ -2091,13 +1731,11 @@ export type MetadataSearchDto = {
     trashedAfter?: string;
     /** Filter by trash date (before) */
     trashedBefore?: string;
-    /** Asset type filter */
     "type"?: AssetTypeEnum;
     /** Filter by update date (after) */
     updatedAfter?: string;
     /** Filter by update date (before) */
     updatedBefore?: string;
-    /** Filter by visibility */
     visibility?: AssetVisibility;
     /** Include deleted assets */
     withDeleted?: boolean;
@@ -2115,7 +1753,6 @@ export type SearchFacetCountResponseDto = {
     value: string;
 };
 export type SearchFacetResponseDto = {
-    /** Facet counts */
     counts: SearchFacetCountResponseDto[];
     /** Facet field name */
     fieldName: string;
@@ -2165,8 +1802,6 @@ export type RandomSearchDto = {
     createdAfter?: string;
     /** Filter by creation date (before) */
     createdBefore?: string;
-    /** Device ID to filter by */
-    deviceId?: string;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -2182,7 +1817,7 @@ export type RandomSearchDto = {
     /** Library ID to filter by */
     libraryId?: string | null;
     /** Filter by camera make */
-    make?: string;
+    make?: string | null;
     /** Filter by camera model */
     model?: string | null;
     /** Filter by OCR text content */
@@ -2209,13 +1844,11 @@ export type RandomSearchDto = {
     trashedAfter?: string;
     /** Filter by trash date (before) */
     trashedBefore?: string;
-    /** Asset type filter */
     "type"?: AssetTypeEnum;
     /** Filter by update date (after) */
     updatedAfter?: string;
     /** Filter by update date (before) */
     updatedBefore?: string;
-    /** Filter by visibility */
     visibility?: AssetVisibility;
     /** Include deleted assets */
     withDeleted?: boolean;
@@ -2237,8 +1870,6 @@ export type SmartSearchDto = {
     createdAfter?: string;
     /** Filter by creation date (before) */
     createdBefore?: string;
-    /** Device ID to filter by */
-    deviceId?: string;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -2256,7 +1887,7 @@ export type SmartSearchDto = {
     /** Library ID to filter by */
     libraryId?: string | null;
     /** Filter by camera make */
-    make?: string;
+    make?: string | null;
     /** Filter by camera model */
     model?: string | null;
     /** Filter by OCR text content */
@@ -2291,13 +1922,11 @@ export type SmartSearchDto = {
     trashedAfter?: string;
     /** Filter by trash date (before) */
     trashedBefore?: string;
-    /** Asset type filter */
     "type"?: AssetTypeEnum;
     /** Filter by update date (after) */
     updatedAfter?: string;
     /** Filter by update date (before) */
     updatedBefore?: string;
-    /** Filter by visibility */
     visibility?: AssetVisibility;
     /** Include deleted assets */
     withDeleted?: boolean;
@@ -2319,8 +1948,6 @@ export type StatisticsSearchDto = {
     createdBefore?: string;
     /** Filter by description text */
     description?: string;
-    /** Device ID to filter by */
-    deviceId?: string;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -2336,7 +1963,7 @@ export type StatisticsSearchDto = {
     /** Library ID to filter by */
     libraryId?: string | null;
     /** Filter by camera make */
-    make?: string;
+    make?: string | null;
     /** Filter by camera model */
     model?: string | null;
     /** Filter by OCR text content */
@@ -2361,13 +1988,11 @@ export type StatisticsSearchDto = {
     trashedAfter?: string;
     /** Filter by trash date (before) */
     trashedBefore?: string;
-    /** Asset type filter */
     "type"?: AssetTypeEnum;
     /** Filter by update date (after) */
     updatedAfter?: string;
     /** Filter by update date (before) */
     updatedBefore?: string;
-    /** Filter by visibility */
     visibility?: AssetVisibility;
 };
 export type SearchStatisticsResponseDto = {
@@ -2522,18 +2147,10 @@ export type ServerFeaturesDto = {
     /** Whether trash feature is enabled */
     trash: boolean;
 };
-export type LicenseResponseDto = {
-    /** Activation date */
-    activatedAt: string;
-    /** Activation key */
-    activationKey: string;
-    /** License key (format: IM(SV|CL)(-XXXX){8}) */
-    licenseKey: string;
-};
 export type LicenseKeyDto = {
     /** Activation key */
     activationKey: string;
-    /** License key (format: IM(SV|CL)(-XXXX){8}) */
+    /** License key (format: /^IM(SV|CL)(-[\dA-Za-z]{4}){8}$/) */
     licenseKey: string;
 };
 export type ServerMediaTypesResponseDto = {
@@ -2548,8 +2165,7 @@ export type ServerMlHealthResponseDto = {
     /** Whether the ML server is currently reachable and healthy for smart search */
     smartSearchHealthy: boolean;
 };
-export type ServerPingResponse = {};
-export type ServerPingResponseRead = {
+export type ServerPingResponse = {
     res: string;
 };
 export type UsageByUserDto = {
@@ -2575,6 +2191,7 @@ export type ServerStatsResponseDto = {
     photos: number;
     /** Total storage usage in bytes */
     usage: number;
+    /** Array of usage for each user */
     usageByUser: UsageByUserDto[];
     /** Storage usage for photos in bytes */
     usagePhotos: number;
@@ -2598,10 +2215,6 @@ export type ServerStorageResponseDto = {
     diskUse: string;
     /** Used disk space in bytes */
     diskUseRaw: number;
-};
-export type ServerThemeDto = {
-    /** Custom CSS for theming */
-    customCss: string;
 };
 export type ServerVersionResponseDto = {
     /** Major version number */
@@ -2684,9 +2297,6 @@ export type SharedLinkResponseDto = {
     showMetadata: boolean;
     /** Custom URL slug */
     slug: string | null;
-    /** Access token */
-    token?: string | null;
-    /** Shared link type */
     "type": SharedLinkType;
     /** Owner user ID */
     userId: string;
@@ -2710,7 +2320,6 @@ export type SharedLinkCreateDto = {
     showMetadata?: boolean;
     /** Custom URL slug */
     slug?: string | null;
-    /** Shared link type */
     "type": SharedLinkType;
 };
 export type SharedLinkLoginDto = {
@@ -2740,13 +2349,13 @@ export type AssetIdsDto = {
 export type AssetIdsResponseDto = {
     /** Asset ID */
     assetId: string;
-    /** Error reason if failed */
-    error?: Error2;
+    error?: AssetIdErrorReason;
     /** Whether operation succeeded */
     success: boolean;
 };
 export type SharedSpaceLinkedLibraryDto = {
-    addedById?: string | null;
+    addedById: string | null;
+    /** Link creation timestamp */
     createdAt: string;
     libraryId: string;
     libraryName: string;
@@ -2771,7 +2380,7 @@ export type SharedSpaceMemberResponseDto = {
     /** Most recently added asset ID by this member */
     recentAssetId?: string | null;
     /** Member role */
-    role: Role;
+    role: string;
     /** Show space assets in timeline */
     showInTimeline: boolean;
     /** User ID */
@@ -2781,7 +2390,7 @@ export type SharedSpaceResponseDto = {
     /** Number of assets */
     assetCount?: number;
     /** Space color */
-    color?: Color | null;
+    color?: (UserAvatarColor) | null;
     /** Creation date */
     createdAt: string;
     /** Creator user ID */
@@ -2796,10 +2405,11 @@ export type SharedSpaceResponseDto = {
     id: string;
     /** Last activity timestamp (most recent asset add) */
     lastActivityAt?: string | null;
+    /** Last contributor since last viewed */
     lastContributor?: {
         id: string;
         name: string;
-    };
+    } | null;
     /** When the current user last viewed this space */
     lastViewedAt?: string | null;
     linkedLibraries?: SharedSpaceLinkedLibraryDto[];
@@ -2852,7 +2462,9 @@ export type SharedSpaceActivityResponseDto = {
     /** When the event occurred */
     createdAt: string;
     /** Event-specific data */
-    data: object;
+    data: {
+        [key: string]: any;
+    };
     /** Activity ID */
     id: string;
     /** Activity type */
@@ -2941,7 +2553,6 @@ export type SharedSpacePersonMergeDto = {
     ids: string[];
 };
 export type StackResponseDto = {
-    /** Stack assets */
     assets: AssetResponseDto[];
     /** Stack ID */
     id: string;
@@ -2958,29 +2569,29 @@ export type StackUpdateDto = {
 };
 export type StorageMigrationFileTypesDto = {
     /** Include encoded video files */
-    encodedVideos: boolean;
+    encodedVideos?: boolean;
     /** Include full-size files */
-    fullsize: boolean;
+    fullsize?: boolean;
     /** Include original files */
-    originals: boolean;
+    originals?: boolean;
     /** Include person thumbnail files */
-    personThumbnails: boolean;
+    personThumbnails?: boolean;
     /** Include preview files */
-    previews: boolean;
+    previews?: boolean;
     /** Include profile image files */
-    profileImages: boolean;
+    profileImages?: boolean;
     /** Include sidecar files */
-    sidecars: boolean;
+    sidecars?: boolean;
     /** Include thumbnail files */
-    thumbnails: boolean;
+    thumbnails?: boolean;
 };
 export type StorageMigrationStartDto = {
     /** Concurrency level */
     concurrency?: number;
     /** Delete source files after migration */
-    deleteSource: boolean;
+    deleteSource?: boolean;
     /** Migration direction */
-    direction: Direction;
+    direction: StorageMigrationDirection;
     /** File types to migrate */
     fileTypes: StorageMigrationFileTypesDto;
 };
@@ -2991,36 +2602,11 @@ export type SyncAckDeleteDto = {
 export type SyncAckDto = {
     /** Acknowledgment ID */
     ack: string;
-    /** Sync entity type */
     "type": SyncEntityType;
 };
 export type SyncAckSetDto = {
     /** Acknowledgment IDs (max 1000) */
     acks: string[];
-};
-export type AssetDeltaSyncDto = {
-    /** Sync assets updated after this date */
-    updatedAfter: string;
-    /** User IDs to sync */
-    userIds: string[];
-};
-export type AssetDeltaSyncResponseDto = {
-    /** Deleted asset IDs */
-    deleted: string[];
-    /** Whether full sync is needed */
-    needsFullSync: boolean;
-    /** Upserted assets */
-    upserted: AssetResponseDto[];
-};
-export type AssetFullSyncDto = {
-    /** Last asset ID (pagination) */
-    lastId?: string;
-    /** Maximum number of assets to return */
-    limit: number;
-    /** Sync assets updated until this date */
-    updatedUntil: string;
-    /** Filter by user ID */
-    userId?: string;
 };
 export type SyncStreamDto = {
     /** Reset sync state */
@@ -3040,14 +2626,19 @@ export type SystemConfigBackupsDto = {
     database: DatabaseBackupConfig;
 };
 export type SystemConfigClassificationCategoryDto = {
-    action: Action2;
-    /** Enable or disable this category */
+    /** Action to take when an asset matches */
+    action: Action;
+    /** Whether this category is enabled */
     enabled: boolean;
+    /** Category name */
     name: string;
+    /** CLIP text prompts for this category */
     prompts: string[];
+    /** Cosine similarity threshold for matching this category */
     similarity: number;
 };
 export type SystemConfigClassificationDto = {
+    /** Classification categories */
     categories: SystemConfigClassificationCategoryDto[];
     /** Enable classification globally */
     enabled: boolean;
@@ -3057,7 +2648,6 @@ export type SystemConfigFFmpegRealtimeDto = {
     enabled: boolean;
 };
 export type SystemConfigFFmpegDto = {
-    /** Transcode hardware acceleration */
     accel: TranscodeHWAccel;
     /** Accelerated decode */
     accelDecode: boolean;
@@ -3069,7 +2659,6 @@ export type SystemConfigFFmpegDto = {
     acceptedVideoCodecs: VideoCodec[];
     /** B-frames */
     bframes: number;
-    /** CQ mode */
     cqMode: CQMode;
     /** CRF */
     crf: number;
@@ -3084,19 +2673,15 @@ export type SystemConfigFFmpegDto = {
     realtime: SystemConfigFFmpegRealtimeDto;
     /** References */
     refs: number;
-    /** Target audio codec */
     targetAudioCodec: AudioCodec;
     /** Target resolution */
     targetResolution: string;
-    /** Target video codec */
     targetVideoCodec: VideoCodec;
     /** Temporal AQ */
     temporalAQ: boolean;
     /** Threads */
     threads: number;
-    /** Tone mapping */
     tonemap: ToneMapping;
-    /** Transcode policy */
     transcode: TranscodePolicy;
     /** Two pass */
     twoPass: boolean;
@@ -3104,7 +2689,6 @@ export type SystemConfigFFmpegDto = {
 export type SystemConfigGeneratedFullsizeImageDto = {
     /** Enabled */
     enabled: boolean;
-    /** Image format */
     format: ImageFormat;
     /** Progressive */
     progressive?: boolean;
@@ -3112,8 +2696,8 @@ export type SystemConfigGeneratedFullsizeImageDto = {
     quality: number;
 };
 export type SystemConfigGeneratedImageDto = {
-    /** Image format */
     format: ImageFormat;
+    /** Progressive */
     progressive?: boolean;
     /** Quality */
     quality: number;
@@ -3121,7 +2705,6 @@ export type SystemConfigGeneratedImageDto = {
     size: number;
 };
 export type SystemConfigImageDto = {
-    /** Colorspace */
     colorspace: Colorspace;
     /** Extract embedded */
     extractEmbedded: boolean;
@@ -3152,6 +2735,7 @@ export type SystemConfigJobDto = {
     workflow: JobSettingsDto;
 };
 export type SystemConfigLibraryScanDto = {
+    /** Cron expression */
     cronExpression: string;
     /** Enabled */
     enabled: boolean;
@@ -3230,12 +2814,15 @@ export type SystemConfigMachineLearningDto = {
     facialRecognition: FacialRecognitionConfig;
     ocr: OcrConfig;
     petDetection: PetDetectionConfig;
+    /** ML service URLs */
     urls: string[];
 };
 export type SystemConfigMapDto = {
+    /** Dark map style URL */
     darkStyle: string;
     /** Enabled */
     enabled: boolean;
+    /** Light map style URL */
     lightStyle: string;
 };
 export type SystemConfigFacesDto = {
@@ -3259,6 +2846,7 @@ export type SystemConfigNightlyTasksDto = {
     generateMemories: boolean;
     /** Missing thumbnails */
     missingThumbnails: boolean;
+    /** Start time */
     startTime: string;
     /** Sync quota usage */
     syncQuotaUsage: boolean;
@@ -3267,6 +2855,8 @@ export type SystemConfigNotificationsDto = {
     smtp: SystemConfigSmtpDto;
 };
 export type SystemConfigOAuthDto = {
+    /** Allow insecure requests */
+    allowInsecureRequests: boolean;
     /** Auto launch */
     autoLaunch: boolean;
     /** Auto register */
@@ -3281,18 +2871,23 @@ export type SystemConfigOAuthDto = {
     defaultStorageQuota: number | null;
     /** Enabled */
     enabled: boolean;
+    /** End session endpoint */
+    endSessionEndpoint: string;
     /** Issuer URL */
     issuerUrl: string;
     /** Mobile override enabled */
     mobileOverrideEnabled: boolean;
-    /** Mobile redirect URI */
+    /** Mobile redirect URI (set to empty string to disable) */
     mobileRedirectUri: string;
     /** Profile signing algorithm */
     profileSigningAlgorithm: string;
+    /** OAuth prompt parameter (e.g. select_account, login, consent) */
+    prompt: string;
     /** Role claim */
     roleClaim: string;
     /** Scope */
     scope: string;
+    /** Signing algorithm */
     signingAlgorithm: string;
     /** Storage label claim */
     storageLabelClaim: string;
@@ -3300,7 +2895,6 @@ export type SystemConfigOAuthDto = {
     storageQuotaClaim: string;
     /** Timeout */
     timeout: number;
-    /** Token endpoint auth method */
     tokenEndpointAuthMethod: OAuthTokenEndpointAuthMethod;
 };
 export type SystemConfigPasswordLoginDto = {
@@ -3328,8 +2922,11 @@ export type SystemConfigStorageTemplateDto = {
     template: string;
 };
 export type SystemConfigTemplateEmailsDto = {
+    /** Album invite template */
     albumInviteTemplate: string;
+    /** Album update template */
     albumUpdateTemplate: string;
+    /** Welcome template */
     welcomeTemplate: string;
 };
 export type SystemConfigTemplatesDto = {
@@ -3403,7 +3000,7 @@ export type ReverseGeocodingStateResponseDto = {
 };
 export type TagCreateDto = {
     /** Tag color (hex) */
-    color?: string;
+    color?: string | null;
     /** Tag name */
     name: string;
     /** Parent tag ID */
@@ -3520,7 +3117,6 @@ export type UserGroupMemberSetDto = {
     userIds: string[];
 };
 export type UserUpdateMeDto = {
-    /** Avatar color */
     avatarColor?: (UserAvatarColor) | null;
     /** User email */
     email?: string;
@@ -3662,7 +3258,6 @@ export type SyncAlbumUserDeleteV1 = {
 export type SyncAlbumUserV1 = {
     /** Album ID */
     albumId: string;
-    /** Album user role */
     role: AlbumUserRole;
     /** User ID */
     userId: string;
@@ -3708,13 +3303,20 @@ export type SyncAssetDeleteV1 = {
     assetId: string;
 };
 export type SyncAssetEditDeleteV1 = {
+    /** Edit ID */
     editId: string;
 };
 export type SyncAssetEditV1 = {
     action: AssetEditAction;
+    /** Asset ID */
     assetId: string;
+    /** Edit ID */
     id: string;
-    parameters: object;
+    /** Edit parameters */
+    parameters: {
+        [key: string]: any;
+    };
+    /** Edit sequence */
     sequence: number;
 };
 export type SyncAssetExifV1 = {
@@ -3776,13 +3378,19 @@ export type SyncAssetFaceDeleteV1 = {
 export type SyncAssetFaceV1 = {
     /** Asset ID */
     assetId: string;
+    /** Bounding box X1 */
     boundingBoxX1: number;
+    /** Bounding box X2 */
     boundingBoxX2: number;
+    /** Bounding box Y1 */
     boundingBoxY1: number;
+    /** Bounding box Y2 */
     boundingBoxY2: number;
     /** Asset face ID */
     id: string;
+    /** Image height */
     imageHeight: number;
+    /** Image width */
     imageWidth: number;
     /** Person ID */
     personId: string | null;
@@ -3792,15 +3400,21 @@ export type SyncAssetFaceV1 = {
 export type SyncAssetFaceV2 = {
     /** Asset ID */
     assetId: string;
+    /** Bounding box X1 */
     boundingBoxX1: number;
+    /** Bounding box X2 */
     boundingBoxX2: number;
+    /** Bounding box Y1 */
     boundingBoxY1: number;
+    /** Bounding box Y2 */
     boundingBoxY2: number;
     /** Face deleted at */
     deletedAt: string | null;
     /** Asset face ID */
     id: string;
+    /** Image height */
     imageHeight: number;
+    /** Image width */
     imageWidth: number;
     /** Is the face visible in the asset */
     isVisible: boolean;
@@ -3821,7 +3435,9 @@ export type SyncAssetMetadataV1 = {
     /** Key */
     key: string;
     /** Value */
-    value: object;
+    value: {
+        [key: string]: any;
+    };
 };
 export type SyncAssetOcrDeleteV1 = {
     /** Original asset ID of the deleted OCR entry */
@@ -3896,9 +3512,7 @@ export type SyncAssetV1 = {
     stackId: string | null;
     /** Thumbhash */
     thumbhash: string | null;
-    /** Asset type */
     "type": AssetTypeEnum;
-    /** Asset visibility */
     visibility: AssetVisibility;
     /** Asset width */
     width: number | null;
@@ -3944,8 +3558,7 @@ export type SyncAssetV2 = {
     width: number | null;
 };
 export type SyncAuthUserV1 = {
-    /** User avatar color */
-    avatarColor: (UserAvatarColor) | null;
+    avatarColor?: (UserAvatarColor) | null;
     /** User deleted at */
     deletedAt: string | null;
     /** User email */
@@ -3964,7 +3577,9 @@ export type SyncAuthUserV1 = {
     pinCode: string | null;
     /** User profile changed at */
     profileChangedAt: string;
+    /** Quota size in bytes */
     quotaSizeInBytes: number | null;
+    /** Quota usage in bytes */
     quotaUsageInBytes: number;
     /** User storage label */
     storageLabel: string | null;
@@ -4010,7 +3625,9 @@ export type SyncMemoryV1 = {
     /** Created at */
     createdAt: string;
     /** Data */
-    data: object;
+    data: {
+        [key: string]: any;
+    };
     /** Deleted at */
     deletedAt: string | null;
     /** Hide at */
@@ -4027,7 +3644,6 @@ export type SyncMemoryV1 = {
     seenAt: string | null;
     /** Show at */
     showAt: string | null;
-    /** Memory type */
     "type": MemoryType;
     /** Updated at */
     updatedAt: string;
@@ -4172,22 +3788,21 @@ export type SyncUserDeleteV1 = {
     userId: string;
 };
 export type SyncUserMetadataDeleteV1 = {
-    /** User metadata key */
     key: UserMetadataKey;
     /** User ID */
     userId: string;
 };
 export type SyncUserMetadataV1 = {
-    /** User metadata key */
     key: UserMetadataKey;
     /** User ID */
     userId: string;
     /** User metadata value */
-    value: object;
+    value: {
+        [key: string]: any;
+    };
 };
 export type SyncUserV1 = {
-    /** User avatar color */
-    avatarColor: (UserAvatarColor) | null;
+    avatarColor?: (UserAvatarColor) | null;
     /** User deleted at */
     deletedAt: string | null;
     /** User email */
@@ -4642,18 +4257,13 @@ export function createAlbum({ createAlbumDto }: {
 /**
  * Add assets to albums
  */
-export function addAssetsToAlbums({ key, slug, albumsAddAssetsDto }: {
-    key?: string;
-    slug?: string;
+export function addAssetsToAlbums({ albumsAddAssetsDto }: {
     albumsAddAssetsDto: AlbumsAddAssetsDto;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: AlbumsAddAssetsResponseDto;
-    }>(`/albums/assets${QS.query(QS.explode({
-        key,
-        slug
-    }))}`, oazapfts.json({
+    }>("/albums/assets", oazapfts.json({
         ...opts,
         method: "PUT",
         body: albumsAddAssetsDto
@@ -4695,19 +4305,17 @@ export function deleteAlbum({ id }: {
 /**
  * Retrieve an album
  */
-export function getAlbumInfo({ id, key, slug, withoutAssets }: {
+export function getAlbumInfo({ id, key, slug }: {
     id: string;
     key?: string;
     slug?: string;
-    withoutAssets?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: AlbumResponseDto;
     }>(`/albums/${encodeURIComponent(id)}${QS.query(QS.explode({
         key,
-        slug,
-        withoutAssets
+        slug
     }))}`, {
         ...opts
     }));
@@ -4747,23 +4355,36 @@ export function removeAssetFromAlbum({ id, bulkIdsDto }: {
 /**
  * Add assets to an album
  */
-export function addAssetsToAlbum({ id, key, slug, bulkIdsDto }: {
+export function addAssetsToAlbum({ id, bulkIdsDto }: {
     id: string;
-    key?: string;
-    slug?: string;
     bulkIdsDto: BulkIdsDto;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: BulkIdResponseDto[];
-    }>(`/albums/${encodeURIComponent(id)}/assets${QS.query(QS.explode({
-        key,
-        slug
-    }))}`, oazapfts.json({
+    }>(`/albums/${encodeURIComponent(id)}/assets`, oazapfts.json({
         ...opts,
         method: "PUT",
         body: bulkIdsDto
     })));
+}
+/**
+ * Retrieve album map markers
+ */
+export function getAlbumMapMarkers({ id, key, slug }: {
+    id: string;
+    key?: string;
+    slug?: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: MapMarkerResponseDto[];
+    }>(`/albums/${encodeURIComponent(id)}/map-markers${QS.query(QS.explode({
+        key,
+        slug
+    }))}`, {
+        ...opts
+    }));
 }
 /**
  * Remove user from album
@@ -4963,34 +4584,6 @@ export function copyAsset({ assetCopyDto }: {
     })));
 }
 /**
- * Retrieve assets by device ID
- */
-export function getAllUserAssetsByDeviceId({ deviceId }: {
-    deviceId: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: string[];
-    }>(`/assets/device/${encodeURIComponent(deviceId)}`, {
-        ...opts
-    }));
-}
-/**
- * Check existing assets
- */
-export function checkExistingAssets({ checkExistingAssetsDto }: {
-    checkExistingAssetsDto: CheckExistingAssetsDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: CheckExistingAssetsResponseDto;
-    }>("/assets/exist", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: checkExistingAssetsDto
-    })));
-}
-/**
  * Run an asset job
  */
 export function runAssetJobs({ assetJobsDto }: {
@@ -5028,21 +4621,6 @@ export function updateBulkAssetMetadata({ assetMetadataBulkUpsertDto }: {
         method: "PUT",
         body: assetMetadataBulkUpsertDto
     })));
-}
-/**
- * Get random assets
- */
-export function getRandom({ count }: {
-    count?: number;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AssetResponseDto[];
-    }>(`/assets/random${QS.query(QS.explode({
-        count
-    }))}`, {
-        ...opts
-    }));
 }
 /**
  * Get asset statistics
@@ -5226,27 +4804,6 @@ export function downloadAsset({ edited, id, key, slug }: {
     }))}`, {
         ...opts
     }));
-}
-/**
- * Replace asset
- */
-export function replaceAsset({ id, key, slug, assetMediaReplaceDto }: {
-    id: string;
-    key?: string;
-    slug?: string;
-    assetMediaReplaceDto: AssetMediaReplaceDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AssetMediaResponseDto;
-    }>(`/assets/${encodeURIComponent(id)}/original${QS.query(QS.explode({
-        key,
-        slug
-    }))}`, oazapfts.multipart({
-        ...opts,
-        method: "PUT",
-        body: assetMediaReplaceDto
-    })));
 }
 /**
  * View asset thumbnail
@@ -5670,7 +5227,7 @@ export function getFilteredMapMarkers({ city, country, isFavorite, make, model, 
     tagIds?: string[];
     takenAfter?: string;
     takenBefore?: string;
-    $type?: "IMAGE" | "VIDEO";
+    $type?: MapMediaType;
     withSharedSpaces?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
@@ -6118,6 +5675,18 @@ export function startOAuth({ oAuthConfigDto }: {
         ...opts,
         method: "POST",
         body: oAuthConfigDto
+    })));
+}
+/**
+ * Backchannel OAuth logout
+ */
+export function logoutOAuth({ oAuthBackchannelLogoutDto }: {
+    oAuthBackchannelLogoutDto: OAuthBackchannelLogoutDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText("/oauth/backchannel-logout", oazapfts.form({
+        ...opts,
+        method: "POST",
+        body: oAuthBackchannelLogoutDto
     })));
 }
 /**
@@ -6578,13 +6147,12 @@ export function getExploreData(opts?: Oazapfts.RequestOpts) {
 /**
  * Search large assets
  */
-export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, deviceId, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, spaceId, spacePersonIds, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
+export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, spaceId, spacePersonIds, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
     albumIds?: string[];
     city?: string | null;
     country?: string | null;
     createdAfter?: string;
     createdBefore?: string;
-    deviceId?: string;
     isEncoded?: boolean;
     isFavorite?: boolean;
     isMotion?: boolean;
@@ -6592,7 +6160,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
     isOffline?: boolean;
     lensModel?: string | null;
     libraryId?: string | null;
-    make?: string;
+    make?: string | null;
     minFileSize?: number;
     model?: string | null;
     ocr?: string;
@@ -6623,7 +6191,6 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
         country,
         createdAfter,
         createdBefore,
-        deviceId,
         isEncoded,
         isFavorite,
         isMotion,
@@ -6903,7 +6470,7 @@ export function deleteServerLicense(opts?: Oazapfts.RequestOpts) {
 export function getServerLicense(opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
-        data: LicenseResponseDto;
+        data: UserLicense;
     } | {
         status: 404;
     }>("/server/license", {
@@ -6918,7 +6485,7 @@ export function setServerLicense({ licenseKeyDto }: {
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
-        data: LicenseResponseDto;
+        data: UserLicense;
     }>("/server/license", oazapfts.json({
         ...opts,
         method: "PUT",
@@ -6953,7 +6520,7 @@ export function getMlHealth(opts?: Oazapfts.RequestOpts) {
 export function pingServer(opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
-        data: ServerPingResponseRead;
+        data: ServerPingResponse;
     }>("/server/ping", {
         ...opts
     }));
@@ -6977,17 +6544,6 @@ export function getStorage(opts?: Oazapfts.RequestOpts) {
         status: 200;
         data: ServerStorageResponseDto;
     }>("/server/storage", {
-        ...opts
-    }));
-}
-/**
- * Get theme
- */
-export function getTheme(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: ServerThemeDto;
-    }>("/server/theme", {
         ...opts
     }));
 }
@@ -7152,20 +6708,16 @@ export function sharedLinkLogin({ key, slug, sharedLinkLoginDto }: {
 /**
  * Retrieve current shared link
  */
-export function getMySharedLink({ key, password, slug, token }: {
+export function getMySharedLink({ key, slug }: {
     key?: string;
-    password?: string;
     slug?: string;
-    token?: string;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: SharedLinkResponseDto;
     }>(`/shared-links/me${QS.query(QS.explode({
         key,
-        password,
-        slug,
-        token
+        slug
     }))}`, {
         ...opts
     }));
@@ -7229,19 +6781,14 @@ export function removeSharedLinkAssets({ id, assetIdsDto }: {
 /**
  * Add assets to a shared link
  */
-export function addSharedLinkAssets({ id, key, slug, assetIdsDto }: {
+export function addSharedLinkAssets({ id, assetIdsDto }: {
     id: string;
-    key?: string;
-    slug?: string;
     assetIdsDto: AssetIdsDto;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: AssetIdsResponseDto[];
-    }>(`/shared-links/${encodeURIComponent(id)}/assets${QS.query(QS.explode({
-        key,
-        slug
-    }))}`, oazapfts.json({
+    }>(`/shared-links/${encodeURIComponent(id)}/assets`, oazapfts.json({
         ...opts,
         method: "PUT",
         body: assetIdsDto
@@ -7737,7 +7284,7 @@ export function removeAssetFromStack({ assetId, id }: {
  * Get storage migration estimate
  */
 export function getEstimate({ direction }: {
-    direction: "toS3" | "toDisk";
+    direction: StorageMigrationDirection;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchText(`/storage-migration/estimate${QS.query(QS.explode({
         direction
@@ -7809,36 +7356,6 @@ export function sendSyncAck({ syncAckSetDto }: {
         ...opts,
         method: "POST",
         body: syncAckSetDto
-    })));
-}
-/**
- * Get delta sync for user
- */
-export function getDeltaSync({ assetDeltaSyncDto }: {
-    assetDeltaSyncDto: AssetDeltaSyncDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AssetDeltaSyncResponseDto;
-    }>("/sync/delta-sync", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: assetDeltaSyncDto
-    })));
-}
-/**
- * Get full sync for user
- */
-export function getFullSyncForUser({ assetFullSyncDto }: {
-    assetFullSyncDto: AssetFullSyncDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AssetResponseDto[];
-    }>("/sync/full-sync", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: assetFullSyncDto
     })));
 }
 /**
@@ -8410,7 +7927,7 @@ export function deleteUserLicense(opts?: Oazapfts.RequestOpts) {
 export function getUserLicense(opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
-        data: LicenseResponseDto;
+        data: UserLicense;
     }>("/users/me/license", {
         ...opts
     }));
@@ -8423,7 +7940,7 @@ export function setUserLicense({ licenseKeyDto }: {
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
-        data: LicenseResponseDto;
+        data: UserLicense;
     }>("/users/me/license", oazapfts.json({
         ...opts,
         method: "PUT",
@@ -8741,25 +8258,7 @@ export enum AlbumUserRole {
     Owner = "owner",
     Viewer = "viewer"
 }
-export enum SourceType {
-    MachineLearning = "machine-learning",
-    Exif = "exif",
-    Manual = "manual"
-}
-export enum AssetTypeEnum {
-    Image = "IMAGE",
-    Video = "VIDEO",
-    Audio = "AUDIO",
-    Other = "OTHER"
-}
 export enum BulkIdErrorReason {
-    Duplicate = "duplicate",
-    NoPermission = "no_permission",
-    NotFound = "not_found",
-    Unknown = "unknown",
-    Validation = "validation"
-}
-export enum Error {
     Duplicate = "duplicate",
     NoPermission = "no_permission",
     NotFound = "not_found",
@@ -8785,7 +8284,6 @@ export enum Permission {
     AssetView = "asset.view",
     AssetDownload = "asset.download",
     AssetUpload = "asset.upload",
-    AssetReplace = "asset.replace",
     AssetCopy = "asset.copy",
     AssetDerive = "asset.derive",
     AssetEditGet = "asset.edit.get",
@@ -8942,14 +8440,13 @@ export enum Permission {
 }
 export enum AssetMediaStatus {
     Created = "created",
-    Replaced = "replaced",
     Duplicate = "duplicate"
 }
-export enum Action {
+export enum AssetUploadAction {
     Accept = "accept",
     Reject = "reject"
 }
-export enum Reason {
+export enum AssetRejectReason {
     Duplicate = "duplicate",
     UnsupportedFormat = "unsupported-format"
 }
@@ -8958,6 +8455,17 @@ export enum AssetJobName {
     RefreshMetadata = "refresh-metadata",
     RegenerateThumbnail = "regenerate-thumbnail",
     TranscodeVideo = "transcode-video"
+}
+export enum SourceType {
+    MachineLearning = "machine-learning",
+    Exif = "exif",
+    Manual = "manual"
+}
+export enum AssetTypeEnum {
+    Image = "IMAGE",
+    Video = "VIDEO",
+    Audio = "AUDIO",
+    Other = "OTHER"
 }
 export enum AssetEditAction {
     Crop = "crop",
@@ -8974,6 +8482,10 @@ export enum AssetMediaSize {
     Fullsize = "fullsize",
     Preview = "preview",
     Thumbnail = "thumbnail"
+}
+export enum MapMediaType {
+    Image = "IMAGE",
+    Video = "VIDEO"
 }
 export enum ManualJobName {
     PersonCleanup = "person-cleanup",
@@ -9123,34 +8635,17 @@ export enum SharedLinkType {
     Album = "ALBUM",
     Individual = "INDIVIDUAL"
 }
-export enum Error2 {
+export enum AssetIdErrorReason {
     Duplicate = "duplicate",
     NoPermission = "no_permission",
     NotFound = "not_found"
-}
-export enum Color {
-    Primary = "primary",
-    Pink = "pink",
-    Red = "red",
-    Yellow = "yellow",
-    Blue = "blue",
-    Green = "green",
-    Purple = "purple",
-    Orange = "orange",
-    Gray = "gray",
-    Amber = "amber"
-}
-export enum Role {
-    Owner = "owner",
-    Editor = "editor",
-    Viewer = "viewer"
 }
 export enum SharedSpaceRole {
     Owner = "owner",
     Editor = "editor",
     Viewer = "viewer"
 }
-export enum Direction {
+export enum StorageMigrationDirection {
     ToS3 = "toS3",
     ToDisk = "toDisk"
 }
@@ -9277,7 +8772,7 @@ export enum SyncRequestType {
     LibraryAssetExifsV1 = "LibraryAssetExifsV1",
     SharedSpaceLibrariesV1 = "SharedSpaceLibrariesV1"
 }
-export enum Action2 {
+export enum Action {
     Tag = "tag",
     TagAndArchive = "tag_and_archive"
 }
@@ -9360,6 +8855,18 @@ export enum ReleaseType {
     Patch = "patch",
     Prepatch = "prepatch",
     Prerelease = "prerelease"
+}
+export enum Color {
+    Primary = "primary",
+    Pink = "pink",
+    Red = "red",
+    Yellow = "yellow",
+    Blue = "blue",
+    Green = "green",
+    Purple = "purple",
+    Orange = "orange",
+    Gray = "gray",
+    Amber = "amber"
 }
 export enum UserMetadataKey {
     Preferences = "preferences",
