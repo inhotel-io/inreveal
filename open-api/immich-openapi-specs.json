@@ -5604,7 +5604,8 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid"
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
               }
             }
           },
@@ -5626,6 +5627,7 @@
             "description": "Scope to a shared space",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -5638,7 +5640,8 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid"
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
               }
             }
           },
@@ -5649,6 +5652,8 @@
             "description": "Filter assets taken after this date",
             "schema": {
               "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "example": "2024-01-01T00:00:00.000Z",
               "type": "string"
             }
           },
@@ -5659,6 +5664,8 @@
             "description": "Filter assets taken before this date",
             "schema": {
               "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "example": "2024-01-01T00:00:00.000Z",
               "type": "string"
             }
           },
@@ -5668,11 +5675,7 @@
             "in": "query",
             "description": "Filter by media type",
             "schema": {
-              "type": "string",
-              "enum": [
-                "IMAGE",
-                "VIDEO"
-              ]
+              "$ref": "#/components/schemas/MapMediaType"
             }
           },
           {
@@ -9780,6 +9783,7 @@
             "description": "Shared space ID to filter by",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -9792,7 +9796,8 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid"
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
               }
             }
           },
@@ -10422,6 +10427,7 @@
             "description": "Scope suggestions to a specific shared space",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -10441,6 +10447,8 @@
             "description": "Filter suggestions by taken date (after)",
             "schema": {
               "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "example": "2024-01-01T00:00:00.000Z",
               "type": "string"
             }
           },
@@ -10451,6 +10459,8 @@
             "description": "Filter suggestions by taken date (before)",
             "schema": {
               "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "example": "2024-01-01T00:00:00.000Z",
               "type": "string"
             }
           },
@@ -10588,7 +10598,8 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid"
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
               }
             }
           },
@@ -10600,7 +10611,7 @@
             "schema": {
               "minimum": 1,
               "maximum": 5,
-              "type": "number"
+              "type": "integer"
             }
           },
           {
@@ -10610,6 +10621,7 @@
             "description": "Scope to a specific shared space",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -10622,7 +10634,8 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid"
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
               }
             }
           },
@@ -10633,6 +10646,8 @@
             "description": "Filter by taken date (after)",
             "schema": {
               "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "example": "2024-01-01T00:00:00.000Z",
               "type": "string"
             }
           },
@@ -10643,6 +10658,8 @@
             "description": "Filter by taken date (before)",
             "schema": {
               "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "example": "2024-01-01T00:00:00.000Z",
               "type": "string"
             }
           },
@@ -10704,6 +10721,7 @@
             "description": "Scope suggestions to a specific shared space",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -10714,6 +10732,8 @@
             "description": "Filter suggestions by taken date (after)",
             "schema": {
               "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "example": "2024-01-01T00:00:00.000Z",
               "type": "string"
             }
           },
@@ -10724,6 +10744,8 @@
             "description": "Filter suggestions by taken date (before)",
             "schema": {
               "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "example": "2024-01-01T00:00:00.000Z",
               "type": "string"
             }
           },
@@ -12503,6 +12525,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -12550,6 +12573,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -12604,6 +12628,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -12669,6 +12694,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -12680,8 +12706,7 @@
             "schema": {
               "minimum": 1,
               "maximum": 100,
-              "default": 50,
-              "type": "number"
+              "type": "integer"
             }
           },
           {
@@ -12691,8 +12716,8 @@
             "description": "Number of items to skip",
             "schema": {
               "minimum": 0,
-              "default": 0,
-              "type": "number"
+              "maximum": 9007199254740991,
+              "type": "integer"
             }
           }
         ],
@@ -12740,6 +12765,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -12797,6 +12823,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -12856,6 +12883,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -12905,6 +12933,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -12964,6 +12993,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -13021,6 +13051,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -13080,6 +13111,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -13137,6 +13169,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -13395,6 +13428,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -13406,7 +13440,7 @@
             "schema": {
               "minimum": 1,
               "maximum": 100,
-              "type": "number"
+              "type": "integer"
             }
           },
           {
@@ -13424,7 +13458,8 @@
             "description": "Number of people to skip",
             "schema": {
               "minimum": 0,
-              "type": "number"
+              "maximum": 9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -13433,6 +13468,8 @@
             "in": "query",
             "schema": {
               "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "example": "2024-01-01T00:00:00.000Z",
               "type": "string"
             }
           },
@@ -13442,6 +13479,8 @@
             "in": "query",
             "schema": {
               "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "example": "2024-01-01T00:00:00.000Z",
               "type": "string"
             }
           },
@@ -14061,6 +14100,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -14530,11 +14570,7 @@
             "in": "query",
             "description": "Migration direction",
             "schema": {
-              "type": "string",
-              "enum": [
-                "toS3",
-                "toDisk"
-              ]
+              "$ref": "#/components/schemas/StorageMigrationDirection"
             }
           }
         ],
@@ -14585,6 +14621,7 @@
             "description": "Batch ID",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -16020,11 +16057,13 @@
             "name": "personIds",
             "required": false,
             "in": "query",
+            "description": "Filter assets containing any of these persons (multi-select)",
             "schema": {
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid"
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
               }
             }
           },
@@ -16036,7 +16075,7 @@
             "schema": {
               "minimum": 1,
               "maximum": 5,
-              "type": "number"
+              "type": "integer"
             }
           },
           {
@@ -16054,6 +16093,7 @@
             "description": "Filter assets belonging to a specific shared space",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -16064,6 +16104,7 @@
             "description": "Filter assets containing a specific shared space person (space face recognition)",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -16071,11 +16112,13 @@
             "name": "spacePersonIds",
             "required": false,
             "in": "query",
+            "description": "Filter assets containing any of these shared space persons (multi-select)",
             "schema": {
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid"
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
               }
             }
           },
@@ -16094,11 +16137,13 @@
             "name": "tagIds",
             "required": false,
             "in": "query",
+            "description": "Filter assets with any of these tags (multi-select)",
             "schema": {
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid"
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
               }
             }
           },
@@ -16358,11 +16403,13 @@
             "name": "personIds",
             "required": false,
             "in": "query",
+            "description": "Filter assets containing any of these persons (multi-select)",
             "schema": {
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid"
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
               }
             }
           },
@@ -16374,7 +16421,7 @@
             "schema": {
               "minimum": 1,
               "maximum": 5,
-              "type": "number"
+              "type": "integer"
             }
           },
           {
@@ -16392,6 +16439,7 @@
             "description": "Filter assets belonging to a specific shared space",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -16402,6 +16450,7 @@
             "description": "Filter assets containing a specific shared space person (space face recognition)",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -16409,11 +16458,13 @@
             "name": "spacePersonIds",
             "required": false,
             "in": "query",
+            "description": "Filter assets containing any of these shared space persons (multi-select)",
             "schema": {
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid"
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
               }
             }
           },
@@ -16432,11 +16483,13 @@
             "name": "tagIds",
             "required": false,
             "in": "query",
+            "description": "Filter assets with any of these tags (multi-select)",
             "schema": {
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid"
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
               }
             }
           },
@@ -16842,6 +16895,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -16889,6 +16943,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -16943,6 +16998,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -17009,6 +17065,7 @@
             "in": "path",
             "schema": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           }
@@ -19311,7 +19368,7 @@
                 "$ref": "#/components/schemas/TrimParameters"
               }
             ],
-            "description": "List of edit actions to apply (crop, rotate, or mirror)"
+            "description": "List of edit actions to apply (crop, rotate, mirror, or trim)"
           }
         },
         "required": [
@@ -19346,7 +19403,7 @@
                 "$ref": "#/components/schemas/TrimParameters"
               }
             ],
-            "description": "List of edit actions to apply (crop, rotate, or mirror)"
+            "description": "List of edit actions to apply (crop, rotate, mirror, or trim)"
           }
         },
         "required": [
@@ -19359,7 +19416,7 @@
       "AssetEditsCreateDto": {
         "properties": {
           "edits": {
-            "description": "List of edit actions to apply (crop, rotate, or mirror)",
+            "description": "List of edit actions to apply (crop, rotate, mirror, or trim)",
             "items": {
               "$ref": "#/components/schemas/AssetEditActionItemDto"
             },
@@ -20563,42 +20620,6 @@
         ],
         "type": "object"
       },
-      "CheckExistingAssetsDto": {
-        "properties": {
-          "deviceAssetIds": {
-            "description": "Device asset IDs to check",
-            "items": {
-              "type": "string"
-            },
-            "minItems": 1,
-            "type": "array"
-          },
-          "deviceId": {
-            "description": "Device ID",
-            "type": "string"
-          }
-        },
-        "required": [
-          "deviceAssetIds",
-          "deviceId"
-        ],
-        "type": "object"
-      },
-      "CheckExistingAssetsResponseDto": {
-        "properties": {
-          "existingIds": {
-            "description": "Existing asset IDs",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "existingIds"
-        ],
-        "type": "object"
-      },
       "Colorspace": {
         "description": "Colorspace",
         "enum": [
@@ -20924,6 +20945,7 @@
           "spaceId": {
             "description": "Shared space ID to download all assets from",
             "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           },
           "userId": {
@@ -21964,6 +21986,13 @@
         ],
         "type": "object"
       },
+      "MapMediaType": {
+        "enum": [
+          "IMAGE",
+          "VIDEO"
+        ],
+        "type": "string"
+      },
       "MapReverseGeocodeResponseDto": {
         "properties": {
           "city": {
@@ -22424,12 +22453,14 @@
           "spaceId": {
             "description": "Shared space ID to filter by",
             "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           },
           "spacePersonIds": {
             "description": "Shared space person IDs to filter by",
             "items": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
             "type": "array"
@@ -23364,8 +23395,7 @@
           "id",
           "isHidden",
           "name",
-          "thumbnailPath",
-          "type"
+          "thumbnailPath"
         ],
         "type": "object"
       },
@@ -23515,8 +23545,7 @@
           "id",
           "isHidden",
           "name",
-          "thumbnailPath",
-          "type"
+          "thumbnailPath"
         ],
         "type": "object"
       },
@@ -24201,12 +24230,14 @@
           "spaceId": {
             "description": "Shared space ID to filter by",
             "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           },
           "spacePersonIds": {
             "description": "Shared space person IDs to filter by",
             "items": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
             "type": "array"
@@ -25448,6 +25479,7 @@
             "type": "string"
           },
           "data": {
+            "additionalProperties": {},
             "description": "Event-specific data",
             "type": "object"
           },
@@ -25499,8 +25531,10 @@
             "description": "Asset IDs",
             "items": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
+            "maxItems": 10000,
             "type": "array"
           }
         },
@@ -25515,8 +25549,10 @@
             "description": "Asset IDs",
             "items": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
+            "maxItems": 10000,
             "type": "array"
           }
         },
@@ -25528,11 +25564,7 @@
       "SharedSpaceCreateDto": {
         "properties": {
           "color": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/UserAvatarColor"
-              }
-            ],
+            "$ref": "#/components/schemas/UserAvatarColor",
             "default": "primary",
             "description": "Space color"
           },
@@ -25544,6 +25576,7 @@
           "name": {
             "description": "Space name",
             "maxLength": 100,
+            "minLength": 1,
             "type": "string"
           }
         },
@@ -25557,6 +25590,7 @@
           "libraryId": {
             "description": "Library ID",
             "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           }
         },
@@ -25572,6 +25606,7 @@
             "type": "string"
           },
           "createdAt": {
+            "description": "Link creation timestamp",
             "format": "date-time",
             "type": "string"
           },
@@ -25583,6 +25618,7 @@
           }
         },
         "required": [
+          "addedById",
           "createdAt",
           "libraryId",
           "libraryName"
@@ -25592,17 +25628,14 @@
       "SharedSpaceMemberCreateDto": {
         "properties": {
           "role": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/SharedSpaceRole"
-              }
-            ],
+            "$ref": "#/components/schemas/SharedSpaceRole",
             "default": "viewer",
             "description": "Member role"
           },
           "userId": {
             "description": "User ID",
             "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           }
         },
@@ -25653,11 +25686,6 @@
           },
           "role": {
             "description": "Member role",
-            "enum": [
-              "owner",
-              "editor",
-              "viewer"
-            ],
             "type": "string"
           },
           "showInTimeline": {
@@ -25694,11 +25722,7 @@
       "SharedSpaceMemberUpdateDto": {
         "properties": {
           "role": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/SharedSpaceRole"
-              }
-            ],
+            "$ref": "#/components/schemas/SharedSpaceRole",
             "description": "Member role"
           }
         },
@@ -25712,6 +25736,7 @@
           "alias": {
             "description": "Alias name for this person",
             "maxLength": 100,
+            "minLength": 1,
             "type": "string"
           }
         },
@@ -25726,6 +25751,7 @@
             "description": "Person IDs to merge into target",
             "items": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
             "type": "array"
@@ -25829,6 +25855,7 @@
             "description": "Representative face ID",
             "format": "uuid",
             "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           }
         },
@@ -25841,21 +25868,13 @@
             "type": "number"
           },
           "color": {
-            "description": "Space color",
-            "enum": [
-              "primary",
-              "pink",
-              "red",
-              "yellow",
-              "blue",
-              "green",
-              "purple",
-              "orange",
-              "gray",
-              "amber"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserAvatarColor"
+              }
             ],
-            "nullable": true,
-            "type": "string"
+            "description": "Space color",
+            "nullable": true
           },
           "createdAt": {
             "description": "Creation date",
@@ -25888,6 +25907,8 @@
             "type": "string"
           },
           "lastContributor": {
+            "description": "Last contributor since last viewed",
+            "nullable": true,
             "properties": {
               "id": {
                 "type": "string"
@@ -25975,7 +25996,6 @@
         "type": "object"
       },
       "SharedSpaceRole": {
-        "description": "Member role",
         "enum": [
           "owner",
           "editor",
@@ -25986,11 +26006,7 @@
       "SharedSpaceUpdateDto": {
         "properties": {
           "color": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/UserAvatarColor"
-              }
-            ],
+            "$ref": "#/components/schemas/UserAvatarColor",
             "description": "Space color"
           },
           "description": {
@@ -26005,6 +26021,7 @@
           "name": {
             "description": "Space name",
             "maxLength": 100,
+            "minLength": 1,
             "type": "string"
           },
           "petsEnabled": {
@@ -26015,6 +26032,7 @@
             "description": "Thumbnail asset ID",
             "format": "uuid",
             "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           },
           "thumbnailCropY": {
@@ -26140,11 +26158,7 @@
             "type": "string"
           },
           "order": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/AssetOrder"
-              }
-            ],
+            "$ref": "#/components/schemas/AssetOrder",
             "description": "Sort order (omit for relevance)"
           },
           "page": {
@@ -26204,12 +26218,14 @@
           "spaceId": {
             "description": "Shared space ID to filter by",
             "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           },
           "spacePersonIds": {
             "description": "Shared space person IDs to filter by",
             "items": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
             "type": "array"
@@ -26475,12 +26491,14 @@
           "spaceId": {
             "description": "Shared space ID to filter by",
             "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           },
           "spacePersonIds": {
             "description": "Shared space person IDs to filter by",
             "items": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
             "type": "array"
@@ -26563,6 +26581,13 @@
         ],
         "type": "string"
       },
+      "StorageMigrationDirection": {
+        "enum": [
+          "toS3",
+          "toDisk"
+        ],
+        "type": "string"
+      },
       "StorageMigrationFileTypesDto": {
         "properties": {
           "encodedVideos": {
@@ -26606,16 +26631,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "encodedVideos",
-          "fullsize",
-          "originals",
-          "personThumbnails",
-          "previews",
-          "profileImages",
-          "sidecars",
-          "thumbnails"
-        ],
         "type": "object"
       },
       "StorageMigrationStartDto": {
@@ -26633,24 +26648,15 @@
             "type": "boolean"
           },
           "direction": {
-            "description": "Migration direction",
-            "enum": [
-              "toS3",
-              "toDisk"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/StorageMigrationDirection",
+            "description": "Migration direction"
           },
           "fileTypes": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/StorageMigrationFileTypesDto"
-              }
-            ],
+            "$ref": "#/components/schemas/StorageMigrationFileTypesDto",
             "description": "File types to migrate"
           }
         },
         "required": [
-          "deleteSource",
           "direction",
           "fileTypes"
         ],
@@ -28563,6 +28569,7 @@
       "SystemConfigClassificationCategoryDto": {
         "properties": {
           "action": {
+            "description": "Action to take when an asset matches",
             "enum": [
               "tag",
               "tag_and_archive"
@@ -28570,20 +28577,23 @@
             "type": "string"
           },
           "enabled": {
-            "description": "Enable or disable this category",
+            "description": "Whether this category is enabled",
             "type": "boolean"
           },
           "name": {
+            "description": "Category name",
             "type": "string"
           },
           "prompts": {
+            "description": "CLIP text prompts for this category",
             "items": {
               "type": "string"
             },
-            "minItems": 1,
             "type": "array"
           },
           "similarity": {
+            "description": "Cosine similarity threshold for matching this category",
+            "format": "double",
             "maximum": 1,
             "minimum": 0,
             "type": "number"
@@ -28601,6 +28611,7 @@
       "SystemConfigClassificationDto": {
         "properties": {
           "categories": {
+            "description": "Classification categories",
             "items": {
               "$ref": "#/components/schemas/SystemConfigClassificationCategoryDto"
             },
@@ -30531,16 +30542,13 @@
       "UserGroupCreateDto": {
         "properties": {
           "color": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/UserAvatarColor"
-              }
-            ],
+            "$ref": "#/components/schemas/UserAvatarColor",
             "description": "Group color"
           },
           "name": {
             "description": "Group name",
             "maxLength": 100,
+            "minLength": 1,
             "type": "string"
           }
         },
@@ -30585,6 +30593,7 @@
             "description": "User IDs",
             "items": {
               "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
             "type": "array"
@@ -30661,6 +30670,7 @@
           "name": {
             "description": "Group name",
             "maxLength": 100,
+            "minLength": 1,
             "type": "string"
           }
         },
