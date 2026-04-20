@@ -9944,6 +9944,7 @@
             "in": "query",
             "description": "Person name to search for",
             "schema": {
+              "minLength": 1,
               "type": "string"
             }
           },
@@ -20296,6 +20297,7 @@
           },
           "modelName": {
             "description": "Name of the model to use",
+            "minLength": 1,
             "type": "string"
           }
         },
@@ -21071,6 +21073,7 @@
           },
           "modelName": {
             "description": "Name of the model to use",
+            "minLength": 1,
             "type": "string"
           }
         },
@@ -22561,6 +22564,7 @@
           },
           "modelName": {
             "description": "Name of the model to use",
+            "minLength": 1,
             "type": "string"
           }
         },
@@ -23283,6 +23287,7 @@
           },
           "modelName": {
             "description": "Name of the model to use",
+            "minLength": 1,
             "type": "string"
           }
         },
@@ -28321,6 +28326,7 @@
             "items": {
               "type": "string"
             },
+            "minItems": 1,
             "type": "array"
           },
           "similarity": {
@@ -30792,6 +30798,7 @@
           },
           "name": {
             "description": "Workflow name",
+            "minLength": 1,
             "type": "string"
           },
           "triggerType": {
