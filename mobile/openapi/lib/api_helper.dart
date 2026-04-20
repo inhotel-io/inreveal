@@ -118,6 +118,9 @@ String parameterToString(dynamic value) {
   if (value is ManualJobName) {
     return ManualJobNameTypeTransformer().encode(value).toString();
   }
+  if (value is MapMediaType) {
+    return MapMediaTypeTypeTransformer().encode(value).toString();
+  }
   if (value is MemorySearchOrder) {
     return MemorySearchOrderTypeTransformer().encode(value).toString();
   }
@@ -171,6 +174,9 @@ String parameterToString(dynamic value) {
   }
   if (value is StorageFolder) {
     return StorageFolderTypeTransformer().encode(value).toString();
+  }
+  if (value is StorageMigrationDirection) {
+    return StorageMigrationDirectionTypeTransformer().encode(value).toString();
   }
   if (value is SyncEntityType) {
     return SyncEntityTypeTypeTransformer().encode(value).toString();
