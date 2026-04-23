@@ -90,6 +90,7 @@ export interface SearchExifOptions {
   state?: string | null;
   description?: string | null;
   rating?: number | null;
+  ratingIsMinimum?: boolean;
 }
 
 export interface SearchEmbeddingOptions {
@@ -362,7 +363,7 @@ export class SearchRepository {
   ) {
     const hasDistanceThreshold = isActiveDistanceThreshold(options.maxDistance);
 
-    const baseQuery = searchAssetBuilder(kysely, options)
+    const baseQuery = searchAssetBuilder(kysely, { ...options, ratingIsMinimum: true })
       .selectAll('asset')
       .innerJoin('smart_search', 'asset.id', 'smart_search.assetId')
       .$if(hasDistanceThreshold, (qb) =>
