@@ -3,6 +3,7 @@ FROM node:24.18.0-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176f
 WORKDIR /usr/src/app
 COPY package* pnpm* .pnpmfile.cjs ./
 COPY ./packages ./packages/
+COPY ./patches ./patches/
 RUN corepack enable pnpm && \
   pnpm --filter @immich/sdk --filter @immich/cli install --frozen-lockfile && \
   pnpm --filter @immich/sdk --filter @immich/cli build
