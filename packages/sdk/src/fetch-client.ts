@@ -1345,15 +1345,14 @@ export type MapReverseGeocodeResponseDto = {
     /** State/Province name */
     state: string | null;
 };
-export type OnThisDayDto = {
-    /** Year for on this day memory */
-    year: number;
-};
 export type MemoryResponseDto = {
     assets: AssetResponseDto[];
     /** Creation date */
     createdAt: string;
-    data: OnThisDayDto;
+    /** Memory data */
+    data: {
+        [key: string]: any;
+    };
     /** Deletion date */
     deletedAt?: string;
     /** Date when memory should be hidden */
@@ -1370,6 +1369,10 @@ export type MemoryResponseDto = {
     seenAt?: string;
     /** Date when memory should be shown */
     showAt?: string;
+    /** Server-defined display subtitle */
+    subtitle?: string;
+    /** Server-defined display title */
+    title?: string;
     "type": MemoryType;
     /** Last update date */
     updatedAt: string;
@@ -1377,7 +1380,10 @@ export type MemoryResponseDto = {
 export type MemoryCreateDto = {
     /** Asset IDs to associate with memory */
     assetIds?: string[];
-    data: OnThisDayDto;
+    /** Memory data */
+    data: {
+        [key: string]: any;
+    };
     /** Date when memory should be hidden */
     hideAt?: string;
     /** Is memory saved */
@@ -7841,7 +7847,8 @@ export enum MemorySearchOrder {
     Random = "random"
 }
 export enum MemoryType {
-    OnThisDay = "on_this_day"
+    OnThisDay = "on_this_day",
+    Rule = "rule"
 }
 export enum PartnerDirection {
     SharedBy = "shared-by",
