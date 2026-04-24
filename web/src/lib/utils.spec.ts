@@ -1,5 +1,5 @@
-import { AssetTypeEnum } from '@immich/sdk';
-import { getAssetUrl } from '$lib/utils';
+import { AssetTypeEnum, MemoryType, type MemoryResponseDto } from '@immich/sdk';
+import { getAssetUrl, getMemoryTitle } from '$lib/utils';
 import { assetFactory } from '@test-data/factories/asset-factory';
 import { sharedLinkFactory } from '@test-data/factories/shared-link-factory';
 
@@ -159,6 +159,55 @@ describe('utils', () => {
       expect(url).toContain('/thumbnail');
       expect(url).not.toContain('/original');
       expect(url).toContain(asset.id);
+    });
+  });
+
+  describe(getMemoryTitle.name, () => {
+    const translate = ((key: string, payload?: { values?: Record<string, number> }) => {
+      if (key === 'years_ago') {
+        return `${payload?.values?.years} years ago`;
+      }
+
+      return key;
+    }) as unknown as Parameters<typeof getMemoryTitle>[1];
+    const memory = (overrides: Partial<MemoryResponseDto>): MemoryResponseDto => ({
+      assets: [],
+      createdAt: '2026-04-23T00:00:00Z',
+      data: {},
+      id: 'memory-id',
+      isSaved: false,
+      memoryAt: '2026-04-23T00:00:00Z',
+      ownerId: 'owner-id',
+      type: MemoryType.Rule,
+      updatedAt: '2026-04-23T00:00:00Z',
+      ...overrides,
+    });
+
+    it('prefers a server-supplied title when present', () => {
+      expect(
+        getMemoryTitle(
+          memory({
+            type: MemoryType.Rule,
+            title: 'Happy birthday, Alice',
+            data: { title: 'Happy birthday, Alice' },
+          }),
+          translate,
+          new Date('2026-04-23T00:00:00Z'),
+        ),
+      ).toBe('Happy birthday, Alice');
+    });
+
+    it('falls back to the localized on-this-day title when no server title exists', () => {
+      expect(
+        getMemoryTitle(
+          memory({
+            type: MemoryType.OnThisDay,
+            data: { year: 2024 },
+          }),
+          translate,
+          new Date('2026-04-23T00:00:00Z'),
+        ),
+      ).toBe('2 years ago');
     });
   });
 });
