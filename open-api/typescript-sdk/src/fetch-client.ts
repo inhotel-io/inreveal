@@ -6125,7 +6125,8 @@ export function searchAssetStatistics({ statisticsSearchDto }: {
 /**
  * Retrieve search suggestions
  */
-export function getSearchSuggestions({ country, includeNull, lensModel, make, model, spaceId, state, takenAfter, takenBefore, $type, withSharedSpaces }: {
+export function getSearchSuggestions({ albumId, country, includeNull, lensModel, make, model, spaceId, state, takenAfter, takenBefore, $type, withSharedSpaces }: {
+    albumId?: string;
     country?: string;
     includeNull?: boolean;
     lensModel?: string;
@@ -6142,6 +6143,7 @@ export function getSearchSuggestions({ country, includeNull, lensModel, make, mo
         status: 200;
         data: string[];
     }>(`/search/suggestions${QS.query(QS.explode({
+        albumId,
         country,
         includeNull,
         lensModel,
@@ -6160,7 +6162,8 @@ export function getSearchSuggestions({ country, includeNull, lensModel, make, mo
 /**
  * Retrieve dynamic filter suggestions
  */
-export function getFilterSuggestions({ city, country, isFavorite, make, mediaType, model, personIds, rating, spaceId, tagIds, takenAfter, takenBefore, withSharedSpaces }: {
+export function getFilterSuggestions({ albumId, city, country, isFavorite, make, mediaType, model, personIds, rating, spaceId, tagIds, takenAfter, takenBefore, withSharedSpaces }: {
+    albumId?: string;
     city?: string;
     country?: string;
     isFavorite?: boolean;
@@ -6179,6 +6182,7 @@ export function getFilterSuggestions({ city, country, isFavorite, make, mediaTyp
         status: 200;
         data: FilterSuggestionsResponseDto;
     }>(`/search/suggestions/filters${QS.query(QS.explode({
+        albumId,
         city,
         country,
         isFavorite,
