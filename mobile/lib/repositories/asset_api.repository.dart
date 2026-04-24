@@ -21,7 +21,7 @@ class AssetApiRepository extends ApiRepository {
   TrashApi get _trashApi => _apiService.trashApi;
 
   Future<void> delete(List<String> ids, bool force) async {
-    return _api.deleteAssets(AssetBulkDeleteDto(ids: ids, force: Optional.present(force)));
+    await _api.deleteAssets(AssetBulkDeleteDto(ids: ids, force: Optional.present(force)));
   }
 
   Future<void> restoreTrash(List<String> ids) async {
@@ -39,15 +39,15 @@ class AssetApiRepository extends ApiRepository {
   }
 
   Future<void> updateVisibility(List<String> ids, AssetVisibilityEnum visibility) async {
-    return _api.updateAssets(AssetBulkUpdateDto(ids: ids, visibility: Optional.present(_mapVisibility(visibility))));
+    await _api.updateAssets(AssetBulkUpdateDto(ids: ids, visibility: Optional.present(_mapVisibility(visibility))));
   }
 
   Future<void> updateFavorite(List<String> ids, bool isFavorite) async {
-    return _api.updateAssets(AssetBulkUpdateDto(ids: ids, isFavorite: Optional.present(isFavorite)));
+    await _api.updateAssets(AssetBulkUpdateDto(ids: ids, isFavorite: Optional.present(isFavorite)));
   }
 
   Future<void> updateLocation(List<String> ids, LatLng location) async {
-    return _api.updateAssets(
+    await _api.updateAssets(
       AssetBulkUpdateDto(
         ids: ids,
         latitude: Optional.present(location.latitude),
@@ -67,7 +67,7 @@ class AssetApiRepository extends ApiRepository {
   }
 
   Future<void> unStack(List<String> ids) async {
-    return _stacksApi.deleteStacks(BulkIdsDto(ids: ids));
+    await _stacksApi.deleteStacks(BulkIdsDto(ids: ids));
   }
 
   Future<Response> downloadAsset(String id, {required bool edited}) {
@@ -101,7 +101,7 @@ class AssetApiRepository extends ApiRepository {
   }
 
   Future<void> removeEdits(String assetId) async {
-    return _api.removeAssetEdits(assetId);
+    await _api.removeAssetEdits(assetId);
   }
 }
 
