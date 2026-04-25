@@ -16,7 +16,7 @@ pnpmfileChecksum: sha256-un98do36L0wZyqsjcLozQ3YUadCAn2yz5bXcBbOuyDA=
 
 patchedDependencies:
   '@immich/ui@0.76.2':
-    hash: 76d22c164f5b0e850c3c367a387d965c22b8cdc95dc71b986bbaaded51abc895
+    hash: cc8ba169830a29816aa11a35bb7f1aa8df5fba761705c6b690dd8dc426eb5f5d
     path: patches/@immich__ui@0.76.2.patch
 
 importers:
@@ -751,7 +751,7 @@ importers:
         version: link:../open-api/typescript-sdk
       '@immich/ui':
         specifier: ^0.76.0
-        version: 0.76.2(patch_hash=76d22c164f5b0e850c3c367a387d965c22b8cdc95dc71b986bbaaded51abc895)(@sveltejs/kit@2.57.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.0.0(svelte@5.55.2)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)))(svelte@5.55.2)(typescript@6.0.3)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)))(svelte@5.55.2)
+        version: 0.76.2(patch_hash=cc8ba169830a29816aa11a35bb7f1aa8df5fba761705c6b690dd8dc426eb5f5d)(@sveltejs/kit@2.57.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.0.0(svelte@5.55.2)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)))(svelte@5.55.2)(typescript@6.0.3)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)))(svelte@5.55.2)
       '@mapbox/mapbox-gl-rtl-text':
         specifier: 0.4.0
         version: 0.4.0
@@ -16303,7 +16303,7 @@ snapshots:
       node-emoji: 2.2.0
       svelte: 5.55.2
 
-  '@immich/ui@0.76.2(patch_hash=76d22c164f5b0e850c3c367a387d965c22b8cdc95dc71b986bbaaded51abc895)(@sveltejs/kit@2.57.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.0.0(svelte@5.55.2)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)))(svelte@5.55.2)(typescript@6.0.3)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)))(svelte@5.55.2)':
+  '@immich/ui@0.76.2(patch_hash=cc8ba169830a29816aa11a35bb7f1aa8df5fba761705c6b690dd8dc426eb5f5d)(@sveltejs/kit@2.57.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.0.0(svelte@5.55.2)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)))(svelte@5.55.2)(typescript@6.0.3)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)))(svelte@5.55.2)':
     dependencies:
       '@immich/svelte-markdown-preprocess': 0.4.1(svelte@5.55.2)
       '@internationalized/date': 3.12.1
