@@ -6253,15 +6253,19 @@ export function searchAssetStatistics({ statisticsSearchDto }: {
 /**
  * Retrieve search suggestions
  */
-export function getSearchSuggestions({ albumId, country, includeNull, lensModel, make, model, spaceId, state, takenAfter, takenBefore, $type, withSharedSpaces }: {
+export function getSearchSuggestions({ albumId, country, includeNull, isFavorite, lensModel, make, model, personIds, rating, spaceId, state, tagIds, takenAfter, takenBefore, $type, withSharedSpaces }: {
     albumId?: string;
     country?: string;
     includeNull?: boolean;
+    isFavorite?: boolean;
     lensModel?: string;
     make?: string;
     model?: string;
+    personIds?: string[];
+    rating?: number;
     spaceId?: string;
     state?: string;
+    tagIds?: string[];
     takenAfter?: string;
     takenBefore?: string;
     $type: SearchSuggestionType;
@@ -6274,11 +6278,15 @@ export function getSearchSuggestions({ albumId, country, includeNull, lensModel,
         albumId,
         country,
         includeNull,
+        isFavorite,
         lensModel,
         make,
         model,
+        personIds,
+        rating,
         spaceId,
         state,
+        tagIds,
         takenAfter,
         takenBefore,
         "type": $type,
