@@ -120,6 +120,7 @@ class AuthService {
       _authRepository.clearLocalData(),
       Store.delete(StoreKey.currentUser),
       Store.delete(StoreKey.accessToken),
+      Store.delete(StoreKey.autoEndpointLocationDisclosureAccepted),
     ]);
   }
 
@@ -135,6 +136,10 @@ class AuthService {
   Future<String?> setOpenApiServiceEndpoint() async {
     final enable = _authRepository.getEndpointSwitchingFeature();
     if (!enable) {
+      return null;
+    }
+
+    if (!Store.get(StoreKey.autoEndpointLocationDisclosureAccepted, false)) {
       return null;
     }
 
