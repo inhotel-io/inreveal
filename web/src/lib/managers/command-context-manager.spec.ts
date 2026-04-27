@@ -268,6 +268,24 @@ describe('registerSelectionContext', () => {
     unmount();
   });
 
+  it('treats all selected assets as unowned without an authenticated user', () => {
+    mockUser.current = null;
+    const { unmount } = render(RegisterSelectionContextHarness, {
+      props: {
+        options: {
+          getAssets: () => [makeAsset({ id: 'asset-1', ownerId: 'u-other' })],
+          clearSelection: vi.fn(),
+        },
+      },
+    });
+
+    const selection = commandContextManager.getContext().selection;
+    expect(selection?.ownedAssets).toEqual([]);
+    expect(selection?.ownedSelectedAssetIds).toEqual([]);
+    expect(selection?.isAllUserOwned).toBe(false);
+    unmount();
+  });
+
   it('computes archive/trash/favorite flags from the live assets', () => {
     let assets = [
       makeAsset({ id: 'asset-1', visibility: AssetVisibility.Archive, isFavorite: true, isTrashed: true }),
@@ -347,6 +365,21 @@ describe('registerSelectionContext', () => {
     });
     expect(commandContextManager.getContext().selection).not.toBeNull();
     unmount();
+    expect(commandContextManager.getContext().selection).toBeNull();
+  });
+
+  it('does not let an older registration cleanup clear a newer active registration', () => {
+    const first = render(RegisterSelectionContextHarness, {
+      props: { options: { getAssets: () => [makeAsset({ id: 'asset-1' })], clearSelection: vi.fn() } },
+    });
+    const second = render(RegisterSelectionContextHarness, {
+      props: { options: { getAssets: () => [makeAsset({ id: 'asset-2' })], clearSelection: vi.fn() } },
+    });
+
+    expect(commandContextManager.getContext().selection?.selectedAssetIds).toEqual(['asset-2']);
+    first.unmount();
+    expect(commandContextManager.getContext().selection?.selectedAssetIds).toEqual(['asset-2']);
+    second.unmount();
     expect(commandContextManager.getContext().selection).toBeNull();
   });
 });

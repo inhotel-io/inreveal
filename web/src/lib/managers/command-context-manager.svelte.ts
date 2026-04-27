@@ -66,6 +66,7 @@ export type RegisterSelectionContextOptions = {
 type RegisteredSelectionContext = {
   routeId: string | null;
   options: RegisterSelectionContextOptions;
+  token: symbol;
 };
 
 export interface CommandContext {
@@ -93,6 +94,12 @@ class CommandContextManager {
 
   setSelection(selection: RegisteredSelectionContext | null) {
     this._selection = selection;
+  }
+
+  clearSelection(token: symbol) {
+    if (this._selection?.token === token) {
+      this._selection = null;
+    }
   }
 
   /**
@@ -226,9 +233,10 @@ export function registerSpaceContext(
 
 export function registerSelectionContext(options: RegisterSelectionContextOptions) {
   const routeId = page.route.id;
+  const token = Symbol('cmdk-selection-context');
 
   $effect(() => {
-    commandContextManager.setSelection({ routeId, options });
-    return () => commandContextManager.setSelection(null);
+    commandContextManager.setSelection({ routeId, options, token });
+    return () => commandContextManager.clearSelection(token);
   });
 }
