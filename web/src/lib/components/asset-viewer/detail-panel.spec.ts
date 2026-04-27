@@ -1,7 +1,7 @@
 import { getAppleMapsUrl, getGoogleMapsUrl, getOpenStreetMapUrl } from '$lib/utils/exif-utils';
 import { renderWithTooltips } from '$tests/helpers';
-import { assetFactory } from '@test-data/factories/asset-factory';
 import { AssetTypeEnum, AssetVisibility, type AssetResponseDto } from '@immich/sdk';
+import { assetFactory } from '@test-data/factories/asset-factory';
 import '@testing-library/jest-dom';
 import { screen, waitFor } from '@testing-library/svelte';
 import DetailPanel from './detail-panel.svelte';
