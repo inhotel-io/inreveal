@@ -17,7 +17,7 @@ Create shared frontend component files:
 - `web/src/lib/components/people/people-types.ts`: shared view-model and visibility save result types.
 - `web/src/lib/components/people/people-grid.svelte`: generic grid and pagination sentinel.
 - `web/src/lib/components/people/person-tile.svelte`: thumbnail/link/badge/action-menu shell.
-- `web/src/lib/components/people/people-visibility-modal.svelte`: shared visibility modal behavior.
+- `web/src/lib/components/people/people-visibility-modal.svelte`: shared visibility modal behavior with adapter-controlled grid and button classes.
 - `web/src/lib/components/people/people-grid.test-wrapper.svelte`: test wrapper for grid snippets.
 - `web/src/lib/components/people/person-tile.test-wrapper.svelte`: test wrapper for tile snippets.
 - `web/src/lib/components/people/people-visibility-modal.test-wrapper.svelte`: test wrapper with `TooltipProvider`.
@@ -632,6 +632,9 @@ Create `web/src/lib/components/people/people-visibility-modal.svelte` using the 
     people: VisibilityPerson[];
     titleId?: string | undefined;
     totalPeopleCount?: number | undefined;
+    gridClass?: string;
+    personButtonClass?: string;
+    personStyle?: string;
     hasMore?: boolean;
     loading?: boolean;
     onClose: () => void;
@@ -644,6 +647,9 @@ Create `web/src/lib/components/people/people-visibility-modal.svelte` using the 
     people,
     titleId = undefined,
     totalPeopleCount = undefined,
+    gridClass = 'w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-10 gap-1',
+    personButtonClass = 'group relative w-full h-full',
+    personStyle = undefined,
     hasMore = false,
     loading = false,
     onClose,
@@ -746,12 +752,13 @@ Use the existing modal markup from `manage-people-visibility.svelte`, replacing 
   </div>
 
   <div class="p-2 pb-8 md:px-8">
-    <PeopleGrid items={people} hasNextPage={hasMore} {loading} {loadNextPage}>
+    <PeopleGrid items={people} class={gridClass} hasNextPage={hasMore} {loading} {loadNextPage}>
       {#snippet children(person)}
         {@const hidden = overrides.get(person.id) ?? person.isHidden}
         <button
           type="button"
-          class="group relative w-full h-full"
+          class={personButtonClass}
+          style={personStyle}
           onclick={() => setHiddenOverride(person, !hidden)}
           aria-pressed={hidden}
           aria-label={person.displayName ? $t('hide_named_person', { values: { name: person.displayName } }) : $t('hide_person')}
@@ -793,6 +800,9 @@ Create `web/src/lib/components/people/people-visibility-modal.test-wrapper.svelt
     saveVisibilityChanges: (changes: VisibilityChange[]) => Promise<VisibilitySaveResult>;
     titleId?: string;
     totalPeopleCount?: number;
+    gridClass?: string;
+    personButtonClass?: string;
+    personStyle?: string;
     hasMore?: boolean;
     loading?: boolean;
     loadNextPage?: () => void;
@@ -1100,6 +1110,8 @@ In `web/src/routes/(user)/people/manage-people-visibility.svelte`, replace direc
 />
 ```
 
+Global intentionally uses the shared visibility modal defaults for `gridClass` and `personButtonClass`, preserving the current global grid density.
+
 - [ ] **Step 6: Run global adapter tests**
 
 Run:
@@ -1340,12 +1352,17 @@ Replace `web/src/lib/components/spaces/manage-space-people-visibility.svelte` wi
   people={visibilityPeople}
   {onClose}
   onUpdate={handleUpdate}
+  gridClass="flex flex-wrap gap-1"
+  personButtonClass="group relative"
+  personStyle="width: 6rem; height: 6rem;"
   hasMore={hasMore}
   loading={loading}
   loadNextPage={onLoadMore}
   saveVisibilityChanges={saveVisibilityChanges}
 />
 ```
+
+The space adapter must preserve the current compact space visibility layout with `flex flex-wrap gap-1` and fixed `6rem` person buttons. Do not change the shared modal's global defaults to accommodate the space layout.
 
 - [ ] **Step 5: Run space adapter tests**
 
