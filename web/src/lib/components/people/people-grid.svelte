@@ -21,23 +21,37 @@
     children,
   }: Props = $props();
   let sentinel: HTMLElement | undefined = $state();
-
-  const intersectionObserver = new IntersectionObserver((entries) => {
-    const entry = entries.find((entry) => entry.target === sentinel);
-    if (entry?.isIntersecting && hasNextPage && !loading) {
-      loadNextPage();
-    }
-  });
+  let intersectionObserver: IntersectionObserver | undefined;
 
   $effect(() => {
-    if (sentinel) {
-      intersectionObserver.disconnect();
-      intersectionObserver.observe(sentinel);
+    if (!hasNextPage || !sentinel || typeof IntersectionObserver === 'undefined') {
+      intersectionObserver?.disconnect();
+      intersectionObserver = undefined;
+      return;
     }
+
+    const observedSentinel = sentinel;
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries.find((entry) => entry.target === observedSentinel);
+      if (entry?.isIntersecting && hasNextPage && !loading) {
+        loadNextPage();
+      }
+    });
+
+    intersectionObserver?.disconnect();
+    intersectionObserver = observer;
+    observer.observe(observedSentinel);
+
+    return () => {
+      observer.disconnect();
+      if (intersectionObserver === observer) {
+        intersectionObserver = undefined;
+      }
+    };
   });
 
   onDestroy(() => {
-    intersectionObserver.disconnect();
+    intersectionObserver?.disconnect();
   });
 </script>
 
@@ -50,7 +64,7 @@
 {#if hasNextPage}
   <div bind:this={sentinel} class="flex h-8 w-full items-center justify-center">
     {#if loading}
-      <span class="text-sm text-gray-500">{$t('loading')}</span>
+      <span class="text-sm text-gray-500" aria-live="polite">{$t('loading')}</span>
     {/if}
   </div>
 {/if}
