@@ -130,7 +130,9 @@
   const todayFormatted = new Date().toISOString().split('T')[0];
 </script>
 
-<div class="mb-4 flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800/50">
+<div
+  class="mb-4 flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800/50"
+>
   <div class="flex items-center gap-4">
     <div class="size-20 overflow-hidden rounded-full">
       <img src={thumbnailUrl} alt={displayName} class="size-full object-cover" />

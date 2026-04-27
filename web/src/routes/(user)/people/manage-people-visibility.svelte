@@ -50,5 +50,5 @@
   onUpdate={handleUpdate}
   {loadNextPage}
   hasMore={true}
-  saveVisibilityChanges={saveVisibilityChanges}
+  {saveVisibilityChanges}
 />

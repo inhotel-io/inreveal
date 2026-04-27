@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen } from '@testing-library/svelte';
-import PersonTileWrapper from './person-tile.test-wrapper.svelte';
 import type { ManagedPerson } from './people-types';
+import PersonTileWrapper from './person-tile.test-wrapper.svelte';
 
 const basePerson = (overrides: Partial<ManagedPerson> = {}): ManagedPerson => ({
   id: 'person-1',

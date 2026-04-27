@@ -55,7 +55,9 @@ describe('PeopleGrid', () => {
   const flushAnimationFrames = () => {
     const callbacks = [...pendingAnimationFrames.values()];
     pendingAnimationFrames.clear();
-    callbacks.forEach((callback) => callback(0));
+    for (const callback of callbacks) {
+      callback(0);
+    }
   };
 
   it('renders items through the child snippet', () => {
@@ -193,7 +195,7 @@ describe('PeopleGrid', () => {
     await waitFor(() => expect(loadNextPage).toHaveBeenCalledTimes(1));
   });
 
-  it('does not call loadNextPage from the visibility re-check while loading', async () => {
+  it('does not call loadNextPage from the visibility re-check while loading', () => {
     vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockReturnValue({
       top: window.innerHeight - 1,
     } as DOMRect);

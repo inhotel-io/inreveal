@@ -23,10 +23,7 @@ describe('PeopleInfiniteScroll adapter', () => {
   });
 
   it('provides person and index through the snippet API', () => {
-    const people = [
-      personFactory.build({ id: 'p1', name: 'Alice' }),
-      personFactory.build({ id: 'p2', name: 'Bob' }),
-    ];
+    const people = [personFactory.build({ id: 'p1', name: 'Alice' }), personFactory.build({ id: 'p2', name: 'Bob' })];
 
     render(PeopleInfiniteScrollWrapper, {
       props: {

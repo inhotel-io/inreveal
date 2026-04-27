@@ -9,11 +9,11 @@
     children?: import('svelte').Snippet<[{ person: PersonResponseDto; index: number }]>;
   }
 
-  let { people, hasNextPage = undefined, loadNextPage, children }: Props = $props();
+  let { people, hasNextPage = undefined, loadNextPage, children: renderPerson }: Props = $props();
 </script>
 
 <PeopleGrid items={people} hasNextPage={!!hasNextPage} {loadNextPage}>
   {#snippet children(person, index)}
-    {@render children?.({ person, index })}
+    {@render renderPerson?.({ person, index })}
   {/snippet}
 </PeopleGrid>
