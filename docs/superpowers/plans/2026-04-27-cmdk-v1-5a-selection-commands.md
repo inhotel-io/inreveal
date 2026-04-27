@@ -655,12 +655,16 @@ export const canAddSelectedToCurrentSpace = (ctx: CommandContext) => {
 
 export const canFavoriteSelected = (ctx: CommandContext) => {
   const selection = getSelection(ctx);
-  return selection !== null && selection.isAllUserOwned && selection.onFavorite !== undefined && !selection.isAllFavorite;
+  return (
+    selection !== null && selection.isAllUserOwned && selection.onFavorite !== undefined && !selection.isAllFavorite
+  );
 };
 
 export const canArchiveSelected = (ctx: CommandContext) => {
   const selection = getSelection(ctx);
-  return selection !== null && selection.isAllUserOwned && selection.onArchive !== undefined && !selection.isAllArchived;
+  return (
+    selection !== null && selection.isAllUserOwned && selection.onArchive !== undefined && !selection.isAllArchived
+  );
 };
 
 export const canDeleteSelected = (ctx: CommandContext) => {
@@ -765,7 +769,11 @@ export async function handleDeleteSelected(ctx?: CommandContext) {
           ? $t('assets_permanently_deleted_count', { values: { count: ids.length } })
           : $t('assets_trashed_count', { values: { count: ids.length } }),
         button: onUndoDelete
-          ? { label: $t('undo'), color: 'secondary' as const, onclick: () => void undoDeleteAssets(onUndoDelete, assets) }
+          ? {
+              label: $t('undo'),
+              color: 'secondary' as const,
+              onclick: () => void undoDeleteAssets(onUndoDelete, assets),
+            }
           : undefined,
       },
       { timeout: 5000 },
@@ -909,7 +917,12 @@ it('selection commands appear from the live provider context', async () => {
   expect(section.status).toBe('ok');
   if (section.status === 'ok') {
     expect(section.items.map((item) => item.id)).toEqual(
-      expect.arrayContaining(['cmd:selection_add_to_album', 'cmd:selection_favorite', 'cmd:selection_archive', 'cmd:selection_delete']),
+      expect.arrayContaining([
+        'cmd:selection_add_to_album',
+        'cmd:selection_favorite',
+        'cmd:selection_archive',
+        'cmd:selection_delete',
+      ]),
     );
     expect(section.items.some((item) => item.id === 'cmd:selection_add_to_current_space')).toBe(false);
   }
@@ -933,9 +946,11 @@ it('command activation passes a fresh selection context after selection changes 
   manager.activate('command', cmd);
   await flushMicrotasks();
 
-  expect(handlerSpy).toHaveBeenCalledWith(expect.objectContaining({
-    selection: expect.objectContaining({ selectedAssetIds: ['asset-after'] }),
-  }));
+  expect(handlerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      selection: expect.objectContaining({ selectedAssetIds: ['asset-after'] }),
+    }),
+  );
   handlerSpy.mockRestore();
 });
 ```
@@ -1189,7 +1204,9 @@ registerSelectionContext({
   clearSelection: () => assetMultiSelectManager.clear(),
   canAddToAlbum: () => true,
   getOnFavorite: () =>
-    timelineManager ? (ids, isFavorite) => timelineManager.update(ids, (asset) => (asset.isFavorite = isFavorite)) : undefined,
+    timelineManager
+      ? (ids, isFavorite) => timelineManager.update(ids, (asset) => (asset.isFavorite = isFavorite))
+      : undefined,
   getOnArchive: () =>
     timelineManager
       ? (ids, visibility) => timelineManager.update(ids, (asset) => (asset.visibility = visibility))
@@ -1377,7 +1394,9 @@ registerSelectionContext({
   clearSelection: () => assetMultiSelectManager.clear(),
   canAddToAlbum: () => true,
   getOnFavorite: () =>
-    timelineManager ? (ids, isFavorite) => timelineManager.update(ids, (asset) => (asset.isFavorite = isFavorite)) : undefined,
+    timelineManager
+      ? (ids, isFavorite) => timelineManager.update(ids, (asset) => (asset.isFavorite = isFavorite))
+      : undefined,
   getOnArchive: () =>
     timelineManager
       ? (ids, visibility) => timelineManager.update(ids, (asset) => (asset.visibility = visibility))
@@ -1403,7 +1422,9 @@ registerSelectionContext({
   clearSelection: () => assetMultiSelectManager.clear(),
   canAddToAlbum: () => true,
   getOnFavorite: () =>
-    timelineManager ? (ids, isFavorite) => timelineManager.update(ids, (asset) => (asset.isFavorite = isFavorite)) : undefined,
+    timelineManager
+      ? (ids, isFavorite) => timelineManager.update(ids, (asset) => (asset.isFavorite = isFavorite))
+      : undefined,
   getOnDelete: () => (timelineManager ? (assetIds) => timelineManager.removeAssets(assetIds) : undefined),
 });
 ```
