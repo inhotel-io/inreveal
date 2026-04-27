@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import UserPageLayout from '$lib/components/layouts/user-page-layout.svelte';
+  import SpacePersonProfile from '$lib/components/spaces/space-person-profile.svelte';
   import { createUrl, getAssetMediaUrl } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
   import {
@@ -83,6 +84,10 @@
   function cancelMerge() {
     action = null;
     mergeTargetId = null;
+  }
+
+  function handlePersonChange(updatedPerson: SharedSpacePersonResponseDto) {
+    person = updatedPerson;
   }
 
   const PAGE_SIZE = 100;
@@ -249,21 +254,7 @@
   {:else}
     <!-- Person detail: asset grid -->
     <section class="px-4 pt-4">
-      <div class="mb-4 flex items-center gap-4">
-        <div class="size-20 overflow-hidden rounded-full">
-          <img src={getThumbUrl(person)} alt={displayName} class="size-full object-cover" />
-        </div>
-        <div>
-          <h2 class="text-xl font-bold">{displayName}</h2>
-          {#if person.alias && person.name}
-            <p class="text-sm text-gray-500 dark:text-gray-400">{person.name}</p>
-          {/if}
-          <p class="text-sm text-gray-400 dark:text-gray-500">
-            {person.assetCount}
-            {$t('photos')}
-          </p>
-        </div>
-      </div>
+      <SpacePersonProfile spaceId={space.id} {person} canEditBirthDate={isEditor} onPersonChange={handlePersonChange} />
 
       {#if assetIds.length === 0}
         <div class="py-8 text-center">
