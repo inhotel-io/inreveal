@@ -11,6 +11,7 @@ let pendingAnimationFrames = new Map<number, FrameRequestCallback>();
 class ControllableIntersectionObserver implements IntersectionObserver {
   readonly root = null;
   readonly rootMargin = '';
+  readonly scrollMargin = '';
   readonly thresholds = [];
   readonly disconnect = vi.fn();
   readonly observe = vi.fn((target: Element) => {
