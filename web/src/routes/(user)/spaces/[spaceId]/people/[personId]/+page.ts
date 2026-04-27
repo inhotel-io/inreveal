@@ -1,5 +1,5 @@
 import { authenticate } from '$lib/utils/auth';
-import { getMembers, getSpace, getSpacePeople, getSpacePerson, getSpacePersonAssets } from '@immich/sdk';
+import { getMembers, getSpace, getSpacePerson, getSpacePersonAssets } from '@immich/sdk';
 import type { PageLoad } from './$types';
 
 export const load = (async ({ url, params }) => {
@@ -14,21 +14,14 @@ export const load = (async ({ url, params }) => {
     getSpacePersonAssets({ id: params.spaceId, personId: params.personId }),
   ]);
 
-  // Only fetch first page of people if merging
-  let allPeople: Awaited<ReturnType<typeof getSpacePeople>> = [];
-  if (action === 'merge') {
-    allPeople = await getSpacePeople({ id: params.spaceId, limit: 100 });
-  }
-
   return {
     space,
     members,
     person,
     assetIds,
-    allPeople,
     action,
     meta: {
-      title: `${person.alias || person.name || space.name} - ${space.name}`,
+      title: `${person.name || space.name} - ${space.name}`,
     },
   };
 }) satisfies PageLoad;

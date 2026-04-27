@@ -19,7 +19,7 @@
   const visibilityPeople: VisibilityPerson[] = $derived(
     people.map((person) => ({
       id: person.id,
-      displayName: person.alias || person.name || '',
+      displayName: person.name || '',
       thumbnailUrl: createUrl(`/shared-spaces/${spaceId}/people/${person.id}/thumbnail`, {
         updatedAt: person.updatedAt,
       }),

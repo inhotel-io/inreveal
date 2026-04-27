@@ -3,26 +3,30 @@
   import { shortcut } from '$lib/actions/shortcut';
   import UserPageLayout from '$lib/components/layouts/user-page-layout.svelte';
   import PeopleGrid from '$lib/components/people/people-grid.svelte';
+  import PeopleMergeSelector from '$lib/components/people/people-merge-selector.svelte';
   import PersonTile from '$lib/components/people/person-tile.svelte';
   import type { ManagedPerson } from '$lib/components/people/people-types';
   import ManageSpacePeopleVisibility from '$lib/components/spaces/manage-space-people-visibility.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/button-context-menu.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/menu-option.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
+  import PersonEditBirthDateModal from '$lib/modals/PersonEditBirthDateModal.svelte';
   import { createUrl } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
   import {
     getSpacePeople,
+    mergeSpacePeople,
     SharedSpaceRole,
     updateSpacePerson,
     type SharedSpaceMemberResponseDto,
     type SharedSpacePersonResponseDto,
     type SharedSpaceResponseDto,
   } from '@immich/sdk';
-  import { Button, Icon, IconButton, toastManager } from '@immich/ui';
+  import { Button, Icon, IconButton, modalManager, toastManager } from '@immich/ui';
   import {
     mdiAccountGroupOutline,
     mdiAccountMultipleCheckOutline,
+    mdiCalendarEditOutline,
     mdiArrowLeft,
     mdiDotsVertical,
     mdiEyeOffOutline,
@@ -39,30 +43,32 @@
 
   let { data }: Props = $props();
 
-  let space: SharedSpaceResponseDto = $state(data.space);
-  let members: SharedSpaceMemberResponseDto[] = $state(data.members);
-  let people = $state<SharedSpacePersonResponseDto[]>(data.people);
-
-  $effect(() => {
-    if (data.space.id !== space.id) {
-      space = data.space;
-      members = data.members;
-      people = data.people;
-      editingName = '';
-      hasMore = data.people.length >= PAGE_SIZE;
-    }
-  });
-
   const PAGE_SIZE = 100;
+
+  const space: SharedSpaceResponseDto = $derived(data.space);
+  const members: SharedSpaceMemberResponseDto[] = $derived(data.members);
+  let people = $state<SharedSpacePersonResponseDto[]>([]);
+  let loadedSpaceId = $state('');
   let loading = $state(false);
-  let hasMore = $state(data.people.length >= PAGE_SIZE);
+  let hasMore = $state(false);
 
   let selectHidden = $state(false);
   const visiblePeople = $derived(people.filter((p) => !p.isHidden));
   let allPeople = $state<SharedSpacePersonResponseDto[]>([]);
+  let mergingPerson = $state<SharedSpacePersonResponseDto>();
 
   // Name editing state
   let editingName = $state('');
+
+  $effect(() => {
+    if (data.space.id !== loadedSpaceId) {
+      people = data.people;
+      editingName = '';
+      hasMore = data.people.length >= PAGE_SIZE;
+      mergingPerson = undefined;
+      loadedSpaceId = data.space.id;
+    }
+  });
 
   const currentMember = $derived(members.find((m) => m.userId === authManager.user.id));
   const isOwner = $derived(currentMember?.role === SharedSpaceRole.Owner);
@@ -74,7 +80,7 @@
 
   const toManagedPerson = (person: SharedSpacePersonResponseDto): ManagedPerson => ({
     id: person.id,
-    displayName: person.alias || person.name || '',
+    displayName: person.name || '',
     canonicalName: person.name,
     thumbnailUrl: getThumbUrl(person),
     href: `/spaces/${space.id}/people/${person.id}`,
@@ -170,8 +176,51 @@
     }
   };
 
-  function handleMerge(personId: string) {
-    void goto(`/spaces/${space.id}/people/${personId}?action=merge`);
+  const getMergeDisplayName = (person: SharedSpacePersonResponseDto) => person.name || '';
+
+  const loadMergePeople = async () => {
+    return getSpacePeople({ id: space.id, limit: PAGE_SIZE });
+  };
+
+  const mergePeople = async (
+    targetPerson: SharedSpacePersonResponseDto,
+    selectedPeople: SharedSpacePersonResponseDto[],
+  ) => {
+    await mergeSpacePeople({
+      id: space.id,
+      personId: targetPerson.id,
+      sharedSpacePersonMergeDto: { ids: selectedPeople.map(({ id }) => id) },
+    });
+    toastManager.success($t('spaces_people_merged'));
+    return targetPerson;
+  };
+
+  async function handleMergeComplete() {
+    mergingPerson = undefined;
+    await refreshPeople();
+  }
+
+  async function openBirthDateModal(selectedPerson: SharedSpacePersonResponseDto) {
+    const person = people.find(({ id }) => id === selectedPerson.id) ?? selectedPerson;
+    await modalManager.show(PersonEditBirthDateModal, {
+      birthDate: person.birthDate,
+      onSave: async (birthDate) => {
+        try {
+          const updatedPerson = await updateSpacePerson({
+            id: space.id,
+            personId: person.id,
+            sharedSpacePersonUpdateDto: { birthDate },
+          });
+          const savedPerson = { ...person, ...updatedPerson, birthDate: updatedPerson.birthDate ?? birthDate };
+          people = people.map((currentPerson) => (currentPerson.id === person.id ? savedPerson : currentPerson));
+          toastManager.success($t('date_of_birth_saved'));
+          return true;
+        } catch (error) {
+          handleError(error, $t('errors.unable_to_save_date_of_birth'));
+          return false;
+        }
+      },
+    });
   }
 
   async function handleHide(person: SharedSpacePersonResponseDto) {
@@ -245,9 +294,14 @@
                   icon={mdiDotsVertical}
                   title={$t('show_person_options')}
                 >
+                  <MenuOption
+                    onClick={() => void openBirthDateModal(person)}
+                    icon={mdiCalendarEditOutline}
+                    text={$t('set_date_of_birth')}
+                  />
                   <MenuOption onClick={() => handleHide(person)} icon={mdiEyeOffOutline} text={$t('hide_person')} />
                   <MenuOption
-                    onClick={() => handleMerge(person.id)}
+                    onClick={() => (mergingPerson = person)}
                     icon={mdiAccountMultipleCheckOutline}
                     text={$t('merge_people')}
                   />
@@ -275,6 +329,21 @@
         {/snippet}
       </PeopleGrid>
     </div>
+  {/if}
+
+  {#if mergingPerson}
+    <PeopleMergeSelector
+      person={mergingPerson}
+      getDisplayName={getMergeDisplayName}
+      getThumbnailUrl={getThumbUrl}
+      loadPeople={loadMergePeople}
+      {mergePeople}
+      onBack={() => (mergingPerson = undefined)}
+      onMerge={() => void handleMergeComplete()}
+      showSimilaritySort={false}
+      loadErrorMessage={$t('spaces_error_loading_people')}
+      mergeErrorMessage={$t('spaces_error_merging_people')}
+    />
   {/if}
 </UserPageLayout>
 

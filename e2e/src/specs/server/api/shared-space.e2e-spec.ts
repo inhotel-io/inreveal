@@ -1880,6 +1880,45 @@ describe('/shared-spaces', () => {
           expect((direct.body as { isHidden: boolean }).isHidden).toBe(true);
         });
 
+        it('updates, persists, lists, and clears birthDate', async () => {
+          const scratch = await utils.createSpacePerson(spaceId, 'BirthDatePerson', owner.userId, spaceAssetId);
+
+          const putRes = await request(app)
+            .put(`/shared-spaces/${spaceId}/people/${scratch.spacePersonId}`)
+            .set('Authorization', `Bearer ${owner.accessToken}`)
+            .send({ birthDate: '1984-05-09' });
+          expect(putRes.status).toBe(200);
+          expect((putRes.body as { birthDate: string | null }).birthDate).toBe('1984-05-09');
+
+          const direct = await request(app)
+            .get(`/shared-spaces/${spaceId}/people/${scratch.spacePersonId}`)
+            .set('Authorization', `Bearer ${owner.accessToken}`);
+          expect(direct.status).toBe(200);
+          expect((direct.body as { birthDate: string | null }).birthDate).toBe('1984-05-09');
+
+          const listing = await request(app)
+            .get(`/shared-spaces/${spaceId}/people?withHidden=true`)
+            .set('Authorization', `Bearer ${owner.accessToken}`);
+          expect(listing.status).toBe(200);
+          const listedPerson = (listing.body as Array<{ id: string; birthDate: string | null }>).find(
+            ({ id }) => id === scratch.spacePersonId,
+          );
+          expect(listedPerson?.birthDate).toBe('1984-05-09');
+
+          const clearRes = await request(app)
+            .put(`/shared-spaces/${spaceId}/people/${scratch.spacePersonId}`)
+            .set('Authorization', `Bearer ${owner.accessToken}`)
+            .send({ birthDate: '' });
+          expect(clearRes.status).toBe(200);
+          expect((clearRes.body as { birthDate: string | null }).birthDate).toBeNull();
+
+          const directAfterClear = await request(app)
+            .get(`/shared-spaces/${spaceId}/people/${scratch.spacePersonId}`)
+            .set('Authorization', `Bearer ${owner.accessToken}`);
+          expect(directAfterClear.status).toBe(200);
+          expect((directAfterClear.body as { birthDate: string | null }).birthDate).toBeNull();
+        });
+
         it('non-existent personId returns 400', async () => {
           // Same manual `BadRequestException('Person not found')` mechanism as
           // GET /:personId (T10). Pinned at the PUT path too — they share the
