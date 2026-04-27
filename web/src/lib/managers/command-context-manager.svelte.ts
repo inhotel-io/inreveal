@@ -225,8 +225,9 @@ export function registerSpaceContext(
 }
 
 export function registerSelectionContext(options: RegisterSelectionContextOptions) {
+  const routeId = page.route.id;
+
   $effect(() => {
-    const routeId = page.route.id;
     commandContextManager.setSelection({ routeId, options });
     return () => commandContextManager.setSelection(null);
   });

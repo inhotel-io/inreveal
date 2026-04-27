@@ -253,6 +253,7 @@ describe('registerSelectionContext', () => {
     const first = commandContextManager.getContext().selection;
     expect(first?.assets.map((asset) => asset.id)).toEqual(['asset-1', 'asset-2']);
     expect(first?.selectedAssetIds).toEqual(['asset-1', 'asset-2']);
+    expect(first?.ownedAssets.map((asset) => asset.id)).toEqual(['asset-1']);
     expect(first?.ownedSelectedAssetIds).toEqual(['asset-1']);
     expect(first?.isAllUserOwned).toBe(false);
     expect(first?.clearSelection).toBe(clearSelection);
@@ -260,6 +261,7 @@ describe('registerSelectionContext', () => {
     assets = [makeAsset({ id: 'asset-3', ownerId: 'u-me', isFavorite: true })];
     const second = commandContextManager.getContext().selection;
     expect(second?.selectedAssetIds).toEqual(['asset-3']);
+    expect(second?.ownedAssets.map((asset) => asset.id)).toEqual(['asset-3']);
     expect(second?.ownedSelectedAssetIds).toEqual(['asset-3']);
     expect(second?.isAllUserOwned).toBe(true);
     expect(second?.isAllFavorite).toBe(true);
