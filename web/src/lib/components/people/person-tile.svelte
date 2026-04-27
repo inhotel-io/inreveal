@@ -5,6 +5,7 @@
   import { Icon } from '@immich/ui';
   import { mdiHeart, mdiPaw } from '@mdi/js';
   import type { Snippet } from 'svelte';
+  import { t } from 'svelte-i18n';
 
   interface Props {
     person: ManagedPerson;
@@ -44,7 +45,7 @@
         preload={false}
       />
       {#if person.isFavorite}
-        <div class="absolute top-4 start-4" aria-label="Favorite" title="Favorite">
+        <div class="absolute top-4 start-4" aria-label={$t('favorite')} title={$t('favorite')}>
           <Icon icon={mdiHeart} size="24" class="text-white" />
         </div>
       {/if}

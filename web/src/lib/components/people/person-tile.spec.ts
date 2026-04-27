@@ -28,7 +28,7 @@ describe('PersonTile', () => {
 
     expect(screen.getByRole('link', { name: 'Mochi' })).toHaveAttribute('href', '/people/person-1');
     expect(screen.getByTitle('Mochi')).toHaveAttribute('src', '/api/people/person-1/thumbnail');
-    expect(screen.getByLabelText('Favorite')).toBeInTheDocument();
+    expect(screen.getByLabelText('favorite')).toBeInTheDocument();
     expect(screen.getByTitle('cat')).toBeInTheDocument();
     expect(screen.getByText('Footer content')).toBeInTheDocument();
   });
@@ -66,11 +66,16 @@ describe('PersonTile', () => {
 
     expect(screen.getByRole('button', { name: 'Actions' })).toBeInTheDocument();
 
+    const actionButton = screen.getByRole('button', { name: 'Actions' });
+    actionButton.focus();
+    await fireEvent.focusOut(link, { relatedTarget: actionButton });
+    await fireEvent.focus(actionButton);
+
     await fireEvent.mouseLeave(screen.getByRole('group'));
 
     expect(screen.getByRole('button', { name: 'Actions' })).toBeInTheDocument();
 
-    await fireEvent.focusOut(link, { relatedTarget: document.body });
+    await fireEvent.focusOut(actionButton, { relatedTarget: document.body });
 
     expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
     expect(container).not.toHaveTextContent('Actions');
@@ -97,7 +102,7 @@ describe('PersonTile', () => {
       },
     });
 
-    expect(screen.queryByLabelText('Favorite')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('favorite')).not.toBeInTheDocument();
     expect(screen.queryByTitle('cat')).not.toBeInTheDocument();
   });
 });
