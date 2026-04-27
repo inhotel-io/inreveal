@@ -3,6 +3,18 @@ import { ADMIN_VISIBLE_QUEUES } from '$lib/constants';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import { isAlmostExactWordMatch } from '$lib/managers/cmdk-match';
 import type { CommandContext } from '$lib/managers/command-context-manager.svelte';
+import {
+  canAddSelectedToAlbum,
+  canAddSelectedToCurrentSpace,
+  canArchiveSelected,
+  canDeleteSelected,
+  canFavoriteSelected,
+  handleAddSelectedToAlbum,
+  handleAddSelectedToCurrentSpace,
+  handleArchiveSelected,
+  handleDeleteSelected,
+  handleFavoriteSelected,
+} from '$lib/managers/selection-command-handlers';
 import AlbumEditModal from '$lib/modals/AlbumEditModal.svelte';
 import AlbumOptionsModal from '$lib/modals/AlbumOptionsModal.svelte';
 import ShortcutsModal from '$lib/modals/ShortcutsModal.svelte';
@@ -33,6 +45,7 @@ import {
   mdiAccountMultiplePlus,
   mdiAccountPlus,
   mdiAccountSearchOutline,
+  mdiArchiveArrowDownOutline,
   mdiBrain,
   mdiBroom,
   mdiCloudUploadOutline,
@@ -40,7 +53,9 @@ import {
   mdiDownload,
   mdiExitRun,
   mdiFaceRecognition,
+  mdiHeartOutline,
   mdiImageMultipleOutline,
+  mdiImagePlusOutline,
   mdiImageOutline,
   mdiInformationOutline,
   mdiKeyboardOutline,
@@ -314,6 +329,50 @@ export const COMMAND_ITEMS: readonly CommandItem[] = [
         await goto(Route.albums());
       }
     },
+  },
+
+  // v1.5A — selection-context commands. Visible only when pages register a
+  // non-empty selection context with the required per-action capabilities.
+  {
+    id: 'cmd:selection_add_to_album',
+    labelKey: 'cmdk_cmd_selection_add_to_album_label',
+    descriptionKey: 'cmdk_cmd_selection_add_to_album_description',
+    icon: mdiPlaylistPlus,
+    isAvailable: canAddSelectedToAlbum,
+    handler: handleAddSelectedToAlbum,
+  },
+  {
+    id: 'cmd:selection_add_to_current_space',
+    labelKey: 'cmdk_cmd_selection_add_to_current_space_label',
+    descriptionKey: 'cmdk_cmd_selection_add_to_current_space_description',
+    icon: mdiImagePlusOutline,
+    isAvailable: canAddSelectedToCurrentSpace,
+    handler: handleAddSelectedToCurrentSpace,
+  },
+  {
+    id: 'cmd:selection_favorite',
+    labelKey: 'cmdk_cmd_selection_favorite_label',
+    descriptionKey: 'cmdk_cmd_selection_favorite_description',
+    icon: mdiHeartOutline,
+    isAvailable: canFavoriteSelected,
+    handler: handleFavoriteSelected,
+  },
+  {
+    id: 'cmd:selection_archive',
+    labelKey: 'cmdk_cmd_selection_archive_label',
+    descriptionKey: 'cmdk_cmd_selection_archive_description',
+    icon: mdiArchiveArrowDownOutline,
+    isAvailable: canArchiveSelected,
+    handler: handleArchiveSelected,
+  },
+  {
+    id: 'cmd:selection_delete',
+    labelKey: 'cmdk_cmd_selection_delete_label',
+    descriptionKey: 'cmdk_cmd_selection_delete_description',
+    icon: mdiDeleteOutline,
+    destructive: true,
+    isAvailable: canDeleteSelected,
+    handler: handleDeleteSelected,
   },
 
   // v1.4 — space-context commands. Visible only on /spaces/[spaceId]/… routes

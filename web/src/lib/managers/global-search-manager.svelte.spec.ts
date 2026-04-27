@@ -33,6 +33,7 @@ import { goto } from '$app/navigation';
 import * as recentModule from '$lib/stores/cmdk-recent';
 import { addEntry, getEntries, __resetForTests as resetRecentStore } from '$lib/stores/cmdk-recent';
 import {
+  AssetVisibility,
   getAlbumInfo,
   getAlbumNames,
   getAllPeople,
@@ -61,6 +62,7 @@ import {
   type Sections,
 } from './global-search-manager.svelte';
 import { NAVIGATION_ITEMS } from './navigation-items';
+import type { TimelineAsset } from './timeline-manager/types';
 
 // File-level reset so mock state cannot leak between describe blocks. Tests that
 // mutate these should still set what they want in their own beforeEach, but this
@@ -72,6 +74,9 @@ afterEach(() => {
   mockPage.route.id = null;
   mockPage.params = {};
   mockPage.url = new URL('https://gallery.test/photos');
+  commandContextManager.setAlbum(null);
+  commandContextManager.setSpace(null);
+  commandContextManager.setSelection(null);
 });
 
 vi.mock('@immich/sdk', async () => ({
@@ -148,6 +153,29 @@ vi.mock('svelte-i18n', async (orig) => {
 });
 
 const flushMicrotasks = () => new Promise((resolve) => queueMicrotask(() => resolve(undefined)));
+
+const makeTimelineAsset = (overrides: Partial<TimelineAsset> = {}): TimelineAsset =>
+  ({
+    id: 'asset-1',
+    ownerId: 'test-user',
+    ratio: 1,
+    thumbhash: null,
+    localDateTime: '2026-01-01T00:00:00.000Z',
+    fileCreatedAt: '2026-01-01T00:00:00.000Z',
+    visibility: AssetVisibility.Timeline,
+    isFavorite: false,
+    isTrashed: false,
+    isVideo: false,
+    isImage: true,
+    stack: null,
+    duration: null,
+    projectionType: null,
+    livePhotoVideoId: null,
+    city: null,
+    country: null,
+    people: null,
+    ...overrides,
+  }) as unknown as TimelineAsset;
 
 describe('GlobalSearchManager (skeleton)', () => {
   let manager: GlobalSearchManager;
@@ -982,6 +1010,33 @@ describe('activate("command")', () => {
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({ album: expect.objectContaining({ id: 'a1' }) }));
     commandContextManager.setAlbum(null);
     mockPage.route.id = null;
+  });
+
+  it('command activation passes a fresh selection context after selection changes while the palette is open', async () => {
+    mockPage.route.id = '/(user)/photos/[[assetId=id]]';
+    let assets = [makeTimelineAsset({ id: 'asset-before', ownerId: 'test-user' })];
+    commandContextManager.setSelection({
+      routeId: mockPage.route.id,
+      token: Symbol('selection-test'),
+      options: {
+        getAssets: () => assets,
+        clearSelection: vi.fn(),
+        canAddToAlbum: () => true,
+      },
+    });
+
+    const cmd = COMMAND_ITEMS.find((item) => item.id === 'cmd:selection_add_to_album')!;
+    const handlerSpy = vi.spyOn(cmd, 'handler').mockResolvedValue(undefined);
+    assets = [makeTimelineAsset({ id: 'asset-after', ownerId: 'test-user' })];
+    manager.activate('command', cmd);
+    await flushMicrotasks();
+
+    expect(handlerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selection: expect.objectContaining({ selectedAssetIds: ['asset-after'] }),
+      }),
+    );
+    handlerSpy.mockRestore();
   });
 
   it('drift guard: zero-arg v1.3 command still fires while album context registered', async () => {
@@ -2262,6 +2317,50 @@ describe('commands provider', () => {
       expect(labels).toEqual([...labels].sort());
       // Sanity: the seed item from Task 1 is present under bare `>`.
       expect(labels).toContain('theme');
+    }
+  });
+
+  it('selection commands are hidden under bare > when ctx.selection is null', async () => {
+    commandContextManager.setSelection(null);
+    manager.setQuery('>');
+    await flushMicrotasks();
+    const section = manager.sections.commands;
+    expect(section.status).toBe('ok');
+    if (section.status === 'ok') {
+      expect(section.items.some((item) => item.id.startsWith('cmd:selection_'))).toBe(false);
+    }
+  });
+
+  it('selection commands appear from the live provider context', async () => {
+    mockPage.route.id = '/(user)/photos/[[assetId=id]]';
+    commandContextManager.setSelection({
+      routeId: mockPage.route.id,
+      token: Symbol('selection-test'),
+      options: {
+        getAssets: () => [makeTimelineAsset({ id: 'asset-1', ownerId: 'test-user' })],
+        clearSelection: vi.fn(),
+        canAddToAlbum: () => true,
+        getOnFavorite: () => vi.fn(),
+        getOnArchive: () => vi.fn(),
+        getOnDelete: () => vi.fn(),
+        getOnUndoDelete: () => vi.fn(),
+      },
+    });
+
+    manager.setQuery('>');
+    await flushMicrotasks();
+    const section = manager.sections.commands;
+    expect(section.status).toBe('ok');
+    if (section.status === 'ok') {
+      expect(section.items.map((item) => item.id)).toEqual(
+        expect.arrayContaining([
+          'cmd:selection_add_to_album',
+          'cmd:selection_favorite',
+          'cmd:selection_archive',
+          'cmd:selection_delete',
+        ]),
+      );
+      expect(section.items.some((item) => item.id === 'cmd:selection_add_to_current_space')).toBe(false);
     }
   });
 

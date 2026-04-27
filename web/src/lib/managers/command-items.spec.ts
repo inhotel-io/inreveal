@@ -10,6 +10,7 @@ import type { AlbumResponseDto, SharedSpaceMemberResponseDto, SharedSpaceRespons
 import * as sdk from '@immich/sdk';
 import { QueueCommand, QueueName, SharedSpaceRole } from '@immich/sdk';
 import { modalManager, toastManager } from '@immich/ui';
+import en from '$i18n/en.json';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AlbumEditModal from '../modals/AlbumEditModal.svelte';
 import AlbumOptionsModal from '../modals/AlbumOptionsModal.svelte';
@@ -19,6 +20,7 @@ import SpaceCreateModal from '../modals/SpaceCreateModal.svelte';
 import SpaceMembersModal from '../modals/SpaceMembersModal.svelte';
 import type { CommandContext } from './command-context-manager.svelte';
 import { COMMAND_ITEMS, isAlmostExactCommandMatch, type CommandItem } from './command-items';
+import * as selectionHandlers from '$lib/managers/selection-command-handlers';
 
 vi.mock('@immich/ui', async (orig) => {
   const actual = await orig<typeof import('@immich/ui')>();
@@ -45,6 +47,20 @@ vi.mock('$lib/services/album.service', () => ({
   handleDeleteAlbum: vi.fn().mockResolvedValue(true),
   handleDownloadAlbum: vi.fn().mockResolvedValue(undefined),
 }));
+
+vi.mock('$lib/managers/selection-command-handlers', async () => {
+  const actual = await vi.importActual<typeof import('$lib/managers/selection-command-handlers')>(
+    '$lib/managers/selection-command-handlers',
+  );
+  return {
+    ...actual,
+    handleAddSelectedToAlbum: vi.fn(),
+    handleAddSelectedToCurrentSpace: vi.fn(),
+    handleFavoriteSelected: vi.fn(),
+    handleArchiveSelected: vi.fn(),
+    handleDeleteSelected: vi.fn(),
+  };
+});
 
 const { mockUser } = vi.hoisted(() => ({
   mockUser: { current: { id: 'test-user' } as { id: string } | null },
@@ -93,8 +109,8 @@ describe('COMMAND_ITEMS', () => {
     expect(COMMAND_ITEMS.find((c) => c.id === 'cmd:theme')).toBeDefined();
   });
 
-  it('has 25 entries (7 v1.3.0 + 8 v1.3.1 + 5 v1.4 album + 5 v1.4 space)', () => {
-    expect(COMMAND_ITEMS).toHaveLength(25);
+  it('has 30 entries (7 v1.3.0 + 8 v1.3.1 + 5 v1.4 album + 5 v1.4 space + 5 v1.5A selection)', () => {
+    expect(COMMAND_ITEMS).toHaveLength(30);
   });
 
   it('CommandItem type allows isAvailable and destructive', () => {
@@ -126,6 +142,124 @@ describe('COMMAND_ITEMS', () => {
       expect(cmd, `expected ${id} in COMMAND_ITEMS`).toBeDefined();
       expect(cmd!.adminOnly, `expected ${id} to be adminOnly`).toBe(true);
     }
+  });
+
+  it('all selection command label/description keys exist in en.json', () => {
+    const keys = new Set(Object.keys(en));
+    for (const cmd of COMMAND_ITEMS.filter((item) => item.id.startsWith('cmd:selection_'))) {
+      expect(keys.has(cmd.labelKey), `${cmd.id} labelKey ${cmd.labelKey}`).toBe(true);
+      expect(keys.has(cmd.descriptionKey), `${cmd.id} descriptionKey ${cmd.descriptionKey}`).toBe(true);
+    }
+  });
+});
+
+describe('selection-context commands', () => {
+  type SelectionContext = NonNullable<CommandContext['selection']>;
+
+  const makeSelection = (overrides: Partial<SelectionContext> = {}): SelectionContext => ({
+    assets: [],
+    selectedAssetIds: ['asset-1'],
+    ownedAssets: [],
+    ownedSelectedAssetIds: ['asset-1'],
+    canAddToAlbum: true,
+    isAllUserOwned: true,
+    isAllFavorite: false,
+    isAllArchived: false,
+    isAllTrashed: false,
+    clearSelection: vi.fn(),
+    onFavorite: vi.fn(),
+    onArchive: vi.fn(),
+    onDelete: vi.fn(),
+    ...overrides,
+  });
+
+  const makeCtx = (selection: SelectionContext | null = makeSelection()): CommandContext => ({
+    routeId: '/(user)/photos/[[assetId=id]]',
+    params: {},
+    album: null,
+    space: null,
+    selection,
+    userId: 'test-user',
+    isAdmin: false,
+  });
+
+  const cmd = (id: string) => COMMAND_ITEMS.find((item) => item.id === id)!;
+
+  beforeEach(() => {
+    vi.mocked(selectionHandlers.handleAddSelectedToAlbum).mockClear();
+    vi.mocked(selectionHandlers.handleAddSelectedToCurrentSpace).mockClear();
+    vi.mocked(selectionHandlers.handleFavoriteSelected).mockClear();
+    vi.mocked(selectionHandlers.handleArchiveSelected).mockClear();
+    vi.mocked(selectionHandlers.handleDeleteSelected).mockClear();
+  });
+
+  it('registers all selection command ids', () => {
+    expect(cmd('cmd:selection_add_to_album')).toBeDefined();
+    expect(cmd('cmd:selection_add_to_current_space')).toBeDefined();
+    expect(cmd('cmd:selection_favorite')).toBeDefined();
+    expect(cmd('cmd:selection_archive')).toBeDefined();
+    expect(cmd('cmd:selection_delete')).toBeDefined();
+  });
+
+  it('marks only delete as destructive', () => {
+    expect(cmd('cmd:selection_delete').destructive).toBe(true);
+    for (const id of [
+      'cmd:selection_add_to_album',
+      'cmd:selection_add_to_current_space',
+      'cmd:selection_favorite',
+      'cmd:selection_archive',
+    ]) {
+      expect(cmd(id).destructive, id).toBeFalsy();
+    }
+  });
+
+  it.each([
+    ['cmd:selection_add_to_album', selectionHandlers.handleAddSelectedToAlbum],
+    ['cmd:selection_add_to_current_space', selectionHandlers.handleAddSelectedToCurrentSpace],
+    ['cmd:selection_favorite', selectionHandlers.handleFavoriteSelected],
+    ['cmd:selection_archive', selectionHandlers.handleArchiveSelected],
+    ['cmd:selection_delete', selectionHandlers.handleDeleteSelected],
+  ])('%s delegates to the matching handler', async (id, handler) => {
+    const ctx = makeCtx();
+    await cmd(id).handler(ctx);
+    expect(handler).toHaveBeenCalledWith(ctx);
+  });
+
+  it('add-to-album shows only when selection.canAddToAlbum is true', () => {
+    const item = cmd('cmd:selection_add_to_album');
+    expect(item.isAvailable!(makeCtx(makeSelection({ canAddToAlbum: true })))).toBe(true);
+    expect(item.isAvailable!(makeCtx(makeSelection({ canAddToAlbum: false })))).toBe(false);
+    expect(item.isAvailable!(makeCtx(null))).toBe(false);
+  });
+
+  it('add-to-current-space shows only when selection.addSelectedToCurrentSpace exists', () => {
+    const item = cmd('cmd:selection_add_to_current_space');
+    expect(item.isAvailable!(makeCtx(makeSelection({ addSelectedToCurrentSpace: vi.fn() })))).toBe(true);
+    expect(item.isAvailable!(makeCtx(makeSelection({ addSelectedToCurrentSpace: undefined })))).toBe(false);
+    expect(item.isAvailable!(makeCtx(null))).toBe(false);
+  });
+
+  it('favorite hides when ownership is mixed, missing onFavorite, or already all favorite', () => {
+    const item = cmd('cmd:selection_favorite');
+    expect(item.isAvailable!(makeCtx(makeSelection()))).toBe(true);
+    expect(item.isAvailable!(makeCtx(makeSelection({ isAllUserOwned: false })))).toBe(false);
+    expect(item.isAvailable!(makeCtx(makeSelection({ onFavorite: undefined })))).toBe(false);
+    expect(item.isAvailable!(makeCtx(makeSelection({ isAllFavorite: true })))).toBe(false);
+  });
+
+  it('archive hides when ownership is mixed, missing onArchive, or already all archived', () => {
+    const item = cmd('cmd:selection_archive');
+    expect(item.isAvailable!(makeCtx(makeSelection()))).toBe(true);
+    expect(item.isAvailable!(makeCtx(makeSelection({ isAllUserOwned: false })))).toBe(false);
+    expect(item.isAvailable!(makeCtx(makeSelection({ onArchive: undefined })))).toBe(false);
+    expect(item.isAvailable!(makeCtx(makeSelection({ isAllArchived: true })))).toBe(false);
+  });
+
+  it('delete hides when ownership is mixed or missing onDelete', () => {
+    const item = cmd('cmd:selection_delete');
+    expect(item.isAvailable!(makeCtx(makeSelection()))).toBe(true);
+    expect(item.isAvailable!(makeCtx(makeSelection({ isAllUserOwned: false })))).toBe(false);
+    expect(item.isAvailable!(makeCtx(makeSelection({ onDelete: undefined })))).toBe(false);
   });
 });
 
@@ -354,6 +488,7 @@ describe('album-context commands', () => {
       raw: baseAlbum,
     },
     space: null,
+    selection: null,
     userId: 'u-owner',
     isAdmin: false,
     ...overrides,
@@ -539,6 +674,7 @@ describe('space-context commands', () => {
       raw: baseSpace,
       members: [],
     },
+    selection: null,
     userId: 'u-owner',
     isAdmin: false,
     ...overrides,
