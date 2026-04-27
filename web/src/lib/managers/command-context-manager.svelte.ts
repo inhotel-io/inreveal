@@ -1,7 +1,10 @@
 import { page } from '$app/state';
 import { authManager } from '$lib/managers/auth-manager.svelte';
+import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
+import type { OnArchive, OnDelete, OnFavorite, OnUndoDelete } from '$lib/utils/actions';
 import { isAlbumsRoute, isSpacesRoute } from '$lib/utils/navigation';
 import {
+  AssetVisibility,
   SharedSpaceRole,
   type AlbumResponseDto,
   type SharedSpaceMemberResponseDto,
@@ -31,11 +34,46 @@ export interface SpaceContext {
   members: SharedSpaceMemberResponseDto[];
 }
 
+export interface SelectionCommandContext {
+  assets: TimelineAsset[];
+  selectedAssetIds: string[];
+  ownedAssets: TimelineAsset[];
+  ownedSelectedAssetIds: string[];
+  canAddToAlbum: boolean;
+  isAllUserOwned: boolean;
+  isAllFavorite: boolean;
+  isAllArchived: boolean;
+  isAllTrashed: boolean;
+  clearSelection: () => void;
+  onFavorite?: OnFavorite;
+  onArchive?: OnArchive;
+  onDelete?: OnDelete;
+  onUndoDelete?: OnUndoDelete;
+  addSelectedToCurrentSpace?: () => Promise<boolean>;
+}
+
+export type RegisterSelectionContextOptions = {
+  getAssets: () => TimelineAsset[];
+  clearSelection: () => void;
+  canAddToAlbum?: () => boolean;
+  getOnFavorite?: () => OnFavorite | undefined;
+  getOnArchive?: () => OnArchive | undefined;
+  getOnDelete?: () => OnDelete | undefined;
+  getOnUndoDelete?: () => OnUndoDelete | undefined;
+  getAddSelectedToCurrentSpace?: () => (() => Promise<boolean>) | undefined;
+};
+
+type RegisteredSelectionContext = {
+  routeId: string | null;
+  options: RegisterSelectionContextOptions;
+};
+
 export interface CommandContext {
   routeId: string | null;
   params: Record<string, string>;
   album: AlbumContext | null;
   space: SpaceContext | null;
+  selection: SelectionCommandContext | null;
   userId: string | null;
   isAdmin: boolean;
 }
@@ -43,6 +81,7 @@ export interface CommandContext {
 class CommandContextManager {
   private _album: AlbumContext | null = $state(null);
   private _space: SpaceContext | null = $state(null);
+  private _selection: RegisteredSelectionContext | null = $state(null);
 
   setAlbum(album: AlbumContext | null) {
     this._album = album;
@@ -50,6 +89,10 @@ class CommandContextManager {
 
   setSpace(space: SpaceContext | null) {
     this._space = space;
+  }
+
+  setSelection(selection: RegisteredSelectionContext | null) {
+    this._selection = selection;
   }
 
   /**
@@ -62,14 +105,63 @@ class CommandContextManager {
   getContext(): CommandContext {
     const u = authManager.authenticated ? authManager.user : null;
     const routeId = page.route.id;
+    const userId = u?.id ?? null;
     return {
       routeId,
       params: { ...page.params },
       album: isAlbumsRoute(routeId) ? this._album : null,
       space: isSpacesRoute(routeId) ? this._space : null,
-      userId: u?.id ?? null,
+      selection: this.getSelection(routeId, userId),
+      userId,
       isAdmin: u?.isAdmin ?? false,
     };
+  }
+
+  private getSelection(routeId: string | null, currentUserId: string | null): SelectionCommandContext | null {
+    const registered = this._selection;
+    if (!registered || registered.routeId !== routeId) {
+      return null;
+    }
+
+    const assets = this.uniqueAssets(registered.options.getAssets());
+    if (assets.length === 0) {
+      return null;
+    }
+
+    const ownedAssets = currentUserId === null ? [] : assets.filter((asset) => asset.ownerId === currentUserId);
+    const selectedAssetIds = assets.map((asset) => asset.id);
+    const ownedSelectedAssetIds = ownedAssets.map((asset) => asset.id);
+
+    return {
+      assets,
+      selectedAssetIds,
+      ownedAssets,
+      ownedSelectedAssetIds,
+      canAddToAlbum: registered.options.canAddToAlbum?.() ?? false,
+      isAllUserOwned: currentUserId !== null && ownedAssets.length === assets.length,
+      isAllFavorite: assets.every((asset) => asset.isFavorite),
+      isAllArchived: assets.every((asset) => asset.visibility === AssetVisibility.Archive),
+      isAllTrashed: assets.every((asset) => asset.isTrashed),
+      clearSelection: registered.options.clearSelection,
+      onFavorite: registered.options.getOnFavorite?.(),
+      onArchive: registered.options.getOnArchive?.(),
+      onDelete: registered.options.getOnDelete?.(),
+      onUndoDelete: registered.options.getOnUndoDelete?.(),
+      addSelectedToCurrentSpace: registered.options.getAddSelectedToCurrentSpace?.(),
+    };
+  }
+
+  private uniqueAssets(assets: TimelineAsset[]) {
+    const seen = new Set<string>();
+    const unique: TimelineAsset[] = [];
+    for (const asset of assets) {
+      if (seen.has(asset.id)) {
+        continue;
+      }
+      seen.add(asset.id);
+      unique.push(asset);
+    }
+    return unique;
   }
 }
 
@@ -129,5 +221,13 @@ export function registerSpaceContext(
       members,
     });
     return () => commandContextManager.setSpace(null);
+  });
+}
+
+export function registerSelectionContext(options: RegisterSelectionContextOptions) {
+  $effect(() => {
+    const routeId = page.route.id;
+    commandContextManager.setSelection({ routeId, options });
+    return () => commandContextManager.setSelection(null);
   });
 }
