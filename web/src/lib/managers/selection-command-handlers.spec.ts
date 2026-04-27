@@ -184,6 +184,16 @@ describe('add selected to current space', () => {
     expect(deleteBulk).not.toHaveBeenCalled();
     expect(restoreAssets).not.toHaveBeenCalled();
   });
+
+  it('returns false and does not call SDK functions when the callback is absent', async () => {
+    const selection = makeSelection({ addSelectedToCurrentSpace: undefined });
+
+    await expect(handleAddSelectedToCurrentSpace(makeCtx(selection))).resolves.toBe(false);
+
+    expect(updateAssets).not.toHaveBeenCalled();
+    expect(deleteBulk).not.toHaveBeenCalled();
+    expect(restoreAssets).not.toHaveBeenCalled();
+  });
 });
 
 describe('favorite selected', () => {
@@ -209,6 +219,7 @@ describe('favorite selected', () => {
 
     expect(updateAssets).not.toHaveBeenCalled();
     expect(selection.onFavorite).not.toHaveBeenCalled();
+    expect(toastManager.primary).not.toHaveBeenCalled();
     expect(selection.clearSelection).not.toHaveBeenCalled();
   });
 
@@ -248,6 +259,7 @@ describe('archive selected', () => {
 
     expect(updateAssets).not.toHaveBeenCalled();
     expect(selection.onArchive).not.toHaveBeenCalled();
+    expect(toastManager.primary).not.toHaveBeenCalled();
     expect(selection.clearSelection).not.toHaveBeenCalled();
   });
 
@@ -296,6 +308,47 @@ describe('delete selected', () => {
 
     expect(restoreAssets).toHaveBeenCalledWith({ bulkIdsDto: { ids: ['asset-1', 'asset-2'] } });
     expect(selection.onUndoDelete).toHaveBeenCalledWith(assets);
+  });
+
+  it('undo restore failure calls handleError and does not call onUndoDelete', async () => {
+    const error = new Error('restore failed');
+    vi.mocked(restoreAssets).mockRejectedValueOnce(error);
+    const selection = makeSelection();
+
+    await handleDeleteSelected(makeCtx(selection));
+    const toast = vi.mocked(toastManager.primary).mock.calls[0][0] as { button: { onclick: () => void } };
+    toast.button.onclick();
+
+    await vi.waitFor(() => expect(handleErrorSpy).toHaveBeenCalledWith(error, expect.any(String)));
+    expect(selection.onUndoDelete).not.toHaveBeenCalled();
+  });
+
+  it('returns false without side effects when onDelete is missing', async () => {
+    const selection = makeSelection({ onDelete: undefined });
+
+    await expect(handleDeleteSelected(makeCtx(selection))).resolves.toBe(false);
+
+    expect(deleteBulk).not.toHaveBeenCalled();
+    expect(toastManager.primary).not.toHaveBeenCalled();
+    expect(selection.clearSelection).not.toHaveBeenCalled();
+  });
+
+  it('returns false without side effects when no owned ids are selected', async () => {
+    const selection = makeSelection({
+      assets: [],
+      selectedAssetIds: [],
+      ownedAssets: [],
+      ownedSelectedAssetIds: [],
+      isAllFavorite: true,
+      isAllArchived: true,
+      isAllTrashed: true,
+    });
+
+    await expect(handleDeleteSelected(makeCtx(selection))).resolves.toBe(false);
+
+    expect(deleteBulk).not.toHaveBeenCalled();
+    expect(toastManager.primary).not.toHaveBeenCalled();
+    expect(selection.clearSelection).not.toHaveBeenCalled();
   });
 
   it('uses force: true when trash feature flag is false', async () => {
@@ -364,6 +417,21 @@ describe('null selection handlers', () => {
     await handleFavoriteSelected(ctx);
     await handleArchiveSelected(ctx);
     await handleDeleteSelected(ctx);
+
+    expect(modalManager.show).not.toHaveBeenCalled();
+    expect(updateAssets).not.toHaveBeenCalled();
+    expect(deleteBulk).not.toHaveBeenCalled();
+    expect(restoreAssets).not.toHaveBeenCalled();
+    expect(toastManager.primary).not.toHaveBeenCalled();
+    expect(handleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it('calling every handler without a context is a no-op', async () => {
+    await handleAddSelectedToAlbum();
+    await expect(handleAddSelectedToCurrentSpace()).resolves.toBe(false);
+    await handleFavoriteSelected();
+    await handleArchiveSelected();
+    await expect(handleDeleteSelected()).resolves.toBe(false);
 
     expect(modalManager.show).not.toHaveBeenCalled();
     expect(updateAssets).not.toHaveBeenCalled();
