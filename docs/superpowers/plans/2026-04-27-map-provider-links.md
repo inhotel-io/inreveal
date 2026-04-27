@@ -96,7 +96,7 @@ import {
 Run:
 
 ```bash
-pnpm --dir web test -- --run src/lib/utils/exif-utils.spec.ts
+pnpm --dir web exec vitest run src/lib/utils/exif-utils.spec.ts
 ```
 
 Expected: FAIL because `getGoogleMapsUrl`, `getAppleMapsUrl`, `getOpenStreetMapUrl`, and `getMapProviderLinks` are not exported yet.
@@ -161,7 +161,7 @@ export const getMapProviderLinks = (lat: number, lon: number) => [
 Run:
 
 ```bash
-pnpm --dir web test -- --run src/lib/utils/exif-utils.spec.ts
+pnpm --dir web exec vitest run src/lib/utils/exif-utils.spec.ts
 ```
 
 Expected: PASS for existing EXIF count tests and the new map provider URL tests.
@@ -293,7 +293,7 @@ describe('DetailPanel map provider links', () => {
 Run:
 
 ```bash
-pnpm --dir web test -- --run src/lib/components/asset-viewer/detail-panel.spec.ts
+pnpm --dir web exec vitest run src/lib/components/asset-viewer/detail-panel.spec.ts
 ```
 
 Expected: FAIL because only `open_in_openstreetmap` is rendered in `detail-panel.svelte`; `open_in_google_maps` and `open_in_apple_maps` are missing.
@@ -372,7 +372,7 @@ Replace the popup body inside `web/src/lib/components/asset-viewer/detail-panel.
 Run:
 
 ```bash
-pnpm --dir web test -- --run src/lib/utils/exif-utils.spec.ts src/lib/components/asset-viewer/detail-panel.spec.ts
+pnpm --dir web exec vitest run src/lib/utils/exif-utils.spec.ts src/lib/components/asset-viewer/detail-panel.spec.ts
 ```
 
 Expected: PASS for helper tests and detail panel rendering coverage.
@@ -416,7 +416,7 @@ Then rerun the two format checks.
 Run:
 
 ```bash
-pnpm --dir web test -- --run src/lib/utils/exif-utils.spec.ts src/lib/components/asset-viewer/detail-panel.spec.ts
+pnpm --dir web exec vitest run src/lib/utils/exif-utils.spec.ts src/lib/components/asset-viewer/detail-panel.spec.ts
 ```
 
 Expected: all tests pass.
