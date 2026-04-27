@@ -9,6 +9,7 @@ const allowedPages = [
   'src/routes/(user)/tags/[[photos=photos]]/[[assetId=id]]/+page.svelte',
   'src/routes/(user)/archive/[[photos=photos]]/[[assetId=id]]/+page.svelte',
   'src/routes/(user)/search/[[photos=photos]]/[[assetId=id]]/+page.svelte',
+  'src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/+page.svelte',
 ];
 
 const deniedPages = [
