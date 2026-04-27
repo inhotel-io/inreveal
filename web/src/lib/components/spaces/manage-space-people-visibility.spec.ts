@@ -59,6 +59,14 @@ describe('ManageSpacePeopleVisibility', () => {
     expect(screen.getByTestId('visibility-person-p2')).toBeInTheDocument();
   });
 
+  it('should show alias instead of canonical name', () => {
+    const people = [makePerson({ id: 'p1', name: 'Alice Johnson', alias: 'Mom' })];
+    renderComponent(people);
+
+    expect(screen.getByText('Mom')).toBeInTheDocument();
+    expect(screen.queryByText('Alice Johnson')).not.toBeInTheDocument();
+  });
+
   it('should show hidden people with aria-pressed true', () => {
     const people = [
       makePerson({ id: 'p1', name: 'Alice', isHidden: false }),

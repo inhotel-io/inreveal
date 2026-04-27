@@ -119,6 +119,14 @@ describe('Spaces people page', () => {
     expect(screen.getByText('Alice')).toBeInTheDocument();
   });
 
+  it('shows alias instead of canonical name for viewers', () => {
+    const people = [makePerson({ id: 'p1', name: 'Alice Johnson', alias: 'Mom' })];
+    renderPage({ people, members: [makeMember({ role: SharedSpaceRole.Viewer })] });
+
+    expect(screen.getByText('Mom')).toBeInTheDocument();
+    expect(screen.queryByText('Alice Johnson')).not.toBeInTheDocument();
+  });
+
   it('shows context menu button on hover for editors', async () => {
     const people = [makePerson({ id: 'p1', name: 'Alice' })];
     const { baseElement } = renderPage({ people, members: [makeMember({ role: SharedSpaceRole.Editor })] });
@@ -164,6 +172,32 @@ describe('Spaces people page', () => {
     renderPage({ people: [person], members: [makeMember({ role: SharedSpaceRole.Editor })] });
 
     const nameInput = screen.getByDisplayValue('Alice');
+    const user = userEvent.setup();
+
+    await user.click(nameInput);
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Alice Smith');
+    await fireEvent.focusOut(nameInput);
+
+    await waitFor(() => {
+      expect(sdkMock.updateSpacePerson).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'space-1',
+          personId: 'p1',
+          sharedSpacePersonUpdateDto: { name: 'Alice Smith' },
+        }),
+      );
+    });
+  });
+
+  it('edits canonical name when alias is present', async () => {
+    const person = makePerson({ id: 'p1', name: 'Alice Johnson', alias: 'Mom' });
+    sdkMock.updateSpacePerson.mockResolvedValue(person);
+    sdkMock.getSpacePeople.mockResolvedValue([person]);
+
+    renderPage({ people: [person], members: [makeMember({ role: SharedSpaceRole.Editor })] });
+
+    const nameInput = screen.getByDisplayValue('Alice Johnson');
     const user = userEvent.setup();
 
     await user.click(nameInput);

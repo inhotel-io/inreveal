@@ -1,8 +1,10 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { shortcut } from '$lib/actions/shortcut';
-  import ImageThumbnail from '$lib/components/assets/thumbnail/image-thumbnail.svelte';
   import UserPageLayout from '$lib/components/layouts/user-page-layout.svelte';
+  import PeopleGrid from '$lib/components/people/people-grid.svelte';
+  import PersonTile from '$lib/components/people/person-tile.svelte';
+  import type { ManagedPerson } from '$lib/components/people/people-types';
   import ManageSpacePeopleVisibility from '$lib/components/spaces/manage-space-people-visibility.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/button-context-menu.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/menu-option.svelte';
@@ -26,7 +28,6 @@
     mdiEyeOffOutline,
     mdiEyeOutline,
   } from '@mdi/js';
-  import { onDestroy } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { t } from 'svelte-i18n';
@@ -48,7 +49,6 @@
       members = data.members;
       people = data.people;
       editingName = '';
-      hoveredPersonId = null;
       hasMore = data.people.length >= PAGE_SIZE;
     }
   });
@@ -64,9 +64,6 @@
   // Name editing state
   let editingName = $state('');
 
-  // Hover state for context menus
-  let hoveredPersonId = $state<string | null>(null);
-
   const currentMember = $derived(members.find((m) => m.userId === authManager.user.id));
   const isOwner = $derived(currentMember?.role === SharedSpaceRole.Owner);
   const isEditor = $derived(isOwner || currentMember?.role === SharedSpaceRole.Editor);
@@ -74,6 +71,18 @@
   const getThumbUrl = (person: SharedSpacePersonResponseDto): string => {
     return createUrl(`/shared-spaces/${space.id}/people/${person.id}/thumbnail`, { updatedAt: person.updatedAt });
   };
+
+  const toManagedPerson = (person: SharedSpacePersonResponseDto): ManagedPerson => ({
+    id: person.id,
+    displayName: person.alias || person.name || '',
+    canonicalName: person.name,
+    thumbnailUrl: getThumbUrl(person),
+    href: `/spaces/${space.id}/people/${person.id}`,
+    isHidden: person.isHidden,
+    type: person.type,
+    assetCount: person.assetCount,
+    faceCount: person.faceCount,
+  });
 
   async function refreshPeople() {
     try {
@@ -97,13 +106,6 @@
       handleError(error, $t('spaces_error_loading_people'));
     } finally {
       loading = false;
-    }
-    // If sentinel is still visible after loading (viewport not filled), load more
-    if (hasMore && sentinel) {
-      const rect = sentinel.getBoundingClientRect();
-      if (rect.top < window.innerHeight) {
-        void loadMore();
-      }
     }
   }
 
@@ -188,26 +190,6 @@
       handleError(error, $t('errors.unable_to_hide_person'));
     }
   }
-
-  let sentinel = $state<HTMLElement>();
-
-  const intersectionObserver = new IntersectionObserver((entries) => {
-    const entry = entries.find((e) => e.target === sentinel);
-    if (entry?.isIntersecting) {
-      void loadMore();
-    }
-  });
-
-  $effect(() => {
-    if (sentinel) {
-      intersectionObserver.disconnect();
-      intersectionObserver.observe(sentinel);
-    }
-  });
-
-  onDestroy(() => {
-    intersectionObserver.disconnect();
-  });
 </script>
 
 <UserPageLayout title={$t('spaces_people_title')}>
@@ -240,75 +222,59 @@
       </div>
     </div>
   {:else}
-    <div
-      class="grid grid-cols-2 gap-4 px-4 pt-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8"
-    >
-      {#each visiblePeople as person (person.id)}
-        <div
-          class="relative rounded-xl border-2 border-transparent p-2 transition-all hover:border-immich-primary/50 hover:bg-gray-200 hover:shadow-sm dark:hover:border-immich-dark-primary/25 dark:hover:bg-immich-dark-primary/20"
-          onmouseenter={() => (hoveredPersonId = person.id)}
-          onmouseleave={() => (hoveredPersonId = null)}
-          role="group"
-        >
-          <a href="/spaces/{space.id}/people/{person.id}" draggable="false">
-            <div class="w-full rounded-xl brightness-95 filter">
-              <ImageThumbnail
-                shadow
-                url={getThumbUrl(person)}
-                altText={person.name || ''}
-                title={person.name || null}
-                widthStyle="100%"
-                circle
-                preload={false}
-              />
-            </div>
-          </a>
+    <div class="px-4 pt-4">
+      <PeopleGrid
+        items={visiblePeople}
+        class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8"
+        hasNextPage={hasMore}
+        {loading}
+        loadNextPage={loadMore}
+      >
+        {#snippet children(person)}
+          {@const managedPerson = toManagedPerson(person)}
+          <div
+            class="rounded-xl border-2 border-transparent p-2 transition-all hover:border-immich-primary/50 hover:bg-gray-200 hover:shadow-sm dark:hover:border-immich-dark-primary/25 dark:hover:bg-immich-dark-primary/20"
+          >
+            <PersonTile person={managedPerson} showActionMenu={isEditor}>
+              {#snippet actionMenu()}
+                <ButtonContextMenu
+                  buttonClass="icon-white-drop-shadow"
+                  color="secondary"
+                  size="medium"
+                  variant="filled"
+                  icon={mdiDotsVertical}
+                  title={$t('show_person_options')}
+                >
+                  <MenuOption onClick={() => handleHide(person)} icon={mdiEyeOffOutline} text={$t('hide_person')} />
+                  <MenuOption
+                    onClick={() => handleMerge(person.id)}
+                    icon={mdiAccountMultipleCheckOutline}
+                    text={$t('merge_people')}
+                  />
+                </ButtonContextMenu>
+              {/snippet}
 
-          {#if isEditor && hoveredPersonId === person.id}
-            <div class="absolute end-4 top-4 z-1">
-              <ButtonContextMenu
-                buttonClass="icon-white-drop-shadow"
-                color="secondary"
-                size="medium"
-                variant="filled"
-                icon={mdiDotsVertical}
-                title={$t('show_person_options')}
-              >
-                <MenuOption onClick={() => handleHide(person)} icon={mdiEyeOffOutline} text={$t('hide_person')} />
-                <MenuOption
-                  onClick={() => handleMerge(person.id)}
-                  icon={mdiAccountMultipleCheckOutline}
-                  text={$t('merge_people')}
-                />
-              </ButtonContextMenu>
-            </div>
-          {/if}
-
-          {#if isEditor}
-            <input
-              type="text"
-              class="mt-2 w-full rounded-2xl border-gray-100 bg-white py-2 text-center text-sm text-primary placeholder-gray-400 dark:border-gray-900 dark:bg-immich-dark-gray"
-              value={person.name}
-              placeholder={$t('add_a_name')}
-              use:shortcut={{ shortcut: { key: 'Enter' }, onShortcut: (e) => e.currentTarget.blur() }}
-              onfocusin={() => onNameFocus(person)}
-              onfocusout={() => onNameSubmit(editingName, person)}
-              oninput={(event) => onNameInput(event)}
-            />
-          {:else if person.name}
-            <p class="mt-2 truncate text-center text-sm font-medium">{person.name}</p>
-          {/if}
-        </div>
-      {/each}
+              {#snippet footer()}
+                {#if isEditor}
+                  <input
+                    type="text"
+                    class="mt-2 w-full rounded-2xl border-gray-100 bg-white py-2 text-center text-sm text-primary placeholder-gray-400 dark:border-gray-900 dark:bg-immich-dark-gray"
+                    value={person.name}
+                    placeholder={$t('add_a_name')}
+                    use:shortcut={{ shortcut: { key: 'Enter' }, onShortcut: (e) => e.currentTarget.blur() }}
+                    onfocusin={() => onNameFocus(person)}
+                    onfocusout={() => onNameSubmit(editingName, person)}
+                    oninput={(event) => onNameInput(event)}
+                  />
+                {:else if managedPerson.displayName}
+                  <p class="mt-2 truncate text-center text-sm font-medium">{managedPerson.displayName}</p>
+                {/if}
+              {/snippet}
+            </PersonTile>
+          </div>
+        {/snippet}
+      </PeopleGrid>
     </div>
-
-    {#if hasMore}
-      <div bind:this={sentinel} class="h-8 flex items-center justify-center">
-        {#if loading}
-          <span class="text-sm text-gray-500">{$t('loading')}</span>
-        {/if}
-      </div>
-    {/if}
   {/if}
 </UserPageLayout>
 
