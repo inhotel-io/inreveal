@@ -447,6 +447,7 @@ Class | Method | HTTP request | Description
  - [CastResponse](doc//CastResponse.md)
  - [CastUpdate](doc//CastUpdate.md)
  - [ChangePasswordDto](doc//ChangePasswordDto.md)
+ - [ClassificationFaceExclusion](doc//ClassificationFaceExclusion.md)
  - [Colorspace](doc//Colorspace.md)
  - [ContributorCountResponseDto](doc//ContributorCountResponseDto.md)
  - [CreateAlbumDto](doc//CreateAlbumDto.md)
