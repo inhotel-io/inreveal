@@ -134,5 +134,11 @@ describe('ManagePeopleVisibility component', () => {
       { ...people[1], isHidden: false },
       people[2],
     ]);
+    const updatedPeople = onUpdate.mock.calls[0][0];
+    expect(updatedPeople).toBe(people);
+    expect(updatedPeople[0]).toBe(people[0]);
+    expect(updatedPeople[1]).toBe(people[1]);
+    expect(updatedPeople[2]).toBe(people[2]);
+    expect(people.map(({ isHidden }) => isHidden)).toEqual([true, false, false]);
   });
 });

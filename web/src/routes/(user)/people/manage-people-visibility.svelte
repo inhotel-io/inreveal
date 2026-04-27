@@ -32,7 +32,13 @@
 
   const handleUpdate = (updatedVisibilityPeople: VisibilityPerson[]) => {
     const hiddenById = new Map(updatedVisibilityPeople.map((person) => [person.id, person.isHidden]));
-    onUpdate(people.map((person) => ({ ...person, isHidden: hiddenById.get(person.id) ?? person.isHidden })));
+    for (const person of people) {
+      const nextHidden = hiddenById.get(person.id);
+      if (nextHidden !== undefined && nextHidden !== person.isHidden) {
+        person.isHidden = nextHidden;
+      }
+    }
+    onUpdate(people);
   };
 </script>
 
