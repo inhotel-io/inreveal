@@ -23,6 +23,18 @@
   let sentinel: HTMLElement | undefined = $state();
   let intersectionObserver: IntersectionObserver | undefined;
   let cancelVisibilityCheck: (() => void) | undefined;
+  let lastVisibilityCheckItemCount: number | undefined;
+  let lastVisibilityCheckSentinel: HTMLElement | undefined;
+
+  const cancelScheduledVisibilityCheck = () => {
+    cancelVisibilityCheck?.();
+    cancelVisibilityCheck = undefined;
+  };
+
+  const requestNextPage = () => {
+    cancelScheduledVisibilityCheck();
+    loadNextPage();
+  };
 
   $effect(() => {
     if (!hasNextPage || !sentinel || typeof IntersectionObserver === 'undefined') {
@@ -35,7 +47,7 @@
     const observer = new IntersectionObserver((entries) => {
       const entry = entries.find((entry) => entry.target === observedSentinel);
       if (entry?.isIntersecting && hasNextPage && !loading) {
-        loadNextPage();
+        requestNextPage();
       }
     });
 
@@ -53,28 +65,41 @@
 
   onDestroy(() => {
     intersectionObserver?.disconnect();
-    cancelVisibilityCheck?.();
+    cancelScheduledVisibilityCheck();
   });
 
   $effect(() => {
-    void items.length;
+    const itemCount = items.length;
+    const observedSentinel = sentinel;
 
-    cancelVisibilityCheck?.();
-    cancelVisibilityCheck = undefined;
+    if (!hasNextPage || !observedSentinel) {
+      cancelScheduledVisibilityCheck();
+      lastVisibilityCheckItemCount = undefined;
+      lastVisibilityCheckSentinel = undefined;
+      return;
+    }
 
-    if (!hasNextPage || loading || !sentinel) {
+    if (lastVisibilityCheckItemCount === itemCount && lastVisibilityCheckSentinel === observedSentinel) {
+      return;
+    }
+
+    cancelScheduledVisibilityCheck();
+    lastVisibilityCheckItemCount = itemCount;
+    lastVisibilityCheckSentinel = observedSentinel;
+
+    if (loading) {
       return;
     }
 
     const checkSentinelVisibility = () => {
       cancelVisibilityCheck = undefined;
-      if (!hasNextPage || loading || !sentinel) {
+      if (!hasNextPage || loading || !observedSentinel) {
         return;
       }
 
-      const rect = sentinel.getBoundingClientRect();
+      const rect = observedSentinel.getBoundingClientRect();
       if (rect.top < window.innerHeight) {
-        loadNextPage();
+        requestNextPage();
       }
     };
 

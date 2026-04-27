@@ -5,6 +5,8 @@ import PeopleGridWrapper from './people-grid.test-wrapper.svelte';
 type ObserverEntry = Pick<IntersectionObserverEntry, 'target' | 'isIntersecting'>;
 
 const observerInstances: ControllableIntersectionObserver[] = [];
+let nextAnimationFrameId = 1;
+let pendingAnimationFrames = new Map<number, FrameRequestCallback>();
 
 class ControllableIntersectionObserver implements IntersectionObserver {
   readonly root = null;
@@ -30,12 +32,15 @@ class ControllableIntersectionObserver implements IntersectionObserver {
 describe('PeopleGrid', () => {
   beforeEach(() => {
     observerInstances.length = 0;
+    nextAnimationFrameId = 1;
+    pendingAnimationFrames = new Map();
     vi.stubGlobal('IntersectionObserver', ControllableIntersectionObserver);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
+      const id = nextAnimationFrameId++;
+      pendingAnimationFrames.set(id, callback);
+      return id;
     });
-    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => pendingAnimationFrames.delete(id));
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       top: window.innerHeight + 1,
     } as DOMRect);
@@ -45,6 +50,12 @@ describe('PeopleGrid', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
+
+  const flushAnimationFrames = () => {
+    const callbacks = [...pendingAnimationFrames.values()];
+    pendingAnimationFrames.clear();
+    callbacks.forEach((callback) => callback(0));
+  };
 
   it('renders items through the child snippet', () => {
     render(PeopleGridWrapper, {
@@ -144,6 +155,8 @@ describe('PeopleGrid', () => {
       },
     });
 
+    flushAnimationFrames();
+
     await waitFor(() => expect(loadNextPage).toHaveBeenCalledTimes(1));
   });
 
@@ -174,6 +187,8 @@ describe('PeopleGrid', () => {
       loadNextPage,
     });
 
+    flushAnimationFrames();
+
     await waitFor(() => expect(loadNextPage).toHaveBeenCalledTimes(1));
   });
 
@@ -192,9 +207,59 @@ describe('PeopleGrid', () => {
       },
     });
 
-    await Promise.resolve();
+    flushAnimationFrames();
 
     expect(loadNextPage).not.toHaveBeenCalled();
+  });
+
+  it('does not retry the visibility re-check when loading finishes without new items', async () => {
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockReturnValue({
+      top: window.innerHeight - 1,
+    } as DOMRect);
+    const loadNextPage = vi.fn();
+
+    const { rerender } = render(PeopleGridWrapper, {
+      props: {
+        items: [{ id: 'p1', label: 'Alice' }],
+        hasNextPage: true,
+        loading: true,
+        loadNextPage,
+      },
+    });
+
+    await rerender({
+      items: [{ id: 'p1', label: 'Alice' }],
+      hasNextPage: true,
+      loading: false,
+      loadNextPage,
+    });
+
+    flushAnimationFrames();
+
+    expect(loadNextPage).not.toHaveBeenCalled();
+  });
+
+  it('does not call loadNextPage twice when intersection fires before a pending visibility re-check', () => {
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockReturnValue({
+      top: window.innerHeight - 1,
+    } as DOMRect);
+    const loadNextPage = vi.fn();
+
+    render(PeopleGridWrapper, {
+      props: {
+        items: [{ id: 'p1', label: 'Alice' }],
+        hasNextPage: true,
+        loadNextPage,
+      },
+    });
+
+    observerInstances[0].trigger({
+      target: observerInstances[0].observedTarget!,
+      isIntersecting: true,
+    });
+    flushAnimationFrames();
+
+    expect(loadNextPage).toHaveBeenCalledTimes(1);
   });
 
   it('does not observe or call loadNextPage when there are no more pages', () => {
