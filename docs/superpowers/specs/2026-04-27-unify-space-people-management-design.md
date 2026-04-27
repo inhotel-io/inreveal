@@ -57,17 +57,9 @@ Core fields:
 - `type` and `species`: optional pet badge support.
 - `assetCount` and `faceCount`: optional summary metadata.
 
-Optional callbacks:
+Callbacks stay in adapters. The shared view model is data-only; route-specific behavior is passed through snippets, event handlers, or explicit modal save functions instead of being stored on the person object.
 
-- `onRename`
-- `onHide`
-- `onMerge`
-- `onToggleFavorite`
-- `onSetBirthDate`
-- `onSetAlias`
-- `onClearAlias`
-
-The shared components should not import global people routes or space routes. They should receive URLs and callbacks from adapters.
+The shared components should not import global people routes or space routes. They should receive URLs, render snippets, and save functions from adapters.
 
 ## Global People Behavior
 
