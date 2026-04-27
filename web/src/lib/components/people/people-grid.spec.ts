@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, waitFor } from '@testing-library/svelte';
 import PeopleGridWrapper from './people-grid.test-wrapper.svelte';
 
 type ObserverEntry = Pick<IntersectionObserverEntry, 'target' | 'isIntersecting'>;
@@ -31,9 +31,18 @@ describe('PeopleGrid', () => {
   beforeEach(() => {
     observerInstances.length = 0;
     vi.stubGlobal('IntersectionObserver', ControllableIntersectionObserver);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: window.innerHeight + 1,
+    } as DOMRect);
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -117,6 +126,73 @@ describe('PeopleGrid', () => {
       target: observerInstances[0].observedTarget!,
       isIntersecting: true,
     });
+
+    expect(loadNextPage).not.toHaveBeenCalled();
+  });
+
+  it('calls loadNextPage after render when the sentinel is still visible', async () => {
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockReturnValue({
+      top: window.innerHeight - 1,
+    } as DOMRect);
+    const loadNextPage = vi.fn();
+
+    render(PeopleGridWrapper, {
+      props: {
+        items: [{ id: 'p1', label: 'Alice' }],
+        hasNextPage: true,
+        loadNextPage,
+      },
+    });
+
+    await waitFor(() => expect(loadNextPage).toHaveBeenCalledTimes(1));
+  });
+
+  it('calls loadNextPage after items grow when the sentinel remains visible', async () => {
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockReturnValue({
+      top: window.innerHeight - 1,
+    } as DOMRect);
+    const loadNextPage = vi.fn();
+
+    const { rerender } = render(PeopleGridWrapper, {
+      props: {
+        items: [{ id: 'p1', label: 'Alice' }],
+        hasNextPage: true,
+        loading: true,
+        loadNextPage,
+      },
+    });
+
+    expect(loadNextPage).not.toHaveBeenCalled();
+
+    await rerender({
+      items: [
+        { id: 'p1', label: 'Alice' },
+        { id: 'p2', label: 'Bob' },
+      ],
+      hasNextPage: true,
+      loading: false,
+      loadNextPage,
+    });
+
+    await waitFor(() => expect(loadNextPage).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not call loadNextPage from the visibility re-check while loading', async () => {
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockReturnValue({
+      top: window.innerHeight - 1,
+    } as DOMRect);
+    const loadNextPage = vi.fn();
+
+    render(PeopleGridWrapper, {
+      props: {
+        items: [{ id: 'p1', label: 'Alice' }],
+        hasNextPage: true,
+        loading: true,
+        loadNextPage,
+      },
+    });
+
+    await Promise.resolve();
 
     expect(loadNextPage).not.toHaveBeenCalled();
   });

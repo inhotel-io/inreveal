@@ -22,6 +22,7 @@
   }: Props = $props();
   let sentinel: HTMLElement | undefined = $state();
   let intersectionObserver: IntersectionObserver | undefined;
+  let cancelVisibilityCheck: (() => void) | undefined;
 
   $effect(() => {
     if (!hasNextPage || !sentinel || typeof IntersectionObserver === 'undefined') {
@@ -52,6 +53,38 @@
 
   onDestroy(() => {
     intersectionObserver?.disconnect();
+    cancelVisibilityCheck?.();
+  });
+
+  $effect(() => {
+    void items.length;
+
+    cancelVisibilityCheck?.();
+    cancelVisibilityCheck = undefined;
+
+    if (!hasNextPage || loading || !sentinel) {
+      return;
+    }
+
+    const checkSentinelVisibility = () => {
+      cancelVisibilityCheck = undefined;
+      if (!hasNextPage || loading || !sentinel) {
+        return;
+      }
+
+      const rect = sentinel.getBoundingClientRect();
+      if (rect.top < window.innerHeight) {
+        loadNextPage();
+      }
+    };
+
+    if (typeof requestAnimationFrame === 'function') {
+      const frame = requestAnimationFrame(checkSentinelVisibility);
+      cancelVisibilityCheck = () => cancelAnimationFrame(frame);
+    } else {
+      const timeout = window.setTimeout(checkSentinelVisibility, 0);
+      cancelVisibilityCheck = () => window.clearTimeout(timeout);
+    }
   });
 </script>
 
