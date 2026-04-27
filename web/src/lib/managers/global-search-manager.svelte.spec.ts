@@ -46,6 +46,7 @@ import {
   searchPlaces,
   searchSmart,
   type PersonResponseDto,
+  type SharedSpaceResponseDto,
 } from '@immich/sdk';
 import { toastManager } from '@immich/ui';
 import { computeCommandScore } from 'bits-ui';
