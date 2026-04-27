@@ -198,15 +198,12 @@ describe(SearchRepository.name, () => {
     });
 
     it('total filtering keeps current smart-search rating, person, and tag semantics', () => {
-      const sql = buildFacetFilteredIdsSql(
-        sut,
-        {
-          ...baseOptions,
-          rating: 4,
-          personIds: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'],
-          tagIds: ['00000000-0000-0000-0000-000000000003'],
-        },
-      );
+      const sql = buildFacetFilteredIdsSql(sut, {
+        ...baseOptions,
+        rating: 4,
+        personIds: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'],
+        tagIds: ['00000000-0000-0000-0000-000000000003'],
+      });
 
       expect(sql).toMatch(/"asset_exif"\."rating"\s*>=\s*\$\d+/i);
       expect(sql).toContain('"asset_face"');
