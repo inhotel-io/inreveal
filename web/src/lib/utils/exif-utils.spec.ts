@@ -42,9 +42,7 @@ describe('map provider urls', () => {
   });
 
   it('builds Apple Maps coordinate urls', () => {
-    expect(getAppleMapsUrl(48.85341, 2.3488)).toBe(
-      'https://maps.apple.com/?ll=48.85341%2C2.3488&q=48.85341%2C2.3488',
-    );
+    expect(getAppleMapsUrl(48.85341, 2.3488)).toBe('https://maps.apple.com/?ll=48.85341%2C2.3488&q=48.85341%2C2.3488');
   });
 
   it('builds OpenStreetMap urls that preserve the existing marker and map zoom behavior', () => {
