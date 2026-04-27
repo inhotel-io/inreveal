@@ -114,15 +114,15 @@ All facets are computed from assets matching the smart-search query under the cu
 
 Facet lists use current self-exclusion behavior:
 
-| Output       | Filters excluded for that output            |
-| ------------ | ------------------------------------------- |
+| Output        | Filters excluded for that output                    |
+| ------------- | --------------------------------------------------- |
 | `timeBuckets` | timeline/date filters (`takenAfter`, `takenBefore`) |
-| `people`     | selected people (`personIds` or `spacePersonIds`) |
-| `countries`  | selected country and city                  |
-| `cameraMakes` | selected make and model                   |
-| `tags`       | selected tag IDs                           |
-| `ratings`    | selected rating                            |
-| `mediaTypes` | selected media type                        |
+| `people`      | selected people (`personIds` or `spacePersonIds`)   |
+| `countries`   | selected country and city                           |
+| `cameraMakes` | selected make and model                             |
+| `tags`        | selected tag IDs                                    |
+| `ratings`     | selected rating                                     |
+| `mediaTypes`  | selected media type                                 |
 
 All other active filters remain applied to each facet.
 

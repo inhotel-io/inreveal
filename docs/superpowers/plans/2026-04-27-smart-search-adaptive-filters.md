@@ -145,18 +145,20 @@ describe('POST /search/smart/facets', () => {
   it('forwards the smart facets body to the service', async () => {
     ctx.authenticate.mockResolvedValue({});
 
-    const { status, body } = await request(ctx.getHttpServer()).post('/search/smart/facets').send({
-      query: 'mountains',
-      language: 'de',
-      withSharedSpaces: true,
-      personIds: ['44444444-4444-4444-8444-444444444444'],
-      country: 'Germany',
-      rating: 4,
-      takenAfter: '2024-01-01T00:00:00.000Z',
-      takenBefore: '2025-01-01T00:00:00.000Z',
-      type: 'IMAGE',
-      isFavorite: true,
-    });
+    const { status, body } = await request(ctx.getHttpServer())
+      .post('/search/smart/facets')
+      .send({
+        query: 'mountains',
+        language: 'de',
+        withSharedSpaces: true,
+        personIds: ['44444444-4444-4444-8444-444444444444'],
+        country: 'Germany',
+        rating: 4,
+        takenAfter: '2024-01-01T00:00:00.000Z',
+        takenBefore: '2025-01-01T00:00:00.000Z',
+        type: 'IMAGE',
+        isFavorite: true,
+      });
 
     expect(status).toBe(200);
     expect(body.total).toBe(2);
@@ -181,7 +183,10 @@ describe('POST /search/smart/facets', () => {
     const { status } = await request(ctx.getHttpServer()).post('/search/smart/facets').send({ queryAssetId });
 
     expect(status).toBe(200);
-    expect(service.searchSmartFacets).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ queryAssetId }));
+    expect(service.searchSmartFacets).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ queryAssetId }),
+    );
   });
 
   it('accepts rating null for unrated smart facet requests', async () => {
@@ -193,7 +198,10 @@ describe('POST /search/smart/facets', () => {
     });
 
     expect(status).toBe(200);
-    expect(service.searchSmartFacets).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ rating: null }));
+    expect(service.searchSmartFacets).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ rating: null }),
+    );
   });
 
   it('rejects invalid queryAssetId values', async () => {
@@ -268,7 +276,9 @@ const SmartSearchFacetsSchema = BaseSearchSchema.pick({
 const SmartSearchFacetsResponseSchema = z
   .object({
     total: z.int().nonnegative().describe('Exact count after applying all active smart-search filters'),
-    timeBuckets: z.array(TimeBucketsResponseSchema).describe('Available monthly buckets for the smart-search result set'),
+    timeBuckets: z
+      .array(TimeBucketsResponseSchema)
+      .describe('Available monthly buckets for the smart-search result set'),
     countries: z.array(z.string()).describe('Available countries'),
     cities: z.array(z.string()).describe('Available cities for the current smart-search country scope'),
     cameraMakes: z.array(z.string()).describe('Available camera makes'),
@@ -450,10 +460,7 @@ describe('searchSmartFacets', () => {
 
     await sut.searchSmartFacets(authStub.user1, { query: 'test', spaceId, spacePersonIds });
 
-    expect(mocks.access.sharedSpace.checkMemberAccess).toHaveBeenCalledWith(
-      authStub.user1.user.id,
-      new Set([spaceId]),
-    );
+    expect(mocks.access.sharedSpace.checkMemberAccess).toHaveBeenCalledWith(authStub.user1.user.id, new Set([spaceId]));
     expect(mocks.search.getSmartSearchFacets).toHaveBeenCalledWith(
       expect.objectContaining({ spaceId, spacePersonIds }),
     );
@@ -771,7 +778,11 @@ describe('smart facets query shape', () => {
   });
 
   it('location, camera, tags, rating, and media each exclude only their own group', () => {
-    const locationSql = buildFacetFilteredIdsSql(sut, { ...baseOptions, country: 'Germany', city: 'Berlin' }, 'location');
+    const locationSql = buildFacetFilteredIdsSql(
+      sut,
+      { ...baseOptions, country: 'Germany', city: 'Berlin' },
+      'location',
+    );
     const citySql = buildFacetFilteredIdsSql(sut, { ...baseOptions, country: 'Germany', city: 'Berlin' }, 'city');
     const cameraSql = buildFacetFilteredIdsSql(sut, { ...baseOptions, make: 'Sony', model: 'A7' }, 'camera');
     const modelSql = buildFacetFilteredIdsSql(sut, { ...baseOptions, make: 'Sony', model: 'A7' }, 'cameraModel');
@@ -852,7 +863,16 @@ import {
 Add types near `SmartSearchOptions` and `FilterSuggestionsResult`:
 
 ```ts
-type SmartFacetExclude = 'time' | 'people' | 'location' | 'city' | 'camera' | 'cameraModel' | 'tags' | 'rating' | 'media';
+type SmartFacetExclude =
+  | 'time'
+  | 'people'
+  | 'location'
+  | 'city'
+  | 'camera'
+  | 'cameraModel'
+  | 'tags'
+  | 'rating'
+  | 'media';
 
 export type SmartSearchFacetsOptions = Omit<SmartSearchOptions, 'orderDirection'>;
 
@@ -1075,7 +1095,14 @@ describe(SearchRepository.name, () => {
         model: 'R5',
         rating: 5,
       });
-      await ctx.newExif({ assetId: farAway.id, country: 'Norway', city: 'Bergen', make: 'Nikon', model: 'Z8', rating: 5 });
+      await ctx.newExif({
+        assetId: farAway.id,
+        country: 'Norway',
+        city: 'Bergen',
+        make: 'Nikon',
+        model: 'Z8',
+        rating: 5,
+      });
       await addEmbedding(ctx.database, january.id);
       await addEmbedding(ctx.database, february.id);
       await addEmbedding(ctx.database, farAway.id, farEmbedding);
@@ -1692,7 +1719,9 @@ describe('mapSmartSearchFacetsToFilterSuggestions', () => {
       cameraMakes: ['Sony'],
       cameraModels: ['A7'],
       tags: [{ id: 'tag-1', name: 'Travel' }],
-      people: [{ id: 'person-1', name: 'Ada', thumbnailUrl: createUrl('/shared-spaces/space-1/people/person-1/thumbnail') }],
+      people: [
+        { id: 'person-1', name: 'Ada', thumbnailUrl: createUrl('/shared-spaces/space-1/people/person-1/thumbnail') },
+      ],
       ratings: [4],
       mediaTypes: [AssetTypeEnum.Image],
       hasUnnamedPeople: true,

@@ -57,7 +57,7 @@ const buildFacetCandidateSql = (sut: SearchRepository, options: Record<string, u
 const buildFacetFilteredIdsSql = (
   sut: SearchRepository,
   options: Record<string, unknown>,
-  exclude: 'time' | 'people' | 'location' | 'city' | 'camera' | 'cameraModel' | 'tags' | 'rating' | 'media' | undefined,
+  exclude?: 'time' | 'people' | 'location' | 'city' | 'camera' | 'cameraModel' | 'tags' | 'rating' | 'media',
 ) => (sut as any).buildSmartFacetFilteredAssetIds(offlineKysely(), options, exclude).compile().sql;
 
 const FAILURE_MESSAGE =
@@ -191,7 +191,7 @@ describe(SearchRepository.name, () => {
     });
 
     it('rating null filters for unrated assets instead of using minimum rating comparison', () => {
-      const sql = buildFacetFilteredIdsSql(sut, { ...baseOptions, rating: null }, undefined);
+      const sql = buildFacetFilteredIdsSql(sut, { ...baseOptions, rating: null });
 
       expect(sql).toMatch(/"asset_exif"\."rating"\s+is\s+null/i);
       expect(sql).not.toMatch(/"asset_exif"\."rating"\s*>=/i);
@@ -206,7 +206,6 @@ describe(SearchRepository.name, () => {
           personIds: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'],
           tagIds: ['00000000-0000-0000-0000-000000000003'],
         },
-        undefined,
       );
 
       expect(sql).toMatch(/"asset_exif"\."rating"\s*>=\s*\$\d+/i);

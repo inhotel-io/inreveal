@@ -614,7 +614,7 @@ export class SearchRepository {
 
   private async getSmartFacetTotal(trx: Kysely<DB>, options: SmartSearchFacetsOptions): Promise<number> {
     const row = await trx
-      .selectFrom(this.buildSmartFacetFilteredAssetIds(trx, options, undefined).as('filtered'))
+      .selectFrom(this.buildSmartFacetFilteredAssetIds(trx, options).as('filtered'))
       .select((eb) => eb.fn.countAll<number>().as('count'))
       .executeTakeFirstOrThrow();
     return Number(row.count);
