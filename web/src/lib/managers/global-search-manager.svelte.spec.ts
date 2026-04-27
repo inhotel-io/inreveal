@@ -1025,10 +1025,17 @@ describe('activate("command")', () => {
       },
     });
 
-    const cmd = COMMAND_ITEMS.find((item) => item.id === 'cmd:selection_add_to_album')!;
-    const handlerSpy = vi.spyOn(cmd, 'handler').mockResolvedValue(undefined);
+    manager.setQuery('>');
+    await flushMicrotasks();
+    const section = manager.sections.commands;
+    expect(section.status).toBe('ok');
+    if (section.status !== 'ok') {
+      return;
+    }
+    const item = section.items.find((item) => item.id === 'cmd:selection_add_to_album')!;
+    const handlerSpy = vi.spyOn(item, 'handler').mockResolvedValue(undefined);
     assets = [makeTimelineAsset({ id: 'asset-after', ownerId: 'test-user' })];
-    manager.activate('command', cmd);
+    manager.activate('command', item);
     await flushMicrotasks();
 
     expect(handlerSpy).toHaveBeenCalledWith(
@@ -2362,6 +2369,37 @@ describe('commands provider', () => {
       );
       expect(section.items.some((item) => item.id === 'cmd:selection_add_to_current_space')).toBe(false);
     }
+  });
+
+  it('topCommandMatch ranks eligible almost-exact command matches by score', () => {
+    mockPage.route.id = '/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]';
+    commandContextManager.setSpace({
+      id: 'space-1',
+      name: 'Shared',
+      createdById: 'test-user',
+      isOwner: true,
+      isMember: false,
+      canWrite: true,
+      raw: { id: 'space-1', name: 'Shared', createdById: 'test-user' } as unknown as SharedSpaceResponseDto,
+      members: [],
+    });
+    commandContextManager.setSelection({
+      routeId: mockPage.route.id,
+      token: Symbol('selection-test'),
+      options: {
+        getAssets: () => [makeTimelineAsset({ id: 'asset-1', ownerId: 'test-user' })],
+        clearSelection: vi.fn(),
+        canAddToAlbum: () => true,
+        getOnFavorite: () => vi.fn(),
+        getOnArchive: () => vi.fn(),
+        getOnDelete: () => vi.fn(),
+      },
+    });
+
+    manager.setQuery('add member');
+
+    expect(manager.topCommandMatch?.id).toBe('cmd:space_add_member');
+    expect(manager.topCommandMatch?.id).not.toBe('cmd:selection_add_to_album');
   });
 
   it('under `@alice`, commands section is empty', async () => {
