@@ -15,16 +15,24 @@
 
   let { person, showActionMenu = true, actionMenu, footer }: Props = $props();
   let showActions = $state(false);
+  let groupElement: HTMLDivElement;
+
+  const hideActionsUnlessFocused = () => {
+    if (!groupElement.matches(':focus-within') && !groupElement.contains(document.activeElement)) {
+      showActions = false;
+    }
+  };
 </script>
 
 <div
+  bind:this={groupElement}
   class="relative"
   role="group"
   onmouseenter={() => (showActions = true)}
-  onmouseleave={() => (showActions = false)}
+  onmouseleave={hideActionsUnlessFocused}
   use:focusOutside={{ onFocusOut: () => (showActions = false) }}
 >
-  <a href={person.href} draggable="false" onfocus={() => (showActions = true)}>
+  <a href={person.href} draggable="false" aria-label={person.displayName} onfocus={() => (showActions = true)}>
     <div class="w-full h-full rounded-xl brightness-95 filter">
       <ImageThumbnail
         shadow
@@ -36,7 +44,7 @@
         preload={false}
       />
       {#if person.isFavorite}
-        <div class="absolute top-4 start-4">
+        <div class="absolute top-4 start-4" aria-label="Favorite" title="Favorite">
           <Icon icon={mdiHeart} size="24" class="text-white" />
         </div>
       {/if}
