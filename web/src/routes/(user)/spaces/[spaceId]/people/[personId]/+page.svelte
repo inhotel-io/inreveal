@@ -31,19 +31,6 @@
   let allPeople: SharedSpacePersonResponseDto[] = $state(data.allPeople);
   let action = $state<string | null>(data.action);
 
-  // Sync on space change OR person change (person-to-person nav within same space)
-  $effect(() => {
-    if (data.person.id !== person.id || data.space.id !== space.id) {
-      space = data.space;
-      members = data.members;
-      person = data.person;
-      assetIds = data.assetIds;
-      allPeople = data.allPeople;
-      action = data.action;
-      mergeTargetId = null;
-    }
-  });
-
   let mergeTargetId = $state<string | null>(null);
 
   const currentMember = $derived(members.find((m) => m.userId === authManager.user.id));
@@ -93,6 +80,21 @@
   const PAGE_SIZE = 100;
   let loadingMore = $state(false);
   let hasMore = $state(data.allPeople.length >= PAGE_SIZE);
+  let lastData = $state(data);
+
+  $effect(() => {
+    if (data !== lastData) {
+      space = data.space;
+      members = data.members;
+      person = data.person;
+      assetIds = data.assetIds;
+      allPeople = data.allPeople;
+      action = data.action;
+      mergeTargetId = null;
+      hasMore = data.allPeople.length >= PAGE_SIZE;
+      lastData = data;
+    }
+  });
 
   async function loadMorePeople() {
     if (loadingMore || !hasMore) {

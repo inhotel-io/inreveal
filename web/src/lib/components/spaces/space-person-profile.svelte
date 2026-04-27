@@ -1,5 +1,6 @@
 <script lang="ts">
   import DateInput from '$lib/elements/DateInput.svelte';
+  import { locale } from '$lib/stores/preferences.store';
   import { createUrl } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
   import {
@@ -10,7 +11,7 @@
   } from '@immich/sdk';
   import { Button, toastManager } from '@immich/ui';
   import { DateTime } from 'luxon';
-  import { locale, t } from 'svelte-i18n';
+  import { t } from 'svelte-i18n';
 
   interface Props {
     spaceId: string;
@@ -55,6 +56,10 @@
     const label = $t('person_birthdate', { values: { date: formattedBirthDate } });
     return label === 'person_birthdate' ? formattedBirthDate : label;
   });
+  const aliasSaveLabel = $derived(`${$t('save')} ${$t('spaces_set_alias')}`);
+  const aliasClearLabel = $derived(`${$t('clear')} ${$t('spaces_set_alias')}`);
+  const birthDateSaveLabel = $derived(`${$t('save')} ${$t('set_date_of_birth')}`);
+  const birthDateClearLabel = $derived(`${$t('clear')} ${$t('set_date_of_birth')}`);
 
   async function saveAlias() {
     const alias = aliasInput.trim();
@@ -71,7 +76,11 @@
         onPersonChange(person);
         toastManager.success($t('spaces_alias_saved'));
       } else {
-        await clearAlias();
+        await deleteSpacePersonAlias({ id: spaceId, personId: person.id });
+        person = { ...person, alias: null };
+        aliasInput = '';
+        onPersonChange(person);
+        toastManager.success($t('spaces_alias_cleared'));
       }
     } catch (error) {
       handleError(error, $t('spaces_error_saving_alias'));
@@ -95,13 +104,13 @@
     }
   }
 
-  async function saveBirthDate() {
+  async function saveBirthDate(nextBirthDate = birthDateInput) {
     isSavingBirthDate = true;
     try {
       const updatedPerson = await updateSpacePerson({
         id: spaceId,
         personId: person.id,
-        sharedSpacePersonUpdateDto: { birthDate: birthDateInput },
+        sharedSpacePersonUpdateDto: { birthDate: nextBirthDate },
       });
       person = updatedPerson;
       birthDateInput = updatedPerson.birthDate ?? '';
@@ -115,8 +124,7 @@
   }
 
   async function clearBirthDate() {
-    birthDateInput = '';
-    await saveBirthDate();
+    await saveBirthDate('');
   }
 
   const todayFormatted = new Date().toISOString().split('T')[0];
@@ -162,6 +170,7 @@
           size="small"
           shape="round"
           loading={isSavingAlias}
+          aria-label={aliasSaveLabel}
           data-testid="save-alias-button"
         >
           {$t('save')}
@@ -174,6 +183,7 @@
             color="secondary"
             onclick={clearAlias}
             disabled={isSavingAlias}
+            aria-label={aliasClearLabel}
             data-testid="clear-alias-button"
           >
             {$t('clear')}
@@ -201,6 +211,7 @@
             size="small"
             shape="round"
             loading={isSavingBirthDate}
+            aria-label={birthDateSaveLabel}
             data-testid="save-birthdate-button"
           >
             {$t('save')}
@@ -213,6 +224,7 @@
               color="secondary"
               onclick={clearBirthDate}
               disabled={isSavingBirthDate}
+              aria-label={birthDateClearLabel}
               data-testid="clear-birthdate-button"
             >
               {$t('clear')}

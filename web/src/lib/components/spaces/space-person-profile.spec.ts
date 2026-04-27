@@ -8,6 +8,11 @@ import userEvent from '@testing-library/user-event';
 import { DateTime } from 'luxon';
 import SpacePersonProfile from './space-person-profile.svelte';
 
+const aliasSaveLabel = 'save spaces_set_alias';
+const aliasClearLabel = 'clear spaces_set_alias';
+const birthDateSaveLabel = 'save set_date_of_birth';
+const birthDateClearLabel = 'clear set_date_of_birth';
+
 vi.mock('@immich/ui', async (importOriginal) => {
   const original = await importOriginal<typeof import('@immich/ui')>();
   return {
@@ -77,7 +82,7 @@ describe('SpacePersonProfile', () => {
 
     await user.clear(screen.getByLabelText('spaces_set_alias'));
     await user.type(screen.getByLabelText('spaces_set_alias'), '  Aunt Alice  ');
-    await user.click(screen.getByTestId('save-alias-button'));
+    await user.click(screen.getByRole('button', { name: aliasSaveLabel }));
 
     await waitFor(() => {
       expect(sdkMock.setSpacePersonAlias).toHaveBeenCalledWith({
@@ -95,7 +100,7 @@ describe('SpacePersonProfile', () => {
     const { onPersonChange } = renderProfile({ person });
     const user = userEvent.setup();
 
-    await user.click(screen.getByTestId('clear-alias-button'));
+    await user.click(screen.getByRole('button', { name: aliasClearLabel }));
 
     await waitFor(() => {
       expect(sdkMock.deleteSpacePersonAlias).toHaveBeenCalledWith({ id: 'space-1', personId: 'p1' });
@@ -110,7 +115,7 @@ describe('SpacePersonProfile', () => {
     const user = userEvent.setup();
 
     await user.clear(screen.getByLabelText('spaces_set_alias'));
-    await user.click(screen.getByTestId('save-alias-button'));
+    await user.click(screen.getByRole('button', { name: aliasSaveLabel }));
 
     await waitFor(() => {
       expect(sdkMock.deleteSpacePersonAlias).toHaveBeenCalledWith({ id: 'space-1', personId: 'p1' });
@@ -125,7 +130,7 @@ describe('SpacePersonProfile', () => {
     const user = userEvent.setup();
 
     await user.type(screen.getByLabelText('spaces_set_alias'), 'Friend');
-    await user.click(screen.getByTestId('save-alias-button'));
+    await user.click(screen.getByRole('button', { name: aliasSaveLabel }));
 
     await waitFor(() => {
       expect(sdkMock.setSpacePersonAlias).toHaveBeenCalledWith({
@@ -142,7 +147,7 @@ describe('SpacePersonProfile', () => {
     const { onPersonChange } = renderProfile({ person, role: SharedSpaceRole.Viewer });
     const user = userEvent.setup();
 
-    await user.click(screen.getByTestId('clear-alias-button'));
+    await user.click(screen.getByRole('button', { name: aliasClearLabel }));
 
     await waitFor(() => {
       expect(sdkMock.deleteSpacePersonAlias).toHaveBeenCalledWith({ id: 'space-1', personId: 'p1' });
@@ -153,28 +158,32 @@ describe('SpacePersonProfile', () => {
   it('handles alias save failure', async () => {
     const error = new Error('alias failed');
     sdkMock.setSpacePersonAlias.mockRejectedValue(error);
-    renderProfile();
+    const { onPersonChange } = renderProfile();
     const user = userEvent.setup();
 
     await user.type(screen.getByLabelText('spaces_set_alias'), 'Friend');
-    await user.click(screen.getByTestId('save-alias-button'));
+    await user.click(screen.getByRole('button', { name: aliasSaveLabel }));
 
     await waitFor(() => {
       expect(handleError).toHaveBeenCalledWith(error, 'spaces_error_saving_alias');
     });
+    expect(toastManager.success).not.toHaveBeenCalled();
+    expect(onPersonChange).not.toHaveBeenCalled();
   });
 
   it('handles alias clear failure', async () => {
     const error = new Error('clear failed');
     sdkMock.deleteSpacePersonAlias.mockRejectedValue(error);
-    renderProfile({ person: makePerson({ alias: 'Mom' }) });
+    const { onPersonChange } = renderProfile({ person: makePerson({ alias: 'Mom' }) });
     const user = userEvent.setup();
 
-    await user.click(screen.getByTestId('clear-alias-button'));
+    await user.click(screen.getByRole('button', { name: aliasClearLabel }));
 
     await waitFor(() => {
       expect(handleError).toHaveBeenCalledWith(error, 'spaces_error_saving_alias');
     });
+    expect(toastManager.success).not.toHaveBeenCalled();
+    expect(onPersonChange).not.toHaveBeenCalled();
   });
 
   it('shows birthdate using localized date formatting', () => {
@@ -201,7 +210,7 @@ describe('SpacePersonProfile', () => {
     const birthDateInput = screen.getByLabelText('set_date_of_birth');
     await fireEvent.input(birthDateInput, { target: { value: '1991-07-16' } });
     await fireEvent.blur(birthDateInput);
-    await user.click(screen.getByTestId('save-birthdate-button'));
+    await user.click(screen.getByRole('button', { name: birthDateSaveLabel }));
 
     await waitFor(() => {
       expect(sdkMock.updateSpacePerson).toHaveBeenCalledWith({
@@ -213,7 +222,7 @@ describe('SpacePersonProfile', () => {
     expect(onPersonChange).toHaveBeenCalledWith(savedPerson);
     expect(toastManager.success).toHaveBeenCalledWith('date_of_birth_saved');
 
-    await user.click(screen.getByTestId('clear-birthdate-button'));
+    await user.click(screen.getByRole('button', { name: birthDateClearLabel }));
 
     await waitFor(() => {
       expect(sdkMock.updateSpacePerson).toHaveBeenLastCalledWith({
@@ -229,17 +238,28 @@ describe('SpacePersonProfile', () => {
   it('handles birthdate save failure', async () => {
     const error = new Error('birthdate failed');
     sdkMock.updateSpacePerson.mockRejectedValue(error);
-    renderProfile({ person: makePerson({ birthDate: '1990-06-15' }) });
+    const { onPersonChange } = renderProfile({ person: makePerson({ birthDate: '1990-06-15' }) });
     const user = userEvent.setup();
 
     const birthDateInput = screen.getByLabelText('set_date_of_birth');
     await fireEvent.input(birthDateInput, { target: { value: '1991-07-16' } });
     await fireEvent.blur(birthDateInput);
-    await user.click(screen.getByTestId('save-birthdate-button'));
+    await user.click(screen.getByRole('button', { name: birthDateSaveLabel }));
 
     await waitFor(() => {
       expect(handleError).toHaveBeenCalledWith(error, 'errors.unable_to_save_date_of_birth');
     });
+    expect(toastManager.success).not.toHaveBeenCalled();
+    expect(onPersonChange).not.toHaveBeenCalled();
+  });
+
+  it('uses distinct accessible names for alias and birthdate actions', () => {
+    renderProfile({ person: makePerson({ alias: 'Mom', birthDate: '1990-06-15' }) });
+
+    expect(screen.getByRole('button', { name: aliasSaveLabel })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: aliasClearLabel })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: birthDateSaveLabel })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: birthDateClearLabel })).toBeInTheDocument();
   });
 
   it('hides birthdate editor from viewers while keeping the display visible', () => {
