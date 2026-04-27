@@ -194,6 +194,12 @@ git commit -m "test: cover shared space person birth date"
 - Create: `web/src/lib/components/people/person-tile.spec.ts`
 - Create: `web/src/lib/components/people/people-visibility-modal.spec.ts`
 
+Commit boundaries:
+
+- Commit 2A: `people-types.ts`, `people-grid.svelte`, `people-grid.test-wrapper.svelte`, and `people-grid.spec.ts`.
+- Commit 2B: `person-tile.svelte`, `person-tile.test-wrapper.svelte`, and `person-tile.spec.ts`.
+- Commit 2C: `people-visibility-modal.svelte`, `people-visibility-modal.test-wrapper.svelte`, and `people-visibility-modal.spec.ts`.
+
 - [ ] **Step 1: Write failing shared component tests**
 
 Create `web/src/lib/components/people/people-grid.spec.ts`:
@@ -508,7 +514,26 @@ Create `web/src/lib/components/people/people-grid.test-wrapper.svelte`:
 </PeopleGrid>
 ```
 
-- [ ] **Step 5: Create `PersonTile` and its test wrapper**
+- [ ] **Step 5: Run the grid test**
+
+Run:
+
+```bash
+pnpm --dir web exec vitest run src/lib/components/people/people-grid.spec.ts
+```
+
+Expected: the grid test passes.
+
+- [ ] **Step 6: Commit shared grid extraction**
+
+Run:
+
+```bash
+git add web/src/lib/components/people/people-types.ts web/src/lib/components/people/people-grid.svelte web/src/lib/components/people/people-grid.test-wrapper.svelte web/src/lib/components/people/people-grid.spec.ts
+git commit -m "feat: add shared people grid"
+```
+
+- [ ] **Step 7: Create `PersonTile` and its test wrapper**
 
 Create `web/src/lib/components/people/person-tile.svelte` with this contract:
 
@@ -610,7 +635,26 @@ Create `web/src/lib/components/people/person-tile.test-wrapper.svelte`:
 </TooltipProvider>
 ```
 
-- [ ] **Step 6: Create `PeopleVisibilityModal` and wrapper**
+- [ ] **Step 8: Run the tile test**
+
+Run:
+
+```bash
+pnpm --dir web exec vitest run src/lib/components/people/person-tile.spec.ts
+```
+
+Expected: the tile test passes.
+
+- [ ] **Step 9: Commit shared tile extraction**
+
+Run:
+
+```bash
+git add web/src/lib/components/people/person-tile.svelte web/src/lib/components/people/person-tile.test-wrapper.svelte web/src/lib/components/people/person-tile.spec.ts
+git commit -m "feat: add shared person tile"
+```
+
+- [ ] **Step 10: Create `PeopleVisibilityModal` and wrapper**
 
 Create `web/src/lib/components/people/people-visibility-modal.svelte` using the existing global/space modal behavior:
 
@@ -816,7 +860,26 @@ Create `web/src/lib/components/people/people-visibility-modal.test-wrapper.svelt
 </TooltipProvider>
 ```
 
-- [ ] **Step 7: Run shared component tests**
+- [ ] **Step 11: Run the visibility modal test**
+
+Run:
+
+```bash
+pnpm --dir web exec vitest run src/lib/components/people/people-visibility-modal.spec.ts
+```
+
+Expected: the visibility modal test passes.
+
+- [ ] **Step 12: Commit shared visibility modal extraction**
+
+Run:
+
+```bash
+git add web/src/lib/components/people/people-visibility-modal.svelte web/src/lib/components/people/people-visibility-modal.test-wrapper.svelte web/src/lib/components/people/people-visibility-modal.spec.ts
+git commit -m "feat: add shared people visibility modal"
+```
+
+- [ ] **Step 13: Run all shared component tests**
 
 Run:
 
@@ -826,14 +889,15 @@ pnpm --dir web exec vitest run src/lib/components/people/people-grid.spec.ts src
 
 Expected: all shared component tests pass.
 
-- [ ] **Step 8: Commit shared component extraction**
+- [ ] **Step 14: Confirm Task 2 commit boundaries**
 
 Run:
 
 ```bash
-git add web/src/lib/components/people
-git commit -m "feat: add shared people management components"
+git log --oneline -3
 ```
+
+Expected: the last three commits are `feat: add shared people grid`, `feat: add shared person tile`, and `feat: add shared people visibility modal`. Do not create an extra Task 2 commit if those commits already exist.
 
 ---
 
