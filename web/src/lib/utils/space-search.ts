@@ -82,13 +82,13 @@ export function buildSmartSearchParams(args: SmartSearchParamsArgs): SmartSearch
 }
 
 export function buildSmartSearchFacetsParams(args: SmartSearchParamsArgs): SmartSearchFacetsDto {
-  const { order: _order, ...params } = buildSmartSearchParams(args);
+  const { order: _, ...params } = buildSmartSearchParams(args);
   return params;
 }
 
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) {
-    return `[${value.map(stableJson).join(',')}]`;
+    return `[${value.map((item) => stableJson(item)).join(',')}]`;
   }
 
   if (value && typeof value === 'object') {
