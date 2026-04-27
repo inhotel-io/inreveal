@@ -304,9 +304,9 @@ describe('delete selected', () => {
 
     await handleDeleteSelected(makeCtx(selection));
     const toast = vi.mocked(toastManager.primary).mock.calls[0][0] as { button: { onclick: () => void } };
-    await toast.button.onclick();
+    toast.button.onclick();
 
-    expect(restoreAssets).toHaveBeenCalledWith({ bulkIdsDto: { ids: ['asset-1', 'asset-2'] } });
+    await vi.waitFor(() => expect(restoreAssets).toHaveBeenCalledWith({ bulkIdsDto: { ids: ['asset-1', 'asset-2'] } }));
     expect(selection.onUndoDelete).toHaveBeenCalledWith(assets);
   });
 

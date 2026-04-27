@@ -159,6 +159,8 @@ class CommandContextManager {
   }
 
   private uniqueAssets(assets: TimelineAsset[]) {
+    // Local dedupe only; no Svelte subscription reads this Set.
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
     const seen = new Set<string>();
     const unique: TimelineAsset[] = [];
     for (const asset of assets) {

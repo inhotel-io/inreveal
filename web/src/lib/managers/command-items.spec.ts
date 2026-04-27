@@ -1,6 +1,8 @@
 import { goto } from '$app/navigation';
+import en from '$i18n/en.json';
 import { ADMIN_VISIBLE_QUEUES } from '$lib/constants';
 import { authManager } from '$lib/managers/auth-manager.svelte';
+import * as selectionHandlers from '$lib/managers/selection-command-handlers';
 import { Route } from '$lib/route';
 import * as albumService from '$lib/services/album.service';
 import * as albumUtils from '$lib/utils/album-utils';
@@ -10,7 +12,6 @@ import type { AlbumResponseDto, SharedSpaceMemberResponseDto, SharedSpaceRespons
 import * as sdk from '@immich/sdk';
 import { QueueCommand, QueueName, SharedSpaceRole } from '@immich/sdk';
 import { modalManager, toastManager } from '@immich/ui';
-import en from '$i18n/en.json';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AlbumEditModal from '../modals/AlbumEditModal.svelte';
 import AlbumOptionsModal from '../modals/AlbumOptionsModal.svelte';
@@ -20,7 +21,6 @@ import SpaceCreateModal from '../modals/SpaceCreateModal.svelte';
 import SpaceMembersModal from '../modals/SpaceMembersModal.svelte';
 import type { CommandContext } from './command-context-manager.svelte';
 import { COMMAND_ITEMS, isAlmostExactCommandMatch, type CommandItem } from './command-items';
-import * as selectionHandlers from '$lib/managers/selection-command-handlers';
 
 vi.mock('@immich/ui', async (orig) => {
   const actual = await orig<typeof import('@immich/ui')>();

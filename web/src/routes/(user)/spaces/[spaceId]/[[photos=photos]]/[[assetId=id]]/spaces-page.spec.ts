@@ -1,6 +1,5 @@
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
-import { MAX_SPACE_ASSETS_PER_REQUEST } from '$lib/components/spaces/space-asset-limit-warning.svelte';
 import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
 import type { SharedSpaceMemberResponseDto, SharedSpaceResponseDto } from '@immich/sdk';
 import { AssetVisibility, SharedSpaceRole } from '@immich/sdk';
@@ -8,6 +7,8 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import SpacesPage from './+page.svelte';
+
+const OVER_SPACE_ASSET_LIMIT = 10_001;
 
 const {
   gotoMock,
@@ -26,7 +27,7 @@ const {
   },
   mockAssetMultiSelectManager: {
     selectionActive: false,
-    assets: [],
+    assets: [] as TimelineAsset[],
     clear: vi.fn(),
     isAllUserOwned: true,
   },
@@ -313,7 +314,7 @@ describe('Spaces page search URL state', () => {
     mockAssetMultiSelectManager.assets = [];
     await expect(addSelected()).resolves.toBe(false);
 
-    mockAssetMultiSelectManager.assets = Array.from({ length: MAX_SPACE_ASSETS_PER_REQUEST + 1 }, (_, index) =>
+    mockAssetMultiSelectManager.assets = Array.from({ length: OVER_SPACE_ASSET_LIMIT }, (_, index) =>
       makeTimelineAsset({ id: `asset-${index}` }),
     );
     await expect(addSelected()).resolves.toBe(false);
