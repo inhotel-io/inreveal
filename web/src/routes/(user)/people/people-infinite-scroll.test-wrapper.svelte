@@ -12,7 +12,8 @@
 </script>
 
 <PeopleInfiniteScroll {people} {hasNextPage} {loadNextPage}>
-  {#snippet children({ person })}
+  {#snippet children({ person, index })}
     <span>{person.name}</span>
+    <span data-testid="person-index-{person.id}">{index}</span>
   {/snippet}
 </PeopleInfiniteScroll>

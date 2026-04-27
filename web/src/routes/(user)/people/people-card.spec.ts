@@ -6,8 +6,8 @@ import type { Component } from 'svelte';
 import PeopleCard from './people-card.svelte';
 
 describe('PeopleCard adapter', () => {
-  it('keeps global person actions available through the shared tile', async () => {
-    const person = personFactory.build({ id: 'p1', name: 'Alice', isFavorite: false, type: 'person' });
+  const renderCard = (isFavorite = false) => {
+    const person = personFactory.build({ id: 'p1', name: 'Alice', isFavorite, type: 'person' });
     const onHidePerson = vi.fn();
     const onMergePeople = vi.fn();
     const onToggleFavorite = vi.fn();
@@ -22,11 +22,39 @@ describe('PeopleCard adapter', () => {
       },
     );
 
+    return { baseElement, onHidePerson, onMergePeople, onToggleFavorite };
+  };
+
+  it('keeps global person actions available through the shared tile', async () => {
+    const { baseElement } = renderCard();
+
     await fireEvent.mouseEnter(baseElement.querySelector('[role="group"]')!);
 
     expect(screen.getByText('hide_person')).toBeInTheDocument();
     expect(screen.getByText('set_date_of_birth')).toBeInTheDocument();
     expect(screen.getByText('merge_people')).toBeInTheDocument();
     expect(screen.getByText('to_favorite')).toBeInTheDocument();
+  });
+
+  it('wires global person callbacks through the shared tile action menu', async () => {
+    const { baseElement, onHidePerson, onMergePeople, onToggleFavorite } = renderCard();
+
+    await fireEvent.mouseEnter(baseElement.querySelector('[role="group"]')!);
+    await fireEvent.click(screen.getByText('hide_person'));
+    await fireEvent.click(screen.getByText('merge_people'));
+    await fireEvent.click(screen.getByText('to_favorite'));
+
+    expect(onHidePerson).toHaveBeenCalledTimes(1);
+    expect(onMergePeople).toHaveBeenCalledTimes(1);
+    expect(onToggleFavorite).toHaveBeenCalledTimes(1);
+  });
+
+  it('wires unfavorite through the shared tile action menu', async () => {
+    const { baseElement, onToggleFavorite } = renderCard(true);
+
+    await fireEvent.mouseEnter(baseElement.querySelector('[role="group"]')!);
+    await fireEvent.click(screen.getByText('unfavorite'));
+
+    expect(onToggleFavorite).toHaveBeenCalledTimes(1);
   });
 });

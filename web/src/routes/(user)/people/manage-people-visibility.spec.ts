@@ -10,6 +10,7 @@ import ManagePeopleVisibilityWrapper from './manage-people-visibility.test-wrapp
 describe('ManagePeopleVisibility component', () => {
   beforeEach(() => {
     vi.stubGlobal('IntersectionObserver', getIntersectionObserverMock());
+    vi.clearAllMocks();
     sdkMock.updatePeople.mockResolvedValue([]);
   });
 
@@ -89,27 +90,49 @@ describe('ManagePeopleVisibility component', () => {
     expect(personButtons[2].getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('saves global visibility through updatePeople', async () => {
+  it('saves global visibility through updatePeople and maps updated hidden state back to global people', async () => {
     const onClose = vi.fn();
     const onUpdate = vi.fn();
     const loadNextPage = vi.fn();
-    const person = personFactory.build({ id: 'a', name: 'Alice', isHidden: false });
+    const people = [
+      personFactory.build({ id: 'a', name: 'Alice', isHidden: false }),
+      personFactory.build({ id: 'b', name: 'Bob', isHidden: true }),
+      personFactory.build({ id: 'c', name: 'Charlie', isHidden: false }),
+    ];
+    sdkMock.updatePeople.mockResolvedValueOnce([
+      { id: 'a', success: true },
+      { id: 'b', success: false },
+    ]);
     const { container } = render(ManagePeopleVisibilityWrapper, {
       props: {
-        people: [person],
-        totalPeopleCount: 1,
+        people,
+        totalPeopleCount: 3,
         onClose,
         onUpdate,
         loadNextPage,
       },
     });
     const user = userEvent.setup();
+    const personButtons = container.querySelectorAll('button[aria-pressed]');
 
-    await user.click(container.querySelector('button[aria-pressed]')!);
+    await user.click(personButtons[0]);
+    await user.click(personButtons[1]);
     await user.click(screen.getByTestId('save-visibility'));
 
     await waitFor(() => {
-      expect(sdkMock.updatePeople).toHaveBeenCalledWith({ peopleUpdateDto: { people: [{ id: 'a', isHidden: true }] } });
+      expect(sdkMock.updatePeople).toHaveBeenCalledWith({
+        peopleUpdateDto: {
+          people: [
+            { id: 'a', isHidden: true },
+            { id: 'b', isHidden: false },
+          ],
+        },
+      });
     });
+    expect(onUpdate).toHaveBeenCalledWith([
+      { ...people[0], isHidden: true },
+      { ...people[1], isHidden: false },
+      people[2],
+    ]);
   });
 });
