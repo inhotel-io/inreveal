@@ -1,5 +1,7 @@
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
+import { handleError } from '$lib/utils/handle-error';
 import { SharedSpaceRole, type SharedSpacePersonResponseDto } from '@immich/sdk';
+import { toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
@@ -13,6 +15,10 @@ vi.mock('@immich/ui', async (importOriginal) => {
     toastManager: { primary: vi.fn(), success: vi.fn(), warning: vi.fn() },
   };
 });
+
+vi.mock('$lib/utils/handle-error', () => ({
+  handleError: vi.fn(),
+}));
 
 const makePerson = (overrides: Partial<SharedSpacePersonResponseDto> = {}): SharedSpacePersonResponseDto =>
   ({
@@ -81,6 +87,7 @@ describe('SpacePersonProfile', () => {
       });
     });
     expect(onPersonChange).toHaveBeenCalledWith({ ...person, alias: 'Aunt Alice' });
+    expect(toastManager.success).toHaveBeenCalledWith('spaces_alias_saved');
   });
 
   it('clears alias through deleteSpacePersonAlias and notifies parent', async () => {
@@ -94,6 +101,22 @@ describe('SpacePersonProfile', () => {
       expect(sdkMock.deleteSpacePersonAlias).toHaveBeenCalledWith({ id: 'space-1', personId: 'p1' });
     });
     expect(onPersonChange).toHaveBeenCalledWith({ ...person, alias: null });
+    expect(toastManager.success).toHaveBeenCalledWith('spaces_alias_cleared');
+  });
+
+  it('saves an empty alias by clearing through deleteSpacePersonAlias and notifying parent', async () => {
+    const person = makePerson({ alias: 'Mom' });
+    const { onPersonChange } = renderProfile({ person });
+    const user = userEvent.setup();
+
+    await user.clear(screen.getByLabelText('spaces_set_alias'));
+    await user.click(screen.getByTestId('save-alias-button'));
+
+    await waitFor(() => {
+      expect(sdkMock.deleteSpacePersonAlias).toHaveBeenCalledWith({ id: 'space-1', personId: 'p1' });
+    });
+    expect(onPersonChange).toHaveBeenCalledWith({ ...person, alias: null });
+    expect(toastManager.success).toHaveBeenCalledWith('spaces_alias_cleared');
   });
 
   it('allows viewers to save an alias', async () => {
@@ -112,6 +135,46 @@ describe('SpacePersonProfile', () => {
       });
     });
     expect(onPersonChange).toHaveBeenCalledWith({ ...person, alias: 'Friend' });
+  });
+
+  it('allows viewers to clear an alias', async () => {
+    const person = makePerson({ alias: 'Mom' });
+    const { onPersonChange } = renderProfile({ person, role: SharedSpaceRole.Viewer });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId('clear-alias-button'));
+
+    await waitFor(() => {
+      expect(sdkMock.deleteSpacePersonAlias).toHaveBeenCalledWith({ id: 'space-1', personId: 'p1' });
+    });
+    expect(onPersonChange).toHaveBeenCalledWith({ ...person, alias: null });
+  });
+
+  it('handles alias save failure', async () => {
+    const error = new Error('alias failed');
+    sdkMock.setSpacePersonAlias.mockRejectedValue(error);
+    renderProfile();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText('spaces_set_alias'), 'Friend');
+    await user.click(screen.getByTestId('save-alias-button'));
+
+    await waitFor(() => {
+      expect(handleError).toHaveBeenCalledWith(error, 'spaces_error_saving_alias');
+    });
+  });
+
+  it('handles alias clear failure', async () => {
+    const error = new Error('clear failed');
+    sdkMock.deleteSpacePersonAlias.mockRejectedValue(error);
+    renderProfile({ person: makePerson({ alias: 'Mom' }) });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId('clear-alias-button'));
+
+    await waitFor(() => {
+      expect(handleError).toHaveBeenCalledWith(error, 'spaces_error_saving_alias');
+    });
   });
 
   it('shows birthdate using localized date formatting', () => {
@@ -148,6 +211,7 @@ describe('SpacePersonProfile', () => {
       });
     });
     expect(onPersonChange).toHaveBeenCalledWith(savedPerson);
+    expect(toastManager.success).toHaveBeenCalledWith('date_of_birth_saved');
 
     await user.click(screen.getByTestId('clear-birthdate-button'));
 
@@ -159,6 +223,23 @@ describe('SpacePersonProfile', () => {
       });
     });
     expect(onPersonChange).toHaveBeenLastCalledWith(clearedPerson);
+    expect(toastManager.success).toHaveBeenLastCalledWith('date_of_birth_saved');
+  });
+
+  it('handles birthdate save failure', async () => {
+    const error = new Error('birthdate failed');
+    sdkMock.updateSpacePerson.mockRejectedValue(error);
+    renderProfile({ person: makePerson({ birthDate: '1990-06-15' }) });
+    const user = userEvent.setup();
+
+    const birthDateInput = screen.getByLabelText('set_date_of_birth');
+    await fireEvent.input(birthDateInput, { target: { value: '1991-07-16' } });
+    await fireEvent.blur(birthDateInput);
+    await user.click(screen.getByTestId('save-birthdate-button'));
+
+    await waitFor(() => {
+      expect(handleError).toHaveBeenCalledWith(error, 'errors.unable_to_save_date_of_birth');
+    });
   });
 
   it('hides birthdate editor from viewers while keeping the display visible', () => {
