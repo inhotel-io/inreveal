@@ -17,6 +17,19 @@ vi.mock('$lib/utils/handle-error', () => ({
   handleError: vi.fn(),
 }));
 
+vi.mock('svelte-i18n', async () => {
+  const { readable } = await import('svelte/store');
+  const formatMessage = (key: string, options?: { values?: Record<string, unknown> }) => {
+    const count = options?.values?.count;
+    return count === undefined ? key : `${key} ${count}`;
+  };
+
+  return {
+    locale: readable('en-US'),
+    t: readable(formatMessage),
+  };
+});
+
 const makePerson = (overrides: Partial<VisibilityPerson> = {}): VisibilityPerson => ({
   id: 'person-1',
   displayName: 'John Doe',
@@ -73,6 +86,7 @@ describe('PeopleVisibilityModal', () => {
       makePerson({ id: 'p2', displayName: 'Bob', isHidden: true }),
       makePerson({ id: 'p3', displayName: 'Charlie', isHidden: false }),
     ];
+    saveVisibilityChanges.mockResolvedValueOnce({ successCount: 2, failCount: 0 });
     renderComponent(people);
 
     await fireEvent.click(screen.getByTestId('visibility-person-p1'));
@@ -90,7 +104,36 @@ describe('PeopleVisibilityModal', () => {
       people[2],
     ]);
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(toastManager.primary).toHaveBeenCalledWith(expect.stringContaining('visibility_changed'));
+    expect(toastManager.primary).toHaveBeenCalledWith('visibility_changed 2');
+    expect(toastManager.warning).not.toHaveBeenCalled();
+  });
+
+  it('applies local overrides and closes after partial save failures', async () => {
+    const people = [
+      makePerson({ id: 'p1', displayName: 'Alice', isHidden: false }),
+      makePerson({ id: 'p2', displayName: 'Bob', isHidden: true }),
+      makePerson({ id: 'p3', displayName: 'Charlie', isHidden: false }),
+    ];
+    saveVisibilityChanges.mockResolvedValueOnce({ successCount: 1, failCount: 1 });
+    renderComponent(people);
+
+    await fireEvent.click(screen.getByTestId('visibility-person-p1'));
+    await fireEvent.click(screen.getByTestId('visibility-person-p2'));
+    await fireEvent.click(screen.getByTestId('save-visibility'));
+
+    await waitFor(() => expect(saveVisibilityChanges).toHaveBeenCalledTimes(1));
+    expect(saveVisibilityChanges).toHaveBeenCalledWith([
+      { id: 'p1', isHidden: true },
+      { id: 'p2', isHidden: false },
+    ]);
+    expect(toastManager.warning).toHaveBeenCalledWith('errors.unable_to_change_visibility 1');
+    expect(toastManager.primary).toHaveBeenCalledWith('visibility_changed 1');
+    expect(onUpdate).toHaveBeenCalledWith([
+      { ...people[0], isHidden: true },
+      { ...people[1], isHidden: false },
+      people[2],
+    ]);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('treats displayName as the named-person value for hide unnamed', async () => {
