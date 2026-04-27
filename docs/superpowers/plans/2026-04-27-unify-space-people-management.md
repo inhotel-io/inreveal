@@ -200,7 +200,7 @@ Commit boundaries:
 - Commit 2B: `person-tile.svelte`, `person-tile.test-wrapper.svelte`, and `person-tile.spec.ts`.
 - Commit 2C: `people-visibility-modal.svelte`, `people-visibility-modal.test-wrapper.svelte`, and `people-visibility-modal.spec.ts`.
 
-- [ ] **Step 1: Write failing shared component tests**
+- [ ] **Step 1: Write the failing grid test**
 
 Create `web/src/lib/components/people/people-grid.spec.ts`:
 
@@ -245,151 +245,15 @@ describe('PeopleGrid', () => {
 });
 ```
 
-Create `web/src/lib/components/people/person-tile.spec.ts`:
-
-```ts
-import '@testing-library/jest-dom';
-import { fireEvent, render, screen } from '@testing-library/svelte';
-import PersonTileWrapper from './person-tile.test-wrapper.svelte';
-
-const person = {
-  id: 'p1',
-  displayName: 'Mom',
-  canonicalName: 'Alice',
-  thumbnailUrl: '/thumbnail.jpg',
-  href: '/people/p1',
-  isHidden: false,
-  isFavorite: true,
-  type: 'pet',
-  species: 'Dog',
-};
-
-describe('PersonTile', () => {
-  it('renders link, thumbnail title, favorite badge, pet badge, and footer slot', () => {
-    const { baseElement } = render(PersonTileWrapper, {
-      props: {
-        person,
-        showFooter: true,
-      },
-    });
-
-    expect(baseElement.querySelector('a[href="/people/p1"]')).toBeInTheDocument();
-    expect(screen.getByTitle('Mom')).toBeInTheDocument();
-    expect(screen.getByTitle('Dog')).toBeInTheDocument();
-    expect(screen.getByText('Footer content')).toBeInTheDocument();
-  });
-
-  it('renders the action menu slot only on hover when provided', async () => {
-    const { baseElement } = render(PersonTileWrapper, {
-      props: {
-        person,
-        showActionMenu: true,
-      },
-    });
-
-    expect(screen.queryByText('Actions')).not.toBeInTheDocument();
-    await fireEvent.mouseEnter(baseElement.querySelector('[role="group"]')!);
-    expect(screen.getByText('Actions')).toBeInTheDocument();
-  });
-});
-```
-
-Create `web/src/lib/components/people/people-visibility-modal.spec.ts`:
-
-```ts
-import '@testing-library/jest-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import PeopleVisibilityModalWrapper from './people-visibility-modal.test-wrapper.svelte';
-
-const makePerson = (overrides = {}) => ({
-  id: 'p1',
-  displayName: 'Alice',
-  thumbnailUrl: '/thumb.jpg',
-  isHidden: false,
-  ...overrides,
-});
-
-describe('PeopleVisibilityModal', () => {
-  it('preserves local hidden overrides when people are appended', async () => {
-    const saveVisibilityChanges = vi.fn().mockResolvedValue({ successCount: 1, failCount: 0 });
-    const onUpdate = vi.fn();
-    const onClose = vi.fn();
-    const { rerender } = render(PeopleVisibilityModalWrapper, {
-      props: {
-        people: [makePerson({ id: 'p1', displayName: 'Alice' })],
-        saveVisibilityChanges,
-        onUpdate,
-        onClose,
-      },
-    });
-
-    await fireEvent.click(screen.getByTestId('visibility-person-p1'));
-    expect(screen.getByTestId('visibility-person-p1')).toHaveAttribute('aria-pressed', 'true');
-
-    await rerender({
-      people: [makePerson({ id: 'p1', displayName: 'Alice' }), makePerson({ id: 'p2', displayName: 'Bob' })],
-      saveVisibilityChanges,
-      onUpdate,
-      onClose,
-    });
-
-    expect(screen.getByTestId('visibility-person-p1')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('visibility-person-p2')).toHaveAttribute('aria-pressed', 'false');
-  });
-
-  it('saves only changed people and returns updated local people', async () => {
-    const saveVisibilityChanges = vi.fn().mockResolvedValue({ successCount: 1, failCount: 0 });
-    const onUpdate = vi.fn();
-    const onClose = vi.fn();
-    render(PeopleVisibilityModalWrapper, {
-      props: {
-        people: [makePerson({ id: 'p1', isHidden: false }), makePerson({ id: 'p2', isHidden: true })],
-        saveVisibilityChanges,
-        onUpdate,
-        onClose,
-      },
-    });
-
-    await fireEvent.click(screen.getByTestId('visibility-person-p1'));
-    await fireEvent.click(screen.getByTestId('save-visibility'));
-
-    await waitFor(() => {
-      expect(saveVisibilityChanges).toHaveBeenCalledWith([{ id: 'p1', isHidden: true }]);
-      expect(onUpdate).toHaveBeenCalledWith([
-        expect.objectContaining({ id: 'p1', isHidden: true }),
-        expect.objectContaining({ id: 'p2', isHidden: true }),
-      ]);
-      expect(onClose).toHaveBeenCalled();
-    });
-  });
-
-  it('treats displayName as the named-person value for hide unnamed', async () => {
-    render(PeopleVisibilityModalWrapper, {
-      props: {
-        people: [makePerson({ id: 'p1', displayName: 'Alias' }), makePerson({ id: 'p2', displayName: '' })],
-        saveVisibilityChanges: vi.fn().mockResolvedValue({ successCount: 1, failCount: 0 }),
-        onUpdate: vi.fn(),
-        onClose: vi.fn(),
-      },
-    });
-
-    await fireEvent.click(screen.getByLabelText('hide_unnamed_people'));
-
-    expect(screen.getByTestId('visibility-person-p1')).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByTestId('visibility-person-p2')).toHaveAttribute('aria-pressed', 'true');
-  });
-});
-```
-
-- [ ] **Step 2: Run shared component tests and verify missing components fail**
+- [ ] **Step 2: Run the grid test and verify it fails**
 
 Run:
 
 ```bash
-pnpm --dir web exec vitest run src/lib/components/people/people-grid.spec.ts src/lib/components/people/person-tile.spec.ts src/lib/components/people/people-visibility-modal.spec.ts
+pnpm --dir web exec vitest run src/lib/components/people/people-grid.spec.ts
 ```
 
-Expected: tests fail because the new components do not exist yet.
+Expected: the test fails because `people-grid.test-wrapper.svelte` and `people-grid.svelte` do not exist yet.
 
 - [ ] **Step 3: Create shared type contracts**
 
@@ -533,7 +397,68 @@ git add web/src/lib/components/people/people-types.ts web/src/lib/components/peo
 git commit -m "feat: add shared people grid"
 ```
 
-- [ ] **Step 7: Create `PersonTile` and its test wrapper**
+- [ ] **Step 7: Write the failing tile test**
+
+Create `web/src/lib/components/people/person-tile.spec.ts`:
+
+```ts
+import '@testing-library/jest-dom';
+import { fireEvent, render, screen } from '@testing-library/svelte';
+import PersonTileWrapper from './person-tile.test-wrapper.svelte';
+
+const person = {
+  id: 'p1',
+  displayName: 'Mom',
+  canonicalName: 'Alice',
+  thumbnailUrl: '/thumbnail.jpg',
+  href: '/people/p1',
+  isHidden: false,
+  isFavorite: true,
+  type: 'pet',
+  species: 'Dog',
+};
+
+describe('PersonTile', () => {
+  it('renders link, thumbnail title, favorite badge, pet badge, and footer slot', () => {
+    const { baseElement } = render(PersonTileWrapper, {
+      props: {
+        person,
+        showFooter: true,
+      },
+    });
+
+    expect(baseElement.querySelector('a[href="/people/p1"]')).toBeInTheDocument();
+    expect(screen.getByTitle('Mom')).toBeInTheDocument();
+    expect(screen.getByTitle('Dog')).toBeInTheDocument();
+    expect(screen.getByText('Footer content')).toBeInTheDocument();
+  });
+
+  it('renders the action menu slot only on hover when provided', async () => {
+    const { baseElement } = render(PersonTileWrapper, {
+      props: {
+        person,
+        showActionMenu: true,
+      },
+    });
+
+    expect(screen.queryByText('Actions')).not.toBeInTheDocument();
+    await fireEvent.mouseEnter(baseElement.querySelector('[role="group"]')!);
+    expect(screen.getByText('Actions')).toBeInTheDocument();
+  });
+});
+```
+
+- [ ] **Step 8: Run the tile test and verify it fails**
+
+Run:
+
+```bash
+pnpm --dir web exec vitest run src/lib/components/people/person-tile.spec.ts
+```
+
+Expected: the test fails because `person-tile.test-wrapper.svelte` and `person-tile.svelte` do not exist yet.
+
+- [ ] **Step 9: Create `PersonTile` and its test wrapper**
 
 Create `web/src/lib/components/people/person-tile.svelte` with this contract:
 
@@ -635,7 +560,7 @@ Create `web/src/lib/components/people/person-tile.test-wrapper.svelte`:
 </TooltipProvider>
 ```
 
-- [ ] **Step 8: Run the tile test**
+- [ ] **Step 10: Run the tile test**
 
 Run:
 
@@ -645,7 +570,7 @@ pnpm --dir web exec vitest run src/lib/components/people/person-tile.spec.ts
 
 Expected: the tile test passes.
 
-- [ ] **Step 9: Commit shared tile extraction**
+- [ ] **Step 11: Commit shared tile extraction**
 
 Run:
 
@@ -654,7 +579,106 @@ git add web/src/lib/components/people/person-tile.svelte web/src/lib/components/
 git commit -m "feat: add shared person tile"
 ```
 
-- [ ] **Step 10: Create `PeopleVisibilityModal` and wrapper**
+- [ ] **Step 12: Write the failing visibility modal test**
+
+Create `web/src/lib/components/people/people-visibility-modal.spec.ts`:
+
+```ts
+import '@testing-library/jest-dom';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import PeopleVisibilityModalWrapper from './people-visibility-modal.test-wrapper.svelte';
+
+const makePerson = (overrides = {}) => ({
+  id: 'p1',
+  displayName: 'Alice',
+  thumbnailUrl: '/thumb.jpg',
+  isHidden: false,
+  ...overrides,
+});
+
+describe('PeopleVisibilityModal', () => {
+  it('preserves local hidden overrides when people are appended', async () => {
+    const saveVisibilityChanges = vi.fn().mockResolvedValue({ successCount: 1, failCount: 0 });
+    const onUpdate = vi.fn();
+    const onClose = vi.fn();
+    const { rerender } = render(PeopleVisibilityModalWrapper, {
+      props: {
+        people: [makePerson({ id: 'p1', displayName: 'Alice' })],
+        saveVisibilityChanges,
+        onUpdate,
+        onClose,
+      },
+    });
+
+    await fireEvent.click(screen.getByTestId('visibility-person-p1'));
+    expect(screen.getByTestId('visibility-person-p1')).toHaveAttribute('aria-pressed', 'true');
+
+    await rerender({
+      people: [makePerson({ id: 'p1', displayName: 'Alice' }), makePerson({ id: 'p2', displayName: 'Bob' })],
+      saveVisibilityChanges,
+      onUpdate,
+      onClose,
+    });
+
+    expect(screen.getByTestId('visibility-person-p1')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('visibility-person-p2')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('saves only changed people and returns updated local people', async () => {
+    const saveVisibilityChanges = vi.fn().mockResolvedValue({ successCount: 1, failCount: 0 });
+    const onUpdate = vi.fn();
+    const onClose = vi.fn();
+    render(PeopleVisibilityModalWrapper, {
+      props: {
+        people: [makePerson({ id: 'p1', isHidden: false }), makePerson({ id: 'p2', isHidden: true })],
+        saveVisibilityChanges,
+        onUpdate,
+        onClose,
+      },
+    });
+
+    await fireEvent.click(screen.getByTestId('visibility-person-p1'));
+    await fireEvent.click(screen.getByTestId('save-visibility'));
+
+    await waitFor(() => {
+      expect(saveVisibilityChanges).toHaveBeenCalledWith([{ id: 'p1', isHidden: true }]);
+      expect(onUpdate).toHaveBeenCalledWith([
+        expect.objectContaining({ id: 'p1', isHidden: true }),
+        expect.objectContaining({ id: 'p2', isHidden: true }),
+      ]);
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  it('treats displayName as the named-person value for hide unnamed', async () => {
+    render(PeopleVisibilityModalWrapper, {
+      props: {
+        people: [makePerson({ id: 'p1', displayName: 'Alias' }), makePerson({ id: 'p2', displayName: '' })],
+        saveVisibilityChanges: vi.fn().mockResolvedValue({ successCount: 1, failCount: 0 }),
+        onUpdate: vi.fn(),
+        onClose: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(screen.getByLabelText('hide_unnamed_people'));
+
+    expect(screen.getByTestId('visibility-person-p1')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('visibility-person-p2')).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+```
+
+- [ ] **Step 13: Run the visibility modal test and verify it fails**
+
+Run:
+
+```bash
+pnpm --dir web exec vitest run src/lib/components/people/people-visibility-modal.spec.ts
+```
+
+Expected: the test fails because `people-visibility-modal.test-wrapper.svelte` and `people-visibility-modal.svelte` do not exist yet.
+
+- [ ] **Step 14: Create `PeopleVisibilityModal` and wrapper**
 
 Create `web/src/lib/components/people/people-visibility-modal.svelte` using the existing global/space modal behavior:
 
@@ -860,7 +884,7 @@ Create `web/src/lib/components/people/people-visibility-modal.test-wrapper.svelt
 </TooltipProvider>
 ```
 
-- [ ] **Step 11: Run the visibility modal test**
+- [ ] **Step 15: Run the visibility modal test**
 
 Run:
 
@@ -870,7 +894,7 @@ pnpm --dir web exec vitest run src/lib/components/people/people-visibility-modal
 
 Expected: the visibility modal test passes.
 
-- [ ] **Step 12: Commit shared visibility modal extraction**
+- [ ] **Step 16: Commit shared visibility modal extraction**
 
 Run:
 
@@ -879,7 +903,7 @@ git add web/src/lib/components/people/people-visibility-modal.svelte web/src/lib
 git commit -m "feat: add shared people visibility modal"
 ```
 
-- [ ] **Step 13: Run all shared component tests**
+- [ ] **Step 17: Run all shared component tests**
 
 Run:
 
@@ -889,7 +913,7 @@ pnpm --dir web exec vitest run src/lib/components/people/people-grid.spec.ts src
 
 Expected: all shared component tests pass.
 
-- [ ] **Step 14: Confirm Task 2 commit boundaries**
+- [ ] **Step 18: Confirm Task 2 commit boundaries**
 
 Run:
 
