@@ -430,7 +430,7 @@
               <div class="flex flex-col items-center gap-1">
                 <p class="font-bold">{lat.toPrecision(6)}, {lon.toPrecision(6)}</p>
                 <div class="flex flex-col items-center gap-1">
-                  {#each mapProviderLinks as link}
+                  {#each mapProviderLinks as link (link.key)}
                     <a
                       href={link.url}
                       target="_blank"

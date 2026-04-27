@@ -6,6 +6,12 @@ export const getExifCount = (asset: AssetResponseDto) => {
 
 const coordinates = (lat: number, lon: number) => `${lat},${lon}`;
 
+type MapProviderLink = {
+  key: 'google' | 'apple' | 'openStreetMap';
+  label: 'open_in_google_maps' | 'open_in_apple_maps' | 'open_in_openstreetmap';
+  url: string;
+};
+
 export const getGoogleMapsUrl = (lat: number, lon: number) => {
   const url = new URL('https://www.google.com/maps/search/');
   url.searchParams.set('api', '1');
@@ -29,7 +35,7 @@ export const getOpenStreetMapUrl = (lat: number, lon: number) => {
   return url.toString();
 };
 
-export const getMapProviderLinks = (lat: number, lon: number) => [
+export const getMapProviderLinks = (lat: number, lon: number): MapProviderLink[] => [
   {
     key: 'google',
     label: 'open_in_google_maps',
