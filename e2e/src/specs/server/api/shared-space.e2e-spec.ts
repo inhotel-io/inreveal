@@ -1882,19 +1882,20 @@ describe('/shared-spaces', () => {
 
         it('updates, persists, lists, and clears birthDate', async () => {
           const scratch = await utils.createSpacePerson(spaceId, 'BirthDatePerson', owner.userId, spaceAssetId);
+          const expectedBirthDate = '1984-05-09T00:00:00.000Z';
 
           const putRes = await request(app)
             .put(`/shared-spaces/${spaceId}/people/${scratch.spacePersonId}`)
             .set('Authorization', `Bearer ${owner.accessToken}`)
             .send({ birthDate: '1984-05-09' });
           expect(putRes.status).toBe(200);
-          expect((putRes.body as { birthDate: string | null }).birthDate).toBe('1984-05-09');
+          expect((putRes.body as { birthDate: string | null }).birthDate).toBe(expectedBirthDate);
 
           const direct = await request(app)
             .get(`/shared-spaces/${spaceId}/people/${scratch.spacePersonId}`)
             .set('Authorization', `Bearer ${owner.accessToken}`);
           expect(direct.status).toBe(200);
-          expect((direct.body as { birthDate: string | null }).birthDate).toBe('1984-05-09');
+          expect((direct.body as { birthDate: string | null }).birthDate).toBe(expectedBirthDate);
 
           const listing = await request(app)
             .get(`/shared-spaces/${spaceId}/people?withHidden=true`)
@@ -1903,7 +1904,7 @@ describe('/shared-spaces', () => {
           const listedPerson = (listing.body as Array<{ id: string; birthDate: string | null }>).find(
             ({ id }) => id === scratch.spacePersonId,
           );
-          expect(listedPerson?.birthDate).toBe('1984-05-09');
+          expect(listedPerson?.birthDate).toBe(expectedBirthDate);
 
           const clearRes = await request(app)
             .put(`/shared-spaces/${spaceId}/people/${scratch.spacePersonId}`)
