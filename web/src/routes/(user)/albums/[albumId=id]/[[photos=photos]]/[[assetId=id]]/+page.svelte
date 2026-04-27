@@ -240,8 +240,9 @@
       viewMode === AlbumPageViewMode.VIEW && timelineManager
         ? (ids, visibility) => timelineManager.update(ids, (asset) => (asset.visibility = visibility))
         : undefined,
-    getOnDelete: () => (viewMode === AlbumPageViewMode.VIEW ? handleRemoveAssets : undefined),
-    getOnUndoDelete: () => (viewMode === AlbumPageViewMode.VIEW ? handleUndoRemoveAssets : undefined),
+    getOnDelete: () => (viewMode === AlbumPageViewMode.VIEW && timelineManager ? handleRemoveAssets : undefined),
+    getOnUndoDelete: () =>
+      viewMode === AlbumPageViewMode.VIEW && timelineManager ? handleUndoRemoveAssets : undefined,
   });
 
   $effect(() => {

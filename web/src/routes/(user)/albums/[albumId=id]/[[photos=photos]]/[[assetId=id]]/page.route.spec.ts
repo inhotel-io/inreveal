@@ -151,6 +151,19 @@ describe('album detail filter panel route', () => {
     expect(options.getOnUndoDelete()).toBeUndefined();
   });
 
+  it('does not expose timeline-backed cmdk callbacks before the album timeline manager is bound', () => {
+    renderPage(albumFactory.build({ id: 'without-bound-timeline-manager', assetCount: 2 }));
+
+    expect(registerSelectionContextMock).toHaveBeenCalledOnce();
+    const options = registerSelectionContextMock.mock.calls[0][0];
+    expect(options.canAddToAlbum()).toBe(true);
+    expect(options.getAssets()).toBe(assetMultiSelectManager.assets);
+    expect(options.getOnFavorite()).toBeUndefined();
+    expect(options.getOnArchive()).toBeUndefined();
+    expect(options.getOnDelete()).toBeUndefined();
+    expect(options.getOnUndoDelete()).toBeUndefined();
+  });
+
   it('keeps the filter panel visible when timeline months exist but the manager asset count is zero', async () => {
     renderPage(albumFactory.build({ id: 'timeline-months-only', assetCount: 2 }));
 
