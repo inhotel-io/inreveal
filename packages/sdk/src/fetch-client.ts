@@ -2560,6 +2560,14 @@ export type SystemConfigMapDto = {
     /** Light map style URL */
     lightStyle: string;
 };
+export type SystemConfigMemoriesDto = {
+    /** Birthday memories */
+    birthday: boolean;
+    /** Recent trip memories */
+    recentTrips: boolean;
+    /** Retention days */
+    retentionDays: number;
+};
 export type SystemConfigFacesDto = {
     /** Import */
     "import": boolean;
@@ -2691,6 +2699,7 @@ export type SystemConfigDto = {
     logging: SystemConfigLoggingDto;
     machineLearning: SystemConfigMachineLearningDto;
     map: SystemConfigMapDto;
+    memories: SystemConfigMemoriesDto;
     metadata: SystemConfigMetadataDto;
     newVersionCheck: SystemConfigNewVersionCheckDto;
     nightlyTasks: SystemConfigNightlyTasksDto;
