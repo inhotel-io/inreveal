@@ -14,8 +14,8 @@ that space's add-photos mode, and select assets there.
 
 Add a command-palette command:
 
-| Command id | Label | Scope | Behavior |
-| --- | --- | --- | --- |
+| Command id                   | Label                      | Scope                                       | Behavior                                                                                               |
+| ---------------------------- | -------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `cmd:selection_add_to_space` | `Add selected to space...` | Selected assets on supported timeline pages | Open a modal space picker, choose a writable target space, then add the selected assets to that space. |
 
 This command is a target-space picker. It is separate from
