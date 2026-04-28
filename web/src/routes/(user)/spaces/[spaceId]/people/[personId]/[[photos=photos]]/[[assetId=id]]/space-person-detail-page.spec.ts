@@ -1,4 +1,5 @@
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
+import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import {
   SharedSpaceRole,
@@ -12,14 +13,29 @@ import { userAdminFactory } from '@test-data/factories/user-factory';
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
+import type { Component } from 'svelte';
+import { load } from './+page';
 import SpacePersonDetailPage from './+page.svelte';
 
-const { gotoMock, invalidateAllMock } = vi.hoisted(() => ({
+const { gotoMock, invalidateAllMock, authenticateMock, mockAssetMultiSelectManager } = vi.hoisted(() => ({
   gotoMock: vi.fn(),
   invalidateAllMock: vi.fn(),
+  authenticateMock: vi.fn(),
+  mockAssetMultiSelectManager: {
+    selectionActive: false,
+    assets: [],
+    clear: vi.fn(),
+    isAllUserOwned: true,
+    isAllFavorite: false,
+    isAllArchived: false,
+  },
 }));
 
 vi.mock('$app/navigation', () => ({ goto: gotoMock, invalidateAll: invalidateAllMock }));
+vi.mock('$lib/utils/auth', () => ({ authenticate: authenticateMock }));
+vi.mock('$lib/managers/asset-multi-select-manager.svelte', () => ({
+  assetMultiSelectManager: mockAssetMultiSelectManager,
+}));
 
 vi.mock('@immich/ui', async (importOriginal) => {
   const original = await importOriginal<typeof import('@immich/ui')>();
@@ -32,8 +48,13 @@ vi.mock('@immich/ui', async (importOriginal) => {
   };
 });
 
-vi.mock('$lib/components/layouts/user-page-layout.svelte', async () => {
-  const { default: MockComponent } = await import('$lib/components/spaces/mock-user-page-layout.test-wrapper.svelte');
+vi.mock('$lib/components/timeline/Timeline.svelte', async () => {
+  const { default: MockComponent } = await import('./mock-space-person-timeline.test-wrapper.svelte');
+  return { default: MockComponent };
+});
+
+vi.mock('$lib/components/assets/thumbnail/image-thumbnail.svelte', async () => {
+  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
   return { default: MockComponent };
 });
 
@@ -94,17 +115,19 @@ function renderPage({
   authManager.setUser(currentUser);
   authManager.setPreferences(preferencesFactory.build());
 
-  return render(SpacePersonDetailPage, {
-    props: {
-      data: {
-        space: makeSpace(),
-        members,
-        person,
-        assetIds: ['asset-1'],
-        action,
-        meta: { title: 'Alice - Test Space' },
-      },
+  const props = {
+    data: {
+      space: makeSpace(),
+      members,
+      person,
+      action,
+      meta: { title: 'Alice - Test Space' },
     },
+  };
+
+  return render(TestWrapper as Component<{ component: typeof SpacePersonDetailPage; componentProps: typeof props }>, {
+    component: SpacePersonDetailPage,
+    componentProps: props,
   });
 }
 
@@ -113,6 +136,39 @@ describe('Spaces person detail page', () => {
     vi.resetAllMocks();
     gotoMock.mockResolvedValue(undefined);
     invalidateAllMock.mockResolvedValue(undefined);
+    authenticateMock.mockResolvedValue(undefined);
+    mockAssetMultiSelectManager.selectionActive = false;
+    mockAssetMultiSelectManager.assets = [];
+  });
+
+  it('loads person metadata without fetching a separate asset id grid', async () => {
+    const space = makeSpace();
+    const members = [makeMember()];
+    const person = makePerson();
+    sdkMock.getSpace.mockResolvedValue(space);
+    sdkMock.getMembers.mockResolvedValue(members);
+    sdkMock.getSpacePerson.mockResolvedValue(person);
+
+    const result = await load({
+      url: new URL('https://gallery.test/spaces/space-1/people/person-1'),
+      params: { spaceId: 'space-1', personId: 'person-1' },
+    } as never);
+
+    expect(result).toMatchObject({ space, members, person, action: null });
+    expect(sdkMock.getSpacePersonAssets).not.toHaveBeenCalled();
+  });
+
+  it('uses the shared timeline surface for space person photos', () => {
+    renderPage();
+
+    expect(screen.getByTestId('space-person-timeline')).toHaveAttribute('data-enable-routing', 'true');
+    expect(screen.getByTestId('space-person-timeline')).toHaveAttribute('data-space-id', 'space-1');
+    expect(JSON.parse(screen.getByTestId('timeline-options').textContent ?? '{}')).toEqual({
+      spaceId: 'space-1',
+      spacePersonId: 'person-1',
+      withStacked: true,
+    });
+    expect(screen.queryByTestId('person-asset-asset-1')).not.toBeInTheDocument();
   });
 
   it('does not expose person actions to viewers', () => {
