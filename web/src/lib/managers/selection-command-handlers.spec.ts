@@ -1,3 +1,4 @@
+import { MAX_SPACE_ASSETS_PER_REQUEST } from '$lib/constants';
 import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
 import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
 import AssetAddToAlbumModal from '$lib/modals/AssetAddToAlbumModal.svelte';
@@ -91,7 +92,10 @@ const makeSelection = (overrides: Partial<SelectionCommandContext> = {}): Select
   };
 };
 
-const makeCtx = (selection: SelectionCommandContext | null): CommandContext => ({
+const makeCtx = (
+  selection: SelectionCommandContext | null,
+  overrides: Partial<CommandContext> = {},
+): CommandContext => ({
   routeId: '/(user)/photos/[[assetId=id]]',
   params: {},
   album: null,
@@ -99,6 +103,18 @@ const makeCtx = (selection: SelectionCommandContext | null): CommandContext => (
   selection,
   userId: 'u-me',
   isAdmin: false,
+  ...overrides,
+});
+
+const makeWritableSpaceContext = (): NonNullable<CommandContext['space']> => ({
+  id: 'space-1',
+  name: 'Writable Space',
+  createdById: 'u-me',
+  isOwner: true,
+  isMember: true,
+  canWrite: true,
+  raw: { id: 'space-1', name: 'Writable Space', createdById: 'u-me' } as never,
+  members: [],
 });
 
 let handleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -126,13 +142,49 @@ describe('selection command availability', () => {
     expect(canAddSelectedToAlbum(makeCtx(null))).toBe(false);
   });
 
-  it('canAddSelectedToCurrentSpace is true only when selection.addSelectedToCurrentSpace exists', () => {
+  it('canAddSelectedToCurrentSpace requires a writable space, callback, and in-limit selection count', () => {
+    const selection = makeSelection({ addSelectedToCurrentSpace: vi.fn().mockResolvedValue(true) });
     expect(
       canAddSelectedToCurrentSpace(
-        makeCtx(makeSelection({ addSelectedToCurrentSpace: vi.fn().mockResolvedValue(true) })),
+        makeCtx(selection, { routeId: '/(user)/spaces/[spaceId]', space: makeWritableSpaceContext() }),
       ),
     ).toBe(true);
-    expect(canAddSelectedToCurrentSpace(makeCtx(makeSelection({ addSelectedToCurrentSpace: undefined })))).toBe(false);
+    expect(canAddSelectedToCurrentSpace(makeCtx(selection))).toBe(false);
+    expect(
+      canAddSelectedToCurrentSpace(
+        makeCtx(selection, {
+          routeId: '/(user)/spaces/[spaceId]',
+          space: { ...makeWritableSpaceContext(), canWrite: false },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      canAddSelectedToCurrentSpace(
+        makeCtx(makeSelection({ addSelectedToCurrentSpace: undefined }), {
+          routeId: '/(user)/spaces/[spaceId]',
+          space: makeWritableSpaceContext(),
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      canAddSelectedToCurrentSpace(
+        makeCtx(makeSelection({ selectedAssetIds: [] }), {
+          routeId: '/(user)/spaces/[spaceId]',
+          space: makeWritableSpaceContext(),
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      canAddSelectedToCurrentSpace(
+        makeCtx(
+          makeSelection({
+            selectedAssetIds: Array.from({ length: MAX_SPACE_ASSETS_PER_REQUEST + 1 }, (_, index) => `asset-${index}`),
+            addSelectedToCurrentSpace: vi.fn().mockResolvedValue(true),
+          }),
+          { routeId: '/(user)/spaces/[spaceId]', space: makeWritableSpaceContext() },
+        ),
+      ),
+    ).toBe(false);
     expect(canAddSelectedToCurrentSpace(makeCtx(null))).toBe(false);
   });
 
@@ -207,7 +259,11 @@ describe('add selected to current space', () => {
     const addSelectedToCurrentSpace = vi.fn().mockResolvedValue(true);
     const selection = makeSelection({ addSelectedToCurrentSpace });
 
-    await expect(handleAddSelectedToCurrentSpace(makeCtx(selection))).resolves.toBe(true);
+    await expect(
+      handleAddSelectedToCurrentSpace(
+        makeCtx(selection, { routeId: '/(user)/spaces/[spaceId]', space: makeWritableSpaceContext() }),
+      ),
+    ).resolves.toBe(true);
 
     expect(addSelectedToCurrentSpace).toHaveBeenCalledOnce();
     expect(updateAssets).not.toHaveBeenCalled();

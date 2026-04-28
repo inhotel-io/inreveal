@@ -1,6 +1,6 @@
 import { goto } from '$app/navigation';
 import en from '$i18n/en.json';
-import { ADMIN_VISIBLE_QUEUES } from '$lib/constants';
+import { ADMIN_VISIBLE_QUEUES, MAX_SPACE_ASSETS_PER_REQUEST } from '$lib/constants';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import * as selectionHandlers from '$lib/managers/selection-command-handlers';
 import { Route } from '$lib/route';
@@ -185,6 +185,26 @@ describe('selection-context commands', () => {
     isAdmin: false,
   });
 
+  const makeSpaceCtx = (
+    selection: SelectionContext | null = makeSelection(),
+    overrides: Partial<CommandContext> = {},
+  ): CommandContext => ({
+    ...makeCtx(selection),
+    routeId: '/(user)/spaces/[spaceId]',
+    params: { spaceId: 'space-1' },
+    space: {
+      id: 'space-1',
+      name: 'Writable Space',
+      createdById: 'test-user',
+      isOwner: true,
+      isMember: true,
+      canWrite: true,
+      raw: { id: 'space-1', name: 'Writable Space', createdById: 'test-user' } as never,
+      members: [],
+    },
+    ...overrides,
+  });
+
   const cmd = (id: string) => COMMAND_ITEMS.find((item) => item.id === id)!;
 
   beforeEach(() => {
@@ -245,10 +265,38 @@ describe('selection-context commands', () => {
     expect(item.isAvailable!(makeCtx(null))).toBe(false);
   });
 
-  it('add-to-current-space shows only when selection.addSelectedToCurrentSpace exists', () => {
+  it('add-to-current-space requires a writable space, callback, and in-limit selection count', () => {
     const item = cmd('cmd:selection_add_to_current_space');
-    expect(item.isAvailable!(makeCtx(makeSelection({ addSelectedToCurrentSpace: vi.fn() })))).toBe(true);
-    expect(item.isAvailable!(makeCtx(makeSelection({ addSelectedToCurrentSpace: undefined })))).toBe(false);
+    expect(item.isAvailable!(makeSpaceCtx(makeSelection({ addSelectedToCurrentSpace: vi.fn() })))).toBe(true);
+    expect(item.isAvailable!(makeCtx(makeSelection({ addSelectedToCurrentSpace: vi.fn() })))).toBe(false);
+    expect(
+      item.isAvailable!(
+        makeSpaceCtx(makeSelection({ addSelectedToCurrentSpace: vi.fn() }), {
+          space: { ...makeSpaceCtx().space!, canWrite: false },
+        }),
+      ),
+    ).toBe(false);
+    expect(item.isAvailable!(makeSpaceCtx(makeSelection({ addSelectedToCurrentSpace: undefined })))).toBe(false);
+    expect(
+      item.isAvailable!(
+        makeSpaceCtx(
+          makeSelection({
+            selectedAssetIds: [],
+            addSelectedToCurrentSpace: vi.fn(),
+          }),
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      item.isAvailable!(
+        makeSpaceCtx(
+          makeSelection({
+            selectedAssetIds: Array.from({ length: MAX_SPACE_ASSETS_PER_REQUEST + 1 }, (_, index) => `asset-${index}`),
+            addSelectedToCurrentSpace: vi.fn(),
+          }),
+        ),
+      ),
+    ).toBe(false);
     expect(item.isAvailable!(makeCtx(null))).toBe(false);
   });
 

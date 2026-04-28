@@ -1,3 +1,4 @@
+import { MAX_SPACE_ASSETS_PER_REQUEST } from '$lib/constants';
 import type { CommandContext, SelectionCommandContext } from '$lib/managers/command-context-manager.svelte';
 import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
 import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
@@ -21,7 +22,13 @@ export const canAddSelectedToAlbum = (ctx: CommandContext) => {
 
 export const canAddSelectedToCurrentSpace = (ctx: CommandContext) => {
   const selection = getSelection(ctx);
-  return selection?.addSelectedToCurrentSpace !== undefined;
+  const selectedCount = selection?.selectedAssetIds.length ?? 0;
+  return (
+    ctx.space?.canWrite === true &&
+    selection?.addSelectedToCurrentSpace !== undefined &&
+    selectedCount > 0 &&
+    selectedCount <= MAX_SPACE_ASSETS_PER_REQUEST
+  );
 };
 
 export const canAddSelectedToSpace = (ctx: CommandContext) => {
@@ -65,11 +72,10 @@ export function handleAddSelectedToSpace(ctx?: CommandContext) {
 }
 
 export async function handleAddSelectedToCurrentSpace(ctx?: CommandContext) {
-  const addSelectedToCurrentSpace = getSelection(ctx)?.addSelectedToCurrentSpace;
-  if (!addSelectedToCurrentSpace) {
+  if (!ctx || !canAddSelectedToCurrentSpace(ctx)) {
     return false;
   }
-  return addSelectedToCurrentSpace();
+  return getSelection(ctx)?.addSelectedToCurrentSpace?.() ?? false;
 }
 
 export async function handleFavoriteSelected(ctx?: CommandContext) {

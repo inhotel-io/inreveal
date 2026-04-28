@@ -20,9 +20,7 @@
   import SpaceMap from '$lib/components/spaces/space-map.svelte';
   import SpaceNewAssetsDivider from '$lib/components/spaces/space-new-assets-divider.svelte';
   import SpaceOnboardingBanner from '$lib/components/spaces/space-onboarding-banner.svelte';
-  import SpaceAssetLimitWarning, {
-    MAX_SPACE_ASSETS_PER_REQUEST,
-  } from '$lib/components/spaces/space-asset-limit-warning.svelte';
+  import SpaceAssetLimitWarning from '$lib/components/spaces/space-asset-limit-warning.svelte';
   import SpacePanel from '$lib/components/spaces/space-panel.svelte';
   import SpacePeopleStrip from '$lib/components/spaces/space-people-strip.svelte';
   import SpaceLinkedLibrariesModal from '$lib/modals/SpaceLinkedLibrariesModal.svelte';
@@ -42,6 +40,7 @@
   import { registerSelectionContext, registerSpaceContext } from '$lib/managers/command-context-manager.svelte';
   import { eventManager } from '$lib/managers/event-manager.svelte';
   import { Route } from '$lib/route';
+  import { MAX_SPACE_ASSETS_PER_REQUEST } from '$lib/constants';
   import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { createUrl } from '$lib/utils';
