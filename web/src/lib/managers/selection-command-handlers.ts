@@ -2,6 +2,7 @@ import type { CommandContext, SelectionCommandContext } from '$lib/managers/comm
 import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
 import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
 import AssetAddToAlbumModal from '$lib/modals/AssetAddToAlbumModal.svelte';
+import AssetAddToSpaceModal from '$lib/modals/AssetAddToSpaceModal.svelte';
 import AssetDeleteConfirmModal from '$lib/modals/AssetDeleteConfirmModal.svelte';
 import { showDeleteModal } from '$lib/stores/preferences.store';
 import type { OnUndoDelete } from '$lib/utils/actions';
@@ -21,6 +22,11 @@ export const canAddSelectedToAlbum = (ctx: CommandContext) => {
 export const canAddSelectedToCurrentSpace = (ctx: CommandContext) => {
   const selection = getSelection(ctx);
   return selection?.addSelectedToCurrentSpace !== undefined;
+};
+
+export const canAddSelectedToSpace = (ctx: CommandContext) => {
+  const selection = getSelection(ctx);
+  return selection !== null && selection.canAddToSpace;
 };
 
 export const canFavoriteSelected = (ctx: CommandContext) => {
@@ -48,6 +54,14 @@ export function handleAddSelectedToAlbum(ctx?: CommandContext) {
     return;
   }
   return modalManager.show(AssetAddToAlbumModal, { assetIds: selection.selectedAssetIds });
+}
+
+export function handleAddSelectedToSpace(ctx?: CommandContext) {
+  const selection = getSelection(ctx);
+  if (!selection?.canAddToSpace) {
+    return;
+  }
+  return modalManager.show(AssetAddToSpaceModal, { assetIds: selection.selectedAssetIds });
 }
 
 export async function handleAddSelectedToCurrentSpace(ctx?: CommandContext) {

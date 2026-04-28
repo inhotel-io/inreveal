@@ -2348,6 +2348,7 @@ describe('commands provider', () => {
         getAssets: () => [makeTimelineAsset({ id: 'asset-1', ownerId: 'test-user' })],
         clearSelection: vi.fn(),
         canAddToAlbum: () => true,
+        canAddToSpace: () => true,
         getOnFavorite: () => vi.fn(),
         getOnArchive: () => vi.fn(),
         getOnDelete: () => vi.fn(),
@@ -2363,6 +2364,7 @@ describe('commands provider', () => {
       expect(section.items.map((item) => item.id)).toEqual(
         expect.arrayContaining([
           'cmd:selection_add_to_album',
+          'cmd:selection_add_to_space',
           'cmd:selection_favorite',
           'cmd:selection_archive',
           'cmd:selection_delete',

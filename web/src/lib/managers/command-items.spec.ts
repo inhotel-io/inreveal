@@ -56,6 +56,7 @@ vi.mock('$lib/managers/selection-command-handlers', async () => {
     ...actual,
     handleAddSelectedToAlbum: vi.fn(),
     handleAddSelectedToCurrentSpace: vi.fn(),
+    handleAddSelectedToSpace: vi.fn(),
     handleFavoriteSelected: vi.fn(),
     handleArchiveSelected: vi.fn(),
     handleDeleteSelected: vi.fn(),
@@ -109,8 +110,8 @@ describe('COMMAND_ITEMS', () => {
     expect(COMMAND_ITEMS.find((c) => c.id === 'cmd:theme')).toBeDefined();
   });
 
-  it('has 30 entries (7 v1.3.0 + 8 v1.3.1 + 5 v1.4 album + 5 v1.4 space + 5 v1.5A selection)', () => {
-    expect(COMMAND_ITEMS).toHaveLength(30);
+  it('has 32 entries (7 v1.3.0 + 8 v1.3.1 + 5 v1.4 album + 6 v1.4 space + 6 v1.5A selection)', () => {
+    expect(COMMAND_ITEMS).toHaveLength(32);
   });
 
   it('CommandItem type allows isAvailable and destructive', () => {
@@ -162,6 +163,7 @@ describe('selection-context commands', () => {
     ownedAssets: [],
     ownedSelectedAssetIds: ['asset-1'],
     canAddToAlbum: true,
+    canAddToSpace: true,
     isAllUserOwned: true,
     isAllFavorite: false,
     isAllArchived: false,
@@ -188,6 +190,7 @@ describe('selection-context commands', () => {
   beforeEach(() => {
     vi.mocked(selectionHandlers.handleAddSelectedToAlbum).mockClear();
     vi.mocked(selectionHandlers.handleAddSelectedToCurrentSpace).mockClear();
+    vi.mocked(selectionHandlers.handleAddSelectedToSpace).mockClear();
     vi.mocked(selectionHandlers.handleFavoriteSelected).mockClear();
     vi.mocked(selectionHandlers.handleArchiveSelected).mockClear();
     vi.mocked(selectionHandlers.handleDeleteSelected).mockClear();
@@ -195,6 +198,7 @@ describe('selection-context commands', () => {
 
   it('registers all selection command ids', () => {
     expect(cmd('cmd:selection_add_to_album')).toBeDefined();
+    expect(cmd('cmd:selection_add_to_space')).toBeDefined();
     expect(cmd('cmd:selection_add_to_current_space')).toBeDefined();
     expect(cmd('cmd:selection_favorite')).toBeDefined();
     expect(cmd('cmd:selection_archive')).toBeDefined();
@@ -205,6 +209,7 @@ describe('selection-context commands', () => {
     expect(cmd('cmd:selection_delete').destructive).toBe(true);
     for (const id of [
       'cmd:selection_add_to_album',
+      'cmd:selection_add_to_space',
       'cmd:selection_add_to_current_space',
       'cmd:selection_favorite',
       'cmd:selection_archive',
@@ -215,6 +220,7 @@ describe('selection-context commands', () => {
 
   it.each([
     ['cmd:selection_add_to_album', selectionHandlers.handleAddSelectedToAlbum],
+    ['cmd:selection_add_to_space', selectionHandlers.handleAddSelectedToSpace],
     ['cmd:selection_add_to_current_space', selectionHandlers.handleAddSelectedToCurrentSpace],
     ['cmd:selection_favorite', selectionHandlers.handleFavoriteSelected],
     ['cmd:selection_archive', selectionHandlers.handleArchiveSelected],
@@ -229,6 +235,13 @@ describe('selection-context commands', () => {
     const item = cmd('cmd:selection_add_to_album');
     expect(item.isAvailable!(makeCtx(makeSelection({ canAddToAlbum: true })))).toBe(true);
     expect(item.isAvailable!(makeCtx(makeSelection({ canAddToAlbum: false })))).toBe(false);
+    expect(item.isAvailable!(makeCtx(null))).toBe(false);
+  });
+
+  it('add-to-space shows only when selection.canAddToSpace is true', () => {
+    const item = cmd('cmd:selection_add_to_space');
+    expect(item.isAvailable!(makeCtx(makeSelection({ canAddToSpace: true })))).toBe(true);
+    expect(item.isAvailable!(makeCtx(makeSelection({ canAddToSpace: false })))).toBe(false);
     expect(item.isAvailable!(makeCtx(null))).toBe(false);
   });
 
@@ -722,6 +735,40 @@ describe('space-context commands', () => {
     handleErrorSpy.mockRestore();
   });
 
+  describe('cmd:space_add_photos', () => {
+    const cmd = () => COMMAND_ITEMS.find((c) => c.id === 'cmd:space_add_photos')!;
+    it('hides when space is null', () => {
+      expect(cmd().isAvailable!(ctxNoSpace())).toBe(false);
+    });
+    it('hides when the page does not expose an add-photos callback', () => {
+      expect(cmd().isAvailable!(makeCtx())).toBe(false);
+    });
+    it('hides for viewers even if a callback is present', () => {
+      expect(
+        cmd().isAvailable!(
+          makeCtx({
+            space: { ...ctxViewer().space!, addPhotosToCurrentSpace: vi.fn() },
+          }),
+        ),
+      ).toBe(false);
+    });
+    it('shows when the writable space page exposes an add-photos callback', () => {
+      const addPhotosToCurrentSpace = vi.fn();
+      expect(
+        cmd().isAvailable!(
+          makeCtx({
+            space: { ...makeCtx().space!, addPhotosToCurrentSpace },
+          }),
+        ),
+      ).toBe(true);
+    });
+    it('handler delegates to ctx.space.addPhotosToCurrentSpace', async () => {
+      const addPhotosToCurrentSpace = vi.fn();
+      await cmd().handler(makeCtx({ space: { ...makeCtx().space!, addPhotosToCurrentSpace } }));
+      expect(addPhotosToCurrentSpace).toHaveBeenCalledOnce();
+    });
+  });
+
   describe('cmd:space_manage_members', () => {
     const cmd = () => COMMAND_ITEMS.find((c) => c.id === 'cmd:space_manage_members')!;
     it('hides when space is null', () => {
@@ -861,6 +908,7 @@ describe('space-context commands', () => {
         'cmd:album_share',
         'cmd:album_download',
         'cmd:space_manage_members',
+        'cmd:space_add_photos',
         'cmd:space_add_member',
       ];
       for (const id of nonDestructiveIds) {

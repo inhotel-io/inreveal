@@ -312,6 +312,7 @@ describe('registerSelectionContext', () => {
 
   it('resolves canAddToAlbum and callbacks through live getters', () => {
     let canAddToAlbum = false;
+    let canAddToSpace = false;
     let favorite = vi.fn();
     const archive = vi.fn();
     const onDelete = vi.fn();
@@ -324,6 +325,7 @@ describe('registerSelectionContext', () => {
           getAssets: () => [makeAsset()],
           clearSelection: vi.fn(),
           canAddToAlbum: () => canAddToAlbum,
+          canAddToSpace: () => canAddToSpace,
           getOnFavorite: () => favorite,
           getOnArchive: () => archive,
           getOnDelete: () => onDelete,
@@ -334,8 +336,11 @@ describe('registerSelectionContext', () => {
     });
 
     expect(commandContextManager.getContext().selection?.canAddToAlbum).toBe(false);
+    expect(commandContextManager.getContext().selection?.canAddToSpace).toBe(false);
     canAddToAlbum = true;
+    canAddToSpace = true;
     expect(commandContextManager.getContext().selection?.canAddToAlbum).toBe(true);
+    expect(commandContextManager.getContext().selection?.canAddToSpace).toBe(true);
     expect(commandContextManager.getContext().selection?.onFavorite).toBe(favorite);
     favorite = vi.fn();
     expect(commandContextManager.getContext().selection?.onFavorite).toBe(favorite);
@@ -437,6 +442,23 @@ describe('registerSpaceContext', () => {
     const space = commandContextManager.getContext().space;
     expect(space?.isMember).toBe(false);
     expect(space?.canWrite).toBe(false);
+    unmount();
+  });
+
+  it('passes through the live add-photos callback when provided', () => {
+    mockUser.current = { id: 'u-me', isAdmin: false };
+    const addPhotosToCurrentSpace = vi.fn();
+    const { unmount } = render(RegisterSpaceContextHarness, {
+      props: {
+        spaceThunk: () => makeSpace(),
+        membersThunk: () => [makeMember({ userId: 'u-me', role: SharedSpaceRole.Editor })],
+        options: { getAddPhotosToCurrentSpace: () => addPhotosToCurrentSpace },
+      },
+    });
+
+    expect(commandContextManager.getContext().space?.addPhotosToCurrentSpace).toBe(addPhotosToCurrentSpace);
+    commandContextManager.getContext().space?.addPhotosToCurrentSpace?.();
+    expect(addPhotosToCurrentSpace).toHaveBeenCalledOnce();
     unmount();
   });
 

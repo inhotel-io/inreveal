@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add v1.5A command-palette actions for the current asset selection: add to album, add to this writable space, add to favorites, archive, and delete.
+**Goal:** Add v1.5A command-palette actions for the current asset selection: add to album, add to a writable target space, add to this writable space, add to favorites, archive, and delete.
 
 **Architecture:** Add a route-scoped `SelectionCommandContext` to the existing command context manager, then keep command behavior in a focused handler module that command registry entries delegate to. Pages opt in by registering live selection thunks and page-local update callbacks; command availability is derived from the latest context snapshot at provider and activation time.
 
@@ -15,6 +15,7 @@
 Implement the approved design in:
 
 - `docs/superpowers/specs/2026-04-27-cmdk-v1.5a-selection-commands-design.md`
+- `docs/superpowers/specs/2026-04-28-cmdk-add-selected-to-space-design.md`
 
 The spec is authoritative. If a conflict appears between this plan and the spec, stop and fix the plan or implementation before continuing.
 
@@ -30,13 +31,13 @@ The spec is authoritative. If a conflict appears between this plan and the spec,
   Responsibility: red/green coverage for empty selection, live thunks, dedupe, ownership flags, dynamic callback getters, route gating, and cleanup.
 
 - Create: `web/src/lib/managers/selection-command-handlers.ts`
-  Responsibility: implement the five v1.5A command handlers and their availability predicates without reaching into page globals.
+  Responsibility: implement the six v1.5A command handlers and their availability predicates without reaching into page globals.
 
 - Create: `web/src/lib/managers/selection-command-handlers.spec.ts`
   Responsibility: red/green coverage for modal delegation, SDK calls, page callback calls, clear/no-clear behavior, force delete, undo wiring, and failure paths.
 
 - Modify: `web/src/lib/managers/command-items.ts`
-  Responsibility: register five new `cmd:selection_*` entries with labels, icons, availability predicates, handlers, and destructive delete flag.
+  Responsibility: register six new `cmd:selection_*` entries with labels, icons, availability predicates, handlers, and destructive delete flag.
 
 - Modify: `web/src/lib/managers/command-items.spec.ts`
   Responsibility: update registry-count drift guards and test command availability/handler delegation.
@@ -45,7 +46,7 @@ The spec is authoritative. If a conflict appears between this plan and the spec,
   Responsibility: prove selection commands are provider-gated from live context and activation uses a fresh context snapshot.
 
 - Modify: `i18n/en.json`
-  Responsibility: add English labels/descriptions for the five selection commands.
+  Responsibility: add English labels/descriptions for the six selection commands.
 
 - Modify: `web/src/routes/(user)/photos/[[assetId=id]]/+page.svelte`
   Responsibility: register photo-page selection context matching the existing visible toolbar actions.
@@ -835,8 +836,8 @@ In `web/src/lib/managers/command-items.spec.ts`, update all local `makeCtx()` he
 Update the count test:
 
 ```typescript
-it('has 30 entries (7 v1.3.0 + 8 v1.3.1 + 5 v1.4 album + 5 v1.4 space + 5 v1.5A selection)', () => {
-  expect(COMMAND_ITEMS).toHaveLength(30);
+it('has 32 entries (7 v1.3.0 + 8 v1.3.1 + 5 v1.4 album + 6 v1.4 space + 6 v1.5A selection)', () => {
+  expect(COMMAND_ITEMS).toHaveLength(32);
 });
 ```
 
@@ -984,7 +985,7 @@ pnpm --dir web test --run src/lib/managers/command-items.spec.ts src/lib/manager
 
 Expected: FAIL because command items and i18n keys are not registered yet.
 
-- [ ] **Step 5: Register the five command items**
+- [ ] **Step 5: Register the command items**
 
 In `web/src/lib/managers/command-items.ts`, import handler functions:
 
@@ -1772,7 +1773,7 @@ Expected:
 - `registerSelectionContext` appears only in the context manager, approved page files, tests, and harnesses.
 - `cmd:selection_*` appears only in command registry/tests and global-search tests.
 - `selection_add_to_current_space` appears only in command registry/tests/i18n and space-page tests.
-- `AssetAddToAlbumModal` usage for v1.5A is in `selection-command-handlers.ts`; no secondary picker exists.
+- `AssetAddToAlbumModal` and `AssetAddToSpaceModal` usage for v1.5A is in `selection-command-handlers.ts`; no in-palette secondary picker exists.
 
 - [ ] **Step 4: Commit final fixes if needed**
 

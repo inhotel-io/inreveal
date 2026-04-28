@@ -1,6 +1,7 @@
 import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
 import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
 import AssetAddToAlbumModal from '$lib/modals/AssetAddToAlbumModal.svelte';
+import AssetAddToSpaceModal from '$lib/modals/AssetAddToSpaceModal.svelte';
 import AssetDeleteConfirmModal from '$lib/modals/AssetDeleteConfirmModal.svelte';
 import { showDeleteModal } from '$lib/stores/preferences.store';
 import * as handleErrorModule from '$lib/utils/handle-error';
@@ -12,11 +13,13 @@ import type { CommandContext, SelectionCommandContext } from './command-context-
 import {
   canAddSelectedToAlbum,
   canAddSelectedToCurrentSpace,
+  canAddSelectedToSpace,
   canArchiveSelected,
   canDeleteSelected,
   canFavoriteSelected,
   handleAddSelectedToAlbum,
   handleAddSelectedToCurrentSpace,
+  handleAddSelectedToSpace,
   handleArchiveSelected,
   handleDeleteSelected,
   handleFavoriteSelected,
@@ -74,6 +77,7 @@ const makeSelection = (overrides: Partial<SelectionCommandContext> = {}): Select
     ownedAssets,
     ownedSelectedAssetIds: ownedAssets.map((asset) => asset.id),
     canAddToAlbum: true,
+    canAddToSpace: true,
     isAllUserOwned: true,
     isAllFavorite: assets.every((asset) => asset.isFavorite),
     isAllArchived: assets.every((asset) => asset.visibility === AssetVisibility.Archive),
@@ -132,6 +136,12 @@ describe('selection command availability', () => {
     expect(canAddSelectedToCurrentSpace(makeCtx(null))).toBe(false);
   });
 
+  it('canAddSelectedToSpace is true only when selection.canAddToSpace is true', () => {
+    expect(canAddSelectedToSpace(makeCtx(makeSelection({ canAddToSpace: true })))).toBe(true);
+    expect(canAddSelectedToSpace(makeCtx(makeSelection({ canAddToSpace: false })))).toBe(false);
+    expect(canAddSelectedToSpace(makeCtx(null))).toBe(false);
+  });
+
   it('canFavoriteSelected requires selection, all-owned, onFavorite, and at least one non-favorite asset', () => {
     const asset = makeAsset({ isFavorite: false });
     expect(canFavoriteSelected(makeCtx(makeSelection({ assets: [asset] })))).toBe(true);
@@ -169,6 +179,26 @@ describe('add selected to album', () => {
 
     expect(modalManager.show).toHaveBeenCalledWith(AssetAddToAlbumModal, { assetIds: ['asset-1', 'asset-2'] });
     expect(selection.clearSelection).not.toHaveBeenCalled();
+  });
+});
+
+describe('add selected to space', () => {
+  it('opens AssetAddToSpaceModal with selected asset ids and does not clear selection', async () => {
+    const assets = [makeAsset({ id: 'asset-1' }), makeAsset({ id: 'asset-2' })];
+    const selection = makeSelection({ assets });
+
+    await handleAddSelectedToSpace(makeCtx(selection));
+
+    expect(modalManager.show).toHaveBeenCalledWith(AssetAddToSpaceModal, { assetIds: ['asset-1', 'asset-2'] });
+    expect(selection.clearSelection).not.toHaveBeenCalled();
+  });
+
+  it('no-ops when add-to-space is disabled for the selected page', async () => {
+    const selection = makeSelection({ canAddToSpace: false });
+
+    await handleAddSelectedToSpace(makeCtx(selection));
+
+    expect(modalManager.show).not.toHaveBeenCalled();
   });
 });
 

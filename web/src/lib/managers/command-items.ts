@@ -6,11 +6,13 @@ import type { CommandContext } from '$lib/managers/command-context-manager.svelt
 import {
   canAddSelectedToAlbum,
   canAddSelectedToCurrentSpace,
+  canAddSelectedToSpace,
   canArchiveSelected,
   canDeleteSelected,
   canFavoriteSelected,
   handleAddSelectedToAlbum,
   handleAddSelectedToCurrentSpace,
+  handleAddSelectedToSpace,
   handleArchiveSelected,
   handleDeleteSelected,
   handleFavoriteSelected,
@@ -342,6 +344,14 @@ export const COMMAND_ITEMS: readonly CommandItem[] = [
     handler: handleAddSelectedToAlbum,
   },
   {
+    id: 'cmd:selection_add_to_space',
+    labelKey: 'cmdk_cmd_selection_add_to_space_label',
+    descriptionKey: 'cmdk_cmd_selection_add_to_space_description',
+    icon: mdiImageMultipleOutline,
+    isAvailable: canAddSelectedToSpace,
+    handler: handleAddSelectedToSpace,
+  },
+  {
     id: 'cmd:selection_add_to_current_space',
     labelKey: 'cmdk_cmd_selection_add_to_current_space_label',
     descriptionKey: 'cmdk_cmd_selection_add_to_current_space_description',
@@ -377,6 +387,14 @@ export const COMMAND_ITEMS: readonly CommandItem[] = [
 
   // v1.4 — space-context commands. Visible only on /spaces/[spaceId]/… routes
   // with a registered SpaceContext.
+  {
+    id: 'cmd:space_add_photos',
+    labelKey: 'cmdk_cmd_space_add_photos_label',
+    descriptionKey: 'cmdk_cmd_space_add_photos_description',
+    icon: mdiImagePlusOutline,
+    isAvailable: (ctx) => ctx.space?.canWrite === true && ctx.space.addPhotosToCurrentSpace !== undefined,
+    handler: (ctx) => ctx?.space?.addPhotosToCurrentSpace?.(),
+  },
   {
     id: 'cmd:space_manage_members',
     labelKey: 'cmdk_cmd_space_manage_members_label',

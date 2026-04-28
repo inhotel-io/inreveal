@@ -183,6 +183,7 @@
     getAssets: () => assetMultiSelectManager.assets,
     clearSelection: () => assetMultiSelectManager.clear(),
     canAddToAlbum: () => true,
+    canAddToSpace: () => true,
     getOnFavorite: () =>
       timelineManager
         ? (ids, isFavorite) => timelineManager.update(ids, (asset) => (asset.isFavorite = isFavorite))

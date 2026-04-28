@@ -104,10 +104,6 @@
   let space: SharedSpaceResponseDto = $state(data.space);
   let members: SharedSpaceMemberResponseDto[] = $state(data.members);
 
-  registerSpaceContext(
-    () => space,
-    () => members,
-  );
   const initialSearchState = getSearchablePageState(page.url);
 
   // Sync when navigating between spaces (component persists, data updates)
@@ -248,6 +244,19 @@
     currentMember?.role === SharedSpaceRole.Owner || currentMember?.role === SharedSpaceRole.Editor,
   );
   const showInTimeline = $derived(currentMember?.showInTimeline ?? true);
+
+  registerSpaceContext(
+    () => space,
+    () => members,
+    {
+      getAddPhotosToCurrentSpace: () =>
+        viewMode === 'view' && isEditor && !assetMultiSelectManager.selectionActive
+          ? () => {
+              viewMode = 'select-assets';
+            }
+          : undefined,
+    },
+  );
 
   const totalAssetCount = $derived(timelineManager?.assetCount ?? 0);
   const isTimelineEmpty = $derived(

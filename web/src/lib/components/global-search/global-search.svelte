@@ -545,7 +545,10 @@
                       onSelect={() => manager.topCommandMatch && manager.activate('command', manager.topCommandMatch)}
                       class="group"
                     >
-                      <CommandRow item={manager.topCommandMatch} />
+                      <CommandRow
+                        item={manager.topCommandMatch}
+                        pending={manager.topCommandMatch.id === manager.pendingConfirmId}
+                      />
                     </Command.Item>
                   </Command.GroupItems>
                 </Command.Group>

@@ -307,6 +307,7 @@ describe('Photos page search URL state', () => {
     const options = mockRegisterSelectionContext.mock.calls[0][0];
     expect(options.getAssets()).toBe(mockAssetMultiSelectManager.assets);
     expect(options.canAddToAlbum()).toBe(true);
+    expect(options.canAddToSpace()).toBe(true);
     expect(options.getOnFavorite()).toEqual(expect.any(Function));
     expect(options.getOnArchive()).toEqual(expect.any(Function));
     expect(options.getOnDelete()).toEqual(expect.any(Function));

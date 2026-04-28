@@ -28,11 +28,16 @@ export interface SpaceContext {
   isOwner: boolean;
   isMember: boolean;
   canWrite: boolean;
+  addPhotosToCurrentSpace?: () => void;
   /** Original DTO. */
   raw: SharedSpaceResponseDto;
   /** Separately-fetched members list (space page loader returns this as `data.members`). */
   members: SharedSpaceMemberResponseDto[];
 }
+
+export type RegisterSpaceContextOptions = {
+  getAddPhotosToCurrentSpace?: () => (() => void) | undefined;
+};
 
 export interface SelectionCommandContext {
   assets: TimelineAsset[];
@@ -40,6 +45,7 @@ export interface SelectionCommandContext {
   ownedAssets: TimelineAsset[];
   ownedSelectedAssetIds: string[];
   canAddToAlbum: boolean;
+  canAddToSpace: boolean;
   isAllUserOwned: boolean;
   isAllFavorite: boolean;
   isAllArchived: boolean;
@@ -56,6 +62,7 @@ export type RegisterSelectionContextOptions = {
   getAssets: () => TimelineAsset[];
   clearSelection: () => void;
   canAddToAlbum?: () => boolean;
+  canAddToSpace?: () => boolean;
   getOnFavorite?: () => OnFavorite | undefined;
   getOnArchive?: () => OnArchive | undefined;
   getOnDelete?: () => OnDelete | undefined;
@@ -145,6 +152,7 @@ class CommandContextManager {
       ownedAssets,
       ownedSelectedAssetIds,
       canAddToAlbum: registered.options.canAddToAlbum?.() ?? false,
+      canAddToSpace: registered.options.canAddToSpace?.() ?? false,
       isAllUserOwned: currentUserId !== null && ownedAssets.length === assets.length,
       isAllFavorite: assets.every((asset) => asset.isFavorite),
       isAllArchived: assets.every((asset) => asset.visibility === AssetVisibility.Archive),
@@ -206,6 +214,7 @@ export function registerAlbumContext(albumDto: () => AlbumResponseDto) {
 export function registerSpaceContext(
   getSpace: () => SharedSpaceResponseDto | undefined,
   getMembers: () => SharedSpaceMemberResponseDto[] | undefined,
+  options: RegisterSpaceContextOptions = {},
 ) {
   $effect(() => {
     const currentUserId = authManager.authenticated ? (authManager.user?.id ?? null) : null;
@@ -226,6 +235,7 @@ export function registerSpaceContext(
       isOwner,
       isMember: self !== undefined,
       canWrite,
+      addPhotosToCurrentSpace: options.getAddPhotosToCurrentSpace?.(),
       raw: space,
       members,
     });

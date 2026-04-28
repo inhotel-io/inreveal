@@ -270,6 +270,18 @@ describe('Spaces page search URL state', () => {
     });
   });
 
+  it('space cmdk add-photos command enters select-assets mode for writable users', async () => {
+    renderPage();
+    const options = mockRegisterSpaceContext.mock.calls[0][2];
+    const addPhotosToCurrentSpace = options.getAddPhotosToCurrentSpace();
+
+    expect(addPhotosToCurrentSpace).toEqual(expect.any(Function));
+    addPhotosToCurrentSpace?.();
+
+    await waitFor(() => expect(screen.getByLabelText('add_to_space')).toBeInTheDocument());
+    expect(options.getAddPhotosToCurrentSpace()).toBeUndefined();
+  });
+
   it('registers normal space view favorite/archive callbacks and no add-to-current-space', () => {
     renderPage();
 
@@ -300,9 +312,11 @@ describe('Spaces page search URL state', () => {
       members: [makeMember({ role: SharedSpaceRole.Viewer })],
     });
     const options = mockRegisterSelectionContext.mock.calls[0][0];
+    const spaceOptions = mockRegisterSpaceContext.mock.calls[0][2];
 
     expect(screen.queryByLabelText('add_photos')).not.toBeInTheDocument();
     expect(options.getAddSelectedToCurrentSpace()).toBeUndefined();
+    expect(spaceOptions.getAddPhotosToCurrentSpace()).toBeUndefined();
   });
 
   it('addSelectedToCurrentSpace rejects empty and over-limit selections', async () => {
