@@ -1,10 +1,8 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { shortcut } from '$lib/actions/shortcut';
   import UserPageLayout from '$lib/components/layouts/user-page-layout.svelte';
-  import PeopleGrid from '$lib/components/people/people-grid.svelte';
+  import PeopleManagementGrid from '$lib/components/people/people-management-grid.svelte';
   import PeopleMergeSelector from '$lib/components/people/people-merge-selector.svelte';
-  import PersonTile from '$lib/components/people/person-tile.svelte';
   import type { ManagedPerson } from '$lib/components/people/people-types';
   import ManageSpacePeopleVisibility from '$lib/components/spaces/manage-space-people-visibility.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/button-context-menu.svelte';
@@ -57,13 +55,9 @@
   let allPeople = $state<SharedSpacePersonResponseDto[]>([]);
   let mergingPerson = $state<SharedSpacePersonResponseDto>();
 
-  // Name editing state
-  let editingName = $state('');
-
   $effect(() => {
     if (data.space.id !== loadedSpaceId) {
       people = data.people;
-      editingName = '';
       hasMore = data.people.length >= PAGE_SIZE;
       mergingPerson = undefined;
       loadedSpaceId = data.space.id;
@@ -150,10 +144,6 @@
     }
   }
 
-  const onNameFocus = (person: SharedSpacePersonResponseDto) => {
-    editingName = person.name;
-  };
-
   const onNameSubmit = async (name: string, person: SharedSpacePersonResponseDto) => {
     try {
       if (name === person.name) {
@@ -167,12 +157,6 @@
       await refreshPeople();
     } catch (error) {
       handleError(error, $t('errors.unable_to_save_name'));
-    }
-  };
-
-  const onNameInput = (event: Event) => {
-    if (event.target) {
-      editingName = (event.target as HTMLInputElement).value;
     }
   };
 
@@ -272,62 +256,40 @@
     </div>
   {:else}
     <div class="px-4 pt-4">
-      <PeopleGrid
-        items={visiblePeople}
-        class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8"
+      <PeopleManagementGrid
+        people={visiblePeople}
+        {toManagedPerson}
+        gridClass="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8"
         hasNextPage={hasMore}
         {loading}
         loadNextPage={loadMore}
+        canEditNames={isEditor}
+        canShowActions={isEditor}
+        {onNameSubmit}
       >
-        {#snippet children(person)}
-          {@const managedPerson = toManagedPerson(person)}
-          <div
-            class="rounded-xl border-2 border-transparent p-2 transition-all hover:border-immich-primary/50 hover:bg-gray-200 hover:shadow-sm dark:hover:border-immich-dark-primary/25 dark:hover:bg-immich-dark-primary/20"
+        {#snippet actions(person)}
+          <ButtonContextMenu
+            buttonClass="icon-white-drop-shadow"
+            color="secondary"
+            size="medium"
+            variant="filled"
+            icon={mdiDotsVertical}
+            title={$t('show_person_options')}
           >
-            <PersonTile person={managedPerson} showActionMenu={isEditor}>
-              {#snippet actionMenu()}
-                <ButtonContextMenu
-                  buttonClass="icon-white-drop-shadow"
-                  color="secondary"
-                  size="medium"
-                  variant="filled"
-                  icon={mdiDotsVertical}
-                  title={$t('show_person_options')}
-                >
-                  <MenuOption
-                    onClick={() => void openBirthDateModal(person)}
-                    icon={mdiCalendarEditOutline}
-                    text={$t('set_date_of_birth')}
-                  />
-                  <MenuOption onClick={() => handleHide(person)} icon={mdiEyeOffOutline} text={$t('hide_person')} />
-                  <MenuOption
-                    onClick={() => (mergingPerson = person)}
-                    icon={mdiAccountMultipleCheckOutline}
-                    text={$t('merge_people')}
-                  />
-                </ButtonContextMenu>
-              {/snippet}
-
-              {#snippet footer()}
-                {#if isEditor}
-                  <input
-                    type="text"
-                    class="mt-2 w-full rounded-2xl border-gray-100 bg-white py-2 text-center text-sm text-primary placeholder-gray-400 dark:border-gray-900 dark:bg-immich-dark-gray"
-                    value={person.name}
-                    placeholder={$t('add_a_name')}
-                    use:shortcut={{ shortcut: { key: 'Enter' }, onShortcut: (e) => e.currentTarget.blur() }}
-                    onfocusin={() => onNameFocus(person)}
-                    onfocusout={() => onNameSubmit(editingName, person)}
-                    oninput={(event) => onNameInput(event)}
-                  />
-                {:else if managedPerson.displayName}
-                  <p class="mt-2 truncate text-center text-sm font-medium">{managedPerson.displayName}</p>
-                {/if}
-              {/snippet}
-            </PersonTile>
-          </div>
+            <MenuOption
+              onClick={() => void openBirthDateModal(person)}
+              icon={mdiCalendarEditOutline}
+              text={$t('set_date_of_birth')}
+            />
+            <MenuOption onClick={() => handleHide(person)} icon={mdiEyeOffOutline} text={$t('hide_person')} />
+            <MenuOption
+              onClick={() => (mergingPerson = person)}
+              icon={mdiAccountMultipleCheckOutline}
+              text={$t('merge_people')}
+            />
+          </ButtonContextMenu>
         {/snippet}
-      </PeopleGrid>
+      </PeopleManagementGrid>
     </div>
   {/if}
 
