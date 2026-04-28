@@ -12,7 +12,8 @@ In scope:
 
 - `/photos?q=...`
 - `/spaces/:spaceId?q=...`
-- Smart-search text queries and `queryAssetId` searches
+- Smart-search text queries
+- `queryAssetId` support at the API/service layer. The current photos and spaces routes only expose text `q`, so route wiring for query-asset search is deferred until a route state source exists.
 - Search-scoped timeline counts
 - Search-scoped people, location, camera, and tag value lists
 - Exact totals for the full server-side matching set
@@ -34,7 +35,7 @@ Out of scope:
 2. Compute facets from the full server-side smart-search result set, not the loaded page.
 3. Keep exact semantics in v1. Do not silently cap candidate count or approximate counts.
 4. Match current faceted-search self-exclusion behavior.
-5. Return monthly time buckets using the existing `{ timeBucket, count }` shape used by `getTimeBuckets`.
+5. Return monthly time buckets using the same local-date bucketing and `{ timeBucket, count }` shape used by `getTimeBuckets`.
 6. Use route-owned facet fetching. `SmartSearchResults` stays focused on result pages.
 7. Load search results and facets independently.
 8. Preserve current stable rating/media UI behavior.
@@ -200,7 +201,7 @@ Results and facets load independently.
 Facet refetch triggers:
 
 - committed query change
-- `queryAssetId` change
+- `queryAssetId` change when a route state source exists
 - language change
 - scope change
 - active filter change, except sort order

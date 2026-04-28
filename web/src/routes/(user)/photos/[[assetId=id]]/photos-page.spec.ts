@@ -347,6 +347,16 @@ describe('Photos page search URL state', () => {
     await vi.waitFor(() => expect(sdkMock.getFilterSuggestions).toHaveBeenCalled());
   });
 
+  it('does not fetch smart facets when the committed query is whitespace only', async () => {
+    mockPage.url = new URL('https://gallery.test/photos?q=%20%20');
+
+    renderPage();
+
+    expect(screen.queryByTestId('smart-search-results')).not.toBeInTheDocument();
+    expect(sdkMock.searchSmartFacets).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(sdkMock.getFilterSuggestions).toHaveBeenCalled());
+  });
+
   it('does not include sort order in the smart facet payload', async () => {
     mockPage.url = new URL('https://gallery.test/photos?q=nature&sort=asc');
 
@@ -354,6 +364,16 @@ describe('Photos page search URL state', () => {
 
     await vi.waitFor(() => expect(sdkMock.searchSmartFacets).toHaveBeenCalled());
     expect(sdkMock.searchSmartFacets.mock.calls[0][0].smartSearchFacetsDto).not.toHaveProperty('order');
+  });
+
+  it('does not refetch smart facets for sort-only filter changes', async () => {
+    renderPage();
+    await vi.waitFor(() => expect(sdkMock.searchSmartFacets).toHaveBeenCalledTimes(1));
+
+    await fireEvent.click(screen.getByTestId('filter-panel-set-sort-asc'));
+
+    await waitFor(() => expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-sort-order', 'asc'));
+    expect(sdkMock.searchSmartFacets).toHaveBeenCalledTimes(1);
   });
 
   it('keeps rendering search results when smart facets fail', async () => {

@@ -82,4 +82,15 @@
   >
     Set country
   </button>
+  <button
+    type="button"
+    data-testid="filter-panel-set-sort-asc"
+    onclick={() => {
+      if (filters) {
+        filters = { ...filters, sortOrder: 'asc' };
+      }
+    }}
+  >
+    Sort ascending
+  </button>
 </div>

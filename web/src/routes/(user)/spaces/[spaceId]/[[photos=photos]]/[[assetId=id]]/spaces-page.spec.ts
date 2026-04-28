@@ -271,6 +271,28 @@ describe('Spaces page search URL state', () => {
     expect(dto).not.toHaveProperty('order');
   });
 
+  it('does not fetch smart facets when the committed space query is whitespace only', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?q=%20%20');
+
+    renderPage();
+
+    expect(screen.queryByTestId('smart-search-results')).not.toBeInTheDocument();
+    expect(sdkMock.searchSmartFacets).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(sdkMock.getFilterSuggestions).toHaveBeenCalled());
+  });
+
+  it('does not refetch space smart facets for sort-only filter changes', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?q=beach');
+
+    renderPage();
+    await vi.waitFor(() => expect(sdkMock.searchSmartFacets).toHaveBeenCalledTimes(1));
+
+    await fireEvent.click(screen.getByTestId('filter-panel-set-sort-asc'));
+
+    await waitFor(() => expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-sort-order', 'asc'));
+    expect(sdkMock.searchSmartFacets).toHaveBeenCalledTimes(1);
+  });
+
   it('uses smart facet timeBuckets in space search mode', async () => {
     mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?q=beach');
 
