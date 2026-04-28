@@ -2776,11 +2776,11 @@ describe('SWR loading rules', () => {
   });
 
   it('flips error → loading on new keystroke', async () => {
-    vi.mocked(searchSmart).mockImplementation(async ({ smartSearchDto }) => {
+    vi.mocked(searchSmart).mockImplementation(({ smartSearchDto }) => {
       if (smartSearchDto.query === 'xxxx') {
-        throw new Error('boom');
+        return Promise.reject(new Error('boom'));
       }
-      return { assets: { items: [], nextPage: null } } as never;
+      return Promise.resolve({ assets: { items: [], nextPage: null } } as never);
     });
     const m = new GlobalSearchManager();
     m.open();

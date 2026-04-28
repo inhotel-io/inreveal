@@ -957,6 +957,46 @@ describe('global-search root', () => {
     expect(entityOrder[5]).toMatch(/^cmdk_tags_heading$|^Tags$/i);
   });
 
+  it('renders secondary selection commands before entity results when a command is promoted', async () => {
+    mockPage.route.id = '/(user)/photos/[[assetId=id]]';
+    commandContextManager.setSelection({
+      routeId: mockPage.route.id,
+      token: Symbol('selection-test'),
+      options: {
+        getAssets: () => [
+          {
+            id: 'asset-1',
+            ownerId: 'test-user',
+            visibility: AssetVisibility.Timeline,
+            isFavorite: false,
+            isTrashed: false,
+          } as never,
+        ],
+        clearSelection: vi.fn(),
+        canAddToAlbum: () => true,
+        canAddToSpace: () => true,
+      },
+    });
+
+    const m = new GlobalSearchManager();
+    installPhotoStub(m, [{ id: 'photo-1', originalFileName: 'add-photo.jpg' }]);
+    m.open();
+    render(GlobalSearch, { props: { manager: m } });
+    await user.type(screen.getByRole('combobox'), 'add');
+
+    await vi.waitFor(() => expect(m.topCommandMatch?.id).toBe('cmd:selection_add_to_album'));
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-command-item][data-value="photo:photo-1"]')).not.toBeNull(),
+    );
+    const commandsSection = document.querySelector('[data-cmdk-commands-section]');
+    const addToSpaceRow = document.querySelector('[data-command-item][data-value="cmd:selection_add_to_space"]');
+    const photosHeading = screen.getByText(/^cmdk_photos_heading$|^Photos$/i);
+
+    expect(commandsSection).not.toBeNull();
+    expect(addToSpaceRow).not.toBeNull();
+    expect(commandsSection!.compareDocumentPosition(photosHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('min query length gating: typing 1 char fires Photos only (Albums/Spaces/People/Places/Tags stay idle)', async () => {
     // Photos has minQueryLength=1; every other entity provider has minQueryLength=2.
     // So a single-char query must only dispatch the photos run. The other providers
