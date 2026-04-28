@@ -28,6 +28,27 @@ identity table, change face matching writes, or merge personal/space people.
 - Using inaccessible names, thumbnails, counts, or hidden/favorite state.
 - Reworking smart search unless grouped person filters can be reused cleanly.
 
+## Use Cases Covered
+
+- A user has timeline-enabled shared spaces and expects people from those space
+  photos to appear in the personal Photos filter panel.
+- The same human exists as a current user's personal person and as one or more
+  space people. The filter panel shows one row and selecting it searches all
+  linked sources.
+- The same human appears in four accessible timeline-enabled spaces. If those
+  space people all link to the same personal `person.id`, the filter panel shows
+  one row.
+- Two unrelated people have the same display name in different spaces. Without
+  explicit face/person evidence, they remain separate rows.
+- A selected person is outside the default capped suggestions. The row remains
+  visible and filterable through selected-source hydration.
+- A user searches a large people set. The filter panel queries the server rather
+  than filtering 20,000+ rows in the browser.
+- A user disables favorites filtering back to all timeline assets. Shared-space
+  people become available again only when shared timeline assets are in scope.
+- A user loses access to a space. The lost space person stops contributing to
+  future suggestions and search requests.
+
 ## Current Behavior
 
 The Photos filter panel calls `getFilterSuggestions({ withSharedSpaces: true })`
@@ -53,11 +74,16 @@ type PersonFilterSource =
 type GroupedPersonFilterOption = {
   id: string;
   name: string;
-  thumbnail?: {
-    type: 'person' | 'space-person';
-    personId: string;
-    spaceId?: string;
-  };
+  thumbnail?:
+    | {
+        type: 'person';
+        personId: string;
+      }
+    | {
+        type: 'space-person';
+        spaceId: string;
+        spacePersonId: string;
+      };
   sources: PersonFilterSource[];
 };
 ```
@@ -81,6 +107,12 @@ The server then treats `personIds` and `spacePersonIds` as one OR filter group.
 An asset matches if it contains any selected personal person or any selected
 space person.
 
+Multiple selected people also use OR semantics in this interim. That matches the
+checkbox-style filter affordance and the existing map filter behavior. If the
+product later needs "Alice AND Bob" semantics, the API should add nested person
+groups instead of trying to infer that from flat `personIds` and
+`spacePersonIds`.
+
 ## Grouping Rules
 
 The grouped read model may merge rows only with explicit evidence:
@@ -99,8 +131,8 @@ interim should not silently merge them.
 
 Use only accessible scoped data for returned fields:
 
-- Name priority: current user's alias for a space person, shared-space person
-  name, current user's linked personal person name, then unnamed fallback.
+- Name priority: current user's personal person name, current user's alias for a
+  space person, shared-space person name, then unnamed fallback.
 - Thumbnail priority: accessible personal person thumbnail, then accessible
   space person thumbnail, then initials fallback.
 - Favorite or hidden state from an inaccessible personal profile must not affect
@@ -140,14 +172,17 @@ This implies a suggestion request shape like:
   withSharedSpaces: true,
   peopleQuery?: string,
   peopleLimit?: number,
-  selectedPersonSources?: PersonFilterSource[],
+  selectedPersonIds?: string[],
+  selectedSpacePersonIds?: string[],
   ...otherFilterContext
 }
 ```
 
-`selectedPersonSources` is not counted against `peopleLimit`. It keeps active
-chips and selected rows stable when the user changes other filters or narrows
-the people query.
+The selected source arrays are not counted against `peopleLimit`. They keep
+active chips and selected rows stable when the user changes other filters or
+narrows the people query. They are represented as flat arrays rather than nested
+objects so the existing filter suggestions query endpoint can parse them
+reliably.
 
 ## Repository Strategy
 
@@ -170,10 +205,11 @@ Then produce people candidates from that scoped set:
   `shared_space_person -> shared_space_person_face -> asset_face`.
 - Alias candidates from `shared_space_person_alias` for the current user.
 
-For unqueried top suggestions, the database should aggregate counts and apply
-the people limit before returning details where possible. For queried
-suggestions, the database should narrow by `peopleQuery` before grouping and
-limiting.
+For unqueried top suggestions, the database should aggregate enough source data
+to group first, then apply the people limit to grouped rows. Prelimiting raw
+candidates is allowed only when it cannot split linked sources into duplicate
+visible rows. For queried suggestions, the database should narrow by
+`peopleQuery` before grouping and limiting.
 
 Hydration for selected sources should be a separate bounded path. It only needs
 to fetch rows for selected personal and space person IDs, then apply the same
@@ -203,7 +239,8 @@ Request additions:
 ```ts
 peopleQuery?: string;
 peopleLimit?: number;
-selectedPersonSources?: PersonFilterSource[];
+selectedPersonIds?: string[];
+selectedSpacePersonIds?: string[];
 ```
 
 Response addition:
@@ -230,6 +267,11 @@ spacePersonIds?: string[];
 `spacePersonIds` already exists in parts of the search model. The missing piece
 is cross-source OR semantics when `personMatchAny` is true.
 
+This search behavior applies to metadata/timeline and map searches that support
+`withSharedSpaces`. Smart search currently has stricter validation around
+`spacePersonIds` and should stay out of scope unless that validation is
+redesigned deliberately.
+
 ## Frontend Strategy
 
 Extend filter panel people options with source metadata while preserving legacy
@@ -250,9 +292,10 @@ expandPersonFilters(filters) => {
 }
 ```
 
-Photos timeline and Map timeline builders should use this helper. Space-specific
-pages can keep their existing behavior until they opt into the grouped source
-shape.
+Photos timeline and Map timeline builders should use this helper. Suggestion
+requests should use the same helper to send `selectedPersonIds` and
+`selectedSpacePersonIds` for hydration. Space-specific pages can keep their
+existing behavior until they opt into the grouped source shape.
 
 The People filter search box should support an async provider:
 
@@ -298,7 +341,21 @@ but search requests must still be constrained server-side.
 If risk is high, gate the UI consumption behind a temporary feature flag while
 the API path is tested.
 
-## Test Plan
+## Implementation Discipline
+
+This work should be implemented test-first. Each behavioral slice should follow
+red-green-refactor:
+
+1. Add a focused failing test for the next behavior.
+2. Run the targeted test and confirm it fails for the expected reason.
+3. Implement the smallest change that makes it pass.
+4. Re-run the targeted test and the relevant surrounding suite.
+5. Refactor only after tests are green.
+
+Do not batch the repository query, DTO, filter-state, and UI behavior into one
+untestable change. The implementation should split along the boundaries below.
+
+## Test Coverage Plan
 
 Server tests:
 
@@ -312,6 +369,8 @@ Server tests:
 - Filters assets with OR semantics across `personIds` and `spacePersonIds` when
   `personMatchAny` is true.
 - Does not return names or thumbnails from inaccessible profiles/assets.
+- Leaves smart-search `spacePersonIds` behavior unchanged unless smart search is
+  explicitly included in a later scope.
 
 Frontend tests:
 
@@ -323,12 +382,23 @@ Frontend tests:
 - Debounces server-side people search and ignores stale responses.
 - Preserves legacy personal-only behavior for album and non-grouped contexts.
 
+Coverage matrix:
+
+| Area                   | Minimum test type                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| DTO parsing            | Unit tests for `peopleQuery`, `peopleLimit`, selected personal IDs, and selected space person IDs          |
+| Grouping               | Unit tests for explicit-link grouping and same-name non-grouping                                           |
+| Repository SQL         | SQL-generation or repository tests for bounded suggestions, query narrowing, and selected-source hydration |
+| Search filtering       | Service/repository tests for cross-source OR behavior                                                      |
+| Privacy                | Service/repository tests using inaccessible personal names/thumbnails/counts                               |
+| Web filter expansion   | Unit tests for grouped and legacy person options                                                           |
+| People search UI       | Component tests for debounced server search and selected-row stability                                     |
+| Photos/Map integration | Existing route/config tests updated to assert grouped source expansion                                     |
+
 ## Open Implementation Decisions
 
 - Exact default and maximum `peopleLimit` values.
 - Whether `peopleQuery` should be prefix-only for index friendliness or
   contains-style with trigram support.
-- Whether selected-source hydration should be part of `getFilterSuggestions` or
-  a small companion endpoint if the DTO becomes too large.
 - Whether `personMatchAny` should remain a generic search DTO field or be scoped
   to grouped timeline filters only.
