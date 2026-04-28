@@ -173,6 +173,11 @@ export type SystemConfig = {
     generateMemories: boolean;
     syncQuotaUsage: boolean;
   };
+  memories: {
+    retentionDays: number;
+    birthday: boolean;
+    recentTrips: boolean;
+  };
   trash: {
     enabled: boolean;
     days: number;
@@ -423,6 +428,11 @@ export const defaults = Object.freeze<SystemConfig>({
     syncQuotaUsage: true,
     missingThumbnails: true,
     clusterNewFaces: true,
+  },
+  memories: {
+    retentionDays: 365,
+    birthday: true,
+    recentTrips: true,
   },
   trash: {
     enabled: true,
