@@ -2696,6 +2696,7 @@ describe('setQuery synchronous navigation', () => {
     vi.mocked(searchPerson).mockResolvedValue([] as never);
     vi.mocked(searchPlaces).mockResolvedValue([] as never);
     vi.mocked(getAllTags).mockResolvedValue([] as never);
+    vi.mocked(getMlHealth).mockResolvedValue({ smartSearchHealthy: true } as never);
   });
 
   afterEach(() => {
@@ -2757,6 +2758,7 @@ describe('SWR loading rules', () => {
     vi.mocked(searchPerson).mockResolvedValue([] as never);
     vi.mocked(searchPlaces).mockResolvedValue([] as never);
     vi.mocked(getAllTags).mockResolvedValue([] as never);
+    vi.mocked(getMlHealth).mockResolvedValue({ smartSearchHealthy: true } as never);
   });
   afterEach(() => {
     restoreAbortTimeout();
@@ -2774,7 +2776,12 @@ describe('SWR loading rules', () => {
   });
 
   it('flips error → loading on new keystroke', async () => {
-    vi.mocked(searchSmart).mockRejectedValueOnce(new Error('boom'));
+    vi.mocked(searchSmart).mockImplementation(async ({ smartSearchDto }) => {
+      if (smartSearchDto.query === 'xxxx') {
+        throw new Error('boom');
+      }
+      return { assets: { items: [], nextPage: null } } as never;
+    });
     const m = new GlobalSearchManager();
     m.open();
     m.setQuery('xxxx');
