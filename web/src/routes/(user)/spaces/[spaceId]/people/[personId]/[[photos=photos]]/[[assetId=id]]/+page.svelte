@@ -33,6 +33,7 @@
   import { ContextMenuButton, modalManager, toastManager, type ActionItem } from '@immich/ui';
   import { mdiAccountMultipleCheckOutline, mdiArrowLeft, mdiCalendarEditOutline, mdiDotsVertical } from '@mdi/js';
   import { DateTime } from 'luxon';
+  import { tick } from 'svelte';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
 
@@ -52,6 +53,9 @@
   let personOverride = $state<SharedSpacePersonResponseDto>();
   let personOverrideKey = $state('');
   const person = $derived(personOverrideKey === routeStateKey && personOverride ? personOverride : data.person);
+  let isEditingName = $state(false);
+  let editedName = $state('');
+  let nameInput = $state<HTMLInputElement>();
 
   let actionOverride = $state<string | null>();
   let actionOverrideKey = $state('');
@@ -79,6 +83,44 @@
   const setAction = (updatedAction: string | null) => {
     actionOverride = updatedAction;
     actionOverrideKey = routeStateKey;
+  };
+
+  const startEditingName = () => {
+    if (!isEditor) {
+      return;
+    }
+    editedName = person.name;
+    isEditingName = true;
+    void tick().then(() => nameInput?.focus());
+  };
+
+  const cancelEditingName = () => {
+    editedName = person.name;
+    isEditingName = false;
+  };
+
+  const saveName = async () => {
+    if (!isEditingName) {
+      return;
+    }
+
+    isEditingName = false;
+    if (editedName === person.name) {
+      return;
+    }
+
+    try {
+      const updatedPerson = await updateSpacePerson({
+        id: space.id,
+        personId: person.id,
+        sharedSpacePersonUpdateDto: { name: editedName },
+      });
+      setPerson({ ...person, ...updatedPerson, name: updatedPerson.name ?? editedName });
+      toastManager.success($t('change_name_successfully'));
+    } catch (error) {
+      editedName = person.name;
+      handleError(error, $t('errors.unable_to_save_name'));
+    }
   };
 
   const getThumbUrl = (person: SharedSpacePersonResponseDto): string => {
@@ -187,37 +229,83 @@
     >
       <div class="relative w-fit p-4 pt-12 sm:px-6">
         <section class="flex w-64 place-items-center border-black sm:w-96">
-          <div class="relative flex items-center justify-center">
-            <ImageThumbnail
-              circle
-              shadow
-              url={thumbnailUrl}
-              altText={person.name}
-              widthStyle="3.375rem"
-              heightStyle="3.375rem"
-            />
-            <div class="flex flex-col justify-center px-4 text-start text-primary">
-              <p class="w-40 truncate font-medium sm:w-72">{person.name || $t('add_a_name')}</p>
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                {$t('assets_count', { values: { count: person.assetCount } })}
-              </p>
-              {#if person.birthDate}
-                <p class="text-sm text-gray-500 dark:text-gray-400">
-                  {$t('person_birthdate', {
-                    values: {
-                      date: DateTime.fromISO(person.birthDate).toLocaleString(
-                        {
-                          month: 'numeric',
-                          day: 'numeric',
-                          year: 'numeric',
-                        },
-                        { locale: $locale },
-                      ),
-                    },
-                  })}
-                </p>
-              {/if}
+          {#if isEditor}
+            <button
+              type="button"
+              class="relative flex items-center justify-center text-start"
+              aria-label={$t('edit_name')}
+              onclick={startEditingName}
+            >
+              <ImageThumbnail
+                circle
+                shadow
+                url={thumbnailUrl}
+                altText={person.name}
+                widthStyle="3.375rem"
+                heightStyle="3.375rem"
+              />
+            </button>
+          {:else}
+            <div class="relative flex items-center justify-center">
+              <ImageThumbnail
+                circle
+                shadow
+                url={thumbnailUrl}
+                altText={person.name}
+                widthStyle="3.375rem"
+                heightStyle="3.375rem"
+              />
             </div>
+          {/if}
+          <div class="flex flex-col justify-center px-4 text-start text-primary">
+            {#if isEditingName}
+              <input
+                bind:this={nameInput}
+                bind:value={editedName}
+                class="w-40 rounded-lg bg-gray-100 px-2 py-1 font-medium text-primary outline-hidden focus:ring-2 focus:ring-immich-primary dark:bg-immich-dark-gray dark:focus:ring-immich-dark-primary sm:w-72"
+                placeholder={$t('add_a_name')}
+                aria-label={$t('edit_name')}
+                onblur={() => void saveName()}
+                onkeydown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.currentTarget.blur();
+                  }
+                  if (event.key === 'Escape') {
+                    cancelEditingName();
+                  }
+                }}
+              />
+            {:else if isEditor}
+              <button
+                type="button"
+                class="w-40 truncate text-start font-medium sm:w-72"
+                aria-label={$t('edit_name')}
+                onclick={startEditingName}
+              >
+                {person.name || $t('add_a_name')}
+              </button>
+            {:else}
+              <p class="w-40 truncate font-medium sm:w-72">{person.name || $t('add_a_name')}</p>
+            {/if}
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              {$t('assets_count', { values: { count: person.assetCount } })}
+            </p>
+            {#if person.birthDate}
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                {$t('person_birthdate', {
+                  values: {
+                    date: DateTime.fromISO(person.birthDate).toLocaleString(
+                      {
+                        month: 'numeric',
+                        day: 'numeric',
+                        year: 'numeric',
+                      },
+                      { locale: $locale },
+                    ),
+                  },
+                })}
+              </p>
+            {/if}
           </div>
         </section>
       </div>

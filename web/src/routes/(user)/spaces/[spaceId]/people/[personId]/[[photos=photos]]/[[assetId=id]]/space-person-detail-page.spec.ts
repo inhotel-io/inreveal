@@ -191,6 +191,24 @@ describe('Spaces person detail page', () => {
     expect(screen.getByTestId('people-merge-selector')).toHaveAttribute('data-person-id', 'person-1');
   });
 
+  it('edits the space person name from the detail header', async () => {
+    const person = makePerson({ name: '' });
+    sdkMock.updateSpacePerson.mockResolvedValue({ ...person, name: 'Alice' });
+    renderPage({ person });
+
+    await userEvent.click(screen.getByText('add_a_name'));
+    const input = screen.getByPlaceholderText('add_a_name');
+    await userEvent.type(input, 'Alice');
+    await userEvent.keyboard('{Enter}');
+
+    expect(sdkMock.updateSpacePerson).toHaveBeenCalledWith({
+      id: 'space-1',
+      personId: 'person-1',
+      sharedSpacePersonUpdateDto: { name: 'Alice' },
+    });
+    expect(await screen.findByText('Alice')).toBeInTheDocument();
+  });
+
   it('updates birthdate from the detail page and reopens with the saved value', async () => {
     const person = makePerson({ birthDate: null });
     sdkMock.updateSpacePerson.mockResolvedValue({ ...person, birthDate: null });
