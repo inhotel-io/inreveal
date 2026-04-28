@@ -36,6 +36,7 @@
   import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
   import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
+  import { registerSelectionContext } from '$lib/managers/command-context-manager.svelte';
   import { memoryManager } from '$lib/managers/memory-manager.svelte';
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import { Route } from '$lib/route';
@@ -332,6 +333,23 @@
     assetMultiSelectManager.clear();
   };
 
+  registerSelectionContext({
+    getAssets: () => assetMultiSelectManager.assets,
+    clearSelection: () => assetMultiSelectManager.clear(),
+    canAddToAlbum: () => true,
+    canAddToSpace: () => true,
+    getOnFavorite: () =>
+      timelineManager
+        ? (ids, isFavorite) => timelineManager.update(ids, (asset) => (asset.isFavorite = isFavorite))
+        : undefined,
+    getOnArchive: () =>
+      timelineManager
+        ? (ids, visibility) => timelineManager.update(ids, (asset) => (asset.visibility = visibility))
+        : undefined,
+    getOnDelete: () => (timelineManager ? (assetIds) => timelineManager.removeAssets(assetIds) : undefined),
+    getOnUndoDelete: () => (timelineManager ? (assets) => timelineManager.upsertAssets(assets) : undefined),
+  });
+
   function clearSearch() {
     isLoading = false;
     const nextUrl = buildSearchablePageUrl(page.url, '');
@@ -368,7 +386,7 @@
     memoryManager.memories.map((memory) => ({
       id: memory.id,
       title: $memoryLaneTitle(memory),
-      href: Route.memories({ id: memory.assets[0].id }),
+      href: Route.memoryViewer({ id: memory.assets[0].id }),
       alt: $t('memory_lane_title', { values: { title: $getAltText(toTimelineAsset(memory.assets[0])) } }),
       src: getAssetMediaUrl({ id: memory.assets[0].id }),
     })),
