@@ -163,6 +163,8 @@ describe('scanTakeoutFiles', () => {
 
     expect(result.items).toHaveLength(1);
     expect(result.items[0].path).toBe('Takeout/Google Photos/Trip/IMG_002.jpg');
+    expect(result.items[0].name).toBe('IMG_002.jpg');
+    expect(await result.items[0].getFile()).toBeInstanceOf(File);
     expect(result.items[0].metadata).toBeUndefined();
     expect(result.stats.withLocation).toBe(0);
     expect(result.stats.withDate).toBe(0);
