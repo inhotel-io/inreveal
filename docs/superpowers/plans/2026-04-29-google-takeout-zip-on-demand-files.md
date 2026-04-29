@@ -71,6 +71,7 @@ Tests       37 passed (37)
 ### Task 1: Zip Items Expose Lazy Files
 
 **Files:**
+
 - Modify: `web/src/lib/utils/google-takeout-scanner.spec.ts`
 - Modify: `web/src/lib/utils/google-takeout-parser.ts`
 - Modify: `web/src/lib/utils/google-takeout-scanner.ts`
@@ -80,98 +81,98 @@ Tests       37 passed (37)
 In `web/src/lib/utils/google-takeout-scanner.spec.ts`, update the first zip scan test body to assert the new metadata fields and `getFile()` result:
 
 ```ts
-  it('should scan a zip and expose media bytes lazily with metadata', async () => {
-    const zipBlob = await createZipBlob([
-      { path: 'Takeout/Google Photos/Trip/IMG_001.jpg', content: 'fake-image-data' },
-      { path: 'Takeout/Google Photos/Trip/IMG_001.jpg.json', content: makeSidecar() },
-    ]);
+it('should scan a zip and expose media bytes lazily with metadata', async () => {
+  const zipBlob = await createZipBlob([
+    { path: 'Takeout/Google Photos/Trip/IMG_001.jpg', content: 'fake-image-data' },
+    { path: 'Takeout/Google Photos/Trip/IMG_001.jpg.json', content: makeSidecar() },
+  ]);
 
-    const result: ScanResult = await scanTakeoutFiles({
-      files: [blobToFile(zipBlob, 'takeout-001.zip')],
-    });
-
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0].path).toBe('Takeout/Google Photos/Trip/IMG_001.jpg');
-    expect(result.items[0].name).toBe('IMG_001.jpg');
-    expect(result.items[0].size).toBe('fake-image-data'.length);
-    expect(result.items[0].lastModified).toBeGreaterThan(0);
-
-    const file = await result.items[0].getFile();
-    expect(file.name).toBe('IMG_001.jpg');
-    expect(file.size).toBe('fake-image-data'.length);
-    expect(await file.text()).toBe('fake-image-data');
-
-    const secondFile = await result.items[0].getFile();
-    expect(secondFile).not.toBe(file);
-    expect(secondFile.name).toBe('IMG_001.jpg');
-    expect(await secondFile.text()).toBe('fake-image-data');
-
-    expect(result.items[0].metadata).toBeDefined();
-    expect(result.items[0].metadata!.title).toBe('IMG_001.jpg');
-    expect(result.items[0].metadata!.latitude).toBe(48.8566);
-    expect(result.items[0].metadata!.isFavorite).toBe(true);
-    expect(result.stats.totalMedia).toBe(1);
-    expect(result.stats.withLocation).toBe(1);
-    expect(result.stats.withDate).toBe(1);
-    expect(result.stats.favorites).toBe(1);
-    expect(result.stats.archived).toBe(0);
+  const result: ScanResult = await scanTakeoutFiles({
+    files: [blobToFile(zipBlob, 'takeout-001.zip')],
   });
+
+  expect(result.items).toHaveLength(1);
+  expect(result.items[0].path).toBe('Takeout/Google Photos/Trip/IMG_001.jpg');
+  expect(result.items[0].name).toBe('IMG_001.jpg');
+  expect(result.items[0].size).toBe('fake-image-data'.length);
+  expect(result.items[0].lastModified).toBeGreaterThan(0);
+
+  const file = await result.items[0].getFile();
+  expect(file.name).toBe('IMG_001.jpg');
+  expect(file.size).toBe('fake-image-data'.length);
+  expect(await file.text()).toBe('fake-image-data');
+
+  const secondFile = await result.items[0].getFile();
+  expect(secondFile).not.toBe(file);
+  expect(secondFile.name).toBe('IMG_001.jpg');
+  expect(await secondFile.text()).toBe('fake-image-data');
+
+  expect(result.items[0].metadata).toBeDefined();
+  expect(result.items[0].metadata!.title).toBe('IMG_001.jpg');
+  expect(result.items[0].metadata!.latitude).toBe(48.8566);
+  expect(result.items[0].metadata!.isFavorite).toBe(true);
+  expect(result.stats.totalMedia).toBe(1);
+  expect(result.stats.withLocation).toBe(1);
+  expect(result.stats.withDate).toBe(1);
+  expect(result.stats.favorites).toBe(1);
+  expect(result.stats.archived).toBe(0);
+});
 ```
 
 Also add this test inside `describe('scanTakeoutFiles', ...)` to prove scan does not extract media:
 
 ```ts
-  it('does not extract media entries while scanning a zip', async () => {
+it('does not extract media entries while scanning a zip', async () => {
+  vi.resetModules();
+
+  const mediaArrayBuffer = vi.fn(async () => new TextEncoder().encode('media-bytes').buffer);
+  const sidecarArrayBuffer = vi.fn(async () => new TextEncoder().encode(makeSidecar()).buffer);
+  const close = vi.fn(async () => undefined);
+
+  vi.doMock('@zip.js/zip.js', () => ({
+    BlobReader: vi.fn(),
+    configure: vi.fn(),
+    ZipReader: vi.fn().mockImplementation(() => ({
+      close,
+      getEntries: vi.fn(async () => [
+        {
+          filename: 'Takeout/Google Photos/Trip/IMG_001.jpg',
+          directory: false,
+          uncompressedSize: 'media-bytes'.length,
+          lastModDate: new Date('2021-01-01T00:00:00.000Z'),
+          arrayBuffer: mediaArrayBuffer,
+        },
+        {
+          filename: 'Takeout/Google Photos/Trip/IMG_001.jpg.json',
+          directory: false,
+          uncompressedSize: 10,
+          lastModDate: new Date('2021-01-01T00:00:00.000Z'),
+          arrayBuffer: sidecarArrayBuffer,
+        },
+      ]),
+    })),
+  }));
+
+  try {
+    const { scanTakeoutFiles } = await import('$lib/utils/google-takeout-scanner');
+    const result = await scanTakeoutFiles({
+      files: [new File(['zip-placeholder'], 'takeout.zip', { type: 'application/zip' })],
+    });
+
+    expect(sidecarArrayBuffer).toHaveBeenCalledOnce();
+    expect(mediaArrayBuffer).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledOnce();
+
+    const file = await result.items[0].getFile();
+    expect(mediaArrayBuffer).toHaveBeenCalledOnce();
+    expect(await file.text()).toBe('media-bytes');
+  } finally {
+    vi.doUnmock('@zip.js/zip.js');
     vi.resetModules();
-
-    const mediaArrayBuffer = vi.fn(async () => new TextEncoder().encode('media-bytes').buffer);
-    const sidecarArrayBuffer = vi.fn(async () => new TextEncoder().encode(makeSidecar()).buffer);
-    const close = vi.fn(async () => undefined);
-
-    vi.doMock('@zip.js/zip.js', () => ({
-      BlobReader: vi.fn(),
-      configure: vi.fn(),
-      ZipReader: vi.fn().mockImplementation(() => ({
-        close,
-        getEntries: vi.fn(async () => [
-          {
-            filename: 'Takeout/Google Photos/Trip/IMG_001.jpg',
-            directory: false,
-            uncompressedSize: 'media-bytes'.length,
-            lastModDate: new Date('2021-01-01T00:00:00.000Z'),
-            arrayBuffer: mediaArrayBuffer,
-          },
-          {
-            filename: 'Takeout/Google Photos/Trip/IMG_001.jpg.json',
-            directory: false,
-            uncompressedSize: 10,
-            lastModDate: new Date('2021-01-01T00:00:00.000Z'),
-            arrayBuffer: sidecarArrayBuffer,
-          },
-        ]),
-      })),
-    }));
-
-    try {
-      const { scanTakeoutFiles } = await import('$lib/utils/google-takeout-scanner');
-      const result = await scanTakeoutFiles({
-        files: [new File(['zip-placeholder'], 'takeout.zip', { type: 'application/zip' })],
-      });
-
-      expect(sidecarArrayBuffer).toHaveBeenCalledOnce();
-      expect(mediaArrayBuffer).not.toHaveBeenCalled();
-      expect(close).toHaveBeenCalledOnce();
-
-      const file = await result.items[0].getFile();
-      expect(mediaArrayBuffer).toHaveBeenCalledOnce();
-      expect(await file.text()).toBe('media-bytes');
-    } finally {
-      vi.doUnmock('@zip.js/zip.js');
-      vi.resetModules();
-      const mod = await import('$lib/utils/google-takeout-scanner');
-      scanTakeoutFiles = mod.scanTakeoutFiles;
-    }
-  });
+    const mod = await import('$lib/utils/google-takeout-scanner');
+    scanTakeoutFiles = mod.scanTakeoutFiles;
+  }
+});
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -248,9 +249,9 @@ async function getZipEntryFile(entry: ZipEntry, name: string, lastModified: numb
 In `web/src/lib/utils/google-takeout-scanner.ts`, inside `scanZipFile`, replace the `mediaBlobs` map with descriptors:
 
 ```ts
-  const mediaPaths: string[] = [];
-  const mediaDescriptors = new Map<string, ZipMediaDescriptor>();
-  const sidecarTexts = new Map<string, string>();
+const mediaPaths: string[] = [];
+const mediaDescriptors = new Map<string, ZipMediaDescriptor>();
+const sidecarTexts = new Map<string, string>();
 ```
 
 Then replace the media branch in the entry loop with:
@@ -285,33 +286,33 @@ Keep the existing sidecar extraction block after `else if`.
 In `web/src/lib/utils/google-takeout-scanner.ts`, replace the `for (const [path, blob] of mediaBlobs)` block with:
 
 ```ts
-  for (const descriptor of mediaDescriptors.values()) {
-    const metadata = metadataMap.get(descriptor.path);
+for (const descriptor of mediaDescriptors.values()) {
+  const metadata = metadataMap.get(descriptor.path);
 
-    if (metadata?.latitude !== undefined && metadata?.longitude !== undefined) {
-      progress.withLocation++;
-    }
-    if (metadata?.dateTaken) {
-      progress.withDate++;
-    }
-    if (metadata?.isFavorite) {
-      progress.favorites++;
-    }
-    if (metadata?.isArchived) {
-      progress.archived++;
-    }
-
-    allItems.push({
-      path: descriptor.path,
-      name: descriptor.name,
-      size: descriptor.size,
-      lastModified: descriptor.lastModified,
-      getFile: () => getZipEntryFile(descriptor.entry, descriptor.name, descriptor.lastModified),
-      metadata,
-      albumName: undefined,
-    });
-    onProgress?.(progress);
+  if (metadata?.latitude !== undefined && metadata?.longitude !== undefined) {
+    progress.withLocation++;
   }
+  if (metadata?.dateTaken) {
+    progress.withDate++;
+  }
+  if (metadata?.isFavorite) {
+    progress.favorites++;
+  }
+  if (metadata?.isArchived) {
+    progress.archived++;
+  }
+
+  allItems.push({
+    path: descriptor.path,
+    name: descriptor.name,
+    size: descriptor.size,
+    lastModified: descriptor.lastModified,
+    getFile: () => getZipEntryFile(descriptor.entry, descriptor.name, descriptor.lastModified),
+    metadata,
+    albumName: undefined,
+  });
+  onProgress?.(progress);
+}
 ```
 
 - [ ] **Step 7: Run the focused tests to verify they pass**
@@ -336,6 +337,7 @@ git commit -m "refactor(takeout): expose zip files on demand"
 ### Task 2: Update Existing Zip Scanner Edge Cases
 
 **Files:**
+
 - Modify: `web/src/lib/utils/google-takeout-scanner.spec.ts`
 - Modify: `web/src/lib/utils/google-takeout-scanner.ts` only if these tests reveal a regression
 
@@ -344,13 +346,13 @@ git commit -m "refactor(takeout): expose zip files on demand"
 In `web/src/lib/utils/google-takeout-scanner.spec.ts`, update `should handle items without sidecar`:
 
 ```ts
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0].path).toBe('Takeout/Google Photos/Trip/IMG_002.jpg');
-    expect(result.items[0].name).toBe('IMG_002.jpg');
-    expect(await result.items[0].getFile()).toBeInstanceOf(File);
-    expect(result.items[0].metadata).toBeUndefined();
-    expect(result.stats.withLocation).toBe(0);
-    expect(result.stats.withDate).toBe(0);
+expect(result.items).toHaveLength(1);
+expect(result.items[0].path).toBe('Takeout/Google Photos/Trip/IMG_002.jpg');
+expect(result.items[0].name).toBe('IMG_002.jpg');
+expect(await result.items[0].getFile()).toBeInstanceOf(File);
+expect(result.items[0].metadata).toBeUndefined();
+expect(result.stats.withLocation).toBe(0);
+expect(result.stats.withDate).toBe(0);
 ```
 
 - [ ] **Step 2: Run the no-sidecar test**
@@ -385,6 +387,7 @@ git commit -m "test(takeout): update zip scanner edge cases"
 ### Task 3: Folder Imports Use The Same Item Contract
 
 **Files:**
+
 - Modify: `web/src/lib/utils/google-takeout-scanner.spec.ts`
 - Modify: `web/src/lib/utils/google-takeout-scanner.ts`
 
@@ -393,24 +396,24 @@ git commit -m "test(takeout): update zip scanner edge cases"
 In `web/src/lib/utils/google-takeout-scanner.spec.ts`, update `should scan folder files with webkitRelativePath`:
 
 ```ts
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0].path).toBe('Takeout/Google Photos/Trip/IMG_001.jpg');
-    expect(result.items[0].name).toBe('IMG_001.jpg');
-    expect(result.items[0].size).toBe('fake-image'.length);
-    expect(result.items[0].lastModified).toBeGreaterThan(0);
-    expect(await result.items[0].getFile()).toBe(files[0]);
-    expect(result.items[0].metadata).toBeDefined();
-    expect(result.items[0].metadata!.title).toBe('IMG_001.jpg');
-    expect(result.items[0].metadata!.latitude).toBe(48.8566);
-    expect(result.stats.totalMedia).toBe(1);
-    expect(result.stats.withLocation).toBe(1);
+expect(result.items).toHaveLength(1);
+expect(result.items[0].path).toBe('Takeout/Google Photos/Trip/IMG_001.jpg');
+expect(result.items[0].name).toBe('IMG_001.jpg');
+expect(result.items[0].size).toBe('fake-image'.length);
+expect(result.items[0].lastModified).toBeGreaterThan(0);
+expect(await result.items[0].getFile()).toBe(files[0]);
+expect(result.items[0].metadata).toBeDefined();
+expect(result.items[0].metadata!.title).toBe('IMG_001.jpg');
+expect(result.items[0].metadata!.latitude).toBe(48.8566);
+expect(result.stats.totalMedia).toBe(1);
+expect(result.stats.withLocation).toBe(1);
 ```
 
 Update the sidecar matching test assertion:
 
 ```ts
-    expect(itemWithout!.name).toBe('IMG_002.jpg');
-    expect(await itemWithout!.getFile()).toBe(files[2]);
+expect(itemWithout!.name).toBe('IMG_002.jpg');
+expect(await itemWithout!.getFile()).toBe(files[2]);
 ```
 
 - [ ] **Step 2: Run the folder tests to verify they fail**
@@ -428,15 +431,15 @@ Expected: FAIL because folder items still use `file` and do not define `name`, `
 In `web/src/lib/utils/google-takeout-scanner.ts`, replace the folder item object with:
 
 ```ts
-    const item: TakeoutMediaItem = {
-      path: filePath,
-      name: file.name,
-      size: file.size,
-      lastModified: file.lastModified,
-      getFile: async () => file,
-      metadata,
-      albumName: undefined,
-    };
+const item: TakeoutMediaItem = {
+  path: filePath,
+  name: file.name,
+  size: file.size,
+  lastModified: file.lastModified,
+  getFile: async () => file,
+  metadata,
+  albumName: undefined,
+};
 ```
 
 - [ ] **Step 4: Run scanner specs**
@@ -461,6 +464,7 @@ git commit -m "refactor(takeout): adapt folder imports to lazy files"
 ### Task 4: Uploader Loads Bytes Only At Upload Time
 
 **Files:**
+
 - Modify: `web/src/lib/utils/google-takeout-uploader.spec.ts`
 - Modify: `web/src/lib/utils/google-takeout-uploader.ts`
 
@@ -497,95 +501,95 @@ function makeItem(overrides: Partial<TakeoutMediaItem> = {}): TakeoutMediaItem {
 In `describe('uploadTakeoutItem', ...)`, add:
 
 ```ts
-  it('loads the file through getFile once during upload', async () => {
-    utilsMock.uploadRequest.mockResolvedValue({
-      data: { id: 'asset-1', status: 'created' },
-      status: 201,
-    });
-
-    const getFile = vi.fn(async () => new File(['lazy-bytes'], 'IMG_001.jpg', { lastModified: 1_609_459_200_000 }));
-    const item = makeItem({ getFile, size: 'lazy-bytes'.length });
-
-    await uploadTakeoutItem(item, { ...defaultOptions(), skipDuplicates: false });
-
-    expect(getFile).toHaveBeenCalledOnce();
-    const formData = utilsMock.uploadRequest.mock.calls[0][0].data as FormData;
-    const uploadedFile = formData.get('assetData') as File;
-    expect(uploadedFile.name).toBe('IMG_001.jpg');
-    expect(await uploadedFile.text()).toBe('lazy-bytes');
+it('loads the file through getFile once during upload', async () => {
+  utilsMock.uploadRequest.mockResolvedValue({
+    data: { id: 'asset-1', status: 'created' },
+    status: 201,
   });
 
-  it('hashes lazy file bytes for duplicate checks at upload time', async () => {
-    vi.mocked(sdkMock.checkBulkUpload).mockResolvedValue({
-      results: [
-        {
-          id: 'IMG_001.jpg',
-          assetId: 'existing-asset-1',
-          action: AssetUploadAction.Reject,
-          reason: AssetRejectReason.Duplicate,
-        },
-      ],
-    });
+  const getFile = vi.fn(async () => new File(['lazy-bytes'], 'IMG_001.jpg', { lastModified: 1_609_459_200_000 }));
+  const item = makeItem({ getFile, size: 'lazy-bytes'.length });
 
-    const getFile = vi.fn(async () => new File(['lazy-bytes'], 'IMG_001.jpg', { lastModified: 1_609_459_200_000 }));
-    const item = makeItem({ getFile, size: 'lazy-bytes'.length });
+  await uploadTakeoutItem(item, { ...defaultOptions(), skipDuplicates: false });
 
-    const result = await uploadTakeoutItem(item, defaultOptions());
+  expect(getFile).toHaveBeenCalledOnce();
+  const formData = utilsMock.uploadRequest.mock.calls[0][0].data as FormData;
+  const uploadedFile = formData.get('assetData') as File;
+  expect(uploadedFile.name).toBe('IMG_001.jpg');
+  expect(await uploadedFile.text()).toBe('lazy-bytes');
+});
 
-    expect(getFile).toHaveBeenCalledOnce();
-    expect(sdkMock.checkBulkUpload).toHaveBeenCalledWith({
-      assetBulkUploadCheckDto: {
-        assets: [{ id: 'IMG_001.jpg', checksum: 'b2953b8e364061cea5600e64ec5049d63f08efbe' }],
+it('hashes lazy file bytes for duplicate checks at upload time', async () => {
+  vi.mocked(sdkMock.checkBulkUpload).mockResolvedValue({
+    results: [
+      {
+        id: 'IMG_001.jpg',
+        assetId: 'existing-asset-1',
+        action: AssetUploadAction.Reject,
+        reason: AssetRejectReason.Duplicate,
       },
-    });
-    expect(result).toEqual({ assetId: 'existing-asset-1', status: 'duplicate' });
-    expect(utilsMock.uploadRequest).not.toHaveBeenCalled();
+    ],
   });
 
-  it('uses item name and lastModified metadata instead of file metadata', async () => {
-    utilsMock.uploadRequest.mockResolvedValue({
-      data: { id: 'asset-1', status: 'created' },
-      status: 201,
-    });
+  const getFile = vi.fn(async () => new File(['lazy-bytes'], 'IMG_001.jpg', { lastModified: 1_609_459_200_000 }));
+  const item = makeItem({ getFile, size: 'lazy-bytes'.length });
 
-    const file = new File(['bytes'], 'WRONG_NAME.jpg', { lastModified: 946_684_800_000 });
-    const item = makeItem({
-      name: 'IMG_FROM_ITEM.jpg',
-      lastModified: 1_609_459_200_000,
-      getFile: vi.fn(async () => file),
-      metadata: {
-        title: 'IMG_FROM_ITEM.jpg',
-        description: undefined,
-        dateTaken: undefined,
-        latitude: undefined,
-        longitude: undefined,
-        isFavorite: false,
-        isArchived: false,
-      },
-    });
+  const result = await uploadTakeoutItem(item, defaultOptions());
 
-    await uploadTakeoutItem(item, { ...defaultOptions(), skipDuplicates: false });
+  expect(getFile).toHaveBeenCalledOnce();
+  expect(sdkMock.checkBulkUpload).toHaveBeenCalledWith({
+    assetBulkUploadCheckDto: {
+      assets: [{ id: 'IMG_001.jpg', checksum: 'b2953b8e364061cea5600e64ec5049d63f08efbe' }],
+    },
+  });
+  expect(result).toEqual({ assetId: 'existing-asset-1', status: 'duplicate' });
+  expect(utilsMock.uploadRequest).not.toHaveBeenCalled();
+});
 
-    const formData = utilsMock.uploadRequest.mock.calls[0][0].data as FormData;
-    const uploadedFile = formData.get('assetData') as File;
-    expect(formData.get('deviceAssetId')).toBe('takeout-IMG_FROM_ITEM.jpg-1609459200000');
-    expect(formData.get('fileCreatedAt')).toBe('2021-01-01T00:00:00.000Z');
-    expect(uploadedFile.name).toBe('IMG_FROM_ITEM.jpg');
+it('uses item name and lastModified metadata instead of file metadata', async () => {
+  utilsMock.uploadRequest.mockResolvedValue({
+    data: { id: 'asset-1', status: 'created' },
+    status: 201,
   });
 
-  it('returns an item error when lazy file loading fails', async () => {
-    const item = makeItem({
-      getFile: vi.fn(async () => {
-        throw new Error('Cannot extract zip entry');
-      }),
-    });
-
-    const result = await uploadTakeoutItem(item, { ...defaultOptions(), skipDuplicates: false });
-
-    expect(result.status).toBe('error');
-    expect(result.error).toContain('Cannot extract zip entry');
-    expect(utilsMock.uploadRequest).not.toHaveBeenCalled();
+  const file = new File(['bytes'], 'WRONG_NAME.jpg', { lastModified: 946_684_800_000 });
+  const item = makeItem({
+    name: 'IMG_FROM_ITEM.jpg',
+    lastModified: 1_609_459_200_000,
+    getFile: vi.fn(async () => file),
+    metadata: {
+      title: 'IMG_FROM_ITEM.jpg',
+      description: undefined,
+      dateTaken: undefined,
+      latitude: undefined,
+      longitude: undefined,
+      isFavorite: false,
+      isArchived: false,
+    },
   });
+
+  await uploadTakeoutItem(item, { ...defaultOptions(), skipDuplicates: false });
+
+  const formData = utilsMock.uploadRequest.mock.calls[0][0].data as FormData;
+  const uploadedFile = formData.get('assetData') as File;
+  expect(formData.get('deviceAssetId')).toBe('takeout-IMG_FROM_ITEM.jpg-1609459200000');
+  expect(formData.get('fileCreatedAt')).toBe('2021-01-01T00:00:00.000Z');
+  expect(uploadedFile.name).toBe('IMG_FROM_ITEM.jpg');
+});
+
+it('returns an item error when lazy file loading fails', async () => {
+  const item = makeItem({
+    getFile: vi.fn(async () => {
+      throw new Error('Cannot extract zip entry');
+    }),
+  });
+
+  const result = await uploadTakeoutItem(item, { ...defaultOptions(), skipDuplicates: false });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('Cannot extract zip entry');
+  expect(utilsMock.uploadRequest).not.toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 3: Run uploader tests to verify they fail**
@@ -660,6 +664,7 @@ git commit -m "refactor(takeout): load upload files on demand"
 ### Task 5: Update UI And Test-Only Item Fixtures
 
 **Files:**
+
 - Modify: `web/src/lib/components/import/import-wizard.svelte`
 - Modify: `web/src/lib/components/import/__tests__/import-wizard.spec.ts`
 - Modify: `web/src/lib/components/import/__tests__/import-review-step.spec.ts`
@@ -693,53 +698,53 @@ import ImportWizard from '../import-wizard.svelte';
 Add this test inside `describe('ImportWizard', ...)`:
 
 ```ts
-  it('imports name-only Takeout items without reading item.file', async () => {
-    const user = userEvent.setup();
-    const file = new File(['bytes'], 'IMG_001.jpg', { lastModified: 1_609_459_200_000 });
-    const item: TakeoutMediaItem = {
-      path: 'Takeout/Google Photos/Trip/IMG_001.jpg',
-      name: 'IMG_001.jpg',
-      size: file.size,
-      lastModified: file.lastModified,
-      getFile: async () => file,
-      metadata: undefined,
-      albumName: undefined,
-    };
-    Object.defineProperty(item, 'file', {
-      get() {
-        throw new Error('item.file should not be read');
-      },
-    });
-
-    vi.mocked(scanTakeoutFiles).mockResolvedValue({
-      items: [item],
-      albums: [],
-      stats: {
-        totalMedia: 1,
-        withLocation: 0,
-        withDate: 0,
-        favorites: 0,
-        archived: 0,
-        dateRange: undefined,
-      },
-    });
-    vi.mocked(uploadTakeoutItem).mockResolvedValue({ assetId: 'asset-1', status: 'imported' });
-
-    const { container, getByText, getByTestId } = render(ImportWizard);
-
-    await user.click(getByText('next'));
-
-    const zipInput = container.querySelector('input[type="file"][accept=".zip"]') as HTMLInputElement;
-    await fireEvent.change(zipInput, {
-      target: { files: [new File(['zip'], 'takeout.zip', { type: 'application/zip' })] },
-    });
-    await user.click(getByTestId('next-button'));
-
-    await waitFor(() => expect(getByTestId('import-button')).toBeInTheDocument());
-    await user.click(getByTestId('import-button'));
-
-    await waitFor(() => expect(uploadTakeoutItem).toHaveBeenCalledWith(item, expect.any(Object)));
+it('imports name-only Takeout items without reading item.file', async () => {
+  const user = userEvent.setup();
+  const file = new File(['bytes'], 'IMG_001.jpg', { lastModified: 1_609_459_200_000 });
+  const item: TakeoutMediaItem = {
+    path: 'Takeout/Google Photos/Trip/IMG_001.jpg',
+    name: 'IMG_001.jpg',
+    size: file.size,
+    lastModified: file.lastModified,
+    getFile: async () => file,
+    metadata: undefined,
+    albumName: undefined,
+  };
+  Object.defineProperty(item, 'file', {
+    get() {
+      throw new Error('item.file should not be read');
+    },
   });
+
+  vi.mocked(scanTakeoutFiles).mockResolvedValue({
+    items: [item],
+    albums: [],
+    stats: {
+      totalMedia: 1,
+      withLocation: 0,
+      withDate: 0,
+      favorites: 0,
+      archived: 0,
+      dateRange: undefined,
+    },
+  });
+  vi.mocked(uploadTakeoutItem).mockResolvedValue({ assetId: 'asset-1', status: 'imported' });
+
+  const { container, getByText, getByTestId } = render(ImportWizard);
+
+  await user.click(getByText('next'));
+
+  const zipInput = container.querySelector('input[type="file"][accept=".zip"]') as HTMLInputElement;
+  await fireEvent.change(zipInput, {
+    target: { files: [new File(['zip'], 'takeout.zip', { type: 'application/zip' })] },
+  });
+  await user.click(getByTestId('next-button'));
+
+  await waitFor(() => expect(getByTestId('import-button')).toBeInTheDocument());
+  await user.click(getByTestId('import-button'));
+
+  await waitFor(() => expect(uploadTakeoutItem).toHaveBeenCalledWith(item, expect.any(Object)));
+});
 ```
 
 - [ ] **Step 3: Run the import wizard test to verify it fails**
@@ -769,13 +774,13 @@ with:
 Replace:
 
 ```ts
-        manager.trackError(item.file.name, result.error ?? 'Unknown error');
+manager.trackError(item.file.name, result.error ?? 'Unknown error');
 ```
 
 with:
 
 ```ts
-        manager.trackError(item.name, result.error ?? 'Unknown error');
+manager.trackError(item.name, result.error ?? 'Unknown error');
 ```
 
 - [ ] **Step 5: Add a parser spec fixture helper**
@@ -806,13 +811,13 @@ Replace old literals shaped like:
 with:
 
 ```ts
-makeMediaItem('Takeout/Google Photos/A/img.jpg', { metadata: validMeta })
+makeMediaItem('Takeout/Google Photos/A/img.jpg', { metadata: validMeta });
 ```
 
 For old literals with `albumName`, use:
 
 ```ts
-makeMediaItem('Takeout/YouTube/playlists/playlist.json', { albumName: 'playlists' })
+makeMediaItem('Takeout/YouTube/playlists/playlist.json', { albumName: 'playlists' });
 ```
 
 - [ ] **Step 6: Update import review fixture helper**
@@ -874,6 +879,7 @@ git commit -m "refactor(takeout): update media item consumers"
 ### Task 6: Worker Configuration And Full Verification
 
 **Files:**
+
 - Modify: `web/src/lib/utils/google-takeout-scanner.ts` only if worker configuration is changed
 
 - [ ] **Step 1: Try enabling zip.js workers for the scanner path**
@@ -881,14 +887,14 @@ git commit -m "refactor(takeout): update media item consumers"
 In `web/src/lib/utils/google-takeout-scanner.ts`, replace:
 
 ```ts
-  // Disable web workers to avoid stream lifecycle issues during SvelteKit navigation
-  configure({ useWebWorkers: false });
+// Disable web workers to avoid stream lifecycle issues during SvelteKit navigation
+configure({ useWebWorkers: false });
 ```
 
 with:
 
 ```ts
-  configure({ useWebWorkers: true });
+configure({ useWebWorkers: true });
 ```
 
 - [ ] **Step 2: Run scanner and uploader specs**

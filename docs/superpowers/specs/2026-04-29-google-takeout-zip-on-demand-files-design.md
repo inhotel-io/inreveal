@@ -118,16 +118,16 @@ Add uploader coverage that:
 
 Edge cases to cover or preserve:
 
-| Edge Case | Expected Behavior |
-| --- | --- |
-| Zip entry has no sidecar | Item is listed with undefined metadata and `getFile()` still works. |
-| Sidecar exists before or after media in zip order | Matching remains order-independent. |
-| Localized Google Photos root | Album detection still works for roots such as `Google Fotos` and `Google フォト`. |
-| Non-Photos Takeout media path | Progress reconciliation still drops tentative non-Photos album names. |
-| Mixed zip and folder selection | Both item sources use the same `TakeoutMediaItem` contract. |
-| Abort during scan | Scan stops before building or extracting further entries. |
-| Extraction failure during upload | The item returns upload status `error`; other imports can continue through the existing wizard loop. |
-| Repeated `getFile()` call | Each call returns a fresh usable `File` without retaining prior extracted bytes. |
+| Edge Case                                         | Expected Behavior                                                                                    |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Zip entry has no sidecar                          | Item is listed with undefined metadata and `getFile()` still works.                                  |
+| Sidecar exists before or after media in zip order | Matching remains order-independent.                                                                  |
+| Localized Google Photos root                      | Album detection still works for roots such as `Google Fotos` and `Google フォト`.                    |
+| Non-Photos Takeout media path                     | Progress reconciliation still drops tentative non-Photos album names.                                |
+| Mixed zip and folder selection                    | Both item sources use the same `TakeoutMediaItem` contract.                                          |
+| Abort during scan                                 | Scan stops before building or extracting further entries.                                            |
+| Extraction failure during upload                  | The item returns upload status `error`; other imports can continue through the existing wizard loop. |
+| Repeated `getFile()` call                         | Each call returns a fresh usable `File` without retaining prior extracted bytes.                     |
 
 Baseline verification in the worktree after setup:
 
