@@ -18,6 +18,7 @@
 - Modify `web/src/lib/components/import/import-wizard.svelte`: use `item.name` for current file and error reporting.
 - Modify `web/src/lib/utils/google-takeout-scanner.spec.ts`: add red tests for lazy zip extraction and update assertions to the new item shape.
 - Modify `web/src/lib/utils/google-takeout-uploader.spec.ts`: update fixture helper and add red tests for upload-time `getFile()` behavior.
+- Modify `web/src/lib/components/import/__tests__/import-wizard.spec.ts`: add a red interaction test proving the import loop uses `item.name`, not `item.file.name`.
 - Modify `web/src/lib/utils/google-takeout-parser.spec.ts`: update test-only `TakeoutMediaItem` literals to the new shape.
 - Modify `web/src/lib/components/import/__tests__/import-review-step.spec.ts`: update test fixture helper to the new shape.
 
@@ -514,6 +515,64 @@ In `describe('uploadTakeoutItem', ...)`, add:
     expect(await uploadedFile.text()).toBe('lazy-bytes');
   });
 
+  it('hashes lazy file bytes for duplicate checks at upload time', async () => {
+    vi.mocked(sdkMock.checkBulkUpload).mockResolvedValue({
+      results: [
+        {
+          id: 'IMG_001.jpg',
+          assetId: 'existing-asset-1',
+          action: AssetUploadAction.Reject,
+          reason: AssetRejectReason.Duplicate,
+        },
+      ],
+    });
+
+    const getFile = vi.fn(async () => new File(['lazy-bytes'], 'IMG_001.jpg', { lastModified: 1_609_459_200_000 }));
+    const item = makeItem({ getFile, size: 'lazy-bytes'.length });
+
+    const result = await uploadTakeoutItem(item, defaultOptions());
+
+    expect(getFile).toHaveBeenCalledOnce();
+    expect(sdkMock.checkBulkUpload).toHaveBeenCalledWith({
+      assetBulkUploadCheckDto: {
+        assets: [{ id: 'IMG_001.jpg', checksum: 'b2953b8e364061cea5600e64ec5049d63f08efbe' }],
+      },
+    });
+    expect(result).toEqual({ assetId: 'existing-asset-1', status: 'duplicate' });
+    expect(utilsMock.uploadRequest).not.toHaveBeenCalled();
+  });
+
+  it('uses item name and lastModified metadata instead of file metadata', async () => {
+    utilsMock.uploadRequest.mockResolvedValue({
+      data: { id: 'asset-1', status: 'created' },
+      status: 201,
+    });
+
+    const file = new File(['bytes'], 'WRONG_NAME.jpg', { lastModified: 946_684_800_000 });
+    const item = makeItem({
+      name: 'IMG_FROM_ITEM.jpg',
+      lastModified: 1_609_459_200_000,
+      getFile: vi.fn(async () => file),
+      metadata: {
+        title: 'IMG_FROM_ITEM.jpg',
+        description: undefined,
+        dateTaken: undefined,
+        latitude: undefined,
+        longitude: undefined,
+        isFavorite: false,
+        isArchived: false,
+      },
+    });
+
+    await uploadTakeoutItem(item, { ...defaultOptions(), skipDuplicates: false });
+
+    const formData = utilsMock.uploadRequest.mock.calls[0][0].data as FormData;
+    const uploadedFile = formData.get('assetData') as File;
+    expect(formData.get('deviceAssetId')).toBe('takeout-IMG_FROM_ITEM.jpg-1609459200000');
+    expect(formData.get('fileCreatedAt')).toBe('2021-01-01T00:00:00.000Z');
+    expect(uploadedFile.name).toBe('IMG_FROM_ITEM.jpg');
+  });
+
   it('returns an item error when lazy file loading fails', async () => {
     const item = makeItem({
       getFile: vi.fn(async () => {
@@ -534,7 +593,7 @@ In `describe('uploadTakeoutItem', ...)`, add:
 Run:
 
 ```bash
-pnpm --dir web exec vitest run src/lib/utils/google-takeout-uploader.spec.ts -t "getFile|lazy file loading"
+pnpm --dir web exec vitest run src/lib/utils/google-takeout-uploader.spec.ts -t "getFile|lazy file loading|lazy file bytes|file metadata"
 ```
 
 Expected: FAIL because `uploadTakeoutItem()` still reads `item.file`.
@@ -602,6 +661,7 @@ git commit -m "refactor(takeout): load upload files on demand"
 
 **Files:**
 - Modify: `web/src/lib/components/import/import-wizard.svelte`
+- Modify: `web/src/lib/components/import/__tests__/import-wizard.spec.ts`
 - Modify: `web/src/lib/components/import/__tests__/import-review-step.spec.ts`
 - Modify: `web/src/lib/utils/google-takeout-parser.spec.ts`
 - Modify: `web/src/lib/utils/google-takeout-scanner.spec.ts` if any old `file` assertion remains
@@ -616,7 +676,83 @@ pnpm --dir web run check:typescript
 
 Expected before this task: FAIL with `Property 'file' does not exist on type 'TakeoutMediaItem'` in import wizard and/or specs.
 
-- [ ] **Step 2: Update import wizard runtime reads**
+- [ ] **Step 2: Add the failing import wizard interaction test**
+
+In `web/src/lib/components/import/__tests__/import-wizard.spec.ts`, replace the imports with:
+
+```ts
+import type { TakeoutMediaItem } from '$lib/utils/google-takeout-parser';
+import { scanTakeoutFiles } from '$lib/utils/google-takeout-scanner';
+import { uploadTakeoutItem } from '$lib/utils/google-takeout-uploader';
+import '@testing-library/jest-dom';
+import { fireEvent, render, waitFor } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
+import ImportWizard from '../import-wizard.svelte';
+```
+
+Add this test inside `describe('ImportWizard', ...)`:
+
+```ts
+  it('imports name-only Takeout items without reading item.file', async () => {
+    const user = userEvent.setup();
+    const file = new File(['bytes'], 'IMG_001.jpg', { lastModified: 1_609_459_200_000 });
+    const item: TakeoutMediaItem = {
+      path: 'Takeout/Google Photos/Trip/IMG_001.jpg',
+      name: 'IMG_001.jpg',
+      size: file.size,
+      lastModified: file.lastModified,
+      getFile: async () => file,
+      metadata: undefined,
+      albumName: undefined,
+    };
+    Object.defineProperty(item, 'file', {
+      get() {
+        throw new Error('item.file should not be read');
+      },
+    });
+
+    vi.mocked(scanTakeoutFiles).mockResolvedValue({
+      items: [item],
+      albums: [],
+      stats: {
+        totalMedia: 1,
+        withLocation: 0,
+        withDate: 0,
+        favorites: 0,
+        archived: 0,
+        dateRange: undefined,
+      },
+    });
+    vi.mocked(uploadTakeoutItem).mockResolvedValue({ assetId: 'asset-1', status: 'imported' });
+
+    const { container, getByText, getByTestId } = render(ImportWizard);
+
+    await user.click(getByText('next'));
+
+    const zipInput = container.querySelector('input[type="file"][accept=".zip"]') as HTMLInputElement;
+    await fireEvent.change(zipInput, {
+      target: { files: [new File(['zip'], 'takeout.zip', { type: 'application/zip' })] },
+    });
+    await user.click(getByTestId('next-button'));
+
+    await waitFor(() => expect(getByTestId('import-button')).toBeInTheDocument());
+    await user.click(getByTestId('import-button'));
+
+    await waitFor(() => expect(uploadTakeoutItem).toHaveBeenCalledWith(item, expect.any(Object)));
+  });
+```
+
+- [ ] **Step 3: Run the import wizard test to verify it fails**
+
+Run:
+
+```bash
+pnpm --dir web exec vitest run src/lib/components/import/__tests__/import-wizard.spec.ts -t "imports name-only Takeout items without reading item.file"
+```
+
+Expected: FAIL because `import-wizard.svelte` reads `item.file.name`.
+
+- [ ] **Step 4: Update import wizard runtime reads**
 
 In `web/src/lib/components/import/import-wizard.svelte`, replace:
 
@@ -642,7 +778,7 @@ with:
         manager.trackError(item.name, result.error ?? 'Unknown error');
 ```
 
-- [ ] **Step 3: Add a parser spec fixture helper**
+- [ ] **Step 5: Add a parser spec fixture helper**
 
 In `web/src/lib/utils/google-takeout-parser.spec.ts`, near the `validMeta` constant, add:
 
@@ -679,7 +815,7 @@ For old literals with `albumName`, use:
 makeMediaItem('Takeout/YouTube/playlists/playlist.json', { albumName: 'playlists' })
 ```
 
-- [ ] **Step 4: Update import review fixture helper**
+- [ ] **Step 6: Update import review fixture helper**
 
 In `web/src/lib/components/import/__tests__/import-review-step.spec.ts`, replace `makeItem()` with:
 
@@ -698,7 +834,7 @@ function makeItem(overrides?: Partial<TakeoutMediaItem>): TakeoutMediaItem {
 }
 ```
 
-- [ ] **Step 5: Remove remaining stale `item.file` references**
+- [ ] **Step 7: Remove remaining stale `item.file` references**
 
 Run:
 
@@ -715,23 +851,23 @@ web/src/lib/components/import/*.svelte
 web/src/lib/components/import/__tests__/*.spec.ts
 ```
 
-- [ ] **Step 6: Run typecheck and focused component/parser tests**
+- [ ] **Step 8: Run typecheck and focused component/parser tests**
 
 Run:
 
 ```bash
 pnpm --dir web run check:typescript
-pnpm --dir web exec vitest run src/lib/utils/google-takeout-parser.spec.ts src/lib/components/import/__tests__/import-review-step.spec.ts
+pnpm --dir web exec vitest run src/lib/utils/google-takeout-parser.spec.ts src/lib/components/import/__tests__/import-review-step.spec.ts src/lib/components/import/__tests__/import-wizard.spec.ts
 ```
 
 Expected: both commands pass. If `check:typescript` surfaces unrelated baseline failures, document them and run the focused Vitest command.
 
-- [ ] **Step 7: Commit Task 5**
+- [ ] **Step 9: Commit Task 5**
 
 Run:
 
 ```bash
-git add web/src/lib/components/import/import-wizard.svelte web/src/lib/components/import/__tests__/import-review-step.spec.ts web/src/lib/utils/google-takeout-parser.spec.ts web/src/lib/utils/google-takeout-scanner.spec.ts
+git add web/src/lib/components/import/import-wizard.svelte web/src/lib/components/import/__tests__/import-wizard.spec.ts web/src/lib/components/import/__tests__/import-review-step.spec.ts web/src/lib/utils/google-takeout-parser.spec.ts web/src/lib/utils/google-takeout-scanner.spec.ts
 git commit -m "refactor(takeout): update media item consumers"
 ```
 
