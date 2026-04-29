@@ -86,7 +86,6 @@ interface ZipMediaDescriptor {
   name: string;
   size: number;
   lastModified: number;
-  entry: ZipEntry;
 }
 
 function isZipFile(file: File): boolean {
@@ -106,7 +105,7 @@ function basename(path: string): string {
   return path.slice(Math.max(0, path.lastIndexOf('/') + 1));
 }
 
-async function getZipEntryFile(entry: ZipEntry, name: string, lastModified: number): Promise<File> {
+async function extractZipEntryFile(entry: ZipEntry, name: string, lastModified: number): Promise<File> {
   if (entry.arrayBuffer) {
     const buffer = await entry.arrayBuffer();
     return new File([buffer], name, { lastModified });
@@ -118,6 +117,23 @@ async function getZipEntryFile(entry: ZipEntry, name: string, lastModified: numb
   }
 
   throw new Error(`Zip entry "${entry.filename}" cannot be extracted`);
+}
+
+async function getZipEntryFile(zipFile: File, entryPath: string, name: string, lastModified: number): Promise<File> {
+  const { BlobReader, ZipReader } = await import('@zip.js/zip.js');
+  const reader = new ZipReader(new BlobReader(zipFile));
+
+  try {
+    const entries: ZipEntry[] = await reader.getEntries();
+    const entry = entries.find((entry) => entry.filename === entryPath);
+    if (!entry) {
+      throw new Error(`Zip entry "${entryPath}" not found`);
+    }
+
+    return await extractZipEntryFile(entry, name, lastModified);
+  } finally {
+    await reader.close();
+  }
 }
 
 function trackItemStats(
@@ -161,8 +177,7 @@ async function scanZipFile(
 ): Promise<void> {
   const { BlobReader, ZipReader, configure } = await import('@zip.js/zip.js');
 
-  // Disable web workers to avoid stream lifecycle issues during SvelteKit navigation
-  configure({ useWebWorkers: false });
+  configure({ useWebWorkers: true });
 
   const reader = new ZipReader(new BlobReader(zipFile));
 
@@ -203,7 +218,6 @@ async function scanZipFile(
             name,
             size: entry.uncompressedSize ?? 0,
             lastModified,
-            entry,
           });
 
           // Update progress counters while scanning so the UI shows activity.
@@ -272,7 +286,7 @@ async function scanZipFile(
       name: descriptor.name,
       size: descriptor.size,
       lastModified: descriptor.lastModified,
-      getFile: () => getZipEntryFile(descriptor.entry, descriptor.name, descriptor.lastModified),
+      getFile: () => getZipEntryFile(zipFile, descriptor.path, descriptor.name, descriptor.lastModified),
       metadata,
       albumName: undefined,
     });

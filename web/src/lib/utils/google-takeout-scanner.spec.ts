@@ -85,31 +85,34 @@ describe('scanTakeoutFiles', () => {
     const mediaArrayBuffer = vi.fn(async () => new TextEncoder().encode('media-bytes').buffer);
     const sidecarArrayBuffer = vi.fn(async () => new TextEncoder().encode(makeSidecar()).buffer);
     const close = vi.fn(async () => undefined);
+    const blobReader = vi.fn(function BlobReader() {});
+    const configure = vi.fn();
+    const zipReader = vi.fn(function ZipReader() {
+      return {
+        close,
+        getEntries: vi.fn(async () => [
+          {
+            filename: 'Takeout/Google Photos/Trip/IMG_001.jpg',
+            directory: false,
+            uncompressedSize: 'media-bytes'.length,
+            lastModDate: new Date('2021-01-01T00:00:00.000Z'),
+            arrayBuffer: mediaArrayBuffer,
+          },
+          {
+            filename: 'Takeout/Google Photos/Trip/IMG_001.jpg.json',
+            directory: false,
+            uncompressedSize: 10,
+            lastModDate: new Date('2021-01-01T00:00:00.000Z'),
+            arrayBuffer: sidecarArrayBuffer,
+          },
+        ]),
+      };
+    });
 
     vi.doMock('@zip.js/zip.js', () => ({
-      BlobReader: vi.fn(function BlobReader() {}),
-      configure: vi.fn(),
-      ZipReader: vi.fn(function ZipReader() {
-        return {
-          close,
-          getEntries: vi.fn(async () => [
-            {
-              filename: 'Takeout/Google Photos/Trip/IMG_001.jpg',
-              directory: false,
-              uncompressedSize: 'media-bytes'.length,
-              lastModDate: new Date('2021-01-01T00:00:00.000Z'),
-              arrayBuffer: mediaArrayBuffer,
-            },
-            {
-              filename: 'Takeout/Google Photos/Trip/IMG_001.jpg.json',
-              directory: false,
-              uncompressedSize: 10,
-              lastModDate: new Date('2021-01-01T00:00:00.000Z'),
-              arrayBuffer: sidecarArrayBuffer,
-            },
-          ]),
-        };
-      }),
+      BlobReader: blobReader,
+      configure,
+      ZipReader: zipReader,
     }));
 
     try {
@@ -121,10 +124,16 @@ describe('scanTakeoutFiles', () => {
       expect(sidecarArrayBuffer).toHaveBeenCalledOnce();
       expect(mediaArrayBuffer).not.toHaveBeenCalled();
       expect(close).toHaveBeenCalledOnce();
+      expect(configure).toHaveBeenCalledWith({ useWebWorkers: true });
+      expect(blobReader).toHaveBeenCalledOnce();
+      expect(zipReader).toHaveBeenCalledOnce();
 
       const file = await result.items[0].getFile();
       expect(mediaArrayBuffer).toHaveBeenCalledOnce();
       expect(await file.text()).toBe('media-bytes');
+      expect(blobReader).toHaveBeenCalledTimes(2);
+      expect(zipReader).toHaveBeenCalledTimes(2);
+      expect(close).toHaveBeenCalledTimes(2);
     } finally {
       vi.doUnmock('@zip.js/zip.js');
       vi.resetModules();
