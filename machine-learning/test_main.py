@@ -1031,12 +1031,25 @@ class TestOcr:
 
         rapid_recognizer.assert_called_once_with(
             OcrOptions(
-              session=ort_session.return_value,
-              rec_batch_num=6,
-              rec_img_shape=(3, 48, 320),
-              model_root_dir=text_recognizer.cache_dir,
+                session=ort_session.return_value,
+                rec_batch_num=6,
+                rec_img_shape=(3, 48, 320),
+                model_root_dir=text_recognizer.cache_dir,
             )
         )
+
+    def test_passes_model_root_dir_to_rapidocr(
+        self, ort_session: mock.Mock, path: mock.Mock, mocker: MockerFixture
+    ) -> None:
+        path.return_value.__truediv__.return_value.__truediv__.return_value.suffix = ".onnx"
+        mocker.patch("immich_ml.models.base.InferenceModel.download")
+        rapid_recognizer = mocker.patch("immich_ml.models.ocr.recognition.RapidTextRecognizer")
+
+        text_recognizer = TextRecognizer("PP-OCRv5_mobile", cache_dir="test_cache")
+        text_recognizer.load()
+
+        options = rapid_recognizer.call_args.args[0]
+        assert options["model_root_dir"] == text_recognizer.cache_dir
 
     def test_set_custom_max_batch_size(self, ort_session: mock.Mock, path: mock.Mock, mocker: MockerFixture) -> None:
         path.return_value.__truediv__.return_value.__truediv__.return_value.suffix = ".onnx"
@@ -1049,10 +1062,10 @@ class TestOcr:
 
         rapid_recognizer.assert_called_once_with(
             OcrOptions(
-              session=ort_session.return_value,
-              rec_batch_num=4,
-              rec_img_shape=(3, 48, 320),
-              model_root_dir=text_recognizer.cache_dir,
+                session=ort_session.return_value,
+                rec_batch_num=4,
+                rec_img_shape=(3, 48, 320),
+                model_root_dir=text_recognizer.cache_dir,
             )
         )
 
@@ -1069,10 +1082,10 @@ class TestOcr:
 
         rapid_recognizer.assert_called_once_with(
             OcrOptions(
-              session=ort_session.return_value,
-              rec_batch_num=6,
-              rec_img_shape=(3, 48, 320),
-              model_root_dir=text_recognizer.cache_dir,
+                session=ort_session.return_value,
+                rec_batch_num=6,
+                rec_img_shape=(3, 48, 320),
+                model_root_dir=text_recognizer.cache_dir,
             )
         )
 
