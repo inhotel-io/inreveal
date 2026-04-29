@@ -227,7 +227,6 @@ async function scanZipFile(
             progress.albumNames.add(parts[2]);
           }
           onProgress?.(progress);
-
         } else if (isSidecarFile(entry.filename)) {
           if (entry.arrayBuffer) {
             const buffer = await entry.arrayBuffer();

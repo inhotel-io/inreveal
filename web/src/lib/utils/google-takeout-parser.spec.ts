@@ -520,9 +520,7 @@ describe('finalizeItemAlbumNames', () => {
   });
 
   it('leaves albumName undefined for items loose in the Photos root (no album subfolder)', () => {
-    const items: TakeoutMediaItem[] = [
-      makeMediaItem('Takeout/Google Fotos/img.jpg', { albumName: 'whatever' }),
-    ];
+    const items: TakeoutMediaItem[] = [makeMediaItem('Takeout/Google Fotos/img.jpg', { albumName: 'whatever' })];
     finalizeItemAlbumNames(items, new Set(['Google Fotos']));
     expect(items[0].albumName).toBeUndefined();
   });

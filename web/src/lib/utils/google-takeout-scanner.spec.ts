@@ -90,22 +90,24 @@ describe('scanTakeoutFiles', () => {
     const zipReader = vi.fn(function ZipReader() {
       return {
         close,
-        getEntries: vi.fn(() => Promise.resolve([
-          {
-            filename: 'Takeout/Google Photos/Trip/IMG_001.jpg',
-            directory: false,
-            uncompressedSize: 'media-bytes'.length,
-            lastModDate: new Date('2021-01-01T00:00:00.000Z'),
-            arrayBuffer: mediaArrayBuffer,
-          },
-          {
-            filename: 'Takeout/Google Photos/Trip/IMG_001.jpg.json',
-            directory: false,
-            uncompressedSize: 10,
-            lastModDate: new Date('2021-01-01T00:00:00.000Z'),
-            arrayBuffer: sidecarArrayBuffer,
-          },
-        ])),
+        getEntries: vi.fn(() =>
+          Promise.resolve([
+            {
+              filename: 'Takeout/Google Photos/Trip/IMG_001.jpg',
+              directory: false,
+              uncompressedSize: 'media-bytes'.length,
+              lastModDate: new Date('2021-01-01T00:00:00.000Z'),
+              arrayBuffer: mediaArrayBuffer,
+            },
+            {
+              filename: 'Takeout/Google Photos/Trip/IMG_001.jpg.json',
+              directory: false,
+              uncompressedSize: 10,
+              lastModDate: new Date('2021-01-01T00:00:00.000Z'),
+              arrayBuffer: sidecarArrayBuffer,
+            },
+          ]),
+        ),
       };
     });
 
