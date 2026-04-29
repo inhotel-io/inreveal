@@ -30,7 +30,7 @@ function makeItem(overrides: Partial<TakeoutMediaItem> = {}): TakeoutMediaItem {
     name: 'IMG_001.jpg',
     size: file.size,
     lastModified: 1_609_459_200_000,
-    getFile: vi.fn(async () => file),
+    getFile: vi.fn(() => Promise.resolve(file)),
     metadata: {
       title: 'IMG_001.jpg',
       description: 'A nice photo',
@@ -126,7 +126,9 @@ describe('uploadTakeoutItem', () => {
       status: 201,
     });
 
-    const getFile = vi.fn(async () => new File(['lazy-bytes'], 'IMG_001.jpg', { lastModified: 1_609_459_200_000 }));
+    const getFile = vi.fn(() =>
+      Promise.resolve(new File(['lazy-bytes'], 'IMG_001.jpg', { lastModified: 1_609_459_200_000 })),
+    );
     const item = makeItem({ getFile, size: 'lazy-bytes'.length });
 
     await uploadTakeoutItem(item, { ...defaultOptions(), skipDuplicates: false });
@@ -150,7 +152,9 @@ describe('uploadTakeoutItem', () => {
       ],
     });
 
-    const getFile = vi.fn(async () => new File(['lazy-bytes'], 'IMG_001.jpg', { lastModified: 1_609_459_200_000 }));
+    const getFile = vi.fn(() =>
+      Promise.resolve(new File(['lazy-bytes'], 'IMG_001.jpg', { lastModified: 1_609_459_200_000 })),
+    );
     const item = makeItem({ getFile, size: 'lazy-bytes'.length });
 
     const result = await uploadTakeoutItem(item, defaultOptions());
@@ -175,7 +179,7 @@ describe('uploadTakeoutItem', () => {
     const item = makeItem({
       name: 'IMG_FROM_ITEM.jpg',
       lastModified: 1_609_459_200_000,
-      getFile: vi.fn(async () => file),
+      getFile: vi.fn(() => Promise.resolve(file)),
       metadata: {
         title: 'IMG_FROM_ITEM.jpg',
         description: undefined,
@@ -319,9 +323,7 @@ describe('uploadTakeoutItem', () => {
 
   it('returns an item error when lazy file loading fails', async () => {
     const item = makeItem({
-      getFile: vi.fn(async () => {
-        throw new Error('Cannot extract zip entry');
-      }),
+      getFile: vi.fn(() => Promise.reject(new Error('Cannot extract zip entry'))),
     });
 
     const result = await uploadTakeoutItem(item, { ...defaultOptions(), skipDuplicates: false });

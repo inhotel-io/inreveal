@@ -82,15 +82,15 @@ describe('scanTakeoutFiles', () => {
   it('does not extract media entries while scanning a zip', async () => {
     vi.resetModules();
 
-    const mediaArrayBuffer = vi.fn(async () => new TextEncoder().encode('media-bytes').buffer);
-    const sidecarArrayBuffer = vi.fn(async () => new TextEncoder().encode(makeSidecar()).buffer);
-    const close = vi.fn(async () => undefined);
+    const mediaArrayBuffer = vi.fn(() => Promise.resolve(new TextEncoder().encode('media-bytes').buffer));
+    const sidecarArrayBuffer = vi.fn(() => Promise.resolve(new TextEncoder().encode(makeSidecar()).buffer));
+    const close = vi.fn(() => Promise.resolve(undefined));
     const blobReader = vi.fn(function BlobReader() {});
     const configure = vi.fn();
     const zipReader = vi.fn(function ZipReader() {
       return {
         close,
-        getEntries: vi.fn(async () => [
+        getEntries: vi.fn(() => Promise.resolve([
           {
             filename: 'Takeout/Google Photos/Trip/IMG_001.jpg',
             directory: false,
@@ -105,7 +105,7 @@ describe('scanTakeoutFiles', () => {
             lastModDate: new Date('2021-01-01T00:00:00.000Z'),
             arrayBuffer: sidecarArrayBuffer,
           },
-        ]),
+        ])),
       };
     });
 

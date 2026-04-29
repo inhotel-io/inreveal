@@ -355,7 +355,7 @@ async function scanFolderFiles(
       name: file.name,
       size: file.size,
       lastModified: file.lastModified,
-      getFile: async () => file,
+      getFile: () => Promise.resolve(file),
       metadata,
       albumName: undefined,
     };

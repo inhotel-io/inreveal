@@ -12,7 +12,7 @@ function makeItem(overrides?: Partial<TakeoutMediaItem>): TakeoutMediaItem {
     name: file.name,
     size: file.size,
     lastModified: file.lastModified,
-    getFile: async () => file,
+    getFile: () => Promise.resolve(file),
     metadata: undefined,
     ...overrides,
   };

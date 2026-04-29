@@ -23,7 +23,7 @@ function makeMediaItem(path: string, overrides: Partial<TakeoutMediaItem> = {}):
     name,
     size: file.size,
     lastModified: file.lastModified,
-    getFile: async () => file,
+    getFile: () => Promise.resolve(file),
     ...overrides,
   };
 }

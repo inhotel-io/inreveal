@@ -52,7 +52,7 @@ describe('ImportWizard', () => {
       name: 'IMG_001.jpg',
       size: file.size,
       lastModified: file.lastModified,
-      getFile: async () => file,
+      getFile: () => Promise.resolve(file),
       metadata: undefined,
       albumName: undefined,
     };
