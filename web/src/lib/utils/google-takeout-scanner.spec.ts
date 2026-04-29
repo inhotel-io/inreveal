@@ -300,7 +300,11 @@ describe('scanTakeoutFiles — folder support', () => {
     const result: ScanResult = await scanTakeoutFiles({ files });
 
     expect(result.items).toHaveLength(1);
-    expect(result.items[0].file.name).toBe('IMG_001.jpg');
+    expect(result.items[0].path).toBe('Takeout/Google Photos/Trip/IMG_001.jpg');
+    expect(result.items[0].name).toBe('IMG_001.jpg');
+    expect(result.items[0].size).toBe('fake-image'.length);
+    expect(result.items[0].lastModified).toBeGreaterThan(0);
+    expect(await result.items[0].getFile()).toBe(files[0]);
     expect(result.items[0].metadata).toBeDefined();
     expect(result.items[0].metadata!.title).toBe('IMG_001.jpg');
     expect(result.items[0].metadata!.latitude).toBe(48.8566);
@@ -329,7 +333,8 @@ describe('scanTakeoutFiles — folder support', () => {
     expect(itemWithMeta).toBeDefined();
     expect(itemWithMeta!.metadata!.isFavorite).toBe(true);
     expect(itemWithout).toBeDefined();
-    expect(itemWithout!.file.name).toBe('IMG_002.jpg');
+    expect(itemWithout!.name).toBe('IMG_002.jpg');
+    expect(await itemWithout!.getFile()).toBe(files[2]);
   });
 
   it('should detect albums from folder hierarchy', async () => {

@@ -338,7 +338,10 @@ async function scanFolderFiles(
 
     const item: TakeoutMediaItem = {
       path: filePath,
-      file,
+      name: file.name,
+      size: file.size,
+      lastModified: file.lastModified,
+      getFile: async () => file,
       metadata,
       albumName: undefined,
     };
