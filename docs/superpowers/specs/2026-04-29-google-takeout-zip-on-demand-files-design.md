@@ -45,7 +45,7 @@ export interface TakeoutMediaItem {
 }
 ```
 
-Folder imports keep the original selected `File` and implement `getFile` as a closure returning that file. Zip imports populate `name`, `size`, and `lastModified` from zip entry metadata and implement `getFile` as a closure that extracts only that entry.
+Folder imports keep the original selected `File` and implement `getFile` as a closure returning that file. Zip imports populate `name`, `size`, and `lastModified` from zip entry metadata (`filename`, `uncompressedSize`, and `lastModDate`) and implement `getFile` as a closure that extracts only that entry.
 
 ## Zip Scan Design
 
@@ -60,7 +60,9 @@ Folder imports keep the original selected `File` and implement `getFile` as a cl
 
 The primary implementation should use a per-zip central-directory cache so uploads do not reparse every zip entry for every item. The cache may retain zip entry metadata and the source zip `File`, but it must not retain extracted media blobs.
 
-Because zip.js reader and entry lifetimes can be subtle, the implementation must verify whether entries remain extractable after `reader.close()`. If they do not, the extractor should reopen a `ZipReader` as needed and cache only the resulting entry map, closing readers after extraction. The invariant is more important than the exact lifecycle: scan must not extract media, and upload must extract only the requested media file.
+The expected lifecycle is: call `getEntries()`, cache `FileEntry` references for media, close the `ZipReader` after scan, and let each `getFile()` call invoke `entry.arrayBuffer()` on the cached entry. A small zip.js probe in the worktree confirmed this works after `reader.close()` in the local test environment. Add regression coverage so this assumption is protected by tests. If browser validation shows closed-reader extraction is unsafe, change only the extractor internals to reopen a reader and rebuild the entry map on demand; keep the public `TakeoutMediaItem` contract unchanged.
+
+Extraction failures for encrypted, corrupt, or missing entries should surface as upload errors for that item through the existing `uploadTakeoutItem()` error result path. Scan should continue to skip entries that lack a usable extractor, matching current behavior.
 
 ## Worker Configuration
 
@@ -82,6 +84,20 @@ Name and timestamp-only values should use `item.name` and `item.lastModified` so
 
 `import-wizard.svelte` will replace `item.file.name` with `item.name` for progress and error reporting. `import-review-step.svelte` does not need runtime changes unless TypeScript fixtures or props require the new shape in tests.
 
+## TDD Execution
+
+Implementation must use red-green-refactor. Do not write production code for a behavior until its failing test has been added and run.
+
+Recommended test-first order:
+
+1. Add a scanner test proving zip scan returns item metadata and `getFile()` returns the expected bytes. Run it and confirm it fails because `getFile` does not exist yet.
+2. Add a scanner test proving media entries are not extracted during scan. Use a zip.js mock or spy that distinguishes sidecar extraction from media extraction, and confirm the test fails against the current eager scanner.
+3. Add a folder-source scanner test proving `getFile()` returns the original selected `File`, including `name`, `size`, and `lastModified`.
+4. Add uploader tests proving name/timestamp metadata is read without extraction where possible, `getFile()` is called during upload, and duplicate hashing still reads bytes at upload time.
+5. Update parser and import component fixtures only after the tests define the new `TakeoutMediaItem` shape.
+
+After each red test fails for the expected reason, implement the minimal production change to make it pass, then rerun the focused specs before moving to the next behavior.
+
 ## Testing
 
 Update the scanner, parser, uploader, and import component specs to construct `TakeoutMediaItem` with `name`, `size`, `lastModified`, and `getFile`.
@@ -99,6 +115,19 @@ Add uploader coverage that:
 - verifies `uploadTakeoutItem()` calls `getFile()` during upload,
 - verifies duplicate checks still hash the file bytes at upload time,
 - verifies name and last-modified metadata are preserved.
+
+Edge cases to cover or preserve:
+
+| Edge Case | Expected Behavior |
+| --- | --- |
+| Zip entry has no sidecar | Item is listed with undefined metadata and `getFile()` still works. |
+| Sidecar exists before or after media in zip order | Matching remains order-independent. |
+| Localized Google Photos root | Album detection still works for roots such as `Google Fotos` and `Google フォト`. |
+| Non-Photos Takeout media path | Progress reconciliation still drops tentative non-Photos album names. |
+| Mixed zip and folder selection | Both item sources use the same `TakeoutMediaItem` contract. |
+| Abort during scan | Scan stops before building or extracting further entries. |
+| Extraction failure during upload | The item returns upload status `error`; other imports can continue through the existing wizard loop. |
+| Repeated `getFile()` call | Each call returns a fresh usable `File` without retaining prior extracted bytes. |
 
 Baseline verification in the worktree after setup:
 
