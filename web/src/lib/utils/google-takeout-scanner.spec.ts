@@ -42,7 +42,7 @@ describe('scanTakeoutFiles', () => {
     scanTakeoutFiles = mod.scanTakeoutFiles;
   });
 
-  it('should scan a zip and extract media with metadata', async () => {
+  it('should scan a zip and expose media bytes lazily with metadata', async () => {
     const zipBlob = await createZipBlob([
       { path: 'Takeout/Google Photos/Trip/IMG_001.jpg', content: 'fake-image-data' },
       { path: 'Takeout/Google Photos/Trip/IMG_001.jpg.json', content: makeSidecar() },
@@ -54,6 +54,20 @@ describe('scanTakeoutFiles', () => {
 
     expect(result.items).toHaveLength(1);
     expect(result.items[0].path).toBe('Takeout/Google Photos/Trip/IMG_001.jpg');
+    expect(result.items[0].name).toBe('IMG_001.jpg');
+    expect(result.items[0].size).toBe('fake-image-data'.length);
+    expect(result.items[0].lastModified).toBeGreaterThan(0);
+
+    const file = await result.items[0].getFile();
+    expect(file.name).toBe('IMG_001.jpg');
+    expect(file.size).toBe('fake-image-data'.length);
+    expect(await file.text()).toBe('fake-image-data');
+
+    const secondFile = await result.items[0].getFile();
+    expect(secondFile).not.toBe(file);
+    expect(secondFile.name).toBe('IMG_001.jpg');
+    expect(await secondFile.text()).toBe('fake-image-data');
+
     expect(result.items[0].metadata).toBeDefined();
     expect(result.items[0].metadata!.title).toBe('IMG_001.jpg');
     expect(result.items[0].metadata!.latitude).toBe(48.8566);
@@ -63,6 +77,60 @@ describe('scanTakeoutFiles', () => {
     expect(result.stats.withDate).toBe(1);
     expect(result.stats.favorites).toBe(1);
     expect(result.stats.archived).toBe(0);
+  });
+
+  it('does not extract media entries while scanning a zip', async () => {
+    vi.resetModules();
+
+    const mediaArrayBuffer = vi.fn(async () => new TextEncoder().encode('media-bytes').buffer);
+    const sidecarArrayBuffer = vi.fn(async () => new TextEncoder().encode(makeSidecar()).buffer);
+    const close = vi.fn(async () => undefined);
+
+    vi.doMock('@zip.js/zip.js', () => ({
+      BlobReader: vi.fn(function BlobReader() {}),
+      configure: vi.fn(),
+      ZipReader: vi.fn(function ZipReader() {
+        return {
+          close,
+          getEntries: vi.fn(async () => [
+            {
+              filename: 'Takeout/Google Photos/Trip/IMG_001.jpg',
+              directory: false,
+              uncompressedSize: 'media-bytes'.length,
+              lastModDate: new Date('2021-01-01T00:00:00.000Z'),
+              arrayBuffer: mediaArrayBuffer,
+            },
+            {
+              filename: 'Takeout/Google Photos/Trip/IMG_001.jpg.json',
+              directory: false,
+              uncompressedSize: 10,
+              lastModDate: new Date('2021-01-01T00:00:00.000Z'),
+              arrayBuffer: sidecarArrayBuffer,
+            },
+          ]),
+        };
+      }),
+    }));
+
+    try {
+      const { scanTakeoutFiles } = await import('$lib/utils/google-takeout-scanner');
+      const result = await scanTakeoutFiles({
+        files: [new File(['zip-placeholder'], 'takeout.zip', { type: 'application/zip' })],
+      });
+
+      expect(sidecarArrayBuffer).toHaveBeenCalledOnce();
+      expect(mediaArrayBuffer).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledOnce();
+
+      const file = await result.items[0].getFile();
+      expect(mediaArrayBuffer).toHaveBeenCalledOnce();
+      expect(await file.text()).toBe('media-bytes');
+    } finally {
+      vi.doUnmock('@zip.js/zip.js');
+      vi.resetModules();
+      const mod = await import('$lib/utils/google-takeout-scanner');
+      scanTakeoutFiles = mod.scanTakeoutFiles;
+    }
   });
 
   it('should report progress via callback', async () => {
