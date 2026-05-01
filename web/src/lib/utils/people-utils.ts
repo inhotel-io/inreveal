@@ -1,4 +1,4 @@
-import { AssetTypeEnum, type AssetFaceResponseDto } from '@immich/sdk';
+import { AssetTypeEnum } from '@immich/sdk';
 import type { Faces } from '$lib/stores/people.store';
 import { getAssetMediaUrl } from '$lib/utils';
 import { mapNormalizedRectToContent, type Rect, type Size } from '$lib/utils/container-utils';
@@ -22,7 +22,7 @@ export const getBoundingBox = (faces: Faces[], imageSize: Size): BoundingBox[] =
 };
 
 export const zoomImageToBase64 = async (
-  face: AssetFaceResponseDto,
+  face: Faces,
   assetId: string,
   assetType: AssetTypeEnum,
   photoViewer: HTMLImageElement | undefined,
