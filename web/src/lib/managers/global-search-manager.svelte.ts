@@ -260,6 +260,8 @@ export class GlobalSearchManager {
    */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   private commandInFlight: Set<string> = new Set();
+
+  private clearQueryOnNextModalOpen = false;
   /**
    * Id of the row currently showing the 200 ms "pending" affordance (subtle spinner
    * on the row) while its activation handler is resolving. Null when no activation is
@@ -580,7 +582,11 @@ export class GlobalSearchManager {
     this.isOpen = true;
     this.presentation = presentation;
     const currentPageSearchState = getSearchablePageState(page.url);
-    if (currentPageSearchState.isSearchable) {
+    if (presentation === 'modal' && this.clearQueryOnNextModalOpen) {
+      this.query = '';
+      this.searchSortOrder = 'relevance';
+      this.clearQueryOnNextModalOpen = false;
+    } else if (currentPageSearchState.isSearchable) {
       this.query = currentPageSearchState.query;
       this.searchSortOrder = currentPageSearchState.query ? currentPageSearchState.sortOrder : 'relevance';
     } else {
@@ -1254,6 +1260,7 @@ export class GlobalSearchManager {
       text: trimmed,
       lastUsed: Date.now(),
     });
+    this.clearQueryOnNextModalOpen = true;
     void goto(this.buildSearchDestination(trimmed));
   }
 

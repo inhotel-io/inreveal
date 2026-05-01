@@ -244,6 +244,36 @@ describe('GlobalSearchManager (skeleton)', () => {
     expect(manager.searchSortOrder).toBe('asc');
   });
 
+  it('open() clears the modal query once after activating a text search', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/photos');
+
+    m.open('modal');
+    m.activateSearch('beach');
+    m.close();
+    mockPage.url = new URL('https://gallery.test/photos?q=beach&sort=asc');
+
+    m.open('modal');
+
+    expect(m.query).toBe('');
+    expect(m.searchSortOrder).toBe('relevance');
+  });
+
+  it('open() still hydrates the dropdown query after activating a text search', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/photos');
+
+    m.open('modal');
+    m.activateSearch('beach');
+    m.close();
+    mockPage.url = new URL('https://gallery.test/photos?q=beach&sort=asc');
+
+    m.open('dropdown');
+
+    expect(m.query).toBe('beach');
+    expect(m.searchSortOrder).toBe('asc');
+  });
+
   it('open() resets the search draft sort to relevance when the current searchable page has no query', () => {
     mockPage.url = new URL('https://gallery.test/photos');
     manager.open();
