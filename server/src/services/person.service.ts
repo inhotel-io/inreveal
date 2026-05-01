@@ -47,6 +47,8 @@ import { mimeTypes } from 'src/utils/mime-types';
 import { isFacialRecognitionEnabled } from 'src/utils/misc';
 import { Point, transformPoints } from 'src/utils/transform';
 
+const FACE_IDENTITY_BACKFILL_CHUNK_SIZE = 1000;
+
 @Injectable()
 export class PersonService extends BaseService {
   async getAll(auth: AuthDto, dto: PersonSearchDto): Promise<PeopleResponseDto> {
@@ -98,6 +100,7 @@ export class PersonService extends BaseService {
         }
 
         await this.personRepository.reassignFace(face.id, personId);
+        await this.replaceFaceIdentity(personId, face.id, 'manual');
       }
 
       result.push(mapPerson(person));
@@ -116,6 +119,7 @@ export class PersonService extends BaseService {
     const person = await this.findOrFail(personId);
 
     await this.personRepository.reassignFace(face.id, personId);
+    await this.replaceFaceIdentity(personId, face.id, 'manual');
     if (person.faceAssetId === null) {
       await this.createNewFeaturePhoto([person.id]);
     }
@@ -281,6 +285,45 @@ export class PersonService extends BaseService {
     return JobStatus.Success;
   }
 
+  @OnJob({ name: JobName.FaceIdentityBackfill, queue: QueueName.BackgroundTask })
+  async handleFaceIdentityBackfill({
+    stage = 'person',
+    cursor,
+  }: JobOf<JobName.FaceIdentityBackfill>): Promise<JobStatus> {
+    if (stage === 'person') {
+      const result = await this.faceIdentityRepository.backfillPersonalIdentities({
+        cursor,
+        limit: FACE_IDENTITY_BACKFILL_CHUNK_SIZE,
+      });
+
+      if (result.nextCursor) {
+        await this.jobRepository.queue({
+          name: JobName.FaceIdentityBackfill,
+          data: { stage: 'person', cursor: result.nextCursor },
+        });
+        return JobStatus.Success;
+      }
+    }
+
+    const result = await this.faceIdentityRepository.backfillSpacePersonIdentities({
+      cursor: stage === 'space-person' ? cursor : undefined,
+      limit: FACE_IDENTITY_BACKFILL_CHUNK_SIZE,
+    });
+
+    if (result.conflictCount > 0) {
+      this.logger.warn(`Face identity backfill left ${result.conflictCount} space people unresolved`);
+    }
+
+    if (result.nextCursor) {
+      await this.jobRepository.queue({
+        name: JobName.FaceIdentityBackfill,
+        data: { stage: 'space-person', cursor: result.nextCursor },
+      });
+    }
+
+    return JobStatus.Success;
+  }
+
   @OnJob({ name: JobName.AssetDetectFacesQueueAll, queue: QueueName.FaceDetection })
   async handleQueueDetectFaces({ force }: JobOf<JobName.AssetDetectFacesQueueAll>): Promise<JobStatus> {
     const { machineLearning } = await this.getConfig({ withCache: false });
@@ -383,6 +426,7 @@ export class PersonService extends BaseService {
     }
 
     if (faceIdsToRemove.length > 0) {
+      await this.faceIdentityRepository.unlinkFaces(faceIdsToRemove);
       this.logger.log(`Removed ${faceIdsToRemove.length} faces below detection threshold in asset ${id}`);
     }
 
@@ -441,6 +485,7 @@ export class PersonService extends BaseService {
 
     if (force) {
       await this.personRepository.unassignFaces({ sourceType: SourceType.MachineLearning });
+      await this.faceIdentityRepository.unlinkFacesBySourceType(SourceType.MachineLearning);
       await this.handlePersonCleanup();
       await this.personRepository.vacuum({ reindexVectors: false });
 
@@ -519,6 +564,7 @@ export class PersonService extends BaseService {
 
     if (face.personId) {
       this.logger.debug(`Face ${id} already has a person assigned`);
+      await this.replaceFaceIdentity(face.personId, face.id, 'owner-person');
 
       // Still queue space face matching — this face may belong to a space
       // that was created/linked after the face was originally recognized.
@@ -584,6 +630,7 @@ export class PersonService extends BaseService {
     if (personId) {
       this.logger.debug(`Assigning face ${id} to person ${personId}`);
       await this.personRepository.reassignFaces({ faceIds: [id], newPersonId: personId });
+      await this.replaceFaceIdentity(personId, id, 'owner-person');
     }
 
     // Queue shared space face matching for any spaces containing this asset
@@ -596,6 +643,15 @@ export class PersonService extends BaseService {
     }
 
     return JobStatus.Success;
+  }
+
+  private async replaceFaceIdentity(
+    personId: string,
+    assetFaceId: string,
+    source: 'owner-person' | 'manual',
+  ): Promise<void> {
+    const identity = await this.faceIdentityRepository.ensurePersonIdentity(personId);
+    await this.faceIdentityRepository.replaceFaceIdentity({ assetFaceId, identityId: identity.id, source });
   }
 
   @OnJob({ name: JobName.PersonFileMigration, queue: QueueName.Migration })
@@ -665,8 +721,15 @@ export class PersonService extends BaseService {
         const mergeData: UpdateFacesData = { oldPersonId: mergeId, newPersonId: id };
         this.logger.log(`Merging ${mergeName} into ${primaryName}`);
 
+        const targetIdentity = await this.faceIdentityRepository.ensurePersonIdentity(id);
+        const sourceIdentity = await this.faceIdentityRepository.ensurePersonIdentity(mergeId);
         await this.personRepository.reassignFaces(mergeData);
         await this.removeAllPeople([mergePerson]);
+        await this.faceIdentityRepository.mergeIdentities({
+          targetIdentityId: targetIdentity.id,
+          sourceIdentityIds: [sourceIdentity.id],
+          source: 'manual',
+        });
 
         this.logger.log(`Merged ${mergeName} into ${primaryName}`);
         results.push({ id: mergeId, success: true });
@@ -744,7 +807,7 @@ export class PersonService extends BaseService {
       dto.imageHeight = originalDimensions.height;
     }
 
-    await this.personRepository.createAssetFace({
+    const faceId = await this.personRepository.createAssetFace({
       personId: dto.personId,
       assetId: dto.assetId,
       imageHeight: dto.imageHeight,
@@ -755,6 +818,7 @@ export class PersonService extends BaseService {
       boundingBoxY2: Math.round(bottomRight.y),
       sourceType: SourceType.Manual,
     });
+    await this.replaceFaceIdentity(dto.personId, faceId, 'manual');
 
     if (!person.faceAssetId) {
       await this.createNewFeaturePhoto([person.id]);
@@ -764,6 +828,11 @@ export class PersonService extends BaseService {
   async deleteFace(auth: AuthDto, id: string, dto: AssetFaceDeleteDto): Promise<void> {
     await this.requireAccess({ auth, permission: Permission.FaceDelete, ids: [id] });
 
-    return dto.force ? this.personRepository.deleteAssetFace(id) : this.personRepository.softDeleteAssetFaces(id);
+    if (dto.force) {
+      await this.personRepository.deleteAssetFace(id);
+    } else {
+      await this.personRepository.softDeleteAssetFaces(id);
+    }
+    await this.faceIdentityRepository.unlinkFaces([id]);
   }
 }

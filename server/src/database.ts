@@ -260,6 +260,7 @@ export type Person = {
   isHidden: boolean;
   species: string | null;
   thumbnailPath: string;
+  identityId: string | null;
 };
 
 export type AssetFace = {
@@ -340,6 +341,7 @@ export type SharedSpaceMember = {
   role: string;
   joinedAt: Date;
   showInTimeline: boolean;
+  sharePersonMetadata: boolean;
   lastViewedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -380,6 +382,15 @@ export type SharedSpacePerson = {
   createdAt: Date;
   updatedAt: Date;
   updateId: string;
+  identityId: string | null;
+  nameSource: string;
+  nameSourceProfileType: string | null;
+  nameSourceProfileId: string | null;
+  nameSourceUpdatedAt: Date | null;
+  birthDateSource: string;
+  birthDateSourceProfileType: string | null;
+  birthDateSourceProfileId: string | null;
+  birthDateSourceUpdatedAt: Date | null;
   // Populated via LEFT JOIN to asset_face → person in repository queries
   personalPersonId: string | null;
   personalName: string | null;

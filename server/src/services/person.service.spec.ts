@@ -43,6 +43,7 @@ describe(PersonService.name, () => {
 
   beforeEach(() => {
     ({ sut, mocks } = newTestService(PersonService));
+    mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identity-1' } as any);
   });
 
   it('should be defined', () => {
@@ -382,6 +383,29 @@ describe(PersonService.name, () => {
         },
       ]);
     });
+
+    it('should replace identity links for reassigned faces', async () => {
+      const face = AssetFaceFactory.create();
+      const auth = AuthFactory.create();
+      const person = PersonFactory.create();
+
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([person.id]));
+      mocks.person.getById.mockResolvedValue(person);
+      mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set([face.id]));
+      mocks.person.getFacesByIds.mockResolvedValue([getForAssetFace(face)]);
+      mocks.person.reassignFace.mockResolvedValue(1);
+
+      await sut.reassignFaces(auth, person.id, {
+        data: [{ personId: person.id, assetId: face.assetId }],
+      });
+
+      expect(mocks.faceIdentity.ensurePersonIdentity).toHaveBeenCalledWith(person.id);
+      expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
+        assetFaceId: face.id,
+        identityId: 'identity-1',
+        source: 'manual',
+      });
+    });
   });
 
   describe('handlePersonMigration', () => {
@@ -555,6 +579,26 @@ describe(PersonService.name, () => {
 
       expect(mocks.job.queue).not.toHaveBeenCalledWith();
       expect(mocks.job.queueAll).not.toHaveBeenCalledWith();
+    });
+
+    it('should replace identity links when reassigning a face by id', async () => {
+      const face = AssetFaceFactory.create();
+      const person = PersonFactory.create();
+
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([person.id]));
+      mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set([face.id]));
+      mocks.person.getFaceById.mockResolvedValue(getForAssetFace(face));
+      mocks.person.reassignFace.mockResolvedValue(1);
+      mocks.person.getById.mockResolvedValue(person);
+
+      await sut.reassignFacesById(AuthFactory.create(), person.id, { id: face.id });
+
+      expect(mocks.faceIdentity.ensurePersonIdentity).toHaveBeenCalledWith(person.id);
+      expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
+        assetFaceId: face.id,
+        identityId: 'identity-1',
+        source: 'manual',
+      });
     });
 
     it('should fail if user has not the correct permissions on the asset', async () => {
@@ -802,6 +846,28 @@ describe(PersonService.name, () => {
         lastRun: expect.any(String),
       });
       expect(mocks.person.vacuum).toHaveBeenCalledWith({ reindexVectors: false });
+    });
+
+    it('should unlink existing ML identity links when force resets recognition assignments', async () => {
+      const face = AssetFaceFactory.from().person().build();
+      mocks.job.getJobCounts.mockResolvedValue({
+        active: 1,
+        waiting: 0,
+        paused: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+      });
+      mocks.person.getAllFaces.mockReturnValue(makeStream([face]));
+      mocks.person.getAllWithoutFaces.mockResolvedValue([]);
+      mocks.person.unassignFaces.mockResolvedValue();
+      mocks.sharedSpace.deleteAllPersonFaces.mockResolvedValue(void 0 as any);
+      mocks.sharedSpace.deleteAllPersons.mockResolvedValue(void 0 as any);
+      mocks.sharedSpace.getSpaceIdsWithFaceRecognitionEnabled.mockResolvedValue([]);
+
+      await sut.handleQueueRecognizeFaces({ force: true });
+
+      expect(mocks.faceIdentity.unlinkFacesBySourceType).toHaveBeenCalledWith(SourceType.MachineLearning);
     });
 
     it('should run nightly if new face has been added since last run', async () => {
@@ -1146,6 +1212,48 @@ describe(PersonService.name, () => {
     });
   });
 
+  describe('handleFaceIdentityBackfill', () => {
+    it('should backfill personal identities and requeue when another page exists', async () => {
+      mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({
+        processed: 1000,
+        nextCursor: 'person-cursor',
+      });
+      mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({
+        processed: 0,
+        conflictCount: 0,
+      });
+
+      await expect(sut.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.faceIdentity.backfillPersonalIdentities).toHaveBeenCalledWith({ cursor: undefined, limit: 1000 });
+      expect(mocks.faceIdentity.backfillSpacePersonIdentities).not.toHaveBeenCalled();
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.FaceIdentityBackfill,
+        data: { stage: 'person', cursor: 'person-cursor' },
+      });
+    });
+
+    it('should continue with shared-space person identity backfill after personal rows are done', async () => {
+      mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 1 });
+      mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({
+        processed: 1000,
+        conflictCount: 2,
+        nextCursor: 'space-person-cursor',
+      });
+
+      await expect(sut.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.faceIdentity.backfillSpacePersonIdentities).toHaveBeenCalledWith({
+        cursor: undefined,
+        limit: 1000,
+      });
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.FaceIdentityBackfill,
+        data: { stage: 'space-person', cursor: 'space-person-cursor' },
+      });
+    });
+  });
+
   describe('handleRecognizeFaces', () => {
     beforeEach(() => {
       mocks.sharedSpace.getSpaceIdsForAsset.mockResolvedValue([]);
@@ -1194,6 +1302,22 @@ describe(PersonService.name, () => {
       });
     });
 
+    it('should link identity when a face already has an assigned person', async () => {
+      const asset = AssetFactory.create();
+      const face = AssetFaceFactory.from({ assetId: asset.id }).person().build();
+      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(face, asset));
+      mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identity-1' } as any);
+
+      expect(await sut.handleRecognizeFaces({ id: face.id })).toBe(JobStatus.Skipped);
+
+      expect(mocks.faceIdentity.ensurePersonIdentity).toHaveBeenCalledWith(face.personId);
+      expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
+        assetFaceId: face.id,
+        identityId: 'identity-1',
+        source: 'owner-person',
+      });
+    });
+
     it('should not queue space face matching when face has personId but no spaces', async () => {
       const asset = AssetFactory.create();
       const face = AssetFaceFactory.from({ assetId: asset.id }).person().build();
@@ -1239,6 +1363,31 @@ describe(PersonService.name, () => {
       expect(mocks.person.reassignFaces).toHaveBeenCalledWith({
         faceIds: expect.not.arrayContaining([face.id]),
         newPersonId: primaryFace.person!.id,
+      });
+    });
+
+    it('should link identity after recognition assigns an existing person', async () => {
+      const asset = AssetFactory.create();
+      const [noPerson, matchedFace] = [
+        AssetFaceFactory.create({ assetId: asset.id }),
+        AssetFaceFactory.from().person().build(),
+      ];
+      const faces = [
+        { ...noPerson, distance: 0 },
+        { ...matchedFace, distance: 0.2 },
+      ] as FaceSearchResult[];
+      mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
+      mocks.search.searchFaces.mockResolvedValue(faces);
+      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
+      mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identity-1' } as any);
+
+      await sut.handleRecognizeFaces({ id: noPerson.id });
+
+      expect(mocks.faceIdentity.ensurePersonIdentity).toHaveBeenCalledWith(matchedFace.person!.id);
+      expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
+        assetFaceId: noPerson.id,
+        identityId: 'identity-1',
+        source: 'owner-person',
       });
     });
 
@@ -1496,6 +1645,29 @@ describe(PersonService.name, () => {
       });
 
       expect(mocks.access.person.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([person.id]));
+    });
+
+    it('should merge source identities after personal people are merged', async () => {
+      const auth = AuthFactory.create();
+      const [person, mergePerson] = [PersonFactory.create(), PersonFactory.create()];
+
+      mocks.person.getById.mockResolvedValueOnce(person);
+      mocks.person.getById.mockResolvedValueOnce(mergePerson);
+      mocks.access.person.checkOwnerAccess.mockResolvedValueOnce(new Set([person.id]));
+      mocks.access.person.checkOwnerAccess.mockResolvedValueOnce(new Set([mergePerson.id]));
+      mocks.faceIdentity.ensurePersonIdentity
+        .mockResolvedValueOnce({ id: 'target-identity' } as any)
+        .mockResolvedValueOnce({ id: 'source-identity' } as any);
+
+      await expect(sut.mergePerson(auth, person.id, { ids: [mergePerson.id] })).resolves.toEqual([
+        { id: mergePerson.id, success: true },
+      ]);
+
+      expect(mocks.faceIdentity.mergeIdentities).toHaveBeenCalledWith({
+        targetIdentityId: 'target-identity',
+        sourceIdentityIds: ['source-identity'],
+        source: 'manual',
+      });
     });
 
     it('should merge two people with smart merge', async () => {
@@ -1942,6 +2114,7 @@ describe(PersonService.name, () => {
 
       expect(mocks.person.deleteAssetFace).toHaveBeenCalledWith(faceId);
       expect(mocks.person.softDeleteAssetFaces).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.unlinkFaces).toHaveBeenCalledWith([faceId]);
     });
 
     it('should soft delete a face', async () => {
@@ -1953,6 +2126,7 @@ describe(PersonService.name, () => {
 
       expect(mocks.person.softDeleteAssetFaces).toHaveBeenCalledWith(faceId);
       expect(mocks.person.deleteAssetFace).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.unlinkFaces).toHaveBeenCalledWith([faceId]);
     });
   });
 
