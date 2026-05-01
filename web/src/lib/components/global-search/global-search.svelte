@@ -392,8 +392,16 @@
   <div
     class="relative min-w-0 flex-1"
     use:clickOutside={{
-      onOutclick: () => manager.close(),
-      onEscape: () => manager.close(),
+      onOutclick: () => {
+        if (manager.presentation === 'dropdown') {
+          manager.close();
+        }
+      },
+      onEscape: () => {
+        if (manager.presentation === 'dropdown') {
+          manager.close();
+        }
+      },
     }}
   >
     <span class="sr-only" id="global-search-dropdown-label">{$t('global_search')}</span>

@@ -65,6 +65,18 @@ describe('global-search-input-trigger', () => {
     expect(globalSearchManager.isOpen).toBe(false);
   });
 
+  it('does not let the dropdown outside-click listener close the modal presentation', async () => {
+    const user = userEvent.setup();
+
+    render(GlobalSearchInputTrigger);
+
+    globalSearchManager.open('modal');
+    await user.click(document.body);
+
+    expect(globalSearchManager.isOpen).toBe(true);
+    expect(globalSearchManager.presentation).toBe('modal');
+  });
+
   it('switches from dropdown to modal presentation on the keyboard launcher shortcut', async () => {
     const user = userEvent.setup();
 
