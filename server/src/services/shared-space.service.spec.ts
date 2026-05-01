@@ -2566,7 +2566,9 @@ describe(SharedSpaceService.name, () => {
 
       expect(result).toBe(JobStatus.Skipped);
       expect(mocks.sharedSpace.getAssetIdsInSpacePage).not.toHaveBeenCalled();
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpacePersonDedup }),
+      );
     });
 
     it('should skip when face recognition is disabled', async () => {
@@ -2577,7 +2579,9 @@ describe(SharedSpaceService.name, () => {
 
       expect(result).toBe(JobStatus.Skipped);
       expect(mocks.sharedSpace.getAssetIdsInSpacePage).not.toHaveBeenCalled();
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpacePersonDedup }),
+      );
     });
 
     it('should process pages sequentially without queueing per-asset child jobs', async () => {
@@ -2643,7 +2647,9 @@ describe(SharedSpaceService.name, () => {
 
       expect(result).toBe(JobStatus.Success);
       expect(processSpy).not.toHaveBeenCalled();
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpacePersonDedup }),
+      );
     });
 
     it('should stop without dedup when face recognition is disabled between pages', async () => {
@@ -2652,7 +2658,10 @@ describe(SharedSpaceService.name, () => {
       const disabled = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false });
 
       (sut as any).sharedSpaceFaceMatchBatchSize = 2;
-      mocks.sharedSpace.getById.mockResolvedValueOnce(enabled).mockResolvedValueOnce(enabled).mockResolvedValueOnce(disabled);
+      mocks.sharedSpace.getById
+        .mockResolvedValueOnce(enabled)
+        .mockResolvedValueOnce(enabled)
+        .mockResolvedValueOnce(disabled);
       mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }, { assetId: 'a2' }]);
       const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
 
@@ -2661,7 +2670,9 @@ describe(SharedSpaceService.name, () => {
       expect(result).toBe(JobStatus.Success);
       expect(processSpy).toHaveBeenCalledTimes(2);
       expect(mocks.sharedSpace.getAssetIdsInSpacePage).toHaveBeenCalledTimes(1);
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpacePersonDedup }),
+      );
     });
 
     it('should stop without dedup when the space is deleted between pages', async () => {
@@ -2681,7 +2692,9 @@ describe(SharedSpaceService.name, () => {
       expect(result).toBe(JobStatus.Success);
       expect(processSpy).toHaveBeenCalledTimes(2);
       expect(mocks.sharedSpace.getAssetIdsInSpacePage).toHaveBeenCalledTimes(1);
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpacePersonDedup }),
+      );
     });
 
     it('should re-check the space before queuing final dedup', async () => {
@@ -2690,7 +2703,10 @@ describe(SharedSpaceService.name, () => {
       const disabled = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false });
 
       (sut as any).sharedSpaceFaceMatchBatchSize = 2;
-      mocks.sharedSpace.getById.mockResolvedValueOnce(enabled).mockResolvedValueOnce(enabled).mockResolvedValueOnce(disabled);
+      mocks.sharedSpace.getById
+        .mockResolvedValueOnce(enabled)
+        .mockResolvedValueOnce(enabled)
+        .mockResolvedValueOnce(disabled);
       mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }]);
       const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
 
@@ -2698,7 +2714,9 @@ describe(SharedSpaceService.name, () => {
 
       expect(result).toBe(JobStatus.Success);
       expect(processSpy).toHaveBeenCalledTimes(1);
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpacePersonDedup }),
+      );
     });
   });
 

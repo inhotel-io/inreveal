@@ -33,7 +33,7 @@ export class ThumbnailLoadQueue {
 
       pending = false;
       const index = this.waiting.indexOf(run);
-      if (index >= 0) {
+      if (index !== -1) {
         this.waiting.splice(index, 1);
       }
     };

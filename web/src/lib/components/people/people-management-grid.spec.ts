@@ -69,7 +69,10 @@ describe('PeopleManagementGrid', () => {
     let callback!: IntersectionObserverCallback;
     class VisibleObserver {
       observe = vi.fn((target: Element) => {
-        callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+        callback(
+          [{ isIntersecting: true, target } as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        );
       });
       disconnect = vi.fn();
       unobserve = vi.fn();
@@ -106,7 +109,10 @@ describe('PeopleManagementGrid', () => {
     let callback!: IntersectionObserverCallback;
     class VisibleObserver {
       observe = vi.fn((target: Element) => {
-        callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+        callback(
+          [{ isIntersecting: true, target } as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        );
       });
       disconnect = vi.fn();
       unobserve = vi.fn();
@@ -139,7 +145,10 @@ describe('PeopleManagementGrid', () => {
     let callback!: IntersectionObserverCallback;
     class VisibleObserver {
       observe = vi.fn((target: Element) => {
-        callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+        callback(
+          [{ isIntersecting: true, target } as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        );
       });
       disconnect = vi.fn();
       unobserve = vi.fn();
