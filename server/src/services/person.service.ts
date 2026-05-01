@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Insertable, Updateable } from 'kysely';
 import { isAbsolute } from 'node:path';
 import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
@@ -11,10 +11,12 @@ import {
   AssetFaceDeleteDto,
   AssetFaceResponseDto,
   AssetFaceUpdateDto,
+  DetachScopedPersonDto,
   FaceDto,
   mapFaces,
   mapPerson,
   MergePersonDto,
+  MergeScopedPeopleDto,
   PeopleResponseDto,
   PeopleUpdateDto,
   PersonCreateDto,
@@ -85,6 +87,37 @@ export class PersonService extends BaseService {
       total,
       hidden,
     };
+  }
+
+  async mergeScopedPeople(auth: AuthDto, dto: MergeScopedPeopleDto): Promise<void> {
+    const resolved = await this.faceIdentityRepository.resolveRepairRefs(auth.user.id, dto);
+    if (!resolved.accessible) {
+      throw new BadRequestException('One or more people were not found or are not accessible');
+    }
+    if (!resolved.allAttachedProfilesRepairable) {
+      throw new ForbiddenException('Cannot merge identities with inaccessible attached profiles');
+    }
+    if (resolved.hasScopedProfileConflict) {
+      throw new BadRequestException('Cannot merge people that already have separate profiles in the same scope');
+    }
+
+    await this.faceIdentityRepository.mergeIdentities({
+      targetIdentityId: resolved.targetIdentityId,
+      sourceIdentityIds: resolved.sourceIdentityIds,
+      source: 'manual',
+    });
+  }
+
+  async detachScopedPerson(auth: AuthDto, dto: DetachScopedPersonDto): Promise<void> {
+    const resolved = await this.faceIdentityRepository.resolveDetachRef(auth.user.id, dto.profile);
+    if (!resolved.accessible) {
+      throw new BadRequestException('Person was not found or is not accessible');
+    }
+    if (!resolved.allBackingFacesRepairable) {
+      throw new ForbiddenException('Cannot detach a profile whose faces also back inaccessible profiles');
+    }
+
+    await this.faceIdentityRepository.detachScopedProfile(dto.profile);
   }
 
   async reassignFaces(auth: AuthDto, personId: string, dto: AssetFaceUpdateDto): Promise<PersonResponseDto[]> {
@@ -833,11 +866,7 @@ export class PersonService extends BaseService {
   async deleteFace(auth: AuthDto, id: string, dto: AssetFaceDeleteDto): Promise<void> {
     await this.requireAccess({ auth, permission: Permission.FaceDelete, ids: [id] });
 
-    if (dto.force) {
-      await this.personRepository.deleteAssetFace(id);
-    } else {
-      await this.personRepository.softDeleteAssetFaces(id);
-    }
+    await (dto.force ? this.personRepository.deleteAssetFace(id) : this.personRepository.softDeleteAssetFaces(id));
     await this.faceIdentityRepository.unlinkFaces([id]);
   }
 }

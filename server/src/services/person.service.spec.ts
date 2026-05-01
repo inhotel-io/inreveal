@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DiskStorageBackend } from 'src/backends/disk-storage.backend';
 import { BulkIdErrorReason } from 'src/dtos/asset-ids.response.dto';
 import { mapFaces, mapPerson } from 'src/dtos/person.dto';
@@ -1793,6 +1793,124 @@ describe(PersonService.name, () => {
 
       expect(mocks.person.delete).not.toHaveBeenCalled();
       expect(mocks.access.person.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([person.id]));
+    });
+  });
+
+  describe('scoped people repair', () => {
+    it('rejects same-person repair for inaccessible scoped profiles', async () => {
+      const auth = AuthFactory.create();
+      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue({
+        accessible: false,
+        allAttachedProfilesRepairable: false,
+      } as any);
+
+      await expect(
+        sut.mergeScopedPeople(auth, {
+          target: { type: 'space-person', id: newUuid(), spaceId: newUuid() },
+          sources: [{ type: 'space-person', id: newUuid(), spaceId: newUuid() }],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+    });
+
+    it('merges same-person repair only after access and repairability checks', async () => {
+      const auth = AuthFactory.create();
+      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue({
+        accessible: true,
+        targetIdentityId: 'identity-1',
+        sourceIdentityIds: ['identity-2'],
+        type: 'person',
+        allAttachedProfilesRepairable: true,
+      } as any);
+      mocks.faceIdentity.mergeIdentities.mockResolvedValue({
+        personalProfileConflictCount: 0,
+        spaceProfileConflictCount: 0,
+      });
+
+      await sut.mergeScopedPeople(auth, {
+        target: { type: 'person', id: newUuid() },
+        sources: [{ type: 'space-person', id: newUuid(), spaceId: newUuid() }],
+      });
+
+      expect(mocks.faceIdentity.mergeIdentities).toHaveBeenCalledWith({
+        targetIdentityId: 'identity-1',
+        sourceIdentityIds: ['identity-2'],
+        source: 'manual',
+      });
+    });
+
+    it('rejects global merge when an involved identity has inaccessible attached profiles', async () => {
+      const auth = AuthFactory.create();
+      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue({
+        accessible: true,
+        targetIdentityId: 'identity-1',
+        sourceIdentityIds: ['identity-2'],
+        type: 'person',
+        allAttachedProfilesRepairable: false,
+      } as any);
+
+      await expect(
+        sut.mergeScopedPeople(auth, {
+          target: { type: 'person', id: newUuid() },
+          sources: [{ type: 'space-person', id: newUuid(), spaceId: newUuid() }],
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+    });
+
+    it('rejects same-person repair when the scoped profiles conflict in the same owner or space', async () => {
+      const auth = AuthFactory.create();
+      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue({
+        accessible: true,
+        targetIdentityId: 'identity-1',
+        sourceIdentityIds: ['identity-2'],
+        type: 'person',
+        allAttachedProfilesRepairable: true,
+        hasScopedProfileConflict: true,
+      } as any);
+
+      await expect(
+        sut.mergeScopedPeople(auth, {
+          target: { type: 'person', id: newUuid() },
+          sources: [{ type: 'person', id: newUuid() }],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+    });
+
+    it('detaches a scoped profile after access and backing-face checks', async () => {
+      const auth = AuthFactory.create();
+      const profile = { type: 'person' as const, id: newUuid() };
+      mocks.faceIdentity.resolveDetachRef.mockResolvedValue({
+        accessible: true,
+        identityId: 'identity-1',
+        type: 'person',
+        allBackingFacesRepairable: true,
+      } as any);
+
+      await sut.detachScopedPerson(auth, { profile });
+
+      expect(mocks.faceIdentity.resolveDetachRef).toHaveBeenCalledWith(auth.user.id, profile);
+      expect(mocks.faceIdentity.detachScopedProfile).toHaveBeenCalledWith(profile);
+    });
+
+    it('rejects detach when selected profile faces also back inaccessible profiles', async () => {
+      const auth = AuthFactory.create();
+      mocks.faceIdentity.resolveDetachRef.mockResolvedValue({
+        accessible: true,
+        identityId: 'identity-1',
+        type: 'person',
+        allBackingFacesRepairable: false,
+      } as any);
+
+      await expect(
+        sut.detachScopedPerson(auth, { profile: { type: 'space-person', id: newUuid(), spaceId: newUuid() } }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(mocks.faceIdentity.detachScopedProfile).not.toHaveBeenCalled();
     });
   });
 

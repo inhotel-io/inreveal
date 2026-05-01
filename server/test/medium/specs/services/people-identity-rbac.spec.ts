@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Kysely } from 'kysely';
 import { SearchSuggestionType } from 'src/dtos/search.dto';
 import { AssetVisibility, SharedSpaceRole } from 'src/enum';
@@ -55,7 +56,11 @@ const setupPeopleIdentityMatrix = async () => {
   await ctx.newSharedSpaceMember({ spaceId: space1.id, userId: space1OnlyMember.id, role: SharedSpaceRole.Owner });
   await ctx.newSharedSpaceMember({ spaceId: space1.id, userId: userInBothSpaces.id, role: SharedSpaceRole.Viewer });
   await ctx.newSharedSpaceMember({ spaceId: space2.id, userId: userInBothSpaces.id, role: SharedSpaceRole.Owner });
-  await ctx.newSharedSpaceMember({ spaceId: hiddenTimelineSpace.id, userId: userInBothSpaces.id, role: SharedSpaceRole.Viewer });
+  await ctx.newSharedSpaceMember({
+    spaceId: hiddenTimelineSpace.id,
+    userId: userInBothSpaces.id,
+    role: SharedSpaceRole.Viewer,
+  });
   await ctx.database
     .updateTable('shared_space_member')
     .set({ showInTimeline: false })
@@ -81,7 +86,11 @@ const setupPeopleIdentityMatrix = async () => {
     }
     await ctx.newSharedSpaceAsset({ spaceId: input.spaceId, assetId: asset.id, addedById: input.ownerId ?? source.id });
     const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id, personId: alicePerson.id });
-    await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: aliceIdentity.id, source: 'owner-person' });
+    await faceIdentityRepository.linkFace({
+      assetFaceId: faceId,
+      identityId: aliceIdentity.id,
+      source: 'owner-person',
+    });
     const spacePerson = await ctx.database
       .insertInto('shared_space_person')
       .values({
@@ -122,6 +131,35 @@ const setupPeopleIdentityMatrix = async () => {
     userInBothSpaces,
     nonMember,
     adminNonMember,
+  };
+};
+
+const setupRepairFixture = async (role: SharedSpaceRole = SharedSpaceRole.Editor) => {
+  const { ctx, sut, faceIdentityRepository } = setup();
+  const { user: actor } = await ctx.newUser();
+  const { user: otherUser } = await ctx.newUser();
+  const { space } = await ctx.newSharedSpace({ createdById: otherUser.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: actor.id, role });
+  const { person: actorPerson } = await ctx.newPerson({ ownerId: actor.id, name: 'Actor Alice' });
+  const targetIdentity = await faceIdentityRepository.ensurePersonIdentity(actorPerson.id);
+  const spacePerson = await ctx.database
+    .insertInto('shared_space_person')
+    .values({ spaceId: space.id, name: 'Space Alice', type: 'person' })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  const sourceIdentity = await faceIdentityRepository.ensureSpacePersonIdentity(spacePerson.id);
+
+  return {
+    ctx,
+    sut,
+    faceIdentityRepository,
+    actor,
+    otherUser,
+    space,
+    actorPerson,
+    targetIdentity,
+    spacePerson,
+    sourceIdentity,
   };
 };
 
@@ -280,5 +318,62 @@ describe('People identity RBAC projection', () => {
     expect(inBoth[0].filterId).toMatch(/^(person|space-person):/);
     expect(JSON.stringify(inBoth)).not.toContain(fx.aliceIdentityId);
     expect(space1OnlyPrivate).toEqual([]);
+  });
+
+  describe('repair RBAC', () => {
+    it('viewer role in a space cannot repair that Space Person', async () => {
+      const fx = await setupRepairFixture(SharedSpaceRole.Viewer);
+
+      await expect(
+        fx.sut.mergeScopedPeople(factory.auth({ user: fx.actor }), {
+          target: { type: 'person', id: fx.actorPerson.id },
+          sources: [{ type: 'space-person', id: fx.spacePerson.id, spaceId: fx.space.id }],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it.each([SharedSpaceRole.Owner, SharedSpaceRole.Editor])(
+      '%s role in a space can repair that Space Person',
+      async (role) => {
+        const fx = await setupRepairFixture(role);
+
+        await fx.sut.mergeScopedPeople(factory.auth({ user: fx.actor }), {
+          target: { type: 'person', id: fx.actorPerson.id },
+          sources: [{ type: 'space-person', id: fx.spacePerson.id, spaceId: fx.space.id }],
+        });
+
+        const updatedSpacePerson = await fx.ctx.database
+          .selectFrom('shared_space_person')
+          .select('identityId')
+          .where('id', '=', fx.spacePerson.id)
+          .executeTakeFirstOrThrow();
+        expect(updatedSpacePerson.identityId).toBe(fx.targetIdentity.id);
+      },
+    );
+
+    it('user cannot repair a personal profile they do not own', async () => {
+      const fx = await setupRepairFixture(SharedSpaceRole.Editor);
+      const { person: otherPerson } = await fx.ctx.newPerson({ ownerId: fx.otherUser.id });
+      await fx.faceIdentityRepository.ensurePersonIdentity(otherPerson.id);
+
+      await expect(
+        fx.sut.mergeScopedPeople(factory.auth({ user: fx.actor }), {
+          target: { type: 'person', id: otherPerson.id },
+          sources: [{ type: 'space-person', id: fx.spacePerson.id, spaceId: fx.space.id }],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('admin who is not a member cannot repair a Space Person by admin status alone', async () => {
+      const fx = await setupRepairFixture(SharedSpaceRole.Editor);
+      const { user: admin } = await fx.ctx.newUser({ isAdmin: true });
+
+      await expect(
+        fx.sut.mergeScopedPeople(factory.auth({ user: admin }), {
+          target: { type: 'person', id: fx.actorPerson.id },
+          sources: [{ type: 'space-person', id: fx.spacePerson.id, spaceId: fx.space.id }],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
   });
 });

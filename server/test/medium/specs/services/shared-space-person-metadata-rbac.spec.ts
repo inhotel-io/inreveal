@@ -1,7 +1,7 @@
 import { Kysely } from 'kysely';
 import { JobStatus, SharedSpaceRole } from 'src/enum';
-import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
@@ -23,8 +23,8 @@ const setup = (db?: Kysely<DB>) => {
     mock: [LoggingRepository, JobRepository],
   });
   const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
-  jobs.queue.mockResolvedValue(undefined);
-  jobs.queueAll.mockResolvedValue(undefined);
+  jobs.queue.mockResolvedValue();
+  jobs.queueAll.mockResolvedValue();
   return { ctx, sut, faceIdentityRepository: ctx.get(FaceIdentityRepository) };
 };
 

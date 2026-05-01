@@ -1540,6 +1540,24 @@ export type PeopleUpdateDto = {
     /** People to update */
     people: PeopleUpdateItem[];
 };
+export type ScopedPersonProfileRefDto = {
+    /** Scoped profile ID */
+    id: string;
+    /** Space ID for Space Person refs */
+    spaceId?: string;
+    /** Scoped profile type */
+    "type": Type2;
+};
+export type DetachScopedPersonDto = {
+    /** Scoped profile to detach */
+    profile: ScopedPersonProfileRefDto;
+};
+export type MergeScopedPeopleDto = {
+    /** Source scoped profiles */
+    sources: ScopedPersonProfileRefDto[];
+    /** Target scoped profile */
+    target: ScopedPersonProfileRefDto;
+};
 export type PersonUpdateDto = {
     /** Person date of birth */
     birthDate?: string | null;
@@ -5780,6 +5798,30 @@ export function updatePeople({ peopleUpdateDto }: {
     })));
 }
 /**
+ * Detach a scoped person profile
+ */
+export function detachScopedPerson({ detachScopedPersonDto }: {
+    detachScopedPersonDto: DetachScopedPersonDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText("/people/detach-profile", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: detachScopedPersonDto
+    })));
+}
+/**
+ * Merge scoped people by identity
+ */
+export function mergeScopedPeople({ mergeScopedPeopleDto }: {
+    mergeScopedPeopleDto: MergeScopedPeopleDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText("/people/same-person", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: mergeScopedPeopleDto
+    })));
+}
+/**
  * Delete person
  */
 export function deletePerson({ id }: {
@@ -8397,6 +8439,10 @@ export enum MemoryType {
 export enum PartnerDirection {
     SharedBy = "shared-by",
     SharedWith = "shared-with"
+}
+export enum Type2 {
+    Person = "person",
+    SpacePerson = "space-person"
 }
 export enum PluginJsonSchemaType {
     String = "string",

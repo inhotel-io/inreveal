@@ -1873,6 +1873,8 @@
   "merge_people_prompt": "Do you want to merge these people? This action is irreversible.",
   "merge_people_successfully": "Merge people successfully",
   "merged_people_count": "Merged {count, plural, one {# person} other {# people}}",
+  "separate_from_grouped_person": "Separate from grouped person",
+  "separate_from_grouped_person_prompt": "Separate this profile from the grouped person?",
   "minimize": "Minimize",
   "minute": "Minute",
   "minutes": "Minutes",

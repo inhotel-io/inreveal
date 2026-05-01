@@ -1,4 +1,5 @@
 import { Kysely } from 'kysely';
+import { SharedSpaceRole } from 'src/enum';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
@@ -21,15 +22,15 @@ beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
 
+const newSpacePerson = async (ctx: ReturnType<typeof setup>['ctx'], spaceId: string) => {
+  return ctx.database.insertInto('shared_space_person').values({ spaceId }).returningAll().executeTakeFirstOrThrow();
+};
+
+const linkSpaceFace = async (ctx: ReturnType<typeof setup>['ctx'], personId: string, assetFaceId: string) => {
+  await ctx.database.insertInto('shared_space_person_face').values({ personId, assetFaceId }).execute();
+};
+
 describe(FaceIdentityRepository.name, () => {
-  const newSpacePerson = async (ctx: ReturnType<typeof setup>['ctx'], spaceId: string) => {
-    return ctx.database.insertInto('shared_space_person').values({ spaceId }).returningAll().executeTakeFirstOrThrow();
-  };
-
-  const linkSpaceFace = async (ctx: ReturnType<typeof setup>['ctx'], personId: string, assetFaceId: string) => {
-    await ctx.database.insertInto('shared_space_person_face').values({ personId, assetFaceId }).execute();
-  };
-
   it('enforces one identity per personal profile and one active identity per face', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
@@ -234,5 +235,224 @@ describe(FaceIdentityRepository.name, () => {
     expect(links).toEqual([{ assetFaceId: sourceFace.id, identityId: targetIdentity.id }]);
     expect(sourceProfile.identityId).toBe(sourceIdentity.id);
     expect(sourceSpaceProfile.identityId).toBe(targetIdentity.id);
+  });
+
+  describe('repair', () => {
+    it('merges non-conflicting identities by moving face links without merging scoped metadata', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+      const birthDate = new Date('1990-01-01');
+      const { person: personalPerson } = await ctx.newPerson({
+        ownerId: user.id,
+        name: 'Personal Alice',
+        birthDate,
+      });
+      const { asset: personalAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: personalFace } = await ctx.newAssetFace({
+        assetId: personalAsset.id,
+        personId: personalPerson.id,
+      });
+      const personalIdentity = await sut.ensurePersonIdentity(personalPerson.id);
+      await sut.linkFace({ assetFaceId: personalFace.id, identityId: personalIdentity.id, source: 'owner-person' });
+
+      const { asset: spaceAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: spaceFace } = await ctx.newAssetFace({ assetId: spaceAsset.id });
+      const spacePerson = await ctx.database
+        .insertInto('shared_space_person')
+        .values({
+          spaceId: space.id,
+          name: 'Space Alice',
+          birthDate: '1988-02-03',
+          representativeFaceId: spaceFace.id,
+          type: 'person',
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await linkSpaceFace(ctx, spacePerson.id, spaceFace.id);
+      const spaceIdentity = await sut.ensureSpacePersonIdentity(spacePerson.id);
+      await sut.linkFace({ assetFaceId: spaceFace.id, identityId: spaceIdentity.id, source: 'shared-space-evidence' });
+
+      await sut.mergeIdentities({
+        targetIdentityId: spaceIdentity.id,
+        sourceIdentityIds: [personalIdentity.id],
+        source: 'manual',
+      });
+
+      const oldSourceFaces = await ctx.database
+        .selectFrom('face_identity_face')
+        .selectAll()
+        .where('identityId', '=', personalIdentity.id)
+        .execute();
+      const personalProfile = await ctx.database
+        .selectFrom('person')
+        .select(['name', 'birthDate', 'identityId'])
+        .where('id', '=', personalPerson.id)
+        .executeTakeFirstOrThrow();
+      const spaceProfile = await ctx.database
+        .selectFrom('shared_space_person')
+        .select(['name', 'birthDate', 'identityId'])
+        .where('id', '=', spacePerson.id)
+        .executeTakeFirstOrThrow();
+
+      expect(oldSourceFaces).toHaveLength(0);
+      expect(personalProfile.name).toBe('Personal Alice');
+      expect(personalProfile.birthDate).toEqual(birthDate);
+      expect(personalProfile.identityId).toBe(spaceIdentity.id);
+      expect(spaceProfile).toEqual(
+        expect.objectContaining({
+          name: 'Space Alice',
+          birthDate: new Date('1988-02-03'),
+          identityId: spaceIdentity.id,
+        }),
+      );
+    });
+
+    it('detaches a space profile into a fresh identity and moves only that profile faces', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+      const { person: personalPerson } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+      const { asset: personalAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: personalFace } = await ctx.newAssetFace({
+        assetId: personalAsset.id,
+        personId: personalPerson.id,
+      });
+      const originalIdentity = await sut.ensurePersonIdentity(personalPerson.id);
+      await sut.linkFace({ assetFaceId: personalFace.id, identityId: originalIdentity.id, source: 'owner-person' });
+
+      const { asset: spaceAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: spaceFace } = await ctx.newAssetFace({ assetId: spaceAsset.id });
+      const spacePerson = await ctx.database
+        .insertInto('shared_space_person')
+        .values({
+          spaceId: space.id,
+          identityId: originalIdentity.id,
+          name: 'Alice in Space',
+          representativeFaceId: spaceFace.id,
+          type: 'person',
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await linkSpaceFace(ctx, spacePerson.id, spaceFace.id);
+      await sut.linkFace({
+        assetFaceId: spaceFace.id,
+        identityId: originalIdentity.id,
+        source: 'shared-space-evidence',
+      });
+
+      const newIdentityId = await sut.detachScopedProfile({
+        type: 'space-person',
+        id: spacePerson.id,
+        spaceId: space.id,
+      });
+
+      const detachedProfile = await ctx.database
+        .selectFrom('shared_space_person')
+        .select('identityId')
+        .where('id', '=', spacePerson.id)
+        .executeTakeFirstOrThrow();
+      const sourcePersonal = await ctx.database
+        .selectFrom('person')
+        .select('identityId')
+        .where('id', '=', personalPerson.id)
+        .executeTakeFirstOrThrow();
+      const links = await ctx.database
+        .selectFrom('face_identity_face')
+        .select(['assetFaceId', 'identityId'])
+        .where('assetFaceId', 'in', [personalFace.id, spaceFace.id])
+        .orderBy('assetFaceId')
+        .execute();
+
+      expect(newIdentityId).not.toBe(originalIdentity.id);
+      expect(detachedProfile.identityId).toBe(newIdentityId);
+      expect(sourcePersonal.identityId).toBe(originalIdentity.id);
+      expect(links).toEqual(
+        expect.arrayContaining([
+          { assetFaceId: personalFace.id, identityId: originalIdentity.id },
+          { assetFaceId: spaceFace.id, identityId: newIdentityId },
+        ]),
+      );
+    });
+
+    it('reports identity repair as unsafe when an attached space profile is not repairable by the actor', async () => {
+      const { ctx, sut } = setup();
+      const { user: actor } = await ctx.newUser();
+      const { user: stranger } = await ctx.newUser();
+      const { space: accessibleSpace } = await ctx.newSharedSpace({ createdById: actor.id });
+      const { space: privateSpace } = await ctx.newSharedSpace({ createdById: stranger.id });
+      await ctx.newSharedSpaceMember({ spaceId: accessibleSpace.id, userId: actor.id, role: SharedSpaceRole.Editor });
+      await ctx.newSharedSpaceMember({ spaceId: privateSpace.id, userId: stranger.id, role: SharedSpaceRole.Owner });
+      const { person: actorPerson } = await ctx.newPerson({ ownerId: actor.id });
+      const actorIdentity = await sut.ensurePersonIdentity(actorPerson.id);
+      const sourceIdentity = await ctx.database
+        .insertInto('face_identity')
+        .values({ type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      const accessibleSpacePerson = await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: accessibleSpace.id, identityId: sourceIdentity.id, type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: privateSpace.id, identityId: sourceIdentity.id, type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      const resolved = await sut.resolveRepairRefs(actor.id, {
+        target: { type: 'person', id: actorPerson.id },
+        sources: [{ type: 'space-person', id: accessibleSpacePerson.id, spaceId: accessibleSpace.id }],
+      });
+
+      expect(actorIdentity.id).toBeTruthy();
+      expect(resolved).toEqual(expect.objectContaining({ accessible: true, allAttachedProfilesRepairable: false }));
+    });
+
+    it('reports same-owner personal repair as a scoped profile conflict', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person: targetPerson } = await ctx.newPerson({ ownerId: user.id });
+      const { person: sourcePerson } = await ctx.newPerson({ ownerId: user.id });
+      await sut.ensurePersonIdentity(targetPerson.id);
+      await sut.ensurePersonIdentity(sourcePerson.id);
+
+      const resolved = await sut.resolveRepairRefs(user.id, {
+        target: { type: 'person', id: targetPerson.id },
+        sources: [{ type: 'person', id: sourcePerson.id }],
+      });
+
+      expect(resolved).toEqual(expect.objectContaining({ accessible: true, hasScopedProfileConflict: true }));
+    });
+
+    it('rejects detach when selected space-person faces also back non-repairable personal profiles', async () => {
+      const { ctx, sut } = setup();
+      const { user: actor } = await ctx.newUser();
+      const { user: sourceOwner } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: actor.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: actor.id, role: SharedSpaceRole.Editor });
+      const { person: sourcePerson } = await ctx.newPerson({ ownerId: sourceOwner.id });
+      const { asset } = await ctx.newAsset({ ownerId: sourceOwner.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: sourcePerson.id });
+      const identity = await sut.ensurePersonIdentity(sourcePerson.id);
+      await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+      const spacePerson = await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: space.id, identityId: identity.id, representativeFaceId: assetFace.id, type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+
+      const resolved = await sut.resolveDetachRef(actor.id, {
+        type: 'space-person',
+        id: spacePerson.id,
+        spaceId: space.id,
+      });
+
+      expect(resolved).toEqual(expect.objectContaining({ accessible: true, allBackingFacesRepairable: false }));
+    });
   });
 });

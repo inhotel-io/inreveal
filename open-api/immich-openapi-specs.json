@@ -8442,6 +8442,104 @@
         "x-immich-state": "Stable"
       }
     },
+    "/people/detach-profile": {
+      "post": {
+        "description": "Separate one personal or space person profile from a grouped person identity.",
+        "operationId": "detachScopedPerson",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetachScopedPersonDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Detach a scoped person profile",
+        "tags": [
+          "People"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "person.merge",
+        "x-immich-state": "Stable"
+      }
+    },
+    "/people/same-person": {
+      "post": {
+        "description": "Mark personal and space people as the same person without exposing raw face identity IDs.",
+        "operationId": "mergeScopedPeople",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeScopedPeopleDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Merge scoped people by identity",
+        "tags": [
+          "People"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "person.merge",
+        "x-immich-state": "Stable"
+      }
+    },
     "/people/{id}": {
       "delete": {
         "description": "Delete an individual person.",
@@ -20926,6 +21024,18 @@
         },
         "type": "object"
       },
+      "DetachScopedPersonDto": {
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ScopedPersonProfileRefDto",
+            "description": "Scoped profile to detach"
+          }
+        },
+        "required": [
+          "profile"
+        ],
+        "type": "object"
+      },
       "DownloadArchiveDto": {
         "properties": {
           "assetIds": {
@@ -22339,6 +22449,27 @@
         },
         "required": [
           "ids"
+        ],
+        "type": "object"
+      },
+      "MergeScopedPeopleDto": {
+        "properties": {
+          "sources": {
+            "description": "Source scoped profiles",
+            "items": {
+              "$ref": "#/components/schemas/ScopedPersonProfileRefDto"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ScopedPersonProfileRefDto",
+            "description": "Target scoped profile"
+          }
+        },
+        "required": [
+          "sources",
+          "target"
         ],
         "type": "object"
       },
@@ -24635,6 +24766,35 @@
         },
         "required": [
           "angle"
+        ],
+        "type": "object"
+      },
+      "ScopedPersonProfileRefDto": {
+        "properties": {
+          "id": {
+            "description": "Scoped profile ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "spaceId": {
+            "description": "Space ID for Space Person refs",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "type": {
+            "description": "Scoped profile type",
+            "enum": [
+              "person",
+              "space-person"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type"
         ],
         "type": "object"
       },

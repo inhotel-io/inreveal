@@ -1,7 +1,7 @@
 import { getAnimateMock } from '$lib/__mocks__/animate.mock';
 import { getIntersectionObserverMock } from '$lib/__mocks__/intersection-observer.mock';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
-import type { PersonResponseDto } from '@immich/sdk';
+import { Type, type PersonResponseDto } from '@immich/sdk';
 import { personFactory } from '@test-data/factories/person-factory';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
@@ -146,10 +146,9 @@ describe('Global people page', () => {
         id: 'space-person-1',
         name: 'Shared Alice',
         isFavorite: undefined,
-        primaryProfile: { type: 'space-person', id: 'space-person-1', spaceId: 'space-1' },
-        filterId: 'space-person:space-person-1',
+        primaryProfile: { type: Type.SpacePerson, id: 'space-person-1', spaceId: 'space-1' },
         numberOfAssets: 4,
-      } as any),
+      }),
     ]);
 
     expect(screen.getByRole('link', { name: 'Shared Alice' })).toHaveAttribute(
@@ -167,8 +166,8 @@ describe('Global people page', () => {
         id: 'space-person-1',
         name: 'Shared Alice',
         isFavorite: undefined,
-        primaryProfile: { type: 'space-person', id: 'space-person-1', spaceId: 'space-1' },
-      } as any),
+        primaryProfile: { type: Type.SpacePerson, id: 'space-person-1', spaceId: 'space-1' },
+      }),
     ]);
 
     await fireEvent.mouseEnter(baseElement.querySelector('[role="group"]')!);

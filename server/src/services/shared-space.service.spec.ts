@@ -1503,9 +1503,7 @@ describe(SharedSpaceService.name, () => {
         sharePersonMetadata: false,
       });
 
-      mocks.sharedSpace.getMember
-        .mockResolvedValueOnce(viewerMember)
-        .mockResolvedValueOnce(updatedMember);
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(viewerMember).mockResolvedValueOnce(updatedMember);
       mocks.sharedSpace.updateMember.mockResolvedValue(
         factory.sharedSpaceMember({
           spaceId,
@@ -2348,7 +2346,9 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.isPersonFaceAssigned.mockResolvedValue(false);
       mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(void 0 as any);
       mocks.sharedSpace.findClosestSpacePerson.mockResolvedValue([]);
-      mocks.sharedSpace.createPerson.mockResolvedValue(factory.sharedSpacePerson({ id: spacePersonId, spaceId, identityId }));
+      mocks.sharedSpace.createPerson.mockResolvedValue(
+        factory.sharedSpacePerson({ id: spacePersonId, spaceId, identityId }),
+      );
       mocks.sharedSpace.addPersonFaces.mockResolvedValue([]);
       mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
 
@@ -3104,9 +3104,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
       mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([
-        { ...person, faceCount: 5, assetCount: 3 },
-      ]);
+      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([{ ...person, faceCount: 5, assetCount: 3 }]);
       mocks.sharedSpace.getAliasesBySpaceAndUser.mockResolvedValue([
         factory.sharedSpacePersonAlias({ personId, userId: auth.user.id, alias: 'My Alice' }),
       ]);
@@ -3220,9 +3218,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
       mocks.sharedSpace.getById.mockResolvedValue(space);
       // SQL already filters out pets when petsEnabled is false
-      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([
-        { ...humanPerson, faceCount: 1, assetCount: 1 },
-      ]);
+      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([{ ...humanPerson, faceCount: 1, assetCount: 1 }]);
       mocks.sharedSpace.getAliasesBySpaceAndUser.mockResolvedValue([]);
 
       const result = await sut.getSpacePeople(factory.auth(), spaceId);
@@ -3248,9 +3244,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
       mocks.sharedSpace.getById.mockResolvedValue(space);
       // SQL already filters out hidden persons
-      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([
-        { ...visiblePerson, faceCount: 1, assetCount: 1 },
-      ]);
+      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([{ ...visiblePerson, faceCount: 1, assetCount: 1 }]);
       mocks.sharedSpace.getAliasesBySpaceAndUser.mockResolvedValue([]);
 
       const result = await sut.getSpacePeople(factory.auth(), spaceId);
@@ -3421,9 +3415,7 @@ describe(SharedSpaceService.name, () => {
       });
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ faceRecognitionEnabled: true }));
-      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([
-        { ...person, faceCount: 3, assetCount: 2 },
-      ]);
+      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([{ ...person, faceCount: 3, assetCount: 2 }]);
       mocks.sharedSpace.getAliasesBySpaceAndUser.mockResolvedValue([]);
       const result = await sut.getSpacePeople(auth, spaceId);
       expect(result).toHaveLength(1);
@@ -3443,9 +3435,7 @@ describe(SharedSpaceService.name, () => {
       });
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ faceRecognitionEnabled: true }));
-      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([
-        { ...person, faceCount: 3, assetCount: 2 },
-      ]);
+      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([{ ...person, faceCount: 3, assetCount: 2 }]);
       mocks.sharedSpace.getAliasesBySpaceAndUser.mockResolvedValue([]);
       const result = await sut.getSpacePeople(auth, spaceId);
       expect(result).toHaveLength(1);
@@ -3514,9 +3504,7 @@ describe(SharedSpaceService.name, () => {
       });
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ faceRecognitionEnabled: true }));
-      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([
-        { ...person, faceCount: 1, assetCount: 1 },
-      ]);
+      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([{ ...person, faceCount: 1, assetCount: 1 }]);
       mocks.sharedSpace.getAliasesBySpaceAndUser.mockResolvedValue([]);
       const result = await sut.getSpacePeople(auth, spaceId);
       expect(result).toHaveLength(1);
@@ -3530,9 +3518,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ spaceId }));
       mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([
-        { ...hiddenPerson, faceCount: 1, assetCount: 1 },
-      ]);
+      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([{ ...hiddenPerson, faceCount: 1, assetCount: 1 }]);
       mocks.sharedSpace.getAliasesBySpaceAndUser.mockResolvedValue([]);
 
       const result = await sut.getSpacePeople(factory.auth(), spaceId, { withHidden: true });
@@ -3628,9 +3614,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
       mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([
-        { ...person, faceCount: 5, assetCount: 3 },
-      ]);
+      mocks.sharedSpace.getPersonsBySpaceId.mockResolvedValue([{ ...person, faceCount: 5, assetCount: 3 }]);
       mocks.sharedSpace.getAliasesBySpaceAndUser.mockResolvedValue([]);
 
       const result = await sut.getSpacePeople(auth, spaceId);
@@ -3833,7 +3817,6 @@ describe(SharedSpaceService.name, () => {
       const auth = factory.auth();
       const spaceId = newUuid();
       const personId = newUuid();
-      const birthDate = '1984-05-09';
       const person = factory.sharedSpacePerson({ id: personId, spaceId, birthDate: null });
       const space = factory.sharedSpace({ id: spaceId });
 
@@ -3980,9 +3963,7 @@ describe(SharedSpaceService.name, () => {
       const updatedPerson = factory.sharedSpacePerson({ id: personId, spaceId, name: 'New Name' });
 
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
-      mocks.sharedSpace.getPersonById
-        .mockResolvedValueOnce(person)
-        .mockResolvedValueOnce({ ...updatedPerson });
+      mocks.sharedSpace.getPersonById.mockResolvedValueOnce(person).mockResolvedValueOnce({ ...updatedPerson });
       mocks.sharedSpace.updatePerson.mockResolvedValue(updatedPerson);
 
       mocks.sharedSpace.getAlias.mockResolvedValue(void 0);
@@ -4061,9 +4042,7 @@ describe(SharedSpaceService.name, () => {
       const updatedPerson = factory.sharedSpacePerson({ id: personId, spaceId, representativeFaceId: faceId });
 
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
-      mocks.sharedSpace.getPersonById
-        .mockResolvedValueOnce(person)
-        .mockResolvedValueOnce({ ...updatedPerson});
+      mocks.sharedSpace.getPersonById.mockResolvedValueOnce(person).mockResolvedValueOnce({ ...updatedPerson });
       mocks.sharedSpace.isFaceInSpace.mockResolvedValue(true);
       mocks.sharedSpace.updatePerson.mockResolvedValue(updatedPerson);
 
@@ -4083,9 +4062,7 @@ describe(SharedSpaceService.name, () => {
       const person = factory.sharedSpacePerson({ id: personId, spaceId });
 
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
-      mocks.sharedSpace.getPersonById
-        .mockResolvedValueOnce(person)
-        .mockResolvedValueOnce({ ...person});
+      mocks.sharedSpace.getPersonById.mockResolvedValueOnce(person).mockResolvedValueOnce({ ...person });
       mocks.sharedSpace.updatePerson.mockResolvedValue(person);
 
       mocks.sharedSpace.getAlias.mockResolvedValue(void 0);
@@ -4109,9 +4086,7 @@ describe(SharedSpaceService.name, () => {
       const updatedPerson = factory.sharedSpacePerson({ id: personId, spaceId, isHidden: true });
 
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
-      mocks.sharedSpace.getPersonById
-        .mockResolvedValueOnce(person)
-        .mockResolvedValueOnce({ ...updatedPerson});
+      mocks.sharedSpace.getPersonById.mockResolvedValueOnce(person).mockResolvedValueOnce({ ...updatedPerson });
       mocks.sharedSpace.updatePerson.mockResolvedValue(updatedPerson);
 
       mocks.sharedSpace.getAlias.mockResolvedValue(void 0);
@@ -4352,7 +4327,10 @@ describe(SharedSpaceService.name, () => {
       const source = factory.sharedSpacePerson({ id: sourceId, spaceId, identityId: sourceIdentityId });
 
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
-      mocks.sharedSpace.getPersonById.mockResolvedValueOnce(target).mockResolvedValueOnce(source).mockResolvedValue(target);
+      mocks.sharedSpace.getPersonById
+        .mockResolvedValueOnce(target)
+        .mockResolvedValueOnce(source)
+        .mockResolvedValue(target);
       mocks.sharedSpace.getIdentityEvidenceForSpacePerson.mockResolvedValue([
         { identityId: targetIdentityId, type: 'person', supportingFaceCount: 2 },
         { identityId: sourceIdentityId, type: 'person', supportingFaceCount: 1 },
@@ -5555,7 +5533,9 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.findClosestSpacePerson.mockResolvedValueOnce([
         { personId: personB, name: '', distance: 0.1, identityId: identityB, type: 'person' },
       ]);
-      mocks.sharedSpace.getPersonById.mockResolvedValue(factory.sharedSpacePerson({ id: personA, spaceId, identityId: identityA }));
+      mocks.sharedSpace.getPersonById.mockResolvedValue(
+        factory.sharedSpacePerson({ id: personA, spaceId, identityId: identityA }),
+      );
       mocks.sharedSpace.getIdentityEvidenceForSpacePerson.mockResolvedValue([
         { identityId: identityA, type: 'person', supportingFaceCount: 5 },
         { identityId: identityB, type: 'person', supportingFaceCount: 2 },

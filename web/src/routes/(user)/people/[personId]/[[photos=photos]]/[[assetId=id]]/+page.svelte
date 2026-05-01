@@ -36,14 +36,16 @@
   import { getPersonActions } from '$lib/services/person.service';
   import { locale } from '$lib/stores/preferences.store';
   import { websocketEvents } from '$lib/stores/websocket';
-  import { getPeopleThumbnailUrl } from '$lib/utils';
+  import { createUrl, getPeopleThumbnailUrl } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
   import { isExternalUrl } from '$lib/utils/navigation';
   import {
     AssetVisibility,
+    detachScopedPerson,
     getAllPeople,
     getPerson,
     mergePerson,
+    mergeScopedPeople,
     searchPerson,
     updatePerson,
     type PersonResponseDto,
@@ -94,6 +96,30 @@
    **/
   let isSearchingPeople = $state(false);
   let suggestionContainer: HTMLElement | undefined = $state();
+
+  type ScopedPersonProfileRef = { type: 'person'; id: string } | { type: 'space-person'; id: string; spaceId: string };
+
+  const toScopedPersonRef = (person: PersonResponseDto): ScopedPersonProfileRef => {
+    if (person.primaryProfile?.type === 'space-person' && person.primaryProfile.spaceId) {
+      return { type: 'space-person', id: person.primaryProfile.id, spaceId: person.primaryProfile.spaceId };
+    }
+    if (person.primaryProfile?.type === 'user-person') {
+      return { type: 'person', id: person.primaryProfile.id };
+    }
+    return { type: 'person', id: person.id };
+  };
+
+  const isSpaceScoped = (person: PersonResponseDto) => toScopedPersonRef(person).type === 'space-person';
+
+  const getScopedThumbnailUrl = (person: PersonResponseDto): string => {
+    const profile = person.primaryProfile;
+    if (profile?.type === 'space-person' && profile.spaceId) {
+      return createUrl(`/shared-spaces/${profile.spaceId}/people/${profile.id}/thumbnail`, {
+        updatedAt: person.updatedAt,
+      });
+    }
+    return getPeopleThumbnailUrl(person);
+  };
 
   onMount(() => {
     const action = $page.url.searchParams.get(QueryParameter.ACTION);
@@ -153,22 +179,50 @@
   const getMergeDisplayName = (person: PersonResponseDto) => person.name;
 
   const loadMergePeople = async (sortFaces: boolean, person: PersonResponseDto) => {
-    const data = await getAllPeople({ withHidden: false, closestPersonId: sortFaces ? person.id : undefined });
+    const data = await getAllPeople({
+      withHidden: false,
+      withSharedSpaces: true,
+      closestPersonId: sortFaces ? person.id : undefined,
+    });
     return data.people;
   };
 
-  const mergePeople = async (person: PersonResponseDto, selectedPeople: PersonResponseDto[]) => {
-    const results = await mergePerson({
-      id: person.id,
-      mergePersonDto: { ids: selectedPeople.map(({ id }) => id) },
-    });
-    const mergedPerson = await getPerson({ id: person.id });
-    const count = results.filter(({ success }) => success).length;
-    toastManager.primary($t('merged_people_count', { values: { count } }));
+  const mergePeople = async (targetCandidate: PersonResponseDto, selectedPeople: PersonResponseDto[]) => {
+    const targetPerson = person;
+    const sourcePeople =
+      targetCandidate.id === targetPerson.id
+        ? selectedPeople
+        : [targetCandidate, ...selectedPeople.filter((selectedPerson) => selectedPerson.id !== targetPerson.id)];
+    const usesScopedRepair =
+      isSpaceScoped(targetPerson) || sourcePeople.some((sourcePerson) => isSpaceScoped(sourcePerson));
+    const mergedCount = await (usesScopedRepair
+      ? (async () => {
+          await mergeScopedPeople({
+            mergeScopedPeopleDto: {
+              target: toScopedPersonRef(targetPerson),
+              sources: sourcePeople.map((sourcePerson) => toScopedPersonRef(sourcePerson)),
+            },
+          });
+          return sourcePeople.length;
+        })()
+      : mergePerson({
+          id: targetPerson.id,
+          mergePersonDto: { ids: sourcePeople.map(({ id }) => id) },
+        }).then((results) => results.filter(({ success }) => success).length));
+    const mergedPerson = await getPerson({ id: targetPerson.id });
+    toastManager.primary($t('merged_people_count', { values: { count: mergedCount } }));
     return mergedPerson;
   };
 
   const handleSwapMergePerson = async (person: PersonResponseDto) => {
+    const profile = person.primaryProfile;
+    if (profile?.type === 'space-person' && profile.spaceId) {
+      await goto(
+        Route.viewSpacePerson(profile.spaceId, profile.id, { previousRoute: Route.people(), action: 'merge' }),
+      );
+      return;
+    }
+
     await goto(Route.viewPerson(person, { previousRoute: Route.people(), action: 'merge' }));
   };
 
@@ -352,6 +406,25 @@
       viewMode = PersonPageViewMode.MERGE_PEOPLE;
     },
   };
+
+  const SeparateFromGroupedPerson: ActionItem = {
+    title: $t('separate_from_grouped_person'),
+    icon: mdiAccountMultipleCheckOutline,
+    onAction: async () => {
+      const isConfirm = await modalManager.showDialog({ prompt: $t('separate_from_grouped_person_prompt') });
+      if (!isConfirm) {
+        return;
+      }
+
+      try {
+        await detachScopedPerson({ detachScopedPersonDto: { profile: { type: 'person', id: person.id } } });
+        await invalidateAll();
+        toastManager.primary($t('separate_from_grouped_person'));
+      } catch (error) {
+        handleError(error, $t('errors.unable_to_save_name'));
+      }
+    },
+  };
 </script>
 
 <OnEvents
@@ -529,7 +602,16 @@
       <ControlAppBar showBackButton backIcon={mdiArrowLeft} onClose={() => goto(previousRoute)}>
         {#snippet trailing()}
           <ContextMenuButton
-            items={[SelectFeaturePhoto, HidePerson, ShowPerson, SetDateOfBirth, Merge, Favorite, Unfavorite]}
+            items={[
+              SelectFeaturePhoto,
+              HidePerson,
+              ShowPerson,
+              SetDateOfBirth,
+              Merge,
+              SeparateFromGroupedPerson,
+              Favorite,
+              Unfavorite,
+            ]}
             aria-label={$t('open')}
           />
         {/snippet}
@@ -559,10 +641,10 @@
   <PeopleMergeSelector
     {person}
     getDisplayName={getMergeDisplayName}
-    getThumbnailUrl={getPeopleThumbnailUrl}
+    getThumbnailUrl={getScopedThumbnailUrl}
     loadPeople={loadMergePeople}
     {mergePeople}
-    searchPeople={(name) => searchPerson({ name })}
+    searchPeople={(name) => searchPerson({ name, withHidden: true, withSharedSpaces: true })}
     onBack={handleGoBack}
     onMerge={handleMerge}
     onSwapPerson={handleSwapMergePerson}

@@ -19,7 +19,9 @@ import { BulkIdResponseDto, BulkIdsDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
   AssetFaceUpdateDto,
+  DetachScopedPersonDto,
   MergePersonDto,
+  MergeScopedPeopleDto,
   PeopleResponseDto,
   PeopleUpdateDto,
   PersonCreateDto,
@@ -88,6 +90,30 @@ export class PersonController {
   })
   deletePeople(@Auth() auth: AuthDto, @Body() dto: BulkIdsDto): Promise<void> {
     return this.service.deleteAll(auth, dto);
+  }
+
+  @Post('same-person')
+  @Authenticated({ permission: Permission.PersonMerge })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Endpoint({
+    summary: 'Merge scoped people by identity',
+    description: 'Mark personal and space people as the same person without exposing raw face identity IDs.',
+    history: new HistoryBuilder().added('v2').stable('v2'),
+  })
+  mergeScopedPeople(@Auth() auth: AuthDto, @Body() dto: MergeScopedPeopleDto): Promise<void> {
+    return this.service.mergeScopedPeople(auth, dto);
+  }
+
+  @Post('detach-profile')
+  @Authenticated({ permission: Permission.PersonMerge })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Endpoint({
+    summary: 'Detach a scoped person profile',
+    description: 'Separate one personal or space person profile from a grouped person identity.',
+    history: new HistoryBuilder().added('v2').stable('v2'),
+  })
+  detachScopedPerson(@Auth() auth: AuthDto, @Body() dto: DetachScopedPersonDto): Promise<void> {
+    return this.service.detachScopedPerson(auth, dto);
   }
 
   @Get(':id')

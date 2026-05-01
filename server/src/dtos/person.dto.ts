@@ -46,6 +46,36 @@ const MergePersonSchema = z
   })
   .meta({ id: 'MergePersonDto' });
 
+const ScopedPersonProfileRefSchema = z
+  .object({
+    type: z.enum(['person', 'space-person']).describe('Scoped profile type'),
+    id: z.uuidv4().describe('Scoped profile ID'),
+    spaceId: z.uuidv4().optional().describe('Space ID for Space Person refs'),
+  })
+  .superRefine((value, ctx) => {
+    if (value.type === 'space-person' && !value.spaceId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['spaceId'],
+        message: 'spaceId is required for space-person refs',
+      });
+    }
+  })
+  .meta({ id: 'ScopedPersonProfileRefDto' });
+
+const MergeScopedPeopleSchema = z
+  .object({
+    target: ScopedPersonProfileRefSchema.describe('Target scoped profile'),
+    sources: z.array(ScopedPersonProfileRefSchema).min(1).describe('Source scoped profiles'),
+  })
+  .meta({ id: 'MergeScopedPeopleDto' });
+
+const DetachScopedPersonSchema = z
+  .object({
+    profile: ScopedPersonProfileRefSchema.describe('Scoped profile to detach'),
+  })
+  .meta({ id: 'DetachScopedPersonDto' });
+
 const PersonSearchSchema = z
   .object({
     withHidden: stringToBool.optional().describe('Include hidden people'),
@@ -104,6 +134,9 @@ export class PersonCreateDto extends createZodDto(PersonCreateSchema) {}
 export class PersonUpdateDto extends createZodDto(PersonUpdateSchema) {}
 export class PeopleUpdateDto extends createZodDto(PeopleUpdateSchema) {}
 export class MergePersonDto extends createZodDto(MergePersonSchema) {}
+export class ScopedPersonProfileRefDto extends createZodDto(ScopedPersonProfileRefSchema) {}
+export class MergeScopedPeopleDto extends createZodDto(MergeScopedPeopleSchema) {}
+export class DetachScopedPersonDto extends createZodDto(DetachScopedPersonSchema) {}
 export class PersonSearchDto extends createZodDto(PersonSearchSchema) {}
 export class PersonResponseDto extends createZodDto(PersonResponseSchema) {}
 

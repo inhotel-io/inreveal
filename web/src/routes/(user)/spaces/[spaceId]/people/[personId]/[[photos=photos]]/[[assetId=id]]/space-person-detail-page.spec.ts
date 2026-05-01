@@ -177,6 +177,7 @@ describe('Spaces person detail page', () => {
     expect(screen.queryByLabelText('show_person_options')).not.toBeInTheDocument();
     expect(screen.queryByText('set_date_of_birth')).not.toBeInTheDocument();
     expect(screen.queryByText('merge_people')).not.toBeInTheDocument();
+    expect(screen.queryByText('separate_from_grouped_person')).not.toBeInTheDocument();
   });
 
   it('ignores a forced merge action for viewers', () => {
@@ -189,6 +190,28 @@ describe('Spaces person detail page', () => {
     renderPage({ action: 'merge' });
 
     expect(screen.getByTestId('people-merge-selector')).toHaveAttribute('data-person-id', 'person-1');
+  });
+
+  it('uses same-person repair for a space person merged with a personal candidate', async () => {
+    renderPage({ action: 'merge' });
+
+    await userEvent.click(screen.getByTestId('merge-personal-candidate'));
+
+    expect(sdkMock.mergeScopedPeople).toHaveBeenCalledWith({
+      mergeScopedPeopleDto: {
+        target: { type: 'space-person', id: 'person-1', spaceId: 'space-1' },
+        sources: [{ type: 'person', id: 'person-candidate' }],
+      },
+    });
+    expect(sdkMock.mergeSpacePeople).not.toHaveBeenCalled();
+  });
+
+  it('searches merge candidates with shared spaces enabled', async () => {
+    renderPage({ action: 'merge' });
+
+    await userEvent.click(screen.getByTestId('search-merge-candidates'));
+
+    expect(sdkMock.searchPerson).toHaveBeenCalledWith({ name: 'Alice', withHidden: true, withSharedSpaces: true });
   });
 
   it('edits the space person name from the detail header', async () => {
@@ -268,5 +291,17 @@ describe('Spaces person detail page', () => {
       sharedSpacePersonUpdateDto: { isHidden: true },
     });
     expect(gotoMock).toHaveBeenCalledWith('/spaces/space-1/people');
+  });
+
+  it('detaches a space person for owner or editor members after confirmation', async () => {
+    vi.mocked(modalManager.showDialog).mockResolvedValue(true);
+    renderPage();
+
+    await userEvent.click(screen.getByText('separate_from_grouped_person'));
+
+    expect(sdkMock.detachScopedPerson).toHaveBeenCalledWith({
+      detachScopedPersonDto: { profile: { type: 'space-person', id: 'person-1', spaceId: 'space-1' } },
+    });
+    expect(invalidateAllMock).toHaveBeenCalled();
   });
 });

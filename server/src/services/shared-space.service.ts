@@ -30,8 +30,8 @@ import {
   SharedSpaceUpdateDto,
 } from 'src/dtos/shared-space.dto';
 import {
-  AssetType,
   AssetFileType,
+  AssetType,
   AssetVisibility,
   CacheControl,
   JobName,
@@ -55,6 +55,8 @@ const ROLE_HIERARCHY: Record<SharedSpaceRole, number> = {
   [SharedSpaceRole.Editor]: 1,
   [SharedSpaceRole.Owner]: 2,
 };
+
+const getSharedSpaceRoleScore = (role: string) => ROLE_HIERARCHY[role as SharedSpaceRole] ?? 0;
 
 type SpacePersonMatchResult = {
   id: string;
@@ -1346,7 +1348,8 @@ export class SharedSpaceService extends BaseService {
       return;
     }
 
-    const assetAdderId = (await this.sharedSpaceRepository.getSpaceAssetAdder(spaceId, assetId))?.addedById ?? null;
+    const spaceAsset = await this.sharedSpaceRepository.getSpaceAssetAdder(spaceId, assetId);
+    const assetAdderId = spaceAsset?.addedById ?? null;
     const { machineLearning } = await this.getConfig({ withCache: true });
     const maxDistance = machineLearning.facialRecognition.maxDistance;
     const affectedPersonIds = new Set<string>();
@@ -1468,7 +1471,10 @@ export class SharedSpaceService extends BaseService {
     type: string;
     maxDistance: number;
   }): Promise<SpacePersonMatchResult> {
-    const existingByIdentity = await this.sharedSpaceRepository.getSpacePersonByIdentity(input.spaceId, input.identityId);
+    const existingByIdentity = await this.sharedSpaceRepository.getSpacePersonByIdentity(
+      input.spaceId,
+      input.identityId,
+    );
     if (existingByIdentity) {
       return existingByIdentity;
     }
@@ -1556,7 +1562,10 @@ export class SharedSpaceService extends BaseService {
     const types = new Set(evidence.map((item) => item.type));
     if (types.size > 1) {
       this.logger.warn(`Skipping identity merge for space person ${input.targetSpacePersonId}: incompatible types`);
-      return targetSpacePerson.identityId ?? evidence.toSorted((a, b) => a.identityId.localeCompare(b.identityId))[0].identityId;
+      return (
+        targetSpacePerson.identityId ??
+        evidence.toSorted((a, b) => a.identityId.localeCompare(b.identityId))[0].identityId
+      );
     }
 
     const targetIdentityId =
@@ -1564,7 +1573,7 @@ export class SharedSpaceService extends BaseService {
         ? targetSpacePerson.identityId
         : evidence.toSorted((a, b) => {
             const supportDelta = Number(b.supportingFaceCount) - Number(a.supportingFaceCount);
-            return supportDelta !== 0 ? supportDelta : a.identityId.localeCompare(b.identityId);
+            return supportDelta === 0 ? a.identityId.localeCompare(b.identityId) : supportDelta;
           })[0].identityId;
 
     const sourceIdentityIds = evidence
@@ -1598,9 +1607,12 @@ export class SharedSpaceService extends BaseService {
       return false;
     }
 
-    const candidates = (
-      await this.sharedSpaceRepository.getMetadataInheritanceCandidates({ spaceId, identityId, assetAdderId })
-    ).filter((item) => item.type === person.type);
+    const metadataCandidates = await this.sharedSpaceRepository.getMetadataInheritanceCandidates({
+      spaceId,
+      identityId,
+      assetAdderId,
+    });
+    const candidates = metadataCandidates.filter((item) => item.type === person.type);
     if (candidates.length === 0) {
       return false;
     }
@@ -1624,10 +1636,7 @@ export class SharedSpaceService extends BaseService {
       updates.nameSourceUpdatedAt = now;
     }
 
-    if (
-      (person.birthDateSource === 'none' || person.birthDateSource === 'inherited') &&
-      birthDateCandidate
-    ) {
+    if ((person.birthDateSource === 'none' || person.birthDateSource === 'inherited') && birthDateCandidate) {
       updates.birthDate = birthDateCandidate.value;
       updates.birthDateSource = 'inherited';
       updates.birthDateSourceProfileType = 'user-person';
@@ -1650,11 +1659,10 @@ export class SharedSpaceService extends BaseService {
       return null;
     }
 
-    const roleScore = (role: string) => (role === SharedSpaceRole.Owner ? 2 : role === SharedSpaceRole.Editor ? 1 : 0);
     const ranked = candidates
       .map((candidate) => ({ candidate, value: getValue(candidate) }))
       .toSorted((a, b) => {
-        const roleDelta = roleScore(b.candidate.role) - roleScore(a.candidate.role);
+        const roleDelta = getSharedSpaceRoleScore(b.candidate.role) - getSharedSpaceRoleScore(a.candidate.role);
         if (roleDelta !== 0) {
           return roleDelta;
         }
@@ -1672,7 +1680,7 @@ export class SharedSpaceService extends BaseService {
     const best = ranked[0].candidate;
     const topCandidates = ranked.filter(
       (item) =>
-        roleScore(item.candidate.role) === roleScore(best.role) &&
+        getSharedSpaceRoleScore(item.candidate.role) === getSharedSpaceRoleScore(best.role) &&
         item.candidate.isAssetAdder === best.isAssetAdder &&
         Number(item.candidate.supportingFaceCount) === Number(best.supportingFaceCount),
     );

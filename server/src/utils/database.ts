@@ -425,9 +425,7 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
     .$if(!!options.personIds && options.personIds.length > 0, (qb) =>
       options.personMatchAny ? hasAnyPerson(qb, options.personIds!) : hasPeople(qb, options.personIds!),
     )
-    .$if(!!options.identityIds && options.identityIds.length > 0, (qb) =>
-      hasFaceIdentities(qb, options.identityIds!),
-    )
+    .$if(!!options.identityIds && options.identityIds.length > 0, (qb) => hasFaceIdentities(qb, options.identityIds!))
     .$if(!!options.createdBefore, (qb) => qb.where('asset.createdAt', '<=', options.createdBefore!))
     .$if(!!options.createdAfter, (qb) => qb.where('asset.createdAt', '>=', options.createdAfter!))
     .$if(!!options.updatedBefore, (qb) => qb.where('asset.updatedAt', '<=', options.updatedBefore!))

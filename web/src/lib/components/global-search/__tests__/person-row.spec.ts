@@ -43,7 +43,6 @@ describe('person-row', () => {
     expect(img?.getAttribute('src')).toMatch(/\/api\/shared-spaces\/space-1\/people\/space-person-1\/thumbnail/);
   });
 
-
   it('swaps to placeholder div when the thumbnail image fails to load', async () => {
     const { container } = render(PersonRow, {
       props: { item: { id: 'p1', name: 'Alice' } as never },

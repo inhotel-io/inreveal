@@ -104,6 +104,73 @@ describe(PersonController.name, () => {
     });
   });
 
+  describe('POST /people/same-person', () => {
+    it('should merge scoped personal and space people', async () => {
+      const targetId = factory.uuid();
+      const sourceId = factory.uuid();
+      const spaceId = factory.uuid();
+
+      const { status } = await request(ctx.getHttpServer())
+        .post('/people/same-person')
+        .send({
+          target: { type: 'person', id: targetId },
+          sources: [{ type: 'space-person', id: sourceId, spaceId }],
+        })
+        .set('Authorization', `Bearer token`);
+
+      expect(status).toBe(204);
+      expect(service.mergeScopedPeople).toHaveBeenCalledWith(undefined, {
+        target: { type: 'person', id: targetId },
+        sources: [{ type: 'space-person', id: sourceId, spaceId }],
+      });
+    });
+
+    it('should reject raw identity refs', async () => {
+      const { status, body } = await request(ctx.getHttpServer())
+        .post('/people/same-person')
+        .send({
+          target: { type: 'face-identity', id: factory.uuid() },
+          sources: [],
+        })
+        .set('Authorization', `Bearer token`);
+
+      expect(status).toBe(400);
+      expect(body).toEqual(
+        errorDto.badRequest([
+          '[target.type] Invalid option: expected one of "person"|"space-person"',
+          '[sources] Too small: expected array to have >=1 items',
+        ]),
+      );
+    });
+
+    it('should require spaceId for space-person refs', async () => {
+      const { status, body } = await request(ctx.getHttpServer())
+        .post('/people/same-person')
+        .send({
+          target: { type: 'person', id: factory.uuid() },
+          sources: [{ type: 'space-person', id: factory.uuid() }],
+        })
+        .set('Authorization', `Bearer token`);
+
+      expect(status).toBe(400);
+      expect(body).toEqual(errorDto.badRequest(['[sources.0.spaceId] spaceId is required for space-person refs']));
+    });
+  });
+
+  describe('POST /people/detach-profile', () => {
+    it('should detach a scoped profile', async () => {
+      const profile = { type: 'person' as const, id: factory.uuid() };
+
+      const { status } = await request(ctx.getHttpServer())
+        .post('/people/detach-profile')
+        .send({ profile })
+        .set('Authorization', `Bearer token`);
+
+      expect(status).toBe(204);
+      expect(service.detachScopedPerson).toHaveBeenCalledWith(undefined, { profile });
+    });
+  });
+
   describe('DELETE /people', () => {
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).delete('/people');

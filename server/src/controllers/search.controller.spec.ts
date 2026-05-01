@@ -350,11 +350,13 @@ describe(SearchController.name, () => {
         ctx.authenticate.mockResolvedValue({});
         service.getSearchSuggestions.mockResolvedValue(['Berlin']);
 
-        const { status, body } = await request(ctx.getHttpServer()).get('/search/suggestions').query({
-          type: 'city',
-          withSharedSpaces: true,
-          personIds: `person:${personId}`,
-        });
+        const { status, body } = await request(ctx.getHttpServer())
+          .get('/search/suggestions')
+          .query({
+            type: 'city',
+            withSharedSpaces: true,
+            personIds: `person:${personId}`,
+          });
 
         expect(status).toBe(200);
         expect(body).toEqual(['Berlin']);
@@ -461,10 +463,12 @@ describe(SearchController.name, () => {
           hasUnnamedPeople: false,
         });
 
-        const { status } = await request(ctx.getHttpServer()).get('/search/suggestions/filters').query({
-          withSharedSpaces: true,
-          personIds: `space-person:${personId}`,
-        });
+        const { status } = await request(ctx.getHttpServer())
+          .get('/search/suggestions/filters')
+          .query({
+            withSharedSpaces: true,
+            personIds: `space-person:${personId}`,
+          });
 
         expect(status).toBe(200);
         expect(service.getFilterSuggestions).toHaveBeenCalledWith(

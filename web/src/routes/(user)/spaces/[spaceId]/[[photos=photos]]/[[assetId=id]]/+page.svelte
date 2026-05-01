@@ -852,11 +852,7 @@
             onClick={handleToggleTimeline}
           />
           <MenuOption
-            text={
-              sharePersonMetadata
-                ? $t('spaces_stop_sharing_person_metadata')
-                : $t('spaces_share_person_metadata')
-            }
+            text={sharePersonMetadata ? $t('spaces_stop_sharing_person_metadata') : $t('spaces_share_person_metadata')}
             icon={mdiFaceRecognition}
             onClick={handleTogglePersonMetadataSharing}
           />

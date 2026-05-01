@@ -11,7 +11,6 @@ import {
   anyUuid,
   asUuid,
   hasAnySpacePerson,
-  hasFaceIdentities,
   hasPeople,
   hasTags,
   searchAssetBuilder,
@@ -289,18 +288,32 @@ export class SearchRepository {
       .then((row) => row?.embedding ?? null);
   }
 
-  @GenerateSql({
-    params: [
-      { page: 1, size: 100 },
-      {
-        takenAfter: DummyValue.DATE,
-        lensModel: DummyValue.STRING,
-        withStacked: true,
-        isFavorite: true,
-        userIds: [DummyValue.UUID],
-      },
-    ],
-  })
+  @GenerateSql(
+    {
+      params: [
+        { page: 1, size: 100 },
+        {
+          takenAfter: DummyValue.DATE,
+          lensModel: DummyValue.STRING,
+          withStacked: true,
+          isFavorite: true,
+          userIds: [DummyValue.UUID],
+        },
+      ],
+    },
+    {
+      name: 'identity-filter',
+      params: [
+        { page: 1, size: 100 },
+        {
+          userIds: [DummyValue.UUID],
+          timelineSpaceIds: [DummyValue.UUID],
+          identityIds: [DummyValue.UUID],
+          withStacked: true,
+        },
+      ],
+    },
+  )
   async searchMetadata(pagination: SearchPaginationOptions, options: AssetSearchOptions) {
     const orderDirection = (options.orderDirection?.toLowerCase() || 'desc') as OrderByDirection;
     const items = await searchAssetBuilder(this.db, options)
@@ -1105,6 +1118,17 @@ export class SearchRepository {
       .execute();
   }
 
+  @GenerateSql({
+    name: 'identity-filter-suggestions',
+    params: [
+      [DummyValue.UUID],
+      {
+        timelineSpaceIds: [DummyValue.UUID],
+        identityIds: [DummyValue.UUID],
+        takenAfter: DummyValue.DATE,
+      },
+    ],
+  })
   async getFilterSuggestions(userIds: string[], options: FilterSuggestionsOptions): Promise<FilterSuggestionsResult> {
     const [countries, cameraMakes, tags, peopleResult, ratings, mediaTypes] = await Promise.all([
       this.getFilteredCountries(userIds, without(options, 'country', 'city')),
@@ -1495,9 +1519,7 @@ export class SearchRepository {
     `.execute(this.db);
 
     return {
-      people: result.rows
-        .map((row) => ({ id: row.id, name: row.name ?? '' }))
-        .filter((person) => person.name !== ''),
+      people: result.rows.map((row) => ({ id: row.id, name: row.name ?? '' })).filter((person) => person.name !== ''),
       hasUnnamedPeople: result.rows.some((row) => !row.name),
     };
   }

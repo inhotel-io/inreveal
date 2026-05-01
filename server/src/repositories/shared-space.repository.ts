@@ -626,9 +626,7 @@ export class SharedSpaceRepository {
       .$if(!options.withHidden, (qb) => qb.where('shared_space_person.isHidden', '=', false))
       .$if(!options.petsEnabled, (qb) => qb.where('shared_space_person.type', '!=', 'pet'))
       .$if(!!options.named, (qb) => qb.where('shared_space_person.name', '!=', ''))
-      .$if(!!namePattern, (qb) =>
-        qb.where(() => sql`"shared_space_person"."name" ILIKE ${namePattern} ESCAPE '\\'`),
-      )
+      .$if(!!namePattern, (qb) => qb.where(() => sql`"shared_space_person"."name" ILIKE ${namePattern} ESCAPE '\\'`))
       .$if(!!options.takenAfter || !!options.takenBefore, (qb) =>
         qb.where((eb) =>
           eb.exists(

@@ -2,8 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { Insertable, Kysely, Selectable, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DummyValue, GenerateSql } from 'src/decorators';
-import { PeopleResponseDto, PersonResponseDto } from 'src/dtos/person.dto';
-import { AssetVisibility, SourceType } from 'src/enum';
+import {
+  MergeScopedPeopleDto,
+  PeopleResponseDto,
+  PersonResponseDto,
+  ScopedPersonProfileRefDto,
+} from 'src/dtos/person.dto';
+import { AssetVisibility, SharedSpaceRole, SourceType } from 'src/enum';
 import { DB } from 'src/schema';
 import { FaceIdentityFaceSource, FaceIdentityFaceTable } from 'src/schema/tables/face-identity-face.table';
 import { FaceIdentityTable } from 'src/schema/tables/face-identity.table';
@@ -45,11 +50,48 @@ type AccessiblePeopleSearchOptions = {
   limit?: number;
 };
 
+type ProfileKind = 'person' | 'space-person';
+
 export type ScopedPersonTokenResolution = {
   identityIds: string[];
   legacyPersonIds: string[];
   legacySpacePersonIds: string[];
   hasInaccessibleToken: boolean;
+};
+
+export type RepairRefsResolution =
+  | {
+      accessible: false;
+      reason: 'not-found-or-no-access' | 'incompatible-type';
+    }
+  | {
+      accessible: true;
+      targetIdentityId: string;
+      sourceIdentityIds: string[];
+      type: string;
+      allAttachedProfilesRepairable: boolean;
+      hasScopedProfileConflict: boolean;
+    };
+
+export type DetachRefResolution =
+  | {
+      accessible: false;
+      reason: 'not-found-or-no-access';
+    }
+  | {
+      accessible: true;
+      identityId: string;
+      type: string;
+      allBackingFacesRepairable: boolean;
+    };
+
+type RepairProfile = {
+  type: ProfileKind;
+  id: string;
+  spaceId: string | null;
+  identityId: string;
+  identityType: string;
+  representativeFaceId: string | null;
 };
 
 type AccessiblePeopleIdentityPageRow = {
@@ -82,6 +124,15 @@ type HydratedAccessiblePersonRow = {
 export class FaceIdentityRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
+  @GenerateSql({
+    params: [
+      {
+        userId: DummyValue.UUID,
+        tokens: [`person:${DummyValue.UUID}`, `space-person:${DummyValue.UUID}`],
+        scope: { withSharedSpaces: true, spaceId: DummyValue.UUID, timelineSpaceIds: [DummyValue.UUID] },
+      },
+    ],
+  })
   async resolveScopedPersonTokens(input: {
     userId: string;
     tokens: string[];
@@ -153,7 +204,7 @@ export class FaceIdentityRepository {
         .where('shared_space_person.id', 'in', [...scopedSpacePersonIds])
         .execute();
       const rowsById = new Map(rows.map((row) => [row.id, row]));
-      const timelineSpaceIds = new Set(input.scope.timelineSpaceIds ?? []);
+      const timelineSpaceIds = new Set(input.scope.timelineSpaceIds);
 
       for (const spacePersonId of scopedSpacePersonIds) {
         const row = rowsById.get(spacePersonId);
@@ -184,6 +235,16 @@ export class FaceIdentityRepository {
     };
   }
 
+  @GenerateSql({
+    params: [
+      DummyValue.UUID,
+      {
+        name: DummyValue.STRING,
+        withHidden: true,
+        limit: 50,
+      },
+    ],
+  })
   async searchAccessiblePeople(userId: string, options: AccessiblePeopleSearchOptions): Promise<PersonResponseDto[]> {
     const rows = await this.getAccessiblePeopleIdentityPage({
       userId,
@@ -200,6 +261,7 @@ export class FaceIdentityRepository {
     });
   }
 
+  @GenerateSql({ params: [DummyValue.UUID, { limit: 100 }] })
   async getAccessiblePersonFilterSuggestions(
     userId: string,
     options: { limit?: number } = {},
@@ -241,6 +303,349 @@ export class FaceIdentityRepository {
       hasNextPage: rows.length > size,
       people,
     };
+  }
+
+  async resolveRepairRefs(actorUserId: string, dto: MergeScopedPeopleDto): Promise<RepairRefsResolution> {
+    const refs = [dto.target, ...dto.sources];
+    const profiles: RepairProfile[] = [];
+
+    for (const ref of refs) {
+      const profile = await this.resolveRepairProfile(actorUserId, ref);
+      if (!profile) {
+        return { accessible: false, reason: 'not-found-or-no-access' };
+      }
+      profiles.push(profile);
+    }
+
+    const target = profiles[0];
+    if (profiles.some((profile) => profile.identityType !== target.identityType)) {
+      return { accessible: false, reason: 'incompatible-type' };
+    }
+
+    const sourceIdentityIds = [
+      ...new Set(
+        profiles
+          .slice(1)
+          .map((profile) => profile.identityId)
+          .filter((id) => id !== target.identityId),
+      ),
+    ];
+    const identityIds = [...new Set([target.identityId, ...sourceIdentityIds])];
+    const [allAttachedProfilesRepairable, hasScopedProfileConflict] = await Promise.all([
+      this.areAttachedProfilesRepairable(actorUserId, identityIds),
+      this.hasRepairProfileConflict(target.identityId, sourceIdentityIds),
+    ]);
+
+    return {
+      accessible: true,
+      targetIdentityId: target.identityId,
+      sourceIdentityIds,
+      type: target.identityType,
+      allAttachedProfilesRepairable,
+      hasScopedProfileConflict,
+    };
+  }
+
+  async resolveDetachRef(actorUserId: string, profileRef: ScopedPersonProfileRefDto): Promise<DetachRefResolution> {
+    const profile = await this.resolveRepairProfile(actorUserId, profileRef);
+    if (!profile) {
+      return { accessible: false, reason: 'not-found-or-no-access' };
+    }
+
+    return {
+      accessible: true,
+      identityId: profile.identityId,
+      type: profile.identityType,
+      allBackingFacesRepairable: await this.areProfileBackingFacesRepairable(actorUserId, profileRef),
+    };
+  }
+
+  async detachScopedProfile(profileRef: ScopedPersonProfileRefDto): Promise<string> {
+    return this.db.transaction().execute(async (trx) => {
+      const profile = await this.getProfileForDetach(profileRef, trx);
+      const identity = await trx
+        .insertInto('face_identity')
+        .values({
+          type: profile.identityType,
+          representativeFaceId: profile.representativeFaceId,
+        } satisfies Insertable<FaceIdentityTable>)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      await (
+        profileRef.type === 'person'
+          ? trx.updateTable('person').set({ identityId: identity.id }).where('id', '=', profileRef.id)
+          : trx
+              .updateTable('shared_space_person')
+              .set({ identityId: identity.id })
+              .where('id', '=', profileRef.id)
+              .where('spaceId', '=', profileRef.spaceId!)
+      ).execute();
+
+      const faceIds = await this.getScopedProfileFaceIds(profileRef, trx);
+      if (faceIds.length > 0) {
+        await trx
+          .updateTable('face_identity_face')
+          .set({ identityId: identity.id, source: 'manual' })
+          .where('assetFaceId', 'in', faceIds)
+          .execute();
+
+        if (profile.representativeFaceId && faceIds.includes(profile.representativeFaceId)) {
+          const replacement = await trx
+            .selectFrom('face_identity_face')
+            .select('assetFaceId')
+            .where('identityId', '=', profile.identityId)
+            .orderBy('updatedAt', 'desc')
+            .executeTakeFirst();
+
+          await trx
+            .updateTable('face_identity')
+            .set({ representativeFaceId: replacement?.assetFaceId ?? null })
+            .where('id', '=', profile.identityId)
+            .execute();
+        }
+      }
+
+      return identity.id;
+    });
+  }
+
+  private isRepairRole(role: string | null | undefined): boolean {
+    return role === SharedSpaceRole.Owner || role === SharedSpaceRole.Editor;
+  }
+
+  private async resolveRepairProfile(
+    actorUserId: string,
+    ref: ScopedPersonProfileRefDto,
+  ): Promise<RepairProfile | null> {
+    if (ref.type === 'person') {
+      const row = await this.db
+        .selectFrom('person')
+        .innerJoin('face_identity', 'face_identity.id', 'person.identityId')
+        .select([
+          'person.id',
+          'person.identityId',
+          'person.faceAssetId as representativeFaceId',
+          'face_identity.type as identityType',
+        ])
+        .where('person.id', '=', ref.id)
+        .where('person.ownerId', '=', actorUserId)
+        .executeTakeFirst();
+
+      return row?.identityId
+        ? {
+            type: 'person',
+            id: row.id,
+            spaceId: null,
+            identityId: row.identityId,
+            identityType: row.identityType,
+            representativeFaceId: row.representativeFaceId,
+          }
+        : null;
+    }
+
+    if (!ref.spaceId) {
+      return null;
+    }
+
+    const row = await this.db
+      .selectFrom('shared_space_person')
+      .innerJoin('face_identity', 'face_identity.id', 'shared_space_person.identityId')
+      .innerJoin('shared_space_member', (join) =>
+        join
+          .onRef('shared_space_member.spaceId', '=', 'shared_space_person.spaceId')
+          .on('shared_space_member.userId', '=', actorUserId),
+      )
+      .select([
+        'shared_space_person.id',
+        'shared_space_person.spaceId',
+        'shared_space_person.identityId',
+        'shared_space_person.representativeFaceId',
+        'shared_space_member.role',
+        'face_identity.type as identityType',
+      ])
+      .where('shared_space_person.id', '=', ref.id)
+      .where('shared_space_person.spaceId', '=', ref.spaceId)
+      .executeTakeFirst();
+
+    return row?.identityId && this.isRepairRole(row.role)
+      ? {
+          type: 'space-person',
+          id: row.id,
+          spaceId: row.spaceId,
+          identityId: row.identityId,
+          identityType: row.identityType,
+          representativeFaceId: row.representativeFaceId,
+        }
+      : null;
+  }
+
+  private async areAttachedProfilesRepairable(actorUserId: string, identityIds: string[]): Promise<boolean> {
+    if (identityIds.length === 0) {
+      return false;
+    }
+
+    const inaccessiblePersonal = await this.db
+      .selectFrom('person')
+      .select('id')
+      .where('identityId', 'in', identityIds)
+      .where('ownerId', '!=', actorUserId)
+      .limit(1)
+      .executeTakeFirst();
+    if (inaccessiblePersonal) {
+      return false;
+    }
+
+    const spaceRows = await this.db
+      .selectFrom('shared_space_person')
+      .leftJoin('shared_space_member', (join) =>
+        join
+          .onRef('shared_space_member.spaceId', '=', 'shared_space_person.spaceId')
+          .on('shared_space_member.userId', '=', actorUserId),
+      )
+      .select(['shared_space_person.id', 'shared_space_member.role'])
+      .where('shared_space_person.identityId', 'in', identityIds)
+      .execute();
+
+    return spaceRows.every((row) => this.isRepairRole(row.role));
+  }
+
+  private async hasRepairProfileConflict(targetIdentityId: string, sourceIdentityIds: string[]): Promise<boolean> {
+    if (sourceIdentityIds.length === 0) {
+      return false;
+    }
+
+    const personalConflict = await this.db
+      .selectFrom('person as source_person')
+      .innerJoin('person as target_person', (join) =>
+        join
+          .onRef('target_person.ownerId', '=', 'source_person.ownerId')
+          .on('target_person.identityId', '=', targetIdentityId),
+      )
+      .select('source_person.id')
+      .where('source_person.identityId', 'in', sourceIdentityIds)
+      .limit(1)
+      .executeTakeFirst();
+    if (personalConflict) {
+      return true;
+    }
+
+    const spaceConflict = await this.db
+      .selectFrom('shared_space_person as source_person')
+      .innerJoin('shared_space_person as target_person', (join) =>
+        join
+          .onRef('target_person.spaceId', '=', 'source_person.spaceId')
+          .on('target_person.identityId', '=', targetIdentityId),
+      )
+      .select('source_person.id')
+      .where('source_person.identityId', 'in', sourceIdentityIds)
+      .limit(1)
+      .executeTakeFirst();
+
+    return !!spaceConflict;
+  }
+
+  private async getProfileForDetach(
+    profileRef: ScopedPersonProfileRefDto,
+    db: Kysely<DB> = this.db,
+  ): Promise<RepairProfile> {
+    if (profileRef.type === 'person') {
+      const row = await db
+        .selectFrom('person')
+        .innerJoin('face_identity', 'face_identity.id', 'person.identityId')
+        .select([
+          'person.id',
+          'person.identityId',
+          'person.faceAssetId as representativeFaceId',
+          'face_identity.type as identityType',
+        ])
+        .where('person.id', '=', profileRef.id)
+        .executeTakeFirstOrThrow();
+
+      return {
+        type: 'person',
+        id: row.id,
+        spaceId: null,
+        identityId: row.identityId!,
+        identityType: row.identityType,
+        representativeFaceId: row.representativeFaceId,
+      };
+    }
+
+    const row = await db
+      .selectFrom('shared_space_person')
+      .innerJoin('face_identity', 'face_identity.id', 'shared_space_person.identityId')
+      .select([
+        'shared_space_person.id',
+        'shared_space_person.spaceId',
+        'shared_space_person.identityId',
+        'shared_space_person.representativeFaceId',
+        'face_identity.type as identityType',
+      ])
+      .where('shared_space_person.id', '=', profileRef.id)
+      .where('shared_space_person.spaceId', '=', profileRef.spaceId!)
+      .executeTakeFirstOrThrow();
+
+    return {
+      type: 'space-person',
+      id: row.id,
+      spaceId: row.spaceId,
+      identityId: row.identityId!,
+      identityType: row.identityType,
+      representativeFaceId: row.representativeFaceId,
+    };
+  }
+
+  private async getScopedProfileFaceIds(profileRef: ScopedPersonProfileRefDto, db: Kysely<DB> = this.db) {
+    if (profileRef.type === 'person') {
+      const rows = await db.selectFrom('asset_face').select('id').where('personId', '=', profileRef.id).execute();
+      return rows.map((row) => row.id);
+    }
+
+    const rows = await db
+      .selectFrom('shared_space_person_face')
+      .select('assetFaceId')
+      .where('personId', '=', profileRef.id)
+      .execute();
+    return rows.map((row) => row.assetFaceId);
+  }
+
+  private async areProfileBackingFacesRepairable(
+    actorUserId: string,
+    profileRef: ScopedPersonProfileRefDto,
+  ): Promise<boolean> {
+    const faceIds = await this.getScopedProfileFaceIds(profileRef);
+    if (faceIds.length === 0) {
+      return true;
+    }
+
+    const inaccessiblePersonal = await this.db
+      .selectFrom('asset_face')
+      .innerJoin('person', 'person.id', 'asset_face.personId')
+      .select('asset_face.id')
+      .where('asset_face.id', 'in', faceIds)
+      .$if(profileRef.type === 'person', (qb) => qb.where('person.id', '!=', profileRef.id))
+      .where('person.ownerId', '!=', actorUserId)
+      .limit(1)
+      .executeTakeFirst();
+    if (inaccessiblePersonal) {
+      return false;
+    }
+
+    const spaceRows = await this.db
+      .selectFrom('shared_space_person_face')
+      .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
+      .leftJoin('shared_space_member', (join) =>
+        join
+          .onRef('shared_space_member.spaceId', '=', 'shared_space_person.spaceId')
+          .on('shared_space_member.userId', '=', actorUserId),
+      )
+      .select(['shared_space_person.id', 'shared_space_member.role'])
+      .where('shared_space_person_face.assetFaceId', 'in', faceIds)
+      .$if(profileRef.type === 'space-person', (qb) => qb.where('shared_space_person.id', '!=', profileRef.id))
+      .execute();
+
+    return spaceRows.every((row) => this.isRepairRole(row.role));
   }
 
   @GenerateSql({ params: [{ userId: DummyValue.UUID, withHidden: true, limit: 51, offset: 0 }] })
