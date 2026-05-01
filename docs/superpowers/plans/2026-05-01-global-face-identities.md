@@ -20,6 +20,25 @@
 - No request-time vector matching. Embedding comparisons remain in recognition, space matching, or repair jobs.
 - Permission tests must assert both presence and absence. A passing positive case is not enough for this feature.
 
+## Execution Split
+
+This file remains the umbrella roadmap. Execute the feature through smaller phase plans so schema risk, shared-space behavior, public API changes, web changes, and repair tooling can be reviewed independently.
+
+1. `2026-05-01-global-face-identities-01-schema-backfill-lifecycle.md`
+   - Owns Ubiquitous Language updates, additive schema, migration, repository wiring, identity backfill, native recognition identity links, and identity lifecycle maintenance for face reassignment, personal person merge, face deletion, face unassignment, and recognition resets.
+   - Exits with no public DTO or user-visible behavior change except internal identity persistence.
+2. `2026-05-01-global-face-identities-02-space-matching-metadata.md`
+   - Owns shared-space member metadata contribution settings, identity-first space-person matching, metadata inheritance into `shared_space_person`, conflict handling, source locks, and cross-owner identity merging when shared-space evidence proves sameness.
+   - Exits when shared-space matching can fill Space Person name and birth date from source metadata without leaking private `person` rows or inheriting hidden, favorite, alias, or inaccessible thumbnail state.
+3. People resolver and RBAC projection
+   - Owns the identity-grouped `/people` mode, accessible profile selection, counts, thumbnails, route targets, and the full permission matrix for personal plus timeline-enabled shared-space people.
+4. Filter panel and global search
+   - Owns scoped person tokens in filter suggestions, timeline filters, single-space filters, global search people rows, global search previews, and token parsing compatibility.
+5. Manual repair and performance hardening
+   - Owns same-person merge/detach endpoints, admin or owner repair flows, generated SQL review, query plans, indexes, search-performance regression tests, and release checks.
+
+Do not execute a later umbrella section directly until its split phase plan exists. When a concern spans phases, write the failing test in the phase where the first behavior becomes observable, then keep the end-to-end assertion in the later public API or web phase.
+
 ## Scoped Token Contract
 
 Use scoped profile tokens for filters and global search instead of raw identity ids:
