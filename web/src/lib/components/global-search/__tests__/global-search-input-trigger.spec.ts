@@ -51,6 +51,15 @@ describe('global-search-input-trigger', () => {
     expect(globalSearchManager.presentation).toBe('dropdown');
   });
 
+  it('shows the committed page query while the search field is closed', () => {
+    mockPage.url = new URL('https://gallery.test/photos?q=mountains');
+
+    render(GlobalSearchInputTrigger);
+
+    expect(screen.getByRole('combobox', { name: 'cmdk_placeholder' })).toHaveValue('mountains');
+    expect(document.querySelector('[data-cmdk-dropdown-panel]')).toBeNull();
+  });
+
   it('closes the dropdown on outside click', async () => {
     const user = userEvent.setup();
 

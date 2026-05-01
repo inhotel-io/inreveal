@@ -25,6 +25,8 @@
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { NAVIGATION_ITEMS, type NavigationItem } from '$lib/managers/navigation-items';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
+  import { page } from '$app/state';
+  import { getSearchablePageState } from '$lib/utils/searchable-page-search';
 
   interface Props {
     manager: GlobalSearchManager;
@@ -42,9 +44,16 @@
   // `$state` + `$effect` is flagged by svelte/prefer-writable-derived. The cleanest
   // Svelte 5 shape for a bi-directional mirror is to keep $state and push changes in
   // both directions via $effect. The rule's preferred pattern doesn't fit this case.
-  // eslint-disable-next-line svelte/prefer-writable-derived
   let inputValue = $state('');
+  const showDropdownPanel = $derived(manager.isOpen && manager.presentation === 'dropdown');
+  const closedDropdownSearchState = $derived.by(() =>
+    variant === 'dropdown' ? getSearchablePageState(page.url) : null,
+  );
   $effect(() => {
+    if (variant === 'dropdown' && !showDropdownPanel) {
+      inputValue = closedDropdownSearchState?.query ?? '';
+      return;
+    }
     inputValue = manager.query;
   });
   let selectedValue = $state<string>('');
@@ -63,6 +72,9 @@
   }
 
   $effect(() => {
+    if (variant === 'dropdown' && !showDropdownPanel) {
+      return;
+    }
     manager.setQuery(inputValue);
   });
 
@@ -243,8 +255,6 @@
     return { status: 'ok' as const, items, total: items.length };
   });
   const showPreview = $derived(mediaQueryManager.minLg);
-  const showDropdownPanel = $derived(manager.isOpen && manager.presentation === 'dropdown');
-
   // Progress stripe: only show after a 200ms grace window. A clean setTimeout
   // pattern — the effect fires on every batchInFlight transition and the cleanup
   // cancels any pending stripe when the batch settles before the 200ms mark.

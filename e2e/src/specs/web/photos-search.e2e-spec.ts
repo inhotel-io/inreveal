@@ -75,6 +75,7 @@ test.describe('Photos Search', () => {
     });
 
     const trigger = page.getByTestId('cmdk-input-trigger');
+    await expect(trigger.getByRole('combobox')).toHaveValue('mountain');
     await trigger.click();
     await expect(page.locator('[data-cmdk-dropdown-panel]')).toBeVisible();
     await expect(trigger.getByRole('combobox')).toHaveValue('mountain');
