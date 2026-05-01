@@ -1,9 +1,14 @@
 import { Kysely } from 'kysely';
+import { SearchSuggestionType } from 'src/dtos/search.dto';
 import { AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+import { PartnerRepository } from 'src/repositories/partner.repository';
+import { SearchRepository } from 'src/repositories/search.repository';
+import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { DB } from 'src/schema';
 import { PersonService } from 'src/services/person.service';
+import { SearchService } from 'src/services/search.service';
 import { newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
@@ -17,6 +22,14 @@ const setup = (db?: Kysely<DB>) => {
     mock: [LoggingRepository],
   });
   return { ctx, sut, faceIdentityRepository: ctx.get(FaceIdentityRepository) };
+};
+
+const setupSearch = (db?: Kysely<DB>) => {
+  return newMediumService(SearchService, {
+    database: db || defaultDatabase,
+    real: [FaceIdentityRepository, SearchRepository, SharedSpaceRepository, PartnerRepository],
+    mock: [LoggingRepository],
+  });
 };
 
 beforeAll(async () => {
@@ -58,11 +71,14 @@ const setupPeopleIdentityMatrix = async () => {
   });
   const aliceIdentity = await faceIdentityRepository.ensurePersonIdentity(alicePerson.id);
 
-  const makeSharedFace = async (input: { spaceId: string; personName: string; ownerId?: string }) => {
+  const makeSharedFace = async (input: { spaceId: string; personName: string; ownerId?: string; city?: string }) => {
     const { asset } = await ctx.newAsset({
       ownerId: input.ownerId ?? source.id,
       visibility: AssetVisibility.Timeline,
     });
+    if (input.city) {
+      await ctx.newExif({ assetId: asset.id, city: input.city, country: 'Germany' });
+    }
     await ctx.newSharedSpaceAsset({ spaceId: input.spaceId, assetId: asset.id, addedById: input.ownerId ?? source.id });
     const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id, personId: alicePerson.id });
     await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: aliceIdentity.id, source: 'owner-person' });
@@ -85,8 +101,8 @@ const setupPeopleIdentityMatrix = async () => {
     return { asset, faceId, spacePerson };
   };
 
-  const space1Alice = await makeSharedFace({ spaceId: space1.id, personName: 'Alice Source' });
-  const space2Alice = await makeSharedFace({ spaceId: space2.id, personName: 'Space 2 Private Name' });
+  const space1Alice = await makeSharedFace({ spaceId: space1.id, personName: 'Alice Source', city: 'Berlin' });
+  const space2Alice = await makeSharedFace({ spaceId: space2.id, personName: 'Space 2 Private Name', city: 'Paris' });
   const hiddenTimelineAlice = await makeSharedFace({
     spaceId: hiddenTimelineSpace.id,
     personName: 'Hidden Timeline Name',
@@ -196,5 +212,73 @@ describe('People identity RBAC projection', () => {
     } as any);
 
     expect(result).toEqual({ people: [], total: 0, hidden: 0, hasNextPage: false });
+  });
+
+  it('returns identity-grouped scoped person tokens in global filter suggestions', async () => {
+    const fx = await setupPeopleIdentityMatrix();
+    const { sut } = setupSearch();
+
+    const result = await sut.getFilterSuggestions(factory.auth({ user: fx.space1OnlyMember }), {
+      withSharedSpaces: true,
+    });
+    const serialized = JSON.stringify(result);
+
+    expect(result.people).toEqual([{ id: `space-person:${fx.space1Alice.spacePerson.id}`, name: 'Alice Source' }]);
+    expect(serialized).not.toContain(fx.aliceIdentityId);
+    expect(serialized).not.toContain('identityId');
+    expect(serialized).not.toContain('Space 2 Private Name');
+    expect(serialized).not.toContain(fx.space2Alice.spacePerson.id);
+  });
+
+  it('filters global search suggestions by resolved identity across accessible spaces', async () => {
+    const fx = await setupPeopleIdentityMatrix();
+    const { sut } = setupSearch();
+
+    const result = await sut.getSearchSuggestions(factory.auth({ user: fx.userInBothSpaces }), {
+      type: SearchSuggestionType.CITY,
+      withSharedSpaces: true,
+      personIds: [`space-person:${fx.space1Alice.spacePerson.id}`],
+    });
+
+    expect(result.toSorted()).toEqual(['Berlin', 'Paris']);
+  });
+
+  it('does not broaden filters when a scoped space person token is inaccessible', async () => {
+    const fx = await setupPeopleIdentityMatrix();
+    const { sut } = setupSearch();
+
+    const cities = await sut.getSearchSuggestions(factory.auth({ user: fx.space1OnlyMember }), {
+      type: SearchSuggestionType.CITY,
+      withSharedSpaces: true,
+      personIds: [`space-person:${fx.space2Alice.spacePerson.id}`],
+    });
+    const filters = await sut.getFilterSuggestions(factory.auth({ user: fx.space1OnlyMember }), {
+      withSharedSpaces: true,
+      personIds: [`space-person:${fx.space2Alice.spacePerson.id}`],
+    });
+
+    expect(cities).toEqual([]);
+    expect(filters.people).toEqual([]);
+    expect(JSON.stringify(filters)).not.toContain('Space 2 Private Name');
+    expect(JSON.stringify(filters)).not.toContain(fx.aliceIdentityId);
+  });
+
+  it('searches only accessible identity-grouped people names', async () => {
+    const fx = await setupPeopleIdentityMatrix();
+    const { sut } = setupSearch();
+
+    const inBoth = await sut.searchPerson(factory.auth({ user: fx.userInBothSpaces }), {
+      name: 'Alice',
+      withSharedSpaces: true,
+    });
+    const space1OnlyPrivate = await sut.searchPerson(factory.auth({ user: fx.space1OnlyMember }), {
+      name: 'Private',
+      withSharedSpaces: true,
+    });
+
+    expect(inBoth).toHaveLength(1);
+    expect(inBoth[0].filterId).toMatch(/^(person|space-person):/);
+    expect(JSON.stringify(inBoth)).not.toContain(fx.aliceIdentityId);
+    expect(space1OnlyPrivate).toEqual([]);
   });
 });

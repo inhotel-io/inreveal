@@ -556,7 +556,7 @@ describe('real providers', () => {
     m.setQuery('alice');
     await vi.advanceTimersByTimeAsync(200);
     expect(searchPerson).toHaveBeenCalledWith(
-      { name: 'alice', withHidden: false },
+      { name: 'alice', withHidden: false, withSharedSpaces: true },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
@@ -954,6 +954,18 @@ describe('activate()', () => {
     expect(goto).toHaveBeenCalledWith('/people/p1');
     const entries = getEntries();
     expect(entries[0]).toMatchObject({ kind: 'person', personId: 'p1', label: 'Alice' });
+  });
+
+  it('activate("person", item) navigates space-primary people to the space person route', () => {
+    const m = new GlobalSearchManager();
+    m.open();
+    m.activate('person', {
+      id: 'space-person-1',
+      name: 'Alice',
+      primaryProfile: { type: 'space-person', id: 'space-person-1', spaceId: 'space-1' },
+    });
+    expect(goto).toHaveBeenCalledWith('/spaces/space-1/people/space-person-1');
+    expect(getEntries()).toHaveLength(0);
   });
 
   it('activate("place", item) navigates to /map with hash and records recent entry', () => {
@@ -4537,7 +4549,10 @@ describe('prefix scoping — runBatch gating', () => {
     m.setQuery('@a');
     await vi.advanceTimersByTimeAsync(150);
 
-    expect(searchPersonSpy).toHaveBeenCalledWith({ name: 'a', withHidden: false }, expect.anything());
+    expect(searchPersonSpy).toHaveBeenCalledWith(
+      { name: 'a', withHidden: false, withSharedSpaces: true },
+      expect.anything(),
+    );
   });
 });
 

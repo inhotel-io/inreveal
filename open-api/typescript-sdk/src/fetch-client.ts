@@ -1771,6 +1771,8 @@ export type MetadataSearchDto = {
     withExif?: boolean;
     /** Include people data in response */
     withPeople?: boolean;
+    /** Include shared spaces the user is a member of */
+    withSharedSpaces?: boolean;
     /** Include stacked assets */
     withStacked?: boolean;
 };
@@ -1884,6 +1886,8 @@ export type RandomSearchDto = {
     withExif?: boolean;
     /** Include people data in response */
     withPeople?: boolean;
+    /** Include shared spaces the user is a member of */
+    withSharedSpaces?: boolean;
     /** Include stacked assets */
     withStacked?: boolean;
 };
@@ -2099,6 +2103,8 @@ export type StatisticsSearchDto = {
     /** Filter by update date (before) */
     updatedBefore?: string;
     visibility?: AssetVisibility;
+    /** Include shared spaces the user is a member of */
+    withSharedSpaces?: boolean;
 };
 export type SearchStatisticsResponseDto = {
     /** Total number of matching assets */
@@ -6000,7 +6006,7 @@ export function getExploreData(opts?: Oazapfts.RequestOpts) {
 /**
  * Search large assets
  */
-export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, spaceId, spacePersonIds, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
+export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, spaceId, spacePersonIds, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif, withSharedSpaces }: {
     albumIds?: string[];
     city?: string | null;
     country?: string | null;
@@ -6034,6 +6040,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
     visibility?: AssetVisibility;
     withDeleted?: boolean;
     withExif?: boolean;
+    withSharedSpaces?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
@@ -6071,7 +6078,8 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
         updatedBefore,
         visibility,
         withDeleted,
-        withExif
+        withExif,
+        withSharedSpaces
     }))}`, {
         ...opts,
         method: "POST"
@@ -6095,16 +6103,18 @@ export function searchAssets({ metadataSearchDto }: {
 /**
  * Search people
  */
-export function searchPerson({ name, withHidden }: {
+export function searchPerson({ name, withHidden, withSharedSpaces }: {
     name: string;
     withHidden?: boolean;
+    withSharedSpaces?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: PersonResponseDto[];
     }>(`/search/person${QS.query(QS.explode({
         name,
-        withHidden
+        withHidden,
+        withSharedSpaces
     }))}`, {
         ...opts
     }));

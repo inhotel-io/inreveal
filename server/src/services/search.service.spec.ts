@@ -22,6 +22,13 @@ describe(SearchService.name, () => {
   beforeEach(() => {
     ({ sut, mocks } = newTestService(SearchService));
     mocks.partner.getAll.mockResolvedValue([]);
+    (mocks.faceIdentity as any).resolveScopedPersonTokens ??= vitest.fn();
+    (mocks.faceIdentity as any).getAccessiblePersonFilterSuggestions ??= vitest.fn();
+    (mocks.faceIdentity as any).searchAccessiblePeople ??= vitest.fn();
+    (mocks.faceIdentity as any).getAccessiblePersonFilterSuggestions.mockResolvedValue({
+      people: [],
+      hasUnnamedPeople: false,
+    });
   });
 
   it('should work', () => {
@@ -42,6 +49,32 @@ describe(SearchService.name, () => {
       await sut.searchPerson(auth, { name, withHidden: true });
 
       expect(mocks.person.getByName).toHaveBeenCalledWith(auth.user.id, name, { withHidden: true });
+    });
+
+    it('uses identity-grouped people search when shared spaces are included', async () => {
+      const auth = AuthFactory.create();
+      const people = [
+        {
+          id: 'space-person-1',
+          name: 'Alice',
+          birthDate: null,
+          thumbnailPath: '',
+          isHidden: false,
+          primaryProfile: { type: 'space-person', id: 'space-person-1', spaceId: 'space-1' },
+          filterId: 'space-person:space-person-1',
+        },
+      ];
+      (mocks.faceIdentity as any).searchAccessiblePeople.mockResolvedValue(people);
+
+      const result = await sut.searchPerson(auth, { name: 'alice', withHidden: false, withSharedSpaces: true });
+
+      expect(result).toEqual(people);
+      expect((mocks.faceIdentity as any).searchAccessiblePeople).toHaveBeenCalledWith(auth.user.id, {
+        name: 'alice',
+        withHidden: false,
+        limit: 50,
+      });
+      expect(mocks.person.getByName).not.toHaveBeenCalled();
     });
   });
 
@@ -155,6 +188,39 @@ describe(SearchService.name, () => {
       expect(mocks.search.getCities).toHaveBeenCalledWith(
         [authStub.user1.user.id],
         expect.objectContaining({ country: 'Germany', personIds, rating: 4 }),
+      );
+    });
+
+    it('resolves scoped person tokens before global search suggestions', async () => {
+      const spaceId = newUuid();
+      const token = `space-person:${newUuid()}`;
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+      (mocks.faceIdentity as any).resolveScopedPersonTokens.mockResolvedValue({
+        identityIds: ['00000000-0000-4000-8000-000000000010'],
+        legacyPersonIds: [],
+        legacySpacePersonIds: [],
+        hasInaccessibleToken: false,
+      });
+      mocks.search.getCities.mockResolvedValue(['Berlin']);
+
+      await sut.getSearchSuggestions(authStub.user1, {
+        includeNull: false,
+        type: SearchSuggestionType.CITY,
+        withSharedSpaces: true,
+        personIds: [token],
+      });
+
+      expect((mocks.faceIdentity as any).resolveScopedPersonTokens).toHaveBeenCalledWith({
+        userId: authStub.user1.user.id,
+        tokens: [token],
+        scope: { withSharedSpaces: true, timelineSpaceIds: [spaceId], spaceId: undefined },
+      });
+      expect(mocks.search.getCities).toHaveBeenCalledWith(
+        [authStub.user1.user.id],
+        expect.objectContaining({
+          identityIds: ['00000000-0000-4000-8000-000000000010'],
+          personIds: [],
+        }),
       );
     });
 
@@ -926,6 +992,28 @@ describe(SearchService.name, () => {
           }),
         ).rejects.toBeInstanceOf(BadRequestException);
       });
+
+      it('resolves scoped person tokens before smart search', async () => {
+        const spaceId = newUuid();
+        const token = `space-person:${newUuid()}`;
+        mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+        (mocks.faceIdentity as any).resolveScopedPersonTokens.mockResolvedValue({
+          identityIds: ['00000000-0000-4000-8000-000000000030'],
+          legacyPersonIds: [],
+          legacySpacePersonIds: [],
+          hasInaccessibleToken: false,
+        });
+
+        await sut.searchSmart(authStub.user1, { query: 'test', withSharedSpaces: true, personIds: [token] });
+
+        expect(mocks.search.searchSmart).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            identityIds: ['00000000-0000-4000-8000-000000000030'],
+            personIds: [],
+          }),
+        );
+      });
     });
 
     it('should pass orderDirection when order is set', async () => {
@@ -1141,6 +1229,23 @@ describe(SearchService.name, () => {
       expect(mocks.sharedSpace.getSpaceIdsForTimeline).toHaveBeenCalledWith(authStub.user1.user.id);
       expect(mocks.search.getSmartSearchFacets).toHaveBeenCalledWith(
         expect.objectContaining({ timelineSpaceIds: [spaceId1, spaceId2] }),
+      );
+    });
+
+    it('resolves inaccessible scoped tokens to an empty smart-facet result set', async () => {
+      const token = `space-person:${newUuid()}`;
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([]);
+      (mocks.faceIdentity as any).resolveScopedPersonTokens.mockResolvedValue({
+        identityIds: [],
+        legacyPersonIds: [],
+        legacySpacePersonIds: [],
+        hasInaccessibleToken: true,
+      });
+
+      await sut.searchSmartFacets(authStub.user1, { query: 'test', withSharedSpaces: true, personIds: [token] });
+
+      expect(mocks.search.getSmartSearchFacets).toHaveBeenCalledWith(
+        expect.objectContaining({ forceEmptyResult: true }),
       );
     });
 
@@ -1453,6 +1558,10 @@ describe(SearchService.name, () => {
         mediaTypes: ['IMAGE', 'VIDEO'],
         hasUnnamedPeople: false,
       });
+      (mocks.faceIdentity as any).getAccessiblePersonFilterSuggestions.mockResolvedValue({
+        people: [{ id: 'p1', name: 'Alice' }],
+        hasUnnamedPeople: false,
+      });
 
       const result = await sut.getFilterSuggestions(auth, { withSharedSpaces: true });
 
@@ -1586,6 +1695,115 @@ describe(SearchService.name, () => {
       expect(mocks.search.getFilterSuggestions).toHaveBeenCalledWith(
         [auth.user.id],
         expect.objectContaining({ timelineSpaceIds: [spaceId] }),
+      );
+    });
+
+    it('resolves scoped person tokens before global filter suggestions', async () => {
+      const auth = AuthFactory.create();
+      const spaceId = newUuid();
+      const token = `space-person:${newUuid()}`;
+      mocks.partner.getAll.mockResolvedValue([]);
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+      (mocks.faceIdentity as any).resolveScopedPersonTokens.mockResolvedValue({
+        identityIds: ['00000000-0000-4000-8000-000000000020'],
+        legacyPersonIds: [],
+        legacySpacePersonIds: [],
+        hasInaccessibleToken: false,
+      });
+      (mocks.faceIdentity as any).getAccessiblePersonFilterSuggestions.mockResolvedValue({
+        people: [{ id: token, name: 'Alice' }],
+        hasUnnamedPeople: false,
+      });
+      mocks.search.getFilterSuggestions.mockResolvedValue(emptyResult);
+
+      await sut.getFilterSuggestions(auth, { withSharedSpaces: true, personIds: [token] });
+
+      expect((mocks.faceIdentity as any).resolveScopedPersonTokens).toHaveBeenCalledWith({
+        userId: auth.user.id,
+        tokens: [token],
+        scope: { withSharedSpaces: true, timelineSpaceIds: [spaceId], spaceId: undefined },
+      });
+      expect(mocks.search.getFilterSuggestions).toHaveBeenCalledWith(
+        [auth.user.id],
+        expect.objectContaining({
+          identityIds: ['00000000-0000-4000-8000-000000000020'],
+          personIds: [],
+        }),
+      );
+    });
+
+    it('keeps bare UUID person filters as legacy personal person ids', async () => {
+      const auth = AuthFactory.create();
+      const personId = newUuid();
+      mocks.partner.getAll.mockResolvedValue([]);
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([]);
+      (mocks.faceIdentity as any).resolveScopedPersonTokens.mockResolvedValue({
+        identityIds: [],
+        legacyPersonIds: [personId],
+        legacySpacePersonIds: [],
+        hasInaccessibleToken: false,
+      });
+      (mocks.faceIdentity as any).getAccessiblePersonFilterSuggestions.mockResolvedValue({
+        people: [],
+        hasUnnamedPeople: false,
+      });
+      mocks.search.getFilterSuggestions.mockResolvedValue(emptyResult);
+
+      await sut.getFilterSuggestions(auth, { withSharedSpaces: true, personIds: [personId] });
+
+      expect(mocks.search.getFilterSuggestions).toHaveBeenCalledWith(
+        [auth.user.id],
+        expect.objectContaining({ personIds: [personId] }),
+      );
+    });
+
+    it('returns empty people-filtered results for inaccessible scoped tokens', async () => {
+      const auth = AuthFactory.create();
+      const token = `space-person:${newUuid()}`;
+      mocks.partner.getAll.mockResolvedValue([]);
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([]);
+      (mocks.faceIdentity as any).resolveScopedPersonTokens.mockResolvedValue({
+        identityIds: [],
+        legacyPersonIds: [],
+        legacySpacePersonIds: [],
+        hasInaccessibleToken: true,
+      });
+      (mocks.faceIdentity as any).getAccessiblePersonFilterSuggestions.mockResolvedValue({
+        people: [],
+        hasUnnamedPeople: false,
+      });
+      mocks.search.getFilterSuggestions.mockResolvedValue(emptyResult);
+
+      await sut.getFilterSuggestions(auth, { withSharedSpaces: true, personIds: [token] });
+
+      expect(mocks.search.getFilterSuggestions).toHaveBeenCalledWith(
+        [auth.user.id],
+        expect.objectContaining({ forceEmptyResult: true }),
+      );
+    });
+
+    it('does not resolve another users private person token through a shared identity', async () => {
+      const auth = AuthFactory.create();
+      const token = `person:${newUuid()}`;
+      mocks.partner.getAll.mockResolvedValue([]);
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([]);
+      (mocks.faceIdentity as any).resolveScopedPersonTokens.mockResolvedValue({
+        identityIds: [],
+        legacyPersonIds: [],
+        legacySpacePersonIds: [],
+        hasInaccessibleToken: true,
+      });
+      (mocks.faceIdentity as any).getAccessiblePersonFilterSuggestions.mockResolvedValue({
+        people: [],
+        hasUnnamedPeople: false,
+      });
+      mocks.search.getFilterSuggestions.mockResolvedValue(emptyResult);
+
+      await sut.getFilterSuggestions(auth, { withSharedSpaces: true, personIds: [token] });
+
+      expect(mocks.search.getFilterSuggestions).toHaveBeenCalledWith(
+        [auth.user.id],
+        expect.objectContaining({ forceEmptyResult: true }),
       );
     });
 

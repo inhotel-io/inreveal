@@ -39,6 +39,19 @@ type AccessiblePeopleOptions = {
   size: number;
 };
 
+type AccessiblePeopleSearchOptions = {
+  name: string;
+  withHidden?: boolean;
+  limit?: number;
+};
+
+export type ScopedPersonTokenResolution = {
+  identityIds: string[];
+  legacyPersonIds: string[];
+  legacySpacePersonIds: string[];
+  hasInaccessibleToken: boolean;
+};
+
 type AccessiblePeopleIdentityPageRow = {
   identityId: string;
   visibleAssetCount: string | number;
@@ -68,6 +81,142 @@ type HydratedAccessiblePersonRow = {
 @Injectable()
 export class FaceIdentityRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
+
+  async resolveScopedPersonTokens(input: {
+    userId: string;
+    tokens: string[];
+    scope: { withSharedSpaces?: boolean; spaceId?: string; timelineSpaceIds?: string[] };
+  }): Promise<ScopedPersonTokenResolution> {
+    const tokens = [...new Set(input.tokens.filter(Boolean))];
+    const identityIds = new Set<string>();
+    const legacyPersonIds = new Set<string>();
+    const legacySpacePersonIds = new Set<string>();
+    let hasInaccessibleToken = false;
+
+    const ownPersonTokenIds = new Set<string>();
+    const scopedSpacePersonIds = new Set<string>();
+    const passThroughLegacyPersonIds = new Set<string>();
+
+    for (const token of tokens) {
+      if (token.startsWith('person:')) {
+        ownPersonTokenIds.add(token.slice('person:'.length));
+      } else if (token.startsWith('space-person:')) {
+        scopedSpacePersonIds.add(token.slice('space-person:'.length));
+      } else if (input.scope.withSharedSpaces) {
+        ownPersonTokenIds.add(token);
+      } else {
+        passThroughLegacyPersonIds.add(token);
+      }
+    }
+
+    for (const id of passThroughLegacyPersonIds) {
+      legacyPersonIds.add(id);
+    }
+
+    if (ownPersonTokenIds.size > 0) {
+      const rows = await this.db
+        .selectFrom('person')
+        .select(['id', 'identityId'])
+        .where('ownerId', '=', input.userId)
+        .where('id', 'in', [...ownPersonTokenIds])
+        .execute();
+      const rowsById = new Map(rows.map((row) => [row.id, row]));
+
+      for (const personId of ownPersonTokenIds) {
+        const row = rowsById.get(personId);
+        if (!row) {
+          hasInaccessibleToken = true;
+          continue;
+        }
+        if (row.identityId) {
+          identityIds.add(row.identityId);
+        } else {
+          legacyPersonIds.add(personId);
+        }
+      }
+    }
+
+    if (scopedSpacePersonIds.size > 0) {
+      const rows = await this.db
+        .selectFrom('shared_space_person')
+        .innerJoin('shared_space_member', (join) =>
+          join
+            .onRef('shared_space_member.spaceId', '=', 'shared_space_person.spaceId')
+            .on('shared_space_member.userId', '=', input.userId),
+        )
+        .select([
+          'shared_space_person.id',
+          'shared_space_person.identityId',
+          'shared_space_person.spaceId',
+          'shared_space_member.showInTimeline',
+        ])
+        .where('shared_space_person.id', 'in', [...scopedSpacePersonIds])
+        .execute();
+      const rowsById = new Map(rows.map((row) => [row.id, row]));
+      const timelineSpaceIds = new Set(input.scope.timelineSpaceIds ?? []);
+
+      for (const spacePersonId of scopedSpacePersonIds) {
+        const row = rowsById.get(spacePersonId);
+        const spaceMatchesScope =
+          !!row &&
+          (!input.scope.spaceId || row.spaceId === input.scope.spaceId) &&
+          (!input.scope.withSharedSpaces ||
+            (row.showInTimeline === true && timelineSpaceIds.size > 0 && timelineSpaceIds.has(row.spaceId)));
+
+        if (!row || !spaceMatchesScope) {
+          hasInaccessibleToken = true;
+          continue;
+        }
+
+        if (row.identityId) {
+          identityIds.add(row.identityId);
+        } else {
+          legacySpacePersonIds.add(spacePersonId);
+        }
+      }
+    }
+
+    return {
+      identityIds: [...identityIds],
+      legacyPersonIds: [...legacyPersonIds],
+      legacySpacePersonIds: [...legacySpacePersonIds],
+      hasInaccessibleToken,
+    };
+  }
+
+  async searchAccessiblePeople(userId: string, options: AccessiblePeopleSearchOptions): Promise<PersonResponseDto[]> {
+    const rows = await this.getAccessiblePeopleIdentityPage({
+      userId,
+      withHidden: options.withHidden ?? false,
+      limit: options.limit ?? 50,
+      offset: 0,
+      searchName: options.name,
+    });
+
+    return this.hydrateAccessiblePeople({
+      userId,
+      identityIds: rows.map((row) => row.identityId),
+      withHidden: options.withHidden ?? false,
+    });
+  }
+
+  async getAccessiblePersonFilterSuggestions(
+    userId: string,
+    options: { limit?: number } = {},
+  ): Promise<{ people: Array<{ id: string; name: string }>; hasUnnamedPeople: boolean }> {
+    const people = await this.searchAccessiblePeople(userId, {
+      name: '',
+      withHidden: false,
+      limit: options.limit ?? 100,
+    });
+
+    return {
+      people: people
+        .filter((person) => person.name !== '')
+        .map((person) => ({ id: person.filterId ?? `person:${person.id}`, name: person.name })),
+      hasUnnamedPeople: people.some((person) => person.name === ''),
+    };
+  }
 
   async getAccessiblePeople(userId: string, options: AccessiblePeopleOptions): Promise<PeopleResponseDto> {
     const page = Math.max(1, options.page);
@@ -100,7 +249,9 @@ export class FaceIdentityRepository {
     withHidden: boolean;
     limit: number;
     offset: number;
+    searchName?: string;
   }): Promise<AccessiblePeopleIdentityPageRow[]> {
+    const searchName = input.searchName ?? '';
     const result = await sql<AccessiblePeopleIdentityPageRow>`
       WITH timeline_spaces AS (
         SELECT "spaceId"
@@ -170,7 +321,8 @@ export class FaceIdentityRepository {
       eligible_profiles AS (
         SELECT *
         FROM accessible_profiles
-        WHERE ${input.withHidden}::boolean OR "isHidden" = false
+        WHERE (${input.withHidden}::boolean OR "isHidden" = false)
+          AND (${searchName} = '' OR name ILIKE ${`%${searchName}%`})
       ),
       identity_counts AS (
         SELECT

@@ -363,6 +363,7 @@
               placeholder={$t('search_people')}
               onReset={onResetSearchBar}
               onSearch={handleSearch}
+              withSharedSpaces={true}
               bind:searchName
               bind:searchedPeopleLocal
             />

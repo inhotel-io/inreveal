@@ -362,6 +362,19 @@ describe(SearchRepository.name, () => {
       expect(countMatches(innerSql, /exists\s*\(select\b[\s\S]+?from\s+"asset_face"/gi)).toBe(1);
       expect(innerSql).toMatch(/"asset_face"\."personId"\s*=\s*any\(\$[\d]+::uuid\[\]\)/i);
     });
+
+    it('identityIds path filters through face_identity_face with correlated EXISTS', () => {
+      const { base } = buildQueries(
+        sut,
+        { page: 1, size: 100 },
+        { ...baseOptions, identityIds: ['00000000-0000-0000-0000-000000000001'] },
+      );
+      const innerSql = base.compile().sql;
+
+      expect(countOrderByExpressions(innerSql + ' limit', 'limit'), FAILURE_MESSAGE).toBe(1);
+      expect(innerSql).toContain('"face_identity_face"');
+      expect(innerSql).toMatch(/"face_identity_face"\."identityId"\s*=\s*\$\d+::uuid/i);
+    });
   });
 
   describe('filter suggestions query shape', () => {
@@ -378,14 +391,27 @@ describe(SearchRepository.name, () => {
       expect(sql).toMatch(/order by\s+"person"\."isFavorite"\s+desc,\s*"person"\."name"/i);
     });
 
-    it('orders space people suggestions by favorite first, then display name', () => {
+    it('orders space people suggestions by space-local display name without private fallbacks', () => {
       const sql = compileFilteredSpacePeopleQuery(sut, {
         spaceId: '11111111-1111-1111-1111-111111111111',
       });
 
-      expect(sql).toMatch(/order by\s+coalesce\("person"\."isFavorite", false\)\s+desc/i);
+      expect(sql).not.toContain('"person"."name"');
+      expect(sql).not.toContain('"person"."isFavorite"');
       expect(sql).toMatch(/nullif\("shared_space_person"\."name", ''\)/i);
-      expect(sql).toMatch(/nullif\("person"\."name", ''\)/i);
+    });
+
+    it('filters facet assets by resolved identity ids', () => {
+      const sql = compileFilteredAssetIds(sut, { identityIds: ['00000000-0000-0000-0000-000000000001'] });
+
+      expect(sql).toContain('"face_identity_face"');
+      expect(sql).toContain('"face_identity_face"."identityId"');
+    });
+
+    it('forceEmptyResult compiles to an impossible predicate', () => {
+      const sql = compileFilteredAssetIds(sut, { forceEmptyResult: true });
+
+      expect(sql).toContain('false');
     });
   });
 
