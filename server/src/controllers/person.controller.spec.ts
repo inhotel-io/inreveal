@@ -46,6 +46,45 @@ describe(PersonController.name, () => {
       expect(status).toBe(400);
       expect(body).toEqual(errorDto.badRequest(['[closestAssetId] Invalid UUID']));
     });
+
+    it('should parse withSharedSpaces and serialize scoped profile fields without raw identity ids', async () => {
+      service.getAll.mockResolvedValue({
+        total: 1,
+        hidden: 0,
+        hasNextPage: false,
+        people: [
+          {
+            id: 'space-person-1',
+            name: 'Alice',
+            birthDate: null,
+            thumbnailPath: '',
+            isHidden: false,
+            type: 'person',
+            species: null,
+            primaryProfile: { type: 'space-person', id: 'space-person-1', spaceId: 'space-1' },
+            filterId: 'space-person:space-person-1',
+            numberOfAssets: 4,
+          } as any,
+        ],
+      });
+
+      const { status, body } = await request(ctx.getHttpServer())
+        .get('/people')
+        .query({ withSharedSpaces: true })
+        .set('Authorization', `Bearer token`);
+
+      expect(status).toBe(200);
+      expect(service.getAll).toHaveBeenCalledWith(undefined, expect.objectContaining({ withSharedSpaces: true }));
+      expect(body.people[0].primaryProfile).toEqual({
+        type: 'space-person',
+        id: 'space-person-1',
+        spaceId: 'space-1',
+      });
+      expect(body.people[0].filterId).toBe('space-person:space-person-1');
+      expect(body.people[0].numberOfAssets).toBe(4);
+      expect(JSON.stringify(body)).not.toContain(['identity', 'Id'].join(''));
+      expect(JSON.stringify(body)).not.toContain(['face', 'identity'].join('_'));
+    });
   });
 
   describe('POST /people', () => {

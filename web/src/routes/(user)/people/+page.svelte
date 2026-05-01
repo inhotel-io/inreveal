@@ -17,7 +17,7 @@
   import { getPersonActions } from '$lib/services/person.service';
   import { locale } from '$lib/stores/preferences.store';
   import { websocketEvents } from '$lib/stores/websocket';
-  import { getPeopleThumbnailUrl, handlePromiseError } from '$lib/utils';
+  import { createUrl, getPeopleThumbnailUrl, handlePromiseError } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
   import { clearQueryParam } from '$lib/utils/navigation';
   import { getAllPeople, getPerson, searchPerson, updatePerson, type PersonResponseDto } from '@immich/sdk';
@@ -86,7 +86,7 @@
           handlePromiseError(
             Promise.all(
               Array.from({ length: pagesToLoad }).map((_, i) => {
-                return getAllPeople({ withHidden: true, page: startingPage + i });
+                return getAllPeople({ withHidden: true, withSharedSpaces: true, page: startingPage + i });
               }),
             ).then((pages) => {
               for (const page of pages) {
@@ -110,7 +110,11 @@
     }
 
     try {
-      const { people: newPeople, hasNextPage } = await getAllPeople({ withHidden: true, page: nextPage });
+      const { people: newPeople, hasNextPage } = await getAllPeople({
+        withHidden: true,
+        withSharedSpaces: true,
+        page: nextPage,
+      });
       people = people.concat(newPeople);
       if (nextPage !== null) {
         currentPage = nextPage;
@@ -229,16 +233,36 @@
   let countVisiblePeople = $derived(searchName ? searchedPeopleLocal.length : data.people.total - data.people.hidden);
   let showPeople = $derived(searchName ? searchedPeopleLocal : visiblePeople);
 
+  const getPersonHref = (person: PersonResponseDto) =>
+    person.primaryProfile?.type === 'space-person' && person.primaryProfile.spaceId
+      ? Route.viewSpacePerson(person.primaryProfile.spaceId, person.primaryProfile.id)
+      : Route.viewPerson(
+          { ...person, id: person.primaryProfile?.id ?? person.id },
+          { previousRoute: Route.people() },
+        );
+
+  const getPersonThumbnail = (person: PersonResponseDto) =>
+    person.primaryProfile?.type === 'space-person' && person.primaryProfile.spaceId
+      ? createUrl(`/shared-spaces/${person.primaryProfile.spaceId}/people/${person.primaryProfile.id}/thumbnail`, {
+          updatedAt: person.updatedAt,
+        })
+      : getPeopleThumbnailUrl({ ...person, id: person.primaryProfile?.id ?? person.id });
+
+  const isPersonalPrimary = (person: PersonResponseDto) =>
+    !person.primaryProfile || person.primaryProfile.type === 'user-person';
+
   const toManagedPerson = (person: PersonResponseDto): ManagedPerson => ({
     id: person.id,
     displayName: person.name,
     canonicalName: person.name,
-    thumbnailUrl: getPeopleThumbnailUrl(person),
-    href: Route.viewPerson(person, { previousRoute: Route.people() }),
+    thumbnailUrl: getPersonThumbnail(person),
+    href: getPersonHref(person),
     isHidden: person.isHidden,
     isFavorite: person.isFavorite,
     type: person.type,
     species: person.species,
+    assetCount: person.numberOfAssets,
+    canEditPersonalProfile: isPersonalPrimary(person),
   });
 
   const onNameChangeSubmit = async (name: string, targetPerson: PersonResponseDto) => {
@@ -361,7 +385,8 @@
       {toManagedPerson}
       hasNextPage={!!nextPage && !searchName}
       {loadNextPage}
-      canEditNames
+      canEditNames={isPersonalPrimary}
+      canShowActions={isPersonalPrimary}
       onNameSubmit={onNameChangeSubmit}
     >
       {#snippet actions(person)}

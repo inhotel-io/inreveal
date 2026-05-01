@@ -44,6 +44,7 @@ describe(PersonService.name, () => {
   beforeEach(() => {
     ({ sut, mocks } = newTestService(PersonService));
     mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identity-1' } as any);
+    (mocks.faceIdentity as any).getAccessiblePeople ??= vi.fn();
   });
 
   it('should be defined', () => {
@@ -51,6 +52,54 @@ describe(PersonService.name, () => {
   });
 
   describe('getAll', () => {
+    it('should use the identity resolver when withSharedSpaces is true', async () => {
+      const auth = AuthFactory.create();
+      const response = {
+        total: 1,
+        hidden: 0,
+        hasNextPage: false,
+        people: [
+          {
+            id: 'person-1',
+            name: 'Alice',
+            birthDate: '1990-01-01',
+            thumbnailPath: '',
+            isHidden: false,
+            isFavorite: true,
+            type: 'person',
+            species: null,
+            updatedAt: new Date().toISOString(),
+            numberOfAssets: 12,
+            primaryProfile: { type: 'user-person', id: 'person-1' },
+            filterId: 'person:person-1',
+          },
+        ],
+      };
+      (mocks.faceIdentity as any).getAccessiblePeople.mockResolvedValue(response);
+
+      await expect(
+        sut.getAll(auth, { withHidden: true, withSharedSpaces: true, page: 1, size: 50 } as any),
+      ).resolves.toEqual(response);
+
+      expect((mocks.faceIdentity as any).getAccessiblePeople).toHaveBeenCalledWith(auth.user.id, {
+        withHidden: true,
+        page: 1,
+        size: 50,
+      });
+      expect(mocks.person.getAllForUser).not.toHaveBeenCalled();
+    });
+
+    it('should keep legacy people behavior when withSharedSpaces is omitted', async () => {
+      const auth = AuthFactory.create();
+      mocks.person.getAllForUser.mockResolvedValue({ items: [], hasNextPage: false });
+      mocks.person.getNumberOfPeople.mockResolvedValue({ total: 0, hidden: 0 });
+
+      await sut.getAll(auth, { withHidden: true, page: 1, size: 50 });
+
+      expect((mocks.faceIdentity as any).getAccessiblePeople).not.toHaveBeenCalled();
+      expect(mocks.person.getAllForUser).toHaveBeenCalled();
+    });
+
     it('should get all hidden and visible people with thumbnails', async () => {
       const auth = AuthFactory.create();
       const [person, hiddenPerson] = [PersonFactory.create(), PersonFactory.create({ isHidden: true })];

@@ -815,12 +815,19 @@ export type AssetFaceWithoutPersonResponseDto = {
     imageWidth: number;
     sourceType?: SourceType;
 };
+export type ScopedPrimaryProfile = {
+    id: string;
+    spaceId?: string;
+    "type": Type;
+};
 export type PersonWithFacesResponseDto = {
     /** Person date of birth */
     birthDate: string | null;
     /** Person color (hex) */
     color?: string;
     faces: AssetFaceWithoutPersonResponseDto[];
+    /** Scoped identity filter token */
+    filterId?: string;
     /** Person ID */
     id: string;
     /** Is favorite */
@@ -829,6 +836,10 @@ export type PersonWithFacesResponseDto = {
     isHidden: boolean;
     /** Person name */
     name: string;
+    /** Accessible asset count for this grouped person */
+    numberOfAssets?: number;
+    /** Accessible profile used for navigation */
+    primaryProfile?: ScopedPrimaryProfile;
     /** Space person ID (when viewed through a space) */
     spacePersonId?: string;
     /** Pet species (e.g. dog, cat) */
@@ -1168,6 +1179,8 @@ export type PersonResponseDto = {
     birthDate: string | null;
     /** Person color (hex) */
     color?: string;
+    /** Scoped identity filter token */
+    filterId?: string;
     /** Person ID */
     id: string;
     /** Is favorite */
@@ -1176,6 +1189,10 @@ export type PersonResponseDto = {
     isHidden: boolean;
     /** Person name */
     name: string;
+    /** Accessible asset count for this grouped person */
+    numberOfAssets?: number;
+    /** Accessible profile used for navigation */
+    primaryProfile?: ScopedPrimaryProfile;
     /** Pet species (e.g. dog, cat) */
     species?: string | null;
     /** Thumbnail path */
@@ -5704,12 +5721,13 @@ export function deletePeople({ bulkIdsDto }: {
 /**
  * Get all people
  */
-export function getAllPeople({ closestAssetId, closestPersonId, page, size, withHidden }: {
+export function getAllPeople({ closestAssetId, closestPersonId, page, size, withHidden, withSharedSpaces }: {
     closestAssetId?: string;
     closestPersonId?: string;
     page?: number;
     size?: number;
     withHidden?: boolean;
+    withSharedSpaces?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
@@ -5719,7 +5737,8 @@ export function getAllPeople({ closestAssetId, closestPersonId, page, size, with
         closestPersonId,
         page,
         size,
-        withHidden
+        withHidden,
+        withSharedSpaces
     }))}`, {
         ...opts
     }));
@@ -8287,6 +8306,10 @@ export enum SourceType {
     MachineLearning = "machine-learning",
     Exif = "exif",
     Manual = "manual"
+}
+export enum Type {
+    UserPerson = "user-person",
+    SpacePerson = "space-person"
 }
 export enum AssetTypeEnum {
     Image = "IMAGE",

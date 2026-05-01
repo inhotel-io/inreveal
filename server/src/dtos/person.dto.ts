@@ -49,12 +49,23 @@ const MergePersonSchema = z
 const PersonSearchSchema = z
   .object({
     withHidden: stringToBool.optional().describe('Include hidden people'),
+    withSharedSpaces: stringToBool
+      .optional()
+      .describe('Include identity-grouped people from timeline-enabled shared spaces'),
     closestPersonId: z.uuidv4().optional().describe('Closest person ID for similarity search'),
     closestAssetId: z.uuidv4().optional().describe('Closest asset ID for similarity search'),
     page: z.coerce.number().min(1).default(1).describe('Page number for pagination'),
     size: z.coerce.number().min(1).max(1000).default(500).describe('Number of items per page'),
   })
   .meta({ id: 'PersonSearchDto' });
+
+const ScopedPrimaryProfileSchema = z
+  .object({
+    type: z.enum(['user-person', 'space-person']),
+    id: z.string(),
+    spaceId: z.string().optional(),
+  })
+  .meta({ id: 'ScopedPrimaryProfile' });
 
 const PersonResponseSchema = z
   .object({
@@ -81,6 +92,9 @@ const PersonResponseSchema = z
       .optional()
       .describe('Person color (hex)')
       .meta(new HistoryBuilder().added('v1.126.0').stable('v2').getExtensions()),
+    primaryProfile: ScopedPrimaryProfileSchema.optional().describe('Accessible profile used for navigation'),
+    filterId: z.string().optional().describe('Scoped identity filter token'),
+    numberOfAssets: z.number().int().min(0).optional().describe('Accessible asset count for this grouped person'),
     type: z.string().default('person').describe('Entity type (person or pet)'),
     species: z.string().nullable().optional().describe('Pet species (e.g. dog, cat)'),
   })

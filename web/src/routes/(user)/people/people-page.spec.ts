@@ -139,4 +139,44 @@ describe('Global people page', () => {
 
     expect(gotoMock).toHaveBeenCalledWith('/people/p1?previousRoute=%2Fpeople&action=merge');
   });
+
+  it('routes a space-primary person to the space person page', () => {
+    renderPage([
+      makePerson({
+        id: 'space-person-1',
+        name: 'Shared Alice',
+        isFavorite: undefined,
+        primaryProfile: { type: 'space-person', id: 'space-person-1', spaceId: 'space-1' },
+        filterId: 'space-person:space-person-1',
+        numberOfAssets: 4,
+      } as any),
+    ]);
+
+    expect(screen.getByRole('link', { name: 'Shared Alice' })).toHaveAttribute(
+      'href',
+      '/spaces/space-1/people/space-person-1',
+    );
+    expect(screen.getByTitle('Shared Alice').getAttribute('src')).toContain(
+      '/shared-spaces/space-1/people/space-person-1/thumbnail?updatedAt=2026-01-02T00%3A00%3A00.000Z',
+    );
+  });
+
+  it('keeps personal edit actions off shared-space-only rows', async () => {
+    const { baseElement } = renderPage([
+      makePerson({
+        id: 'space-person-1',
+        name: 'Shared Alice',
+        isFavorite: undefined,
+        primaryProfile: { type: 'space-person', id: 'space-person-1', spaceId: 'space-1' },
+      } as any),
+    ]);
+
+    await fireEvent.mouseEnter(baseElement.querySelector('[role="group"]')!);
+
+    expect(screen.queryByDisplayValue('Shared Alice')).not.toBeInTheDocument();
+    expect(screen.getByText('Shared Alice')).toBeInTheDocument();
+    expect(screen.queryByLabelText('show_person_options')).not.toBeInTheDocument();
+    expect(screen.queryByText('to_favorite')).not.toBeInTheDocument();
+    expect(screen.queryByText('hide_person')).not.toBeInTheDocument();
+  });
 });

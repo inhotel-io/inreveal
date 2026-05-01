@@ -52,7 +52,12 @@ const FACE_IDENTITY_BACKFILL_CHUNK_SIZE = 1000;
 @Injectable()
 export class PersonService extends BaseService {
   async getAll(auth: AuthDto, dto: PersonSearchDto): Promise<PeopleResponseDto> {
-    const { withHidden = false, closestAssetId, closestPersonId, page, size } = dto;
+    const { withHidden = false, withSharedSpaces = false, closestAssetId, closestPersonId, page, size } = dto;
+
+    if (withSharedSpaces) {
+      return this.faceIdentityRepository.getAccessiblePeople(auth.user.id, { withHidden, page, size });
+    }
+
     let closestFaceAssetId = closestAssetId;
     const pagination = {
       take: size,

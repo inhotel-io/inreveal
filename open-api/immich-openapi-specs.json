@@ -8267,6 +8267,15 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "withSharedSpaces",
+            "required": false,
+            "in": "query",
+            "description": "Include identity-grouped people from timeline-enabled shared spaces",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -23343,6 +23352,10 @@
             ],
             "x-immich-state": "Stable"
           },
+          "filterId": {
+            "description": "Scoped identity filter token",
+            "type": "string"
+          },
           "id": {
             "description": "Person ID",
             "type": "string"
@@ -23369,6 +23382,16 @@
           "name": {
             "description": "Person name",
             "type": "string"
+          },
+          "numberOfAssets": {
+            "description": "Accessible asset count for this grouped person",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "primaryProfile": {
+            "$ref": "#/components/schemas/ScopedPrimaryProfile",
+            "description": "Accessible profile used for navigation"
           },
           "species": {
             "description": "Pet species (e.g. dog, cat)",
@@ -23488,6 +23511,10 @@
             },
             "type": "array"
           },
+          "filterId": {
+            "description": "Scoped identity filter token",
+            "type": "string"
+          },
           "id": {
             "description": "Person ID",
             "type": "string"
@@ -23514,6 +23541,16 @@
           "name": {
             "description": "Person name",
             "type": "string"
+          },
+          "numberOfAssets": {
+            "description": "Accessible asset count for this grouped person",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "primaryProfile": {
+            "$ref": "#/components/schemas/ScopedPrimaryProfile",
+            "description": "Accessible profile used for navigation"
           },
           "spacePersonId": {
             "description": "Space person ID (when viewed through a space)",
@@ -24572,6 +24609,28 @@
         },
         "required": [
           "angle"
+        ],
+        "type": "object"
+      },
+      "ScopedPrimaryProfile": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "user-person",
+              "space-person"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type"
         ],
         "type": "object"
       },
