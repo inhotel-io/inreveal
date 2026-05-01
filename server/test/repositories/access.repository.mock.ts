@@ -61,6 +61,7 @@ export const newAccessRepositoryMock = (): IAccessRepositoryMock => {
     person: {
       checkFaceOwnerAccess: vitest.fn().mockResolvedValue(new Set()),
       checkOwnerAccess: vitest.fn().mockResolvedValue(new Set()),
+      checkSharedSpaceAccess: vitest.fn().mockResolvedValue(new Set()),
     },
 
     partner: {
