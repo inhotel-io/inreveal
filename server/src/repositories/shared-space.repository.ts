@@ -1073,7 +1073,9 @@ export class SharedSpaceRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID, { limit: DummyValue.NUMBER, afterAssetId: DummyValue.UUID }] })
-  getAssetIdsInSpacePage(spaceId: string, options: { limit: number; afterAssetId?: string } = { limit: 1000 }) {
+  getAssetIdsInSpacePage(spaceId: string, options?: { limit?: number; afterAssetId?: string }) {
+    const limit = options?.limit ?? 1000;
+    const afterAssetId = options?.afterAssetId;
     const combined = this.db
       .selectFrom('shared_space_asset')
       .select('assetId as id')
@@ -1092,9 +1094,9 @@ export class SharedSpaceRepository {
     return this.db
       .selectFrom(combined)
       .select('combined.id as assetId')
-      .$if(!!options.afterAssetId, (qb) => qb.where('combined.id', '>', options.afterAssetId!))
+      .$if(!!afterAssetId, (qb) => qb.where('combined.id', '>', afterAssetId!))
       .orderBy('combined.id', 'asc')
-      .limit(options.limit)
+      .limit(limit)
       .execute();
   }
 

@@ -2589,7 +2589,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getAssetIdsInSpacePage
         .mockResolvedValueOnce([{ assetId: 'a1' }, { assetId: 'a2' }])
         .mockResolvedValueOnce([{ assetId: 'a3' }]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
+      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
 
       const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
 
@@ -2618,7 +2618,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getAssetIdsInSpacePage
         .mockResolvedValueOnce([{ assetId: 'asset-1' }, { assetId: 'asset-2' }])
         .mockResolvedValueOnce([]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
+      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
 
       const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
 
@@ -2637,7 +2637,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getById.mockResolvedValue(space);
       mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
+      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
 
       const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
 
@@ -2654,7 +2654,7 @@ describe(SharedSpaceService.name, () => {
       (sut as any).sharedSpaceFaceMatchBatchSize = 2;
       mocks.sharedSpace.getById.mockResolvedValueOnce(enabled).mockResolvedValueOnce(enabled).mockResolvedValueOnce(disabled);
       mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }, { assetId: 'a2' }]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
+      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
 
       const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
 
@@ -2669,9 +2669,12 @@ describe(SharedSpaceService.name, () => {
       const enabled = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
 
       (sut as any).sharedSpaceFaceMatchBatchSize = 2;
-      mocks.sharedSpace.getById.mockResolvedValueOnce(enabled).mockResolvedValueOnce(enabled).mockResolvedValueOnce(void 0);
+      mocks.sharedSpace.getById
+        .mockResolvedValueOnce(enabled)
+        .mockResolvedValueOnce(enabled)
+        .mockImplementationOnce(async () => {});
       mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }, { assetId: 'a2' }]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
+      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
 
       const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
 
@@ -2689,7 +2692,7 @@ describe(SharedSpaceService.name, () => {
       (sut as any).sharedSpaceFaceMatchBatchSize = 2;
       mocks.sharedSpace.getById.mockResolvedValueOnce(enabled).mockResolvedValueOnce(enabled).mockResolvedValueOnce(disabled);
       mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
+      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
 
       const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
 
