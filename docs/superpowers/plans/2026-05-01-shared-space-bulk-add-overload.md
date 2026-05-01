@@ -61,6 +61,7 @@
 ### Task 1: Repository Keyset Pagination
 
 **Files:**
+
 - Modify: `server/src/repositories/shared-space.repository.ts`
 - Test: `server/test/medium/specs/repositories/shared-space.repository.spec.ts`
 
@@ -69,75 +70,75 @@
 Append this `describe` block after the existing `bulkAddUserAssets` tests in `server/test/medium/specs/repositories/shared-space.repository.spec.ts`:
 
 ```ts
-  describe('getAssetIdsInSpacePage', () => {
-    it('returns direct and linked-library assets in stable id order with keyset pagination', async () => {
-      const { ctx, sut } = setup();
-      const { user } = await ctx.newUser();
-      const { space } = await ctx.newSharedSpace({ createdById: user.id });
-      const { library } = await ctx.newLibrary({ ownerId: user.id });
-      await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+describe('getAssetIdsInSpacePage', () => {
+  it('returns direct and linked-library assets in stable id order with keyset pagination', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { library } = await ctx.newLibrary({ ownerId: user.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
 
-      const { asset: directB } = await ctx.newAsset({ ownerId: user.id, id: '00000000-0000-4000-a000-000000000020' });
-      const { asset: directA } = await ctx.newAsset({ ownerId: user.id, id: '00000000-0000-4000-a000-000000000010' });
-      const { asset: libraryAsset } = await ctx.newAsset({
-        ownerId: user.id,
-        libraryId: library.id,
-        id: '00000000-0000-4000-a000-000000000030',
-      });
-      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: directB.id, addedById: user.id });
-      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: directA.id, addedById: user.id });
+    const { asset: directB } = await ctx.newAsset({ ownerId: user.id, id: '00000000-0000-4000-a000-000000000020' });
+    const { asset: directA } = await ctx.newAsset({ ownerId: user.id, id: '00000000-0000-4000-a000-000000000010' });
+    const { asset: libraryAsset } = await ctx.newAsset({
+      ownerId: user.id,
+      libraryId: library.id,
+      id: '00000000-0000-4000-a000-000000000030',
+    });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: directB.id, addedById: user.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: directA.id, addedById: user.id });
 
-      const firstPage = await sut.getAssetIdsInSpacePage(space.id, { limit: 2 });
-      const secondPage = await sut.getAssetIdsInSpacePage(space.id, {
-        limit: 2,
-        afterAssetId: firstPage.at(-1)?.assetId,
-      });
-
-      expect(firstPage.map(({ assetId }) => assetId)).toEqual([directA.id, directB.id]);
-      expect(secondPage.map(({ assetId }) => assetId)).toEqual([libraryAsset.id]);
+    const firstPage = await sut.getAssetIdsInSpacePage(space.id, { limit: 2 });
+    const secondPage = await sut.getAssetIdsInSpacePage(space.id, {
+      limit: 2,
+      afterAssetId: firstPage.at(-1)?.assetId,
     });
 
-    it('deduplicates assets reachable directly and through a linked library', async () => {
-      const { ctx, sut } = setup();
-      const { user } = await ctx.newUser();
-      const { space } = await ctx.newSharedSpace({ createdById: user.id });
-      const { library } = await ctx.newLibrary({ ownerId: user.id });
-      await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
-      const { asset } = await ctx.newAsset({ ownerId: user.id, libraryId: library.id });
-      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
-
-      const page = await sut.getAssetIdsInSpacePage(space.id, { limit: 10 });
-
-      expect(page).toEqual([{ assetId: asset.id }]);
-    });
-
-    it('filters deleted and offline linked-library assets', async () => {
-      const { ctx, sut } = setup();
-      const { user } = await ctx.newUser();
-      const { space } = await ctx.newSharedSpace({ createdById: user.id });
-      const { library } = await ctx.newLibrary({ ownerId: user.id });
-      await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
-      const { asset: visible } = await ctx.newAsset({ ownerId: user.id, libraryId: library.id });
-      await ctx.newAsset({ ownerId: user.id, libraryId: library.id, deletedAt: new Date() });
-      await ctx.newAsset({ ownerId: user.id, libraryId: library.id, isOffline: true });
-
-      const page = await sut.getAssetIdsInSpacePage(space.id, { limit: 10 });
-
-      expect(page).toEqual([{ assetId: visible.id }]);
-    });
-
-    it('returns an empty page after the last asset id', async () => {
-      const { ctx, sut } = setup();
-      const { user } = await ctx.newUser();
-      const { space } = await ctx.newSharedSpace({ createdById: user.id });
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
-      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
-
-      const page = await sut.getAssetIdsInSpacePage(space.id, { limit: 10, afterAssetId: asset.id });
-
-      expect(page).toEqual([]);
-    });
+    expect(firstPage.map(({ assetId }) => assetId)).toEqual([directA.id, directB.id]);
+    expect(secondPage.map(({ assetId }) => assetId)).toEqual([libraryAsset.id]);
   });
+
+  it('deduplicates assets reachable directly and through a linked library', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { library } = await ctx.newLibrary({ ownerId: user.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+    const { asset } = await ctx.newAsset({ ownerId: user.id, libraryId: library.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+
+    const page = await sut.getAssetIdsInSpacePage(space.id, { limit: 10 });
+
+    expect(page).toEqual([{ assetId: asset.id }]);
+  });
+
+  it('filters deleted and offline linked-library assets', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { library } = await ctx.newLibrary({ ownerId: user.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+    const { asset: visible } = await ctx.newAsset({ ownerId: user.id, libraryId: library.id });
+    await ctx.newAsset({ ownerId: user.id, libraryId: library.id, deletedAt: new Date() });
+    await ctx.newAsset({ ownerId: user.id, libraryId: library.id, isOffline: true });
+
+    const page = await sut.getAssetIdsInSpacePage(space.id, { limit: 10 });
+
+    expect(page).toEqual([{ assetId: visible.id }]);
+  });
+
+  it('returns an empty page after the last asset id', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+
+    const page = await sut.getAssetIdsInSpacePage(space.id, { limit: 10, afterAssetId: asset.id });
+
+    expect(page).toEqual([]);
+  });
+});
 ```
 
 - [ ] **Step 2: Run the repository tests and verify failure**
@@ -214,6 +215,7 @@ git commit -m "fix: page shared space asset ids"
 ### Task 2: Bounded SharedSpaceFaceMatchAll Processing
 
 **Files:**
+
 - Modify: `server/src/services/shared-space.service.ts`
 - Test: `server/src/services/shared-space.service.spec.ts`
 
@@ -222,140 +224,149 @@ git commit -m "fix: page shared space asset ids"
 In `server/src/services/shared-space.service.spec.ts`, replace only the `describe('handleSharedSpaceFaceMatchAll', ...)` block with this:
 
 ```ts
-  describe('handleSharedSpaceFaceMatchAll', () => {
-    it('should skip when space not found', async () => {
-      mocks.sharedSpace.getById.mockResolvedValue(void 0);
+describe('handleSharedSpaceFaceMatchAll', () => {
+  it('should skip when space not found', async () => {
+    mocks.sharedSpace.getById.mockResolvedValue(void 0);
 
-      const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId: 'space-1' });
+    const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId: 'space-1' });
 
-      expect(result).toBe(JobStatus.Skipped);
-      expect(mocks.sharedSpace.getAssetIdsInSpacePage).not.toHaveBeenCalled();
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+    expect(result).toBe(JobStatus.Skipped);
+    expect(mocks.sharedSpace.getAssetIdsInSpacePage).not.toHaveBeenCalled();
+    expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+  });
+
+  it('should skip when face recognition is disabled', async () => {
+    const space = factory.sharedSpace({ faceRecognitionEnabled: false });
+    mocks.sharedSpace.getById.mockResolvedValue(space);
+
+    const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId: space.id });
+
+    expect(result).toBe(JobStatus.Skipped);
+    expect(mocks.sharedSpace.getAssetIdsInSpacePage).not.toHaveBeenCalled();
+    expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+  });
+
+  it('should process pages sequentially without queueing per-asset child jobs', async () => {
+    const spaceId = newUuid();
+    const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
+    (sut as any).sharedSpaceFaceMatchBatchSize = 2;
+    mocks.sharedSpace.getById.mockResolvedValue(space);
+    mocks.sharedSpace.getAssetIdsInSpacePage
+      .mockResolvedValueOnce([{ assetId: 'a1' }, { assetId: 'a2' }])
+      .mockResolvedValueOnce([{ assetId: 'a3' }]);
+    const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
+
+    const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
+
+    expect(result).toBe(JobStatus.Success);
+    expect(mocks.sharedSpace.getAssetIdsInSpacePage).toHaveBeenNthCalledWith(1, spaceId, { limit: 2 });
+    expect(mocks.sharedSpace.getAssetIdsInSpacePage).toHaveBeenNthCalledWith(2, spaceId, {
+      limit: 2,
+      afterAssetId: 'a2',
     });
-
-    it('should skip when face recognition is disabled', async () => {
-      const space = factory.sharedSpace({ faceRecognitionEnabled: false });
-      mocks.sharedSpace.getById.mockResolvedValue(space);
-
-      const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId: space.id });
-
-      expect(result).toBe(JobStatus.Skipped);
-      expect(mocks.sharedSpace.getAssetIdsInSpacePage).not.toHaveBeenCalled();
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
-    });
-
-    it('should process pages sequentially without queueing per-asset child jobs', async () => {
-      const spaceId = newUuid();
-      const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
-      (sut as any).sharedSpaceFaceMatchBatchSize = 2;
-      mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.getAssetIdsInSpacePage
-        .mockResolvedValueOnce([{ assetId: 'a1' }, { assetId: 'a2' }])
-        .mockResolvedValueOnce([{ assetId: 'a3' }]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
-
-      const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
-
-      expect(result).toBe(JobStatus.Success);
-      expect(mocks.sharedSpace.getAssetIdsInSpacePage).toHaveBeenNthCalledWith(1, spaceId, { limit: 2 });
-      expect(mocks.sharedSpace.getAssetIdsInSpacePage).toHaveBeenNthCalledWith(2, spaceId, {
-        limit: 2,
-        afterAssetId: 'a2',
-      });
-      expect(processSpy).toHaveBeenNthCalledWith(1, spaceId, 'a1');
-      expect(processSpy).toHaveBeenNthCalledWith(2, spaceId, 'a2');
-      expect(processSpy).toHaveBeenNthCalledWith(3, spaceId, 'a3');
-      expect(mocks.job.queueAll).not.toHaveBeenCalled();
-      expect(mocks.job.queue).toHaveBeenCalledWith({
-        name: JobName.SharedSpacePersonDedup,
-        data: { spaceId },
-      });
-    });
-
-    it('should read an empty final page when the first page is exactly the batch size', async () => {
-      const spaceId = newUuid();
-      const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
-      (sut as any).sharedSpaceFaceMatchBatchSize = 2;
-      mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.getAssetIdsInSpacePage
-        .mockResolvedValueOnce([{ assetId: 'asset-1' }, { assetId: 'asset-2' }])
-        .mockResolvedValueOnce([]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
-
-      const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
-
-      expect(result).toBe(JobStatus.Success);
-      expect(mocks.sharedSpace.getAssetIdsInSpacePage).toHaveBeenCalledTimes(2);
-      expect(processSpy).toHaveBeenCalledTimes(2);
-      expect(mocks.job.queue).toHaveBeenCalledWith({
-        name: JobName.SharedSpacePersonDedup,
-        data: { spaceId },
-      });
-    });
-
-    it('should succeed without dedup when there are no assets to process', async () => {
-      const spaceId = newUuid();
-      const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
-      mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
-
-      const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
-
-      expect(result).toBe(JobStatus.Success);
-      expect(processSpy).not.toHaveBeenCalled();
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
-    });
-
-    it('should stop without dedup when face recognition is disabled between pages', async () => {
-      const spaceId = newUuid();
-      const enabled = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
-      const disabled = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false });
-      (sut as any).sharedSpaceFaceMatchBatchSize = 2;
-      mocks.sharedSpace.getById.mockResolvedValueOnce(enabled).mockResolvedValueOnce(enabled).mockResolvedValueOnce(disabled);
-      mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }, { assetId: 'a2' }]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
-
-      const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
-
-      expect(result).toBe(JobStatus.Success);
-      expect(processSpy).toHaveBeenCalledTimes(2);
-      expect(mocks.sharedSpace.getAssetIdsInSpacePage).toHaveBeenCalledTimes(1);
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
-    });
-
-    it('should stop without dedup when the space is deleted between pages', async () => {
-      const spaceId = newUuid();
-      const enabled = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
-      (sut as any).sharedSpaceFaceMatchBatchSize = 2;
-      mocks.sharedSpace.getById.mockResolvedValueOnce(enabled).mockResolvedValueOnce(enabled).mockResolvedValueOnce(void 0);
-      mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }, { assetId: 'a2' }]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
-
-      const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
-
-      expect(result).toBe(JobStatus.Success);
-      expect(processSpy).toHaveBeenCalledTimes(2);
-      expect(mocks.sharedSpace.getAssetIdsInSpacePage).toHaveBeenCalledTimes(1);
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
-    });
-
-    it('should re-check the space before queuing final dedup', async () => {
-      const spaceId = newUuid();
-      const enabled = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
-      const disabled = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false });
-      (sut as any).sharedSpaceFaceMatchBatchSize = 2;
-      mocks.sharedSpace.getById.mockResolvedValueOnce(enabled).mockResolvedValueOnce(enabled).mockResolvedValueOnce(disabled);
-      mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
-
-      const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
-
-      expect(result).toBe(JobStatus.Success);
-      expect(processSpy).toHaveBeenCalledTimes(1);
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+    expect(processSpy).toHaveBeenNthCalledWith(1, spaceId, 'a1');
+    expect(processSpy).toHaveBeenNthCalledWith(2, spaceId, 'a2');
+    expect(processSpy).toHaveBeenNthCalledWith(3, spaceId, 'a3');
+    expect(mocks.job.queueAll).not.toHaveBeenCalled();
+    expect(mocks.job.queue).toHaveBeenCalledWith({
+      name: JobName.SharedSpacePersonDedup,
+      data: { spaceId },
     });
   });
+
+  it('should read an empty final page when the first page is exactly the batch size', async () => {
+    const spaceId = newUuid();
+    const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
+    (sut as any).sharedSpaceFaceMatchBatchSize = 2;
+    mocks.sharedSpace.getById.mockResolvedValue(space);
+    mocks.sharedSpace.getAssetIdsInSpacePage
+      .mockResolvedValueOnce([{ assetId: 'asset-1' }, { assetId: 'asset-2' }])
+      .mockResolvedValueOnce([]);
+    const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
+
+    const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
+
+    expect(result).toBe(JobStatus.Success);
+    expect(mocks.sharedSpace.getAssetIdsInSpacePage).toHaveBeenCalledTimes(2);
+    expect(processSpy).toHaveBeenCalledTimes(2);
+    expect(mocks.job.queue).toHaveBeenCalledWith({
+      name: JobName.SharedSpacePersonDedup,
+      data: { spaceId },
+    });
+  });
+
+  it('should succeed without dedup when there are no assets to process', async () => {
+    const spaceId = newUuid();
+    const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
+    mocks.sharedSpace.getById.mockResolvedValue(space);
+    mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([]);
+    const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
+
+    const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
+
+    expect(result).toBe(JobStatus.Success);
+    expect(processSpy).not.toHaveBeenCalled();
+    expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+  });
+
+  it('should stop without dedup when face recognition is disabled between pages', async () => {
+    const spaceId = newUuid();
+    const enabled = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
+    const disabled = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false });
+    (sut as any).sharedSpaceFaceMatchBatchSize = 2;
+    mocks.sharedSpace.getById
+      .mockResolvedValueOnce(enabled)
+      .mockResolvedValueOnce(enabled)
+      .mockResolvedValueOnce(disabled);
+    mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }, { assetId: 'a2' }]);
+    const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
+
+    const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
+
+    expect(result).toBe(JobStatus.Success);
+    expect(processSpy).toHaveBeenCalledTimes(2);
+    expect(mocks.sharedSpace.getAssetIdsInSpacePage).toHaveBeenCalledTimes(1);
+    expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+  });
+
+  it('should stop without dedup when the space is deleted between pages', async () => {
+    const spaceId = newUuid();
+    const enabled = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
+    (sut as any).sharedSpaceFaceMatchBatchSize = 2;
+    mocks.sharedSpace.getById
+      .mockResolvedValueOnce(enabled)
+      .mockResolvedValueOnce(enabled)
+      .mockResolvedValueOnce(void 0);
+    mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }, { assetId: 'a2' }]);
+    const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
+
+    const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
+
+    expect(result).toBe(JobStatus.Success);
+    expect(processSpy).toHaveBeenCalledTimes(2);
+    expect(mocks.sharedSpace.getAssetIdsInSpacePage).toHaveBeenCalledTimes(1);
+    expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+  });
+
+  it('should re-check the space before queuing final dedup', async () => {
+    const spaceId = newUuid();
+    const enabled = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
+    const disabled = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false });
+    (sut as any).sharedSpaceFaceMatchBatchSize = 2;
+    mocks.sharedSpace.getById
+      .mockResolvedValueOnce(enabled)
+      .mockResolvedValueOnce(enabled)
+      .mockResolvedValueOnce(disabled);
+    mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }]);
+    const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue(undefined);
+
+    const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
+
+    expect(result).toBe(JobStatus.Success);
+    expect(processSpy).toHaveBeenCalledTimes(1);
+    expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpacePersonDedup }));
+  });
+});
 ```
 
 - [ ] **Step 2: Run the service tests and verify failure**
@@ -467,6 +478,7 @@ git commit -m "fix: bound shared space face matching"
 ### Task 3: S3 Proxy Read Limiter
 
 **Files:**
+
 - Modify: `server/src/backends/s3-storage.backend.ts`
 - Test: `server/src/backends/s3-storage.backend.spec.ts`
 
@@ -475,131 +487,131 @@ git commit -m "fix: bound shared space face matching"
 Append these tests inside the existing `describe('getServeStrategy', ...)` block in `server/src/backends/s3-storage.backend.spec.ts`:
 
 ```ts
-    it('should limit concurrent proxied S3 reads', async () => {
-      const proxyBackend = new S3StorageBackend({
-        bucket: 'test-bucket',
-        region: 'us-east-1',
-        presignedUrlExpiry: 3600,
-        serveMode: 'proxy' as const,
-        proxyReadConcurrency: 1,
-      });
-      const proxyClient = (S3Client as unknown as ReturnType<typeof vi.fn>).mock.results.at(-1)?.value;
-      let firstResolve!: (value: unknown) => void;
-      proxyClient.send
-        .mockReturnValueOnce(
-          new Promise((resolve) => {
-            firstResolve = resolve;
-          }),
-        )
-        .mockResolvedValueOnce({ Body: Readable.from([Buffer.from('second')]), ContentLength: 6 });
+it('should limit concurrent proxied S3 reads', async () => {
+  const proxyBackend = new S3StorageBackend({
+    bucket: 'test-bucket',
+    region: 'us-east-1',
+    presignedUrlExpiry: 3600,
+    serveMode: 'proxy' as const,
+    proxyReadConcurrency: 1,
+  });
+  const proxyClient = (S3Client as unknown as ReturnType<typeof vi.fn>).mock.results.at(-1)?.value;
+  let firstResolve!: (value: unknown) => void;
+  proxyClient.send
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        firstResolve = resolve;
+      }),
+    )
+    .mockResolvedValueOnce({ Body: Readable.from([Buffer.from('second')]), ContentLength: 6 });
 
-      const first = proxyBackend.getServeStrategy('first.jpg', 'image/jpeg');
-      const second = proxyBackend.getServeStrategy('second.jpg', 'image/jpeg');
-      await Promise.resolve();
+  const first = proxyBackend.getServeStrategy('first.jpg', 'image/jpeg');
+  const second = proxyBackend.getServeStrategy('second.jpg', 'image/jpeg');
+  await Promise.resolve();
 
-      expect(proxyClient.send).toHaveBeenCalledTimes(1);
-      firstResolve({ Body: Readable.from([Buffer.from('first')]), ContentLength: 5 });
-      const firstStrategy = await first;
-      expect(proxyClient.send).toHaveBeenCalledTimes(1);
-      if (firstStrategy.type === 'stream') {
-        firstStrategy.stream.destroy();
-      }
-      await second;
+  expect(proxyClient.send).toHaveBeenCalledTimes(1);
+  firstResolve({ Body: Readable.from([Buffer.from('first')]), ContentLength: 5 });
+  const firstStrategy = await first;
+  expect(proxyClient.send).toHaveBeenCalledTimes(1);
+  if (firstStrategy.type === 'stream') {
+    firstStrategy.stream.destroy();
+  }
+  await second;
 
-      expect(proxyClient.send).toHaveBeenCalledTimes(2);
-      await expect(second).resolves.toMatchObject({ type: 'stream' });
-    });
+  expect(proxyClient.send).toHaveBeenCalledTimes(2);
+  await expect(second).resolves.toMatchObject({ type: 'stream' });
+});
 
-    it('should release a proxy read slot when the stream ends', async () => {
-      const proxyBackend = new S3StorageBackend({
-        bucket: 'test-bucket',
-        region: 'us-east-1',
-        presignedUrlExpiry: 3600,
-        serveMode: 'proxy' as const,
-        proxyReadConcurrency: 1,
-      });
-      const proxyClient = (S3Client as unknown as ReturnType<typeof vi.fn>).mock.results.at(-1)?.value;
-      proxyClient.send
-        .mockResolvedValueOnce({ Body: Readable.from([Buffer.from('first')]), ContentLength: 5 })
-        .mockResolvedValueOnce({ Body: Readable.from([Buffer.from('second')]), ContentLength: 6 });
+it('should release a proxy read slot when the stream ends', async () => {
+  const proxyBackend = new S3StorageBackend({
+    bucket: 'test-bucket',
+    region: 'us-east-1',
+    presignedUrlExpiry: 3600,
+    serveMode: 'proxy' as const,
+    proxyReadConcurrency: 1,
+  });
+  const proxyClient = (S3Client as unknown as ReturnType<typeof vi.fn>).mock.results.at(-1)?.value;
+  proxyClient.send
+    .mockResolvedValueOnce({ Body: Readable.from([Buffer.from('first')]), ContentLength: 5 })
+    .mockResolvedValueOnce({ Body: Readable.from([Buffer.from('second')]), ContentLength: 6 });
 
-      const first = await proxyBackend.getServeStrategy('first.jpg', 'image/jpeg');
-      const secondPromise = proxyBackend.getServeStrategy('second.jpg', 'image/jpeg');
-      expect(proxyClient.send).toHaveBeenCalledTimes(1);
-      if (first.type === 'stream') {
+  const first = await proxyBackend.getServeStrategy('first.jpg', 'image/jpeg');
+  const secondPromise = proxyBackend.getServeStrategy('second.jpg', 'image/jpeg');
+  expect(proxyClient.send).toHaveBeenCalledTimes(1);
+  if (first.type === 'stream') {
+    for await (const _chunk of first.stream) {
+      // drain stream
+    }
+  }
+  const second = await secondPromise;
+
+  expect(second.type).toBe('stream');
+  expect(proxyClient.send).toHaveBeenCalledTimes(2);
+});
+
+it('should release a proxy read slot when stream creation fails', async () => {
+  const proxyBackend = new S3StorageBackend({
+    bucket: 'test-bucket',
+    region: 'us-east-1',
+    presignedUrlExpiry: 3600,
+    serveMode: 'proxy' as const,
+    proxyReadConcurrency: 1,
+  });
+  const proxyClient = (S3Client as unknown as ReturnType<typeof vi.fn>).mock.results.at(-1)?.value;
+  proxyClient.send.mockRejectedValueOnce(new Error('denied')).mockResolvedValueOnce({
+    Body: Readable.from([Buffer.from('second')]),
+    ContentLength: 6,
+  });
+
+  await expect(proxyBackend.getServeStrategy('first.jpg', 'image/jpeg')).rejects.toThrow('denied');
+  const second = await proxyBackend.getServeStrategy('second.jpg', 'image/jpeg');
+
+  expect(second.type).toBe('stream');
+  expect(proxyClient.send).toHaveBeenCalledTimes(2);
+});
+
+it('should release a proxy read slot when the stream errors', async () => {
+  const proxyBackend = new S3StorageBackend({
+    bucket: 'test-bucket',
+    region: 'us-east-1',
+    presignedUrlExpiry: 3600,
+    serveMode: 'proxy' as const,
+    proxyReadConcurrency: 1,
+  });
+  const proxyClient = (S3Client as unknown as ReturnType<typeof vi.fn>).mock.results.at(-1)?.value;
+  const erroringStream = new Readable({
+    read() {
+      this.destroy(new Error('stream failed'));
+    },
+  });
+  proxyClient.send
+    .mockResolvedValueOnce({ Body: erroringStream, ContentLength: 5 })
+    .mockResolvedValueOnce({ Body: Readable.from([Buffer.from('second')]), ContentLength: 6 });
+
+  const first = await proxyBackend.getServeStrategy('first.jpg', 'image/jpeg');
+  const secondPromise = proxyBackend.getServeStrategy('second.jpg', 'image/jpeg');
+  if (first.type === 'stream') {
+    await expect(
+      (async () => {
         for await (const _chunk of first.stream) {
           // drain stream
         }
-      }
-      const second = await secondPromise;
+      })(),
+    ).rejects.toThrow('stream failed');
+  }
+  const second = await secondPromise;
 
-      expect(second.type).toBe('stream');
-      expect(proxyClient.send).toHaveBeenCalledTimes(2);
-    });
+  expect(second.type).toBe('stream');
+  expect(proxyClient.send).toHaveBeenCalledTimes(2);
+});
 
-    it('should release a proxy read slot when stream creation fails', async () => {
-      const proxyBackend = new S3StorageBackend({
-        bucket: 'test-bucket',
-        region: 'us-east-1',
-        presignedUrlExpiry: 3600,
-        serveMode: 'proxy' as const,
-        proxyReadConcurrency: 1,
-      });
-      const proxyClient = (S3Client as unknown as ReturnType<typeof vi.fn>).mock.results.at(-1)?.value;
-      proxyClient.send.mockRejectedValueOnce(new Error('denied')).mockResolvedValueOnce({
-        Body: Readable.from([Buffer.from('second')]),
-        ContentLength: 6,
-      });
+it('should not acquire proxy read slots in redirect mode', async () => {
+  const strategy = await backend.getServeStrategy('thumbs/user1/ab/cd/thumb.webp', 'image/webp');
 
-      await expect(proxyBackend.getServeStrategy('first.jpg', 'image/jpeg')).rejects.toThrow('denied');
-      const second = await proxyBackend.getServeStrategy('second.jpg', 'image/jpeg');
-
-      expect(second.type).toBe('stream');
-      expect(proxyClient.send).toHaveBeenCalledTimes(2);
-    });
-
-    it('should release a proxy read slot when the stream errors', async () => {
-      const proxyBackend = new S3StorageBackend({
-        bucket: 'test-bucket',
-        region: 'us-east-1',
-        presignedUrlExpiry: 3600,
-        serveMode: 'proxy' as const,
-        proxyReadConcurrency: 1,
-      });
-      const proxyClient = (S3Client as unknown as ReturnType<typeof vi.fn>).mock.results.at(-1)?.value;
-      const erroringStream = new Readable({
-        read() {
-          this.destroy(new Error('stream failed'));
-        },
-      });
-      proxyClient.send
-        .mockResolvedValueOnce({ Body: erroringStream, ContentLength: 5 })
-        .mockResolvedValueOnce({ Body: Readable.from([Buffer.from('second')]), ContentLength: 6 });
-
-      const first = await proxyBackend.getServeStrategy('first.jpg', 'image/jpeg');
-      const secondPromise = proxyBackend.getServeStrategy('second.jpg', 'image/jpeg');
-      if (first.type === 'stream') {
-        await expect(
-          (async () => {
-            for await (const _chunk of first.stream) {
-              // drain stream
-            }
-          })(),
-        ).rejects.toThrow('stream failed');
-      }
-      const second = await secondPromise;
-
-      expect(second.type).toBe('stream');
-      expect(proxyClient.send).toHaveBeenCalledTimes(2);
-    });
-
-    it('should not acquire proxy read slots in redirect mode', async () => {
-      const strategy = await backend.getServeStrategy('thumbs/user1/ab/cd/thumb.webp', 'image/webp');
-
-      expect(strategy.type).toBe('redirect');
-      expect(mockSend).not.toHaveBeenCalled();
-      expect(getSignedUrl).toHaveBeenCalled();
-    });
+  expect(strategy.type).toBe('redirect');
+  expect(mockSend).not.toHaveBeenCalled();
+  expect(getSignedUrl).toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 2: Run S3 backend tests and verify failure**
@@ -658,7 +670,7 @@ Add a field to `S3StorageBackend`:
 Initialize it in the constructor:
 
 ```ts
-    this.proxyReadLimiter = new AsyncLimiter(config.proxyReadConcurrency ?? 32);
+this.proxyReadLimiter = new AsyncLimiter(config.proxyReadConcurrency ?? 32);
 ```
 
 Add this private method in the class:
@@ -675,16 +687,16 @@ Add this private method in the class:
 Replace the proxy branch of `getServeStrategy` with:
 
 ```ts
-    if (this.serveMode === 'proxy') {
-      const release = await this.proxyReadLimiter.acquire();
-      try {
-        const { stream, length } = await this.get(key);
-        return { type: 'stream', stream: this.releaseWhenStreamCloses(stream, release), length };
-      } catch (error) {
-        release();
-        throw error;
-      }
-    }
+if (this.serveMode === 'proxy') {
+  const release = await this.proxyReadLimiter.acquire();
+  try {
+    const { stream, length } = await this.get(key);
+    return { type: 'stream', stream: this.releaseWhenStreamCloses(stream, release), length };
+  } catch (error) {
+    release();
+    throw error;
+  }
+}
 ```
 
 - [ ] **Step 4: Run S3 backend tests and verify pass**
@@ -713,6 +725,7 @@ git commit -m "fix: limit proxied s3 reads"
 ### Task 4: Shared-Space People Thumbnail Throttling
 
 **Files:**
+
 - Create: `web/src/lib/components/people/thumbnail-load-queue.svelte.ts`
 - Create: `web/src/lib/components/people/deferred-person-thumbnail.svelte`
 - Modify: `web/src/lib/components/people/person-tile.svelte`
@@ -730,179 +743,188 @@ git commit -m "fix: limit proxied s3 reads"
 Append these tests to `web/src/lib/components/people/people-management-grid.spec.ts`:
 
 ```ts
-  it('does not assign thumbnail src for deferred offscreen tiles', () => {
-    class NeverIntersectingObserver {
-      observe = vi.fn();
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-    }
-    vi.stubGlobal('IntersectionObserver', NeverIntersectingObserver);
+it('does not assign thumbnail src for deferred offscreen tiles', () => {
+  class NeverIntersectingObserver {
+    observe = vi.fn();
+    disconnect = vi.fn();
+    unobserve = vi.fn();
+  }
+  vi.stubGlobal('IntersectionObserver', NeverIntersectingObserver);
 
-    render(PeopleManagementGridWrapper, {
-      props: {
-        deferThumbnails: true,
-        people: Array.from({ length: 3 }, (_, index) => ({ id: `person-${index}`, name: `Person ${index}` })),
-      },
-    });
-
-    expect(screen.getAllByRole('img')).toHaveLength(3);
-    expect(screen.getByTitle('Person 0')).not.toHaveAttribute('src');
-    expect(screen.getByTitle('Person 1')).not.toHaveAttribute('src');
-    expect(screen.getByTitle('Person 2')).not.toHaveAttribute('src');
-
-    vi.unstubAllGlobals();
+  render(PeopleManagementGridWrapper, {
+    props: {
+      deferThumbnails: true,
+      people: Array.from({ length: 3 }, (_, index) => ({ id: `person-${index}`, name: `Person ${index}` })),
+    },
   });
 
-  it('only starts the configured number of visible deferred thumbnails at once', async () => {
-    let callback!: IntersectionObserverCallback;
-    class VisibleObserver {
-      observe = vi.fn((target: Element) => {
-        callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
-      });
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      constructor(cb: IntersectionObserverCallback) {
-        callback = cb;
-      }
+  expect(screen.getAllByRole('img')).toHaveLength(3);
+  expect(screen.getByTitle('Person 0')).not.toHaveAttribute('src');
+  expect(screen.getByTitle('Person 1')).not.toHaveAttribute('src');
+  expect(screen.getByTitle('Person 2')).not.toHaveAttribute('src');
+
+  vi.unstubAllGlobals();
+});
+
+it('only starts the configured number of visible deferred thumbnails at once', async () => {
+  let callback!: IntersectionObserverCallback;
+  class VisibleObserver {
+    observe = vi.fn((target: Element) => {
+      callback(
+        [{ isIntersecting: true, target } as IntersectionObserverEntry],
+        this as unknown as IntersectionObserver,
+      );
+    });
+    disconnect = vi.fn();
+    unobserve = vi.fn();
+    constructor(cb: IntersectionObserverCallback) {
+      callback = cb;
     }
-    vi.stubGlobal('IntersectionObserver', VisibleObserver);
+  }
+  vi.stubGlobal('IntersectionObserver', VisibleObserver);
 
-    render(PeopleManagementGridWrapper, {
-      props: {
-        deferThumbnails: true,
-        thumbnailConcurrency: 2,
-        people: Array.from({ length: 4 }, (_, index) => ({ id: `person-${index}`, name: `Person ${index}` })),
-      },
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTitle('Person 0')).toHaveAttribute('src', '/api/people/person-0/thumbnail');
-      expect(screen.getByTitle('Person 1')).toHaveAttribute('src', '/api/people/person-1/thumbnail');
-    });
-    expect(screen.getByTitle('Person 2')).not.toHaveAttribute('src');
-    expect(screen.getByTitle('Person 3')).not.toHaveAttribute('src');
-
-    await fireEvent.load(screen.getByTitle('Person 0'));
-    await waitFor(() => {
-      expect(screen.getByTitle('Person 2')).toHaveAttribute('src', '/api/people/person-2/thumbnail');
-    });
-
-    vi.unstubAllGlobals();
+  render(PeopleManagementGridWrapper, {
+    props: {
+      deferThumbnails: true,
+      thumbnailConcurrency: 2,
+      people: Array.from({ length: 4 }, (_, index) => ({ id: `person-${index}`, name: `Person ${index}` })),
+    },
   });
 
-  it('releases a deferred thumbnail slot when an image fails', async () => {
-    let callback!: IntersectionObserverCallback;
-    class VisibleObserver {
-      observe = vi.fn((target: Element) => {
-        callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
-      });
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      constructor(cb: IntersectionObserverCallback) {
-        callback = cb;
-      }
-    }
-    vi.stubGlobal('IntersectionObserver', VisibleObserver);
+  await waitFor(() => {
+    expect(screen.getByTitle('Person 0')).toHaveAttribute('src', '/api/people/person-0/thumbnail');
+    expect(screen.getByTitle('Person 1')).toHaveAttribute('src', '/api/people/person-1/thumbnail');
+  });
+  expect(screen.getByTitle('Person 2')).not.toHaveAttribute('src');
+  expect(screen.getByTitle('Person 3')).not.toHaveAttribute('src');
 
-    render(PeopleManagementGridWrapper, {
-      props: {
-        deferThumbnails: true,
-        thumbnailConcurrency: 1,
-        people: [
-          { id: 'person-1', name: 'Ada Lovelace' },
-          { id: 'person-2', name: 'Grace Hopper' },
-        ],
-      },
-    });
-
-    await waitFor(() => expect(screen.getByTitle('Ada Lovelace')).toHaveAttribute('src'));
-    expect(screen.getByTitle('Grace Hopper')).not.toHaveAttribute('src');
-    await fireEvent.error(screen.getByTitle('Ada Lovelace'));
-    await waitFor(() => expect(screen.getByTitle('Grace Hopper')).toHaveAttribute('src'));
-
-    vi.unstubAllGlobals();
+  await fireEvent.load(screen.getByTitle('Person 0'));
+  await waitFor(() => {
+    expect(screen.getByTitle('Person 2')).toHaveAttribute('src', '/api/people/person-2/thumbnail');
   });
 
-  it('does not start every thumbnail at once when a new people page is appended', async () => {
-    let callback!: IntersectionObserverCallback;
-    class VisibleObserver {
-      observe = vi.fn((target: Element) => {
-        callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
-      });
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-      constructor(cb: IntersectionObserverCallback) {
-        callback = cb;
-      }
-    }
-    vi.stubGlobal('IntersectionObserver', VisibleObserver);
+  vi.unstubAllGlobals();
+});
 
-    const { rerender } = render(PeopleManagementGridWrapper, {
-      props: {
-        deferThumbnails: true,
-        thumbnailConcurrency: 2,
-        people: [
-          { id: 'person-1', name: 'Ada Lovelace' },
-          { id: 'person-2', name: 'Grace Hopper' },
-        ],
-      },
+it('releases a deferred thumbnail slot when an image fails', async () => {
+  let callback!: IntersectionObserverCallback;
+  class VisibleObserver {
+    observe = vi.fn((target: Element) => {
+      callback(
+        [{ isIntersecting: true, target } as IntersectionObserverEntry],
+        this as unknown as IntersectionObserver,
+      );
     });
-    await waitFor(() => expect(screen.getByTitle('Ada Lovelace')).toHaveAttribute('src'));
-    await waitFor(() => expect(screen.getByTitle('Grace Hopper')).toHaveAttribute('src'));
+    disconnect = vi.fn();
+    unobserve = vi.fn();
+    constructor(cb: IntersectionObserverCallback) {
+      callback = cb;
+    }
+  }
+  vi.stubGlobal('IntersectionObserver', VisibleObserver);
 
-    await rerender({
+  render(PeopleManagementGridWrapper, {
+    props: {
+      deferThumbnails: true,
+      thumbnailConcurrency: 1,
+      people: [
+        { id: 'person-1', name: 'Ada Lovelace' },
+        { id: 'person-2', name: 'Grace Hopper' },
+      ],
+    },
+  });
+
+  await waitFor(() => expect(screen.getByTitle('Ada Lovelace')).toHaveAttribute('src'));
+  expect(screen.getByTitle('Grace Hopper')).not.toHaveAttribute('src');
+  await fireEvent.error(screen.getByTitle('Ada Lovelace'));
+  await waitFor(() => expect(screen.getByTitle('Grace Hopper')).toHaveAttribute('src'));
+
+  vi.unstubAllGlobals();
+});
+
+it('does not start every thumbnail at once when a new people page is appended', async () => {
+  let callback!: IntersectionObserverCallback;
+  class VisibleObserver {
+    observe = vi.fn((target: Element) => {
+      callback(
+        [{ isIntersecting: true, target } as IntersectionObserverEntry],
+        this as unknown as IntersectionObserver,
+      );
+    });
+    disconnect = vi.fn();
+    unobserve = vi.fn();
+    constructor(cb: IntersectionObserverCallback) {
+      callback = cb;
+    }
+  }
+  vi.stubGlobal('IntersectionObserver', VisibleObserver);
+
+  const { rerender } = render(PeopleManagementGridWrapper, {
+    props: {
       deferThumbnails: true,
       thumbnailConcurrency: 2,
       people: [
         { id: 'person-1', name: 'Ada Lovelace' },
         { id: 'person-2', name: 'Grace Hopper' },
-        { id: 'person-3', name: 'Katherine Johnson' },
-        { id: 'person-4', name: 'Dorothy Vaughan' },
-        { id: 'person-5', name: 'Mary Jackson' },
       ],
-    });
-
-    expect(screen.getByTitle('Katherine Johnson')).not.toHaveAttribute('src');
-    expect(screen.getByTitle('Dorothy Vaughan')).not.toHaveAttribute('src');
-    expect(screen.getByTitle('Mary Jackson')).not.toHaveAttribute('src');
-
-    await fireEvent.load(screen.getByTitle('Ada Lovelace'));
-    await waitFor(() => expect(screen.getByTitle('Katherine Johnson')).toHaveAttribute('src'));
-    expect(screen.getByTitle('Mary Jackson')).not.toHaveAttribute('src');
-
-    vi.unstubAllGlobals();
+    },
   });
+  await waitFor(() => expect(screen.getByTitle('Ada Lovelace')).toHaveAttribute('src'));
+  await waitFor(() => expect(screen.getByTitle('Grace Hopper')).toHaveAttribute('src'));
+
+  await rerender({
+    deferThumbnails: true,
+    thumbnailConcurrency: 2,
+    people: [
+      { id: 'person-1', name: 'Ada Lovelace' },
+      { id: 'person-2', name: 'Grace Hopper' },
+      { id: 'person-3', name: 'Katherine Johnson' },
+      { id: 'person-4', name: 'Dorothy Vaughan' },
+      { id: 'person-5', name: 'Mary Jackson' },
+    ],
+  });
+
+  expect(screen.getByTitle('Katherine Johnson')).not.toHaveAttribute('src');
+  expect(screen.getByTitle('Dorothy Vaughan')).not.toHaveAttribute('src');
+  expect(screen.getByTitle('Mary Jackson')).not.toHaveAttribute('src');
+
+  await fireEvent.load(screen.getByTitle('Ada Lovelace'));
+  await waitFor(() => expect(screen.getByTitle('Katherine Johnson')).toHaveAttribute('src'));
+  expect(screen.getByTitle('Mary Jackson')).not.toHaveAttribute('src');
+
+  vi.unstubAllGlobals();
+});
 ```
 
 Append this test to `web/src/lib/components/people/people-visibility-modal.spec.ts`:
 
 ```ts
-  it('does not assign thumbnail src for deferred offscreen visibility modal people', () => {
-    class NeverIntersectingObserver {
-      observe = vi.fn();
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-    }
-    vi.stubGlobal('IntersectionObserver', NeverIntersectingObserver);
+it('does not assign thumbnail src for deferred offscreen visibility modal people', () => {
+  class NeverIntersectingObserver {
+    observe = vi.fn();
+    disconnect = vi.fn();
+    unobserve = vi.fn();
+  }
+  vi.stubGlobal('IntersectionObserver', NeverIntersectingObserver);
 
-    render(PeopleVisibilityModalWrapper, {
-      props: {
-        people: [
-          makePerson({ id: 'p1', displayName: 'Alice', thumbnailUrl: '/api/people/p1/thumbnail' }),
-          makePerson({ id: 'p2', displayName: 'Bob', thumbnailUrl: '/api/people/p2/thumbnail' }),
-        ],
-        onClose,
-        onUpdate,
-        saveVisibilityChanges,
-        deferThumbnails: true,
-      },
-    });
-
-    expect(screen.getByTitle('Alice')).not.toHaveAttribute('src');
-    expect(screen.getByTitle('Bob')).not.toHaveAttribute('src');
-
-    vi.unstubAllGlobals();
+  render(PeopleVisibilityModalWrapper, {
+    props: {
+      people: [
+        makePerson({ id: 'p1', displayName: 'Alice', thumbnailUrl: '/api/people/p1/thumbnail' }),
+        makePerson({ id: 'p2', displayName: 'Bob', thumbnailUrl: '/api/people/p2/thumbnail' }),
+      ],
+      onClose,
+      onUpdate,
+      saveVisibilityChanges,
+      deferThumbnails: true,
+    },
   });
+
+  expect(screen.getByTitle('Alice')).not.toHaveAttribute('src');
+  expect(screen.getByTitle('Bob')).not.toHaveAttribute('src');
+
+  vi.unstubAllGlobals();
+});
 ```
 
 - [ ] **Step 2: Run frontend tests and verify failure**
@@ -1041,8 +1063,8 @@ Create `web/src/lib/components/people/deferred-person-thumbnail.svelte`:
 In `web/src/lib/components/people/person-tile.svelte`, add imports:
 
 ```ts
-  import DeferredPersonThumbnail from '$lib/components/people/deferred-person-thumbnail.svelte';
-  import type { ThumbnailLoadQueue } from '$lib/components/people/thumbnail-load-queue.svelte';
+import DeferredPersonThumbnail from '$lib/components/people/deferred-person-thumbnail.svelte';
+import type { ThumbnailLoadQueue } from '$lib/components/people/thumbnail-load-queue.svelte';
 ```
 
 Extend `Props`:
@@ -1055,7 +1077,7 @@ Extend `Props`:
 Update props destructuring:
 
 ```ts
-  let { person, showActionMenu = true, actionMenu, footer, deferThumbnail = false, thumbnailQueue }: Props = $props();
+let { person, showActionMenu = true, actionMenu, footer, deferThumbnail = false, thumbnailQueue }: Props = $props();
 ```
 
 Replace the existing `ImageThumbnail` block with:
@@ -1089,7 +1111,7 @@ Replace the existing `ImageThumbnail` block with:
 In `web/src/lib/components/people/people-management-grid.svelte`, import the queue:
 
 ```ts
-  import { ThumbnailLoadQueue } from '$lib/components/people/thumbnail-load-queue.svelte';
+import { ThumbnailLoadQueue } from '$lib/components/people/thumbnail-load-queue.svelte';
 ```
 
 Extend `Props`:
@@ -1109,7 +1131,7 @@ Update props destructuring:
 Create the queue after prop destructuring:
 
 ```ts
-  let thumbnailQueue = $derived(new ThumbnailLoadQueue(thumbnailConcurrency));
+let thumbnailQueue = $derived(new ThumbnailLoadQueue(thumbnailConcurrency));
 ```
 
 Update the `PersonTile` usage:
@@ -1133,8 +1155,8 @@ In `web/src/routes/(user)/spaces/[spaceId]/people/+page.svelte`, add `deferThumb
 In `web/src/lib/components/people/people-visibility-modal.svelte`, import the queue and deferred thumbnail:
 
 ```ts
-  import DeferredPersonThumbnail from '$lib/components/people/deferred-person-thumbnail.svelte';
-  import { ThumbnailLoadQueue } from '$lib/components/people/thumbnail-load-queue.svelte';
+import DeferredPersonThumbnail from '$lib/components/people/deferred-person-thumbnail.svelte';
+import { ThumbnailLoadQueue } from '$lib/components/people/thumbnail-load-queue.svelte';
 ```
 
 Extend `Props`:
@@ -1154,7 +1176,7 @@ Update props destructuring:
 Create the queue after props:
 
 ```ts
-  let thumbnailQueue = $derived(new ThumbnailLoadQueue(thumbnailConcurrency));
+let thumbnailQueue = $derived(new ThumbnailLoadQueue(thumbnailConcurrency));
 ```
 
 Replace the `ImageThumbnail` block inside each visibility person button with:
@@ -1194,17 +1216,17 @@ Extend `DeferredPersonThumbnail` props with visibility support before wiring thi
 Include those props in the destructuring defaults:
 
 ```ts
-  let {
-    queue,
-    url,
-    altText,
-    title,
-    widthStyle = '100%',
-    shadow = false,
-    circle = false,
-    hidden = false,
-    hiddenIconClass = 'text-white',
-  }: Props = $props();
+let {
+  queue,
+  url,
+  altText,
+  title,
+  widthStyle = '100%',
+  shadow = false,
+  circle = false,
+  hidden = false,
+  hiddenIconClass = 'text-white',
+}: Props = $props();
 ```
 
 Pass the visibility props through to `ImageThumbnail`:
@@ -1295,6 +1317,7 @@ git commit -m "fix: throttle shared space people thumbnails"
 ### Task 5: Focused Verification and Integration Checks
 
 **Files:**
+
 - Verify only; no source edits expected.
 
 - [ ] **Step 1: Run focused server unit tests**
@@ -1355,6 +1378,7 @@ git diff -- server/src/backends/s3-storage.backend.ts server/src/backends/s3-sto
 ```
 
 Expected:
+
 - `rg` does not show `queueAll` inside `handleSharedSpaceFaceMatchAll`.
 - S3 backend diff contains the limiter and stream-release code without removing unrelated local storage work.
 
