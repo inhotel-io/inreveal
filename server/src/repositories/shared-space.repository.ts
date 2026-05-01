@@ -547,7 +547,10 @@ export class SharedSpaceRepository {
       takenBefore?: Date;
     },
   ) {
-    const escapedName = options.name?.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
+    const escapedName = options.name
+      ?.replaceAll('\\', String.raw`\\`)
+      .replaceAll('%', String.raw`\%`)
+      .replaceAll('_', String.raw`\_`);
     const namePattern = escapedName ? `%${escapedName}%` : undefined;
 
     return this.db
