@@ -126,9 +126,11 @@ it('resolves scoped person tokens before global filter suggestions', async () =>
 
   await sut.getFilterSuggestions(auth, { withSharedSpaces: true, personIds: ['space-person:space-person-1'] });
 
-  expect(mocks.faceIdentity.resolveScopedPersonTokens).toHaveBeenCalledWith(auth.user.id, [
-    'space-person:space-person-1',
-  ]);
+  expect(mocks.faceIdentity.resolveScopedPersonTokens).toHaveBeenCalledWith({
+    userId: auth.user.id,
+    tokens: ['space-person:space-person-1'],
+    scope: expect.objectContaining({ withSharedSpaces: true }),
+  });
   expect(mocks.search.getFilterSuggestions).toHaveBeenCalledWith(
     expect.any(Array),
     expect.objectContaining({ identityIds: ['identity-1'], personIds: [] }),
@@ -165,6 +167,26 @@ it('returns empty people-filtered results for inaccessible scoped tokens', async
   await sut.searchSmart(auth, { query: 'beach', withSharedSpaces: true, personIds: ['space-person:blocked'] });
 
   expect(mocks.search.searchSmart).toHaveBeenCalledWith(expect.objectContaining({ forceEmptyResult: true }));
+});
+
+it('does not resolve another users private person token through a shared identity', async () => {
+  const auth = factory.auth();
+  mocks.faceIdentity.resolveScopedPersonTokens.mockResolvedValue({
+    identityIds: [],
+    legacyPersonIds: [],
+    legacySpacePersonIds: [],
+    hasInaccessibleToken: true,
+  });
+
+  await sut.getFilterSuggestions(auth, {
+    withSharedSpaces: true,
+    personIds: ['person:00000000-0000-4000-8000-000000000099'],
+  });
+
+  expect(mocks.search.getFilterSuggestions).toHaveBeenCalledWith(
+    expect.any(Array),
+    expect.objectContaining({ forceEmptyResult: true }),
+  );
 });
 ```
 
@@ -225,14 +247,20 @@ type ScopedPersonTokenResolution = {
   hasInaccessibleToken: boolean;
 };
 
-resolveScopedPersonTokens(userId: string, tokens: string[]): Promise<ScopedPersonTokenResolution>;
+resolveScopedPersonTokens(input: {
+  userId: string;
+  tokens: string[];
+  scope: { withSharedSpaces?: boolean; spaceId?: string; timelineSpaceIds?: string[] };
+}): Promise<ScopedPersonTokenResolution>;
 ```
 
 Resolution rules:
 
-- `person:<personId>` resolves only if the user owns that `person` or the person identity has at least one accessible face through the viewer's current asset scope.
-- `space-person:<sharedSpacePersonId>` resolves only if the user is a member of that space.
-- bare UUIDs remain legacy personal person filters and are returned in `legacyPersonIds`.
+- `person:<personId>` requires the user to own that `person`; shared-space access must use a `space-person:<sharedSpacePersonId>` token.
+- `space-person:<sharedSpacePersonId>` requires the user to be a member of that space.
+- in global/timeline contexts, `space-person:<id>` must also belong to a timeline-enabled space included in the current request scope;
+- in single-space contexts, scoped tokens are rejected and callers must use `spacePersonIds`;
+- bare UUIDs remain legacy personal person filters and are returned in `legacyPersonIds`; existing repository access checks must still restrict them to the caller's personal scope.
 - duplicate tokens are deduped.
 - well-formed but inaccessible tokens set `hasInaccessibleToken = true`.
 - malformed tokens are rejected by DTO validation before repository resolution.
@@ -308,11 +336,15 @@ Update all service paths that accept `personIds` and global/timeline shared-spac
 Service behavior:
 
 ```ts
-const resolvedPeople = await this.faceIdentityRepository.resolveScopedPersonTokens(auth.user.id, dto.personIds ?? []);
+const resolvedPeople = await this.faceIdentityRepository.resolveScopedPersonTokens({
+  userId: auth.user.id,
+  tokens: dto.personIds ?? [],
+  scope: { withSharedSpaces: dto.withSharedSpaces, spaceId: dto.spaceId, timelineSpaceIds },
+});
 const forceEmptyResult = resolvedPeople.hasInaccessibleToken && resolvedPeople.identityIds.length === 0;
 ```
 
-Pass only repository-internal `identityIds`; never put identity ids back into DTO objects returned to clients.
+When `forceEmptyResult` is true, pass `forceEmptyResult` to every repository path touched by the request, including suggestions. Pass only repository-internal `identityIds`; never put identity ids back into DTO objects returned to clients.
 
 - [ ] **Step 3: Implement repository identity filtering**
 

@@ -36,7 +36,7 @@ This phase does not own:
 - Modify `server/src/repositories/face-identity.repository.ts`
   - Add access-scoped people page and hydration queries.
 - Modify `server/src/repositories/person.repository.ts`
-  - Keep existing personal people query path intact and add helpers only if the identity resolver needs existing person mapping logic.
+  - Keep existing personal people query path intact and expose an explicit mapping helper if the identity resolver reuses existing person projection logic.
 - Modify `server/src/services/person.service.ts`
   - Route `withSharedSpaces=true` to the identity resolver.
 - Modify `server/src/controllers/person.controller.spec.ts`
@@ -335,6 +335,7 @@ Rules:
 - Exclude deleted or invisible faces.
 - Apply `withHidden` only to the scoped profiles used for display, not to raw identity existence.
 - Fetch `size + 1` rows so `hasNextPage` does not require an unbounded total count.
+- Compute `total` and `hidden` from the same accessible identity scope. If the implementation uses `COUNT(DISTINCT ...)`, add generated SQL coverage and carry the query into phase 5 `EXPLAIN` review before shipping.
 - Compute `numberOfAssets` from distinct accessible asset ids.
 
 - [ ] **Step 4: Implement hydration and display priority**
@@ -365,7 +366,7 @@ Output rules:
 - `id` remains the primary profile id for backward compatibility.
 - `primaryProfile.type = 'user-person'` yields `filterId = person:<personId>`.
 - `primaryProfile.type = 'space-person'` yields `filterId = space-person:<sharedSpacePersonId>`.
-- `isFavorite`, `color`, and private `isHidden` come only from the viewer's own `person`; for space-primary rows, omit optional favorite/color and use space visibility only if the viewer can manage or see that space profile state.
+- `isFavorite`, `color`, and private `isHidden` come only from the viewer's own `person`; for space-primary rows, omit optional favorite/color and use space visibility only when the viewer can manage or see that space profile state.
 
 - [ ] **Step 5: Verify medium tests**
 
@@ -547,6 +548,8 @@ expect(spaceHiddenFromTimelineResult.people).not.toContainEqual(
   expect.objectContaining({ id: hiddenTimelinePersonId }),
 );
 expect(accessibleResult.people[0].numberOfAssets).toBe(accessibleAssetCount);
+expect(accessibleResult.total).toBe(accessibleIdentityCount);
+expect(accessibleResult.hidden).toBe(accessibleHiddenIdentityCount);
 ```
 
 Run:

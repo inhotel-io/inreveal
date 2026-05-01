@@ -33,7 +33,7 @@ This phase intentionally does not add the identity-grouped `/people` page, filte
 - Modify `server/src/repositories/shared-space.repository.ts`
   - Select and update `sharePersonMetadata`, find or create space people by identity, collect inheritance candidates, persist inherited fields, and move duplicate space-person face links during dedupe.
 - Modify `server/src/repositories/face-identity.repository.ts`
-  - Reuse phase 1 merge and replacement methods; add small helpers only if matching needs bulk identity lookups.
+  - Reuse phase 1 merge and replacement methods; add a bulk identity lookup helper for matching jobs.
 - Modify `server/src/services/shared-space.service.spec.ts`
   - Unit tests for preferences, matching orchestration, inheritance, source locks, opt-out, and identity-merge calls.
 - Modify `server/test/medium/specs/repositories/shared-space-face-matching.spec.ts`
@@ -86,6 +86,8 @@ Add unit tests in `server/src/services/shared-space.service.spec.ts`:
 - new members default to `sharePersonMetadata: true`;
 - `getMembers` and `getSpace` member summaries include `sharePersonMetadata`;
 - the current member can set `sharePersonMetadata` false and true;
+- a space owner or server admin can disable `sharePersonMetadata` for another member before existing-space inheritance runs;
+- a space owner or server admin cannot enable `sharePersonMetadata` for another member because publishing private person labels must be user-controlled;
 - a non-member cannot update preferences;
 - an owner cannot force another member to publish metadata through the current-member endpoint;
 - existing `updateMemberTimeline` behavior remains compatible.
@@ -112,6 +114,7 @@ Update DTOs:
 
 - Add `sharePersonMetadata: z.boolean()` to `SharedSpaceMemberResponseSchema`.
 - Add `SharedSpaceMemberPreferencesDto` with optional `showInTimeline` and optional `sharePersonMetadata`.
+- Add `SharedSpaceMemberMetadataContributionDto` with `sharePersonMetadata: z.literal(false)` for owner/admin disable-only updates.
 
 Update controller:
 
@@ -127,6 +130,28 @@ updateMemberPreferences(
 ```
 
 Keep `PATCH :id/members/me/timeline` and delegate it to the new service method so existing clients do not break.
+
+Add an owner/admin disable-only endpoint or extend `PATCH :id/members/:userId` with the same disable-only rule:
+
+```ts
+@Patch(':id/members/:userId/metadata-contribution')
+updateMemberMetadataContribution(
+  @Auth() auth: AuthDto,
+  @Param('id') id: string,
+  @Param('userId') userId: string,
+  @Body() dto: SharedSpaceMemberMetadataContributionDto,
+): Promise<SharedSpaceMemberResponseDto> {
+  return this.service.disableMemberMetadataContribution(auth, id, userId, dto);
+}
+```
+
+Service rules:
+
+- current member can set their own value true or false;
+- owner/editor role is not enough to enable another member;
+- space owner or server admin may set another member to false;
+- non-members and viewers cannot update another member;
+- disabling another member logs no private person metadata.
 
 Update repository selects and `mapMember` to include `sharePersonMetadata`.
 
@@ -368,7 +393,73 @@ Expected: PASS.
 
 ---
 
-### Task 5: Merge Identities From Shared-Space Evidence
+### Task 5: Backfill Existing Space Person Metadata After Opt-Out Window
+
+**Files:**
+
+- Modify `server/src/services/shared-space.service.ts`
+- Modify `server/src/repositories/shared-space.repository.ts`
+- Modify `server/src/services/shared-space.service.spec.ts`
+- Modify `server/test/medium/specs/services/shared-space-person-metadata-rbac.spec.ts`
+
+- [ ] **Step 1: Write failing existing-space inheritance tests**
+
+Add tests:
+
+- an existing `shared_space_person` with `identityId`, empty name, and empty birth date inherits allowed source metadata after the metadata contribution endpoint exists;
+- an existing `shared_space_person` does not inherit from a member who was disabled by the owner/admin disable-only endpoint;
+- an existing manual `nameSource = 'manual'` remains unchanged while birth date can still inherit;
+- an existing manual `birthDateSource = 'manual'` remains unchanged while name can still inherit;
+- an existing conflicting candidate set leaves the field unchanged and records no guessed value;
+- the job is chunked, idempotent, and can resume from a cursor.
+
+Run:
+
+```bash
+cd /home/pierre/dev/gallery/.worktrees/global-face-identities-design
+pnpm --dir server test -- shared-space.service -t "existing space metadata inheritance"
+pnpm --dir server test:medium -- shared-space-person-metadata-rbac -t "existing space metadata inheritance"
+```
+
+Expected: FAIL.
+
+- [ ] **Step 2: Implement chunked existing-space inheritance**
+
+Add a service/repository method:
+
+```ts
+backfillSpacePersonMetadata(input: {
+  cursor?: string;
+  limit: number;
+}): Promise<{ processed: number; inherited: number; skipped: number; nextCursor?: string }>;
+```
+
+Algorithm:
+
+1. Page `shared_space_person` rows with non-null `identityId`.
+2. For each row, run the same inheritance candidate selection and conflict handling from Task 3.
+3. Update only fields whose source is `none` or `inherited`.
+4. Respect `sharePersonMetadata = false` at the time the job runs.
+5. Do not copy hidden, favorite, aliases, personal thumbnails, or inaccessible asset references.
+6. Return a cursor and counts so the queue can resume without one large transaction.
+
+- [ ] **Step 3: Queue only after opt-out support ships**
+
+Add a job handler or maintenance action following the local queue convention. It must not be started by the schema migration. It may be started after the phase 2 deployment has exposed the preference endpoint and product has decided the opt-out window is complete.
+
+Run:
+
+```bash
+cd /home/pierre/dev/gallery/.worktrees/global-face-identities-design
+pnpm --dir server test -- shared-space.service -t "existing space metadata inheritance"
+pnpm --dir server test:medium -- shared-space-person-metadata-rbac -t "existing space metadata inheritance"
+```
+
+Expected: PASS.
+
+---
+
+### Task 6: Merge Identities From Shared-Space Evidence
 
 **Files:**
 
@@ -459,7 +550,7 @@ Expected:
 
 ---
 
-### Task 6: Add Metadata RBAC Permission Matrix Tests
+### Task 7: Add Metadata RBAC Permission Matrix Tests
 
 **Files:**
 
@@ -482,6 +573,7 @@ Test cases:
 
 - User A with `sharePersonMetadata = true` publishes name and birth date into the Space 1 Space Person.
 - User A with `sharePersonMetadata = false` publishes neither name nor birth date.
+- Owner/admin disable-only updates prevent existing-space inheritance for the disabled member and cannot force-enable publishing.
 - User B and User C can see only the space-published metadata on Space 1 APIs, not User A's private `person` profile.
 - User D cannot read the Space Person, source metadata, counts, or representative thumbnail.
 - A Space 1 only member cannot infer Space 2 metadata, counts, thumbnails, suggestions, or ranking changes from shared identities.
@@ -520,13 +612,14 @@ Expected:
 
 ---
 
-### Task 7: Preserve Search Performance Handoff
+### Task 8: Preserve Search Performance Handoff
 
 **Files:**
 
 - Modify `server/test/medium/specs/repositories/shared-space-face-matching.spec.ts`
 - Modify `server/src/repositories/shared-space.repository.ts`
-- Modify `docs/superpowers/plans/2026-05-01-global-face-identities.md` only if the later phase handoff changes
+- Modify `docs/superpowers/plans/2026-05-01-global-face-identities.md`
+  - Record any later phase handoff changes discovered during query review.
 
 - [ ] **Step 1: Add query-shape assertions for this phase**
 
@@ -562,7 +655,7 @@ This task is complete when phase 2 matching and inheritance queries are index-ba
 
 ---
 
-### Task 8: Phase Verification
+### Task 9: Phase Verification
 
 **Files:**
 
@@ -605,4 +698,4 @@ git add server web open-api i18n docs
 git commit -m "feat: match space people by identity"
 ```
 
-Phase 2 is complete when shared-space matching dedupes by identity, metadata contribution can be disabled before inheritance, permitted name and birth date inheritance is tested, cross-owner shared-space evidence can merge identities, and the metadata RBAC matrix is green.
+Phase 2 is complete when shared-space matching dedupes by identity, metadata contribution can be disabled before inheritance, existing-space metadata inheritance is chunked and opt-out aware, permitted name and birth date inheritance is tested, cross-owner shared-space evidence can merge identities, and the metadata RBAC matrix is green.

@@ -22,7 +22,7 @@
 
 ## Execution Split
 
-This file remains the umbrella roadmap. Execute the feature through smaller phase plans so schema risk, shared-space behavior, public API changes, web changes, and repair tooling can be reviewed independently.
+This file remains the umbrella roadmap. Execute the feature through smaller phase plans so schema risk, shared-space behavior, public API changes, web changes, and repair tooling can be reviewed independently. The split phase plans are authoritative for implementation-level tests and edge cases.
 
 1. `2026-05-01-global-face-identities-01-schema-backfill-lifecycle.md`
    - Owns Ubiquitous Language updates, additive schema, migration, repository wiring, identity backfill, native recognition identity links, and identity lifecycle maintenance for face reassignment, personal person merge, face deletion, face unassignment, and recognition resets.
@@ -47,8 +47,8 @@ Use scoped profile tokens for filters and global search instead of raw identity 
 export type ScopedPersonToken = `person:${string}` | `space-person:${string}`;
 ```
 
-- `person:<personId>` resolves through the viewer's own `person` row or an already-allowed shared-space read path.
-- `space-person:<sharedSpacePersonId>` resolves through `shared_space_person` plus membership in that space.
+- `person:<personId>` resolves only through the viewer's own `person` row; shared-space access must use a `space-person:<sharedSpacePersonId>` token.
+- `space-person:<sharedSpacePersonId>` resolves through `shared_space_person`, membership in that space, and the current timeline/global request scope.
 - Legacy bare UUIDs remain accepted on existing endpoints. In a single-space route they mean `spacePersonIds`; in a personal route they mean `personIds`.
 - Identity-grouped suggestions should return `id: ScopedPersonToken` and `primaryProfile` metadata. The server resolves the token back to identity inside the current viewer scope before filtering assets.
 
@@ -89,7 +89,7 @@ export type ScopedPersonToken = `person:${string}` | `space-person:${string}`;
 - Modify `server/src/services/person.service.spec.ts`
   - Unit tests for recognition identity linking, backfill job orchestration, and `/people` mode selection.
 - Modify `server/src/repositories/person.repository.ts`
-  - Add identity-aware personal profile lookup and paged accessible identity group hydration if needed by the resolver.
+  - Add identity-aware personal profile lookup and paged accessible identity group hydration when the resolver reuses existing person mapping logic.
 - Modify `server/src/services/shared-space.service.ts`
   - Match space people by `(spaceId, identityId)` and apply metadata inheritance.
   - Mark manual `name` and `birthDate` edits as manual source locks.
@@ -1405,6 +1405,7 @@ it('resolves scoped person tokens before global filter suggestions', async () =>
     identityIds: ['identity-1'],
     legacyPersonIds: [],
     legacySpacePersonIds: [],
+    hasInaccessibleToken: false,
   });
   mocks.search.getFilterSuggestions.mockResolvedValue({
     countries: [],
@@ -1418,9 +1419,11 @@ it('resolves scoped person tokens before global filter suggestions', async () =>
 
   await sut.getFilterSuggestions(auth, { withSharedSpaces: true, personIds: ['space-person:space-person-1'] });
 
-  expect(mocks.faceIdentity.resolveScopedPersonTokens).toHaveBeenCalledWith(auth.user.id, [
-    'space-person:space-person-1',
-  ]);
+  expect(mocks.faceIdentity.resolveScopedPersonTokens).toHaveBeenCalledWith({
+    userId: auth.user.id,
+    tokens: ['space-person:space-person-1'],
+    scope: expect.objectContaining({ withSharedSpaces: true }),
+  });
   expect(mocks.search.getFilterSuggestions).toHaveBeenCalledWith(
     expect.any(Array),
     expect.objectContaining({ identityIds: ['identity-1'] }),
@@ -1454,19 +1457,27 @@ Add `identityIds?: string[]` to repository-only options. This field never appear
 Add to `FaceIdentityRepository`:
 
 ```ts
-resolveScopedPersonTokens(
-  userId: string,
-  tokens: string[],
-): Promise<{ identityIds: string[]; legacyPersonIds: string[]; legacySpacePersonIds: string[] }>;
+resolveScopedPersonTokens(input: {
+  userId: string;
+  tokens: string[];
+  scope: { withSharedSpaces?: boolean; spaceId?: string; timelineSpaceIds?: string[] };
+}): Promise<{
+  identityIds: string[];
+  legacyPersonIds: string[];
+  legacySpacePersonIds: string[];
+  hasInaccessibleToken: boolean;
+}>;
 ```
 
 Requirements:
 
-- `person:<id>` resolves only if the user owns the person or can access at least one asset for the identity through shared spaces;
-- `space-person:<id>` resolves only if the user is a member of that space;
-- bare UUIDs remain in `legacyPersonIds`;
+- `person:<id>` requires the user to own the person; shared-space access must use `space-person:<sharedSpacePersonId>`;
+- `space-person:<id>` requires space membership and, in global/timeline contexts, the space must be included in the current request scope;
+- scoped tokens are rejected in single-space contexts, where callers must use `spacePersonIds`;
+- bare UUIDs remain in `legacyPersonIds` and keep the existing personal-scope checks;
 - no token resolves to an inaccessible identity;
-- invalid tokens return no identity and do not throw unless the caller needs a hard validation error.
+- well-formed but inaccessible tokens set `hasInaccessibleToken = true`;
+- malformed tokens are rejected by DTO validation before repository resolution.
 
 - [ ] **Step 5: Update search repository filtering and suggestions**
 
@@ -1719,26 +1730,25 @@ git commit -m "feat: search people by accessible identity"
 In `server/test/medium/specs/repositories/face-identity.repository.spec.ts`:
 
 ```ts
-it('merges identities by moving profiles and face links to the target identity', async () => {
+it('merges non-conflicting identities by moving face links without merging scoped metadata', async () => {
   const { ctx, sut } = setup();
-  const { user } = await ctx.newUser();
-  const { person: target } = await ctx.newPerson({ ownerId: user.id });
-  const { person: source } = await ctx.newPerson({ ownerId: user.id });
-  const targetIdentityId = await sut.ensurePersonIdentity(target.id);
-  const sourceIdentityId = await sut.ensurePersonIdentity(source.id);
+  const fx = await setupRepairablePersonalAndSpaceIdentities(ctx);
 
-  await sut.mergeIdentities({ targetIdentityId, sourceIdentityIds: [sourceIdentityId], source: 'manual' });
+  await sut.mergeIdentities({
+    targetIdentityId: fx.spaceIdentityId,
+    sourceIdentityIds: [fx.personalIdentityId],
+    source: 'manual',
+  });
 
-  const sourcePerson = await ctx.database
+  const personalProfile = await ctx.database
     .selectFrom('person')
-    .select(['identityId'])
-    .where('id', '=', source.id)
+    .select(['name', 'birthDate', 'identityId'])
+    .where('id', '=', fx.personalPerson.id)
     .executeTakeFirstOrThrow();
 
-  expect(sourcePerson.identityId).toBe(targetIdentityId);
-  await expect(
-    ctx.database.selectFrom('face_identity').selectAll().where('id', '=', sourceIdentityId).executeTakeFirst(),
-  ).resolves.toBeUndefined();
+  expect(personalProfile.name).toBe(fx.personalPerson.name);
+  expect(personalProfile.birthDate).toEqual(fx.personalPerson.birthDate);
+  expect(personalProfile.identityId).toBe(fx.spaceIdentityId);
 });
 
 it('detaches a scoped space profile into a fresh identity without touching inaccessible profiles', async () => {
@@ -1759,6 +1769,20 @@ it('detaches a scoped space profile into a fresh identity without touching inacc
 
   expect(newIdentityId).not.toBe(identityId);
   expect(updated.identityId).toBe(newIdentityId);
+});
+
+it('rejects detach when selected profile faces also back non-repairable profiles', async () => {
+  const { sut } = setup();
+  const fx = await setupSpacePersonBackedByAnotherUsersAssetFaces();
+
+  const resolved = await sut.resolveDetachRef(fx.spaceEditor.id, {
+    type: 'space-person',
+    id: fx.spacePerson.id,
+    spaceId: fx.space.id,
+  });
+
+  expect(resolved.accessible).toBe(true);
+  expect(resolved.allBackingFacesRepairable).toBe(false);
 });
 ```
 
@@ -1857,6 +1881,8 @@ In `PersonService.mergeScopedPeople` and `detachScopedPerson`:
 - `space-person` refs require membership and owner/editor role in that space;
 - all refs must resolve to identities;
 - all identities must be type-compatible;
+- same-person merge requires every attached scoped profile on the involved identities to be repairable by the actor;
+- detach requires every backing face that would move to belong only to repairable profiles;
 - hidden, favorite, aliases, names, and birth dates remain scoped profile fields and are not merged into other profiles;
 - merged public responses still do not include identity ids.
 
@@ -1893,11 +1919,11 @@ git commit -m "feat: repair face identity links"
 
 - [ ] **Step 1: Add failing query-shape tests**
 
-Add tests that call repository methods with `@GenerateSql` coverage and assert the generated SQL shape:
+Add tests that call repository methods with `@GenerateSql` coverage and assert the generated SQL shape. Define a local helper that reads generated SQL snapshots and fails loudly when snapshots are missing:
 
 ```ts
 it('pages identity ids before hydrating people rows', async () => {
-  const sql = await getGeneratedSqlFor('FaceIdentityRepository.getAccessiblePeopleIdentityPage');
+  const sql = await collectGeneratedIdentitySql('FaceIdentityRepository.getAccessiblePeopleIdentityPage');
 
   expect(sql).toContain('limit');
   expect(sql).toContain('face_identity_face');
@@ -1907,14 +1933,21 @@ it('pages identity ids before hydrating people rows', async () => {
 
 it('does not use vector similarity in request-time people/filter/search queries', async () => {
   const sql = [
-    await getGeneratedSqlFor('FaceIdentityRepository.getAccessiblePeopleIdentityPage'),
-    await getGeneratedSqlFor('SearchRepository.getFilteredPeople'),
-    await getGeneratedSqlFor('FaceIdentityRepository.searchAccessiblePeople'),
+    await collectGeneratedIdentitySql('FaceIdentityRepository.getAccessiblePeopleIdentityPage'),
+    await collectGeneratedIdentitySql('SearchRepository.getFilteredPeople'),
+    await collectGeneratedIdentitySql('FaceIdentityRepository.searchAccessiblePeople'),
   ].join('\n');
 
   expect(sql).not.toContain('<=>');
   expect(sql).not.toContain('face_search.embedding');
 });
+
+function collectGeneratedIdentitySql(snapshotName: string): string {
+  if (!existsSync(sqlSnapshotDirectory)) {
+    throw new Error('Generated SQL snapshots are missing; run pnpm --dir server build && pnpm --dir server sync:sql');
+  }
+  return readGeneratedSqlSnapshot(snapshotName);
+}
 ```
 
 If generated-SQL helpers are awkward for private methods, expose small repository methods for query generation:

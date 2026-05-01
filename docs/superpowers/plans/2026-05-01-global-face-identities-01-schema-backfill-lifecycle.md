@@ -167,15 +167,18 @@ Expected: FAIL because the tables and repository do not exist.
 Create `FaceIdentityTable` with:
 
 - `id uuid primary key default immich_uuid_v7()`.
+- `type varchar not null default 'person'` with allowed values `person` and `pet`.
+- `representativeFaceId uuid null references asset_face(id) on delete set null`.
 - `createdAt timestamptz not null default now()`.
 - `updatedAt timestamptz not null default now()`.
+- `updateId uuid not null default immich_uuid_v7()`.
 - update trigger matching existing timestamp conventions.
 
 Create `FaceIdentityFaceTable` with:
 
 - `identityId` foreign key to `face_identity(id)` with cascade delete.
 - `assetFaceId` foreign key to `asset_face(id)` with cascade delete.
-- `source` string, initially `native-recognition`, `backfill`, `shared-space-evidence`, or `manual`.
+- `source` string, initially `owner-person`, `ml`, `backfill`, `shared-space-evidence`, `manual`, or `import`.
 - `confidence` nullable float or numeric if the codebase already uses numeric confidence for recognition links.
 - `createdAt` and `updatedAt`.
 - primary key on `assetFaceId`.
@@ -210,9 +213,11 @@ Migration requirements:
 - Create identity tables before foreign-key columns.
 - Add indexes used by phase 1 queries:
   - `face_identity_face(identityId)`.
+  - `face_identity(representativeFaceId) where representativeFaceId is not null`.
   - `person(identityId) where identityId is not null`.
   - `asset_face(personId) where personId is not null`.
   - `shared_space_person(spaceId, identityId) where identityId is not null`.
+  - `shared_space_person(identityId, spaceId) where identityId is not null`.
 - Do not copy `person.name`, `person.birthDate`, aliases, hidden state, favorite state, or thumbnails into any space row.
 - Do not enqueue inheritance jobs.
 
@@ -324,6 +329,8 @@ Add repository medium tests:
 - Hidden, deleted, or inactive faces are not linked.
 - A second backfill run is idempotent and does not change identity ids.
 - Backfill pages by stable person id or created order and returns a cursor for the next chunk.
+- Existing `shared_space_person` rows infer `identityId` from their linked `shared_space_person_face.assetFaceId -> face_identity_face.identityId` values.
+- Existing `shared_space_person` rows with conflicting linked identities are left unchanged and reported for phase 2 dedupe instead of silently choosing one.
 
 Add service unit tests:
 
@@ -347,6 +354,10 @@ Add a repository method:
 
 ```ts
 backfillPersonalIdentities(input: { cursor?: string; limit: number }): Promise<{ processed: number; nextCursor?: string }>;
+backfillSpacePersonIdentities(input: {
+  cursor?: string;
+  limit: number;
+}): Promise<{ processed: number; nextCursor?: string; conflictCount: number }>;
 ```
 
 Backfill algorithm:
@@ -356,6 +367,15 @@ Backfill algorithm:
 3. Link visible active `asset_face` rows for that `person.id`.
 4. Skip asset faces whose asset is deleted, trashed beyond the active visibility rules, or otherwise excluded by existing face-recognition queries.
 5. Return `nextCursor` only when another page exists.
+
+Space-person identity backfill algorithm:
+
+1. Page existing `shared_space_person` rows by stable id or created order.
+2. Load visible linked faces through `shared_space_person_face`.
+3. Join those faces to `face_identity_face`.
+4. If all linked faces resolve to one identity, set `shared_space_person.identityId` to that identity.
+5. If linked faces resolve to more than one identity, leave `shared_space_person.identityId` null and increment `conflictCount`.
+6. Do not copy names, birth dates, aliases, hidden state, favorite state, or thumbnails.
 
 Service requirements:
 
@@ -387,7 +407,8 @@ Review generated SQL for:
 
 - Modify `server/src/services/person.service.ts`
 - Modify `server/src/services/person.service.spec.ts`
-- Modify `server/src/repositories/face-identity.repository.ts` only if repository support is missing
+- Modify `server/src/repositories/face-identity.repository.ts`
+  - Reuse the phase 1 identity replacement helper from the recognition path.
 
 - [ ] **Step 1: Write failing service tests**
 
@@ -531,4 +552,4 @@ git add docs/docs/developer/ubiquitous-language.md server/src server/test
 git commit -m "feat: add face identity schema and lifecycle links"
 ```
 
-Phase 1 is complete when the additive schema, backfill, native recognition links, and lifecycle maintenance tests are green without any public identity surface.
+Phase 1 is complete when the additive schema, personal and shared-space identity backfill, native recognition links, and lifecycle maintenance tests are green without any public identity surface.

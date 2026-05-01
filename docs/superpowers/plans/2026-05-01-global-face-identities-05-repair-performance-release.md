@@ -64,6 +64,8 @@ This phase does not own:
   - Reuse existing selector for scoped repair candidates where possible.
 - Modify `web/src/lib/components/people/people-merge-selector.spec.ts`
   - Tests for mixed scoped person candidates if selector behavior changes.
+- Create `e2e/src/specs/server/api/global-face-identities.e2e-spec.ts`
+  - API-level end-to-end smoke for the highest-risk two-user/two-space RBAC path.
 - Modify `i18n/en.json`
   - Add labels and confirmation copy for same-person repair and detach.
 
@@ -74,6 +76,7 @@ This phase does not own:
 - A global identity merge is allowed only when every scoped profile attached to each involved identity is accessible for repair by the actor. If not, reject the merge; the actor can detach an accessible scoped profile instead.
 - Do not merge names, aliases, hidden state, favorite state, thumbnails, or birth dates across scoped profiles during repair. Identity graph changes only.
 - Detach must move only the selected scoped profile and its faces to a fresh identity.
+- Detach must not move `face_identity_face` rows that also back a non-repairable personal profile or space profile. Reject the detach until a future scoped-exclusion repair model exists.
 - Request-time people/filter/search paths must not run vector similarity.
 - If an `EXPLAIN` shows unbounded hydration or unacceptable scans on representative data, add indexes or split the query before release.
 
@@ -264,6 +267,9 @@ async detachScopedPerson(auth: AuthDto, dto: DetachScopedPersonDto): Promise<voi
   if (!resolved.accessible) {
     throw new BadRequestException('Person was not found or is not accessible');
   }
+  if (!resolved.allBackingFacesRepairable) {
+    throw new ForbiddenException('Cannot detach a profile whose faces also back inaccessible profiles');
+  }
   await this.faceIdentityRepository.detachScopedProfile(dto.profile);
 }
 ```
@@ -292,30 +298,30 @@ Expected: PASS after repository mocks are wired.
 Add repository tests:
 
 ```ts
-it('merges identities by moving face links to the target identity without merging scoped metadata', async () => {
-  const fx = await setupTwoRepairableIdentities();
+it('merges non-conflicting identities by moving face links without merging scoped metadata', async () => {
+  const fx = await setupRepairablePersonalAndSpaceIdentities();
 
   await sut.mergeIdentities({
-    targetIdentityId: fx.targetIdentityId,
-    sourceIdentityIds: [fx.sourceIdentityId],
+    targetIdentityId: fx.spaceIdentityId,
+    sourceIdentityIds: [fx.personalIdentityId],
     source: 'manual',
   });
 
-  const sourceFaces = await fx.db
+  const oldSourceFaces = await fx.db
     .selectFrom('face_identity_face')
     .selectAll()
-    .where('identityId', '=', fx.sourceIdentityId)
+    .where('identityId', '=', fx.personalIdentityId)
     .execute();
-  const sourceProfile = await fx.db
+  const personalProfile = await fx.db
     .selectFrom('person')
     .select(['name', 'birthDate', 'identityId'])
-    .where('id', '=', fx.sourcePerson.id)
+    .where('id', '=', fx.personalPerson.id)
     .executeTakeFirstOrThrow();
 
-  expect(sourceFaces).toHaveLength(0);
-  expect(sourceProfile.name).toBe(fx.sourcePerson.name);
-  expect(sourceProfile.birthDate).toEqual(fx.sourcePerson.birthDate);
-  expect(sourceProfile.identityId).toBe(fx.targetIdentityId);
+  expect(oldSourceFaces).toHaveLength(0);
+  expect(personalProfile.name).toBe(fx.personalPerson.name);
+  expect(personalProfile.birthDate).toEqual(fx.personalPerson.birthDate);
+  expect(personalProfile.identityId).toBe(fx.spaceIdentityId);
 });
 
 it('detaches a space profile into a fresh identity and moves only that profile faces', async () => {
@@ -353,6 +359,19 @@ it('reports identity repair as unsafe when an attached space profile is not repa
 
   expect(resolved.accessible).toBe(true);
   expect(resolved.allAttachedProfilesRepairable).toBe(false);
+});
+
+it('rejects detach when selected space-person faces also back non-repairable personal profiles', async () => {
+  const fx = await setupSpacePersonBackedByAnotherUsersAssetFaces();
+
+  const resolved = await sut.resolveDetachRef(fx.spaceEditor.id, {
+    type: 'space-person',
+    id: fx.spacePerson.id,
+    spaceId: fx.space.id,
+  });
+
+  expect(resolved.accessible).toBe(true);
+  expect(resolved.allBackingFacesRepairable).toBe(false);
 });
 ```
 
@@ -392,7 +411,7 @@ resolveRepairRefs(
 resolveDetachRef(
   actorUserId: string,
   profile: ScopedPersonProfileRefDto,
-): Promise<{ accessible: boolean; identityId: string; type: 'person' | 'pet' }>;
+): Promise<{ accessible: boolean; identityId: string; type: 'person' | 'pet'; allBackingFacesRepairable: boolean }>;
 ```
 
 Access rules:
@@ -402,6 +421,7 @@ Access rules:
 - refs must resolve to non-null `identityId`.
 - all resolved identities must have compatible type/species rules.
 - `allAttachedProfilesRepairable` is true only when every `person` and `shared_space_person` attached to each involved identity passes the same repair access rules for the actor.
+- `allBackingFacesRepairable` is true only when every `asset_face` that would move during detach belongs to a personal or space profile the actor can repair.
 
 - [ ] **Step 3: Implement detach**
 
@@ -418,7 +438,8 @@ Detach algorithm:
 3. Move `face_identity_face` rows for faces attached to the selected scoped profile to the fresh identity.
 4. For a `person` profile, move faces where `asset_face.personId = profile.id`.
 5. For a `space-person` profile, move faces joined through `shared_space_person_face.personId = profile.id`.
-6. Leave names, aliases, hidden state, favorite state, thumbnails, birth dates, and field-source locks unchanged.
+6. Before moving a face, verify that moving it will not mutate a non-repairable backing personal profile or space profile; reject the detach if any backing face is unsafe.
+7. Leave names, aliases, hidden state, favorite state, thumbnails, birth dates, and field-source locks unchanged.
 
 - [ ] **Step 4: Verify**
 
@@ -628,7 +649,7 @@ In the same spec, define `collectGeneratedIdentitySql()` to read the generated S
 
 ```ts
 if (!existsSync(sqlSnapshotDirectory)) {
-  return '';
+  throw new Error('Generated SQL snapshots are missing; run pnpm --dir server build && pnpm --dir server sync:sql');
 }
 ```
 
@@ -720,7 +741,77 @@ Expected: PASS.
 
 ---
 
-### Task 5: Full Regression And Leak Verification
+### Task 5: Add End-To-End RBAC Smoke
+
+**Files:**
+
+- Create `e2e/src/specs/server/api/global-face-identities.e2e-spec.ts`
+- Modify `e2e/src/utils.ts`
+  - Add setup helpers for seeded identities, space memberships, and shared-space people used by the E2E spec.
+
+- [ ] **Step 1: Write failing E2E test**
+
+Create an API E2E spec that seeds or API-creates:
+
+- User A with a named personal person and birth date.
+- User B with a different personal person that represents the same real person.
+- Space 1 containing User A and User C.
+- Space 2 containing User B and User D.
+- User E who is a member of both spaces.
+- One identity merge from shared-space evidence or the manual same-person endpoint.
+- `sharePersonMetadata = true` for Space 1 source user and `sharePersonMetadata = false` for Space 2 source user.
+
+Test flow:
+
+```ts
+it('dedupes accessible people without leaking inaccessible space metadata', async () => {
+  const fx = await setupGlobalFaceIdentityE2E();
+
+  const bothSpacesPeople = await fx.userE.peopleApi.getAllPeople({ withHidden: true, withSharedSpaces: true });
+  const space1OnlyPeople = await fx.userC.peopleApi.getAllPeople({ withHidden: true, withSharedSpaces: true });
+  const space2OnlyPeople = await fx.userD.peopleApi.getAllPeople({ withHidden: true, withSharedSpaces: true });
+
+  expect(bothSpacesPeople.people.filter((person) => person.name === 'Alice Source')).toHaveLength(1);
+  expect(JSON.stringify(space1OnlyPeople)).not.toContain('Space 2 Private Name');
+  expect(JSON.stringify(space2OnlyPeople)).not.toContain('Alice Source Birth Date From Space 1');
+  expect(JSON.stringify(space1OnlyPeople)).not.toContain(fx.faceIdentityId);
+  expect(JSON.stringify(bothSpacesPeople)).not.toContain('identityId');
+});
+```
+
+The E2E can seed face identities directly through the database if ML is disabled in the E2E stack. It must still exercise public APIs for `/people`, filter suggestions, and global people search after seeding.
+
+Run:
+
+```bash
+cd /home/pierre/dev/gallery/.worktrees/global-face-identities-design
+pnpm --dir e2e test -- --run src/specs/server/api/global-face-identities.e2e-spec.ts
+```
+
+Expected: FAIL before the full feature is implemented.
+
+- [ ] **Step 2: Extend the E2E to filter and search**
+
+Add assertions:
+
+- filter suggestions for User E return one scoped token for the shared identity;
+- filter suggestions for User C do not include Space 2 private names;
+- global people search for User E returns one row;
+- global people search for User C does not rank or return by Space 2 private aliases;
+- non-member User F receives no space-only people, filters, or search rows.
+
+- [ ] **Step 3: Verify E2E**
+
+```bash
+cd /home/pierre/dev/gallery/.worktrees/global-face-identities-design
+pnpm --dir e2e test -- --run src/specs/server/api/global-face-identities.e2e-spec.ts
+```
+
+Expected: PASS.
+
+---
+
+### Task 6: Full Regression And Leak Verification
 
 **Files:**
 
@@ -732,6 +823,7 @@ Expected: PASS.
 cd /home/pierre/dev/gallery/.worktrees/global-face-identities-design
 pnpm --dir server test -- src/services/person.service.spec.ts src/services/shared-space.service.spec.ts src/services/search.service.spec.ts src/controllers/person.controller.spec.ts src/controllers/search.controller.spec.ts src/repositories/search.repository.spec.ts
 pnpm --dir server test:medium -- test/medium/specs/repositories/face-identity.repository.spec.ts test/medium/specs/repositories/face-identity-query-shape.spec.ts test/medium/specs/repositories/shared-space-face-matching.spec.ts test/medium/specs/services/people-identity-rbac.spec.ts
+pnpm --dir e2e test -- --run src/specs/server/api/global-face-identities.e2e-spec.ts
 ```
 
 Expected: PASS.
@@ -778,7 +870,7 @@ Expected:
 ```bash
 cd /home/pierre/dev/gallery/.worktrees/global-face-identities-design
 git status --short
-git add server web open-api i18n
+git add server web open-api i18n e2e
 git commit -m "feat: repair and verify face identities"
 ```
 
