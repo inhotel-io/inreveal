@@ -30,12 +30,12 @@ This file remains the umbrella roadmap. Execute the feature through smaller phas
 2. `2026-05-01-global-face-identities-02-space-matching-metadata.md`
    - Owns shared-space member metadata contribution settings, identity-first space-person matching, metadata inheritance into `shared_space_person`, conflict handling, source locks, and cross-owner identity merging when shared-space evidence proves sameness.
    - Exits when shared-space matching can fill Space Person name and birth date from source metadata without leaking private `person` rows or inheriting hidden, favorite, alias, or inaccessible thumbnail state.
-3. People resolver and RBAC projection
+3. `2026-05-01-global-face-identities-03-people-rbac-projection.md`
    - Owns the identity-grouped `/people` mode, accessible profile selection, counts, thumbnails, route targets, and the full permission matrix for personal plus timeline-enabled shared-space people.
-4. Filter panel and global search
+4. `2026-05-01-global-face-identities-04-filter-panel-global-search.md`
    - Owns scoped person tokens in filter suggestions, timeline filters, single-space filters, global search people rows, global search previews, and token parsing compatibility.
-5. Manual repair and performance hardening
-   - Owns same-person merge/detach endpoints, admin or owner repair flows, generated SQL review, query plans, indexes, search-performance regression tests, and release checks.
+5. `2026-05-01-global-face-identities-05-repair-performance-release.md`
+   - Owns same-person merge/detach endpoints, owner/editor repair flows, generated SQL review, query plans, indexes, search-performance regression tests, and release checks.
 
 Do not execute a later umbrella section directly until its split phase plan exists. When a concern spans phases, write the failing test in the phase where the first behavior becomes observable, then keep the end-to-end assertion in the later public API or web phase.
 
