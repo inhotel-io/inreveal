@@ -33,6 +33,8 @@ import {
   SharedSpaceCreateDto,
   SharedSpaceLibraryLinkDto,
   SharedSpaceMemberCreateDto,
+  SharedSpaceMemberMetadataContributionDto,
+  SharedSpaceMemberPreferencesDto,
   SharedSpaceMemberResponseDto,
   SharedSpaceMemberTimelineDto,
   SharedSpaceMemberUpdateDto,
@@ -157,6 +159,21 @@ export class SharedSpaceController {
     return this.service.updateMemberTimeline(auth, id, dto);
   }
 
+  @Patch(':id/members/me/preferences')
+  @Authenticated({ permission: Permission.SharedSpaceRead })
+  @Endpoint({
+    summary: 'Update current member preferences',
+    description: 'Update timeline visibility and person metadata contribution for the current member.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  updateMemberPreferences(
+    @Auth() auth: AuthDto,
+    @Param('id') id: string,
+    @Body() dto: SharedSpaceMemberPreferencesDto,
+  ): Promise<SharedSpaceMemberResponseDto> {
+    return this.service.updateMemberPreferences(auth, id, dto);
+  }
+
   @Patch(':id/view')
   @Authenticated({ permission: Permission.SharedSpaceRead })
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -183,6 +200,22 @@ export class SharedSpaceController {
     @Body() dto: SharedSpaceMemberUpdateDto,
   ): Promise<SharedSpaceMemberResponseDto> {
     return this.service.updateMember(auth, id, userId, dto);
+  }
+
+  @Patch(':id/members/:userId/metadata-contribution')
+  @Authenticated({ permission: Permission.SharedSpaceMemberUpdate })
+  @Endpoint({
+    summary: 'Disable member person metadata contribution',
+    description: 'Disable person metadata contribution for another member. Members must re-enable it themselves.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  updateMemberMetadataContribution(
+    @Auth() auth: AuthDto,
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Body() dto: SharedSpaceMemberMetadataContributionDto,
+  ): Promise<SharedSpaceMemberResponseDto> {
+    return this.service.updateMemberMetadataContribution(auth, id, userId, dto);
   }
 
   @Delete(':id/members/:userId')
@@ -250,7 +283,11 @@ export class SharedSpaceController {
 
   @Get(':id/activities')
   @Authenticated({ permission: Permission.SharedSpaceRead })
-  @Endpoint({ operationId: 'getSpaceActivities', summary: 'Get space activity feed' })
+  @Endpoint({
+    operationId: 'getSpaceActivities',
+    summary: 'Get space activity feed',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
   getSpaceActivities(
     @Auth() auth: AuthDto,
     @Param() { id }: UUIDParamDto,

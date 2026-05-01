@@ -12755,7 +12755,18 @@
         "tags": [
           "Shared Spaces"
         ],
-        "x-immich-permission": "sharedSpace.read"
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "sharedSpace.read",
+        "x-immich-state": "Beta"
       }
     },
     "/shared-spaces/{id}/assets": {
@@ -13229,6 +13240,71 @@
         "x-immich-state": "Beta"
       }
     },
+    "/shared-spaces/{id}/members/me/preferences": {
+      "patch": {
+        "description": "Update timeline visibility and person metadata contribution for the current member.",
+        "operationId": "updateMemberPreferences",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharedSpaceMemberPreferencesDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedSpaceMemberResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Update current member preferences",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "sharedSpace.read",
+        "x-immich-state": "Beta"
+      }
+    },
     "/shared-spaces/{id}/members/me/timeline": {
       "patch": {
         "description": "Toggle whether this space's assets appear in the current user's personal timeline.",
@@ -13404,6 +13480,79 @@
           }
         ],
         "summary": "Update a member in a shared space",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "sharedSpaceMember.update",
+        "x-immich-state": "Beta"
+      }
+    },
+    "/shared-spaces/{id}/members/{userId}/metadata-contribution": {
+      "patch": {
+        "description": "Disable person metadata contribution for another member. Members must re-enable it themselves.",
+        "operationId": "updateMemberMetadataContribution",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharedSpaceMemberMetadataContributionDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedSpaceMemberResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Disable member person metadata contribution",
         "tags": [
           "Shared Spaces"
         ],
@@ -21389,6 +21538,7 @@
           "DatabaseBackup",
           "FacialRecognitionQueueAll",
           "FacialRecognition",
+          "FaceIdentityBackfill",
           "FileDelete",
           "FileMigrationQueueAll",
           "LibraryDeleteCheck",
@@ -21433,6 +21583,7 @@
           "SharedSpaceFaceMatchAll",
           "SharedSpaceLibraryFaceSync",
           "SharedSpacePersonDedup",
+          "SharedSpacePersonMetadataBackfill",
           "SharedSpaceBulkAddAssets",
           "AssetClassifyQueueAll",
           "AssetClassify"
@@ -25675,6 +25826,34 @@
         ],
         "type": "object"
       },
+      "SharedSpaceMemberMetadataContributionDto": {
+        "properties": {
+          "sharePersonMetadata": {
+            "description": "Disable person metadata contribution for this member",
+            "enum": [
+              false
+            ],
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sharePersonMetadata"
+        ],
+        "type": "object"
+      },
+      "SharedSpaceMemberPreferencesDto": {
+        "properties": {
+          "sharePersonMetadata": {
+            "description": "Share person names and birth dates with this space",
+            "type": "boolean"
+          },
+          "showInTimeline": {
+            "description": "Show space assets in personal timeline",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "SharedSpaceMemberResponseDto": {
         "properties": {
           "avatarColor": {
@@ -25719,6 +25898,10 @@
             "$ref": "#/components/schemas/SharedSpaceRole",
             "description": "Member role"
           },
+          "sharePersonMetadata": {
+            "description": "Share person names and birth dates with this space",
+            "type": "boolean"
+          },
           "showInTimeline": {
             "description": "Show space assets in timeline",
             "type": "boolean"
@@ -25733,6 +25916,7 @@
           "joinedAt",
           "name",
           "role",
+          "sharePersonMetadata",
           "showInTimeline",
           "userId"
         ],

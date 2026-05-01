@@ -253,6 +253,11 @@ export interface ISharedSpacePersonDedupJob extends IBaseJob {
   spaceId: string;
 }
 
+export interface ISharedSpacePersonMetadataBackfillJob extends IBaseJob {
+  cursor?: string;
+  limit?: number;
+}
+
 export interface ISharedSpaceBulkAddAssetsJob extends IBaseJob {
   spaceId: string;
   userId: string;
@@ -456,6 +461,7 @@ export type JobItem =
   | { name: JobName.SharedSpaceFaceMatchAll; data: ISharedSpaceFaceMatchAllJob }
   | { name: JobName.SharedSpaceLibraryFaceSync; data: ISharedSpaceLibraryFaceSyncJob }
   | { name: JobName.SharedSpacePersonDedup; data: ISharedSpacePersonDedupJob }
+  | { name: JobName.SharedSpacePersonMetadataBackfill; data: ISharedSpacePersonMetadataBackfillJob }
 
   // Shared Space Bulk Operations
   | { name: JobName.SharedSpaceBulkAddAssets; data: ISharedSpaceBulkAddAssetsJob }

@@ -1113,7 +1113,7 @@ describe(SharedSpaceRepository.name, () => {
       expect(result[0].id).toBe(spacePerson.id);
     });
 
-    it('should fall back to global person name when space person has no name', async () => {
+    it('should not fall back to private global person metadata when space person has no name', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
@@ -1136,8 +1136,7 @@ describe(SharedSpaceRepository.name, () => {
       const result = await sut.getPersonsBySpaceId(space.id, {});
 
       expect(result).toHaveLength(1);
-      expect(result[0].personalName).toBe('Global Name');
-      expect(result[0].personalThumbnailPath).toBe('/path/to/thumbnail.jpg');
+      expect(result[0].name).toBe('');
     });
 
     it('should sort space persons tied on assetCount alphabetically by name', async () => {
@@ -1172,7 +1171,7 @@ describe(SharedSpaceRepository.name, () => {
       expect(result.map((p) => p.id)).toEqual([alice.id, bob.id, charlie.id]);
     });
 
-    it('should fall back to global person name when sorting tied space persons', async () => {
+    it('should sort unnamed space persons after named rows without private global fallback', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
@@ -1205,7 +1204,7 @@ describe(SharedSpaceRepository.name, () => {
 
       const result = await sut.getPersonsBySpaceId(space.id, {});
 
-      expect(result.map((p) => p.id)).toEqual([alice.id, bob.id, charlie.id]);
+      expect(result.map((p) => p.id)).toEqual([alice.id, charlie.id, bob.id]);
     });
   });
 

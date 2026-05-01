@@ -2453,6 +2453,8 @@ export type SharedSpaceMemberResponseDto = {
     recentAssetId?: string | null;
     /** Member role */
     role: SharedSpaceRole;
+    /** Share person names and birth dates with this space */
+    sharePersonMetadata: boolean;
     /** Show space assets in timeline */
     showInTimeline: boolean;
     /** User ID */
@@ -2570,6 +2572,12 @@ export type SharedSpaceMemberCreateDto = {
     /** User ID */
     userId: string;
 };
+export type SharedSpaceMemberPreferencesDto = {
+    /** Share person names and birth dates with this space */
+    sharePersonMetadata?: boolean;
+    /** Show space assets in personal timeline */
+    showInTimeline?: boolean;
+};
 export type SharedSpaceMemberTimelineDto = {
     /** Show space assets in personal timeline */
     showInTimeline: boolean;
@@ -2577,6 +2585,10 @@ export type SharedSpaceMemberTimelineDto = {
 export type SharedSpaceMemberUpdateDto = {
     /** Member role */
     role: SharedSpaceRole;
+};
+export type SharedSpaceMemberMetadataContributionDto = {
+    /** Disable person metadata contribution for this member */
+    sharePersonMetadata: false;
 };
 export type SharedSpacePersonResponseDto = {
     /** User-specific alias for this person */
@@ -6827,6 +6839,22 @@ export function addMember({ id, sharedSpaceMemberCreateDto }: {
     })));
 }
 /**
+ * Update current member preferences
+ */
+export function updateMemberPreferences({ id, sharedSpaceMemberPreferencesDto }: {
+    id: string;
+    sharedSpaceMemberPreferencesDto: SharedSpaceMemberPreferencesDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: SharedSpaceMemberResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/members/me/preferences`, oazapfts.json({
+        ...opts,
+        method: "PATCH",
+        body: sharedSpaceMemberPreferencesDto
+    })));
+}
+/**
  * Update timeline visibility for current member
  */
 export function updateMemberTimeline({ id, sharedSpaceMemberTimelineDto }: {
@@ -6869,6 +6897,23 @@ export function updateMember({ id, userId, sharedSpaceMemberUpdateDto }: {
         ...opts,
         method: "PATCH",
         body: sharedSpaceMemberUpdateDto
+    })));
+}
+/**
+ * Disable member person metadata contribution
+ */
+export function updateMemberMetadataContribution({ id, userId, sharedSpaceMemberMetadataContributionDto }: {
+    id: string;
+    userId: string;
+    sharedSpaceMemberMetadataContributionDto: SharedSpaceMemberMetadataContributionDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: SharedSpaceMemberResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}/metadata-contribution`, oazapfts.json({
+        ...opts,
+        method: "PATCH",
+        body: sharedSpaceMemberMetadataContributionDto
     })));
 }
 /**
@@ -8366,6 +8411,7 @@ export enum JobName {
     DatabaseBackup = "DatabaseBackup",
     FacialRecognitionQueueAll = "FacialRecognitionQueueAll",
     FacialRecognition = "FacialRecognition",
+    FaceIdentityBackfill = "FaceIdentityBackfill",
     FileDelete = "FileDelete",
     FileMigrationQueueAll = "FileMigrationQueueAll",
     LibraryDeleteCheck = "LibraryDeleteCheck",
@@ -8410,6 +8456,7 @@ export enum JobName {
     SharedSpaceFaceMatchAll = "SharedSpaceFaceMatchAll",
     SharedSpaceLibraryFaceSync = "SharedSpaceLibraryFaceSync",
     SharedSpacePersonDedup = "SharedSpacePersonDedup",
+    SharedSpacePersonMetadataBackfill = "SharedSpacePersonMetadataBackfill",
     SharedSpaceBulkAddAssets = "SharedSpaceBulkAddAssets",
     AssetClassifyQueueAll = "AssetClassifyQueueAll",
     AssetClassify = "AssetClassify"
