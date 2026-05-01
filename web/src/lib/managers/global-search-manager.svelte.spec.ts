@@ -204,6 +204,37 @@ describe('GlobalSearchManager (skeleton)', () => {
     expect(manager.isOpen).toBe(true);
   });
 
+  it('open() records the requested presentation', () => {
+    manager.open('dropdown');
+
+    expect(manager.isOpen).toBe(true);
+    expect(manager.presentation).toBe('dropdown');
+
+    manager.open('modal');
+    expect(manager.presentation).toBe('modal');
+  });
+
+  it('toggle() swaps presentation instead of closing when another surface is open', () => {
+    manager.open('dropdown');
+
+    manager.toggle('modal');
+
+    expect(manager.isOpen).toBe(true);
+    expect(manager.presentation).toBe('modal');
+
+    manager.toggle('modal');
+    expect(manager.isOpen).toBe(false);
+  });
+
+  it('close() resets presentation back to modal', () => {
+    manager.open('dropdown');
+
+    manager.close();
+
+    expect(manager.isOpen).toBe(false);
+    expect(manager.presentation).toBe('modal');
+  });
+
   it('open() hydrates the current searchable page query and sort', () => {
     mockPage.url = new URL('https://gallery.test/photos?q=beach&sort=asc');
     manager.open();

@@ -39,6 +39,7 @@ import { COMMAND_ITEMS, isAlmostExactCommandMatch, type CommandItem } from './co
 import { isAlmostExactNavMatch, NAVIGATION_ITEMS, type NavigationItem } from './navigation-items';
 
 export type SearchMode = 'smart' | 'metadata' | 'description' | 'ocr';
+export type SearchPresentation = 'modal' | 'dropdown';
 
 export type ProviderStatus<T = unknown> =
   | { status: 'idle' }
@@ -208,6 +209,7 @@ function loadSearchQueryType(): SearchMode {
 
 export class GlobalSearchManager {
   isOpen = $state(false);
+  presentation = $state<SearchPresentation>('modal');
   query = $state('');
   searchSortOrder = $state<SearchablePageSortOrder>('relevance');
   mode = $state<SearchMode>(loadSearchQueryType());
@@ -574,8 +576,9 @@ export class GlobalSearchManager {
     return { status: 'ok', items: filtered.slice(0, topN), total: filtered.length };
   }
 
-  open() {
+  open(presentation: SearchPresentation = 'modal') {
     this.isOpen = true;
+    this.presentation = presentation;
     const currentPageSearchState = getSearchablePageState(page.url);
     if (currentPageSearchState.isSearchable) {
       this.query = currentPageSearchState.query;
@@ -923,6 +926,7 @@ export class GlobalSearchManager {
   close() {
     this.cancelConfirm();
     this.isOpen = false;
+    this.presentation = 'modal';
     this.keepOpenOnNextNavigate = false;
     this.closeController.abort();
     if (this.debounceTimer !== null) {
@@ -963,11 +967,11 @@ export class GlobalSearchManager {
     return shouldKeepOpen;
   }
 
-  toggle() {
-    if (this.isOpen) {
+  toggle(presentation: SearchPresentation = 'modal') {
+    if (this.isOpen && this.presentation === presentation) {
       this.close();
     } else {
-      this.open();
+      this.open(presentation);
     }
   }
 
