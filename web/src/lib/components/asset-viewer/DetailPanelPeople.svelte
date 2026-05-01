@@ -5,6 +5,7 @@
   import { Route } from '$lib/route';
   import { locale } from '$lib/stores/preferences.store';
   import { createUrl, getPeopleThumbnailUrl } from '$lib/utils';
+  import { zoomImageToBase64 } from '$lib/utils/people-utils';
   import { type AssetResponseDto } from '@immich/sdk';
   import { IconButton, Text } from '@immich/ui';
   import { mdiEye, mdiEyeOff, mdiPencil, mdiPlus } from '@mdi/js';
@@ -20,9 +21,17 @@
 
   const { asset, isOwner, previousRoute, spaceId }: Props = $props();
 
+  type AssetPerson = NonNullable<AssetResponseDto['people']>[number];
+
   const isSpaceMember = $derived(!!spaceId);
   const unassignedFaces = $derived(asset.unassignedFaces || []);
   const people = $derived(asset.people || []);
+  const getPersonFallbackThumbnailUrl = (person: AssetPerson) =>
+    spaceId && person.spacePersonId
+      ? createUrl(`/shared-spaces/${spaceId}/people/${person.spacePersonId}/thumbnail`, {
+          updatedAt: person.updatedAt,
+        })
+      : getPeopleThumbnailUrl(person);
   const visiblePeople = $derived(
     people
       .filter((p) => assetViewerManager.isShowingHiddenPeople || !p.isHidden)
@@ -105,6 +114,7 @@
         {@const isHighlighted = person.faces.some((f) =>
           assetViewerManager.highlightedFaces.some((b) => b.id === f.id),
         )}
+        {@const fallbackThumbnailUrl = getPersonFallbackThumbnailUrl(person)}
         <a
           class="group outline-none"
           href={spaceId && person.spacePersonId
@@ -115,21 +125,45 @@
           onpointerenter={() => assetViewerManager.setHighlightedFaces(person.faces)}
           onpointerleave={() => assetViewerManager.clearHighlightedFaces()}
         >
-          <ImageThumbnail
-            curve
-            shadow
-            url={spaceId && person.spacePersonId
-              ? createUrl(`/shared-spaces/${spaceId}/people/${person.spacePersonId}/thumbnail`, {
-                  updatedAt: person.updatedAt,
-                })
-              : getPeopleThumbnailUrl(person)}
-            altText={person.name}
-            title={person.name}
-            widthStyle="100%"
-            hidden={person.isHidden}
-            highlighted={isHighlighted}
-            class="group-focus-visible:outline-2 outline-offset-2 outline-immich-primary dark:outline-immich-dark-primary"
-          />
+          {#if person.faces[0]}
+            {#await zoomImageToBase64(person.faces[0], asset.id, asset.type, assetViewerManager.imgRef)}
+              <ImageThumbnail
+                curve
+                shadow
+                url={fallbackThumbnailUrl}
+                altText={person.name}
+                title={person.name}
+                widthStyle="100%"
+                hidden={person.isHidden}
+                highlighted={isHighlighted}
+                class="group-focus-visible:outline-2 outline-offset-2 outline-immich-primary dark:outline-immich-dark-primary"
+              />
+            {:then faceThumbnailUrl}
+              <ImageThumbnail
+                curve
+                shadow
+                url={faceThumbnailUrl ?? fallbackThumbnailUrl}
+                altText={person.name}
+                title={person.name}
+                widthStyle="100%"
+                hidden={person.isHidden}
+                highlighted={isHighlighted}
+                class="group-focus-visible:outline-2 outline-offset-2 outline-immich-primary dark:outline-immich-dark-primary"
+              />
+            {/await}
+          {:else}
+            <ImageThumbnail
+              curve
+              shadow
+              url={fallbackThumbnailUrl}
+              altText={person.name}
+              title={person.name}
+              widthStyle="100%"
+              hidden={person.isHidden}
+              highlighted={isHighlighted}
+              class="group-focus-visible:outline-2 outline-offset-2 outline-immich-primary dark:outline-immich-dark-primary"
+            />
+          {/if}
           <p class="mt-1 truncate font-medium" title={person.name}>{person.name}</p>
           {#if person.birthDate && person.formattedAge}
             <p class="font-light {visiblePeople.length > 6 ? 'text-xs' : ''}" title={person.formattedBirthDate!}>
