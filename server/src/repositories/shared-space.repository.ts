@@ -1072,6 +1072,32 @@ export class SharedSpaceRepository {
     return !!result;
   }
 
+  @GenerateSql({ params: [DummyValue.UUID, { limit: DummyValue.NUMBER, afterAssetId: DummyValue.UUID }] })
+  getAssetIdsInSpacePage(spaceId: string, options: { limit: number; afterAssetId?: string } = { limit: 1000 }) {
+    const combined = this.db
+      .selectFrom('shared_space_asset')
+      .select('assetId as id')
+      .where('spaceId', '=', spaceId)
+      .union(
+        this.db
+          .selectFrom('shared_space_library')
+          .innerJoin('asset', 'asset.libraryId', 'shared_space_library.libraryId')
+          .select('asset.id')
+          .where('shared_space_library.spaceId', '=', spaceId)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.isOffline', '=', false),
+      )
+      .as('combined');
+
+    return this.db
+      .selectFrom(combined)
+      .select('combined.id as assetId')
+      .$if(!!options.afterAssetId, (qb) => qb.where('combined.id', '>', options.afterAssetId!))
+      .orderBy('combined.id', 'asc')
+      .limit(options.limit)
+      .execute();
+  }
+
   @GenerateSql({ params: [DummyValue.UUID] })
   getAssetIdsInSpace(spaceId: string) {
     return this.db
