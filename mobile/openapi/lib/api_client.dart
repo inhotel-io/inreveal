@@ -354,6 +354,8 @@ class ApiClient {
           return DatabaseBackupDto.fromJson(value);
         case 'DatabaseBackupListResponseDto':
           return DatabaseBackupListResponseDto.fromJson(value);
+        case 'DetachScopedPersonDto':
+          return DetachScopedPersonDto.fromJson(value);
         case 'DownloadArchiveDto':
           return DownloadArchiveDto.fromJson(value);
         case 'DownloadArchiveInfo':
@@ -456,6 +458,8 @@ class ApiClient {
           return MemoryUpdateDto.fromJson(value);
         case 'MergePersonDto':
           return MergePersonDto.fromJson(value);
+        case 'MergeScopedPeopleDto':
+          return MergeScopedPeopleDto.fromJson(value);
         case 'MetadataSearchDto':
           return MetadataSearchDto.fromJson(value);
         case 'MirrorAxis':
@@ -592,6 +596,10 @@ class ApiClient {
           return ReverseGeocodingStateResponseDto.fromJson(value);
         case 'RotateParameters':
           return RotateParameters.fromJson(value);
+        case 'ScopedPersonProfileRefDto':
+          return ScopedPersonProfileRefDto.fromJson(value);
+        case 'ScopedPrimaryProfile':
+          return ScopedPrimaryProfile.fromJson(value);
         case 'SearchAlbumResponseDto':
           return SearchAlbumResponseDto.fromJson(value);
         case 'SearchAssetResponseDto':
@@ -672,6 +680,10 @@ class ApiClient {
           return SharedSpaceLinkedLibraryDto.fromJson(value);
         case 'SharedSpaceMemberCreateDto':
           return SharedSpaceMemberCreateDto.fromJson(value);
+        case 'SharedSpaceMemberMetadataContributionDto':
+          return SharedSpaceMemberMetadataContributionDto.fromJson(value);
+        case 'SharedSpaceMemberPreferencesDto':
+          return SharedSpaceMemberPreferencesDto.fromJson(value);
         case 'SharedSpaceMemberResponseDto':
           return SharedSpaceMemberResponseDto.fromJson(value);
         case 'SharedSpaceMemberTimelineDto':

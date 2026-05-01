@@ -1494,6 +1494,133 @@ class SharedSpacesApi {
     return null;
   }
 
+  /// Disable member person metadata contribution
+  ///
+  /// Disable person metadata contribution for another member. Members must re-enable it themselves.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [String] userId (required):
+  ///
+  /// * [SharedSpaceMemberMetadataContributionDto] sharedSpaceMemberMetadataContributionDto (required):
+  Future<Response> updateMemberMetadataContributionWithHttpInfo(String id, String userId, SharedSpaceMemberMetadataContributionDto sharedSpaceMemberMetadataContributionDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{id}/members/{userId}/metadata-contribution'
+      .replaceAll('{id}', id)
+      .replaceAll('{userId}', userId);
+
+    // ignore: prefer_final_locals
+    Object? postBody = sharedSpaceMemberMetadataContributionDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'PATCH',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Disable member person metadata contribution
+  ///
+  /// Disable person metadata contribution for another member. Members must re-enable it themselves.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [String] userId (required):
+  ///
+  /// * [SharedSpaceMemberMetadataContributionDto] sharedSpaceMemberMetadataContributionDto (required):
+  Future<SharedSpaceMemberResponseDto?> updateMemberMetadataContribution(String id, String userId, SharedSpaceMemberMetadataContributionDto sharedSpaceMemberMetadataContributionDto,) async {
+    final response = await updateMemberMetadataContributionWithHttpInfo(id, userId, sharedSpaceMemberMetadataContributionDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'SharedSpaceMemberResponseDto',) as SharedSpaceMemberResponseDto;
+    
+    }
+    return null;
+  }
+
+  /// Update current member preferences
+  ///
+  /// Update timeline visibility and person metadata contribution for the current member.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceMemberPreferencesDto] sharedSpaceMemberPreferencesDto (required):
+  Future<Response> updateMemberPreferencesWithHttpInfo(String id, SharedSpaceMemberPreferencesDto sharedSpaceMemberPreferencesDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{id}/members/me/preferences'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = sharedSpaceMemberPreferencesDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'PATCH',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Update current member preferences
+  ///
+  /// Update timeline visibility and person metadata contribution for the current member.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceMemberPreferencesDto] sharedSpaceMemberPreferencesDto (required):
+  Future<SharedSpaceMemberResponseDto?> updateMemberPreferences(String id, SharedSpaceMemberPreferencesDto sharedSpaceMemberPreferencesDto,) async {
+    final response = await updateMemberPreferencesWithHttpInfo(id, sharedSpaceMemberPreferencesDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'SharedSpaceMemberResponseDto',) as SharedSpaceMemberResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Update timeline visibility for current member
   ///
   /// Toggle whether this space's assets appear in the current user's personal timeline.

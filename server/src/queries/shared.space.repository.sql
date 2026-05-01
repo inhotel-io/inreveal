@@ -38,6 +38,7 @@ select
   "shared_space_member"."role",
   "shared_space_member"."joinedAt",
   "shared_space_member"."showInTimeline",
+  "shared_space_member"."sharePersonMetadata",
   "shared_space_member"."lastViewedAt",
   "user"."name",
   "user"."email",
@@ -58,6 +59,7 @@ select
   "shared_space_member"."role",
   "shared_space_member"."joinedAt",
   "shared_space_member"."showInTimeline",
+  "shared_space_member"."sharePersonMetadata",
   "shared_space_member"."lastViewedAt",
   "user"."name",
   "user"."email",
@@ -403,47 +405,119 @@ where
 
 -- SharedSpaceRepository.getPersonsBySpaceId
 select
-  "shared_space_person".*,
-  "person"."id" as "personalPersonId",
-  "person"."name" as "personalName",
-  "person"."thumbnailPath" as "personalThumbnailPath",
-  "person"."birthDate" as "personalBirthDate"
+  "shared_space_person".*
 from
   "shared_space_person"
-  left join "asset_face" on "asset_face"."id" = "shared_space_person"."representativeFaceId"
-  left join "person" on "person"."id" = "asset_face"."personId"
 where
   "shared_space_person"."spaceId" = $1
   and "shared_space_person"."isHidden" = $2
 order by
   CASE
     WHEN shared_space_person.name != '' THEN 0
-    WHEN person.name IS NOT NULL
-    AND person.name != '' THEN 0
     ELSE 1
   END,
   "shared_space_person"."assetCount" desc,
-  COALESCE(
-    NULLIF(shared_space_person.name, ''),
-    NULLIF(person.name, '')
-  ) asc nulls last,
+  NULLIF(shared_space_person.name, '') asc nulls last,
   "shared_space_person"."id"
 limit
   $3
 
 -- SharedSpaceRepository.getPersonById
 select
-  "shared_space_person".*,
-  "person"."id" as "personalPersonId",
-  "person"."name" as "personalName",
-  "person"."thumbnailPath" as "personalThumbnailPath",
-  "person"."birthDate" as "personalBirthDate"
+  "shared_space_person".*
 from
   "shared_space_person"
-  left join "asset_face" on "asset_face"."id" = "shared_space_person"."representativeFaceId"
-  left join "person" on "person"."id" = "asset_face"."personId"
 where
   "shared_space_person"."id" = $1
+
+-- SharedSpaceRepository.getSpacePersonByIdentity
+select
+  *
+from
+  "shared_space_person"
+where
+  "spaceId" = $1
+  and "identityId" = $2
+
+-- SharedSpaceRepository.getMetadataInheritanceCandidates
+select
+  "person"."id" as "personId",
+  "person"."ownerId" as "userId",
+  "shared_space_member"."role",
+  "person"."name",
+  "person"."birthDate",
+  "person"."type",
+  "person"."species",
+  "person"."updatedAt",
+  count("shared_space_person"."id") as "supportingFaceCount",
+  person."ownerId" = $1 as "isAssetAdder"
+from
+  "person"
+  inner join "shared_space_member" on "shared_space_member"."userId" = "person"."ownerId"
+  and "shared_space_member"."spaceId" = $2
+  and "shared_space_member"."sharePersonMetadata" = $3
+  left join "asset_face" on "asset_face"."personId" = "person"."id"
+  and "asset_face"."deletedAt" is null
+  and "asset_face"."isVisible" is true
+  left join "shared_space_person_face" on "shared_space_person_face"."assetFaceId" = "asset_face"."id"
+  left join "shared_space_person" on "shared_space_person"."id" = "shared_space_person_face"."personId"
+  and "shared_space_person"."spaceId" = $4
+where
+  "person"."identityId" = $5
+group by
+  "person"."id",
+  "person"."ownerId",
+  "shared_space_member"."role",
+  "person"."name",
+  "person"."birthDate",
+  "person"."type",
+  "person"."species",
+  "person"."updatedAt",
+  "isAssetAdder"
+
+-- SharedSpaceRepository.getSpaceAssetAdder
+select
+  "addedById"
+from
+  "shared_space_asset"
+where
+  "spaceId" = $1
+  and "assetId" = $2
+
+-- SharedSpaceRepository.getSpacePersonMetadataBackfillPage
+select
+  "shared_space_person".*
+from
+  "shared_space_person"
+where
+  "identityId" is not null
+order by
+  "id"
+limit
+  $1
+
+-- SharedSpaceRepository.getIdentityEvidenceForSpacePerson
+select
+  "person"."identityId",
+  "person"."type",
+  count("asset_face"."id") as "supportingFaceCount"
+from
+  "shared_space_person_face"
+  inner join "asset_face" on "asset_face"."id" = "shared_space_person_face"."assetFaceId"
+  inner join "asset" on "asset"."id" = "asset_face"."assetId"
+  inner join "person" on "person"."id" = "asset_face"."personId"
+  inner join "shared_space_asset" on "shared_space_asset"."assetId" = "asset_face"."assetId"
+  and "shared_space_asset"."spaceId" = $1
+where
+  "shared_space_person_face"."personId" = $2
+  and "person"."identityId" is not null
+  and "asset_face"."deletedAt" is null
+  and "asset_face"."isVisible" is true
+  and "asset"."deletedAt" is null
+  and "asset"."visibility" = 'timeline'
+group by
+  "person"."identityId",
+  "person"."type"
 
 -- SharedSpaceRepository.updatePerson
 update "shared_space_person"
@@ -712,6 +786,8 @@ with
     select
       "shared_space_person"."id" as "personId",
       "shared_space_person"."name",
+      "shared_space_person"."identityId",
+      "shared_space_person"."type",
       face_search.embedding <=> $1 as "distance"
     from
       "shared_space_person"
@@ -737,6 +813,7 @@ select
   "shared_space_person"."id",
   "shared_space_person"."name",
   "shared_space_person"."type",
+  "shared_space_person"."identityId",
   "shared_space_person"."isHidden",
   "shared_space_person"."faceCount",
   "shared_space_person"."representativeFaceId",
@@ -752,10 +829,13 @@ select
   "asset_face"."id",
   "asset_face"."assetId",
   "asset_face"."personId",
+  "person"."identityId",
+  "person"."type",
   "face_search"."embedding"
 from
   "asset_face"
   inner join "face_search" on "face_search"."faceId" = "asset_face"."id"
+  left join "person" on "person"."id" = "asset_face"."personId"
 where
   "asset_face"."assetId" = $1
   and "asset_face"."deletedAt" is null
@@ -818,6 +898,15 @@ from
   ) as "combined"
 limit
   $6
+
+-- SharedSpaceRepository.getAssetIdForFace
+select
+  "assetId"
+from
+  "asset_face"
+where
+  "id" = $1
+  and "deletedAt" is null
 
 -- SharedSpaceRepository.getAssetIdsInSpacePage
 select
@@ -912,7 +1001,9 @@ limit
 select
   "asset_face"."id",
   "asset_face"."assetId",
-  "asset_face"."personId"
+  "asset_face"."personId",
+  "person"."identityId",
+  "person"."type"
 from
   "asset_face"
   inner join "person" on "person"."id" = "asset_face"."personId"
@@ -942,15 +1033,11 @@ select
   "shared_space_person"."birthDate",
   "shared_space_person"."updatedAt",
   "shared_space_person"."type",
-  "person"."name" as "personalName",
-  "person"."thumbnailPath" as "personalThumbnailPath",
   "asset_face"."personId"
 from
   "shared_space_person"
   inner join "shared_space_person_face" on "shared_space_person_face"."personId" = "shared_space_person"."id"
   inner join "asset_face" on "asset_face"."id" = "shared_space_person_face"."assetFaceId"
-  left join "asset_face" as "representative_face" on "representative_face"."id" = "shared_space_person"."representativeFaceId"
-  left join "person" on "person"."id" = "representative_face"."personId"
 where
   "shared_space_person"."spaceId" = $1
   and "asset_face"."personId" in ($2)
@@ -961,8 +1048,6 @@ group by
   "shared_space_person"."birthDate",
   "shared_space_person"."updatedAt",
   "shared_space_person"."type",
-  "person"."name",
-  "person"."thumbnailPath",
   "asset_face"."personId"
 
 -- SharedSpaceRepository.findSpaceForAssetAndUser

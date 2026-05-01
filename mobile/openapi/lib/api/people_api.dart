@@ -169,6 +169,54 @@ class PeopleApi {
     }
   }
 
+  /// Detach a scoped person profile
+  ///
+  /// Separate one personal or space person profile from a grouped person identity.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [DetachScopedPersonDto] detachScopedPersonDto (required):
+  Future<Response> detachScopedPersonWithHttpInfo(DetachScopedPersonDto detachScopedPersonDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/people/detach-profile';
+
+    // ignore: prefer_final_locals
+    Object? postBody = detachScopedPersonDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Detach a scoped person profile
+  ///
+  /// Separate one personal or space person profile from a grouped person identity.
+  ///
+  /// Parameters:
+  ///
+  /// * [DetachScopedPersonDto] detachScopedPersonDto (required):
+  Future<void> detachScopedPerson(DetachScopedPersonDto detachScopedPersonDto,) async {
+    final response = await detachScopedPersonWithHttpInfo(detachScopedPersonDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
   /// Get all people
   ///
   /// Retrieve a list of all people.
@@ -191,7 +239,10 @@ class PeopleApi {
   ///
   /// * [bool] withHidden:
   ///   Include hidden people
-  Future<Response> getAllPeopleWithHttpInfo({ String? closestAssetId, String? closestPersonId, num? page, num? size, bool? withHidden, }) async {
+  ///
+  /// * [bool] withSharedSpaces:
+  ///   Include identity-grouped people from timeline-enabled shared spaces
+  Future<Response> getAllPeopleWithHttpInfo({ String? closestAssetId, String? closestPersonId, num? page, num? size, bool? withHidden, bool? withSharedSpaces, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/people';
 
@@ -216,6 +267,9 @@ class PeopleApi {
     }
     if (withHidden != null) {
       queryParams.addAll(_queryParams('', 'withHidden', withHidden));
+    }
+    if (withSharedSpaces != null) {
+      queryParams.addAll(_queryParams('', 'withSharedSpaces', withSharedSpaces));
     }
 
     const contentTypes = <String>[];
@@ -252,8 +306,11 @@ class PeopleApi {
   ///
   /// * [bool] withHidden:
   ///   Include hidden people
-  Future<PeopleResponseDto?> getAllPeople({ String? closestAssetId, String? closestPersonId, num? page, num? size, bool? withHidden, }) async {
-    final response = await getAllPeopleWithHttpInfo( closestAssetId: closestAssetId, closestPersonId: closestPersonId, page: page, size: size, withHidden: withHidden, );
+  ///
+  /// * [bool] withSharedSpaces:
+  ///   Include identity-grouped people from timeline-enabled shared spaces
+  Future<PeopleResponseDto?> getAllPeople({ String? closestAssetId, String? closestPersonId, num? page, num? size, bool? withHidden, bool? withSharedSpaces, }) async {
+    final response = await getAllPeopleWithHttpInfo( closestAssetId: closestAssetId, closestPersonId: closestPersonId, page: page, size: size, withHidden: withHidden, withSharedSpaces: withSharedSpaces, );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -500,6 +557,54 @@ class PeopleApi {
 
     }
     return null;
+  }
+
+  /// Merge scoped people by identity
+  ///
+  /// Mark personal and space people as the same person without exposing raw face identity IDs.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [MergeScopedPeopleDto] mergeScopedPeopleDto (required):
+  Future<Response> mergeScopedPeopleWithHttpInfo(MergeScopedPeopleDto mergeScopedPeopleDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/people/same-person';
+
+    // ignore: prefer_final_locals
+    Object? postBody = mergeScopedPeopleDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Merge scoped people by identity
+  ///
+  /// Mark personal and space people as the same person without exposing raw face identity IDs.
+  ///
+  /// Parameters:
+  ///
+  /// * [MergeScopedPeopleDto] mergeScopedPeopleDto (required):
+  Future<void> mergeScopedPeople(MergeScopedPeopleDto mergeScopedPeopleDto,) async {
+    final response = await mergeScopedPeopleWithHttpInfo(mergeScopedPeopleDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
   }
 
   /// Reassign faces

@@ -199,11 +199,13 @@ Class | Method | HTTP request | Description
 *PeopleApi* | [**createPerson**](doc//PeopleApi.md#createperson) | **POST** /people | Create a person
 *PeopleApi* | [**deletePeople**](doc//PeopleApi.md#deletepeople) | **DELETE** /people | Delete people
 *PeopleApi* | [**deletePerson**](doc//PeopleApi.md#deleteperson) | **DELETE** /people/{id} | Delete person
+*PeopleApi* | [**detachScopedPerson**](doc//PeopleApi.md#detachscopedperson) | **POST** /people/detach-profile | Detach a scoped person profile
 *PeopleApi* | [**getAllPeople**](doc//PeopleApi.md#getallpeople) | **GET** /people | Get all people
 *PeopleApi* | [**getPerson**](doc//PeopleApi.md#getperson) | **GET** /people/{id} | Get a person
 *PeopleApi* | [**getPersonStatistics**](doc//PeopleApi.md#getpersonstatistics) | **GET** /people/{id}/statistics | Get person statistics
 *PeopleApi* | [**getPersonThumbnail**](doc//PeopleApi.md#getpersonthumbnail) | **GET** /people/{id}/thumbnail | Get person thumbnail
 *PeopleApi* | [**mergePerson**](doc//PeopleApi.md#mergeperson) | **POST** /people/{id}/merge | Merge people
+*PeopleApi* | [**mergeScopedPeople**](doc//PeopleApi.md#mergescopedpeople) | **POST** /people/same-person | Merge scoped people by identity
 *PeopleApi* | [**reassignFaces**](doc//PeopleApi.md#reassignfaces) | **PUT** /people/{id}/reassign | Reassign faces
 *PeopleApi* | [**updatePeople**](doc//PeopleApi.md#updatepeople) | **PUT** /people | Update people
 *PeopleApi* | [**updatePerson**](doc//PeopleApi.md#updateperson) | **PUT** /people/{id} | Update person
@@ -283,6 +285,8 @@ Class | Method | HTTP request | Description
 *SharedSpacesApi* | [**setSpacePersonAlias**](doc//SharedSpacesApi.md#setspacepersonalias) | **PUT** /shared-spaces/{id}/people/{personId}/alias | Set a person alias in a shared space
 *SharedSpacesApi* | [**unlinkLibrary**](doc//SharedSpacesApi.md#unlinklibrary) | **DELETE** /shared-spaces/{id}/libraries/{libraryId} | Unlink a library from a shared space
 *SharedSpacesApi* | [**updateMember**](doc//SharedSpacesApi.md#updatemember) | **PATCH** /shared-spaces/{id}/members/{userId} | Update a member in a shared space
+*SharedSpacesApi* | [**updateMemberMetadataContribution**](doc//SharedSpacesApi.md#updatemembermetadatacontribution) | **PATCH** /shared-spaces/{id}/members/{userId}/metadata-contribution | Disable member person metadata contribution
+*SharedSpacesApi* | [**updateMemberPreferences**](doc//SharedSpacesApi.md#updatememberpreferences) | **PATCH** /shared-spaces/{id}/members/me/preferences | Update current member preferences
 *SharedSpacesApi* | [**updateMemberTimeline**](doc//SharedSpacesApi.md#updatemembertimeline) | **PATCH** /shared-spaces/{id}/members/me/timeline | Update timeline visibility for current member
 *SharedSpacesApi* | [**updateSpace**](doc//SharedSpacesApi.md#updatespace) | **PATCH** /shared-spaces/{id} | Update a shared space
 *SharedSpacesApi* | [**updateSpacePerson**](doc//SharedSpacesApi.md#updatespaceperson) | **PUT** /shared-spaces/{id}/people/{personId} | Update a person in a shared space
@@ -451,6 +455,7 @@ Class | Method | HTTP request | Description
  - [DatabaseBackupDeleteDto](doc//DatabaseBackupDeleteDto.md)
  - [DatabaseBackupDto](doc//DatabaseBackupDto.md)
  - [DatabaseBackupListResponseDto](doc//DatabaseBackupListResponseDto.md)
+ - [DetachScopedPersonDto](doc//DetachScopedPersonDto.md)
  - [DownloadArchiveDto](doc//DownloadArchiveDto.md)
  - [DownloadArchiveInfo](doc//DownloadArchiveInfo.md)
  - [DownloadInfoDto](doc//DownloadInfoDto.md)
@@ -502,6 +507,7 @@ Class | Method | HTTP request | Description
  - [MemoryType](doc//MemoryType.md)
  - [MemoryUpdateDto](doc//MemoryUpdateDto.md)
  - [MergePersonDto](doc//MergePersonDto.md)
+ - [MergeScopedPeopleDto](doc//MergeScopedPeopleDto.md)
  - [MetadataSearchDto](doc//MetadataSearchDto.md)
  - [MirrorAxis](doc//MirrorAxis.md)
  - [MirrorParameters](doc//MirrorParameters.md)
@@ -570,6 +576,8 @@ Class | Method | HTTP request | Description
  - [ReactionType](doc//ReactionType.md)
  - [ReverseGeocodingStateResponseDto](doc//ReverseGeocodingStateResponseDto.md)
  - [RotateParameters](doc//RotateParameters.md)
+ - [ScopedPersonProfileRefDto](doc//ScopedPersonProfileRefDto.md)
+ - [ScopedPrimaryProfile](doc//ScopedPrimaryProfile.md)
  - [SearchAlbumResponseDto](doc//SearchAlbumResponseDto.md)
  - [SearchAssetResponseDto](doc//SearchAssetResponseDto.md)
  - [SearchExploreItem](doc//SearchExploreItem.md)
@@ -610,6 +618,8 @@ Class | Method | HTTP request | Description
  - [SharedSpaceLibraryLinkDto](doc//SharedSpaceLibraryLinkDto.md)
  - [SharedSpaceLinkedLibraryDto](doc//SharedSpaceLinkedLibraryDto.md)
  - [SharedSpaceMemberCreateDto](doc//SharedSpaceMemberCreateDto.md)
+ - [SharedSpaceMemberMetadataContributionDto](doc//SharedSpaceMemberMetadataContributionDto.md)
+ - [SharedSpaceMemberPreferencesDto](doc//SharedSpaceMemberPreferencesDto.md)
  - [SharedSpaceMemberResponseDto](doc//SharedSpaceMemberResponseDto.md)
  - [SharedSpaceMemberTimelineDto](doc//SharedSpaceMemberTimelineDto.md)
  - [SharedSpaceMemberUpdateDto](doc//SharedSpaceMemberUpdateDto.md)

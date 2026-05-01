@@ -1,6 +1,6 @@
 import { AssetMediaResponseDto, LoginResponseDto, PersonResponseDto, SharedSpaceRole } from '@immich/sdk';
 import { createUserDto } from 'src/fixtures';
-import { app, asBearerAuth, utils } from 'src/utils';
+import { app, utils } from 'src/utils';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -37,10 +37,10 @@ const setupGlobalFaceIdentityE2E = async (): Promise<GlobalFaceIdentityFixture> 
     utils.addSpaceMember(userB.accessToken, space2.id, { userId: userD.userId, role: SharedSpaceRole.Viewer }),
     utils.addSpaceMember(userB.accessToken, space2.id, { userId: userE.userId, role: SharedSpaceRole.Viewer }),
   ]);
-  await db.query(`UPDATE "shared_space_member" SET "sharePersonMetadata" = false WHERE "spaceId" = $1 AND "userId" = $2`, [
-    space2.id,
-    userB.userId,
-  ]);
+  await db.query(
+    `UPDATE "shared_space_member" SET "sharePersonMetadata" = false WHERE "spaceId" = $1 AND "userId" = $2`,
+    [space2.id, userB.userId],
+  );
 
   const [personA, personB] = await Promise.all([
     utils.createPerson(userA.accessToken, { name: 'Alice Source', birthDate: '1990-01-01' }),
