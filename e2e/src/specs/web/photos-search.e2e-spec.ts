@@ -56,6 +56,24 @@ test.describe('Photos Search', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('combobox')).toHaveValue('');
+    await dialog.getByRole('combobox').press('Enter');
+    await expect(page).toHaveURL(/\/photos(?!\?q=)/, { timeout: 10_000 });
+  });
+
+  test('clearing the top search field and pressing Enter removes q=', async ({ context, page }) => {
+    await gotoPhotos(context, page, '/photos?q=mountain');
+
+    const trigger = page.getByTestId('cmdk-input-trigger');
+    const input = trigger.getByRole('combobox');
+    await expect(input).toHaveValue('mountain');
+
+    await trigger.click();
+    await expect(page.locator('[data-cmdk-dropdown-panel]')).toBeVisible();
+    await input.fill('');
+    await input.press('Enter');
+
+    await expect(page).toHaveURL(/\/photos(?!\?q=)/, { timeout: 10_000 });
+    await expect(page.getByTestId('search-chip')).not.toBeVisible();
   });
 
   test('navigating directly to /photos?q=... hides the timeline and shows search results area', async ({

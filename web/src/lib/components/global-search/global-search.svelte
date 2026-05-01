@@ -366,6 +366,11 @@
       e.preventDefault();
       return;
     }
+    if (e.key === 'Enter' && inputValue.trim() === '' && getSearchablePageState(page.url).query !== '') {
+      manager.activateSearch('');
+      e.preventDefault();
+      return;
+    }
     if (e.key === 'Enter' && manager.topSearchMatch && manager.activeItemId === manager.topSearchMatch.id) {
       manager.activateSearch(manager.topSearchMatch.query);
       e.preventDefault();

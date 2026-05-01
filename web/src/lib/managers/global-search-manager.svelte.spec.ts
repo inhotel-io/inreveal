@@ -1322,6 +1322,16 @@ describe('activate("command")', () => {
     expect(goto).toHaveBeenCalledWith('/spaces/space-1/photos?view=grid&q=beach&sort=asc');
   });
 
+  it('activateSearch with empty text clears the committed searchable-page query', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/photos?q=mountain&sort=asc&view=grid');
+
+    m.activateSearch('');
+
+    expect(goto).toHaveBeenCalledWith('/photos?view=grid');
+    expect(getEntries()).toEqual([]);
+  });
+
   it('activateSearch falls back to /photos and drops unrelated params', () => {
     const m = new GlobalSearchManager();
     mockPage.url = new URL('https://gallery.test/albums?view=list');

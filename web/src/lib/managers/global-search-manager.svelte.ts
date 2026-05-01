@@ -1251,6 +1251,13 @@ export class GlobalSearchManager {
   activateSearch(text: string): void {
     const trimmed = text.trim();
     if (!trimmed) {
+      const searchablePageUrl = buildSearchablePageUrl(page.url, '');
+      if (searchablePageUrl && searchablePageUrl !== page.url.pathname + page.url.search) {
+        this.query = '';
+        this.searchSortOrder = 'relevance';
+        this.clearQueryOnNextModalOpen = false;
+        void goto(searchablePageUrl);
+      }
       return;
     }
 

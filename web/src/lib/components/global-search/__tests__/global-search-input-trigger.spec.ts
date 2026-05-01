@@ -60,6 +60,23 @@ describe('global-search-input-trigger', () => {
     expect(document.querySelector('[data-cmdk-dropdown-panel]')).toBeNull();
   });
 
+  it('pressing Enter after clearing the top search field clears the committed search', async () => {
+    mockPage.url = new URL('https://gallery.test/photos?q=mountains');
+    const activateSearchSpy = vi.spyOn(globalSearchManager, 'activateSearch').mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    render(GlobalSearchInputTrigger);
+
+    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+    expect(input).toHaveValue('mountains');
+
+    await user.click(input);
+    await user.clear(input);
+    await user.keyboard('{Enter}');
+
+    expect(activateSearchSpy).toHaveBeenCalledWith('');
+  });
+
   it('closes the dropdown on outside click', async () => {
     const user = userEvent.setup();
 
