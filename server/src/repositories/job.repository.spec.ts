@@ -168,11 +168,14 @@ describe(JobRepository.name, () => {
     ]);
 
     expect(queue.addBulk).not.toHaveBeenCalled();
+    for (const [, , options] of queue.add.mock.calls) {
+      expect(options?.jobId).not.toContain(':');
+    }
     expect(queue.add).toHaveBeenCalledWith(
       JobName.FaceIdentityBackfill,
       {},
       {
-        jobId: 'face-identity-backfill:root',
+        jobId: 'face-identity-backfill/root',
         removeOnFail: true,
       },
     );
@@ -180,49 +183,49 @@ describe(JobRepository.name, () => {
       JobName.FaceIdentityBackfill,
       {},
       {
-        jobId: 'face-identity-backfill:root',
+        jobId: 'face-identity-backfill/root',
         removeOnFail: true,
       },
     );
     expect(queue.add).toHaveBeenCalledWith(
       JobName.FaceIdentityBackfill,
       { stage: 'person', cursor: 'person-cursor' },
-      { jobId: 'face-identity-backfill:person:person-cursor', removeOnFail: true },
+      { jobId: 'face-identity-backfill/person/person-cursor', removeOnFail: true },
     );
     expect(queue.add).toHaveBeenCalledWith(
       JobName.FaceIdentityBackfill,
       { stage: 'space-person', cursor: 'space-cursor' },
-      { jobId: 'face-identity-backfill:space-person:space-cursor', removeOnFail: true },
+      { jobId: 'face-identity-backfill/space-person/space-cursor', removeOnFail: true },
     );
     expect(queue.add).toHaveBeenCalledWith(
       JobName.SharedSpacePersonMetadataBackfill,
       {},
-      { jobId: 'shared-space-person-metadata-backfill:all', removeOnFail: true },
+      { jobId: 'shared-space-person-metadata-backfill/all', removeOnFail: true },
     );
     expect(queue.add).toHaveBeenCalledWith(
       JobName.SharedSpacePersonMetadataBackfill,
       {},
-      { jobId: 'shared-space-person-metadata-backfill:all', removeOnFail: true },
+      { jobId: 'shared-space-person-metadata-backfill/all', removeOnFail: true },
     );
     expect(queue.add).toHaveBeenCalledWith(
       JobName.SharedSpacePersonMetadataBackfill,
       { identityId: 'identity-1' },
-      { jobId: 'shared-space-person-metadata-backfill:identity:identity-1', removeOnFail: true },
+      { jobId: 'shared-space-person-metadata-backfill/identity/identity-1', removeOnFail: true },
     );
     expect(queue.add).toHaveBeenCalledWith(
       JobName.SharedSpacePersonMetadataBackfill,
       { identityId: 'identity-1' },
-      { jobId: 'shared-space-person-metadata-backfill:identity:identity-1', removeOnFail: true },
+      { jobId: 'shared-space-person-metadata-backfill/identity/identity-1', removeOnFail: true },
     );
     expect(queue.add).toHaveBeenCalledWith(
       JobName.SharedSpacePersonMetadataBackfill,
       { identityId: 'identity-1', cursor: 'cursor-1', limit: 1000 },
-      { jobId: 'shared-space-person-metadata-backfill:identity:identity-1:cursor-1', removeOnFail: true },
+      { jobId: 'shared-space-person-metadata-backfill/identity/identity-1/cursor-1', removeOnFail: true },
     );
     expect(queue.add).toHaveBeenCalledWith(
       JobName.SharedSpacePersonMetadataBackfill,
       { identityId: 'identity-1', cursor: 'cursor-2', limit: 1000 },
-      { jobId: 'shared-space-person-metadata-backfill:identity:identity-1:cursor-2', removeOnFail: true },
+      { jobId: 'shared-space-person-metadata-backfill/identity/identity-1/cursor-2', removeOnFail: true },
     );
   });
 });

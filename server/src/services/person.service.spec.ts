@@ -77,7 +77,7 @@ describe(PersonService.name, () => {
       (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(true);
       mocks.job.searchJobs.mockResolvedValue([
         {
-          id: 'face-identity-backfill:space-person:space-person-cursor',
+          id: 'face-identity-backfill/space-person/space-person-cursor',
           name: JobName.FaceIdentityBackfill,
           timestamp: Date.now(),
           data: { stage: 'space-person', cursor: 'space-person-cursor' },
