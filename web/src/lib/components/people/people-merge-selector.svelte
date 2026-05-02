@@ -205,7 +205,7 @@
                       aria-label={$t('swap_merge_direction')}
                       icon={mdiSwapHorizontal}
                       size="large"
-                      onclick={handleSwapPeople}
+                      onclick={() => handleSwapPeople()}
                     />
                   </div>
                 {/if}
