@@ -511,6 +511,22 @@ describe(AssetMediaService.name, () => {
       );
     });
 
+    it('should mark explicit original downloads as attachments', async () => {
+      const asset = AssetFactory.create();
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([asset.id]));
+      mocks.asset.getForOriginal.mockResolvedValue(asset);
+
+      await expect(sut.downloadOriginal(authStub.admin, asset.id, { download: true })).resolves.toEqual(
+        new ImmichFileResponse({
+          path: asset.originalPath,
+          fileName: asset.originalFileName,
+          contentType: 'image/jpeg',
+          cacheControl: CacheControl.PrivateWithCache,
+          disposition: 'attachment',
+        }),
+      );
+    });
+
     it('should create a safe redirect response for S3 originals', async () => {
       const asset = AssetFactory.create({
         originalPath: 'upload/admin/aa/bb/image.jpg',
