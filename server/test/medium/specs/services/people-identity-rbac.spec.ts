@@ -39,7 +39,14 @@ const setup = (db?: Kysely<DB>) => {
 const setupSharedSpace = (db?: Kysely<DB>) => {
   const { ctx, sut } = newMediumService(SharedSpaceService, {
     database: db || defaultDatabase,
-    real: [AssetRepository, ConfigRepository, FaceIdentityRepository, SharedSpaceRepository, SystemMetadataRepository],
+    real: [
+      AccessRepository,
+      AssetRepository,
+      ConfigRepository,
+      FaceIdentityRepository,
+      SharedSpaceRepository,
+      SystemMetadataRepository,
+    ],
     mock: [JobRepository, LoggingRepository],
   });
   const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
@@ -971,6 +978,10 @@ describe('People identity RBAC projection', () => {
       withSharedSpaces: true,
       personIds: [token],
     });
+    const spaceMapMarkers = await sharedSpaceService.getFilteredMapMarkers(auth, {
+      spaceId: space.id,
+      personIds: [spacePerson.id],
+    });
     const albumFilters = await searchService.getFilterSuggestions(auth, { albumId: album.id });
     const albumCities = await searchService.getSearchSuggestions(auth, {
       type: SearchSuggestionType.CITY,
@@ -1010,6 +1021,9 @@ describe('People identity RBAC projection', () => {
     expect(globalMapMarkers).toEqual([
       expect.objectContaining({ id: asset.id, lat: 38.7223, lon: -9.1393, city: 'Lisbon' }),
     ]);
+    expect(spaceMapMarkers).toEqual([
+      expect.objectContaining({ id: asset.id, lat: 38.7223, lon: -9.1393, city: 'Lisbon' }),
+    ]);
     expect(albumFilters.people).toEqual([
       {
         id: token,
@@ -1019,6 +1033,140 @@ describe('People identity RBAC projection', () => {
     ]);
     expect(albumCities).toEqual(['Lisbon']);
     expect(albumAssets.assets.items).toEqual([expect.objectContaining({ id: asset.id })]);
+  });
+
+  it('hydrates linked-library people, filters, search, map, and album scope after legacy identity backfill', async () => {
+    const { ctx, sut, faceIdentityRepository } = setup();
+    const { sut: searchService } = setupSearch();
+    const { sut: sharedSpaceService } = setupSharedSpace();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { user: nonMember } = await ctx.newUser();
+    const { library } = await ctx.newLibrary({ ownerId: owner.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: owner.id });
+    const { person } = await ctx.newPerson({ ownerId: owner.id, name: '' });
+    const { asset } = await ctx.newAsset({
+      ownerId: owner.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    await addCity(ctx, asset.id, 'Basel');
+    await ctx.database
+      .updateTable('asset_exif')
+      .set({ latitude: 47.5596, longitude: 7.5886 })
+      .where('assetId', '=', asset.id)
+      .execute();
+    const { album } = await ctx.newAlbum({ ownerId: member.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    const spacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: space.id,
+        name: 'Legacy Library Person',
+        representativeFaceId: assetFace.id,
+        type: 'person',
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: spacePerson.id, assetFaceId: assetFace.id })
+      .execute();
+
+    await expect(faceIdentityRepository.hasBackfillWork()).resolves.toBe(true);
+    await faceIdentityRepository.backfillPersonalIdentities({ limit: 100 });
+    await faceIdentityRepository.backfillSpacePersonIdentities({ limit: 100 });
+    await expect(faceIdentityRepository.hasBackfillWork()).resolves.toBe(false);
+
+    const auth = authFor(member);
+    const token = `space-person:${spacePerson.id}`;
+    const globalPeople = await sut.getAll(auth, {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const spacePeople = await sharedSpaceService.getSpacePeople(auth, space.id);
+    const globalFilters = await searchService.getFilterSuggestions(auth, { withSharedSpaces: true });
+    const globalPeopleSearch = await searchService.searchPerson(auth, {
+      name: 'Legacy Library',
+      withSharedSpaces: true,
+    });
+    const globalAssets = await searchService.searchMetadata(auth, { withSharedSpaces: true, personIds: [token] });
+    const globalMapMarkers = await sharedSpaceService.getFilteredMapMarkers(auth, {
+      withSharedSpaces: true,
+      personIds: [token],
+    });
+    const spaceMapMarkers = await sharedSpaceService.getFilteredMapMarkers(auth, {
+      spaceId: space.id,
+      personIds: [spacePerson.id],
+    });
+    const albumFilters = await searchService.getFilterSuggestions(auth, { albumId: album.id });
+    const albumAssets = await searchService.searchMetadata(auth, { albumIds: [album.id], personIds: [token] });
+
+    expect(globalPeople.people).toEqual([
+      expect.objectContaining({
+        id: spacePerson.id,
+        name: 'Legacy Library Person',
+        primaryProfile: { type: 'space-person', id: spacePerson.id, spaceId: space.id },
+        filterId: token,
+        numberOfAssets: 1,
+      }),
+    ]);
+    expect(spacePeople).toEqual([
+      expect.objectContaining({ id: spacePerson.id, name: 'Legacy Library Person', thumbnailPath: '' }),
+    ]);
+    expect(globalFilters.people).toEqual([
+      {
+        id: token,
+        name: 'Legacy Library Person',
+        primaryProfile: { type: 'space-person', id: spacePerson.id, spaceId: space.id },
+      },
+    ]);
+    expect(globalPeopleSearch).toEqual([
+      expect.objectContaining({
+        id: spacePerson.id,
+        name: 'Legacy Library Person',
+        filterId: token,
+      }),
+    ]);
+    expect(globalAssets.assets.items).toEqual([expect.objectContaining({ id: asset.id })]);
+    expect(globalMapMarkers).toEqual([
+      expect.objectContaining({ id: asset.id, lat: 47.5596, lon: 7.5886, city: 'Basel' }),
+    ]);
+    expect(spaceMapMarkers).toEqual([
+      expect.objectContaining({ id: asset.id, lat: 47.5596, lon: 7.5886, city: 'Basel' }),
+    ]);
+    expect(albumFilters.people).toEqual([
+      {
+        id: token,
+        name: 'Legacy Library Person',
+        primaryProfile: { type: 'space-person', id: spacePerson.id, spaceId: space.id },
+      },
+    ]);
+    expect(albumAssets.assets.items).toEqual([expect.objectContaining({ id: asset.id })]);
+
+    const nonMemberAuth = authFor(nonMember);
+    const hiddenPeople = await sut.getAll(nonMemberAuth, {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const hiddenFilters = await searchService.getFilterSuggestions(nonMemberAuth, { withSharedSpaces: true });
+    const hiddenAssets = await searchService.searchMetadata(nonMemberAuth, {
+      withSharedSpaces: true,
+      personIds: [token],
+    });
+
+    expect(hiddenPeople.people).toEqual([]);
+    expect(hiddenFilters.people).toEqual([]);
+    expect(hiddenAssets.assets.items).toEqual([]);
+    expect(JSON.stringify({ hiddenPeople, hiddenFilters, hiddenAssets })).not.toContain('Legacy Library Person');
   });
 
   it('timeline opt-in: album scope excludes direct space people and assets while the space is hidden from timeline', async () => {

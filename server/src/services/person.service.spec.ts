@@ -55,6 +55,7 @@ describe(PersonService.name, () => {
   describe('onBootstrap', () => {
     it('should queue identity backfill when existing people or faces need identity links', async () => {
       (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(true);
+      mocks.job.searchJobs.mockResolvedValue([]);
 
       await sut.onBootstrap();
 
@@ -63,6 +64,22 @@ describe(PersonService.name, () => {
 
     it('should skip identity backfill when no identity work remains', async () => {
       (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(false);
+
+      await sut.onBootstrap();
+
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('should not queue a new identity backfill root while another backfill page is pending', async () => {
+      (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(true);
+      mocks.job.searchJobs.mockResolvedValue([
+        {
+          id: 'face-identity-backfill:space-person:space-person-cursor',
+          name: JobName.FaceIdentityBackfill,
+          timestamp: Date.now(),
+          data: { stage: 'space-person', cursor: 'space-person-cursor' },
+        },
+      ]);
 
       await sut.onBootstrap();
 
@@ -1339,6 +1356,10 @@ describe(PersonService.name, () => {
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.FaceIdentityBackfill,
         data: { stage: 'space-person', cursor: 'space-person-cursor' },
+      });
+      expect(mocks.job.queue).not.toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
       });
     });
 

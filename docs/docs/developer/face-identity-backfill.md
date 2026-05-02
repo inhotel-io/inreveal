@@ -26,9 +26,9 @@ It has two stages:
    - Assigns the space person when all linked evidence points to exactly one identity and the space does not already have another person for that same identity.
    - Leaves ambiguous or duplicate space people unresolved and logs the conflict count.
 
-The job is chunked and resumable. It processes personal people first, requeues itself with a cursor until that stage is complete, then does the same for space people.
+The job is chunked and resumable. It processes personal people first, requeues itself with a cursor until that stage is complete, then does the same for space people. The root job uses a stable queue job id, so repeated bootstrap checks or manual triggers coalesce while a run is pending. Cursor jobs include the cursor in the job id, so each page can still progress independently. Bootstrap also skips queuing a new root job while any identity backfill page is active, delayed, paused, or waiting.
 
-When a shared-space identity-link page runs, it also queues `SharedSpacePersonMetadataBackfill`. Linking a legacy Space Person to an identity can make Personal People or other visible Space People newly eligible as name and birth-date sources.
+After the final shared-space identity-link page runs, it queues `SharedSpacePersonMetadataBackfill` once if any shared-space rows were linked. Linking a legacy Space Person to an identity can make Personal People or other visible Space People newly eligible as name and birth-date sources.
 
 ## Identity Link Trigger
 
@@ -74,6 +74,8 @@ Metadata backfill is queued automatically when an operation can change inheritan
 - an owner disables another member's metadata contribution.
 
 When the changed operation is tied to one identity, the job is queued with that `identityId`. Membership, role, preference, and space deletion changes can affect many identities, so they queue a full metadata backfill.
+
+Root metadata backfill jobs are also deduplicated with stable queue job ids: one for a full-library metadata backfill and one per identity-scoped metadata backfill. Cursor jobs include the cursor in the job id, so a large library is still processed page by page without enqueuing duplicate full scans. Dedupe-keyed backfill jobs are removed on failure so the next bootstrap or metadata-changing operation can retry instead of being blocked by a stale failed job id.
 
 ## Product Effects
 

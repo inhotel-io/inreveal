@@ -33,6 +33,7 @@ import {
   JobStatus,
   Permission,
   PersonPathType,
+  QueueJobStatus,
   QueueName,
   SourceType,
   SystemMetadataKey,
@@ -57,6 +58,13 @@ export class PersonService extends BaseService {
   @OnEvent({ name: 'AppBootstrap', workers: [ImmichWorker.Microservices] })
   async onBootstrap(): Promise<void> {
     if (await this.faceIdentityRepository.hasBackfillWork()) {
+      const activeBackfills = await this.jobRepository.searchJobs(QueueName.BackgroundTask, {
+        status: [QueueJobStatus.Active, QueueJobStatus.Delayed, QueueJobStatus.Paused, QueueJobStatus.Waiting],
+      });
+      if (activeBackfills.some((job) => job.name === JobName.FaceIdentityBackfill)) {
+        return;
+      }
+
       await this.jobRepository.queue({ name: JobName.FaceIdentityBackfill, data: {} });
     }
   }
@@ -375,15 +383,16 @@ export class PersonService extends BaseService {
       this.logger.warn(`Face identity backfill left ${result.conflictCount} space people unresolved`);
     }
 
-    if (result.processed > 0) {
-      await this.queueSpacePersonMetadataBackfill();
-    }
-
     if (result.nextCursor) {
       await this.jobRepository.queue({
         name: JobName.FaceIdentityBackfill,
         data: { stage: 'space-person', cursor: result.nextCursor },
       });
+      return JobStatus.Success;
+    }
+
+    if (result.processed > 0) {
+      await this.queueSpacePersonMetadataBackfill();
     }
 
     return JobStatus.Success;
