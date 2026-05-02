@@ -729,6 +729,10 @@ describe(PersonService.name, () => {
         name: JobName.FileDelete,
         data: { files: [person.thumbnailPath] },
       });
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
+      });
     });
   });
 
@@ -1337,6 +1341,21 @@ describe(PersonService.name, () => {
         data: { stage: 'space-person', cursor: 'space-person-cursor' },
       });
     });
+
+    it('should queue metadata inheritance backfill after shared-space identity links are backfilled', async () => {
+      mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 1 });
+      mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({
+        processed: 1,
+        conflictCount: 0,
+      });
+
+      await expect(sut.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
+      });
+    });
   });
 
   describe('handleRecognizeFaces', () => {
@@ -1753,6 +1772,10 @@ describe(PersonService.name, () => {
         sourceIdentityIds: ['source-identity'],
         source: 'manual',
       });
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: { identityId: 'target-identity' },
+      });
     });
 
     it('should merge two people with smart merge', async () => {
@@ -1874,6 +1897,10 @@ describe(PersonService.name, () => {
         sourceIdentityIds: ['identity-2'],
         source: 'manual',
       });
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
+      });
     });
 
     it('rejects global merge when an involved identity has inaccessible attached profiles', async () => {
@@ -1931,6 +1958,10 @@ describe(PersonService.name, () => {
 
       expect(mocks.faceIdentity.resolveDetachRef).toHaveBeenCalledWith(auth.user.id, profile);
       expect(mocks.faceIdentity.detachScopedProfile).toHaveBeenCalledWith(profile);
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
+      });
     });
 
     it('rejects detach when selected profile faces also back inaccessible profiles', async () => {
@@ -2057,6 +2088,10 @@ describe(PersonService.name, () => {
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.FileDelete,
         data: { files: [person1.thumbnailPath, person2.thumbnailPath] },
+      });
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
       });
     });
   });

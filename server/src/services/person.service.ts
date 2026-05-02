@@ -114,6 +114,7 @@ export class PersonService extends BaseService {
       sourceIdentityIds: resolved.sourceIdentityIds,
       source: 'manual',
     });
+    await this.queueSpacePersonMetadataBackfill();
   }
 
   async detachScopedPerson(auth: AuthDto, dto: DetachScopedPersonDto): Promise<void> {
@@ -126,6 +127,7 @@ export class PersonService extends BaseService {
     }
 
     await this.faceIdentityRepository.detachScopedProfile(dto.profile);
+    await this.queueSpacePersonMetadataBackfill();
   }
 
   async reassignFaces(auth: AuthDto, personId: string, dto: AssetFaceUpdateDto): Promise<PersonResponseDto[]> {
@@ -321,6 +323,9 @@ export class PersonService extends BaseService {
     await this.requireAccess({ auth, permission: Permission.PersonDelete, ids });
     const people = await this.personRepository.getForPeopleDelete(ids);
     await this.removeAllPeople(people);
+    if (people.length > 0) {
+      await this.queueSpacePersonMetadataBackfill();
+    }
   }
 
   @Chunked()
@@ -335,6 +340,9 @@ export class PersonService extends BaseService {
   async handlePersonCleanup(): Promise<JobStatus> {
     const people = await this.personRepository.getAllWithoutFaces();
     await this.removeAllPeople(people);
+    if (people.length > 0) {
+      await this.queueSpacePersonMetadataBackfill();
+    }
     return JobStatus.Success;
   }
 
@@ -365,6 +373,10 @@ export class PersonService extends BaseService {
 
     if (result.conflictCount > 0) {
       this.logger.warn(`Face identity backfill left ${result.conflictCount} space people unresolved`);
+    }
+
+    if (result.processed > 0) {
+      await this.queueSpacePersonMetadataBackfill();
     }
 
     if (result.nextCursor) {
@@ -783,6 +795,7 @@ export class PersonService extends BaseService {
           sourceIdentityIds: [sourceIdentity.id],
           source: 'manual',
         });
+        await this.queueSpacePersonMetadataBackfill(targetIdentity.id);
 
         this.logger.log(`Merged ${mergeName} into ${primaryName}`);
         results.push({ id: mergeId, success: true });
@@ -792,6 +805,13 @@ export class PersonService extends BaseService {
       }
     }
     return results;
+  }
+
+  private async queueSpacePersonMetadataBackfill(identityId?: string | null): Promise<void> {
+    await this.jobRepository.queue({
+      name: JobName.SharedSpacePersonMetadataBackfill,
+      data: identityId ? { identityId } : {},
+    });
   }
 
   private async findOrFail(id: string) {

@@ -334,6 +334,7 @@ export class SharedSpaceService extends BaseService {
   async remove(auth: AuthDto, id: string): Promise<void> {
     await this.requireRole(auth, id, SharedSpaceRole.Owner);
     await this.sharedSpaceRepository.remove(id);
+    await this.queueSpacePersonMetadataBackfill();
   }
 
   async getMembers(auth: AuthDto, spaceId: string): Promise<SharedSpaceMemberResponseDto[]> {
@@ -393,6 +394,8 @@ export class SharedSpaceService extends BaseService {
       data: { role, invitedById: auth.user.id },
     });
 
+    await this.queueSpacePersonMetadataBackfill();
+
     return this.mapMember(member);
   }
 
@@ -428,6 +431,8 @@ export class SharedSpaceService extends BaseService {
       data: { targetUserId: userId, oldRole, newRole: dto.role },
     });
 
+    await this.queueSpacePersonMetadataBackfill();
+
     return this.mapMember(member);
   }
 
@@ -456,6 +461,7 @@ export class SharedSpaceService extends BaseService {
 
     if (Object.keys(updates).length > 0) {
       await this.sharedSpaceRepository.updateMember(spaceId, auth.user.id, updates);
+      await this.queueSpacePersonMetadataBackfill();
     }
 
     const member = await this.sharedSpaceRepository.getMember(spaceId, auth.user.id);
@@ -486,6 +492,7 @@ export class SharedSpaceService extends BaseService {
     }
 
     await this.sharedSpaceRepository.updateMember(spaceId, userId, { sharePersonMetadata: false });
+    await this.queueSpacePersonMetadataBackfill();
 
     const member = await this.sharedSpaceRepository.getMember(spaceId, userId);
     if (!member) {
@@ -510,6 +517,7 @@ export class SharedSpaceService extends BaseService {
         type: SharedSpaceActivityType.MemberLeave,
         data: {},
       });
+      await this.queueSpacePersonMetadataBackfill();
       return;
     }
 
@@ -521,6 +529,7 @@ export class SharedSpaceService extends BaseService {
       type: SharedSpaceActivityType.MemberRemove,
       data: { removedUserId: userId },
     });
+    await this.queueSpacePersonMetadataBackfill();
   }
 
   async addAssets(auth: AuthDto, spaceId: string, dto: SharedSpaceAssetAddDto): Promise<void> {
@@ -599,6 +608,7 @@ export class SharedSpaceService extends BaseService {
     await this.sharedSpaceRepository.removeLibrary(spaceId, libraryId);
     await this.sharedSpaceRepository.removePersonFacesByLibrary(spaceId, libraryId);
     await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
+    await this.queueSpacePersonMetadataBackfill();
   }
 
   async markSpaceViewed(auth: AuthDto, spaceId: string): Promise<void> {
@@ -657,6 +667,7 @@ export class SharedSpaceService extends BaseService {
 
     await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, dto.assetIds);
     await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
+    await this.queueSpacePersonMetadataBackfill();
   }
 
   async getMapMarkers(auth: AuthDto, id: string) {
@@ -1051,6 +1062,10 @@ export class SharedSpaceService extends BaseService {
       });
     }
 
+    if (person.identityId && (dto.name !== undefined || dto.birthDate !== undefined || dto.isHidden !== undefined)) {
+      await this.queueSpacePersonMetadataBackfill(person.identityId);
+    }
+
     const alias = await this.sharedSpaceRepository.getAlias(personId, auth.user.id);
 
     await this.sharedSpaceRepository.logActivity({
@@ -1077,6 +1092,9 @@ export class SharedSpaceService extends BaseService {
     }
 
     await this.sharedSpaceRepository.deletePerson(personId);
+    if (person.identityId) {
+      await this.queueSpacePersonMetadataBackfill(person.identityId);
+    }
 
     await this.sharedSpaceRepository.logActivity({
       spaceId,
@@ -1136,6 +1154,13 @@ export class SharedSpaceService extends BaseService {
     };
   }
 
+  private async queueSpacePersonMetadataBackfill(identityId?: string | null): Promise<void> {
+    await this.jobRepository.queue({
+      name: JobName.SharedSpacePersonMetadataBackfill,
+      data: identityId ? { identityId } : {},
+    });
+  }
+
   async mergeSpacePeople(
     auth: AuthDto,
     spaceId: string,
@@ -1180,6 +1205,7 @@ export class SharedSpaceService extends BaseService {
         candidateIdentityIds,
       });
       await this.inheritSpacePersonMetadata(spaceId, targetPersonId, mergedIdentityId);
+      await this.queueSpacePersonMetadataBackfill(mergedIdentityId);
     }
 
     await this.sharedSpaceRepository.recountPersons([targetPersonId]);
@@ -1371,6 +1397,7 @@ export class SharedSpaceService extends BaseService {
     let totalMerges = 0;
     let pass = 0;
     let mergedAny = true;
+    const affectedIdentityIds = new Set<string>();
 
     while (mergedAny) {
       mergedAny = false;
@@ -1441,6 +1468,7 @@ export class SharedSpaceService extends BaseService {
             candidateIdentityIds,
           });
           await this.inheritSpacePersonMetadata(job.spaceId, target.id, mergedIdentityId);
+          affectedIdentityIds.add(mergedIdentityId);
         }
 
         // Refresh representativeFaceId to a face with a valid embedding from the merged pool
@@ -1495,6 +1523,10 @@ export class SharedSpaceService extends BaseService {
 
     // Clean up orphaned persons (no faces linked) as safety net
     await this.sharedSpaceRepository.deleteOrphanedPersons(job.spaceId);
+
+    for (const identityId of affectedIdentityIds) {
+      await this.queueSpacePersonMetadataBackfill(identityId);
+    }
 
     this.logger.log(
       `Dedup finished for space ${job.spaceId}: ${totalMerges} total merges across ${pass} pass${pass === 1 ? '' : 'es'}`,
@@ -1636,6 +1668,7 @@ export class SharedSpaceService extends BaseService {
           targetSpacePersonId: spacePerson.id,
           candidateIdentityIds: [spacePerson.identityId, spacePerson.sourceIdentityId],
         });
+        await this.queueSpacePersonMetadataBackfill(inheritedIdentityId);
       }
       if (inheritedIdentityId) {
         await this.inheritSpacePersonMetadata(spaceId, spacePerson.id, inheritedIdentityId, assetAdderId);

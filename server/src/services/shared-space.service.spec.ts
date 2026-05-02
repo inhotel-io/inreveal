@@ -1215,6 +1215,22 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.sharedSpace.remove).toHaveBeenCalledWith(spaceId);
     });
 
+    it('should queue metadata backfill when a space is deleted', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const member = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Owner });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.sharedSpace.remove.mockResolvedValue(void 0);
+
+      await sut.remove(auth, spaceId);
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
+      });
+    });
+
     it('should throw when non-owner tries to delete', async () => {
       const auth = factory.auth();
       const spaceId = newUuid();
@@ -1375,6 +1391,22 @@ describe(SharedSpaceService.name, () => {
         data: { role: SharedSpaceRole.Editor, invitedById: auth.user.id },
       });
     });
+
+    it('should queue metadata backfill when a member joins or rejoins', async () => {
+      const auth = factory.auth();
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(makeMemberResult({ role: SharedSpaceRole.Owner }));
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(void 0);
+      mocks.sharedSpace.addMember.mockResolvedValue(factory.sharedSpaceMember());
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(makeMemberResult({ userId: 'new-user' }));
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.addMember(auth, 'space-1', { userId: 'new-user' });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
+      });
+    });
   });
 
   describe('updateMember', () => {
@@ -1460,6 +1492,28 @@ describe(SharedSpaceService.name, () => {
       });
     });
 
+    it('should queue metadata backfill when a member role changes', async () => {
+      const auth = factory.auth({ user: { id: 'owner-1' } });
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(
+        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
+      );
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(
+        makeMemberResult({ userId: 'target-user', role: SharedSpaceRole.Viewer }),
+      );
+      mocks.sharedSpace.updateMember.mockResolvedValue(factory.sharedSpaceMember());
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(
+        makeMemberResult({ userId: 'target-user', role: SharedSpaceRole.Editor }),
+      );
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.updateMember(auth, 'space-1', 'target-user', { role: SharedSpaceRole.Editor });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
+      });
+    });
+
     it('should allow any member to toggle their own showInTimeline', async () => {
       const auth = factory.auth();
       const spaceId = newUuid();
@@ -1492,6 +1546,28 @@ describe(SharedSpaceService.name, () => {
       expect(result.showInTimeline).toBe(false);
       expect(mocks.sharedSpace.updateMember).toHaveBeenCalledWith(spaceId, auth.user.id, {
         showInTimeline: false,
+      });
+    });
+
+    it('should queue metadata backfill when timeline visibility changes', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const viewerMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Viewer });
+      const updatedMember = makeMemberResult({
+        spaceId,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Viewer,
+        showInTimeline: false,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(viewerMember).mockResolvedValueOnce(updatedMember);
+      mocks.sharedSpace.updateMember.mockResolvedValue(factory.sharedSpaceMember({ spaceId, userId: auth.user.id }));
+
+      await sut.updateMemberTimeline(auth, spaceId, { showInTimeline: false });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
       });
     });
 
@@ -1528,6 +1604,23 @@ describe(SharedSpaceService.name, () => {
       });
     });
 
+    it('should queue metadata backfill when metadata contribution changes', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const viewerMember = makeMemberResult({ spaceId, userId: auth.user.id, sharePersonMetadata: true });
+      const updatedMember = makeMemberResult({ spaceId, userId: auth.user.id, sharePersonMetadata: false });
+
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(viewerMember).mockResolvedValueOnce(updatedMember);
+      mocks.sharedSpace.updateMember.mockResolvedValue(factory.sharedSpaceMember({ spaceId, userId: auth.user.id }));
+
+      await sut.updateMemberPreferences(auth, spaceId, { sharePersonMetadata: false });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
+      });
+    });
+
     it('should allow owners to disable another member metadata contribution without enabling it', async () => {
       const auth = factory.auth();
       const spaceId = newUuid();
@@ -1549,6 +1642,28 @@ describe(SharedSpaceService.name, () => {
       expect(result.sharePersonMetadata).toBe(false);
       expect(mocks.sharedSpace.updateMember).toHaveBeenCalledWith(spaceId, userId, {
         sharePersonMetadata: false,
+      });
+    });
+
+    it('should queue metadata backfill when an owner disables another member contribution', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const userId = newUuid();
+      const ownerMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Owner });
+      const targetMember = makeMemberResult({ spaceId, userId, sharePersonMetadata: true });
+      const updatedMember = makeMemberResult({ spaceId, userId, sharePersonMetadata: false });
+
+      mocks.sharedSpace.getMember
+        .mockResolvedValueOnce(ownerMember)
+        .mockResolvedValueOnce(targetMember)
+        .mockResolvedValueOnce(updatedMember);
+      mocks.sharedSpace.updateMember.mockResolvedValue(factory.sharedSpaceMember({ spaceId, userId }));
+
+      await sut.updateMemberMetadataContribution(auth, spaceId, userId, { sharePersonMetadata: false });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
       });
     });
 
@@ -1661,6 +1776,38 @@ describe(SharedSpaceService.name, () => {
         userId: auth.user.id,
         type: SharedSpaceActivityType.MemberRemove,
         data: { removedUserId: 'other-user' },
+      });
+    });
+
+    it('should queue metadata backfill when a member leaves', async () => {
+      const auth = factory.auth({ user: { id: 'user-1' } });
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: 'user-1', role: SharedSpaceRole.Editor }),
+      );
+      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.removeMember(auth, 'space-1', 'user-1');
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
+      });
+    });
+
+    it('should queue metadata backfill when an owner removes a member', async () => {
+      const auth = factory.auth({ user: { id: 'owner-1' } });
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
+      );
+      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.removeMember(auth, 'space-1', 'other-user');
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
       });
     });
   });
@@ -2081,6 +2228,30 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.sharedSpace.removePersonFacesByAssetIds).toHaveBeenCalledWith(spaceId, [assetId]);
       expect(mocks.sharedSpace.deleteOrphanedPersons).toHaveBeenCalledWith(spaceId);
     });
+
+    it('should queue metadata backfill after removing assets because source evidence can change', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const assetId = newUuid();
+
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
+      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(new Date());
+      mocks.sharedSpace.update.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+      mocks.sharedSpace.removePersonFacesByAssetIds.mockResolvedValue(void 0);
+      mocks.sharedSpace.deleteOrphanedPersons.mockResolvedValue(void 0);
+
+      await sut.removeAssets(auth, spaceId, { assetIds: [assetId] });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
+      });
+    });
   });
 
   describe('getMapMarkers', () => {
@@ -2416,6 +2587,10 @@ describe(SharedSpaceService.name, () => {
         targetIdentityId,
         sourceIdentityIds: [sourceIdentityId],
         source: 'shared-space-evidence',
+      });
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: { identityId: targetIdentityId },
       });
     });
 
@@ -4147,8 +4322,13 @@ describe(SharedSpaceService.name, () => {
       const auth = factory.auth();
       const spaceId = newUuid();
       const personId = newUuid();
-      const person = factory.sharedSpacePerson({ id: personId, spaceId });
-      const updatedPerson = factory.sharedSpacePerson({ id: personId, spaceId, name: 'New Name' });
+      const person = factory.sharedSpacePerson({ id: personId, spaceId, identityId: 'identity-1' });
+      const updatedPerson = factory.sharedSpacePerson({
+        id: personId,
+        spaceId,
+        identityId: 'identity-1',
+        name: 'New Name',
+      });
 
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
       mocks.sharedSpace.getPersonById.mockResolvedValueOnce(person).mockResolvedValueOnce({ ...updatedPerson });
@@ -4169,6 +4349,10 @@ describe(SharedSpaceService.name, () => {
           nameSourceProfileId: personId,
         }),
       );
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: { identityId: 'identity-1' },
+      });
     });
 
     it('should update space-scoped birth date and mark it manual', async () => {
@@ -4201,6 +4385,32 @@ describe(SharedSpaceService.name, () => {
           birthDateSourceProfileId: personId,
         }),
       );
+    });
+
+    it('should queue metadata backfill when an identity-backed space person is hidden', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const personId = newUuid();
+      const person = factory.sharedSpacePerson({ id: personId, spaceId, identityId: 'identity-1' });
+      const updatedPerson = factory.sharedSpacePerson({
+        id: personId,
+        spaceId,
+        identityId: 'identity-1',
+        isHidden: true,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+      mocks.sharedSpace.getPersonById.mockResolvedValueOnce(person).mockResolvedValueOnce({ ...updatedPerson });
+      mocks.sharedSpace.updatePerson.mockResolvedValue(updatedPerson);
+      mocks.sharedSpace.getAlias.mockResolvedValue(void 0);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.updateSpacePerson(auth, spaceId, personId, { isHidden: true });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: { identityId: 'identity-1' },
+      });
     });
 
     it('should reject representativeFaceId that does not belong to an asset in the space', async () => {
@@ -4241,6 +4451,10 @@ describe(SharedSpaceService.name, () => {
 
       expect(result.representativeFaceId).toBe(faceId);
       expect(mocks.sharedSpace.isFaceInSpace).toHaveBeenCalledWith(spaceId, faceId);
+      expect(mocks.job.queue).not.toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: expect.anything(),
+      });
     });
 
     it('should log activity when updating a person', async () => {
@@ -4305,7 +4519,7 @@ describe(SharedSpaceService.name, () => {
       const auth = factory.auth();
       const spaceId = newUuid();
       const personId = newUuid();
-      const person = factory.sharedSpacePerson({ id: personId, spaceId });
+      const person = factory.sharedSpacePerson({ id: personId, spaceId, identityId: 'identity-1' });
 
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
       mocks.sharedSpace.getPersonById.mockResolvedValue({
@@ -4317,6 +4531,10 @@ describe(SharedSpaceService.name, () => {
       await sut.deleteSpacePerson(auth, spaceId, personId);
 
       expect(mocks.sharedSpace.deletePerson).toHaveBeenCalledWith(personId);
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: { identityId: 'identity-1' },
+      });
     });
 
     it('should log activity when deleting a person', async () => {
@@ -5250,6 +5468,10 @@ describe(SharedSpaceService.name, () => {
         expect(mocks.sharedSpace.removeLibrary).toHaveBeenCalledWith(spaceId, libraryId);
         expect(mocks.sharedSpace.removePersonFacesByLibrary).toHaveBeenCalledWith(spaceId, libraryId);
         expect(mocks.sharedSpace.deleteOrphanedPersons).toHaveBeenCalledWith(spaceId);
+        expect(mocks.job.queue).toHaveBeenCalledWith({
+          name: JobName.SharedSpacePersonMetadataBackfill,
+          data: {},
+        });
       });
     });
   });
@@ -5768,6 +5990,10 @@ describe(SharedSpaceService.name, () => {
         targetIdentityId: identityA,
         sourceIdentityIds: [identityB],
         source: 'shared-space-evidence',
+      });
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: { identityId: identityA },
       });
     });
 
