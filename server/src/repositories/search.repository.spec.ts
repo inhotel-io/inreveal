@@ -416,7 +416,7 @@ describe(SearchRepository.name, () => {
   });
 
   describe('album-scoped suggestions', () => {
-    it('buildFilteredAssetIds uses album_asset and does not fall back to ownerId scope', () => {
+    it('buildFilteredAssetIds intersects album_asset with viewer-owned assets when no timeline spaces are enabled', () => {
       const sql = compileFilteredAssetIds(sut, {
         albumId: '11111111-1111-1111-1111-111111111111',
         tagIds: ['22222222-2222-2222-2222-222222222222'],
@@ -425,10 +425,12 @@ describe(SearchRepository.name, () => {
       expect(sql).toContain('"album_asset"');
       expect(sql).toContain('"album_asset"."albumId"');
       expect(sql).toContain('"album_asset"."assetId" = "asset"."id"');
-      expect(sql).not.toContain('"asset"."ownerId" = any(');
+      expect(sql).toContain('"asset"."ownerId" = any(');
+      expect(sql).not.toContain('"shared_space_asset"');
+      expect(sql).not.toContain('"shared_space_library"');
     });
 
-    it('getExifField uses album_asset and does not fall back to ownerId scope', () => {
+    it('getExifField intersects album_asset with viewer-owned assets when no timeline spaces are enabled', () => {
       const sql = compileExifField(sut, 'country', {
         albumId: '11111111-1111-1111-1111-111111111111',
       });
@@ -436,7 +438,37 @@ describe(SearchRepository.name, () => {
       expect(sql).toContain('"album_asset"');
       expect(sql).toContain('"album_asset"."albumId"');
       expect(sql).toContain('"album_asset"."assetId" = "asset"."id"');
-      expect(sql).not.toContain('"ownerId" = any(');
+      expect(sql).toContain('"asset"."ownerId" = any(');
+      expect(sql).not.toContain('"shared_space_asset"');
+      expect(sql).not.toContain('"shared_space_library"');
+    });
+
+    it('buildFilteredAssetIds allows album assets from timeline-enabled direct and linked-library spaces', () => {
+      const sql = compileFilteredAssetIds(sut, {
+        albumId: '11111111-1111-1111-1111-111111111111',
+        timelineSpaceIds: ['33333333-3333-3333-3333-333333333333'],
+      });
+
+      expect(sql).toContain('"album_asset"');
+      expect(sql).toContain('"asset"."ownerId" = any(');
+      expect(sql).toContain('"shared_space_asset"');
+      expect(sql).toContain('"shared_space_asset"."spaceId"');
+      expect(sql).toContain('"shared_space_library"');
+      expect(sql).toContain('"shared_space_library"."spaceId"');
+    });
+
+    it('getExifField allows album assets from timeline-enabled direct and linked-library spaces', () => {
+      const sql = compileExifField(sut, 'country', {
+        albumId: '11111111-1111-1111-1111-111111111111',
+        timelineSpaceIds: ['33333333-3333-3333-3333-333333333333'],
+      });
+
+      expect(sql).toContain('"album_asset"');
+      expect(sql).toContain('"asset"."ownerId" = any(');
+      expect(sql).toContain('"shared_space_asset"');
+      expect(sql).toContain('"shared_space_asset"."spaceId"');
+      expect(sql).toContain('"shared_space_library"');
+      expect(sql).toContain('"shared_space_library"."spaceId"');
     });
   });
 
