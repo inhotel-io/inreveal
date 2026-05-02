@@ -57,7 +57,7 @@ type SpacePersonBackfillIdentityCandidate = {
 };
 
 const SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_FACE_COUNT = 20;
-const SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_RATIO = 0.95;
+const SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_RATIO = 0.9;
 
 export type ScopedPersonTokenResolution = {
   identityIds: string[];
@@ -267,8 +267,10 @@ export class FaceIdentityRepository {
             SELECT
               shared_space_person.id,
               shared_space_person."spaceId",
-              MIN(face_identity_face."identityId"::text)::uuid AS "identityId",
-              COUNT(DISTINCT face_identity_face."identityId") AS "identityCount"
+              face_identity_face."identityId",
+              COUNT(*) AS "faceCount",
+              SUM(COUNT(*)) OVER (PARTITION BY shared_space_person.id) AS "totalFaceCount",
+              ROW_NUMBER() OVER (PARTITION BY shared_space_person.id ORDER BY COUNT(*) DESC) AS "identityRank"
             FROM shared_space_person
             INNER JOIN shared_space_person_face
               ON shared_space_person_face."personId" = shared_space_person.id
@@ -279,9 +281,11 @@ export class FaceIdentityRepository {
             WHERE shared_space_person."identityId" IS NULL
               AND asset_face."deletedAt" IS NULL
               AND asset_face."isVisible" = true
-            GROUP BY shared_space_person.id, shared_space_person."spaceId"
+            GROUP BY shared_space_person.id, shared_space_person."spaceId", face_identity_face."identityId"
           ) AS candidate
-          WHERE candidate."identityCount" = 1
+          WHERE candidate."identityRank" = 1
+            AND candidate."faceCount" >= ${SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_FACE_COUNT}
+            AND candidate."faceCount"::numeric / candidate."totalFaceCount"::numeric >= ${SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_RATIO}
             AND NOT EXISTS (
               SELECT 1
               FROM shared_space_person existing_space_person

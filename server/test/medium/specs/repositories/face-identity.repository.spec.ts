@@ -54,6 +54,42 @@ describe(FaceIdentityRepository.name, () => {
     }
   });
 
+  it('reports backfill work for dominant multi-candidate space people', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    try {
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+      const { person: dominantPerson } = await ctx.newPerson({ ownerId: user.id });
+      const { person: noisyPerson } = await ctx.newPerson({ ownerId: user.id });
+      const dominantIdentity = await sut.ensurePersonIdentity(dominantPerson.id);
+      const noisyIdentity = await sut.ensurePersonIdentity(noisyPerson.id);
+      const spacePerson = await newSpacePerson(ctx, space.id);
+
+      for (let index = 0; index < 20; index++) {
+        const { asset } = await ctx.newAsset({ ownerId: user.id });
+        const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: dominantPerson.id });
+        await sut.linkFace({ assetFaceId: assetFace.id, identityId: dominantIdentity.id, source: 'backfill' });
+        await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+      }
+
+      for (let index = 0; index < 2; index++) {
+        const { asset } = await ctx.newAsset({ ownerId: user.id });
+        const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: noisyPerson.id });
+        await sut.linkFace({ assetFaceId: assetFace.id, identityId: noisyIdentity.id, source: 'backfill' });
+        await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+      }
+
+      await expect(sut.hasBackfillWork()).resolves.toBe(true);
+
+      await sut.backfillSpacePersonIdentities({ limit: 100 });
+
+      await expect(sut.hasBackfillWork()).resolves.toBe(false);
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
+  });
+
   it('does not report unresolved space-person conflicts as recurring backfill work', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
@@ -292,6 +328,114 @@ describe(FaceIdentityRepository.name, () => {
 
     expect(updatedSpacePerson.identityId).toBe(dominantIdentity.id);
     expect(noisyIdentities).toHaveLength(3);
+  });
+
+  it('infers shared-space person identity when high-evidence dominance has a few absolute noisy faces', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { person: dominantPerson } = await ctx.newPerson({ ownerId: user.id, name: 'Dominant' });
+    const dominantIdentity = await sut.ensurePersonIdentity(dominantPerson.id);
+    const spacePerson = await newSpacePerson(ctx, space.id);
+
+    for (let index = 0; index < 73; index++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: dominantPerson.id });
+      await sut.linkFace({ assetFaceId: assetFace.id, identityId: dominantIdentity.id, source: 'backfill' });
+      await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+    }
+
+    for (let personIndex = 0; personIndex < 2; personIndex++) {
+      const { person: noisyPerson } = await ctx.newPerson({ ownerId: user.id });
+      const noisyIdentity = await sut.ensurePersonIdentity(noisyPerson.id);
+
+      for (let faceIndex = 0; faceIndex < 2; faceIndex++) {
+        const { asset } = await ctx.newAsset({ ownerId: user.id });
+        const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: noisyPerson.id });
+        await sut.linkFace({ assetFaceId: assetFace.id, identityId: noisyIdentity.id, source: 'backfill' });
+        await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+      }
+    }
+
+    await sut.backfillSpacePersonIdentities({ limit: 100 });
+
+    const updatedSpacePerson = await ctx.database
+      .selectFrom('shared_space_person')
+      .select('identityId')
+      .where('id', '=', spacePerson.id)
+      .executeTakeFirstOrThrow();
+
+    expect(updatedSpacePerson.identityId).toBe(dominantIdentity.id);
+  });
+
+  it('infers shared-space person identity when large-cluster noisy evidence stays proportional to dominance', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { person: dominantPerson } = await ctx.newPerson({ ownerId: user.id, name: 'Dominant' });
+    const { person: noisyPerson } = await ctx.newPerson({ ownerId: user.id, name: 'Noisy' });
+    const dominantIdentity = await sut.ensurePersonIdentity(dominantPerson.id);
+    const noisyIdentity = await sut.ensurePersonIdentity(noisyPerson.id);
+    const spacePerson = await newSpacePerson(ctx, space.id);
+
+    for (let index = 0; index < 200; index++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: dominantPerson.id });
+      await sut.linkFace({ assetFaceId: assetFace.id, identityId: dominantIdentity.id, source: 'backfill' });
+      await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+    }
+
+    for (let index = 0; index < 20; index++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: noisyPerson.id });
+      await sut.linkFace({ assetFaceId: assetFace.id, identityId: noisyIdentity.id, source: 'backfill' });
+      await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+    }
+
+    await sut.backfillSpacePersonIdentities({ limit: 100 });
+
+    const updatedSpacePerson = await ctx.database
+      .selectFrom('shared_space_person')
+      .select('identityId')
+      .where('id', '=', spacePerson.id)
+      .executeTakeFirstOrThrow();
+
+    expect(updatedSpacePerson.identityId).toBe(dominantIdentity.id);
+  });
+
+  it('does not infer shared-space person identity when noisy evidence exceeds the proportional tolerance', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { person: dominantPerson } = await ctx.newPerson({ ownerId: user.id, name: 'Dominant' });
+    const { person: noisyPerson } = await ctx.newPerson({ ownerId: user.id, name: 'Noisy' });
+    const dominantIdentity = await sut.ensurePersonIdentity(dominantPerson.id);
+    const noisyIdentity = await sut.ensurePersonIdentity(noisyPerson.id);
+    const spacePerson = await newSpacePerson(ctx, space.id);
+
+    for (let index = 0; index < 73; index++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: dominantPerson.id });
+      await sut.linkFace({ assetFaceId: assetFace.id, identityId: dominantIdentity.id, source: 'backfill' });
+      await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+    }
+
+    for (let index = 0; index < 9; index++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: noisyPerson.id });
+      await sut.linkFace({ assetFaceId: assetFace.id, identityId: noisyIdentity.id, source: 'backfill' });
+      await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+    }
+
+    await sut.backfillSpacePersonIdentities({ limit: 100 });
+
+    const updatedSpacePerson = await ctx.database
+      .selectFrom('shared_space_person')
+      .select('identityId')
+      .where('id', '=', spacePerson.id)
+      .executeTakeFirstOrThrow();
+
+    expect(updatedSpacePerson.identityId).toBeNull();
   });
 
   it('reports duplicate space-person rows for the same identity instead of violating uniqueness', async () => {
