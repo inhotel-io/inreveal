@@ -32,8 +32,10 @@
     mergeScopedPeople,
     searchPerson,
     SharedSpaceRole,
+    Type2 as ScopedPersonProfileType,
     updateSpacePerson,
     type PersonResponseDto,
+    type ScopedPersonProfileRefDto,
     type SharedSpaceMemberResponseDto,
     type SharedSpacePersonResponseDto,
   } from '@immich/sdk';
@@ -76,7 +78,6 @@
   let loadingTimeout: NodeJS.Timeout | null = null;
 
   type ScopedMergeCandidate = SharedSpacePersonResponseDto | PersonResponseDto;
-  type ScopedPersonProfileRef = { type: 'person'; id: string } | { type: 'space-person'; id: string; spaceId: string };
 
   let actionOverride = $state<string | null>();
   let actionOverrideKey = $state('');
@@ -227,19 +228,23 @@
   const isSharedSpacePerson = (person: ScopedMergeCandidate): person is SharedSpacePersonResponseDto =>
     'assetCount' in person;
 
-  const toScopedPersonRef = (person: ScopedMergeCandidate, fallbackSpaceId = space.id): ScopedPersonProfileRef => {
+  const toScopedPersonRef = (person: ScopedMergeCandidate, fallbackSpaceId = space.id): ScopedPersonProfileRefDto => {
     if ('primaryProfile' in person && person.primaryProfile) {
       if (person.primaryProfile.type === 'space-person' && person.primaryProfile.spaceId) {
-        return { type: 'space-person', id: person.primaryProfile.id, spaceId: person.primaryProfile.spaceId };
+        return {
+          type: ScopedPersonProfileType.SpacePerson,
+          id: person.primaryProfile.id,
+          spaceId: person.primaryProfile.spaceId,
+        };
       }
-      return { type: 'person', id: person.primaryProfile.id };
+      return { type: ScopedPersonProfileType.Person, id: person.primaryProfile.id };
     }
 
     if (isSharedSpacePerson(person)) {
-      return { type: 'space-person', id: person.id, spaceId: person.spaceId ?? fallbackSpaceId };
+      return { type: ScopedPersonProfileType.SpacePerson, id: person.id, spaceId: person.spaceId ?? fallbackSpaceId };
     }
 
-    return { type: 'person', id: person.id };
+    return { type: ScopedPersonProfileType.Person, id: person.id };
   };
 
   const getMergeDisplayName = (person: ScopedMergeCandidate) => person.name || '';
@@ -269,9 +274,9 @@
     const targetRef = toScopedPersonRef(targetPerson);
     const sourceRefs = selectedPeople.map((person) => toScopedPersonRef(person));
     const canUseSameSpaceMerge =
-      targetRef.type === 'space-person' &&
+      targetRef.type === ScopedPersonProfileType.SpacePerson &&
       targetRef.spaceId === space.id &&
-      sourceRefs.every((ref) => ref.type === 'space-person' && ref.spaceId === space.id);
+      sourceRefs.every((ref) => ref.type === ScopedPersonProfileType.SpacePerson && ref.spaceId === space.id);
 
     await (canUseSameSpaceMerge
       ? mergeSpacePeople({
@@ -363,7 +368,9 @@
 
     try {
       await detachScopedPerson({
-        detachScopedPersonDto: { profile: { type: 'space-person', id: person.id, spaceId: space.id } },
+        detachScopedPersonDto: {
+          profile: { type: ScopedPersonProfileType.SpacePerson, id: person.id, spaceId: space.id },
+        },
       });
       toastManager.success($t('separate_from_grouped_person'));
       await invalidateAll();

@@ -47,8 +47,10 @@
     mergePerson,
     mergeScopedPeople,
     searchPerson,
+    Type2 as ScopedPersonProfileType,
     updatePerson,
     type PersonResponseDto,
+    type ScopedPersonProfileRefDto,
   } from '@immich/sdk';
   import {
     ActionButton,
@@ -97,19 +99,22 @@
   let isSearchingPeople = $state(false);
   let suggestionContainer: HTMLElement | undefined = $state();
 
-  type ScopedPersonProfileRef = { type: 'person'; id: string } | { type: 'space-person'; id: string; spaceId: string };
-
-  const toScopedPersonRef = (person: PersonResponseDto): ScopedPersonProfileRef => {
+  const toScopedPersonRef = (person: PersonResponseDto): ScopedPersonProfileRefDto => {
     if (person.primaryProfile?.type === 'space-person' && person.primaryProfile.spaceId) {
-      return { type: 'space-person', id: person.primaryProfile.id, spaceId: person.primaryProfile.spaceId };
+      return {
+        type: ScopedPersonProfileType.SpacePerson,
+        id: person.primaryProfile.id,
+        spaceId: person.primaryProfile.spaceId,
+      };
     }
     if (person.primaryProfile?.type === 'user-person') {
-      return { type: 'person', id: person.primaryProfile.id };
+      return { type: ScopedPersonProfileType.Person, id: person.primaryProfile.id };
     }
-    return { type: 'person', id: person.id };
+    return { type: ScopedPersonProfileType.Person, id: person.id };
   };
 
-  const isSpaceScoped = (person: PersonResponseDto) => toScopedPersonRef(person).type === 'space-person';
+  const isSpaceScoped = (person: PersonResponseDto) =>
+    toScopedPersonRef(person).type === ScopedPersonProfileType.SpacePerson;
 
   const getScopedThumbnailUrl = (person: PersonResponseDto): string => {
     const profile = person.primaryProfile;
@@ -417,7 +422,9 @@
       }
 
       try {
-        await detachScopedPerson({ detachScopedPersonDto: { profile: { type: 'person', id: person.id } } });
+        await detachScopedPerson({
+          detachScopedPersonDto: { profile: { type: ScopedPersonProfileType.Person, id: person.id } },
+        });
         await invalidateAll();
         toastManager.primary($t('separate_from_grouped_person'));
       } catch (error) {
