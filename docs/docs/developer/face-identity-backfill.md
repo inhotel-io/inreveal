@@ -42,6 +42,8 @@ It queues `FaceIdentityBackfill` when any of these are true:
 
 This means upgraded installs should not require users to reset face recognition. Restarting the microservices worker is enough to re-run the check. Force-clearing face recognition is destructive and should only be a last-resort repair because it deletes existing recognition state and rebuilds people from scratch.
 
+Admins can also start this repair from the **People identity maintenance** queue on the admin Jobs page. The queue start action enqueues the `FaceIdentityBackfill` root job and shows progress alongside the other queue stats.
+
 ## Metadata Backfill
 
 `SharedSpacePersonMetadataBackfill` recalculates inherited names and birth dates for identity-backed Space People. It does not merge identities and it does not overwrite manual space metadata.
@@ -76,6 +78,8 @@ Metadata backfill is queued automatically when an operation can change inheritan
 When the changed operation is tied to one identity, the job is queued with that `identityId`. Membership, role, preference, and space deletion changes can affect many identities, so they queue a full metadata backfill.
 
 Root metadata backfill jobs are also deduplicated with stable queue job ids: one for a full-library metadata backfill and one per identity-scoped metadata backfill. Cursor jobs include the cursor in the job id, so a large library is still processed page by page without enqueuing duplicate full scans. Dedupe-keyed backfill jobs are removed on failure so the next bootstrap or metadata-changing operation can retry instead of being blocked by a stale failed job id.
+
+Admins can manually queue either root job from the Jobs page create-job modal. `FaceIdentityBackfill` repairs missing identity links first and then queues metadata repair when shared-space links changed. `SharedSpacePersonMetadataBackfill` only recalculates inherited space-person metadata and is safe to rerun when identity links already exist.
 
 ## Product Effects
 

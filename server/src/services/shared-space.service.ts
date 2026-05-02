@@ -1534,7 +1534,7 @@ export class SharedSpaceService extends BaseService {
     return JobStatus.Success;
   }
 
-  @OnJob({ name: JobName.SharedSpacePersonMetadataBackfill, queue: QueueName.BackgroundTask })
+  @OnJob({ name: JobName.SharedSpacePersonMetadataBackfill, queue: QueueName.PeopleBackfill })
   async handleSharedSpacePersonMetadataBackfill({
     cursor,
     identityId,

@@ -58,7 +58,7 @@ export class PersonService extends BaseService {
   @OnEvent({ name: 'AppBootstrap', workers: [ImmichWorker.Microservices] })
   async onBootstrap(): Promise<void> {
     if (await this.faceIdentityRepository.hasBackfillWork()) {
-      const activeBackfills = await this.jobRepository.searchJobs(QueueName.BackgroundTask, {
+      const activeBackfills = await this.jobRepository.searchJobs(QueueName.PeopleBackfill, {
         status: [QueueJobStatus.Active, QueueJobStatus.Delayed, QueueJobStatus.Paused, QueueJobStatus.Waiting],
       });
       if (activeBackfills.some((job) => job.name === JobName.FaceIdentityBackfill)) {
@@ -354,7 +354,7 @@ export class PersonService extends BaseService {
     return JobStatus.Success;
   }
 
-  @OnJob({ name: JobName.FaceIdentityBackfill, queue: QueueName.BackgroundTask })
+  @OnJob({ name: JobName.FaceIdentityBackfill, queue: QueueName.PeopleBackfill })
   async handleFaceIdentityBackfill({
     stage = 'person',
     cursor,

@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { writeFile } from 'node:fs/promises';
 import { FACE_THUMBNAIL_SIZE } from 'src/constants';
 import { AssetEditAction } from 'src/dtos/editing.dto';
@@ -9,6 +10,7 @@ import {
   ImageFormat,
   JobName,
   JobStatus,
+  MetadataKey,
   NotificationLevel,
   NotificationType,
   SharedSpaceActivityType,
@@ -4562,6 +4564,12 @@ describe(SharedSpaceService.name, () => {
   });
 
   describe('backfillSpacePersonMetadata', () => {
+    it('should run metadata backfill on the people backfill queue', () => {
+      const config = new Reflector().get(MetadataKey.JobConfig, sut.handleSharedSpacePersonMetadataBackfill);
+
+      expect(config).toEqual(expect.objectContaining({ queue: 'peopleBackfill' }));
+    });
+
     it('should inherit unlocked fields and return a resumable cursor', async () => {
       const spaceId = newUuid();
       const personId = newUuid();

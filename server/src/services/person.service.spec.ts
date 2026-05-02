@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { DiskStorageBackend } from 'src/backends/disk-storage.backend';
 import { BulkIdErrorReason } from 'src/dtos/asset-ids.response.dto';
 import { mapFaces, mapPerson } from 'src/dtos/person.dto';
@@ -8,6 +9,7 @@ import {
   CacheControl,
   JobName,
   JobStatus,
+  MetadataKey,
   QueueName,
   SourceType,
   SystemMetadataKey,
@@ -60,6 +62,7 @@ describe(PersonService.name, () => {
       await sut.onBootstrap();
 
       expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
+      expect(mocks.job.searchJobs).toHaveBeenCalledWith('peopleBackfill', expect.any(Object));
     });
 
     it('should skip identity backfill when no identity work remains', async () => {
@@ -1319,6 +1322,12 @@ describe(PersonService.name, () => {
   });
 
   describe('handleFaceIdentityBackfill', () => {
+    it('should run on the people backfill queue', () => {
+      const config = new Reflector().get(MetadataKey.JobConfig, sut.handleFaceIdentityBackfill);
+
+      expect(config).toEqual(expect.objectContaining({ queue: 'peopleBackfill' }));
+    });
+
     it('should backfill personal identities and requeue when another page exists', async () => {
       mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({
         processed: 1000,

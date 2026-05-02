@@ -1283,6 +1283,7 @@ export type QueuesResponseLegacyDto = {
     migration: QueueResponseLegacyDto;
     notifications: QueueResponseLegacyDto;
     ocr: QueueResponseLegacyDto;
+    peopleBackfill: QueueResponseLegacyDto;
     petDetection: QueueResponseLegacyDto;
     search: QueueResponseLegacyDto;
     sidecar: QueueResponseLegacyDto;
@@ -2849,6 +2850,7 @@ export type SystemConfigJobDto = {
     migration: JobSettingsDto;
     notifications: JobSettingsDto;
     ocr: JobSettingsDto;
+    peopleBackfill: JobSettingsDto;
     petDetection: JobSettingsDto;
     search: JobSettingsDto;
     sidecar: JobSettingsDto;
@@ -8397,7 +8399,9 @@ export enum ManualJobName {
     UserCleanup = "user-cleanup",
     MemoryCleanup = "memory-cleanup",
     MemoryCreate = "memory-create",
-    BackupDatabase = "backup-database"
+    BackupDatabase = "backup-database",
+    FaceIdentityBackfill = "face-identity-backfill",
+    SharedSpacePersonMetadataBackfill = "shared-space-person-metadata-backfill"
 }
 export enum QueueName {
     ThumbnailGeneration = "thumbnailGeneration",
@@ -8408,6 +8412,7 @@ export enum QueueName {
     SmartSearch = "smartSearch",
     DuplicateDetection = "duplicateDetection",
     BackgroundTask = "backgroundTask",
+    PeopleBackfill = "peopleBackfill",
     StorageTemplateMigration = "storageTemplateMigration",
     Migration = "migration",
     Search = "search",

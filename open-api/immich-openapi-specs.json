@@ -22093,7 +22093,9 @@
           "user-cleanup",
           "memory-cleanup",
           "memory-create",
-          "backup-database"
+          "backup-database",
+          "face-identity-backfill",
+          "shared-space-person-metadata-backfill"
         ],
         "type": "string"
       },
@@ -24268,6 +24270,7 @@
           "smartSearch",
           "duplicateDetection",
           "backgroundTask",
+          "peopleBackfill",
           "storageTemplateMigration",
           "migration",
           "search",
@@ -24432,6 +24435,9 @@
           "ocr": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
+          "peopleBackfill": {
+            "$ref": "#/components/schemas/QueueResponseLegacyDto"
+          },
           "petDetection": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
@@ -24473,6 +24479,7 @@
           "migration",
           "notifications",
           "ocr",
+          "peopleBackfill",
           "petDetection",
           "search",
           "sidecar",
@@ -29450,6 +29457,9 @@
           "ocr": {
             "$ref": "#/components/schemas/JobSettingsDto"
           },
+          "peopleBackfill": {
+            "$ref": "#/components/schemas/JobSettingsDto"
+          },
           "petDetection": {
             "$ref": "#/components/schemas/JobSettingsDto"
           },
@@ -29482,6 +29492,7 @@
           "migration",
           "notifications",
           "ocr",
+          "peopleBackfill",
           "petDetection",
           "search",
           "sidecar",
