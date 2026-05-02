@@ -551,6 +551,31 @@ describe('SharedSpaceService shared-space person metadata RBAC', () => {
     expect(updated.nameSourceProfileId).toBeNull();
   });
 
+  it('restores linked-library inherited metadata when the source space is shown in the linker timeline again', async () => {
+    const { ctx, sut, face, member, sourceSpace, sourceSpacePerson, library, targetSpace } =
+      await createLinkedLibrarySpaceNameBridge();
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+
+    await sut.updateMemberTimeline(authFor(member), sourceSpace.id, { showInTimeline: false });
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+    const hidden = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(hidden.name).toBe('');
+    expect(hidden.nameSource).toBe('none');
+    expect(hidden.birthDate).toBeNull();
+
+    await sut.updateMemberTimeline(authFor(member), sourceSpace.id, { showInTimeline: true });
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+    const restored = await getSpacePersonById(ctx, targetSpacePerson.id);
+
+    expect(restored.name).toBe('John');
+    expect(restored.nameSource).toBe('inherited');
+    expect(restored.nameSourceProfileType).toBe('space-person');
+    expect(restored.nameSourceProfileId).toBe(sourceSpacePerson.id);
+    expect(asBirthDateString(restored.birthDate)).toBe('1980-01-02');
+    expect(restored.birthDateSource).toBe('inherited');
+  });
+
   it('clears linked-library inherited metadata when the source space person is hidden later', async () => {
     const { ctx, sut, face, source, sourceSpace, sourceSpacePerson, library, targetSpace } =
       await createLinkedLibrarySpaceNameBridge();
@@ -744,6 +769,25 @@ describe('SharedSpaceService shared-space person metadata RBAC', () => {
     expect(updated.nameSourceProfileId).toBeNull();
   });
 
+  it('restores a space-sourced inherited name when the source space is shown in the asset adder timeline again', async () => {
+    const { ctx, sut, face, member, sourceSpace, sourceSpacePerson, targetSpacePerson } = await createSpaceNameBridge();
+
+    await sut.updateMemberTimeline(authFor(member), sourceSpace.id, { showInTimeline: false });
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+    const hidden = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(hidden.name).toBe('');
+    expect(hidden.nameSource).toBe('none');
+
+    await sut.updateMemberTimeline(authFor(member), sourceSpace.id, { showInTimeline: true });
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+    const restored = await getSpacePersonById(ctx, targetSpacePerson.id);
+
+    expect(restored.name).toBe('John');
+    expect(restored.nameSource).toBe('inherited');
+    expect(restored.nameSourceProfileType).toBe('space-person');
+    expect(restored.nameSourceProfileId).toBe(sourceSpacePerson.id);
+  });
+
   it('clears a space-sourced inherited name when the source space person is hidden later', async () => {
     const { ctx, sut, face, source, sourceSpace, sourceSpacePerson, targetSpacePerson } = await createSpaceNameBridge();
 
@@ -808,6 +852,25 @@ describe('SharedSpaceService shared-space person metadata RBAC', () => {
     expect(updated.nameSource).toBe('manual');
     expect(updated.nameSourceProfileType).toBe('space-person');
     expect(updated.nameSourceProfileId).toBe(targetSpacePerson.id);
+  });
+
+  it('keeps manual target metadata when source timeline visibility is toggled off and on', async () => {
+    const { ctx, sut, face, member, sourceSpace, targetSpace, targetSpacePerson } = await createSpaceNameBridge();
+
+    await sut.updateSpacePerson(authFor(member), targetSpace.id, targetSpacePerson.id, {
+      name: 'Manual Target',
+      birthDate: '2002-02-02',
+    });
+    await sut.updateMemberTimeline(authFor(member), sourceSpace.id, { showInTimeline: false });
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+    await sut.updateMemberTimeline(authFor(member), sourceSpace.id, { showInTimeline: true });
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const updated = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(updated.name).toBe('Manual Target');
+    expect(updated.nameSource).toBe('manual');
+    expect(asBirthDateString(updated.birthDate)).toBe('2002-02-02');
+    expect(updated.birthDateSource).toBe('manual');
   });
 
   it('does not keep a name that was only visible to a removed target-space member', async () => {
