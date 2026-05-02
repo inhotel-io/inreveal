@@ -262,8 +262,10 @@ const createLinkedLibraryIdentityFixture = async (input?: { city?: string; perso
 const authFor = (user: { id: string; name: string; email: string; isAdmin?: boolean }) =>
   factory.auth({ user: { id: user.id, name: user.name, email: user.email, isAdmin: user.isAdmin } });
 
+type IdentityRbacContext = ReturnType<typeof setup>['ctx'] | ReturnType<typeof setupSearch>['ctx'];
+
 const setSpaceTimeline = async (
-  ctx: ReturnType<typeof setup>['ctx'],
+  ctx: IdentityRbacContext,
   input: { spaceId: string; userId: string; showInTimeline: boolean },
 ) => {
   await ctx.database
@@ -274,7 +276,7 @@ const setSpaceTimeline = async (
     .execute();
 };
 
-const addCity = async (ctx: ReturnType<typeof setup>['ctx'], assetId: string, city: string) => {
+const addCity = async (ctx: IdentityRbacContext, assetId: string, city: string) => {
   await ctx.newExif({ assetId, city, country: 'Germany', fileSizeInByte: 2048 });
 };
 
