@@ -153,7 +153,7 @@ export class PersonController {
     @Auth() auth: AuthDto,
     @Param() { id }: UUIDParamDto,
   ) {
-    await sendFile(res, next, () => this.service.getThumbnail(auth, id), this.logger);
+    await sendFile(res, next, (signal) => this.service.getThumbnail(auth, id, signal), this.logger);
   }
 
   @Put(':id/reassign')

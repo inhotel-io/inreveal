@@ -695,7 +695,12 @@ export class SharedSpaceService extends BaseService {
     return this.mapSpacePerson(person, alias?.alias ?? null);
   }
 
-  async getSpacePersonThumbnail(auth: AuthDto, spaceId: string, personId: string): Promise<ImmichMediaResponse> {
+  async getSpacePersonThumbnail(
+    auth: AuthDto,
+    spaceId: string,
+    personId: string,
+    signal?: AbortSignal,
+  ): Promise<ImmichMediaResponse> {
     await this.requireMembership(auth, spaceId);
 
     const person = await this.sharedSpaceRepository.getPersonById(personId);
@@ -708,7 +713,13 @@ export class SharedSpaceService extends BaseService {
       throw new NotFoundException();
     }
 
-    return this.serveFromBackend(thumbnailPath, mimeTypes.lookup(thumbnailPath), CacheControl.PrivateWithoutCache);
+    return this.serveFromBackend(
+      thumbnailPath,
+      mimeTypes.lookup(thumbnailPath),
+      CacheControl.PrivateWithoutCache,
+      undefined,
+      signal,
+    );
   }
 
   async updateSpacePerson(

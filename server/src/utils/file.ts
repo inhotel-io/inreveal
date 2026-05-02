@@ -57,6 +57,9 @@ export type ImmichMediaResponse = ImmichFileResponse | ImmichRedirectResponse | 
 
 type SendFile = Parameters<Response['sendFile']>;
 type SendFileOptions = SendFile[1];
+type MediaResponseHandler = (
+  signal: AbortSignal,
+) => Promise<ImmichMediaResponse | undefined> | ImmichMediaResponse | undefined;
 
 const cacheControlHeaders: Record<CacheControl, string | null> = {
   [CacheControl.PrivateWithCache]:
@@ -68,7 +71,7 @@ const cacheControlHeaders: Record<CacheControl, string | null> = {
 export const sendFile = async (
   res: Response,
   next: NextFunction,
-  handler: () => Promise<ImmichMediaResponse> | ImmichMediaResponse,
+  handler: MediaResponseHandler,
   logger: LoggingRepository,
 ): Promise<void> => {
   // promisified version of 'res.sendFile' for cleaner async handling
@@ -76,10 +79,14 @@ export const sendFile = async (
     promisify<string, SendFileOptions>(res.sendFile).bind(res)(path, options);
   let responseClosed = false;
   let streamResponse: ImmichStreamResponse | undefined;
+  const abortController = new AbortController();
 
   if (typeof res.once === 'function') {
     res.once('close', () => {
       responseClosed = true;
+      if (!res.writableEnded && !abortController.signal.aborted) {
+        abortController.abort();
+      }
       if (streamResponse && !res.writableEnded && !streamResponse.stream.destroyed) {
         streamResponse.stream.destroy();
       }
@@ -87,7 +94,11 @@ export const sendFile = async (
   }
 
   try {
-    const file = await handler();
+    const file = await handler(abortController.signal);
+
+    if (!file) {
+      return;
+    }
 
     if (file instanceof ImmichRedirectResponse) {
       let parsed: URL;

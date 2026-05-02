@@ -152,13 +152,19 @@ export class UserService extends BaseService {
     await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: [user.profileImagePath] } });
   }
 
-  async getProfileImage(id: string): Promise<ImmichMediaResponse> {
+  async getProfileImage(id: string, signal?: AbortSignal): Promise<ImmichMediaResponse> {
     const user = await this.findOrFail(id, {});
     if (!user.profileImagePath) {
       throw new NotFoundException('User does not have a profile image');
     }
 
-    return this.serveFromBackend(user.profileImagePath, mimeTypes.lookup(user.profileImagePath), CacheControl.None);
+    return this.serveFromBackend(
+      user.profileImagePath,
+      mimeTypes.lookup(user.profileImagePath),
+      CacheControl.None,
+      undefined,
+      signal,
+    );
   }
 
   async getLicense(auth: AuthDto): Promise<LicenseResponseDto> {

@@ -316,7 +316,12 @@ export class SharedSpaceController {
     @Param('id') id: string,
     @Param('personId') personId: string,
   ) {
-    await sendFile(res, next, () => this.service.getSpacePersonThumbnail(auth, id, personId), this.logger);
+    await sendFile(
+      res,
+      next,
+      (signal) => this.service.getSpacePersonThumbnail(auth, id, personId, signal),
+      this.logger,
+    );
   }
 
   @Put(':id/people/:personId')

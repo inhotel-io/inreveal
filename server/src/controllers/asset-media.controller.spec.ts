@@ -1,8 +1,12 @@
+import { EventEmitter } from 'node:events';
+import { Readable } from 'node:stream';
 import { AssetMediaController } from 'src/controllers/asset-media.controller';
 import { AssetMediaStatus } from 'src/dtos/asset-media-response.dto';
-import { AssetMetadataKey } from 'src/enum';
+import { AssetMediaSize } from 'src/dtos/asset-media.dto';
+import { AssetMetadataKey, CacheControl } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { AssetMediaService } from 'src/services/asset-media.service';
+import { ImmichStreamResponse } from 'src/utils/file';
 import request from 'supertest';
 import { factory } from 'test/small.factory';
 import { automock, ControllerContext, controllerSetup, mockBaseService } from 'test/utils';
@@ -150,6 +154,57 @@ describe(AssetMediaController.name, () => {
       it('should redirect if size=original is requested', async () => {
         const { status } = await request(ctx.getHttpServer()).get(`/assets/${factory.uuid()}/thumbnail?size=original`);
         expect(status).toBe(302);
+      });
+
+      it('should abort pending thumbnail work when the response closes before the thumbnail is ready', async () => {
+        const logger = automock(LoggingRepository, { strict: false });
+        const controller = new AssetMediaController(logger, service);
+        let capturedSignal: AbortSignal | undefined;
+        let resolveThumbnail!: (response: ImmichStreamResponse) => void;
+        service.viewThumbnail.mockImplementation((_auth, _id, _dto, signal?: AbortSignal) => {
+          capturedSignal = signal;
+          return new Promise((resolve) => {
+            resolveThumbnail = resolve;
+          });
+        });
+        const res = Object.assign(new EventEmitter(), {
+          set: vi.fn(),
+          header: vi.fn(),
+          headersSent: false,
+          writableEnded: false,
+        }) as any;
+        const next = vi.fn();
+        const stream = new Readable({
+          read() {
+            // keep the stream open so cleanup is observable
+          },
+        });
+        stream.pipe = vi.fn().mockReturnValue(res);
+
+        const sendPromise = controller.viewAsset(
+          {} as any,
+          { id: factory.uuid() },
+          { size: AssetMediaSize.THUMBNAIL },
+          { url: '/assets/id/thumbnail?size=thumbnail' } as any,
+          res,
+          next,
+        );
+        await Promise.resolve();
+
+        expect(capturedSignal).toBeInstanceOf(AbortSignal);
+        res.emit('close');
+        expect(capturedSignal?.aborted).toBe(true);
+
+        resolveThumbnail(
+          new ImmichStreamResponse({
+            stream,
+            contentType: 'image/webp',
+            cacheControl: CacheControl.PrivateWithCache,
+          }),
+        );
+        await sendPromise;
+
+        expect(stream.pipe).not.toHaveBeenCalled();
       });
     });
   });

@@ -163,7 +163,12 @@ export class AssetMediaService extends BaseService {
     }
   }
 
-  async downloadOriginal(auth: AuthDto, id: string, dto: AssetDownloadOriginalDto): Promise<ImmichMediaResponse> {
+  async downloadOriginal(
+    auth: AuthDto,
+    id: string,
+    dto: AssetDownloadOriginalDto,
+    signal?: AbortSignal,
+  ): Promise<ImmichMediaResponse> {
     await this.requireAccess({ auth, permission: Permission.AssetDownload, ids: [id] });
 
     if (auth.sharedLink) {
@@ -182,6 +187,7 @@ export class AssetMediaService extends BaseService {
       mimeTypes.lookup(path),
       CacheControl.PrivateWithCache,
       getFileNameWithoutExtension(originalFileName) + getFilenameExtension(path),
+      signal,
     );
   }
 
@@ -189,6 +195,7 @@ export class AssetMediaService extends BaseService {
     auth: AuthDto,
     id: string,
     dto: AssetMediaOptionsDto,
+    signal?: AbortSignal,
   ): Promise<ImmichMediaResponse | AssetMediaRedirectResponse> {
     await this.requireAccess({ auth, permission: Permission.AssetView, ids: [id] });
 
@@ -226,10 +233,10 @@ export class AssetMediaService extends BaseService {
       auth.sharedLink && !auth.sharedLink.showExif ? id : getFileNameWithoutExtension(originalFileName);
     const fileName = `${fileNameBase}_${size}${getFilenameExtension(path)}`;
 
-    return this.serveFromBackend(path, mimeTypes.lookup(path), CacheControl.PrivateWithCache, fileName);
+    return this.serveFromBackend(path, mimeTypes.lookup(path), CacheControl.PrivateWithCache, fileName, signal);
   }
 
-  async playbackVideo(auth: AuthDto, id: string): Promise<ImmichMediaResponse> {
+  async playbackVideo(auth: AuthDto, id: string, signal?: AbortSignal): Promise<ImmichMediaResponse> {
     await this.requireAccess({ auth, permission: Permission.AssetView, ids: [id] });
 
     const asset = await this.assetRepository.getForVideo(id);
@@ -240,7 +247,13 @@ export class AssetMediaService extends BaseService {
 
     const filepath = asset.encodedVideoPath || asset.originalPath;
 
-    return this.serveFromBackend(filepath, mimeTypes.lookup(filepath), CacheControl.PrivateWithCache);
+    return this.serveFromBackend(
+      filepath,
+      mimeTypes.lookup(filepath),
+      CacheControl.PrivateWithCache,
+      undefined,
+      signal,
+    );
   }
 
   async bulkUploadCheck(auth: AuthDto, dto: AssetBulkUploadCheckDto): Promise<AssetBulkUploadCheckResponseDto> {

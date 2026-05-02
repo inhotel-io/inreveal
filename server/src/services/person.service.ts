@@ -163,7 +163,7 @@ export class PersonService extends BaseService {
     return this.personRepository.getStatistics(id);
   }
 
-  async getThumbnail(auth: AuthDto, id: string): Promise<ImmichMediaResponse> {
+  async getThumbnail(auth: AuthDto, id: string, signal?: AbortSignal): Promise<ImmichMediaResponse> {
     await this.requireThumbnailAccess(auth, id);
     const person = await this.personRepository.getById(id);
     if (!person || !person.thumbnailPath) {
@@ -174,6 +174,8 @@ export class PersonService extends BaseService {
       person.thumbnailPath,
       mimeTypes.lookup(person.thumbnailPath),
       CacheControl.PrivateWithoutCache,
+      undefined,
+      signal,
     );
   }
 

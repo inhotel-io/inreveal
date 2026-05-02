@@ -104,7 +104,7 @@ export class AssetMediaController {
     @Res() res: Response,
     @Next() next: NextFunction,
   ) {
-    await sendFile(res, next, () => this.service.downloadOriginal(auth, id, dto), this.logger);
+    await sendFile(res, next, (signal) => this.service.downloadOriginal(auth, id, dto, signal), this.logger);
   }
 
   @Get(':id/thumbnail')
@@ -134,34 +134,43 @@ export class AssetMediaController {
       return res.redirect('original' + '?' + redirSearchParams.toString());
     }
 
-    const viewThumbnailRes = await this.service.viewThumbnail(auth, id, dto);
+    await sendFile(
+      res,
+      next,
+      async (signal) => {
+        const viewThumbnailRes = await this.service.viewThumbnail(auth, id, dto, signal);
 
-    if (
-      viewThumbnailRes instanceof ImmichFileResponse ||
-      viewThumbnailRes instanceof ImmichRedirectResponse ||
-      viewThumbnailRes instanceof ImmichStreamResponse
-    ) {
-      await sendFile(res, next, () => Promise.resolve(viewThumbnailRes), this.logger);
-    } else {
-      // viewThumbnailRes is a AssetMediaRedirectResponse
-      // which redirects to the original asset or a specific size to make better use of caching
-      const { targetSize } = viewThumbnailRes;
-      const [reqPath, reqSearch] = req.url.split('?');
-      let redirPath: string;
-      const redirSearchParams = new URLSearchParams(reqSearch);
-      if (targetSize === 'original') {
-        // relative path to this.downloadAsset
-        redirPath = 'original';
-        redirSearchParams.delete('size');
-      } else if (Object.values(AssetMediaSize).includes(targetSize)) {
-        redirPath = reqPath;
-        redirSearchParams.set('size', targetSize);
-      } else {
-        throw new Error('Invalid targetSize: ' + targetSize);
-      }
-      const finalRedirPath = redirPath + '?' + redirSearchParams.toString();
-      return res.redirect(finalRedirPath);
-    }
+        if (
+          viewThumbnailRes instanceof ImmichFileResponse ||
+          viewThumbnailRes instanceof ImmichRedirectResponse ||
+          viewThumbnailRes instanceof ImmichStreamResponse
+        ) {
+          return viewThumbnailRes;
+        }
+
+        if (signal.aborted) {
+          return;
+        }
+
+        const { targetSize } = viewThumbnailRes;
+        const [reqPath, reqSearch] = req.url.split('?');
+        let redirPath: string;
+        const redirSearchParams = new URLSearchParams(reqSearch);
+        if (targetSize === 'original') {
+          // relative path to this.downloadAsset
+          redirPath = 'original';
+          redirSearchParams.delete('size');
+        } else if (Object.values(AssetMediaSize).includes(targetSize)) {
+          redirPath = reqPath;
+          redirSearchParams.set('size', targetSize);
+        } else {
+          throw new Error('Invalid targetSize: ' + targetSize);
+        }
+        const finalRedirPath = redirPath + '?' + redirSearchParams.toString();
+        res.redirect(finalRedirPath);
+      },
+      this.logger,
+    );
   }
 
   @Get(':id/video/playback')
@@ -178,7 +187,7 @@ export class AssetMediaController {
     @Res() res: Response,
     @Next() next: NextFunction,
   ) {
-    await sendFile(res, next, () => this.service.playbackVideo(auth, id), this.logger);
+    await sendFile(res, next, (signal) => this.service.playbackVideo(auth, id, signal), this.logger);
   }
 
   @Post('bulk-upload-check')

@@ -447,6 +447,21 @@ describe('sendFile with ImmichMediaResponse', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it('should silently ignore AbortError from canceled media work', async () => {
+    const error = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+    const res = {
+      set: vi.fn(),
+      header: vi.fn(),
+      headersSent: false,
+    } as any;
+    const next = vi.fn();
+
+    await sendFile(res, next, () => Promise.reject(error), mockLogger);
+
+    expect(mockLogger.error).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it('should silently return if headers are already sent', async () => {
     const error = new Error('Something went wrong');
     const res = {

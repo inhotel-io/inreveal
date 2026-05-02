@@ -233,11 +233,12 @@ export class BaseService {
     contentType: string,
     cacheControl: CacheControl,
     fileName?: string,
+    signal?: AbortSignal,
   ): Promise<ImmichMediaResponse> {
     // lazy import to avoid circular dependency (StorageService extends BaseService)
     const { StorageService } = await import('./storage.service.js');
     const backend = StorageService.resolveBackendForKey(filePath);
-    const strategy: ServeStrategy = await backend.getServeStrategy(filePath, contentType);
+    const strategy: ServeStrategy = await backend.getServeStrategy(filePath, contentType, signal);
 
     switch (strategy.type) {
       case 'file': {

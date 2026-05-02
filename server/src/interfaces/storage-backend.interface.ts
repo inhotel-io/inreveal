@@ -10,7 +10,7 @@ export interface StorageBackend {
   put(key: string, source: Readable | Buffer, metadata?: { contentType?: string }): Promise<void>;
 
   /** Get a readable stream for the given key */
-  get(key: string): Promise<{ stream: Readable; contentType?: string; length?: number }>;
+  get(key: string, signal?: AbortSignal): Promise<{ stream: Readable; contentType?: string; length?: number }>;
 
   /** Check if a key exists */
   exists(key: string): Promise<boolean>;
@@ -25,7 +25,7 @@ export interface StorageBackend {
   getPrefixUsage(prefix: string): Promise<number>;
 
   /** Determine how to serve this file to a client */
-  getServeStrategy(key: string, contentType: string): Promise<ServeStrategy>;
+  getServeStrategy(key: string, contentType: string, signal?: AbortSignal): Promise<ServeStrategy>;
 
   /**
    * Download content to a local temp file for processing by tools

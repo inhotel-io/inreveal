@@ -217,6 +217,54 @@ describe('S3StorageBackend', () => {
       expect(proxyClient.send).toHaveBeenCalledTimes(2);
     });
 
+    it('should remove an aborted queued proxy read without starting an S3 request', async () => {
+      const proxyBackend = new S3StorageBackend({
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        presignedUrlExpiry: 3600,
+        serveMode: 'proxy' as const,
+        proxyReadConcurrency: 1,
+      });
+      const proxyClient = (S3Client as unknown as ReturnType<typeof vi.fn>).mock.results.at(-1)?.value;
+      const firstStream = new Readable({
+        read() {
+          // keep the first slot occupied until the queued request is aborted
+        },
+      });
+      proxyClient.send
+        .mockResolvedValueOnce({ Body: firstStream, ContentLength: 5 })
+        .mockResolvedValueOnce({ Body: Readable.from([Buffer.from('third')]), ContentLength: 5 });
+
+      const first = await proxyBackend.getServeStrategy('first.jpg', 'image/jpeg');
+      const abortController = new AbortController();
+      const secondPromise = proxyBackend.getServeStrategy('second.jpg', 'image/jpeg', abortController.signal);
+      await flushPromises();
+      expect(proxyClient.send).toHaveBeenCalledTimes(1);
+
+      abortController.abort();
+      await flushPromises();
+
+      await expect(
+        Promise.race([
+          secondPromise.then(
+            () => 'resolved',
+            (error) => error.name,
+          ),
+          new Promise((resolve) => setTimeout(() => resolve('pending'), 0)),
+        ]),
+      ).resolves.toBe('AbortError');
+      expect(proxyClient.send).toHaveBeenCalledTimes(1);
+
+      if (first.type === 'stream') {
+        first.stream.destroy();
+      }
+      await flushPromises();
+      const third = await proxyBackend.getServeStrategy('third.jpg', 'image/jpeg');
+
+      expect(third.type).toBe('stream');
+      expect(proxyClient.send).toHaveBeenCalledTimes(2);
+    });
+
     it('should release a proxy read slot when stream creation fails', async () => {
       const proxyBackend = new S3StorageBackend({
         bucket: 'test-bucket',

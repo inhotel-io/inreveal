@@ -213,6 +213,6 @@ export class UserController {
     history: new HistoryBuilder().added('v1').beta('v1').stable('v2'),
   })
   async getProfileImage(@Res() res: Response, @Next() next: NextFunction, @Param() { id }: UUIDParamDto) {
-    await sendFile(res, next, () => this.service.getProfileImage(id), this.logger);
+    await sendFile(res, next, (signal) => this.service.getProfileImage(id, signal), this.logger);
   }
 }

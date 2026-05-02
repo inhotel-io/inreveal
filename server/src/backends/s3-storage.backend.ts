@@ -20,15 +20,53 @@ import { ServeStrategy, StorageBackend } from 'src/interfaces/storage-backend.in
 const DEFAULT_PROXY_READ_CONCURRENCY = 32;
 const DEFAULT_PROXY_READ_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
+const createAbortError = () => Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+
+type QueueEntry = {
+  resolve: () => void;
+  reject: (error: Error) => void;
+  signal?: AbortSignal;
+  onAbort?: () => void;
+};
+
 class AsyncLimiter {
   private active = 0;
-  private readonly queue: Array<() => void> = [];
+  private readonly queue: QueueEntry[] = [];
 
   constructor(private readonly max: number) {}
 
-  async acquire(): Promise<() => void> {
+  async acquire(signal?: AbortSignal): Promise<() => void> {
+    if (signal?.aborted) {
+      throw createAbortError();
+    }
+
     if (this.active >= this.max) {
-      await new Promise<void>((resolve) => this.queue.push(resolve));
+      await new Promise<void>((resolve, reject) => {
+        const entry: QueueEntry = {
+          resolve: () => {
+            if (entry.onAbort) {
+              signal?.removeEventListener('abort', entry.onAbort);
+            }
+            resolve();
+          },
+          reject,
+          signal,
+        };
+        entry.onAbort = () => {
+          const index = this.queue.indexOf(entry);
+          if (index !== -1) {
+            this.queue.splice(index, 1);
+          }
+          reject(createAbortError());
+        };
+        signal?.addEventListener('abort', entry.onAbort, { once: true });
+        this.queue.push(entry);
+      });
+    }
+
+    if (signal?.aborted) {
+      this.releaseQueuedWaiter();
+      throw createAbortError();
     }
 
     this.active++;
@@ -39,8 +77,23 @@ class AsyncLimiter {
       }
       released = true;
       this.active--;
-      this.queue.shift()?.();
+      this.releaseQueuedWaiter();
     };
+  }
+
+  private releaseQueuedWaiter() {
+    while (this.queue.length > 0) {
+      const entry = this.queue.shift()!;
+      if (entry.onAbort) {
+        entry.signal?.removeEventListener('abort', entry.onAbort);
+      }
+      if (entry.signal?.aborted) {
+        entry.reject(createAbortError());
+        continue;
+      }
+      entry.resolve();
+      return;
+    }
   }
 }
 
@@ -99,8 +152,11 @@ export class S3StorageBackend implements StorageBackend {
     await upload.done();
   }
 
-  async get(key: string): Promise<{ stream: Readable; contentType?: string; length?: number }> {
-    const response = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+  async get(key: string, signal?: AbortSignal): Promise<{ stream: Readable; contentType?: string; length?: number }> {
+    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+    const response = signal
+      ? await this.client.send(command, { abortSignal: signal })
+      : await this.client.send(command);
 
     return {
       stream: response.Body as Readable,
@@ -161,7 +217,7 @@ export class S3StorageBackend implements StorageBackend {
     return total;
   }
 
-  private releaseWhenStreamCloses(stream: Readable, release: () => void) {
+  private releaseWhenStreamCloses(stream: Readable, release: () => void, signal?: AbortSignal) {
     let released = false;
     let idleTimeout: ReturnType<typeof setTimeout> | undefined;
     const originalEmit = stream.emit;
@@ -179,8 +235,19 @@ export class S3StorageBackend implements StorageBackend {
       }
       released = true;
       clearIdleTimeout();
+      if (signal) {
+        signal.removeEventListener('abort', abortStream);
+      }
       stream.emit = originalEmit;
       release();
+    };
+
+    const abortStream = () => {
+      try {
+        stream.destroy(createAbortError());
+      } finally {
+        releaseOnce();
+      }
     };
 
     const resetIdleTimeout = () => {
@@ -210,16 +277,21 @@ export class S3StorageBackend implements StorageBackend {
     stream.once('end', releaseOnce);
     stream.once('error', releaseOnce);
     stream.once('close', releaseOnce);
+    if (signal?.aborted) {
+      abortStream();
+    } else {
+      signal?.addEventListener('abort', abortStream, { once: true });
+    }
     resetIdleTimeout();
     return stream;
   }
 
-  async getServeStrategy(key: string, contentType: string): Promise<ServeStrategy> {
+  async getServeStrategy(key: string, contentType: string, signal?: AbortSignal): Promise<ServeStrategy> {
     if (this.serveMode === 'proxy') {
-      const release = await this.proxyReadLimiter.acquire();
+      const release = await this.proxyReadLimiter.acquire(signal);
       try {
-        const { stream, length } = await this.get(key);
-        return { type: 'stream', stream: this.releaseWhenStreamCloses(stream, release), length };
+        const { stream, length } = await this.get(key, signal);
+        return { type: 'stream', stream: this.releaseWhenStreamCloses(stream, release, signal), length };
       } catch (error) {
         release();
         throw error;
