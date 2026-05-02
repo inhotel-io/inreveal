@@ -153,6 +153,7 @@ export type SmartSearchOptions = SearchDateOptions &
   SearchUserIdOptions &
   SearchPeopleOptions &
   SearchTagOptions &
+  SearchAlbumOptions &
   SearchOcrOptions &
   SearchSpaceOptions &
   SearchOrderOptions;
@@ -1188,6 +1189,28 @@ export class SearchRepository {
               .where('album_asset.albumId', '=', asUuid(options!.albumId!)),
           ),
         ),
+      )
+      .$if(!!options?.albumId && !!options?.timelineSpaceIds?.length, (qb) =>
+        qb.where((eb) =>
+          eb.or([
+            eb('asset.ownerId', '=', anyUuid(userIds)),
+            eb.exists(
+              eb
+                .selectFrom('shared_space_asset')
+                .whereRef('shared_space_asset.assetId', '=', 'asset.id')
+                .where('shared_space_asset.spaceId', '=', anyUuid(options!.timelineSpaceIds!)),
+            ),
+            eb.exists(
+              eb
+                .selectFrom('shared_space_library')
+                .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+                .where('shared_space_library.spaceId', '=', anyUuid(options!.timelineSpaceIds!)),
+            ),
+          ]),
+        ),
+      )
+      .$if(!!options?.albumId && !options?.timelineSpaceIds?.length, (qb) =>
+        qb.where('asset.ownerId', '=', anyUuid(userIds)),
       )
       .$if(!options?.albumId && !options?.spaceId && !options?.timelineSpaceIds, (qb) =>
         qb.where('asset.ownerId', '=', anyUuid(userIds)),

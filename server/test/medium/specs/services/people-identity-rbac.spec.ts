@@ -262,6 +262,22 @@ const createLinkedLibraryIdentityFixture = async (input?: { city?: string; perso
 const authFor = (user: { id: string; name: string; email: string; isAdmin?: boolean }) =>
   factory.auth({ user: { id: user.id, name: user.name, email: user.email, isAdmin: user.isAdmin } });
 
+const setSpaceTimeline = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  input: { spaceId: string; userId: string; showInTimeline: boolean },
+) => {
+  await ctx.database
+    .updateTable('shared_space_member')
+    .set({ showInTimeline: input.showInTimeline })
+    .where('spaceId', '=', input.spaceId)
+    .where('userId', '=', input.userId)
+    .execute();
+};
+
+const addCity = async (ctx: ReturnType<typeof setup>['ctx'], assetId: string, city: string) => {
+  await ctx.newExif({ assetId, city, country: 'Germany', fileSizeInByte: 2048 });
+};
+
 describe('People identity RBAC projection', () => {
   it('returns one row per accessible identity for a member of multiple spaces', async () => {
     const fx = await setupPeopleIdentityMatrix();
@@ -886,6 +902,321 @@ describe('People identity RBAC projection', () => {
         primaryProfile: { type: 'space-person', id: fx.spacePerson.id, spaceId: fx.space.id },
       },
     ]);
+  });
+
+  it('timeline opt-in: album scope excludes direct space people and assets while the space is hidden from timeline', async () => {
+    const { ctx, sut } = setupSearch();
+    const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+    const { result: person } = await ctx.newPerson({ ownerId: owner.id, name: 'Space Album Name' });
+    const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await addCity(ctx, asset.id, 'Hamburg');
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
+    const { album } = await ctx.newAlbum({ ownerId: member.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+    await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: identity.id, source: 'owner-person' });
+    const spacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: space.id,
+        identityId: identity.id,
+        name: 'Space Album Name',
+        representativeFaceId: faceId,
+        type: 'person',
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: spacePerson.id, assetFaceId: faceId })
+      .execute();
+
+    const auth = authFor(member);
+    await setSpaceTimeline(ctx, { spaceId: space.id, userId: member.id, showInTimeline: false });
+
+    const albumFiltersHidden = await sut.getFilterSuggestions(auth, { albumId: album.id });
+    const albumCitiesHidden = await sut.getSearchSuggestions(auth, {
+      type: SearchSuggestionType.CITY,
+      albumId: album.id,
+      personIds: [`space-person:${spacePerson.id}`],
+    });
+    const albumAssetsHidden = await sut.searchMetadata(auth, { albumIds: [album.id] });
+    const albumStatsHidden = await sut.searchStatistics(auth, { albumIds: [album.id] });
+    const albumRandomHidden = await sut.searchRandom(auth, { albumIds: [album.id], size: 10 });
+    const albumLargeHidden = await sut.searchLargeAssets(auth, { albumIds: [album.id], minFileSize: 1 });
+    const explicitSpaceFilters = await sut.getFilterSuggestions(auth, { spaceId: space.id });
+    const explicitSpaceAssets = await sut.searchMetadata(auth, { spaceId: space.id });
+
+    expect(albumFiltersHidden.people).toEqual([]);
+    expect(albumCitiesHidden).toEqual([]);
+    expect(albumAssetsHidden.assets.items).toEqual([]);
+    expect(albumStatsHidden.total).toBe(0);
+    expect(albumRandomHidden).toEqual([]);
+    expect(albumLargeHidden).toEqual([]);
+    expect(JSON.stringify({ albumFiltersHidden, albumCitiesHidden, albumAssetsHidden })).not.toContain(
+      'Space Album Name',
+    );
+    expect(explicitSpaceFilters.people).toEqual([
+      {
+        id: spacePerson.id,
+        name: 'Space Album Name',
+        primaryProfile: { type: 'space-person', id: spacePerson.id, spaceId: space.id },
+      },
+    ]);
+    expect(explicitSpaceAssets.assets.items).toEqual([expect.objectContaining({ id: asset.id })]);
+
+    await setSpaceTimeline(ctx, { spaceId: space.id, userId: member.id, showInTimeline: true });
+
+    const albumFiltersVisible = await sut.getFilterSuggestions(auth, { albumId: album.id });
+    const albumCitiesVisible = await sut.getSearchSuggestions(auth, {
+      type: SearchSuggestionType.CITY,
+      albumId: album.id,
+      personIds: [`space-person:${spacePerson.id}`],
+    });
+    const albumAssetsVisible = await sut.searchMetadata(auth, { albumIds: [album.id] });
+    const albumStatsVisible = await sut.searchStatistics(auth, { albumIds: [album.id] });
+    const albumRandomVisible = await sut.searchRandom(auth, { albumIds: [album.id], size: 10 });
+    const albumLargeVisible = await sut.searchLargeAssets(auth, { albumIds: [album.id], minFileSize: 1 });
+
+    expect(albumFiltersVisible.people).toEqual([
+      {
+        id: `space-person:${spacePerson.id}`,
+        name: 'Space Album Name',
+        primaryProfile: { type: 'space-person', id: spacePerson.id, spaceId: space.id },
+      },
+    ]);
+    expect(albumCitiesVisible).toEqual(['Hamburg']);
+    expect(albumAssetsVisible.assets.items).toEqual([expect.objectContaining({ id: asset.id })]);
+    expect(albumStatsVisible.total).toBe(1);
+    expect(albumRandomVisible).toEqual([expect.objectContaining({ id: asset.id })]);
+    expect(albumLargeVisible).toEqual([expect.objectContaining({ id: asset.id })]);
+  });
+
+  it('timeline opt-in: album scope excludes linked-library people and assets while the space is hidden from timeline', async () => {
+    const fx = await createLinkedLibraryIdentityFixture({ city: 'Zurich' });
+    const { album } = await fx.ctx.newAlbum({ ownerId: fx.member.id });
+    await fx.ctx.newAlbumAsset({ albumId: album.id, assetId: fx.face.asset.id });
+    const auth = authFor(fx.member);
+    const token = `space-person:${fx.spacePerson.id}`;
+
+    await fx.sharedSpaceService.updateMemberTimeline(auth, fx.space.id, { showInTimeline: false });
+
+    const filtersHidden = await fx.searchService.getFilterSuggestions(auth, { albumId: album.id });
+    const citiesHidden = await fx.searchService.getSearchSuggestions(auth, {
+      type: SearchSuggestionType.CITY,
+      albumId: album.id,
+      personIds: [token],
+    });
+    const assetsHidden = await fx.searchService.searchMetadata(auth, { albumIds: [album.id] });
+    const statsHidden = await fx.searchService.searchStatistics(auth, { albumIds: [album.id] });
+    const explicitSpaceAssets = await fx.searchService.searchMetadata(auth, { spaceId: fx.space.id });
+
+    expect(filtersHidden.people).toEqual([]);
+    expect(citiesHidden).toEqual([]);
+    expect(assetsHidden.assets.items).toEqual([]);
+    expect(statsHidden.total).toBe(0);
+    expect(JSON.stringify({ filtersHidden, citiesHidden, assetsHidden })).not.toContain('Library Source');
+    expect(explicitSpaceAssets.assets.items).toEqual([expect.objectContaining({ id: fx.face.asset.id })]);
+
+    await fx.sharedSpaceService.updateMemberTimeline(auth, fx.space.id, { showInTimeline: true });
+
+    const filtersVisible = await fx.searchService.getFilterSuggestions(auth, { albumId: album.id });
+    const citiesVisible = await fx.searchService.getSearchSuggestions(auth, {
+      type: SearchSuggestionType.CITY,
+      albumId: album.id,
+      personIds: [token],
+    });
+    const assetsVisible = await fx.searchService.searchMetadata(auth, { albumIds: [album.id] });
+    const statsVisible = await fx.searchService.searchStatistics(auth, { albumIds: [album.id] });
+
+    expect(filtersVisible.people).toEqual([
+      {
+        id: token,
+        name: 'Library Source',
+        primaryProfile: { type: 'space-person', id: fx.spacePerson.id, spaceId: fx.space.id },
+      },
+    ]);
+    expect(citiesVisible).toEqual(['Zurich']);
+    expect(assetsVisible.assets.items).toEqual([expect.objectContaining({ id: fx.face.asset.id })]);
+    expect(statsVisible.total).toBe(1);
+  });
+
+  it('timeline opt-in: album scoped stale space-person token cannot broaden results from a hidden space', async () => {
+    const { ctx, sut } = setupSearch();
+    const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+    const { result: person } = await ctx.newPerson({ ownerId: owner.id, name: 'Hidden Token Name' });
+    const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await addCity(ctx, asset.id, 'Cologne');
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
+    const { album } = await ctx.newAlbum({ ownerId: member.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+    await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: identity.id, source: 'owner-person' });
+    const spacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: space.id,
+        identityId: identity.id,
+        name: 'Hidden Token Name',
+        representativeFaceId: faceId,
+        type: 'person',
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: spacePerson.id, assetFaceId: faceId })
+      .execute();
+    await setSpaceTimeline(ctx, { spaceId: space.id, userId: member.id, showInTimeline: false });
+
+    const hidden = await sut.searchMetadata(authFor(member), {
+      albumIds: [album.id],
+      personIds: [`space-person:${spacePerson.id}`],
+    });
+    const cities = await sut.getSearchSuggestions(authFor(member), {
+      type: SearchSuggestionType.CITY,
+      albumId: album.id,
+      personIds: [`space-person:${spacePerson.id}`],
+    });
+
+    expect(hidden.assets.items).toEqual([]);
+    expect(cities).toEqual([]);
+  });
+
+  it('timeline opt-in: album sharing does not re-share a shared-space-only person to a non-member', async () => {
+    const { ctx, sut } = setupSearch();
+    const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+    const { user: owner } = await ctx.newUser();
+    const { user: spaceMember } = await ctx.newUser();
+    const { user: albumViewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: spaceMember.id, role: SharedSpaceRole.Viewer });
+    const { result: person } = await ctx.newPerson({ ownerId: owner.id, name: 'No Reshare Name' });
+    const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await addCity(ctx, asset.id, 'Munich');
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
+    const { album } = await ctx.newAlbum({ ownerId: spaceMember.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    await ctx.newAlbumUser({ albumId: album.id, userId: albumViewer.id });
+    const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+    await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: identity.id, source: 'owner-person' });
+    const spacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: space.id,
+        identityId: identity.id,
+        name: 'No Reshare Name',
+        representativeFaceId: faceId,
+        type: 'person',
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: spacePerson.id, assetFaceId: faceId })
+      .execute();
+
+    const filters = await sut.getFilterSuggestions(authFor(albumViewer), { albumId: album.id });
+    const metadata = await sut.searchMetadata(authFor(albumViewer), { albumIds: [album.id] });
+    const cities = await sut.getSearchSuggestions(authFor(albumViewer), {
+      type: SearchSuggestionType.CITY,
+      albumId: album.id,
+    });
+
+    expect(filters.people).toEqual([]);
+    expect(metadata.assets.items).toEqual([]);
+    expect(cities).toEqual([]);
+    expect(JSON.stringify({ filters, metadata, cities })).not.toContain('No Reshare Name');
+  });
+
+  it('timeline opt-in: disabling a space is per viewer and does not hide it for another member', async () => {
+    const { ctx, sut } = setupSearch();
+    const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+    const { user: owner } = await ctx.newUser();
+    const { user: hiddenMember } = await ctx.newUser();
+    const { user: visibleMember } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: hiddenMember.id, role: SharedSpaceRole.Viewer });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: visibleMember.id, role: SharedSpaceRole.Viewer });
+    const { result: person } = await ctx.newPerson({ ownerId: owner.id, name: 'Viewer Scoped Name' });
+    const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
+    const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+    await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: identity.id, source: 'owner-person' });
+    const spacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: space.id,
+        identityId: identity.id,
+        name: 'Viewer Scoped Name',
+        representativeFaceId: faceId,
+        type: 'person',
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: spacePerson.id, assetFaceId: faceId })
+      .execute();
+    await setSpaceTimeline(ctx, { spaceId: space.id, userId: hiddenMember.id, showInTimeline: false });
+
+    const hidden = await sut.searchPerson(authFor(hiddenMember), { name: 'Viewer', withSharedSpaces: true });
+    const visible = await sut.searchPerson(authFor(visibleMember), { name: 'Viewer', withSharedSpaces: true });
+
+    expect(hidden).toEqual([]);
+    expect(visible).toHaveLength(1);
+  });
+
+  it('timeline opt-in: a viewer-owned identity token does not pull matching photos from a hidden space', async () => {
+    const { ctx, faceIdentityRepository } = setup();
+    const { sut: searchService } = setupSearch();
+    const { sut: sharedSpaceService } = setupSharedSpace();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+    const ownerFace = await createIdentityBackedFace(ctx, faceIdentityRepository, {
+      ownerId: owner.id,
+      personName: 'Owner John',
+      spaceId: space.id,
+    });
+    const memberFace = await createIdentityBackedFace(ctx, faceIdentityRepository, {
+      ownerId: member.id,
+      personName: 'Member John',
+    });
+    await sharedSpaceService.handleSharedSpaceFaceMatch({ spaceId: space.id, assetId: ownerFace.asset.id });
+    await faceIdentityRepository.mergeIdentities({
+      targetIdentityId: memberFace.identity.id,
+      sourceIdentityIds: [ownerFace.identity.id],
+      source: 'manual',
+    });
+    const auth = authFor(member);
+    await sharedSpaceService.updateMemberTimeline(auth, space.id, { showInTimeline: false });
+
+    const filtered = await searchService.searchMetadata(auth, {
+      withSharedSpaces: true,
+      personIds: [`person:${memberFace.person.id}`],
+    });
+
+    expect(filtered.assets.items).toEqual([expect.objectContaining({ id: memberFace.asset.id })]);
+    expect(filtered.assets.items.map((asset) => asset.id)).not.toContain(ownerFace.asset.id);
   });
 
   it('filters global search suggestions by resolved identity across accessible spaces', async () => {

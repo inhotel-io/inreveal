@@ -57,6 +57,8 @@ type ScopedPersonFilterOptions = {
   forceEmptyResult?: boolean;
   withSharedSpaces?: boolean;
   spaceId?: string;
+  albumId?: string;
+  albumIds?: string[];
   timelineSpaceIds?: string[];
 };
 
@@ -116,7 +118,7 @@ export class SearchService extends BaseService {
     const page = dto.page ?? 1;
     const size = dto.size || 250;
     const userIds = await this.getUserIdsToSearch(auth);
-    const timelineSpaceIds = await this.getTimelineSpaceIds(auth, dto.withSharedSpaces);
+    const timelineSpaceIds = await this.getTimelineSpaceIds(auth, dto.withSharedSpaces || !!dto.albumIds?.length);
     const resolvedDto = await this.resolveScopedPersonFilters(auth, { ...dto, timelineSpaceIds });
     const { hasNextPage, items } = await this.searchRepository.searchMetadata(
       { page, size },
@@ -145,7 +147,7 @@ export class SearchService extends BaseService {
     }
 
     const userIds = await this.getUserIdsToSearch(auth);
-    const timelineSpaceIds = await this.getTimelineSpaceIds(auth, dto.withSharedSpaces);
+    const timelineSpaceIds = await this.getTimelineSpaceIds(auth, dto.withSharedSpaces || !!dto.albumIds?.length);
     const resolvedDto = await this.resolveScopedPersonFilters(auth, { ...dto, timelineSpaceIds });
 
     return await this.searchRepository.searchStatistics({
@@ -172,7 +174,7 @@ export class SearchService extends BaseService {
     }
 
     const userIds = await this.getUserIdsToSearch(auth);
-    const timelineSpaceIds = await this.getTimelineSpaceIds(auth, dto.withSharedSpaces);
+    const timelineSpaceIds = await this.getTimelineSpaceIds(auth, dto.withSharedSpaces || !!dto.albumIds?.length);
     const resolvedDto = await this.resolveScopedPersonFilters(auth, { ...dto, timelineSpaceIds });
     const items = await this.searchRepository.searchRandom(dto.size || 250, { ...resolvedDto, userIds });
     return items.map((item) => mapAsset(item, { auth }));
@@ -196,7 +198,7 @@ export class SearchService extends BaseService {
     }
 
     const userIds = await this.getUserIdsToSearch(auth);
-    const timelineSpaceIds = await this.getTimelineSpaceIds(auth, dto.withSharedSpaces);
+    const timelineSpaceIds = await this.getTimelineSpaceIds(auth, dto.withSharedSpaces || !!dto.albumIds?.length);
     const resolvedDto = await this.resolveScopedPersonFilters(auth, { ...dto, timelineSpaceIds });
     const items = await this.searchRepository.searchLargeAssets(dto.size || 250, { ...resolvedDto, userIds });
     return items.map((item) => mapAsset(item, { auth }));
@@ -281,7 +283,7 @@ export class SearchService extends BaseService {
     const userIds = await this.getUserIdsToSearch(auth);
 
     let timelineSpaceIds: string[] | undefined;
-    if (!dto.albumId && dto.withSharedSpaces) {
+    if (dto.withSharedSpaces || dto.albumId) {
       const spaceRows = await this.sharedSpaceRepository.getSpaceIdsForTimeline(auth.user.id);
       if (spaceRows.length > 0) {
         timelineSpaceIds = spaceRows.map((row) => row.spaceId);
@@ -438,7 +440,7 @@ export class SearchService extends BaseService {
     }
 
     let timelineSpaceIds: string[] | undefined;
-    if (dto.withSharedSpaces) {
+    if (dto.withSharedSpaces || !!('albumIds' in dto && dto.albumIds?.length)) {
       const spaceRows = await this.sharedSpaceRepository.getSpaceIdsForTimeline(auth.user.id);
       if (spaceRows.length > 0) {
         timelineSpaceIds = spaceRows.map((row) => row.spaceId);
@@ -489,7 +491,8 @@ export class SearchService extends BaseService {
   ): Promise<T & ScopedPersonFilterOptions> {
     const tokens = dto.personIds?.filter(Boolean) ?? [];
     const hasScopedTokens = tokens.some((token) => token.includes(':'));
-    const shouldResolve = tokens.length > 0 && (dto.withSharedSpaces || hasScopedTokens);
+    const isGlobalSharedScope = dto.withSharedSpaces || !!dto.albumId || !!dto.albumIds?.length;
+    const shouldResolve = tokens.length > 0 && (isGlobalSharedScope || hasScopedTokens);
 
     if (!shouldResolve) {
       return dto;
@@ -499,7 +502,7 @@ export class SearchService extends BaseService {
       userId: auth.user.id,
       tokens,
       scope: {
-        withSharedSpaces: dto.withSharedSpaces,
+        withSharedSpaces: isGlobalSharedScope,
         timelineSpaceIds: dto.timelineSpaceIds,
         spaceId: dto.spaceId,
       },
