@@ -4497,32 +4497,20 @@ describe('prefix scoping — runBatch gating', () => {
 
   it('scope nav: ENTITY_KEYS_BY_SCOPE.nav === [] — no entity providers invoked', async () => {
     const m = new GlobalSearchManager();
-    const searchSmartSpy = vi.mocked(searchSmart);
-    const searchPersonSpy = vi.mocked(searchPerson);
-    const searchPlacesSpy = vi.mocked(searchPlaces);
-    const getAllTagsSpy = vi.mocked(getAllTags);
-    const getAlbumNamesSpy = vi.mocked(getAlbumNames);
-    const getAllSpacesSpy = vi.mocked(getAllSpaces);
-    for (const s of [
-      searchSmartSpy,
-      searchPersonSpy,
-      searchPlacesSpy,
-      getAllTagsSpy,
-      getAlbumNamesSpy,
-      getAllSpacesSpy,
-    ]) {
-      s.mockClear();
+    const providers = (m as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providerRuns = new Map<string, ReturnType<typeof vi.fn>>();
+    for (const key of ['photos', 'people', 'places', 'tags', 'albums', 'spaces'] as const) {
+      const run = vi.fn().mockResolvedValue({ status: 'empty' });
+      providerRuns.set(key, run);
+      providers[key].run = run;
     }
-    const searchSmartCallsBefore = searchSmartSpy.mock.calls.length;
-    const searchPersonCallsBefore = searchPersonSpy.mock.calls.length;
-    const searchPlacesCallsBefore = searchPlacesSpy.mock.calls.length;
 
     m.setQuery('>theme');
     await vi.advanceTimersByTimeAsync(150);
 
-    expect(searchSmartSpy).toHaveBeenCalledTimes(searchSmartCallsBefore);
-    expect(searchPersonSpy).toHaveBeenCalledTimes(searchPersonCallsBefore);
-    expect(searchPlacesSpy).toHaveBeenCalledTimes(searchPlacesCallsBefore);
+    for (const run of providerRuns.values()) {
+      expect(run).not.toHaveBeenCalled();
+    }
     // Navigation section populated via synchronous runNavigationProvider, not runBatch.
     expect(m.sections.navigation.status).toBe('ok');
   });
