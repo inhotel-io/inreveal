@@ -1875,7 +1875,7 @@ describe('/shared-spaces', () => {
           expect((direct.body as { isHidden: boolean }).isHidden).toBe(true);
         });
 
-        it('updates, persists, lists, and clears birthDate', async () => {
+        it('updates, persists, lists, and clears birthDate without mutating the source person', async () => {
           const scratch = await utils.createSpacePerson(spaceId, 'BirthDatePerson', owner.userId, spaceAssetId);
           const expectedBirthDate = '1984-05-09';
 
@@ -1890,7 +1890,7 @@ describe('/shared-spaces', () => {
             .get(`/people/${scratch.globalPersonId}`)
             .set('Authorization', `Bearer ${owner.accessToken}`);
           expect(globalPerson.status).toBe(200);
-          expect((globalPerson.body as { birthDate: string | null }).birthDate).toBe(expectedBirthDate);
+          expect((globalPerson.body as { birthDate: string | null }).birthDate).toBeNull();
 
           const direct = await request(app)
             .get(`/shared-spaces/${spaceId}/people/${scratch.spacePersonId}`)
