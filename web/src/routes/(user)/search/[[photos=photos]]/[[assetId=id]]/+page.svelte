@@ -237,7 +237,7 @@
     personId.startsWith('person:') || personId.startsWith('space-person:');
 
   async function getPersonName(personIds: string[]) {
-    const scopedPersonIds = personIds.filter(isScopedPersonToken);
+    const scopedPersonIds = personIds.filter((personId) => isScopedPersonToken(personId));
     const scopedPeople =
       scopedPersonIds.length > 0 ? await searchPerson({ name: '', withHidden: true, withSharedSpaces: true }) : [];
     const scopedPeopleByFilterId = new Map(
