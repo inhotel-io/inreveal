@@ -2,33 +2,55 @@ import { BadRequestException } from '@nestjs/common';
 import { Kysely } from 'kysely';
 import { SearchSuggestionType } from 'src/dtos/search.dto';
 import { AssetVisibility, SharedSpaceRole } from 'src/enum';
+import { AccessRepository } from 'src/repositories/access.repository';
+import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PartnerRepository } from 'src/repositories/partner.repository';
+import { PersonRepository } from 'src/repositories/person.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
+import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { DB } from 'src/schema';
 import { PersonService } from 'src/services/person.service';
 import { SearchService } from 'src/services/search.service';
+import { SharedSpaceService } from 'src/services/shared-space.service';
 import { newMediumService } from 'test/medium.factory';
-import { factory } from 'test/small.factory';
+import { factory, newEmbedding } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
+import { Mocked } from 'vitest';
 
 let defaultDatabase: Kysely<DB>;
 
 const setup = (db?: Kysely<DB>) => {
   const { ctx, sut } = newMediumService(PersonService, {
     database: db || defaultDatabase,
-    real: [FaceIdentityRepository],
-    mock: [LoggingRepository],
+    real: [AccessRepository, FaceIdentityRepository, PersonRepository],
+    mock: [JobRepository, LoggingRepository],
   });
+  const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+  jobs.queue.mockResolvedValue();
+  jobs.queueAll.mockResolvedValue();
+  return { ctx, sut, faceIdentityRepository: ctx.get(FaceIdentityRepository) };
+};
+
+const setupSharedSpace = (db?: Kysely<DB>) => {
+  const { ctx, sut } = newMediumService(SharedSpaceService, {
+    database: db || defaultDatabase,
+    real: [ConfigRepository, FaceIdentityRepository, SharedSpaceRepository, SystemMetadataRepository],
+    mock: [JobRepository, LoggingRepository],
+  });
+  const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+  jobs.queue.mockResolvedValue();
+  jobs.queueAll.mockResolvedValue();
   return { ctx, sut, faceIdentityRepository: ctx.get(FaceIdentityRepository) };
 };
 
 const setupSearch = (db?: Kysely<DB>) => {
   return newMediumService(SearchService, {
     database: db || defaultDatabase,
-    real: [FaceIdentityRepository, SearchRepository, SharedSpaceRepository, PartnerRepository],
+    real: [AccessRepository, FaceIdentityRepository, SearchRepository, SharedSpaceRepository, PartnerRepository],
     mock: [LoggingRepository],
   });
 };
@@ -163,6 +185,35 @@ const setupRepairFixture = async (role: SharedSpaceRole = SharedSpaceRole.Editor
   };
 };
 
+const createIdentityBackedFace = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  faceIdentityRepository: FaceIdentityRepository,
+  input: {
+    ownerId: string;
+    personName: string;
+    spaceId?: string;
+    assetAdderId?: string;
+  },
+) => {
+  const { result: person } = await ctx.newPerson({ ownerId: input.ownerId, name: input.personName });
+  const { asset } = await ctx.newAsset({ ownerId: input.ownerId, visibility: AssetVisibility.Timeline });
+  if (input.spaceId) {
+    await ctx.newSharedSpaceAsset({
+      spaceId: input.spaceId,
+      assetId: asset.id,
+      addedById: input.assetAdderId ?? input.ownerId,
+    });
+  }
+  const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+  await ctx.database.insertInto('face_search').values({ faceId, embedding: newEmbedding() }).execute();
+  const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+  await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: identity.id, source: 'owner-person' });
+  return { asset, faceId, identity, person };
+};
+
+const authFor = (user: { id: string; name: string; email: string; isAdmin?: boolean }) =>
+  factory.auth({ user: { id: user.id, name: user.name, email: user.email, isAdmin: user.isAdmin } });
+
 describe('People identity RBAC projection', () => {
   it('returns one row per accessible identity for a member of multiple spaces', async () => {
     const fx = await setupPeopleIdentityMatrix();
@@ -252,6 +303,253 @@ describe('People identity RBAC projection', () => {
     expect(result).toEqual({ people: [], total: 0, hidden: 0, hasNextPage: false });
   });
 
+  it('does not leak inherited space metadata through global discovery endpoints to non-members or admins', async () => {
+    const fx = await setupPeopleIdentityMatrix();
+    const { sut: searchService } = setupSearch();
+    const inaccessibleToken = `space-person:${fx.space1Alice.spacePerson.id}`;
+
+    for (const user of [fx.nonMember, fx.adminNonMember]) {
+      const auth = authFor(user);
+      const people = await fx.sut.getAll(auth, {
+        withHidden: true,
+        withSharedSpaces: true,
+        page: 1,
+        size: 50,
+      } as any);
+      const search = await searchService.searchPerson(auth, { name: 'Alice', withSharedSpaces: true });
+      const filters = await searchService.getFilterSuggestions(auth, { withSharedSpaces: true });
+      const scopedCities = await searchService.getSearchSuggestions(auth, {
+        type: SearchSuggestionType.CITY,
+        withSharedSpaces: true,
+        personIds: [inaccessibleToken],
+      });
+      const serialized = JSON.stringify({ people, search, filters, scopedCities });
+
+      expect(people.people).toEqual([]);
+      expect(search).toEqual([]);
+      expect(filters.people).toEqual([]);
+      expect(scopedCities).toEqual([]);
+      expect(serialized).not.toContain('Alice Source');
+      expect(serialized).not.toContain(fx.space1.id);
+      expect(serialized).not.toContain(fx.space1Alice.spacePerson.id);
+      expect(serialized).not.toContain(fx.aliceIdentityId);
+    }
+  });
+
+  it('excludes timeline-disabled spaces from all global discovery endpoints', async () => {
+    const fx = await setupPeopleIdentityMatrix();
+    const { sut: searchService } = setupSearch();
+    const auth = authFor(fx.userInBothSpaces);
+    const hiddenToken = `space-person:${fx.hiddenTimelineAlice.spacePerson.id}`;
+
+    const people = await fx.sut.getAll(auth, {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const search = await searchService.searchPerson(auth, { name: 'Hidden Timeline Name', withSharedSpaces: true });
+    const filters = await searchService.getFilterSuggestions(auth, { withSharedSpaces: true });
+    const scopedCities = await searchService.getSearchSuggestions(auth, {
+      type: SearchSuggestionType.CITY,
+      withSharedSpaces: true,
+      personIds: [hiddenToken],
+    });
+    const serialized = JSON.stringify({ people, search, filters, scopedCities });
+
+    expect(search).toEqual([]);
+    expect(scopedCities).toEqual([]);
+    expect(serialized).not.toContain('Hidden Timeline Name');
+    expect(serialized).not.toContain(fx.hiddenTimelineSpace.id);
+    expect(serialized).not.toContain(fx.hiddenTimelineAlice.spacePerson.id);
+    expect(filters.people).not.toContainEqual(
+      expect.objectContaining({ id: `space-person:${fx.hiddenTimelineAlice.spacePerson.id}` }),
+    );
+  });
+
+  it('stops exposing inherited space people in global discovery after member removal', async () => {
+    const { ctx, sut, faceIdentityRepository } = setup();
+    const { sut: sharedSpaceService } = setupSharedSpace();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+    const face = await createIdentityBackedFace(ctx, faceIdentityRepository, {
+      ownerId: owner.id,
+      personName: 'Removed Member Source',
+      spaceId: space.id,
+    });
+    await sharedSpaceService.handleSharedSpaceFaceMatch({ spaceId: space.id, assetId: face.asset.id });
+
+    const beforeRemoval = await sut.getAll(authFor(member), {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(beforeRemoval.people).toEqual([
+      expect.objectContaining({
+        name: 'Removed Member Source',
+        primaryProfile: expect.objectContaining({ type: 'space-person', spaceId: space.id }),
+      }),
+    ]);
+
+    await sharedSpaceService.removeMember(authFor(owner), space.id, member.id);
+
+    const afterRemoval = await sut.getAll(authFor(member), {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(afterRemoval).toEqual({ people: [], total: 0, hidden: 0, hasNextPage: false });
+  });
+
+  it('inherits an owner name into a space person and updates global people for later invitees after owner rename', async () => {
+    const { ctx, sut, faceIdentityRepository } = setup();
+    const { sut: sharedSpaceService } = setupSharedSpace();
+    const { user: owner } = await ctx.newUser();
+    const { user: invitee } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    const face = await createIdentityBackedFace(ctx, faceIdentityRepository, {
+      ownerId: owner.id,
+      personName: 'Source Person',
+      spaceId: space.id,
+    });
+
+    await sharedSpaceService.handleSharedSpaceFaceMatch({ spaceId: space.id, assetId: face.asset.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: invitee.id, role: SharedSpaceRole.Viewer });
+
+    const beforeRename = await sut.getAll(factory.auth({ user: invitee }), {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(beforeRename.people).toEqual([
+      expect.objectContaining({
+        name: 'Source Person',
+        primaryProfile: expect.objectContaining({ type: 'space-person', spaceId: space.id }),
+      }),
+    ]);
+
+    await sut.update(factory.auth({ user: owner }), face.person.id, { name: 'Renamed Source Person' });
+    await sharedSpaceService.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const afterRename = await sut.getAll(factory.auth({ user: invitee }), {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(afterRename.people).toEqual([
+      expect.objectContaining({
+        name: 'Renamed Source Person',
+        primaryProfile: expect.objectContaining({ type: 'space-person', spaceId: space.id }),
+      }),
+    ]);
+  });
+
+  it('keeps a private member name separate from an inherited space name until identities are linked', async () => {
+    const { ctx, sut, faceIdentityRepository } = setup();
+    const { sut: sharedSpaceService } = setupSharedSpace();
+    const { user: owner } = await ctx.newUser();
+    const { user: invitee } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    const ownerFace = await createIdentityBackedFace(ctx, faceIdentityRepository, {
+      ownerId: owner.id,
+      personName: 'Owner Name',
+      spaceId: space.id,
+    });
+    const inviteeFace = await createIdentityBackedFace(ctx, faceIdentityRepository, {
+      ownerId: invitee.id,
+      personName: 'Invitee Private Name',
+    });
+    await sharedSpaceService.handleSharedSpaceFaceMatch({ spaceId: space.id, assetId: ownerFace.asset.id });
+
+    const beforeInvite = await sut.getAll(factory.auth({ user: invitee }), {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(beforeInvite.people).toEqual([
+      expect.objectContaining({
+        id: inviteeFace.person.id,
+        name: 'Invitee Private Name',
+        primaryProfile: { type: 'user-person', id: inviteeFace.person.id },
+      }),
+    ]);
+    expect(JSON.stringify(beforeInvite)).not.toContain('Owner Name');
+
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: invitee.id, role: SharedSpaceRole.Viewer });
+
+    const afterInvite = await sut.getAll(factory.auth({ user: invitee }), {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(afterInvite.people).toHaveLength(2);
+    expect(afterInvite.people).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: inviteeFace.person.id,
+          name: 'Invitee Private Name',
+          primaryProfile: { type: 'user-person', id: inviteeFace.person.id },
+        }),
+        expect.objectContaining({
+          name: 'Owner Name',
+          primaryProfile: expect.objectContaining({ type: 'space-person', spaceId: space.id }),
+        }),
+      ]),
+    );
+  });
+
+  it('prefers the viewer personal name in global people after a shared identity is linked', async () => {
+    const { ctx, sut, faceIdentityRepository } = setup();
+    const { sut: sharedSpaceService } = setupSharedSpace();
+    const { user: owner } = await ctx.newUser();
+    const { user: invitee } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: invitee.id, role: SharedSpaceRole.Viewer });
+    const ownerFace = await createIdentityBackedFace(ctx, faceIdentityRepository, {
+      ownerId: owner.id,
+      personName: 'Owner Name',
+      spaceId: space.id,
+    });
+    const inviteeFace = await createIdentityBackedFace(ctx, faceIdentityRepository, {
+      ownerId: invitee.id,
+      personName: 'Invitee Private Name',
+    });
+    await sharedSpaceService.handleSharedSpaceFaceMatch({ spaceId: space.id, assetId: ownerFace.asset.id });
+    await faceIdentityRepository.mergeIdentities({
+      targetIdentityId: inviteeFace.identity.id,
+      sourceIdentityIds: [ownerFace.identity.id],
+      source: 'manual',
+    });
+
+    const result = await sut.getAll(factory.auth({ user: invitee }), {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+
+    expect(result.people).toEqual([
+      expect.objectContaining({
+        id: inviteeFace.person.id,
+        name: 'Invitee Private Name',
+        primaryProfile: { type: 'user-person', id: inviteeFace.person.id },
+        filterId: `person:${inviteeFace.person.id}`,
+      }),
+    ]);
+  });
+
   it('returns identity-grouped scoped person tokens in global filter suggestions', async () => {
     const fx = await setupPeopleIdentityMatrix();
     const { sut } = setupSearch();
@@ -261,11 +559,103 @@ describe('People identity RBAC projection', () => {
     });
     const serialized = JSON.stringify(result);
 
-    expect(result.people).toEqual([{ id: `space-person:${fx.space1Alice.spacePerson.id}`, name: 'Alice Source' }]);
+    expect(result.people).toEqual([
+      {
+        id: `space-person:${fx.space1Alice.spacePerson.id}`,
+        name: 'Alice Source',
+        primaryProfile: { type: 'space-person', id: fx.space1Alice.spacePerson.id, spaceId: fx.space1.id },
+      },
+    ]);
     expect(serialized).not.toContain(fx.aliceIdentityId);
     expect(serialized).not.toContain('identityId');
     expect(serialized).not.toContain('Space 2 Private Name');
     expect(serialized).not.toContain(fx.space2Alice.spacePerson.id);
+  });
+
+  it('uses a named accessible space profile over a blank personal profile in global filter suggestions', async () => {
+    const { ctx, sut } = setupSearch();
+    const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+    const { person } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+    const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+    await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: identity.id, source: 'owner-person' });
+    const spacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: space.id,
+        identityId: identity.id,
+        name: 'Pierre',
+        representativeFaceId: faceId,
+        type: 'person',
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    try {
+      const result = await sut.getFilterSuggestions(factory.auth({ user }), { withSharedSpaces: true });
+
+      expect(result.people).toEqual([
+        {
+          id: `space-person:${spacePerson.id}`,
+          name: 'Pierre',
+          primaryProfile: { type: 'space-person', id: spacePerson.id, spaceId: space.id },
+        },
+      ]);
+    } finally {
+      await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
+    }
+  });
+
+  it('uses a named accessible space profile in album filter suggestions', async () => {
+    const { ctx, sut } = setupSearch();
+    const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+    const { result: person } = await ctx.newPerson({ ownerId: owner.id, name: '' });
+    const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
+    const { album } = await ctx.newAlbum({ ownerId: member.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+    await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: identity.id, source: 'owner-person' });
+    const spacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: space.id,
+        identityId: identity.id,
+        name: 'Space Album Person',
+        representativeFaceId: faceId,
+        type: 'person',
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: spacePerson.id, assetFaceId: faceId })
+      .execute();
+
+    try {
+      const result = await sut.getFilterSuggestions(factory.auth({ user: member }), { albumId: album.id });
+
+      expect(result.people).toEqual([
+        {
+          id: `space-person:${spacePerson.id}`,
+          name: 'Space Album Person',
+          primaryProfile: { type: 'space-person', id: spacePerson.id, spaceId: space.id },
+        },
+      ]);
+    } finally {
+      await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
+    }
   });
 
   it('filters global search suggestions by resolved identity across accessible spaces', async () => {

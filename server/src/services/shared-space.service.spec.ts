@@ -1,6 +1,12 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { writeFile } from 'node:fs/promises';
+import { FACE_THUMBNAIL_SIZE } from 'src/constants';
+import { AssetEditAction } from 'src/dtos/editing.dto';
 import { MapMarkerResponseDto } from 'src/dtos/map.dto';
 import {
+  AssetFileType,
+  AssetType,
+  ImageFormat,
   JobName,
   JobStatus,
   NotificationLevel,
@@ -10,6 +16,7 @@ import {
   UserAvatarColor,
 } from 'src/enum';
 import { SharedSpaceService } from 'src/services/shared-space.service';
+import { ImmichStreamResponse } from 'src/utils/file';
 import { factory, newDate, newUuid } from 'test/small.factory';
 import { newTestService, ServiceMocks } from 'test/utils';
 
@@ -42,6 +49,7 @@ describe(SharedSpaceService.name, () => {
     mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(void 0 as any);
     mocks.sharedSpace.getMetadataInheritanceCandidates.mockResolvedValue([]);
     mocks.sharedSpace.getSpaceAssetAdder.mockResolvedValue({ addedById: null });
+    mocks.sharedSpace.getSpacePersonAssetAdderIds.mockResolvedValue([]);
     mocks.sharedSpace.getSpacePersonMetadataBackfillPage.mockResolvedValue([]);
     mocks.sharedSpace.getIdentityEvidenceForSpacePerson.mockResolvedValue([]);
     mocks.faceIdentity.mergeIdentities.mockResolvedValue({
@@ -3884,37 +3892,164 @@ describe(SharedSpaceService.name, () => {
       await expect(sut.getSpacePersonThumbnail(factory.auth(), 'space-1', 'person-1')).rejects.toThrow('Not Found');
     });
 
-    it('should serve thumbnail from the representative face asset', async () => {
+    it('should serve a cropped thumbnail from the representative face asset preview', async () => {
       const spaceId = newUuid();
       const personId = newUuid();
       const faceId = newUuid();
+      const assetId = newUuid();
       const person = factory.sharedSpacePerson({ id: personId, spaceId, representativeFaceId: faceId });
+      const cleanup = vi.fn();
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
       mocks.sharedSpace.getPersonById.mockResolvedValue({
         ...person,
       });
-      vi.spyOn(sut as any, 'serveFromBackend').mockResolvedValue({} as any);
+      mocks.person.getFaceById.mockResolvedValue({
+        id: faceId,
+        assetId,
+        boundingBoxX1: 100,
+        boundingBoxY1: 100,
+        boundingBoxX2: 300,
+        boundingBoxY2: 300,
+        imageWidth: 1000,
+        imageHeight: 800,
+        type: AssetType.Image,
+      } as any);
+      mocks.asset.getForThumbnail.mockResolvedValue({
+        path: '/path/to/asset/preview.jpg',
+      } as any);
+      vi.spyOn(sut as any, 'ensureLocalFile').mockResolvedValue({
+        localPath: '/tmp/preview.jpg',
+        cleanup,
+      });
+      mocks.media.decodeImage.mockResolvedValue({
+        data: Buffer.from('decoded-image'),
+        info: { width: 500, height: 400, channels: 3 },
+      } as any);
+      mocks.media.generateThumbnail.mockImplementation(async (_input, _options, output) => {
+        await writeFile(output, Buffer.from('cropped-face'));
+      });
 
-      await sut.getSpacePersonThumbnail(factory.auth(), spaceId, personId);
+      const result = await sut.getSpacePersonThumbnail(factory.auth(), spaceId, personId);
+
+      expect(result).toBeInstanceOf(ImmichStreamResponse);
       expect(mocks.sharedSpace.isFaceInSpace).toHaveBeenCalledWith(spaceId, faceId);
-      expect(mocks.sharedSpace.getAssetIdForFace).toHaveBeenCalledWith(faceId);
-      expect(mocks.asset.getForThumbnail).toHaveBeenCalled();
-      expect(mocks.person.getFaceById).not.toHaveBeenCalled();
-      expect(mocks.person.getById).not.toHaveBeenCalled();
+      expect(mocks.person.getFaceById).toHaveBeenCalledWith(faceId);
+      expect(mocks.asset.getForThumbnail).toHaveBeenCalledWith(assetId, AssetFileType.Preview, false);
+      expect(mocks.media.generateThumbnail).toHaveBeenCalledWith(
+        Buffer.from('decoded-image'),
+        expect.objectContaining({
+          colorspace: expect.any(String),
+          format: ImageFormat.Jpeg,
+          quality: expect.any(Number),
+          size: FACE_THUMBNAIL_SIZE,
+          edits: [
+            expect.objectContaining({
+              action: AssetEditAction.Crop,
+              parameters: expect.objectContaining({
+                x: expect.any(Number),
+                y: expect.any(Number),
+                width: expect.any(Number),
+                height: expect.any(Number),
+              }),
+            }),
+          ],
+        }),
+        expect.stringMatching(/thumbnail\.jpeg$/),
+      );
+      expect(cleanup).toHaveBeenCalled();
+      if (result instanceof ImmichStreamResponse) {
+        result.stream.destroy();
+      }
     });
 
     it('should throw NotFoundException when representative asset has no thumbnail', async () => {
       const spaceId = newUuid();
       const personId = newUuid();
       const faceId = newUuid();
+      const assetId = newUuid();
       const person = factory.sharedSpacePerson({ id: personId, spaceId, representativeFaceId: faceId });
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
       mocks.sharedSpace.getPersonById.mockResolvedValue({
         ...person,
       });
+      mocks.person.getFaceById.mockResolvedValue({
+        id: faceId,
+        assetId,
+        boundingBoxX1: 100,
+        boundingBoxY1: 100,
+        boundingBoxX2: 300,
+        boundingBoxY2: 300,
+        imageWidth: 1000,
+        imageHeight: 800,
+      } as any);
       mocks.asset.getForThumbnail.mockResolvedValue({ path: null } as any);
 
       await expect(sut.getSpacePersonThumbnail(factory.auth(), spaceId, personId)).rejects.toThrow('Not Found');
+      expect(mocks.asset.getForThumbnail).toHaveBeenNthCalledWith(1, assetId, AssetFileType.Preview, false);
+      expect(mocks.asset.getForThumbnail).toHaveBeenNthCalledWith(2, assetId, AssetFileType.Thumbnail, false);
+    });
+
+    it('should fall back to the asset thumbnail when the representative asset preview is missing', async () => {
+      const spaceId = newUuid();
+      const personId = newUuid();
+      const faceId = newUuid();
+      const assetId = newUuid();
+      const cleanup = vi.fn();
+      const person = factory.sharedSpacePerson({ id: personId, spaceId, representativeFaceId: faceId });
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
+      mocks.sharedSpace.getPersonById.mockResolvedValue({
+        ...person,
+      });
+      mocks.person.getFaceById.mockResolvedValue({
+        id: faceId,
+        assetId,
+        boundingBoxX1: 100,
+        boundingBoxY1: 100,
+        boundingBoxX2: 300,
+        boundingBoxY2: 300,
+        imageWidth: 1000,
+        imageHeight: 800,
+      } as any);
+      mocks.asset.getForThumbnail
+        .mockResolvedValueOnce({ path: null } as any)
+        .mockResolvedValueOnce({ path: '/path/to/asset/thumbnail.jpg' } as any);
+      vi.spyOn(sut as any, 'ensureLocalFile').mockResolvedValue({
+        localPath: '/tmp/thumbnail.jpg',
+        cleanup,
+      });
+      mocks.media.decodeImage.mockResolvedValue({
+        data: Buffer.from('decoded-image'),
+        info: { width: 250, height: 200, channels: 3 },
+      } as any);
+      mocks.media.generateThumbnail.mockImplementation(async (_input, _options, output) => {
+        await writeFile(output, Buffer.from('cropped-face'));
+      });
+
+      const result = await sut.getSpacePersonThumbnail(factory.auth(), spaceId, personId);
+
+      expect(result).toBeInstanceOf(ImmichStreamResponse);
+      expect(mocks.asset.getForThumbnail).toHaveBeenNthCalledWith(1, assetId, AssetFileType.Preview, false);
+      expect(mocks.asset.getForThumbnail).toHaveBeenNthCalledWith(2, assetId, AssetFileType.Thumbnail, false);
+      expect(cleanup).toHaveBeenCalled();
+      if (result instanceof ImmichStreamResponse) {
+        result.stream.destroy();
+      }
+    });
+
+    it('should throw NotFoundException when the representative face is not in the space', async () => {
+      const spaceId = newUuid();
+      const personId = newUuid();
+      const faceId = newUuid();
+      const person = factory.sharedSpacePerson({ id: personId, spaceId, representativeFaceId: faceId });
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
+      mocks.sharedSpace.getPersonById.mockResolvedValue({
+        ...person,
+      });
+      mocks.sharedSpace.isFaceInSpace.mockResolvedValue(false);
+
+      await expect(sut.getSpacePersonThumbnail(factory.auth(), spaceId, personId)).rejects.toThrow('Not Found');
+      expect(mocks.person.getFaceById).not.toHaveBeenCalled();
+      expect(mocks.asset.getForThumbnail).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when person has no thumbnail and no personal person', async () => {
@@ -4171,7 +4306,9 @@ describe(SharedSpaceService.name, () => {
         birthDateSource: 'none',
       });
 
+      const assetAdderId = newUuid();
       mocks.sharedSpace.getSpacePersonMetadataBackfillPage.mockResolvedValue([person]);
+      mocks.sharedSpace.getSpacePersonAssetAdderIds.mockResolvedValue([assetAdderId]);
       mocks.sharedSpace.getPersonById.mockResolvedValue(person);
       mocks.sharedSpace.getMetadataInheritanceCandidates.mockResolvedValue([
         {
@@ -4192,6 +4329,12 @@ describe(SharedSpaceService.name, () => {
       const result = await sut.backfillSpacePersonMetadata({ limit: 1 });
 
       expect(result).toEqual({ processed: 1, inherited: 1, skipped: 0, nextCursor: personId });
+      expect(mocks.sharedSpace.getSpacePersonAssetAdderIds).toHaveBeenCalledWith(spaceId, personId);
+      expect(mocks.sharedSpace.getMetadataInheritanceCandidates).toHaveBeenCalledWith({
+        spaceId,
+        identityId,
+        assetAdderIds: [assetAdderId],
+      });
       expect(mocks.sharedSpace.updatePerson).toHaveBeenCalledWith(
         personId,
         expect.objectContaining({
@@ -4259,6 +4402,27 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.SharedSpacePersonMetadataBackfill,
         data: { cursor: person.id, limit: 1 },
+      });
+    });
+
+    it('should keep scoped identity metadata backfills scoped across chunks', async () => {
+      const identityId = newUuid();
+      const person = factory.sharedSpacePerson({ identityId });
+      mocks.sharedSpace.getSpacePersonMetadataBackfillPage.mockResolvedValue([person]);
+      mocks.sharedSpace.getPersonById.mockResolvedValue(person);
+      mocks.sharedSpace.getMetadataInheritanceCandidates.mockResolvedValue([]);
+
+      const result = await sut.handleSharedSpacePersonMetadataBackfill({ limit: 1, identityId } as never);
+
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.sharedSpace.getSpacePersonMetadataBackfillPage).toHaveBeenCalledWith({
+        cursor: undefined,
+        limit: 1,
+        identityId,
+      });
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: { cursor: person.id, limit: 1, identityId },
       });
     });
   });
@@ -6634,6 +6798,38 @@ describe(SharedSpaceService.name, () => {
         expect.objectContaining({
           personIds: ['person-1'],
           spacePersonIds: undefined,
+        }),
+      );
+    });
+
+    it('should resolve scoped person tokens for global shared-space map markers', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const token = `space-person:${newUuid()}`;
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+      mocks.faceIdentity.resolveScopedPersonTokens.mockResolvedValue({
+        identityIds: ['identity-1'],
+        legacyPersonIds: ['person-1'],
+        legacySpacePersonIds: ['space-person-1'],
+        hasInaccessibleToken: false,
+      });
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
+
+      await sut.getFilteredMapMarkers(auth, {
+        withSharedSpaces: true,
+        personIds: [token],
+      });
+
+      expect(mocks.faceIdentity.resolveScopedPersonTokens).toHaveBeenCalledWith({
+        userId: auth.user.id,
+        tokens: [token],
+        scope: { withSharedSpaces: true, timelineSpaceIds: [spaceId], spaceId: undefined },
+      });
+      expect(mocks.sharedSpace.getFilteredMapMarkers).toHaveBeenCalledWith(
+        expect.objectContaining({
+          identityIds: ['identity-1'],
+          personIds: ['person-1'],
+          spacePersonIds: ['space-person-1'],
         }),
       );
     });

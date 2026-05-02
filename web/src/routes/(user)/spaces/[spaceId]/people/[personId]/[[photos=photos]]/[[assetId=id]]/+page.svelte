@@ -22,6 +22,7 @@
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import { timeBeforeShowLoadingSpinner } from '$lib/constants';
   import PersonEditBirthDateModal from '$lib/modals/PersonEditBirthDateModal.svelte';
+  import { Route } from '$lib/route';
   import { createUrl, getPeopleThumbnailUrl } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
   import { locale } from '$lib/stores/preferences.store';
@@ -68,6 +69,8 @@
   let personOverride = $state<SharedSpacePersonResponseDto>();
   let personOverrideKey = $state('');
   const person = $derived(personOverrideKey === routeStateKey && personOverride ? personOverride : data.person);
+  const previousRoute = $derived(data.previousRoute ?? `/spaces/${space.id}/people`);
+  const previousRouteParams = $derived(data.previousRoute ? { previousRoute: data.previousRoute } : undefined);
   let isEditingName = $state(false);
   let editedName = $state('');
   let nameInput = $state<HTMLInputElement>();
@@ -93,6 +96,7 @@
   const isEditor = $derived(
     currentMember?.role === SharedSpaceRole.Owner || currentMember?.role === SharedSpaceRole.Editor,
   );
+  const getSpacePersonRoute = (personId: string) => Route.viewSpacePerson(space.id, personId, previousRouteParams);
   const thumbnailUrl = $derived(
     createUrl(`/shared-spaces/${space.id}/people/${person.id}/thumbnail`, { updatedAt: person.updatedAt }),
   );
@@ -213,7 +217,7 @@
       });
       toastManager.success($t('spaces_people_merged'));
       await invalidateAll();
-      await goto(`/spaces/${space.id}/people/${suggestedPerson.id}`, { replaceState: true });
+      await goto(getSpacePersonRoute(suggestedPerson.id), { replaceState: true });
     } catch (error) {
       handleError(error, $t('cannot_merge_people'));
     } finally {
@@ -301,7 +305,7 @@
       return;
     }
 
-    await goto(`/spaces/${space.id}/people`);
+    await goto(previousRoute);
   };
 
   const handleRemoveAssets = async (assetIds: string[]) => {
@@ -313,7 +317,7 @@
   async function closeMergeFlow() {
     setAction(null);
     if (data.action === 'merge') {
-      await goto(`/spaces/${space.id}/people/${person.id}`, { replaceState: true });
+      await goto(getSpacePersonRoute(person.id), { replaceState: true });
     }
   }
 

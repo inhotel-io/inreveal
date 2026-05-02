@@ -340,7 +340,7 @@ export class SearchService extends BaseService {
     const userIds = await this.getUserIdsToSearch(auth);
 
     let timelineSpaceIds: string[] | undefined;
-    if (!dto.albumId && dto.withSharedSpaces) {
+    if (dto.withSharedSpaces || dto.albumId) {
       const spaceRows = await this.sharedSpaceRepository.getSpaceIdsForTimeline(auth.user.id);
       if (spaceRows.length > 0) {
         timelineSpaceIds = spaceRows.map((row) => row.spaceId);

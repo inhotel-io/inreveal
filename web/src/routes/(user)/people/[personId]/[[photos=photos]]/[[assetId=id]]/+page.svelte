@@ -73,10 +73,13 @@
 
   let { data }: Props = $props();
 
-  let numberOfAssets = $derived(data.statistics.assets);
-
   let timelineManager = $state<TimelineManager>() as TimelineManager;
-  const options = $derived({ visibility: AssetVisibility.Timeline, personId: data.person.id });
+  let numberOfAssets = $derived(timelineManager?.isInitialized ? timelineManager.assetCount : data.statistics.assets);
+  const options = $derived({
+    visibility: AssetVisibility.Timeline,
+    personId: data.person.id,
+    withSharedSpaces: true,
+  });
 
   let viewMode: PersonPageViewMode = $state(PersonPageViewMode.VIEW_ASSETS);
   let isEditingName = $state(false);

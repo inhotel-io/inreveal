@@ -106,10 +106,12 @@ function renderPage({
   members = [makeMember()],
   person = makePerson(),
   action = null,
+  previousRoute = null,
 }: {
   members?: SharedSpaceMemberResponseDto[];
   person?: SharedSpacePersonResponseDto;
   action?: string | null;
+  previousRoute?: string | null;
 } = {}) {
   const currentUser = userAdminFactory.build({ id: 'current-user-id' });
   authManager.setUser(currentUser);
@@ -121,6 +123,7 @@ function renderPage({
       members,
       person,
       action,
+      previousRoute,
       meta: { title: 'Alice - Test Space' },
     },
   };
@@ -156,6 +159,48 @@ describe('Spaces person detail page', () => {
 
     expect(result).toMatchObject({ space, members, person, action: null });
     expect(sdkMock.getSpacePersonAssets).not.toHaveBeenCalled();
+  });
+
+  it('loads a safe previous route for contextual back navigation', async () => {
+    const space = makeSpace();
+    const members = [makeMember()];
+    const person = makePerson();
+    sdkMock.getSpace.mockResolvedValue(space);
+    sdkMock.getMembers.mockResolvedValue(members);
+    sdkMock.getSpacePerson.mockResolvedValue(person);
+
+    const result = await load({
+      url: new URL('https://gallery.test/spaces/space-1/people/person-1?previousRoute=%2Fpeople'),
+      params: { spaceId: 'space-1', personId: 'person-1' },
+    } as never);
+
+    expect(result).toMatchObject({ previousRoute: '/people' });
+  });
+
+  it('ignores external previous routes', async () => {
+    const space = makeSpace();
+    const members = [makeMember()];
+    const person = makePerson();
+    sdkMock.getSpace.mockResolvedValue(space);
+    sdkMock.getMembers.mockResolvedValue(members);
+    sdkMock.getSpacePerson.mockResolvedValue(person);
+
+    const result = await load({
+      url: new URL(
+        'https://gallery.test/spaces/space-1/people/person-1?previousRoute=https%3A%2F%2Fevil.test%2Fpeople',
+      ),
+      params: { spaceId: 'space-1', personId: 'person-1' },
+    } as never);
+
+    expect(result).toMatchObject({ previousRoute: null });
+  });
+
+  it('returns to the previous route when opened from global people', async () => {
+    renderPage({ previousRoute: '/people' });
+
+    await userEvent.click(screen.getByLabelText('close'));
+
+    expect(gotoMock).toHaveBeenCalledWith('/people');
   });
 
   it('uses the shared timeline surface for space person photos', () => {

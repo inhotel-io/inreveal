@@ -205,6 +205,22 @@ export function hasFaceIdentities<O>(qb: SelectQueryBuilder<DB, 'asset', O>, ide
   );
 }
 
+export function hasAnyFaceIdentity<O>(qb: SelectQueryBuilder<DB, 'asset', O>, identityIds: string[]) {
+  return qb.innerJoin(
+    (eb) =>
+      eb
+        .selectFrom('asset_face')
+        .innerJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
+        .select('asset_face.assetId')
+        .where('face_identity_face.identityId', '=', anyUuid(identityIds))
+        .where('asset_face.deletedAt', 'is', null)
+        .where('asset_face.isVisible', 'is', true)
+        .groupBy('asset_face.assetId')
+        .as('has_any_face_identity'),
+    (join) => join.onRef('has_any_face_identity.assetId', '=', 'asset.id'),
+  );
+}
+
 export function hasSpacePerson<O>(qb: SelectQueryBuilder<DB, 'asset', O>, spacePersonId: string) {
   return qb.where((eb) =>
     eb.exists(

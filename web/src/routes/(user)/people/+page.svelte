@@ -20,7 +20,14 @@
   import { createUrl, getPeopleThumbnailUrl, handlePromiseError } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
   import { clearQueryParam } from '$lib/utils/navigation';
-  import { getAllPeople, getPerson, searchPerson, updatePerson, type PersonResponseDto } from '@immich/sdk';
+  import {
+    getAllPeople,
+    getPerson,
+    searchPerson,
+    updatePerson,
+    updateSpacePerson,
+    type PersonResponseDto,
+  } from '@immich/sdk';
   import { Button, Icon, modalManager, toastManager } from '@immich/ui';
   import {
     mdiAccountMultipleCheckOutline,
@@ -145,7 +152,7 @@
     });
 
     if (!response) {
-      await updateName(personMerge1.id, newName);
+      await updateName(personMerge1, newName);
       return;
     }
 
@@ -235,7 +242,9 @@
 
   const getPersonHref = (person: PersonResponseDto) =>
     person.primaryProfile?.type === 'space-person' && person.primaryProfile.spaceId
-      ? Route.viewSpacePerson(person.primaryProfile.spaceId, person.primaryProfile.id)
+      ? Route.viewSpacePerson(person.primaryProfile.spaceId, person.primaryProfile.id, {
+          previousRoute: Route.people(),
+        })
       : Route.viewPerson({ ...person, id: person.primaryProfile?.id ?? person.id }, { previousRoute: Route.people() });
 
   const getPersonThumbnail = (person: PersonResponseDto) =>
@@ -247,6 +256,9 @@
 
   const isPersonalPrimary = (person: PersonResponseDto) =>
     !person.primaryProfile || person.primaryProfile.type === 'user-person';
+  const isSpacePrimary = (person: PersonResponseDto) =>
+    person.primaryProfile?.type === 'space-person' && !!person.primaryProfile.spaceId;
+  const canEditName = (person: PersonResponseDto) => isPersonalPrimary(person) || isSpacePrimary(person);
 
   const toManagedPerson = (person: PersonResponseDto): ManagedPerson => ({
     id: person.id,
@@ -270,8 +282,13 @@
         return;
       }
 
+      if (!isPersonalPrimary(targetPerson)) {
+        await updateName(targetPerson, name);
+        return;
+      }
+
       if (name === '') {
-        await updateName(targetPerson.id, '');
+        await updateName(targetPerson, '');
         return;
       }
 
@@ -291,13 +308,41 @@
         await handleMerge();
         return;
       }
-      await updateName(targetPerson.id, name);
+      await updateName(targetPerson, name);
     } catch (error) {
       handleError(error, $t('errors.unable_to_save_name'));
     }
   };
 
-  const updateName = async (id: string, name: string) => {
+  const updateName = async (targetPerson: PersonResponseDto, name: string) => {
+    const spaceId =
+      targetPerson.primaryProfile?.type === 'space-person' ? targetPerson.primaryProfile.spaceId : undefined;
+
+    if (spaceId) {
+      const updatedPerson = await updateSpacePerson({
+        id: spaceId,
+        personId: targetPerson.primaryProfile?.id ?? targetPerson.id,
+        sharedSpacePersonUpdateDto: { name },
+      });
+
+      people = people.map((person: PersonResponseDto) =>
+        person.id === targetPerson.id
+          ? {
+              ...person,
+              name: updatedPerson.name,
+              birthDate: updatedPerson.birthDate ?? person.birthDate,
+              isHidden: updatedPerson.isHidden,
+              updatedAt: updatedPerson.updatedAt,
+              type: updatedPerson.type ?? person.type,
+              numberOfAssets: updatedPerson.assetCount,
+            }
+          : person,
+      );
+      newName = '';
+      return;
+    }
+
+    const id = targetPerson.primaryProfile?.id ?? targetPerson.id;
     const updatedPerson = await updatePerson({
       id,
       personUpdateDto: { name },
@@ -383,7 +428,7 @@
       {toManagedPerson}
       hasNextPage={!!nextPage && !searchName}
       {loadNextPage}
-      canEditNames={isPersonalPrimary}
+      canEditNames={canEditName}
       canShowActions={isPersonalPrimary}
       onNameSubmit={onNameChangeSubmit}
     >

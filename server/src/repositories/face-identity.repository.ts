@@ -746,8 +746,8 @@ export class FaceIdentityRepository {
         FROM eligible_profiles
         ORDER BY
           "identityId",
-          "profileRank",
           NULLIF(name, '') IS NULL,
+          "profileRank",
           lower(name),
           "updatedAt" DESC,
           "profileId"
@@ -943,8 +943,8 @@ export class FaceIdentityRepository {
           row_number() OVER (
             PARTITION BY profiles."identityId"
             ORDER BY
-              profiles."profileRank",
               NULLIF(profiles.name, '') IS NULL,
+              profiles."profileRank",
               lower(profiles.name),
               profiles."updatedAt" DESC,
               profiles."profileId"

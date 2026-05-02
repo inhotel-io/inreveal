@@ -110,8 +110,12 @@ const PROVIDER_TIMEOUT_MS = 15_000;
 // cross-contaminate all five sections.
 const idle = Object.freeze({ status: 'idle' as const });
 
-function getPersonRoute(person: Pick<PersonResponseDto, 'id' | 'primaryProfile'>): string {
+function getPersonRoute(person: Pick<PersonResponseDto, 'id' | 'primaryProfile' | 'filterId'>): string {
   if (person.primaryProfile?.type === 'space-person' && person.primaryProfile.spaceId) {
+    if (person.filterId) {
+      return Route.search({ personIds: [person.filterId], withSharedSpaces: true });
+    }
+
     return Route.viewSpacePerson(person.primaryProfile.spaceId, person.primaryProfile.id);
   }
 

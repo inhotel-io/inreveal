@@ -1,6 +1,7 @@
 import { Kysely } from 'kysely';
 import { AssetFileType, AssetOrder, AssetVisibility } from 'src/enum';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { DB } from 'src/schema';
@@ -446,6 +447,47 @@ describe(AssetRepository.name, () => {
 
       const assets = JSON.parse(bucket.assets) as TimeBucketAssets;
       expect(assets.id.toSorted()).toEqual([assetVisible.id]);
+    });
+
+    it('should filter time bucket assets by face identity ids', async () => {
+      const { ctx, sut } = setup();
+      const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user: { id: user.id } });
+
+      const bucketDate = new Date('2026-03-15T12:00:00.000Z');
+      const assetInput = {
+        ownerId: user.id,
+        visibility: AssetVisibility.Timeline,
+        fileCreatedAt: bucketDate,
+        localDateTime: bucketDate,
+      };
+
+      const { asset: matchingAsset } = await ctx.newAsset(assetInput);
+      const { asset: nonMatchingAsset } = await ctx.newAsset(assetInput);
+      await Promise.all([
+        ctx.newExif({ assetId: matchingAsset.id, timeZone: 'UTC' }),
+        ctx.newExif({ assetId: nonMatchingAsset.id, timeZone: 'UTC' }),
+      ]);
+
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+      const { assetFace } = await ctx.newAssetFace({ assetId: matchingAsset.id, personId: person.id, isVisible: true });
+      const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+      await faceIdentityRepository.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'manual' });
+
+      const bucket = await sut.getTimeBucket(
+        '2026-03-01',
+        {
+          userIds: [user.id],
+          identityIds: [identity.id],
+          visibility: AssetVisibility.Timeline,
+        },
+        auth,
+      );
+
+      const assets = JSON.parse(bucket.assets) as TimeBucketAssets;
+      expect(assets.id).toEqual([matchingAsset.id]);
     });
   });
 });

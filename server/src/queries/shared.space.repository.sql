@@ -491,10 +491,12 @@ from
   "shared_space_person"
 where
   "identityId" is not null
+  and "identityId" = $1
+  and "id" > $2
 order by
   "id"
 limit
-  $1
+  $3
 
 -- SharedSpaceRepository.getIdentityEvidenceForSpacePerson
 select

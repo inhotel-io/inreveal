@@ -1,8 +1,14 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { createReadStream } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
-import { SharedSpacePerson } from 'src/database';
+import { FACE_THUMBNAIL_SIZE } from 'src/constants';
+import { AssetFace, SharedSpacePerson } from 'src/database';
 import { OnJob } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
+import { AssetEditAction } from 'src/dtos/editing.dto';
 import type { FilteredMapMarkerDto } from 'src/dtos/gallery-map.dto';
 import type { MapMarkerResponseDto } from 'src/dtos/map.dto';
 import { mapNotification } from 'src/dtos/notification.dto';
@@ -34,6 +40,7 @@ import {
   AssetType,
   AssetVisibility,
   CacheControl,
+  ImageFormat,
   JobName,
   JobStatus,
   NotificationLevel,
@@ -45,10 +52,10 @@ import {
   UserAvatarColor,
 } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
-import { JobOf } from 'src/types';
+import { GenerateThumbnailOptions, ImageDimensions, JobOf } from 'src/types';
 import { asBirthDateString } from 'src/utils/date';
-import { ImmichMediaResponse } from 'src/utils/file';
-import { mimeTypes } from 'src/utils/mime-types';
+import { ImmichMediaResponse, ImmichStreamResponse } from 'src/utils/file';
+import { clamp } from 'src/utils/misc';
 
 const ROLE_HIERARCHY: Record<SharedSpaceRole, number> = {
   [SharedSpaceRole.Viewer]: 0,
@@ -62,6 +69,13 @@ type SpacePersonMatchResult = {
   id: string;
   identityId?: string | null;
   sourceIdentityId?: string | null;
+};
+
+type FaceThumbnailBounds = {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
 };
 
 @Injectable()
@@ -672,12 +686,22 @@ export class SharedSpaceService extends BaseService {
       }
     }
 
+    const scopedPersonFilters = await this.resolveScopedMapPersonFilters(auth, {
+      personIds: dto.spaceId ? undefined : dto.personIds,
+      spacePersonIds: dto.spaceId ? dto.personIds : undefined,
+      withSharedSpaces: dto.withSharedSpaces,
+      timelineSpaceIds,
+      spaceId: dto.spaceId,
+    });
+
     const markers = await this.sharedSpaceRepository.getFilteredMapMarkers({
       userIds: dto.spaceId ? undefined : [auth.user.id],
       spaceId: dto.spaceId,
       timelineSpaceIds,
-      personIds: dto.spaceId ? undefined : dto.personIds,
-      spacePersonIds: dto.spaceId ? dto.personIds : undefined,
+      personIds: scopedPersonFilters.personIds,
+      spacePersonIds: scopedPersonFilters.spacePersonIds,
+      identityIds: scopedPersonFilters.identityIds,
+      forceEmptyResult: scopedPersonFilters.forceEmptyResult,
       tagIds: dto.tagIds,
       make: dto.make,
       model: dto.model,
@@ -701,6 +725,44 @@ export class SharedSpaceService extends BaseService {
       state: marker.state ?? null,
       country: marker.country ?? null,
     }));
+  }
+
+  private async resolveScopedMapPersonFilters(
+    auth: AuthDto,
+    filters: {
+      personIds?: string[];
+      spacePersonIds?: string[];
+      identityIds?: string[];
+      forceEmptyResult?: boolean;
+      withSharedSpaces?: boolean;
+      timelineSpaceIds?: string[];
+      spaceId?: string;
+    },
+  ) {
+    const tokens = filters.personIds?.filter(Boolean) ?? [];
+    const hasScopedTokens = tokens.some((token) => token.includes(':'));
+
+    if (tokens.length === 0 || !hasScopedTokens) {
+      return filters;
+    }
+
+    const resolution = await this.faceIdentityRepository.resolveScopedPersonTokens({
+      userId: auth.user.id,
+      tokens,
+      scope: {
+        withSharedSpaces: filters.withSharedSpaces,
+        timelineSpaceIds: filters.timelineSpaceIds,
+        spaceId: filters.spaceId,
+      },
+    });
+
+    return {
+      ...filters,
+      personIds: resolution.legacyPersonIds,
+      identityIds: resolution.identityIds,
+      spacePersonIds: [...new Set([...(filters.spacePersonIds ?? []), ...resolution.legacySpacePersonIds])],
+      forceEmptyResult: filters.forceEmptyResult || resolution.hasInaccessibleToken,
+    };
   }
 
   async getSpacePeople(
@@ -768,17 +830,126 @@ export class SharedSpaceService extends BaseService {
       throw new NotFoundException();
     }
 
-    const assetId = await this.sharedSpaceRepository.getAssetIdForFace(person.representativeFaceId);
-    if (!assetId) {
+    let face: AssetFace;
+    try {
+      face = await this.personRepository.getFaceById(person.representativeFaceId);
+    } catch {
+      throw new NotFoundException();
+    }
+    if (!face) {
       throw new NotFoundException();
     }
 
-    const { path } = await this.assetRepository.getForThumbnail(assetId, AssetFileType.Thumbnail, false);
-    if (!path) {
+    const sourcePath = await this.getSpacePersonThumbnailSource(face.assetId);
+    if (!sourcePath) {
       throw new NotFoundException();
     }
 
-    return this.serveFromBackend(path, mimeTypes.lookup(path), CacheControl.PrivateWithoutCache);
+    return this.generateSpacePersonFaceThumbnail(face, sourcePath);
+  }
+
+  private async getSpacePersonThumbnailSource(assetId: string): Promise<string | null> {
+    const preview = await this.assetRepository.getForThumbnail(assetId, AssetFileType.Preview, false);
+    if (preview.path) {
+      return preview.path;
+    }
+
+    const thumbnail = await this.assetRepository.getForThumbnail(assetId, AssetFileType.Thumbnail, false);
+    return thumbnail.path ?? null;
+  }
+
+  private async generateSpacePersonFaceThumbnail(face: AssetFace, sourcePath: string): Promise<ImmichMediaResponse> {
+    const { image } = await this.getConfig({ withCache: true });
+    const source = await this.ensureLocalFile(sourcePath);
+    const tempDir = await mkdtemp(join(tmpdir(), 'gallery-space-person-thumbnail-'));
+    const outputPath = join(tempDir, 'thumbnail.jpeg');
+
+    try {
+      const { data: decodedImage, info } = await this.mediaRepository.decodeImage(source.localPath, {
+        colorspace: image.colorspace,
+        processInvalidImages: process.env.IMMICH_PROCESS_INVALID_IMAGES === 'true',
+      });
+
+      const thumbnailOptions: GenerateThumbnailOptions = {
+        colorspace: image.colorspace,
+        format: ImageFormat.Jpeg,
+        raw: info,
+        quality: image.thumbnail.quality,
+        progressive: false,
+        processInvalidImages: false,
+        size: FACE_THUMBNAIL_SIZE,
+        edits: [
+          {
+            action: AssetEditAction.Crop,
+            parameters: this.getFaceThumbnailCrop(
+              {
+                old: { width: face.imageWidth, height: face.imageHeight },
+                new: { width: info.width, height: info.height },
+              },
+              {
+                x1: face.boundingBoxX1,
+                y1: face.boundingBoxY1,
+                x2: face.boundingBoxX2,
+                y2: face.boundingBoxY2,
+              },
+            ),
+          },
+        ],
+      };
+
+      await this.mediaRepository.generateThumbnail(decodedImage, thumbnailOptions, outputPath);
+    } catch (error) {
+      await rm(tempDir, { recursive: true, force: true });
+      throw error;
+    } finally {
+      await source.cleanup();
+    }
+
+    const cleanup = () => {
+      void rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    };
+    const stream = createReadStream(outputPath);
+    stream.once('close', cleanup);
+    stream.once('error', cleanup);
+
+    return new ImmichStreamResponse({
+      stream,
+      contentType: 'image/jpeg',
+      cacheControl: CacheControl.PrivateWithoutCache,
+    });
+  }
+
+  private getFaceThumbnailCrop(
+    dims: { old: ImageDimensions; new: ImageDimensions },
+    { x1, y1, x2, y2 }: FaceThumbnailBounds,
+  ) {
+    const clampedX1 = clamp(x1, 0, dims.old.width);
+    const clampedY1 = clamp(y1, 0, dims.old.height);
+    const clampedX2 = clamp(x2, 0, dims.old.width);
+    const clampedY2 = clamp(y2, 0, dims.old.height);
+
+    const widthScale = dims.new.width / dims.old.width;
+    const heightScale = dims.new.height / dims.old.height;
+
+    const halfWidth = (widthScale * (clampedX2 - clampedX1)) / 2;
+    const halfHeight = (heightScale * (clampedY2 - clampedY1)) / 2;
+
+    const middleX = Math.round(widthScale * clampedX1 + halfWidth);
+    const middleY = Math.round(heightScale * clampedY1 + halfHeight);
+    const targetHalfSize = Math.floor(Math.max(halfWidth, halfHeight) * 1.1);
+    const newHalfSize = Math.min(
+      middleX - Math.max(0, middleX - targetHalfSize),
+      middleY - Math.max(0, middleY - targetHalfSize),
+      Math.min(dims.new.width - 1, middleX + targetHalfSize) - middleX,
+      Math.min(dims.new.height - 1, middleY + targetHalfSize) - middleY,
+    );
+
+    return {
+      x: middleX - newHalfSize,
+      y: middleY - newHalfSize,
+      width: newHalfSize * 2,
+      height: newHalfSize * 2,
+    };
   }
 
   async updateSpacePerson(
@@ -874,11 +1045,13 @@ export class SharedSpaceService extends BaseService {
 
   async backfillSpacePersonMetadata(input: {
     cursor?: string;
+    identityId?: string;
     limit: number;
   }): Promise<{ processed: number; inherited: number; skipped: number; nextCursor?: string }> {
     const limit = Math.max(1, input.limit);
     const people = await this.sharedSpaceRepository.getSpacePersonMetadataBackfillPage({
       cursor: input.cursor,
+      identityId: input.identityId,
       limit,
     });
 
@@ -889,7 +1062,13 @@ export class SharedSpaceService extends BaseService {
         skipped++;
         continue;
       }
-      const didInherit = await this.inheritSpacePersonMetadata(person.spaceId, person.id, person.identityId);
+      const assetAdderIds = await this.sharedSpaceRepository.getSpacePersonAssetAdderIds(person.spaceId, person.id);
+      const didInherit = await this.inheritSpacePersonMetadata(
+        person.spaceId,
+        person.id,
+        person.identityId,
+        assetAdderIds,
+      );
       if (didInherit) {
         inherited++;
       } else {
@@ -1274,13 +1453,14 @@ export class SharedSpaceService extends BaseService {
   @OnJob({ name: JobName.SharedSpacePersonMetadataBackfill, queue: QueueName.BackgroundTask })
   async handleSharedSpacePersonMetadataBackfill({
     cursor,
+    identityId,
     limit = 1000,
   }: JobOf<JobName.SharedSpacePersonMetadataBackfill>): Promise<JobStatus> {
-    const result = await this.backfillSpacePersonMetadata({ cursor, limit });
+    const result = await this.backfillSpacePersonMetadata({ cursor, identityId, limit });
     if (result.nextCursor) {
       await this.jobRepository.queue({
         name: JobName.SharedSpacePersonMetadataBackfill,
-        data: { cursor: result.nextCursor, limit },
+        data: { cursor: result.nextCursor, identityId, limit },
       });
     }
     return JobStatus.Success;
@@ -1600,23 +1780,24 @@ export class SharedSpaceService extends BaseService {
     spaceId: string,
     spacePersonId: string,
     identityId: string,
-    assetAdderId?: string | null,
+    assetAdderIdOrIds?: string | string[] | null,
   ): Promise<boolean> {
     const person = await this.sharedSpaceRepository.getPersonById(spacePersonId);
     if (!person || person.spaceId !== spaceId) {
       return false;
     }
+    const assetAdderIds = Array.isArray(assetAdderIdOrIds)
+      ? assetAdderIdOrIds
+      : assetAdderIdOrIds
+        ? [assetAdderIdOrIds]
+        : [];
 
     const metadataCandidates = await this.sharedSpaceRepository.getMetadataInheritanceCandidates({
       spaceId,
       identityId,
-      assetAdderId,
+      assetAdderIds,
     });
     const candidates = metadataCandidates.filter((item) => item.type === person.type);
-    if (candidates.length === 0) {
-      return false;
-    }
-
     const updates: Parameters<typeof this.sharedSpaceRepository.updatePerson>[1] = {};
     const now = new Date();
     const nameCandidate = this.selectMetadataCandidate(
@@ -1631,17 +1812,30 @@ export class SharedSpaceService extends BaseService {
     if ((person.nameSource === 'none' || person.nameSource === 'inherited') && nameCandidate) {
       updates.name = nameCandidate.value;
       updates.nameSource = 'inherited';
-      updates.nameSourceProfileType = 'user-person';
-      updates.nameSourceProfileId = nameCandidate.candidate.personId;
+      updates.nameSourceProfileType = nameCandidate.candidate.sourceProfileType ?? 'user-person';
+      updates.nameSourceProfileId = nameCandidate.candidate.sourceProfileId ?? nameCandidate.candidate.personId;
       updates.nameSourceUpdatedAt = now;
+    } else if (person.nameSource === 'inherited' && !nameCandidate) {
+      updates.name = '';
+      updates.nameSource = 'none';
+      updates.nameSourceProfileType = null;
+      updates.nameSourceProfileId = null;
+      updates.nameSourceUpdatedAt = null;
     }
 
     if ((person.birthDateSource === 'none' || person.birthDateSource === 'inherited') && birthDateCandidate) {
       updates.birthDate = birthDateCandidate.value;
       updates.birthDateSource = 'inherited';
-      updates.birthDateSourceProfileType = 'user-person';
-      updates.birthDateSourceProfileId = birthDateCandidate.candidate.personId;
+      updates.birthDateSourceProfileType = birthDateCandidate.candidate.sourceProfileType ?? 'user-person';
+      updates.birthDateSourceProfileId =
+        birthDateCandidate.candidate.sourceProfileId ?? birthDateCandidate.candidate.personId;
       updates.birthDateSourceUpdatedAt = now;
+    } else if (person.birthDateSource === 'inherited' && !birthDateCandidate) {
+      updates.birthDate = null;
+      updates.birthDateSource = 'none';
+      updates.birthDateSourceProfileType = null;
+      updates.birthDateSourceProfileId = null;
+      updates.birthDateSourceUpdatedAt = null;
     }
 
     if (Object.keys(updates).length > 0) {

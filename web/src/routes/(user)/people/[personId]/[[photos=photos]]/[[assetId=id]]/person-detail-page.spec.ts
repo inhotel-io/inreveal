@@ -180,6 +180,19 @@ describe('Person detail page', () => {
     expect(sdkMock.searchPerson).toHaveBeenCalledWith({ name: 'Alice', withHidden: true, withSharedSpaces: true });
   });
 
+  it('loads the global person timeline with shared-space assets included', () => {
+    renderPage();
+
+    const options = JSON.parse(screen.getByTestId('timeline-stub').dataset.options ?? '{}');
+    expect(options).toEqual(
+      expect.objectContaining({
+        personId: 'person-1',
+        visibility: 'timeline',
+        withSharedSpaces: true,
+      }),
+    );
+  });
+
   it('detaches the personal profile after confirmation', async () => {
     vi.mocked(modalManager.showDialog).mockResolvedValue(true);
     renderPage();

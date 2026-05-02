@@ -3,6 +3,7 @@ import { Place } from 'src/database';
 import { HistoryBuilder } from 'src/decorators';
 import { AlbumResponseSchema } from 'src/dtos/album.dto';
 import { AssetResponseSchema } from 'src/dtos/asset-response.dto';
+import { ScopedPrimaryProfileSchema } from 'src/dtos/person.dto';
 import { TimeBucketsResponseSchema } from 'src/dtos/time-bucket.dto';
 import { AssetOrder, AssetOrderSchema, AssetTypeSchema, AssetVisibilitySchema } from 'src/enum';
 import { emptyStringToNull, IsNotSiblingOf, isoDatetimeToDate, stringToBool } from 'src/validation';
@@ -218,6 +219,7 @@ const FilterSuggestionsPersonSchema = z
   .object({
     id: z.string().describe('Person ID'),
     name: z.string().describe('Person name'),
+    primaryProfile: ScopedPrimaryProfileSchema.optional().describe('Accessible profile used for thumbnails'),
   })
   .meta({ id: 'FilterSuggestionsPersonDto' });
 

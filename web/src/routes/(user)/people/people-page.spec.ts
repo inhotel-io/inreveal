@@ -153,14 +153,42 @@ describe('Global people page', () => {
 
     expect(screen.getByRole('link', { name: 'Shared Alice' })).toHaveAttribute(
       'href',
-      '/spaces/space-1/people/space-person-1',
+      '/spaces/space-1/people/space-person-1?previousRoute=%2Fpeople',
     );
     expect(screen.getByTitle('Shared Alice').getAttribute('src')).toContain(
       '/shared-spaces/space-1/people/space-person-1/thumbnail?updatedAt=2026-01-02T00%3A00%3A00.000Z',
     );
   });
 
-  it('keeps personal edit actions off shared-space-only rows', async () => {
+  it('saves space-primary person names inline through the space people API', async () => {
+    const person = makePerson({
+      id: 'space-person-1',
+      name: 'Shared Alice',
+      isFavorite: undefined,
+      primaryProfile: { type: Type.SpacePerson, id: 'space-person-1', spaceId: 'space-1' },
+    });
+    sdkMock.updateSpacePerson.mockResolvedValue({ ...person, name: 'Shared Alicia' });
+    renderPage([person]);
+
+    const input = screen.getByDisplayValue('Shared Alice');
+    const user = userEvent.setup();
+
+    await user.click(input);
+    await user.clear(input);
+    await user.type(input, 'Shared Alicia');
+    await fireEvent.focusOut(input);
+
+    await waitFor(() => {
+      expect(sdkMock.updateSpacePerson).toHaveBeenCalledWith({
+        id: 'space-1',
+        personId: 'space-person-1',
+        sharedSpacePersonUpdateDto: { name: 'Shared Alicia' },
+      });
+    });
+    expect(sdkMock.updatePerson).not.toHaveBeenCalled();
+  });
+
+  it('keeps personal actions off shared-space-only rows', async () => {
     const { baseElement } = renderPage([
       makePerson({
         id: 'space-person-1',
@@ -172,8 +200,7 @@ describe('Global people page', () => {
 
     await fireEvent.mouseEnter(baseElement.querySelector('[role="group"]')!);
 
-    expect(screen.queryByDisplayValue('Shared Alice')).not.toBeInTheDocument();
-    expect(screen.getByText('Shared Alice')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Shared Alice')).toHaveAttribute('placeholder', 'add_a_name');
     expect(screen.queryByLabelText('show_person_options')).not.toBeInTheDocument();
     expect(screen.queryByText('to_favorite')).not.toBeInTheDocument();
     expect(screen.queryByText('hide_person')).not.toBeInTheDocument();

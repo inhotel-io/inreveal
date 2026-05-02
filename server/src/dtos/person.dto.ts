@@ -89,7 +89,7 @@ const PersonSearchSchema = z
   })
   .meta({ id: 'PersonSearchDto' });
 
-const ScopedPrimaryProfileSchema = z
+export const ScopedPrimaryProfileSchema = z
   .object({
     type: z.enum(['user-person', 'space-person']),
     id: z.string(),

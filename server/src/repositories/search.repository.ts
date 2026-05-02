@@ -254,6 +254,12 @@ export interface GetCameraLensModelsOptions extends SuggestionScopeOptions {
 
 export interface FilterSuggestionsOptions extends SuggestionScopeOptions, FilterSuggestionFilterOptions {}
 
+type FilterSuggestionPerson = {
+  id: string;
+  name: string;
+  primaryProfile?: { type: 'user-person' | 'space-person'; id: string; spaceId?: string };
+};
+
 type AccessibleTagScopeOptions = Pick<
   SuggestionScopeOptions,
   'spaceId' | 'timelineSpaceIds' | 'takenAfter' | 'takenBefore'
@@ -263,7 +269,7 @@ export interface FilterSuggestionsResult {
   countries: string[];
   cameraMakes: string[];
   tags: Array<{ id: string; value: string }>;
-  people: Array<{ id: string; name: string }>;
+  people: FilterSuggestionPerson[];
   ratings: number[];
   mediaTypes: string[];
   hasUnnamedPeople: boolean;
@@ -767,7 +773,7 @@ export class SearchRepository {
   private async getSmartFacetPeople(
     trx: Kysely<DB>,
     options: SmartSearchFacetsOptions,
-  ): Promise<{ people: Array<{ id: string; name: string }>; hasUnnamedPeople: boolean }> {
+  ): Promise<{ people: FilterSuggestionPerson[]; hasUnnamedPeople: boolean }> {
     const filteredIds = this.buildSmartFacetFilteredAssetIds(trx, options, 'people');
 
     if (options.spaceId) {
@@ -795,6 +801,7 @@ export class SearchRepository {
         .map((person) => ({
           id: person.id,
           name: person.name || '',
+          primaryProfile: { type: 'space-person' as const, id: person.id, spaceId: options.spaceId },
         }))
         .filter((person) => person.name !== '')
         .toSorted((a, b) => a.name.localeCompare(b.name));
@@ -804,7 +811,11 @@ export class SearchRepository {
       return { people, hasUnnamedPeople };
     }
 
-    const people = await trx
+    if (options.timelineSpaceIds?.length) {
+      return this.getFilteredIdentityPeople(filteredIds, options.userIds[0], options.timelineSpaceIds, trx);
+    }
+
+    const peopleRows = await trx
       .selectFrom('person')
       .select(['person.id', 'person.name'])
       .where('person.name', '!=', '')
@@ -821,6 +832,10 @@ export class SearchRepository {
       )
       .orderBy('person.name')
       .execute();
+    const people = peopleRows.map((person) => ({
+      ...person,
+      primaryProfile: { type: 'user-person' as const, id: person.id },
+    }));
 
     const unnamed = await trx
       .selectFrom('person')
@@ -1364,7 +1379,7 @@ export class SearchRepository {
   private async getFilteredPeople(
     userIds: string[],
     options: FilterSuggestionsOptions,
-  ): Promise<{ people: Array<{ id: string; name: string }>; hasUnnamedPeople: boolean }> {
+  ): Promise<{ people: FilterSuggestionPerson[]; hasUnnamedPeople: boolean }> {
     const filteredIds = this.buildFilteredAssetIds(userIds, options);
 
     // When spaceId is set, return shared_space_person records (space-specific IDs and names)
@@ -1375,6 +1390,7 @@ export class SearchRepository {
         .map((p) => ({
           id: p.id,
           name: p.name || '',
+          primaryProfile: { type: 'space-person' as const, id: p.id, spaceId: options.spaceId },
         }))
         .filter((p) => p.name !== '');
 
@@ -1388,7 +1404,11 @@ export class SearchRepository {
     }
 
     // Global: return person records
-    const people = await this.buildFilteredGlobalPeopleQuery(filteredIds).execute();
+    const peopleRows = await this.buildFilteredGlobalPeopleQuery(filteredIds).execute();
+    const people = peopleRows.map((person) => ({
+      ...person,
+      primaryProfile: { type: 'user-person' as const, id: person.id },
+    }));
 
     const unnamed = await this.db
       .selectFrom('person')
@@ -1451,8 +1471,15 @@ export class SearchRepository {
     filteredIds: SelectQueryBuilder<DB, 'asset', { id: string }>,
     userId: string,
     timelineSpaceIds: string[],
-  ): Promise<{ people: Array<{ id: string; name: string }>; hasUnnamedPeople: boolean }> {
-    const result = await sql<{ id: string; name: string | null }>`
+    db: Kysely<DB> = this.db,
+  ): Promise<{ people: FilterSuggestionPerson[]; hasUnnamedPeople: boolean }> {
+    const result = await sql<{
+      id: string;
+      name: string | null;
+      profileType: 'user-person' | 'space-person';
+      profileId: string;
+      spaceId: string | null;
+    }>`
       WITH filtered_assets AS (
         ${filteredIds}
       ),
@@ -1469,6 +1496,7 @@ export class SearchRepository {
         SELECT
           'user-person'::text AS "profileType",
           person.id AS "profileId",
+          NULL::uuid AS "spaceId",
           person."identityId",
           person.name,
           person."isHidden",
@@ -1482,6 +1510,7 @@ export class SearchRepository {
         SELECT
           'space-person'::text AS "profileType",
           shared_space_person.id AS "profileId",
+          shared_space_person."spaceId",
           shared_space_person."identityId",
           COALESCE(NULLIF(shared_space_person_alias.alias, ''), shared_space_person.name, '') AS name,
           shared_space_person."isHidden",
@@ -1503,8 +1532,8 @@ export class SearchRepository {
           row_number() OVER (
             PARTITION BY profiles."identityId"
             ORDER BY
-              profiles."profileRank",
               NULLIF(profiles.name, '') IS NULL,
+              profiles."profileRank",
               lower(profiles.name),
               profiles."updatedAt" DESC,
               profiles."profileId"
@@ -1517,17 +1546,29 @@ export class SearchRepository {
           WHEN "profileType" = 'space-person' THEN 'space-person:' || "profileId"::text
           ELSE 'person:' || "profileId"::text
         END AS id,
-        name
+        name,
+        "profileType",
+        "profileId",
+        "spaceId"
       FROM ranked_profiles
       WHERE rn = 1
       ORDER BY
         NULLIF(name, '') IS NULL,
         lower(name),
         "profileId"
-    `.execute(this.db);
+    `.execute(db);
 
     return {
-      people: result.rows.map((row) => ({ id: row.id, name: row.name ?? '' })).filter((person) => person.name !== ''),
+      people: result.rows
+        .map((row) => ({
+          id: row.id,
+          name: row.name ?? '',
+          primaryProfile:
+            row.profileType === 'space-person'
+              ? { type: row.profileType, id: row.profileId, spaceId: row.spaceId ?? undefined }
+              : { type: row.profileType, id: row.profileId },
+        }))
+        .filter((person) => person.name !== ''),
       hasUnnamedPeople: result.rows.some((row) => !row.name),
     };
   }

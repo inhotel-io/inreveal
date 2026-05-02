@@ -255,6 +255,7 @@ export interface ISharedSpacePersonDedupJob extends IBaseJob {
 
 export interface ISharedSpacePersonMetadataBackfillJob extends IBaseJob {
   cursor?: string;
+  identityId?: string;
   limit?: number;
 }
 

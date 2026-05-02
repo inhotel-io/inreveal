@@ -275,6 +275,13 @@ export class PersonService extends BaseService {
       await this.jobRepository.queue({ name: JobName.PersonGenerateThumbnail, data: { id } });
     }
 
+    if (person.identityId && (name !== undefined || birthDate !== undefined)) {
+      await this.jobRepository.queue({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: { identityId: person.identityId },
+      });
+    }
+
     return mapPerson(person);
   }
 

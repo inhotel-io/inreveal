@@ -13,7 +13,7 @@ import { SharedSpacePersonAliasTable } from 'src/schema/tables/shared-space-pers
 import { SharedSpacePersonFaceTable } from 'src/schema/tables/shared-space-person-face.table';
 import { SharedSpacePersonTable } from 'src/schema/tables/shared-space-person.table';
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
-import { searchAssetBuilder } from 'src/utils/database';
+import { anyUuid, searchAssetBuilder } from 'src/utils/database';
 
 export type LinkedSpacePerson = {
   id: string;
@@ -26,6 +26,8 @@ export type LinkedSpacePerson = {
 
 export type MetadataInheritanceCandidate = {
   personId: string;
+  sourceProfileType?: 'user-person' | 'space-person';
+  sourceProfileId?: string;
   userId: string;
   role: string;
   name: string;
@@ -679,9 +681,13 @@ export class SharedSpaceRepository {
   async getMetadataInheritanceCandidates(input: {
     spaceId: string;
     identityId: string;
-    assetAdderId?: string | null;
+    assetAdderIds?: string[];
   }): Promise<MetadataInheritanceCandidate[]> {
-    return this.db
+    const assetAdderIds = [...new Set(input.assetAdderIds ?? [])];
+    const isAssetAdderSql =
+      assetAdderIds.length > 0 ? sql<boolean>`person."ownerId" = ${anyUuid(assetAdderIds)}` : sql<boolean>`false`;
+
+    const personalCandidates = await this.db
       .selectFrom('person')
       .innerJoin('shared_space_member', (join) =>
         join
@@ -703,6 +709,8 @@ export class SharedSpaceRepository {
       )
       .select([
         'person.id as personId',
+        sql<'user-person'>`'user-person'`.as('sourceProfileType'),
+        'person.id as sourceProfileId',
         'person.ownerId as userId',
         'shared_space_member.role',
         'person.name',
@@ -713,7 +721,7 @@ export class SharedSpaceRepository {
       ])
       .select((eb) => [
         eb.fn.count('shared_space_person.id').$castTo<number>().as('supportingFaceCount'),
-        sql<boolean>`person."ownerId" = ${input.assetAdderId ?? null}`.as('isAssetAdder'),
+        isAssetAdderSql.as('isAssetAdder'),
       ])
       .where('person.identityId', '=', input.identityId)
       .groupBy([
@@ -728,6 +736,71 @@ export class SharedSpaceRepository {
         'isAssetAdder',
       ])
       .execute();
+
+    if (assetAdderIds.length === 0) {
+      return personalCandidates;
+    }
+
+    const visibleSpaceCandidates = await this.db
+      .selectFrom('shared_space_person as source_person')
+      .innerJoin('shared_space_member as source_member', (join) =>
+        join
+          .onRef('source_member.spaceId', '=', 'source_person.spaceId')
+          .on('source_member.userId', '=', anyUuid(assetAdderIds))
+          .on('source_member.showInTimeline', '=', true),
+      )
+      .innerJoin('shared_space_member as target_member', (join) =>
+        join
+          .on('target_member.spaceId', '=', input.spaceId)
+          .on('target_member.userId', '=', anyUuid(assetAdderIds))
+          .on('target_member.sharePersonMetadata', '=', true),
+      )
+      .leftJoin('shared_space_person_alias as source_alias', (join) =>
+        join
+          .onRef('source_alias.personId', '=', 'source_person.id')
+          .onRef('source_alias.userId', '=', 'source_member.userId'),
+      )
+      .select([
+        'source_person.id as personId',
+        sql<'space-person'>`'space-person'`.as('sourceProfileType'),
+        'source_person.id as sourceProfileId',
+        'target_member.userId as userId',
+        'target_member.role',
+        'source_person.birthDate',
+        'source_person.type',
+        'source_person.updatedAt',
+      ])
+      .select((eb) => [
+        sql<string>`COALESCE(NULLIF("source_alias"."alias", ''), "source_person"."name", '')`.as('name'),
+        sql<string | null>`NULL`.as('species'),
+        eb.ref('source_person.faceCount').$castTo<number>().as('supportingFaceCount'),
+        sql<boolean>`true`.as('isAssetAdder'),
+      ])
+      .where('source_person.identityId', '=', input.identityId)
+      .where('source_person.spaceId', '!=', input.spaceId)
+      .where('source_person.isHidden', '=', false)
+      .execute();
+
+    return [...personalCandidates, ...visibleSpaceCandidates];
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  async getSpacePersonAssetAdderIds(spaceId: string, personId: string): Promise<string[]> {
+    const rows = await this.db
+      .selectFrom('shared_space_person_face')
+      .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .innerJoin('shared_space_asset', (join) =>
+        join
+          .onRef('shared_space_asset.assetId', '=', 'asset_face.assetId')
+          .on('shared_space_asset.spaceId', '=', spaceId),
+      )
+      .select('shared_space_asset.addedById as userId')
+      .distinct()
+      .where('shared_space_person_face.personId', '=', personId)
+      .where('shared_space_asset.addedById', 'is not', null)
+      .execute();
+
+    return rows.flatMap((row) => (row.userId ? [row.userId] : []));
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
@@ -740,12 +813,13 @@ export class SharedSpaceRepository {
       .executeTakeFirst();
   }
 
-  @GenerateSql({ params: [DummyValue.UUID, 100] })
-  getSpacePersonMetadataBackfillPage(input: { cursor?: string; limit: number }) {
+  @GenerateSql({ params: [{ cursor: DummyValue.UUID, identityId: DummyValue.UUID, limit: 100 }] })
+  getSpacePersonMetadataBackfillPage(input: { cursor?: string; identityId?: string; limit: number }) {
     return this.db
       .selectFrom('shared_space_person')
       .selectAll('shared_space_person')
       .where('identityId', 'is not', null)
+      .$if(!!input.identityId, (qb) => qb.where('identityId', '=', input.identityId!))
       .$if(!!input.cursor, (qb) => qb.where('id', '>', input.cursor!))
       .orderBy('id')
       .limit(input.limit)

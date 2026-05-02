@@ -285,6 +285,23 @@ describe(PersonService.name, () => {
       expect(mocks.access.person.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([person.id]));
     });
 
+    it('should queue scoped space metadata backfill when an identity-backed person name changes', async () => {
+      const auth = AuthFactory.create();
+      const person = PersonFactory.create({ name: 'Aurelia', identityId: 'identity-1' });
+
+      mocks.person.update.mockResolvedValue(person);
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([person.id]));
+
+      await expect(sut.update(auth, person.id, { name: 'Aurelia' })).resolves.toEqual(
+        expect.objectContaining({ id: person.id, name: 'Aurelia' }),
+      );
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: { identityId: 'identity-1' },
+      });
+    });
+
     it("should update a person's date of birth", async () => {
       const auth = AuthFactory.create();
       const person = PersonFactory.create({ birthDate: new Date('1976-06-30') });

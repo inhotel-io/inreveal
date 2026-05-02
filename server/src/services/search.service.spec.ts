@@ -1630,9 +1630,11 @@ describe(SearchService.name, () => {
 
     it('checks album access and passes albumId to getFilterSuggestions', async () => {
       const albumId = newUuid();
+      const spaceId = newUuid();
       const auth = AuthFactory.create();
       mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
       mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set([albumId]));
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
       mocks.search.getFilterSuggestions.mockResolvedValue({
         countries: ['Germany'],
         cameraMakes: ['Canon'],
@@ -1648,11 +1650,11 @@ describe(SearchService.name, () => {
       expect(result.countries).toEqual(['Germany']);
       expect(mocks.access.album.checkOwnerAccess).toHaveBeenCalled();
       expect(mocks.access.album.checkSharedAlbumAccess).toHaveBeenCalled();
+      expect(mocks.sharedSpace.getSpaceIdsForTimeline).toHaveBeenCalledWith(auth.user.id);
       expect(mocks.search.getFilterSuggestions).toHaveBeenCalledWith(
         [auth.user.id],
-        expect.objectContaining({ albumId }),
+        expect.objectContaining({ albumId, timelineSpaceIds: [spaceId] }),
       );
-      expect(mocks.sharedSpace.getSpaceIdsForTimeline).not.toHaveBeenCalled();
     });
 
     it('rejects albumId mixed with withSharedSpaces for getFilterSuggestions', async () => {

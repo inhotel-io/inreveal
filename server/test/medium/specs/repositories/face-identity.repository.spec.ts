@@ -127,6 +127,44 @@ describe(FaceIdentityRepository.name, () => {
     expect(links.map((link) => link.assetFaceId)).toEqual([visibleFace.id]);
   });
 
+  it('prefers a named accessible space profile over a blank personal profile', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+    const { person } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    const identity = await sut.ensurePersonIdentity(person.id);
+    await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+    const spacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: space.id,
+        identityId: identity.id,
+        name: 'Pierre',
+        representativeFaceId: assetFace.id,
+        type: 'person',
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    try {
+      const result = await sut.getAccessiblePeople(user.id, { withHidden: false, page: 1, size: 50 });
+
+      expect(result.people).toEqual([
+        expect.objectContaining({
+          id: spacePerson.id,
+          name: 'Pierre',
+          primaryProfile: { type: 'space-person', id: spacePerson.id, spaceId: space.id },
+          filterId: `space-person:${spacePerson.id}`,
+        }),
+      ]);
+    } finally {
+      await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
+    }
+  });
+
   it('infers shared-space person identity from linked personal faces and reports conflicts', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();

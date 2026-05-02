@@ -1152,8 +1152,8 @@ WITH
         PARTITION BY
           profiles."identityId"
         ORDER BY
-          profiles."profileRank",
           NULLIF(profiles.name, '') IS NULL,
+          profiles."profileRank",
           lower(profiles.name),
           profiles."updatedAt" DESC,
           profiles."profileId"
