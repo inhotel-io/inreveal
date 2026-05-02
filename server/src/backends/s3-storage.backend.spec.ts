@@ -38,6 +38,14 @@ const flushPromises = async () => {
   }
 };
 
+const readStreamText = async (stream: Readable) => {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString();
+};
+
 describe('S3StorageBackend', () => {
   let backend: S3StorageBackend;
   let mockSend: ReturnType<typeof vi.fn>;
@@ -250,6 +258,48 @@ describe('S3StorageBackend', () => {
 
       expect(second.type).toBe('stream');
       expect(proxyClient.send).toHaveBeenCalledTimes(2);
+    });
+
+    it('should release small thumbnail proxy reads before the returned stream is consumed', async () => {
+      const proxyBackend = new S3StorageBackend({
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        presignedUrlExpiry: 3600,
+        serveMode: 'proxy' as const,
+        proxyReadConcurrency: 1,
+      });
+      const proxyClient = (S3Client as unknown as ReturnType<typeof vi.fn>).mock.results.at(-1)?.value;
+      proxyClient.send
+        .mockResolvedValueOnce({ Body: Readable.from([Buffer.from('first')]), ContentLength: 5 })
+        .mockResolvedValueOnce({ Body: Readable.from([Buffer.from('second')]), ContentLength: 6 });
+
+      const first = await proxyBackend.getServeStrategy('thumbs/user1/ab/cd/first_thumbnail.webp', 'image/webp');
+      const secondPromise = proxyBackend.getServeStrategy('thumbs/user1/ab/cd/second_thumbnail.webp', 'image/webp');
+
+      let assertionError: unknown;
+      try {
+        await flushPromises();
+        expect(proxyClient.send).toHaveBeenCalledTimes(2);
+      } catch (error) {
+        assertionError = error;
+      } finally {
+        if (proxyClient.send.mock.calls.length < 2 && first.type === 'stream') {
+          first.stream.destroy();
+        }
+        await secondPromise.catch(() => {});
+      }
+
+      if (assertionError) {
+        throw assertionError;
+      }
+
+      const second = await secondPromise;
+      expect(first.type).toBe('stream');
+      expect(second.type).toBe('stream');
+      if (first.type === 'stream' && second.type === 'stream') {
+        await expect(readStreamText(first.stream)).resolves.toBe('first');
+        await expect(readStreamText(second.stream)).resolves.toBe('second');
+      }
     });
 
     it('should remove an aborted queued proxy read without starting an S3 request', async () => {

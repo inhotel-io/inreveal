@@ -20,6 +20,7 @@ import { LoggingRepository } from 'src/repositories/logging.repository';
 
 const DEFAULT_PROXY_READ_CONCURRENCY = 32;
 const DEFAULT_PROXY_READ_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const DEFAULT_PROXY_THUMBNAIL_BUFFER_MAX_BYTES = 2 * 1024 * 1024;
 
 const createAbortError = () => Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
 
@@ -241,6 +242,15 @@ export class S3StorageBackend implements StorageBackend {
     this.logger[level](`[S3ProxyTrace:${readId}] ${message}`);
   }
 
+  private shouldBufferProxyRead(key: string, contentType: string, length?: number) {
+    return (
+      key.startsWith('thumbs/') &&
+      contentType.startsWith('image/') &&
+      length !== undefined &&
+      length <= DEFAULT_PROXY_THUMBNAIL_BUFFER_MAX_BYTES
+    );
+  }
+
   private releaseWhenStreamCloses(
     stream: Readable,
     release: () => void,
@@ -348,6 +358,31 @@ export class S3StorageBackend implements StorageBackend {
     return stream;
   }
 
+  private async bufferProxyRead(
+    stream: Readable,
+    release: () => void,
+    context: { readId: number; key: string; startedAt: number; s3StartedAt: number; length?: number },
+    signal?: AbortSignal,
+  ) {
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    const trackedStream = this.releaseWhenStreamCloses(stream, release, context, signal);
+
+    for await (const chunk of trackedStream) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += buffer.length;
+      if (totalBytes > DEFAULT_PROXY_THUMBNAIL_BUFFER_MAX_BYTES) {
+        trackedStream.destroy(
+          new Error(`S3 proxy thumbnail buffer exceeded ${DEFAULT_PROXY_THUMBNAIL_BUFFER_MAX_BYTES} bytes`),
+        );
+        throw new Error(`S3 proxy thumbnail buffer exceeded ${DEFAULT_PROXY_THUMBNAIL_BUFFER_MAX_BYTES} bytes`);
+      }
+      chunks.push(buffer);
+    }
+
+    return Buffer.concat(chunks, totalBytes);
+  }
+
   async getServeStrategy(key: string, contentType: string, signal?: AbortSignal): Promise<ServeStrategy> {
     if (this.serveMode === 'proxy') {
       const readId = ++this.proxyReadSequence;
@@ -375,14 +410,19 @@ export class S3StorageBackend implements StorageBackend {
           readId,
           `s3-response s3Ms=${Date.now() - s3StartedAt} length=${length ?? 'unknown'} key=${key}`,
         );
+        const context = { readId, key, startedAt, s3StartedAt, length };
+        if (this.shouldBufferProxyRead(key, contentType, length)) {
+          const buffer = await this.bufferProxyRead(stream, release, context, signal);
+          return {
+            type: 'stream',
+            stream: Readable.from([buffer]),
+            length,
+          };
+        }
+
         return {
           type: 'stream',
-          stream: this.releaseWhenStreamCloses(
-            stream,
-            release,
-            { readId, key, startedAt, s3StartedAt, length },
-            signal,
-          ),
+          stream: this.releaseWhenStreamCloses(stream, release, context, signal),
           length,
         };
       } catch (error) {
