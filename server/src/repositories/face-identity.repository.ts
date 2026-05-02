@@ -1254,11 +1254,7 @@ export class FaceIdentityRepository {
           continue;
         }
 
-        await this.db
-          .updateTable('shared_space_person')
-          .set({ identityId })
-          .where('id', '=', person.id)
-          .execute();
+        await this.db.updateTable('shared_space_person').set({ identityId }).where('id', '=', person.id).execute();
       } else if (linkedIdentities.length > 1) {
         conflictCount++;
       }

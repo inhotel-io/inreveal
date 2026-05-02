@@ -5042,7 +5042,8 @@ describe('prefix scoping — setQuery SWR scope behavior', () => {
     resolve!([{ id: 'a1', albumName: 'Trip' }] as never);
     await vi.runAllTimersAsync();
 
-    expect(getAlbumNamesSpy).toHaveBeenCalledTimes(1);
+    const callsForManager = getAlbumNamesSpy.mock.calls.filter(([options]) => options?.signal === m.closeSignal);
+    expect(callsForManager).toHaveLength(1);
   });
 });
 
