@@ -153,6 +153,44 @@ describe('sendFile with ImmichMediaResponse', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it('should destroy a stream returned after the response already closed', async () => {
+    let resolveHandler!: (response: ImmichStreamResponse) => void;
+    const handlerPromise = new Promise<ImmichStreamResponse>((resolve) => {
+      resolveHandler = resolve;
+    });
+    const res = Object.assign(new EventEmitter(), {
+      set: vi.fn(),
+      header: vi.fn(),
+      headersSent: false,
+      writableEnded: false,
+    }) as any;
+    const next = vi.fn();
+
+    const sendPromise = sendFile(res, next, () => handlerPromise, mockLogger);
+    res.emit('close');
+
+    const stream = new Readable({
+      read() {
+        // keep the stream open so this test observes explicit cleanup
+      },
+    });
+    const destroy = vi.spyOn(stream, 'destroy');
+    stream.pipe = vi.fn().mockReturnValue(res);
+
+    resolveHandler(
+      new ImmichStreamResponse({
+        stream,
+        contentType: 'image/jpeg',
+        cacheControl: CacheControl.PrivateWithCache,
+      }),
+    );
+    await sendPromise;
+
+    expect(destroy).toHaveBeenCalledTimes(1);
+    expect(stream.pipe).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it('should not destroy a stream when the response closes after completion', async () => {
     const stream = new Readable({
       read() {

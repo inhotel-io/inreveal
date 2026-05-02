@@ -74,6 +74,17 @@ export const sendFile = async (
   // promisified version of 'res.sendFile' for cleaner async handling
   const _sendFile = (path: string, options: SendFileOptions) =>
     promisify<string, SendFileOptions>(res.sendFile).bind(res)(path, options);
+  let responseClosed = false;
+  let streamResponse: ImmichStreamResponse | undefined;
+
+  if (typeof res.once === 'function') {
+    res.once('close', () => {
+      responseClosed = true;
+      if (streamResponse && !res.writableEnded && !streamResponse.stream.destroyed) {
+        streamResponse.stream.destroy();
+      }
+    });
+  }
 
   try {
     const file = await handler();
@@ -99,6 +110,12 @@ export const sendFile = async (
     }
 
     if (file instanceof ImmichStreamResponse) {
+      streamResponse = file;
+      if (responseClosed && !file.stream.destroyed) {
+        file.stream.destroy();
+        return;
+      }
+
       const cacheControlHeader = cacheControlHeaders[file.cacheControl];
       if (cacheControlHeader) {
         res.set('Cache-Control', cacheControlHeader);
@@ -109,13 +126,6 @@ export const sendFile = async (
       }
       if (file.fileName) {
         res.header('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`);
-      }
-      if (typeof res.once === 'function') {
-        res.once('close', () => {
-          if (!res.writableEnded && !file.stream.destroyed) {
-            file.stream.destroy();
-          }
-        });
       }
       file.stream.pipe(res);
       return;
