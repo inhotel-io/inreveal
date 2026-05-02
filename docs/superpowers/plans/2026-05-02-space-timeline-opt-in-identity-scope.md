@@ -41,6 +41,7 @@
 ## Task 1: Red Tests for Album and Global People Scope
 
 **Files:**
+
 - Modify: `server/test/medium/specs/services/people-identity-rbac.spec.ts`
 - Modify: `server/src/services/search.service.spec.ts`
 
@@ -126,7 +127,9 @@ it('timeline opt-in: album scope excludes direct space people and assets while t
   expect(albumStatsHidden.total).toBe(0);
   expect(albumRandomHidden).toEqual([]);
   expect(albumLargeHidden).toEqual([]);
-  expect(JSON.stringify({ albumFiltersHidden, albumCitiesHidden, albumAssetsHidden })).not.toContain('Space Album Name');
+  expect(JSON.stringify({ albumFiltersHidden, albumCitiesHidden, albumAssetsHidden })).not.toContain(
+    'Space Album Name',
+  );
   expect(explicitSpaceFilters.people).toEqual([
     {
       id: spacePerson.id,
@@ -354,7 +357,13 @@ it('timeline opt-in: disabling a space is per viewer and does not hide it for an
   await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: identity.id, source: 'owner-person' });
   const spacePerson = await ctx.database
     .insertInto('shared_space_person')
-    .values({ spaceId: space.id, identityId: identity.id, name: 'Viewer Scoped Name', representativeFaceId: faceId, type: 'person' })
+    .values({
+      spaceId: space.id,
+      identityId: identity.id,
+      name: 'Viewer Scoped Name',
+      representativeFaceId: faceId,
+      type: 'person',
+    })
     .returningAll()
     .executeTakeFirstOrThrow();
   await ctx.database
@@ -562,6 +571,7 @@ Expected: FAIL. The direct and linked-library album tests should expose that `al
 ## Task 2: Implement Search and Filter Timeline Scope
 
 **Files:**
+
 - Modify: `server/src/services/search.service.ts`
 - Modify: `server/src/repositories/search.repository.ts`
 - Generated: `server/src/queries/search.repository.sql`
@@ -785,6 +795,7 @@ git commit -m "fix: gate album people by timeline spaces"
 ## Task 3: Red Tests for Map and Album Map Scope
 
 **Files:**
+
 - Modify: `server/test/medium/specs/repositories/map.repository.spec.ts`
 - Modify: `server/src/services/map.service.spec.ts`
 - Modify: `server/src/services/album.service.spec.ts`
@@ -942,6 +953,7 @@ Expected: FAIL. The repository tests fail because album assets are not scoped by
 ## Task 4: Implement Map and Album Map Timeline Scope
 
 **Files:**
+
 - Modify: `server/src/repositories/map.repository.ts`
 - Modify: `server/src/services/map.service.ts`
 - Modify: `server/src/services/album.service.ts`
@@ -1008,35 +1020,35 @@ Replace `getAlbumMapMarkers` with:
 In the `albumIds.length > 0` branch of `getMapMarkers`, replace the current album expression with:
 
 ```ts
-          const albumScope: Expression<SqlBool>[] = [eb('ownerId', 'in', ownerIds)];
-          if (timelineSpaceIds?.length) {
-            albumScope.push(
-              eb.exists((eb) =>
-                eb
-                  .selectFrom('shared_space_asset')
-                  .whereRef('asset.id', '=', 'shared_space_asset.assetId')
-                  .where('shared_space_asset.spaceId', 'in', timelineSpaceIds),
-              ),
-              eb.exists((eb) =>
-                eb
-                  .selectFrom('shared_space_library')
-                  .whereRef('asset.libraryId', '=', 'shared_space_library.libraryId')
-                  .where('shared_space_library.spaceId', 'in', timelineSpaceIds),
-              ),
-            );
-          }
+const albumScope: Expression<SqlBool>[] = [eb('ownerId', 'in', ownerIds)];
+if (timelineSpaceIds?.length) {
+  albumScope.push(
+    eb.exists((eb) =>
+      eb
+        .selectFrom('shared_space_asset')
+        .whereRef('asset.id', '=', 'shared_space_asset.assetId')
+        .where('shared_space_asset.spaceId', 'in', timelineSpaceIds),
+    ),
+    eb.exists((eb) =>
+      eb
+        .selectFrom('shared_space_library')
+        .whereRef('asset.libraryId', '=', 'shared_space_library.libraryId')
+        .where('shared_space_library.spaceId', 'in', timelineSpaceIds),
+    ),
+  );
+}
 
-          expression.push(
-            eb.and([
-              eb.exists((eb) =>
-                eb
-                  .selectFrom('album_asset')
-                  .whereRef('asset.id', '=', 'album_asset.assetId')
-                  .where('album_asset.albumId', 'in', albumIds),
-              ),
-              eb.or(albumScope),
-            ]),
-          );
+expression.push(
+  eb.and([
+    eb.exists((eb) =>
+      eb
+        .selectFrom('album_asset')
+        .whereRef('asset.id', '=', 'album_asset.assetId')
+        .where('album_asset.albumId', 'in', albumIds),
+    ),
+    eb.or(albumScope),
+  ]),
+);
 ```
 
 Keep the existing owner and timeline-space expressions. This change only prevents album rows from bypassing the same global scope.
@@ -1124,6 +1136,7 @@ git commit -m "fix: gate album map assets by timeline spaces"
 ## Task 5: Red/Green Metadata Inheritance Reversibility
 
 **Files:**
+
 - Modify: `server/test/medium/specs/services/shared-space-person-metadata-rbac.spec.ts`
 
 - [ ] **Step 1: Add direct-space reversibility test**
@@ -1231,6 +1244,7 @@ git commit -m "test: cover timeline opt-in metadata inheritance"
 ## Task 6: Full Verification and SQL Drift Check
 
 **Files:**
+
 - Read/verify: all files touched by Tasks 1-5
 
 - [ ] **Step 1: Run focused medium tests**
