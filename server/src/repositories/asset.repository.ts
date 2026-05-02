@@ -1355,13 +1355,16 @@ export class AssetRepository {
 
   @GenerateSql({ params: [DummyValue.UUID, AssetFileType.Preview, true] })
   async getForThumbnail(id: string, type: AssetFileType, isEdited: boolean) {
+    const types = type === AssetFileType.Thumbnail ? [AssetFileType.Thumbnail, AssetFileType.Preview] : [type];
+
     return this.db
       .selectFrom('asset')
       .where('asset.id', '=', id)
       .leftJoin('asset_file', (join) =>
-        join.onRef('asset.id', '=', 'asset_file.assetId').on('asset_file.type', '=', type),
+        join.onRef('asset.id', '=', 'asset_file.assetId').on('asset_file.type', 'in', types),
       )
       .select(['asset.originalPath', 'asset.originalFileName', 'asset_file.path as path'])
+      .orderBy(sql`case when asset_file.type = ${type} then 0 else 1 end`)
       .orderBy('asset_file.isEdited', isEdited ? 'desc' : 'asc')
       .executeTakeFirstOrThrow();
   }

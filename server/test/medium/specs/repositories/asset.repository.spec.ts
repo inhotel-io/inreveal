@@ -30,6 +30,41 @@ beforeAll(async () => {
 });
 
 describe(AssetRepository.name, () => {
+  describe('getForThumbnail', () => {
+    it('should fall back to the preview file when the thumbnail file is missing', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({
+        ownerId: user.id,
+        originalFileName: 'IMG_001.jpg',
+        originalPath: '/uploads/IMG_001.jpg',
+      });
+      await ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: 'preview.jpg' });
+
+      await expect(sut.getForThumbnail(asset.id, AssetFileType.Thumbnail, true)).resolves.toMatchObject({
+        path: 'preview.jpg',
+      });
+    });
+
+    it('should prefer the requested thumbnail file when thumbnail and preview files exist', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({
+        ownerId: user.id,
+        originalFileName: 'IMG_002.jpg',
+        originalPath: '/uploads/IMG_002.jpg',
+      });
+      await Promise.all([
+        ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: 'preview.jpg' }),
+        ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Thumbnail, path: 'thumbnail.jpg' }),
+      ]);
+
+      await expect(sut.getForThumbnail(asset.id, AssetFileType.Thumbnail, true)).resolves.toMatchObject({
+        path: 'thumbnail.jpg',
+      });
+    });
+  });
+
   describe('getMemoryLocationClusters', () => {
     it('should group previewable timeline assets by country and city within the requested window', async () => {
       const { ctx, sut } = setup();
