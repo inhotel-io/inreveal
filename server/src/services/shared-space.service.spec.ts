@@ -3962,6 +3962,59 @@ describe(SharedSpaceService.name, () => {
       }
     });
 
+    it('should fall back to a centered crop when representative face dimensions are missing', async () => {
+      const spaceId = newUuid();
+      const personId = newUuid();
+      const faceId = newUuid();
+      const assetId = newUuid();
+      const person = factory.sharedSpacePerson({ id: personId, spaceId, representativeFaceId: faceId });
+      const cleanup = vi.fn();
+      let thumbnailOptions: any;
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
+      mocks.sharedSpace.getPersonById.mockResolvedValue({
+        ...person,
+      });
+      mocks.person.getFaceById.mockResolvedValue({
+        id: faceId,
+        assetId,
+        boundingBoxX1: 0,
+        boundingBoxY1: 0,
+        boundingBoxX2: 0,
+        boundingBoxY2: 0,
+        imageWidth: 0,
+        imageHeight: 0,
+        type: AssetType.Image,
+      } as any);
+      mocks.asset.getForThumbnail.mockResolvedValue({
+        path: '/path/to/asset/preview.jpg',
+      } as any);
+      vi.spyOn(sut as any, 'ensureLocalFile').mockResolvedValue({
+        localPath: '/tmp/preview.jpg',
+        cleanup,
+      });
+      mocks.media.decodeImage.mockResolvedValue({
+        data: Buffer.from('decoded-image'),
+        info: { width: 640, height: 480, channels: 3 },
+      } as any);
+      mocks.media.generateThumbnail.mockImplementation(async (_input, options, output) => {
+        thumbnailOptions = options;
+        await writeFile(output, Buffer.from('cropped-face'));
+      });
+
+      const result = await sut.getSpacePersonThumbnail(factory.auth(), spaceId, personId);
+
+      expect(thumbnailOptions.edits).toEqual([
+        {
+          action: AssetEditAction.Crop,
+          parameters: { x: 80, y: 0, width: 480, height: 480 },
+        },
+      ]);
+      expect(cleanup).toHaveBeenCalled();
+      if (result instanceof ImmichStreamResponse) {
+        result.stream.destroy();
+      }
+    });
+
     it('should throw NotFoundException when representative asset has no thumbnail', async () => {
       const spaceId = newUuid();
       const personId = newUuid();

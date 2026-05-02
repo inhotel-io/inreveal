@@ -8,7 +8,7 @@ import { FACE_THUMBNAIL_SIZE } from 'src/constants';
 import { AssetFace, SharedSpacePerson } from 'src/database';
 import { OnJob } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
-import { AssetEditAction } from 'src/dtos/editing.dto';
+import { AssetEditAction, type CropParameters } from 'src/dtos/editing.dto';
 import type { FilteredMapMarkerDto } from 'src/dtos/gallery-map.dto';
 import type { MapMarkerResponseDto } from 'src/dtos/map.dto';
 import { mapNotification } from 'src/dtos/notification.dto';
@@ -922,7 +922,17 @@ export class SharedSpaceService extends BaseService {
   private getFaceThumbnailCrop(
     dims: { old: ImageDimensions; new: ImageDimensions },
     { x1, y1, x2, y2 }: FaceThumbnailBounds,
-  ) {
+  ): CropParameters {
+    if (
+      !this.hasPositiveDimensions(dims.old) ||
+      !this.hasPositiveDimensions(dims.new) ||
+      ![x1, y1, x2, y2].every((value) => Number.isFinite(value)) ||
+      x2 <= x1 ||
+      y2 <= y1
+    ) {
+      return this.getCenteredFaceThumbnailCrop(dims.new);
+    }
+
     const clampedX1 = clamp(x1, 0, dims.old.width);
     const clampedY1 = clamp(y1, 0, dims.old.height);
     const clampedX2 = clamp(x2, 0, dims.old.width);
@@ -944,12 +954,54 @@ export class SharedSpaceService extends BaseService {
       Math.min(dims.new.height - 1, middleY + targetHalfSize) - middleY,
     );
 
-    return {
+    const crop = {
       x: middleX - newHalfSize,
       y: middleY - newHalfSize,
       width: newHalfSize * 2,
       height: newHalfSize * 2,
     };
+
+    return this.hasValidCrop(crop) ? crop : this.getCenteredFaceThumbnailCrop(dims.new);
+  }
+
+  private hasPositiveDimensions(dimensions: ImageDimensions) {
+    return (
+      Number.isFinite(dimensions.width) &&
+      dimensions.width > 0 &&
+      Number.isFinite(dimensions.height) &&
+      dimensions.height > 0
+    );
+  }
+
+  private hasValidCrop(crop: CropParameters) {
+    return (
+      Number.isFinite(crop.x) &&
+      crop.x >= 0 &&
+      Number.isFinite(crop.y) &&
+      crop.y >= 0 &&
+      Number.isFinite(crop.width) &&
+      crop.width > 0 &&
+      Number.isFinite(crop.height) &&
+      crop.height > 0
+    );
+  }
+
+  private getCenteredFaceThumbnailCrop(dimensions: ImageDimensions): CropParameters {
+    const width = this.toPositiveInteger(dimensions.width, FACE_THUMBNAIL_SIZE);
+    const height = this.toPositiveInteger(dimensions.height, FACE_THUMBNAIL_SIZE);
+    const size = Math.min(width, height);
+
+    return {
+      x: Math.floor((width - size) / 2),
+      y: Math.floor((height - size) / 2),
+      width: size,
+      height: size,
+    };
+  }
+
+  private toPositiveInteger(value: number, fallback: number) {
+    const rounded = Math.floor(value);
+    return Number.isFinite(rounded) && rounded > 0 ? rounded : fallback;
   }
 
   async updateSpacePerson(
