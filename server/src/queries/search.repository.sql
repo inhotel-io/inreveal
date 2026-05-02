@@ -902,55 +902,6 @@ order by
 
 -- SearchRepository.getFilterSuggestions (identity-filter-suggestions)
 select distinct
-  "make"
-from
-  "asset_exif"
-where
-  "assetId" in (
-    select
-      "asset"."id"
-    from
-      "asset"
-    where
-      "asset"."visibility" = $1
-      and "asset"."deletedAt" is null
-      and (
-        "asset"."ownerId" = any ($2::uuid[])
-        or exists (
-          select
-          from
-            "shared_space_asset"
-          where
-            "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_asset"."spaceId" = any ($3::uuid[])
-        )
-        or exists (
-          select
-          from
-            "shared_space_library"
-          where
-            "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_library"."spaceId" = any ($4::uuid[])
-        )
-      )
-      and "asset"."fileCreatedAt" >= $5
-      and exists (
-        select
-        from
-          "asset_face"
-          inner join "face_identity_face" on "face_identity_face"."assetFaceId" = "asset_face"."id"
-        where
-          "asset_face"."assetId" = "asset"."id"
-          and "asset_face"."deletedAt" is null
-          and "asset_face"."isVisible" is true
-          and "face_identity_face"."identityId" = $6::uuid
-      )
-  )
-  and "make" is not null
-  and "make" != $7
-order by
-  "make"
-select distinct
   "country"
 from
   "asset_exif"
@@ -999,6 +950,55 @@ where
   and "country" != $7
 order by
   "country"
+select distinct
+  "make"
+from
+  "asset_exif"
+where
+  "assetId" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+    where
+      "asset"."visibility" = $1
+      and "asset"."deletedAt" is null
+      and (
+        "asset"."ownerId" = any ($2::uuid[])
+        or exists (
+          select
+          from
+            "shared_space_asset"
+          where
+            "shared_space_asset"."assetId" = "asset"."id"
+            and "shared_space_asset"."spaceId" = any ($3::uuid[])
+        )
+        or exists (
+          select
+          from
+            "shared_space_library"
+          where
+            "shared_space_library"."libraryId" = "asset"."libraryId"
+            and "shared_space_library"."spaceId" = any ($4::uuid[])
+        )
+      )
+      and "asset"."fileCreatedAt" >= $5
+      and exists (
+        select
+        from
+          "asset_face"
+          inner join "face_identity_face" on "face_identity_face"."assetFaceId" = "asset_face"."id"
+        where
+          "asset_face"."assetId" = "asset"."id"
+          and "asset_face"."deletedAt" is null
+          and "asset_face"."isVisible" is true
+          and "face_identity_face"."identityId" = $6::uuid
+      )
+  )
+  and "make" is not null
+  and "make" != $7
+order by
+  "make"
 select distinct
   "tag"."id",
   "tag"."value"

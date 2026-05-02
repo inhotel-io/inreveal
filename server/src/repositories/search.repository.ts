@@ -1128,6 +1128,14 @@ export class SearchRepository {
         takenAfter: DummyValue.DATE,
       },
     ],
+    sortQueries: [
+      'select distinct\n  "country"',
+      'select distinct\n  "make"',
+      'select distinct\n  "tag"."id"',
+      'WITH\n  filtered_assets',
+      'select distinct\n  "rating"',
+      'select distinct\n  "type"',
+    ],
   })
   async getFilterSuggestions(userIds: string[], options: FilterSuggestionsOptions): Promise<FilterSuggestionsResult> {
     const [countries, cameraMakes, tags, peopleResult, ratings, mediaTypes] = await Promise.all([
