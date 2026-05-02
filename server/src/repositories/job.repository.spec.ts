@@ -168,7 +168,8 @@ describe(JobRepository.name, () => {
     ]);
 
     expect(queue.addBulk).not.toHaveBeenCalled();
-    for (const [, , options] of queue.add.mock.calls) {
+    for (const call of queue.add.mock.calls) {
+      const options = call[2];
       expect(options?.jobId).not.toContain(':');
     }
     expect(queue.add).toHaveBeenCalledWith(
