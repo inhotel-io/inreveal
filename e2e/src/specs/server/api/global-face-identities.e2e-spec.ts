@@ -74,7 +74,10 @@ const setupGlobalFaceIdentityE2E = async (): Promise<GlobalFaceIdentityFixture> 
     ]);
     await db.query(
       `INSERT INTO "face_identity_face" ("assetFaceId", "identityId", "source")
-       VALUES ($1, $3, 'manual'), ($2, $3, 'manual')`,
+       VALUES ($1, $3, 'manual'), ($2, $3, 'manual')
+       ON CONFLICT ("assetFaceId") DO UPDATE SET
+         "identityId" = EXCLUDED."identityId",
+         "source" = EXCLUDED."source"`,
       [faceA, faceB, faceIdentityId],
     );
     const space1Person = await db.query(
