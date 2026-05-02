@@ -98,6 +98,7 @@ export const envData: EnvData = {
       secretAccessKey: undefined,
       presignedUrlExpiry: 3600,
       serveMode: 'redirect',
+      proxyReadIdleTimeoutMs: 300_000,
     },
   },
 
