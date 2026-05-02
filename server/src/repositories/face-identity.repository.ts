@@ -51,6 +51,13 @@ type AccessiblePeopleSearchOptions = {
 };
 
 type ProfileKind = 'person' | 'space-person';
+type SpacePersonBackfillIdentityCandidate = {
+  identityId: string;
+  faceCount: number | string | bigint;
+};
+
+const SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_FACE_COUNT = 20;
+const SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_RATIO = 0.95;
 
 export type ScopedPersonTokenResolution = {
   identityIds: string[];
@@ -1221,18 +1228,20 @@ export class FaceIdentityRepository {
         .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
         .innerJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
         .select('face_identity_face.identityId')
-        .distinct()
+        .select(() => sql<number>`count(*)::int`.as('faceCount'))
         .where('shared_space_person_face.personId', '=', person.id)
         .where('asset_face.deletedAt', 'is', null)
         .where('asset_face.isVisible', '=', true)
+        .groupBy('face_identity_face.identityId')
         .execute();
 
-      if (linkedIdentities.length === 1) {
+      const identityId = this.getSpacePersonBackfillIdentityId(linkedIdentities);
+      if (identityId) {
         const existingPerson = await this.db
           .selectFrom('shared_space_person')
           .select('id')
           .where('spaceId', '=', person.spaceId)
-          .where('identityId', '=', linkedIdentities[0].identityId)
+          .where('identityId', '=', identityId)
           .where('id', '!=', person.id)
           .executeTakeFirst();
 
@@ -1243,7 +1252,7 @@ export class FaceIdentityRepository {
 
         await this.db
           .updateTable('shared_space_person')
-          .set({ identityId: linkedIdentities[0].identityId })
+          .set({ identityId })
           .where('id', '=', person.id)
           .execute();
       } else if (linkedIdentities.length > 1) {
@@ -1256,6 +1265,31 @@ export class FaceIdentityRepository {
       nextCursor: people.length > input.limit ? page.at(-1)?.id : undefined,
       conflictCount,
     };
+  }
+
+  private getSpacePersonBackfillIdentityId(candidates: SpacePersonBackfillIdentityCandidate[]): string | null {
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    if (candidates.length === 1) {
+      return candidates[0].identityId;
+    }
+
+    const rankedCandidates = candidates
+      .map((candidate) => ({ identityId: candidate.identityId, faceCount: Number(candidate.faceCount) }))
+      .toSorted((a, b) => b.faceCount - a.faceCount);
+    const totalFaces = rankedCandidates.reduce((total, candidate) => total + candidate.faceCount, 0);
+    const dominantCandidate = rankedCandidates[0];
+
+    if (
+      dominantCandidate.faceCount >= SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_FACE_COUNT &&
+      dominantCandidate.faceCount / totalFaces >= SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_RATIO
+    ) {
+      return dominantCandidate.identityId;
+    }
+
+    return null;
   }
 
   async mergeIdentities(input: {

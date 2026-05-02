@@ -256,6 +256,44 @@ describe(FaceIdentityRepository.name, () => {
     expect(spacePeople.find((person) => person.id === conflictingPerson.id)?.identityId).toBeNull();
   });
 
+  it('infers shared-space person identity from a dominant linked identity with tiny noisy candidates', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { person: dominantPerson } = await ctx.newPerson({ ownerId: user.id, name: 'Dominant' });
+    const dominantIdentity = await sut.ensurePersonIdentity(dominantPerson.id);
+    const noisyIdentities = [];
+    const spacePerson = await newSpacePerson(ctx, space.id);
+
+    for (let index = 0; index < 100; index++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: dominantPerson.id });
+      await sut.linkFace({ assetFaceId: assetFace.id, identityId: dominantIdentity.id, source: 'backfill' });
+      await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+    }
+
+    for (let index = 0; index < 3; index++) {
+      const { person: noisyPerson } = await ctx.newPerson({ ownerId: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: noisyPerson.id });
+      const noisyIdentity = await sut.ensurePersonIdentity(noisyPerson.id);
+      noisyIdentities.push(noisyIdentity.id);
+      await sut.linkFace({ assetFaceId: assetFace.id, identityId: noisyIdentity.id, source: 'backfill' });
+      await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+    }
+
+    await sut.backfillSpacePersonIdentities({ limit: 100 });
+
+    const updatedSpacePerson = await ctx.database
+      .selectFrom('shared_space_person')
+      .select('identityId')
+      .where('id', '=', spacePerson.id)
+      .executeTakeFirstOrThrow();
+
+    expect(updatedSpacePerson.identityId).toBe(dominantIdentity.id);
+    expect(noisyIdentities).toHaveLength(3);
+  });
+
   it('reports duplicate space-person rows for the same identity instead of violating uniqueness', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
