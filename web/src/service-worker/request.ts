@@ -5,7 +5,7 @@
 
 type PendingRequest = {
   controller: AbortController;
-  promise: Promise<Response>;
+  responsePromise?: Promise<Response>;
   cleanupTimeout?: ReturnType<typeof setTimeout>;
 };
 
@@ -20,21 +20,20 @@ export const handleFetch = (request: URL | Request): Promise<Response> => {
   const requestKey = getRequestKey(request);
   const existing = pendingRequests.get(requestKey);
 
-  if (existing) {
+  if (existing?.responsePromise) {
     // Clone the response since response bodies can only be read once
     // Each caller gets an independent clone they can consume
-    return existing.promise.then((response) => response.clone());
+    return existing.responsePromise.then((response) => response.clone());
   }
 
   const pendingRequest: PendingRequest = {
     controller: new AbortController(),
-    promise: undefined as unknown as Promise<Response>,
     cleanupTimeout: undefined,
   };
   pendingRequests.set(requestKey, pendingRequest);
 
   // NOTE: fetch returns after headers received, not the body
-  pendingRequest.promise = fetch(request, { signal: pendingRequest.controller.signal })
+  pendingRequest.responsePromise = fetch(request, { signal: pendingRequest.controller.signal })
     .catch((error: unknown) => {
       const standardError = error instanceof Error ? error : new Error(String(error));
       if (standardError.name === 'AbortError' || standardError.message === CANCELATION_MESSAGE) {
@@ -44,15 +43,18 @@ export const handleFetch = (request: URL | Request): Promise<Response> => {
       throw standardError;
     })
     .finally(() => {
-      // Schedule cleanup after timeout to allow response body streaming to complete
+      // Fetch resolves once headers arrive. Do not retain the Response for the body lifetime:
+      // an unconsumed cloned body can keep proxied media streams open until their idle timeout.
+      pendingRequest.responsePromise = undefined;
       const cleanupTimeout = setTimeout(() => {
-        pendingRequests.delete(requestKey);
+        if (pendingRequests.get(requestKey) === pendingRequest) {
+          pendingRequests.delete(requestKey);
+        }
       }, CLEANUP_TIMEOUT_MS);
       pendingRequest.cleanupTimeout = cleanupTimeout;
     });
 
-  // Clone for the first caller to keep the original response unconsumed for future callers
-  return pendingRequest.promise.then((response) => response.clone());
+  return pendingRequest.responsePromise;
 };
 
 export const handleCancel = (url: URL) => {
