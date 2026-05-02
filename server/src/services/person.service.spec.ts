@@ -45,10 +45,29 @@ describe(PersonService.name, () => {
     ({ sut, mocks } = newTestService(PersonService));
     mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identity-1' } as any);
     (mocks.faceIdentity as any).getAccessiblePeople ??= vi.fn();
+    (mocks.faceIdentity as any).hasBackfillWork ??= vi.fn();
   });
 
   it('should be defined', () => {
     expect(sut).toBeDefined();
+  });
+
+  describe('onBootstrap', () => {
+    it('should queue identity backfill when existing people or faces need identity links', async () => {
+      (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(true);
+
+      await sut.onBootstrap();
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
+    });
+
+    it('should skip identity backfill when no identity work remains', async () => {
+      (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(false);
+
+      await sut.onBootstrap();
+
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
   });
 
   describe('getAll', () => {

@@ -31,6 +31,65 @@ const linkSpaceFace = async (ctx: ReturnType<typeof setup>['ctx'], personId: str
 };
 
 describe(FaceIdentityRepository.name, () => {
+  it('reports backfill work for legacy people, unlinked visible faces, and legacy space people', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    try {
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+      const spacePerson = await newSpacePerson(ctx, space.id);
+      await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+
+      await expect(sut.hasBackfillWork()).resolves.toBe(true);
+
+      await sut.backfillPersonalIdentities({ limit: 100 });
+      await sut.backfillSpacePersonIdentities({ limit: 100 });
+
+      await expect(sut.hasBackfillWork()).resolves.toBe(false);
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
+  });
+
+  it('does not report unresolved space-person conflicts as recurring backfill work', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    try {
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+
+      const { person: firstPerson } = await ctx.newPerson({ ownerId: user.id });
+      const { asset: firstAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: firstFace } = await ctx.newAssetFace({ assetId: firstAsset.id, personId: firstPerson.id });
+      const firstIdentity = await sut.ensurePersonIdentity(firstPerson.id);
+      await sut.linkFace({ assetFaceId: firstFace.id, identityId: firstIdentity.id, source: 'backfill' });
+
+      const { person: secondPerson } = await ctx.newPerson({ ownerId: user.id });
+      const { asset: secondAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: secondFace } = await ctx.newAssetFace({ assetId: secondAsset.id, personId: secondPerson.id });
+      const secondIdentity = await sut.ensurePersonIdentity(secondPerson.id);
+      await sut.linkFace({ assetFaceId: secondFace.id, identityId: secondIdentity.id, source: 'backfill' });
+
+      await newSpacePerson(ctx, space.id);
+      const conflictingSpacePerson = await newSpacePerson(ctx, space.id);
+      await linkSpaceFace(ctx, conflictingSpacePerson.id, firstFace.id);
+      await linkSpaceFace(ctx, conflictingSpacePerson.id, secondFace.id);
+      await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: space.id, identityId: firstIdentity.id })
+        .execute();
+      const duplicateSpacePerson = await newSpacePerson(ctx, space.id);
+      await linkSpaceFace(ctx, duplicateSpacePerson.id, firstFace.id);
+
+      await expect(sut.hasBackfillWork()).resolves.toBe(false);
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
+  });
+
   it('enforces one identity per personal profile and one active identity per face', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();

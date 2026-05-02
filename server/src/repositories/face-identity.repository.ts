@@ -235,6 +235,59 @@ export class FaceIdentityRepository {
     };
   }
 
+  async hasBackfillWork(): Promise<boolean> {
+    const result = await sql<{ hasWork: boolean }>`
+      SELECT
+        EXISTS (
+          SELECT 1
+          FROM person
+          WHERE person."identityId" IS NULL
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM asset_face
+          INNER JOIN asset ON asset.id = asset_face."assetId"
+          LEFT JOIN face_identity_face ON face_identity_face."assetFaceId" = asset_face.id
+          WHERE asset_face."personId" IS NOT NULL
+            AND asset_face."deletedAt" IS NULL
+            AND asset_face."isVisible" = true
+            AND asset."deletedAt" IS NULL
+            AND face_identity_face."assetFaceId" IS NULL
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM (
+            SELECT
+              shared_space_person.id,
+              shared_space_person."spaceId",
+              MIN(face_identity_face."identityId"::text)::uuid AS "identityId",
+              COUNT(DISTINCT face_identity_face."identityId") AS "identityCount"
+            FROM shared_space_person
+            INNER JOIN shared_space_person_face
+              ON shared_space_person_face."personId" = shared_space_person.id
+            INNER JOIN asset_face
+              ON asset_face.id = shared_space_person_face."assetFaceId"
+            INNER JOIN face_identity_face
+              ON face_identity_face."assetFaceId" = asset_face.id
+            WHERE shared_space_person."identityId" IS NULL
+              AND asset_face."deletedAt" IS NULL
+              AND asset_face."isVisible" = true
+            GROUP BY shared_space_person.id, shared_space_person."spaceId"
+          ) AS candidate
+          WHERE candidate."identityCount" = 1
+            AND NOT EXISTS (
+              SELECT 1
+              FROM shared_space_person existing_space_person
+              WHERE existing_space_person."spaceId" = candidate."spaceId"
+                AND existing_space_person."identityId" = candidate."identityId"
+                AND existing_space_person.id != candidate.id
+            )
+        ) AS "hasWork"
+    `.execute(this.db);
+
+    return result.rows[0]?.hasWork ?? false;
+  }
+
   @GenerateSql({
     params: [
       DummyValue.UUID,

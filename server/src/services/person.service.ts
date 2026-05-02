@@ -3,7 +3,7 @@ import { Insertable, Updateable } from 'kysely';
 import { isAbsolute } from 'node:path';
 import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
 import { Person } from 'src/database';
-import { Chunked, OnJob } from 'src/decorators';
+import { Chunked, OnEvent, OnJob } from 'src/decorators';
 import { BulkIdErrorReason, BulkIdResponseDto, BulkIdsDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
@@ -28,6 +28,7 @@ import {
 import {
   AssetVisibility,
   CacheControl,
+  ImmichWorker,
   JobName,
   JobStatus,
   Permission,
@@ -53,6 +54,13 @@ const FACE_IDENTITY_BACKFILL_CHUNK_SIZE = 1000;
 
 @Injectable()
 export class PersonService extends BaseService {
+  @OnEvent({ name: 'AppBootstrap', workers: [ImmichWorker.Microservices] })
+  async onBootstrap(): Promise<void> {
+    if (await this.faceIdentityRepository.hasBackfillWork()) {
+      await this.jobRepository.queue({ name: JobName.FaceIdentityBackfill, data: {} });
+    }
+  }
+
   async getAll(auth: AuthDto, dto: PersonSearchDto): Promise<PeopleResponseDto> {
     const { withHidden = false, withSharedSpaces = false, closestAssetId, closestPersonId, page, size } = dto;
 
