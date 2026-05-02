@@ -121,6 +121,7 @@ from
       "shared_space_asset"."spaceId" = $1
       and "asset"."deletedAt" is null
       and "asset"."isOffline" = $2
+      and "asset"."visibility" in ($3, $4)
     union
     select
       "asset"."id"
@@ -128,9 +129,10 @@ from
       "shared_space_library"
       inner join "asset" on "asset"."libraryId" = "shared_space_library"."libraryId"
     where
-      "shared_space_library"."spaceId" = $3
+      "shared_space_library"."spaceId" = $5
       and "asset"."deletedAt" is null
-      and "asset"."isOffline" = $4
+      and "asset"."isOffline" = $6
+      and "asset"."visibility" in ($7, $8)
   ) as "combined"
 
 -- SharedSpaceRepository.getEditableByAssetIds
@@ -201,6 +203,7 @@ from
       and "asset"."deletedAt" is null
       and "asset"."isOffline" = $2
       and "asset"."type" = $3
+      and "asset"."visibility" in ($4, $5)
       and "asset"."thumbhash" is not null
     union
     select
@@ -211,24 +214,29 @@ from
       "shared_space_library"
       inner join "asset" on "asset"."libraryId" = "shared_space_library"."libraryId"
     where
-      "shared_space_library"."spaceId" = $4
+      "shared_space_library"."spaceId" = $6
       and "asset"."deletedAt" is null
-      and "asset"."isOffline" = $5
-      and "asset"."type" = $6
+      and "asset"."isOffline" = $7
+      and "asset"."type" = $8
+      and "asset"."visibility" in ($9, $10)
       and "asset"."thumbhash" is not null
   ) as "combined"
 order by
   "combined"."fileCreatedAt" desc
 limit
-  $7
+  $11
 
 -- SharedSpaceRepository.getLastAssetAddedAt
 select
   max("addedAt") as "lastAddedAt"
 from
   "shared_space_asset"
+  inner join "asset" on "asset"."id" = "shared_space_asset"."assetId"
 where
   "spaceId" = $1
+  and "asset"."deletedAt" is null
+  and "asset"."isOffline" = $2
+  and "asset"."visibility" in ($3, $4)
 
 -- SharedSpaceRepository.getNewAssetCount
 select
@@ -245,6 +253,7 @@ from
       and "shared_space_asset"."addedAt" > $2
       and "asset"."deletedAt" is null
       and "asset"."isOffline" = $3
+      and "asset"."visibility" in ($4, $5)
     union
     select
       "asset"."id"
@@ -252,10 +261,11 @@ from
       "shared_space_library"
       inner join "asset" on "asset"."libraryId" = "shared_space_library"."libraryId"
     where
-      "shared_space_library"."spaceId" = $4
-      and "asset"."createdAt" > $5
+      "shared_space_library"."spaceId" = $6
+      and "asset"."createdAt" > $7
       and "asset"."deletedAt" is null
-      and "asset"."isOffline" = $6
+      and "asset"."isOffline" = $8
+      and "asset"."visibility" in ($9, $10)
   ) as "combined"
 
 -- SharedSpaceRepository.getLastContributor
@@ -264,15 +274,19 @@ select
   "user"."name"
 from
   "shared_space_asset"
+  inner join "asset" on "asset"."id" = "shared_space_asset"."assetId"
   inner join "user" on "user"."id" = "shared_space_asset"."addedById"
   and "user"."deletedAt" is null
 where
   "shared_space_asset"."spaceId" = $1
   and "shared_space_asset"."addedAt" > $2
+  and "asset"."deletedAt" is null
+  and "asset"."isOffline" = $3
+  and "asset"."visibility" in ($4, $5)
 order by
   "shared_space_asset"."addedAt" desc
 limit
-  $3
+  $6
 
 -- SharedSpaceRepository.updateMemberLastViewed
 update "shared_space_member"
@@ -284,38 +298,50 @@ where
 
 -- SharedSpaceRepository.getContributionCounts
 select
-  "addedById",
+  "shared_space_asset"."addedById",
   count(*) as "count"
 from
   "shared_space_asset"
+  inner join "asset" on "asset"."id" = "shared_space_asset"."assetId"
 where
-  "spaceId" = $1
+  "shared_space_asset"."spaceId" = $1
+  and "asset"."deletedAt" is null
+  and "asset"."isOffline" = $2
+  and "asset"."visibility" in ($3, $4)
 group by
-  "addedById"
+  "shared_space_asset"."addedById"
 
 -- SharedSpaceRepository.getMemberActivity
 select
-  "addedById",
-  max("addedAt") as "lastAddedAt",
+  "shared_space_asset"."addedById",
+  max("shared_space_asset"."addedAt") as "lastAddedAt",
   (
     select
       "ssa2"."assetId"
     from
       "shared_space_asset" as "ssa2"
+      inner join "asset" as "asset2" on "asset2"."id" = "ssa2"."assetId"
     where
       "ssa2"."addedById" = "shared_space_asset"."addedById"
       and "ssa2"."spaceId" = $1
+      and "asset2"."deletedAt" is null
+      and "asset2"."isOffline" = $2
+      and "asset2"."visibility" in ($3, $4)
     order by
       "ssa2"."addedAt" desc
     limit
-      $2
+      $5
   ) as "recentAssetId"
 from
   "shared_space_asset"
+  inner join "asset" on "asset"."id" = "shared_space_asset"."assetId"
 where
-  "spaceId" = $3
+  "shared_space_asset"."spaceId" = $6
+  and "asset"."deletedAt" is null
+  and "asset"."isOffline" = $7
+  and "asset"."visibility" in ($8, $9)
 group by
-  "addedById"
+  "shared_space_asset"."addedById"
 
 -- SharedSpaceRepository.getMapMarkers
 select
@@ -336,6 +362,7 @@ from
       "shared_space_asset"."spaceId" = $1
       and "asset"."deletedAt" is null
       and "asset"."isOffline" = $2
+      and "asset"."visibility" in ($3, $4)
     union
     select
       "asset"."id"
@@ -343,9 +370,10 @@ from
       "shared_space_library"
       inner join "asset" on "asset"."libraryId" = "shared_space_library"."libraryId"
     where
-      "shared_space_library"."spaceId" = $3
+      "shared_space_library"."spaceId" = $5
       and "asset"."deletedAt" is null
-      and "asset"."isOffline" = $4
+      and "asset"."isOffline" = $6
+      and "asset"."visibility" in ($7, $8)
   ) as "combined"
   inner join "asset" on "asset"."id" = "combined"."id"
   inner join "asset_exif" on "asset"."id" = "asset_exif"."assetId"
@@ -935,12 +963,16 @@ select
 from
   (
     select
-      "assetId" as "id"
+      "shared_space_asset"."assetId" as "id"
     from
       "shared_space_asset"
+      inner join "asset" on "asset"."id" = "shared_space_asset"."assetId"
     where
-      "spaceId" = $1
-      and "assetId" = $2
+      "shared_space_asset"."spaceId" = $1
+      and "shared_space_asset"."assetId" = $2
+      and "asset"."deletedAt" is null
+      and "asset"."isOffline" = $3
+      and "asset"."visibility" in ($4, $5)
     union
     select
       "asset"."id"
@@ -948,13 +980,14 @@ from
       "shared_space_library"
       inner join "asset" on "asset"."libraryId" = "shared_space_library"."libraryId"
     where
-      "shared_space_library"."spaceId" = $3
-      and "asset"."id" = $4
+      "shared_space_library"."spaceId" = $6
+      and "asset"."id" = $7
       and "asset"."deletedAt" is null
-      and "asset"."isOffline" = $5
+      and "asset"."isOffline" = $8
+      and "asset"."visibility" in ($9, $10)
   ) as "combined"
 limit
-  $6
+  $11
 
 -- SharedSpaceRepository.isFaceInSpace
 select
@@ -1002,11 +1035,15 @@ select
 from
   (
     select
-      "assetId" as "id"
+      "shared_space_asset"."assetId" as "id"
     from
       "shared_space_asset"
+      inner join "asset" on "asset"."id" = "shared_space_asset"."assetId"
     where
-      "spaceId" = $1
+      "shared_space_asset"."spaceId" = $1
+      and "asset"."deletedAt" is null
+      and "asset"."isOffline" = $2
+      and "asset"."visibility" in ($3, $4)
     union
     select
       "asset"."id"
@@ -1014,16 +1051,17 @@ from
       "shared_space_library"
       inner join "asset" on "asset"."libraryId" = "shared_space_library"."libraryId"
     where
-      "shared_space_library"."spaceId" = $2
+      "shared_space_library"."spaceId" = $5
       and "asset"."deletedAt" is null
-      and "asset"."isOffline" = $3
+      and "asset"."isOffline" = $6
+      and "asset"."visibility" in ($7, $8)
   ) as "combined"
 where
-  "combined"."id" > $4
+  "combined"."id" > $9
 order by
   "combined"."id" asc
 limit
-  $5
+  $10
 
 -- SharedSpaceRepository.getAssetIdsInSpace
 select
@@ -1031,11 +1069,15 @@ select
 from
   (
     select
-      "assetId" as "id"
+      "shared_space_asset"."assetId" as "id"
     from
       "shared_space_asset"
+      inner join "asset" on "asset"."id" = "shared_space_asset"."assetId"
     where
-      "spaceId" = $1
+      "shared_space_asset"."spaceId" = $1
+      and "asset"."deletedAt" is null
+      and "asset"."isOffline" = $2
+      and "asset"."visibility" in ($3, $4)
     union
     select
       "asset"."id"
@@ -1043,9 +1085,10 @@ from
       "shared_space_library"
       inner join "asset" on "asset"."libraryId" = "shared_space_library"."libraryId"
     where
-      "shared_space_library"."spaceId" = $2
+      "shared_space_library"."spaceId" = $5
       and "asset"."deletedAt" is null
-      and "asset"."isOffline" = $3
+      and "asset"."isOffline" = $6
+      and "asset"."visibility" in ($7, $8)
   ) as "combined"
 
 -- SharedSpaceRepository.getSpaceIdsForAsset
