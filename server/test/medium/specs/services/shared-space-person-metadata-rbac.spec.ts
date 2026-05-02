@@ -1,5 +1,6 @@
 import { Kysely } from 'kysely';
-import { JobStatus, SharedSpaceRole } from 'src/enum';
+import { AssetVisibility, JobStatus, SharedSpaceRole } from 'src/enum';
+import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
@@ -19,7 +20,7 @@ let defaultDatabase: Kysely<DB>;
 const setup = (db?: Kysely<DB>) => {
   const { ctx, sut } = newMediumService(SharedSpaceService, {
     database: db || defaultDatabase,
-    real: [SharedSpaceRepository, FaceIdentityRepository, ConfigRepository, SystemMetadataRepository],
+    real: [AssetRepository, SharedSpaceRepository, FaceIdentityRepository, ConfigRepository, SystemMetadataRepository],
     mock: [LoggingRepository, JobRepository],
   });
   const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
@@ -42,6 +43,7 @@ const createRecognizedFace = async (
     birthDate?: string;
     sharePersonMetadata?: boolean;
     assetAdderId?: string;
+    libraryId?: string;
   },
 ) => {
   const { result: person } = await ctx.newPerson({
@@ -49,7 +51,11 @@ const createRecognizedFace = async (
     name: input.personName,
     birthDate: input.birthDate ? new Date(input.birthDate) : null,
   });
-  const { asset } = await ctx.newAsset({ ownerId: input.ownerId });
+  const { asset } = await ctx.newAsset({
+    ownerId: input.ownerId,
+    libraryId: input.libraryId,
+    visibility: AssetVisibility.Timeline,
+  });
   if (input.spaceId) {
     await ctx.newSharedSpaceAsset({
       spaceId: input.spaceId,
@@ -129,6 +135,56 @@ const createSpaceNameBridge = async (input?: {
   const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
 
   return { ctx, sut, face, source, member, otherOwner, sourceSpace, targetSpace, sourceSpacePerson, targetSpacePerson };
+};
+
+const createLinkedLibrarySpaceNameBridge = async (input?: {
+  memberCanSeeSourceSpace?: boolean;
+  sourceVisibleInMemberTimeline?: boolean;
+  targetOwnedByOther?: boolean;
+  targetMemberRole?: SharedSpaceRole;
+  sourceName?: string;
+  birthDate?: string;
+}) => {
+  const { ctx, sut, faceIdentityRepository } = setup();
+  const { user: source } = await ctx.newUser();
+  const { user: member } = await ctx.newUser();
+  const { user: otherOwner } = input?.targetOwnedByOther ? await ctx.newUser() : { user: member };
+  const { library } = await ctx.newLibrary({ ownerId: source.id });
+  const { space: sourceSpace } = await ctx.newSharedSpace({ createdById: source.id });
+  await ctx.newSharedSpaceMember({ spaceId: sourceSpace.id, userId: source.id, role: SharedSpaceRole.Owner });
+  if (input?.memberCanSeeSourceSpace !== false) {
+    await ctx.newSharedSpaceMember({ spaceId: sourceSpace.id, userId: member.id, role: SharedSpaceRole.Viewer });
+    if (input?.sourceVisibleInMemberTimeline === false) {
+      await ctx.database
+        .updateTable('shared_space_member')
+        .set({ showInTimeline: false })
+        .where('spaceId', '=', sourceSpace.id)
+        .where('userId', '=', member.id)
+        .execute();
+    }
+  }
+  const face = await createRecognizedFace(ctx, faceIdentityRepository, {
+    ownerId: source.id,
+    libraryId: library.id,
+    personName: input?.sourceName ?? 'John',
+    birthDate: input?.birthDate ?? '1980-01-02',
+  });
+  await ctx.newSharedSpaceLibrary({ spaceId: sourceSpace.id, libraryId: library.id, addedById: source.id });
+  await sut.handleSharedSpaceLibraryFaceSync({ spaceId: sourceSpace.id, libraryId: library.id });
+  const sourceSpacePerson = await getOnlySpacePerson(ctx, sourceSpace.id);
+
+  const { space: targetSpace } = await ctx.newSharedSpace({ createdById: otherOwner.id });
+  await ctx.newSharedSpaceMember({ spaceId: targetSpace.id, userId: otherOwner.id, role: SharedSpaceRole.Owner });
+  if (otherOwner.id !== member.id) {
+    await ctx.newSharedSpaceMember({
+      spaceId: targetSpace.id,
+      userId: member.id,
+      role: input?.targetMemberRole ?? SharedSpaceRole.Editor,
+    });
+  }
+  await ctx.newSharedSpaceLibrary({ spaceId: targetSpace.id, libraryId: library.id, addedById: member.id });
+
+  return { ctx, sut, face, library, source, member, otherOwner, sourceSpace, targetSpace, sourceSpacePerson };
 };
 
 describe('SharedSpaceService shared-space person metadata RBAC', () => {
@@ -339,6 +395,83 @@ describe('SharedSpaceService shared-space person metadata RBAC', () => {
     expect(targetSpacePerson.nameSource).toBe('none');
   });
 
+  it('carries a member-visible inherited space name through linked-library face sync', async () => {
+    const { ctx, sut, face, library, targetSpace, sourceSpacePerson } = await createLinkedLibrarySpaceNameBridge();
+
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+    expect(targetSpacePerson.identityId).toBe(face.identity.id);
+    expect(targetSpacePerson.name).toBe('John');
+    expect(targetSpacePerson.nameSource).toBe('inherited');
+    expect(targetSpacePerson.nameSourceProfileType).toBe('space-person');
+    expect(targetSpacePerson.nameSourceProfileId).toBe(sourceSpacePerson.id);
+    expect(asBirthDateString(targetSpacePerson.birthDate)).toBe('1980-01-02');
+    expect(targetSpacePerson.birthDateSource).toBe('inherited');
+    expect(targetSpacePerson.birthDateSourceProfileType).toBe('space-person');
+    expect(targetSpacePerson.birthDateSourceProfileId).toBe(sourceSpacePerson.id);
+    expect(targetSpacePerson.faceCount).toBe(1);
+  });
+
+  it('uses the linked-library linker when a direct space asset row has no adder', async () => {
+    const { ctx, sut, face, library, targetSpace, sourceSpacePerson } = await createLinkedLibrarySpaceNameBridge();
+    await ctx.newSharedSpaceAsset({ spaceId: targetSpace.id, assetId: face.asset.id, addedById: null });
+
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+    expect(targetSpacePerson.name).toBe('John');
+    expect(targetSpacePerson.nameSource).toBe('inherited');
+    expect(targetSpacePerson.nameSourceProfileType).toBe('space-person');
+    expect(targetSpacePerson.nameSourceProfileId).toBe(sourceSpacePerson.id);
+  });
+
+  it('does not carry a linked-library source-space name when the library linker cannot see that source space', async () => {
+    const { ctx, sut, library, targetSpace } = await createLinkedLibrarySpaceNameBridge({
+      memberCanSeeSourceSpace: false,
+    });
+
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+    expect(targetSpacePerson.name).toBe('');
+    expect(targetSpacePerson.nameSource).toBe('none');
+    expect(targetSpacePerson.nameSourceProfileType).toBeNull();
+    expect(targetSpacePerson.nameSourceProfileId).toBeNull();
+  });
+
+  it('does not carry a linked-library source-space name hidden from the library linker timeline', async () => {
+    const { ctx, sut, library, targetSpace } = await createLinkedLibrarySpaceNameBridge({
+      sourceVisibleInMemberTimeline: false,
+    });
+
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+    expect(targetSpacePerson.name).toBe('');
+    expect(targetSpacePerson.nameSource).toBe('none');
+    expect(targetSpacePerson.nameSourceProfileType).toBeNull();
+    expect(targetSpacePerson.nameSourceProfileId).toBeNull();
+  });
+
+  it('does not carry a linked-library source-space name when the linker disabled target-space metadata contribution', async () => {
+    const { ctx, sut, member, library, targetSpace } = await createLinkedLibrarySpaceNameBridge();
+    await ctx.database
+      .updateTable('shared_space_member')
+      .set({ sharePersonMetadata: false })
+      .where('spaceId', '=', targetSpace.id)
+      .where('userId', '=', member.id)
+      .execute();
+
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+    expect(targetSpacePerson.name).toBe('');
+    expect(targetSpacePerson.nameSource).toBe('none');
+    expect(targetSpacePerson.nameSourceProfileType).toBeNull();
+    expect(targetSpacePerson.nameSourceProfileId).toBeNull();
+  });
+
   it('keeps a space-sourced inherited name during backfill while the source remains visible', async () => {
     const { ctx, sut, face, sourceSpacePerson, targetSpacePerson } = await createSpaceNameBridge();
 
@@ -349,6 +482,211 @@ describe('SharedSpaceService shared-space person metadata RBAC', () => {
     expect(updated.nameSource).toBe('inherited');
     expect(updated.nameSourceProfileType).toBe('space-person');
     expect(updated.nameSourceProfileId).toBe(sourceSpacePerson.id);
+  });
+
+  it('clears linked-library inherited metadata when the source member is removed from that source space', async () => {
+    const { ctx, sut, face, source, member, sourceSpace, library, targetSpace } =
+      await createLinkedLibrarySpaceNameBridge();
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+
+    await sut.removeMember(authFor(source), sourceSpace.id, member.id);
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const updated = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(updated.name).toBe('');
+    expect(updated.nameSource).toBe('none');
+    expect(updated.nameSourceProfileType).toBeNull();
+    expect(updated.nameSourceProfileId).toBeNull();
+    expect(updated.birthDate).toBeNull();
+    expect(updated.birthDateSource).toBe('none');
+    expect(updated.birthDateSourceProfileId).toBeNull();
+  });
+
+  it('clears linked-library inherited metadata when the source space is deleted', async () => {
+    const { ctx, sut, face, source, sourceSpace, library, targetSpace } = await createLinkedLibrarySpaceNameBridge();
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+
+    await sut.remove(authFor(source), sourceSpace.id);
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const updated = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(updated.name).toBe('');
+    expect(updated.nameSource).toBe('none');
+    expect(updated.nameSourceProfileType).toBeNull();
+    expect(updated.nameSourceProfileId).toBeNull();
+  });
+
+  it('clears linked-library inherited metadata when the library linker is removed from the target space', async () => {
+    const { ctx, sut, face, member, otherOwner, library, targetSpace } = await createLinkedLibrarySpaceNameBridge({
+      targetOwnedByOther: true,
+      targetMemberRole: SharedSpaceRole.Editor,
+    });
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+
+    await sut.removeMember(authFor(otherOwner), targetSpace.id, member.id);
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const updated = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(updated.name).toBe('');
+    expect(updated.nameSource).toBe('none');
+    expect(updated.nameSourceProfileType).toBeNull();
+    expect(updated.nameSourceProfileId).toBeNull();
+  });
+
+  it('clears linked-library inherited metadata when the source space is hidden from the linker timeline later', async () => {
+    const { ctx, sut, face, member, sourceSpace, library, targetSpace } = await createLinkedLibrarySpaceNameBridge();
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+
+    await sut.updateMemberTimeline(authFor(member), sourceSpace.id, { showInTimeline: false });
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const updated = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(updated.name).toBe('');
+    expect(updated.nameSource).toBe('none');
+    expect(updated.nameSourceProfileType).toBeNull();
+    expect(updated.nameSourceProfileId).toBeNull();
+  });
+
+  it('clears linked-library inherited metadata when the source space person is hidden later', async () => {
+    const { ctx, sut, face, source, sourceSpace, sourceSpacePerson, library, targetSpace } =
+      await createLinkedLibrarySpaceNameBridge();
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+
+    await sut.updateSpacePerson(authFor(source), sourceSpace.id, sourceSpacePerson.id, { isHidden: true });
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const updated = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(updated.name).toBe('');
+    expect(updated.nameSource).toBe('none');
+    expect(updated.nameSourceProfileType).toBeNull();
+    expect(updated.nameSourceProfileId).toBeNull();
+  });
+
+  it('updates from a renamed linked-library source space person and then clears after that source space is deleted', async () => {
+    const { ctx, sut, face, source, sourceSpace, sourceSpacePerson, library, targetSpace } =
+      await createLinkedLibrarySpaceNameBridge();
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+
+    await sut.updateSpacePerson(authFor(source), sourceSpace.id, sourceSpacePerson.id, { name: 'Johnny' });
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const renamed = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(renamed.name).toBe('Johnny');
+    expect(renamed.nameSourceProfileId).toBe(sourceSpacePerson.id);
+
+    await sut.remove(authFor(source), sourceSpace.id);
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const cleared = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(cleared.name).toBe('');
+    expect(cleared.nameSource).toBe('none');
+    expect(cleared.nameSourceProfileId).toBeNull();
+  });
+
+  it('falls back to a current library linker personal name when a linked-library source space name disappears', async () => {
+    const { ctx, sut, face, source, member, sourceSpace, library, targetSpace } =
+      await createLinkedLibrarySpaceNameBridge();
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+    const { person: fallback } = await ctx.newPerson({ ownerId: member.id, name: 'Local John' });
+    await ctx.database
+      .updateTable('person')
+      .set({ identityId: face.identity.id })
+      .where('id', '=', fallback.id)
+      .execute();
+
+    await sut.remove(authFor(source), sourceSpace.id);
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const updated = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(updated.name).toBe('Local John');
+    expect(updated.nameSource).toBe('inherited');
+    expect(updated.nameSourceProfileType).toBe('user-person');
+    expect(updated.nameSourceProfileId).toBe(fallback.id);
+  });
+
+  it('keeps manual linked-library target-space metadata when the inherited source space is deleted', async () => {
+    const { ctx, sut, face, source, member, sourceSpace, library, targetSpace } =
+      await createLinkedLibrarySpaceNameBridge();
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+
+    await sut.updateSpacePerson(authFor(member), targetSpace.id, targetSpacePerson.id, {
+      name: 'Target John',
+      birthDate: '2001-01-01',
+    });
+    await sut.remove(authFor(source), sourceSpace.id);
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const updated = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(updated.name).toBe('Target John');
+    expect(updated.nameSource).toBe('manual');
+    expect(updated.nameSourceProfileType).toBe('space-person');
+    expect(updated.nameSourceProfileId).toBe(targetSpacePerson.id);
+    expect(asBirthDateString(updated.birthDate)).toBe('2001-01-01');
+    expect(updated.birthDateSource).toBe('manual');
+  });
+
+  it('clears and restores linked-library inherited metadata when a linker leaves and rejoins the source space', async () => {
+    const { ctx, sut, face, source, member, sourceSpace, sourceSpacePerson, library, targetSpace } =
+      await createLinkedLibrarySpaceNameBridge();
+    await sut.handleSharedSpaceLibraryFaceSync({ spaceId: targetSpace.id, libraryId: library.id });
+    const targetSpacePerson = await getOnlySpacePerson(ctx, targetSpace.id);
+
+    await sut.removeMember(authFor(source), sourceSpace.id, member.id);
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const afterRemoval = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(afterRemoval.name).toBe('');
+    expect(afterRemoval.nameSource).toBe('none');
+    expect(afterRemoval.birthDate).toBeNull();
+
+    await ctx.newSharedSpaceMember({ spaceId: sourceSpace.id, userId: member.id, role: SharedSpaceRole.Viewer });
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const afterRejoin = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(afterRejoin.name).toBe('John');
+    expect(afterRejoin.nameSource).toBe('inherited');
+    expect(afterRejoin.nameSourceProfileType).toBe('space-person');
+    expect(afterRejoin.nameSourceProfileId).toBe(sourceSpacePerson.id);
+    expect(asBirthDateString(afterRejoin.birthDate)).toBe('1980-01-02');
+    expect(afterRejoin.birthDateSource).toBe('inherited');
+  });
+
+  it('keeps a linked-library space-sourced inherited name during backfill while the source remains visible', async () => {
+    const { ctx, sut, face, targetSpace, sourceSpacePerson } = await createLinkedLibrarySpaceNameBridge();
+    const targetSpacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: targetSpace.id,
+        identityId: face.identity.id,
+        name: '',
+        type: 'person',
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: targetSpacePerson.id, assetFaceId: face.faceId })
+      .execute();
+
+    await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
+
+    const updated = await getSpacePersonById(ctx, targetSpacePerson.id);
+    expect(updated.name).toBe('John');
+    expect(updated.nameSource).toBe('inherited');
+    expect(updated.nameSourceProfileType).toBe('space-person');
+    expect(updated.nameSourceProfileId).toBe(sourceSpacePerson.id);
+    expect(asBirthDateString(updated.birthDate)).toBe('1980-01-02');
+    expect(updated.birthDateSource).toBe('inherited');
+    expect(updated.birthDateSourceProfileType).toBe('space-person');
+    expect(updated.birthDateSourceProfileId).toBe(sourceSpacePerson.id);
   });
 
   it('clears a space-sourced inherited name when the source member is removed from that source space', async () => {

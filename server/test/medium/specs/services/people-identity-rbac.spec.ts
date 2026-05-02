@@ -3,6 +3,7 @@ import { Kysely } from 'kysely';
 import { SearchSuggestionType } from 'src/dtos/search.dto';
 import { AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
+import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
@@ -38,7 +39,7 @@ const setup = (db?: Kysely<DB>) => {
 const setupSharedSpace = (db?: Kysely<DB>) => {
   const { ctx, sut } = newMediumService(SharedSpaceService, {
     database: db || defaultDatabase,
-    real: [ConfigRepository, FaceIdentityRepository, SharedSpaceRepository, SystemMetadataRepository],
+    real: [AssetRepository, ConfigRepository, FaceIdentityRepository, SharedSpaceRepository, SystemMetadataRepository],
     mock: [JobRepository, LoggingRepository],
   });
   const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
@@ -193,10 +194,15 @@ const createIdentityBackedFace = async (
     personName: string;
     spaceId?: string;
     assetAdderId?: string;
+    libraryId?: string;
   },
 ) => {
   const { result: person } = await ctx.newPerson({ ownerId: input.ownerId, name: input.personName });
-  const { asset } = await ctx.newAsset({ ownerId: input.ownerId, visibility: AssetVisibility.Timeline });
+  const { asset } = await ctx.newAsset({
+    ownerId: input.ownerId,
+    libraryId: input.libraryId,
+    visibility: AssetVisibility.Timeline,
+  });
   if (input.spaceId) {
     await ctx.newSharedSpaceAsset({
       spaceId: input.spaceId,
@@ -209,6 +215,48 @@ const createIdentityBackedFace = async (
   const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
   await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: identity.id, source: 'owner-person' });
   return { asset, faceId, identity, person };
+};
+
+const createLinkedLibraryIdentityFixture = async (input?: { city?: string; personName?: string }) => {
+  const { ctx, sut: personService, faceIdentityRepository } = setup();
+  const { sut: sharedSpaceService } = setupSharedSpace();
+  const { sut: searchService } = setupSearch();
+  const { user: source } = await ctx.newUser();
+  const { user: member } = await ctx.newUser();
+  const { user: nonMember } = await ctx.newUser();
+  const { library } = await ctx.newLibrary({ ownerId: source.id });
+  const { space } = await ctx.newSharedSpace({ createdById: source.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: source.id, role: SharedSpaceRole.Owner });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+  const face = await createIdentityBackedFace(ctx, faceIdentityRepository, {
+    ownerId: source.id,
+    libraryId: library.id,
+    personName: input?.personName ?? 'Library Source',
+  });
+  if (input?.city) {
+    await ctx.newExif({ assetId: face.asset.id, city: input.city, country: 'Switzerland' });
+  }
+  await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: source.id });
+  await sharedSpaceService.handleSharedSpaceLibraryFaceSync({ spaceId: space.id, libraryId: library.id });
+  const spacePerson = await ctx.database
+    .selectFrom('shared_space_person')
+    .selectAll()
+    .where('spaceId', '=', space.id)
+    .executeTakeFirstOrThrow();
+
+  return {
+    ctx,
+    personService,
+    sharedSpaceService,
+    searchService,
+    source,
+    member,
+    nonMember,
+    library,
+    space,
+    face,
+    spacePerson,
+  };
 };
 
 const authFor = (user: { id: string; name: string; email: string; isAdmin?: boolean }) =>
@@ -245,6 +293,172 @@ describe('People identity RBAC projection', () => {
     expect(serialized).not.toContain(fx.space2Alice.asset.id);
     expect(serialized).not.toContain('/private/alice-thumbnail.jpg');
     expect(result.people.find((person) => person.name === 'Alice Source')?.numberOfAssets).toBe(1);
+  });
+
+  it('counts linked-library identity faces only for timeline-enabled space members', async () => {
+    const { ctx, sut, faceIdentityRepository } = setup();
+    const { user: source } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { user: nonMember } = await ctx.newUser();
+    const { library } = await ctx.newLibrary({ ownerId: source.id });
+    const { space } = await ctx.newSharedSpace({ createdById: source.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: source.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+    const face = await createIdentityBackedFace(ctx, faceIdentityRepository, {
+      ownerId: source.id,
+      libraryId: library.id,
+      personName: 'Library Source',
+    });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: source.id });
+    const spacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: space.id,
+        identityId: face.identity.id,
+        name: 'Library Source',
+        representativeFaceId: face.faceId,
+        type: 'person',
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: spacePerson.id, assetFaceId: face.faceId })
+      .execute();
+
+    const visible = await sut.getAll(authFor(member), {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+
+    expect(visible.total).toBe(1);
+    expect(visible.people[0]).toEqual(
+      expect.objectContaining({
+        id: spacePerson.id,
+        name: 'Library Source',
+        numberOfAssets: 1,
+        primaryProfile: { type: 'space-person', id: spacePerson.id, spaceId: space.id },
+        filterId: `space-person:${spacePerson.id}`,
+      }),
+    );
+
+    const hiddenFromNonMember = await sut.getAll(authFor(nonMember), {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(hiddenFromNonMember.total).toBe(0);
+    expect(JSON.stringify(hiddenFromNonMember)).not.toContain('Library Source');
+
+    await ctx.database
+      .updateTable('shared_space_member')
+      .set({ showInTimeline: false })
+      .where('spaceId', '=', space.id)
+      .where('userId', '=', member.id)
+      .execute();
+
+    const hiddenFromTimeline = await sut.getAll(authFor(member), {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(hiddenFromTimeline.total).toBe(0);
+  });
+
+  it('exposes linked-library space people through global discovery endpoints without leaking to non-members', async () => {
+    const fx = await createLinkedLibraryIdentityFixture({ city: 'Zurich' });
+    const auth = authFor(fx.member);
+    const token = `space-person:${fx.spacePerson.id}`;
+
+    const people = await fx.personService.getAll(auth, {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const search = await fx.searchService.searchPerson(auth, { name: 'Library', withSharedSpaces: true });
+    const filters = await fx.searchService.getFilterSuggestions(auth, { withSharedSpaces: true });
+    const cities = await fx.searchService.getSearchSuggestions(auth, {
+      type: SearchSuggestionType.CITY,
+      withSharedSpaces: true,
+      personIds: [token],
+    });
+    const metadata = await fx.searchService.searchMetadata(auth, {
+      withSharedSpaces: true,
+      personIds: [token],
+    });
+
+    expect(people.people).toEqual([
+      expect.objectContaining({
+        name: 'Library Source',
+        primaryProfile: { type: 'space-person', id: fx.spacePerson.id, spaceId: fx.space.id },
+      }),
+    ]);
+    expect(search).toEqual([
+      expect.objectContaining({
+        name: 'Library Source',
+        filterId: token,
+        primaryProfile: { type: 'space-person', id: fx.spacePerson.id, spaceId: fx.space.id },
+      }),
+    ]);
+    expect(filters.people).toEqual([
+      {
+        id: token,
+        name: 'Library Source',
+        primaryProfile: { type: 'space-person', id: fx.spacePerson.id, spaceId: fx.space.id },
+      },
+    ]);
+    expect(cities).toEqual(['Zurich']);
+    expect(metadata.assets.items).toEqual([expect.objectContaining({ id: fx.face.asset.id })]);
+
+    const nonMemberAuth = authFor(fx.nonMember);
+    const hiddenPeople = await fx.personService.getAll(nonMemberAuth, {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const hiddenFilters = await fx.searchService.getFilterSuggestions(nonMemberAuth, { withSharedSpaces: true });
+    const hiddenMetadata = await fx.searchService.searchMetadata(nonMemberAuth, {
+      withSharedSpaces: true,
+      personIds: [token],
+    });
+
+    expect(hiddenPeople.people).toEqual([]);
+    expect(hiddenFilters.people).toEqual([]);
+    expect(hiddenMetadata.assets.items).toEqual([]);
+    expect(JSON.stringify({ hiddenPeople, hiddenFilters, hiddenMetadata })).not.toContain('Library Source');
+  });
+
+  it('excludes linked-library space people from global discovery when the member hides the space from timeline', async () => {
+    const fx = await createLinkedLibraryIdentityFixture({ city: 'Zurich' });
+    const auth = authFor(fx.member);
+    const token = `space-person:${fx.spacePerson.id}`;
+    await fx.sharedSpaceService.updateMemberTimeline(auth, fx.space.id, { showInTimeline: false });
+
+    const people = await fx.personService.getAll(auth, {
+      withHidden: true,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const search = await fx.searchService.searchPerson(auth, { name: 'Library', withSharedSpaces: true });
+    const filters = await fx.searchService.getFilterSuggestions(auth, { withSharedSpaces: true });
+    const cities = await fx.searchService.getSearchSuggestions(auth, {
+      type: SearchSuggestionType.CITY,
+      withSharedSpaces: true,
+      personIds: [token],
+    });
+
+    expect(people.people).toEqual([]);
+    expect(search).toEqual([]);
+    expect(filters.people).toEqual([]);
+    expect(cities).toEqual([]);
+    expect(JSON.stringify({ people, search, filters, cities })).not.toContain('Library Source');
   });
 
   it('does not expose raw face identity ids in people responses', async () => {
@@ -656,6 +870,22 @@ describe('People identity RBAC projection', () => {
     } finally {
       await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
     }
+  });
+
+  it('uses a named linked-library space profile in album filter suggestions', async () => {
+    const fx = await createLinkedLibraryIdentityFixture();
+    const { album } = await fx.ctx.newAlbum({ ownerId: fx.member.id });
+    await fx.ctx.newAlbumAsset({ albumId: album.id, assetId: fx.face.asset.id });
+
+    const result = await fx.searchService.getFilterSuggestions(authFor(fx.member), { albumId: album.id });
+
+    expect(result.people).toEqual([
+      {
+        id: `space-person:${fx.spacePerson.id}`,
+        name: 'Library Source',
+        primaryProfile: { type: 'space-person', id: fx.spacePerson.id, spaceId: fx.space.id },
+      },
+    ]);
   });
 
   it('filters global search suggestions by resolved identity across accessible spaces', async () => {

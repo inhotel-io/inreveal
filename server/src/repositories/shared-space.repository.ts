@@ -677,7 +677,9 @@ export class SharedSpaceRepository {
       .executeTakeFirst();
   }
 
-  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  @GenerateSql({
+    params: [{ spaceId: DummyValue.UUID, identityId: DummyValue.UUID, assetAdderIds: [DummyValue.UUID] }],
+  })
   async getMetadataInheritanceCandidates(input: {
     spaceId: string;
     identityId: string;
@@ -786,7 +788,7 @@ export class SharedSpaceRepository {
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
   async getSpacePersonAssetAdderIds(spaceId: string, personId: string): Promise<string[]> {
-    const rows = await this.db
+    const directRows = await this.db
       .selectFrom('shared_space_person_face')
       .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
       .innerJoin('shared_space_asset', (join) =>
@@ -800,17 +802,50 @@ export class SharedSpaceRepository {
       .where('shared_space_asset.addedById', 'is not', null)
       .execute();
 
-    return rows.flatMap((row) => (row.userId ? [row.userId] : []));
+    const libraryRows = await this.db
+      .selectFrom('shared_space_person_face')
+      .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .innerJoin('shared_space_library', (join) =>
+        join
+          .onRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+          .on('shared_space_library.spaceId', '=', spaceId),
+      )
+      .select('shared_space_library.addedById as userId')
+      .distinct()
+      .where('shared_space_person_face.personId', '=', personId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('shared_space_library.addedById', 'is not', null)
+      .execute();
+
+    return [...new Set([...directRows, ...libraryRows].flatMap((row) => (row.userId ? [row.userId] : [])))];
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  getSpaceAssetAdder(spaceId: string, assetId: string): Promise<{ addedById: string | null } | undefined> {
-    return this.db
+  async getSpaceAssetAdder(spaceId: string, assetId: string): Promise<{ addedById: string | null } | undefined> {
+    const directRow = await this.db
       .selectFrom('shared_space_asset')
       .select('addedById')
       .where('spaceId', '=', spaceId)
       .where('assetId', '=', assetId)
       .executeTakeFirst();
+
+    if (directRow?.addedById) {
+      return directRow;
+    }
+
+    const libraryRow = await this.db
+      .selectFrom('shared_space_library')
+      .innerJoin('asset', 'asset.libraryId', 'shared_space_library.libraryId')
+      .select('shared_space_library.addedById')
+      .where('shared_space_library.spaceId', '=', spaceId)
+      .where('asset.id', '=', assetId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .executeTakeFirst();
+
+    return libraryRow ?? directRow;
   }
 
   @GenerateSql({ params: [{ cursor: DummyValue.UUID, identityId: DummyValue.UUID, limit: 100 }] })
@@ -837,14 +872,27 @@ export class SharedSpaceRepository {
       .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
       .innerJoin('asset', 'asset.id', 'asset_face.assetId')
       .innerJoin('person', 'person.id', 'asset_face.personId')
-      .innerJoin('shared_space_asset', (join) =>
-        join
-          .onRef('shared_space_asset.assetId', '=', 'asset_face.assetId')
-          .on('shared_space_asset.spaceId', '=', spaceId),
-      )
       .select(['person.identityId', 'person.type'])
       .select((eb) => eb.fn.count('asset_face.id').$castTo<number>().as('supportingFaceCount'))
       .where('shared_space_person_face.personId', '=', spacePersonId)
+      .where((eb) =>
+        eb.or([
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .select('shared_space_asset.assetId')
+              .whereRef('shared_space_asset.assetId', '=', 'asset_face.assetId')
+              .where('shared_space_asset.spaceId', '=', spaceId),
+          ),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .select('shared_space_library.libraryId')
+              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+              .where('shared_space_library.spaceId', '=', spaceId),
+          ),
+        ]),
+      )
       .where('person.identityId', 'is not', null)
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
