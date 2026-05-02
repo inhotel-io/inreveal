@@ -1,7 +1,7 @@
 import { getAnimateMock } from '$lib/__mocks__/animate.mock';
 import { getIntersectionObserverMock } from '$lib/__mocks__/intersection-observer.mock';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
-import { Type, type PersonResponseDto } from '@immich/sdk';
+import { Type, type PersonResponseDto, type SharedSpacePersonResponseDto } from '@immich/sdk';
 import { personFactory } from '@test-data/factories/person-factory';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
@@ -54,6 +54,25 @@ function makePerson(overrides: Partial<PersonResponseDto> = {}): PersonResponseD
     updatedAt: '2026-01-02T00:00:00.000Z',
     ...overrides,
   });
+}
+
+function makeSpacePerson(overrides: Partial<SharedSpacePersonResponseDto> = {}): SharedSpacePersonResponseDto {
+  return {
+    id: 'space-person-1',
+    spaceId: 'space-1',
+    name: 'Shared Alice',
+    thumbnailPath: '',
+    isHidden: false,
+    birthDate: null,
+    representativeFaceId: null,
+    faceCount: 1,
+    assetCount: 4,
+    alias: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+    type: 'person',
+    ...overrides,
+  };
 }
 
 function renderPage(people: PersonResponseDto[] = [makePerson()]) {
@@ -167,7 +186,7 @@ describe('Global people page', () => {
       isFavorite: undefined,
       primaryProfile: { type: Type.SpacePerson, id: 'space-person-1', spaceId: 'space-1' },
     });
-    sdkMock.updateSpacePerson.mockResolvedValue({ ...person, name: 'Shared Alicia' });
+    sdkMock.updateSpacePerson.mockResolvedValue(makeSpacePerson({ name: 'Shared Alicia' }));
     renderPage([person]);
 
     const input = screen.getByDisplayValue('Shared Alice');

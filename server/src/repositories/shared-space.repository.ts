@@ -685,7 +685,7 @@ export class SharedSpaceRepository {
     identityId: string;
     assetAdderIds?: string[];
   }): Promise<MetadataInheritanceCandidate[]> {
-    const assetAdderIds = [...new Set(input.assetAdderIds ?? [])];
+    const assetAdderIds = [...new Set(input.assetAdderIds)];
     const isAssetAdderSql =
       assetAdderIds.length > 0 ? sql<boolean>`person."ownerId" = ${anyUuid(assetAdderIds)}` : sql<boolean>`false`;
 
