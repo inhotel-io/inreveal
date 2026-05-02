@@ -1767,7 +1767,7 @@ export class SharedSpaceService extends BaseService {
       name: person.name || '',
       thumbnailPath: '',
       isHidden: person.isHidden,
-      birthDate: person.birthDate,
+      birthDate: asBirthDateString(person.birthDate),
       representativeFaceId: person.representativeFaceId,
       faceCount: person.faceCount,
       assetCount: person.assetCount,
