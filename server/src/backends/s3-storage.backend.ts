@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { ServeStrategy, StorageBackend } from 'src/interfaces/storage-backend.interface';
+import { LoggingRepository } from 'src/repositories/logging.repository';
 
 const DEFAULT_PROXY_READ_CONCURRENCY = 32;
 const DEFAULT_PROXY_READ_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -95,6 +96,14 @@ class AsyncLimiter {
       return;
     }
   }
+
+  getStats() {
+    return {
+      active: this.active,
+      queued: this.queue.length,
+      max: this.max,
+    };
+  }
 }
 
 export interface S3StorageConfig {
@@ -107,6 +116,8 @@ export interface S3StorageConfig {
   serveMode: 'redirect' | 'proxy';
   proxyReadConcurrency?: number;
   proxyReadIdleTimeoutMs?: number;
+  proxyDebugLogs?: boolean;
+  logger?: LoggingRepository;
 }
 
 export class S3StorageBackend implements StorageBackend {
@@ -116,6 +127,9 @@ export class S3StorageBackend implements StorageBackend {
   private serveMode: 'redirect' | 'proxy';
   private proxyReadLimiter: AsyncLimiter;
   private proxyReadIdleTimeoutMs: number;
+  private proxyDebugLogs: boolean;
+  private proxyReadSequence = 0;
+  private logger?: LoggingRepository;
 
   constructor(config: S3StorageConfig) {
     this.bucket = config.bucket;
@@ -123,6 +137,8 @@ export class S3StorageBackend implements StorageBackend {
     this.serveMode = config.serveMode;
     this.proxyReadLimiter = new AsyncLimiter(config.proxyReadConcurrency ?? DEFAULT_PROXY_READ_CONCURRENCY);
     this.proxyReadIdleTimeoutMs = Math.max(0, config.proxyReadIdleTimeoutMs ?? DEFAULT_PROXY_READ_IDLE_TIMEOUT_MS);
+    this.proxyDebugLogs = !!config.proxyDebugLogs;
+    this.logger = config.logger;
 
     this.client = new S3Client({
       region: config.region,
@@ -217,9 +233,24 @@ export class S3StorageBackend implements StorageBackend {
     return total;
   }
 
-  private releaseWhenStreamCloses(stream: Readable, release: () => void, signal?: AbortSignal) {
+  private traceProxyRead(level: 'log' | 'warn', readId: number, message: string) {
+    if (!this.proxyDebugLogs || !this.logger) {
+      return;
+    }
+
+    this.logger[level](`[S3ProxyTrace:${readId}] ${message}`);
+  }
+
+  private releaseWhenStreamCloses(
+    stream: Readable,
+    release: () => void,
+    context: { readId: number; key: string; startedAt: number; s3StartedAt: number; length?: number },
+    signal?: AbortSignal,
+  ) {
     let released = false;
     let idleTimeout: ReturnType<typeof setTimeout> | undefined;
+    let bytesRead = 0;
+    let firstByteAt: number | undefined;
     const originalEmit = stream.emit;
 
     const clearIdleTimeout = () => {
@@ -229,7 +260,7 @@ export class S3StorageBackend implements StorageBackend {
       }
     };
 
-    const releaseOnce = () => {
+    const releaseOnce = (reason: string) => {
       if (released) {
         return;
       }
@@ -240,13 +271,23 @@ export class S3StorageBackend implements StorageBackend {
       }
       stream.emit = originalEmit;
       release();
+      const stats = this.proxyReadLimiter.getStats();
+      this.traceProxyRead(
+        'log',
+        context.readId,
+        `release reason=${reason} totalMs=${Date.now() - context.startedAt} streamMs=${
+          Date.now() - context.s3StartedAt
+        } firstByteMs=${firstByteAt === undefined ? 'none' : firstByteAt - context.s3StartedAt} bytes=${bytesRead} length=${
+          context.length ?? 'unknown'
+        } active=${stats.active} queued=${stats.queued} key=${context.key}`,
+      );
     };
 
     const abortStream = () => {
       try {
         stream.destroy(createAbortError());
       } finally {
-        releaseOnce();
+        releaseOnce('abort');
       }
     };
 
@@ -258,25 +299,46 @@ export class S3StorageBackend implements StorageBackend {
       clearIdleTimeout();
       idleTimeout = setTimeout(() => {
         try {
+          this.traceProxyRead(
+            'warn',
+            context.readId,
+            `idle-timeout timeoutMs=${this.proxyReadIdleTimeoutMs} bytes=${bytesRead} key=${context.key}`,
+          );
           stream.destroy(new Error(`S3 proxy read timed out after ${this.proxyReadIdleTimeoutMs}ms of inactivity`));
         } finally {
-          releaseOnce();
+          releaseOnce('idle-timeout');
         }
       }, this.proxyReadIdleTimeoutMs);
+    };
+
+    const traceFirstByte = (timestamp: number) => {
+      this.traceProxyRead(
+        'log',
+        context.readId,
+        `first-byte firstByteMs=${timestamp - context.s3StartedAt} key=${context.key}`,
+      );
     };
 
     // Observe data activity without adding a "data" listener, which would switch the stream into flowing mode
     // before the HTTP response pipe is attached.
     stream.emit = function (this: Readable, eventName: string | symbol, ...args: any[]) {
-      if (eventName === 'data' || eventName === 'readable') {
+      if (eventName === 'data') {
+        if (firstByteAt === undefined) {
+          firstByteAt = Date.now();
+          traceFirstByte(firstByteAt);
+        }
+        const chunk = args[0];
+        bytesRead += typeof chunk?.length === 'number' ? chunk.length : 0;
+        resetIdleTimeout();
+      } else if (eventName === 'readable') {
         resetIdleTimeout();
       }
       return originalEmit.call(this, eventName, ...args);
     } as typeof stream.emit;
 
-    stream.once('end', releaseOnce);
-    stream.once('error', releaseOnce);
-    stream.once('close', releaseOnce);
+    stream.once('end', () => releaseOnce('end'));
+    stream.once('error', (error) => releaseOnce(`error:${error instanceof Error ? error.message : String(error)}`));
+    stream.once('close', () => releaseOnce('close'));
     if (signal?.aborted) {
       abortStream();
     } else {
@@ -288,12 +350,51 @@ export class S3StorageBackend implements StorageBackend {
 
   async getServeStrategy(key: string, contentType: string, signal?: AbortSignal): Promise<ServeStrategy> {
     if (this.serveMode === 'proxy') {
-      const release = await this.proxyReadLimiter.acquire(signal);
+      const readId = ++this.proxyReadSequence;
+      const startedAt = Date.now();
+      const queuedStats = this.proxyReadLimiter.getStats();
+      this.traceProxyRead(
+        'log',
+        readId,
+        `request contentType=${contentType} active=${queuedStats.active} queued=${queuedStats.queued} max=${queuedStats.max} key=${key}`,
+      );
+      let release: (() => void) | undefined;
       try {
+        release = await this.proxyReadLimiter.acquire(signal);
+        const acquiredAt = Date.now();
+        const acquiredStats = this.proxyReadLimiter.getStats();
+        this.traceProxyRead(
+          'log',
+          readId,
+          `acquired waitMs=${acquiredAt - startedAt} active=${acquiredStats.active} queued=${acquiredStats.queued} key=${key}`,
+        );
+        const s3StartedAt = Date.now();
         const { stream, length } = await this.get(key, signal);
-        return { type: 'stream', stream: this.releaseWhenStreamCloses(stream, release, signal), length };
+        this.traceProxyRead(
+          'log',
+          readId,
+          `s3-response s3Ms=${Date.now() - s3StartedAt} length=${length ?? 'unknown'} key=${key}`,
+        );
+        return {
+          type: 'stream',
+          stream: this.releaseWhenStreamCloses(
+            stream,
+            release,
+            { readId, key, startedAt, s3StartedAt, length },
+            signal,
+          ),
+          length,
+        };
       } catch (error) {
-        release();
+        release?.();
+        const stats = this.proxyReadLimiter.getStats();
+        this.traceProxyRead(
+          'warn',
+          readId,
+          `failed totalMs=${Date.now() - startedAt} active=${stats.active} queued=${stats.queued} error=${
+            error instanceof Error ? error.message : String(error)
+          } key=${key}`,
+        );
         throw error;
       }
     }
