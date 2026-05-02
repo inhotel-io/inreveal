@@ -15,6 +15,8 @@ import { SharedSpacePersonTable } from 'src/schema/tables/shared-space-person.ta
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
 import { anyUuid, searchAssetBuilder } from 'src/utils/database';
 
+const visibleSpaceAssetVisibilities = [AssetVisibility.Archive, AssetVisibility.Timeline];
+
 export type LinkedSpacePerson = {
   id: string;
   isHidden: boolean;
@@ -225,6 +227,7 @@ export class SharedSpaceRepository {
           .where('shared_space_asset.spaceId', '=', spaceId)
           .where('asset.deletedAt', 'is', null)
           .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
           .union(
             this.db
               .selectFrom('shared_space_library')
@@ -232,7 +235,8 @@ export class SharedSpaceRepository {
               .select('asset.id')
               .where('shared_space_library.spaceId', '=', spaceId)
               .where('asset.deletedAt', 'is', null)
-              .where('asset.isOffline', '=', false),
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
           )
           .as('combined'),
       )
@@ -251,7 +255,8 @@ export class SharedSpaceRepository {
           .select([sql.lit(spaceId).as('spaceId'), 'asset.id as assetId', sql.lit(userId).as('addedById')])
           .where('asset.ownerId', '=', userId)
           .where('asset.deletedAt', 'is', null)
-          .where('asset.isOffline', '=', false),
+          .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
       )
       .onConflict((oc) => oc.doNothing())
       .executeTakeFirst();
@@ -376,6 +381,7 @@ export class SharedSpaceRepository {
           .where('asset.deletedAt', 'is', null)
           .where('asset.isOffline', '=', false)
           .where('asset.type', '=', AssetType.Image)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
           .where('asset.thumbhash', 'is not', null)
           .union(
             this.db
@@ -386,6 +392,7 @@ export class SharedSpaceRepository {
               .where('asset.deletedAt', 'is', null)
               .where('asset.isOffline', '=', false)
               .where('asset.type', '=', AssetType.Image)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
               .where('asset.thumbhash', 'is not', null),
           )
           .as('combined'),
@@ -400,7 +407,11 @@ export class SharedSpaceRepository {
   async getLastAssetAddedAt(spaceId: string): Promise<Date | undefined> {
     const result = await this.db
       .selectFrom('shared_space_asset')
+      .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
       .where('spaceId', '=', spaceId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
       .select((eb) => eb.fn.max('addedAt').as('lastAddedAt'))
       .executeTakeFirst();
     return result?.lastAddedAt ?? undefined;
@@ -418,6 +429,7 @@ export class SharedSpaceRepository {
           .where('shared_space_asset.addedAt', '>', since)
           .where('asset.deletedAt', 'is', null)
           .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
           .union(
             this.db
               .selectFrom('shared_space_library')
@@ -426,7 +438,8 @@ export class SharedSpaceRepository {
               .where('shared_space_library.spaceId', '=', spaceId)
               .where('asset.createdAt', '>', since)
               .where('asset.deletedAt', 'is', null)
-              .where('asset.isOffline', '=', false),
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
           )
           .as('combined'),
       )
@@ -439,11 +452,15 @@ export class SharedSpaceRepository {
   async getLastContributor(spaceId: string, since: Date): Promise<{ id: string; name: string } | undefined> {
     return this.db
       .selectFrom('shared_space_asset')
+      .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
       .innerJoin('user', (join) =>
         join.onRef('user.id', '=', 'shared_space_asset.addedById').on('user.deletedAt', 'is', null),
       )
       .where('shared_space_asset.spaceId', '=', spaceId)
       .where('shared_space_asset.addedAt', '>', since)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
       .orderBy('shared_space_asset.addedAt', 'desc')
       .select(['user.id', 'user.name'])
       .limit(1)
@@ -464,9 +481,13 @@ export class SharedSpaceRepository {
   getContributionCounts(spaceId: string) {
     return this.db
       .selectFrom('shared_space_asset')
-      .where('spaceId', '=', spaceId)
-      .groupBy('addedById')
-      .select(['addedById', (eb) => eb.fn.countAll().as('count')])
+      .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
+      .where('shared_space_asset.spaceId', '=', spaceId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+      .groupBy('shared_space_asset.addedById')
+      .select(['shared_space_asset.addedById', (eb) => eb.fn.countAll().as('count')])
       .execute();
   }
 
@@ -474,16 +495,24 @@ export class SharedSpaceRepository {
   getMemberActivity(spaceId: string) {
     return this.db
       .selectFrom('shared_space_asset')
-      .where('spaceId', '=', spaceId)
-      .groupBy('addedById')
+      .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
+      .where('shared_space_asset.spaceId', '=', spaceId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+      .groupBy('shared_space_asset.addedById')
       .select([
-        'addedById',
-        (eb) => eb.fn.max('addedAt').as('lastAddedAt'),
+        'shared_space_asset.addedById',
+        (eb) => eb.fn.max('shared_space_asset.addedAt').as('lastAddedAt'),
         (eb) =>
           eb
             .selectFrom('shared_space_asset as ssa2')
+            .innerJoin('asset as asset2', 'asset2.id', 'ssa2.assetId')
             .whereRef('ssa2.addedById', '=', 'shared_space_asset.addedById')
             .where('ssa2.spaceId', '=', spaceId)
+            .where('asset2.deletedAt', 'is', null)
+            .where('asset2.isOffline', '=', false)
+            .where('asset2.visibility', 'in', visibleSpaceAssetVisibilities)
             .orderBy('ssa2.addedAt', 'desc')
             .select('ssa2.assetId')
             .limit(1)
@@ -503,6 +532,7 @@ export class SharedSpaceRepository {
           .where('shared_space_asset.spaceId', '=', spaceId)
           .where('asset.deletedAt', 'is', null)
           .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
           .union(
             this.db
               .selectFrom('shared_space_library')
@@ -510,7 +540,8 @@ export class SharedSpaceRepository {
               .select('asset.id')
               .where('shared_space_library.spaceId', '=', spaceId)
               .where('asset.deletedAt', 'is', null)
-              .where('asset.isOffline', '=', false),
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
           )
           .as('combined'),
       )
@@ -1294,9 +1325,13 @@ export class SharedSpaceRepository {
       .selectFrom(
         this.db
           .selectFrom('shared_space_asset')
-          .select('assetId as id')
-          .where('spaceId', '=', spaceId)
-          .where('assetId', '=', assetId)
+          .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
+          .select('shared_space_asset.assetId as id')
+          .where('shared_space_asset.spaceId', '=', spaceId)
+          .where('shared_space_asset.assetId', '=', assetId)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
           .union(
             this.db
               .selectFrom('shared_space_library')
@@ -1305,7 +1340,8 @@ export class SharedSpaceRepository {
               .where('shared_space_library.spaceId', '=', spaceId)
               .where('asset.id', '=', assetId)
               .where('asset.deletedAt', 'is', null)
-              .where('asset.isOffline', '=', false),
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
           )
           .as('combined'),
       )
@@ -1363,8 +1399,12 @@ export class SharedSpaceRepository {
     const afterAssetId = options?.afterAssetId;
     const combined = this.db
       .selectFrom('shared_space_asset')
-      .select('assetId as id')
-      .where('spaceId', '=', spaceId)
+      .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
+      .select('shared_space_asset.assetId as id')
+      .where('shared_space_asset.spaceId', '=', spaceId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
       .union(
         this.db
           .selectFrom('shared_space_library')
@@ -1372,7 +1412,8 @@ export class SharedSpaceRepository {
           .select('asset.id')
           .where('shared_space_library.spaceId', '=', spaceId)
           .where('asset.deletedAt', 'is', null)
-          .where('asset.isOffline', '=', false),
+          .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
       )
       .as('combined');
 
@@ -1391,8 +1432,12 @@ export class SharedSpaceRepository {
       .selectFrom(
         this.db
           .selectFrom('shared_space_asset')
-          .select('assetId as id')
-          .where('spaceId', '=', spaceId)
+          .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
+          .select('shared_space_asset.assetId as id')
+          .where('shared_space_asset.spaceId', '=', spaceId)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
           .union(
             this.db
               .selectFrom('shared_space_library')
@@ -1400,7 +1445,8 @@ export class SharedSpaceRepository {
               .select('asset.id')
               .where('shared_space_library.spaceId', '=', spaceId)
               .where('asset.deletedAt', 'is', null)
-              .where('asset.isOffline', '=', false),
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
           )
           .as('combined'),
       )

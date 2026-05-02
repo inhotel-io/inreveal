@@ -324,6 +324,30 @@ describe(SharedSpaceRepository.name, () => {
       expect(count).toBe(1);
     });
 
+    it('should skip hidden and locked assets', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Archive });
+      await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Hidden });
+      await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+
+      const count = await sut.bulkAddUserAssets(space.id, user.id);
+
+      expect(count).toBe(2);
+      const assets = await ctx.database
+        .selectFrom('shared_space_asset')
+        .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
+        .select('asset.visibility')
+        .where('shared_space_asset.spaceId', '=', space.id)
+        .execute();
+      expect(assets.map(({ visibility }) => visibility).toSorted()).toEqual([
+        AssetVisibility.Archive,
+        AssetVisibility.Timeline,
+      ]);
+    });
+
     it('should not insert assets owned by other users', async () => {
       const { ctx, sut } = setup();
       const { user: owner } = await ctx.newUser();
@@ -483,6 +507,50 @@ describe(SharedSpaceRepository.name, () => {
       expect(page).toEqual([{ assetId: visible.id }]);
     });
 
+    it('filters hidden and locked assets from face-match pagination', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { library } = await ctx.newLibrary({ ownerId: user.id });
+      await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+
+      const { asset: directVisible } = await ctx.newAsset({
+        ownerId: user.id,
+        id: '00000000-0000-4000-a000-000000000011',
+        visibility: AssetVisibility.Timeline,
+      });
+      const { asset: directHidden } = await ctx.newAsset({
+        ownerId: user.id,
+        id: '00000000-0000-4000-a000-000000000012',
+        visibility: AssetVisibility.Hidden,
+      });
+      const { asset: directLocked } = await ctx.newAsset({
+        ownerId: user.id,
+        id: '00000000-0000-4000-a000-000000000013',
+        visibility: AssetVisibility.Locked,
+      });
+      const { asset: linkedVisible } = await ctx.newAsset({
+        ownerId: user.id,
+        libraryId: library.id,
+        id: '00000000-0000-4000-a000-000000000014',
+        visibility: AssetVisibility.Archive,
+      });
+      await ctx.newAsset({
+        ownerId: user.id,
+        libraryId: library.id,
+        id: '00000000-0000-4000-a000-000000000015',
+        visibility: AssetVisibility.Hidden,
+      });
+
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: directVisible.id, addedById: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: directHidden.id, addedById: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: directLocked.id, addedById: user.id });
+
+      const page = await sut.getAssetIdsInSpacePage(space.id, { limit: 10 });
+
+      expect(page.map(({ assetId }) => assetId)).toEqual([directVisible.id, linkedVisible.id]);
+    });
+
     it('returns an empty page after the last asset id', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
@@ -493,6 +561,78 @@ describe(SharedSpaceRepository.name, () => {
       const page = await sut.getAssetIdsInSpacePage(space.id, { limit: 10, afterAssetId: asset.id });
 
       expect(page).toEqual([]);
+    });
+  });
+
+  describe('space activity from direct asset links', () => {
+    it('should exclude hidden assets from member contribution and recent activity', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { asset: visibleAsset } = await ctx.newAsset({
+        ownerId: user.id,
+        visibility: AssetVisibility.Timeline,
+      });
+      const { asset: hiddenAsset } = await ctx.newAsset({
+        ownerId: user.id,
+        visibility: AssetVisibility.Hidden,
+      });
+
+      const visibleAddedAt = new Date('2026-01-01T00:00:00.000Z');
+      const hiddenAddedAt = new Date('2026-01-02T00:00:00.000Z');
+      await ctx.database
+        .insertInto('shared_space_asset')
+        .values([
+          { spaceId: space.id, assetId: visibleAsset.id, addedById: user.id, addedAt: visibleAddedAt },
+          { spaceId: space.id, assetId: hiddenAsset.id, addedById: user.id, addedAt: hiddenAddedAt },
+        ])
+        .execute();
+
+      const [contribution] = await sut.getContributionCounts(space.id);
+      const [activity] = await sut.getMemberActivity(space.id);
+      const lastAddedAt = await sut.getLastAssetAddedAt(space.id);
+
+      expect(Number(contribution.count)).toBe(1);
+      expect(activity.recentAssetId).toBe(visibleAsset.id);
+      expect(activity.lastAddedAt).toEqual(visibleAddedAt);
+      expect(lastAddedAt).toEqual(visibleAddedAt);
+    });
+
+    it('should exclude hidden assets from last contributor', async () => {
+      const { ctx, sut } = setup();
+      const { user: visibleContributor } = await ctx.newUser({ name: 'Visible Contributor' });
+      const { user: hiddenContributor } = await ctx.newUser({ name: 'Hidden Contributor' });
+      const { space } = await ctx.newSharedSpace({ createdById: visibleContributor.id });
+      const { asset: visibleAsset } = await ctx.newAsset({
+        ownerId: visibleContributor.id,
+        visibility: AssetVisibility.Timeline,
+      });
+      const { asset: hiddenAsset } = await ctx.newAsset({
+        ownerId: hiddenContributor.id,
+        visibility: AssetVisibility.Hidden,
+      });
+
+      await ctx.database
+        .insertInto('shared_space_asset')
+        .values([
+          {
+            spaceId: space.id,
+            assetId: visibleAsset.id,
+            addedById: visibleContributor.id,
+            addedAt: new Date('2026-01-01T00:00:00.000Z'),
+          },
+          {
+            spaceId: space.id,
+            assetId: hiddenAsset.id,
+            addedById: hiddenContributor.id,
+            addedAt: new Date('2026-01-02T00:00:00.000Z'),
+          },
+        ])
+        .execute();
+
+      const contributor = await sut.getLastContributor(space.id, new Date('2025-01-01T00:00:00.000Z'));
+
+      expect(contributor).toEqual({ id: visibleContributor.id, name: 'Visible Contributor' });
     });
   });
 
@@ -525,6 +665,51 @@ describe(SharedSpaceRepository.name, () => {
       const count = await sut.getAssetCount(space.id);
 
       expect(count).toBe(1);
+    });
+
+    it('should exclude hidden and locked assets from the visible asset count', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { library } = await ctx.newLibrary({ ownerId: user.id });
+
+      const { asset: timelineAsset } = await ctx.newAsset({
+        ownerId: user.id,
+        visibility: AssetVisibility.Timeline,
+      });
+      const { asset: archivedAsset } = await ctx.newAsset({
+        ownerId: user.id,
+        visibility: AssetVisibility.Archive,
+      });
+      const { asset: hiddenAsset } = await ctx.newAsset({
+        ownerId: user.id,
+        visibility: AssetVisibility.Hidden,
+      });
+      const { asset: lockedAsset } = await ctx.newAsset({
+        ownerId: user.id,
+        visibility: AssetVisibility.Locked,
+      });
+      const { asset: linkedTimelineAsset } = await ctx.newAsset({
+        ownerId: user.id,
+        libraryId: library.id,
+        visibility: AssetVisibility.Timeline,
+      });
+      await ctx.newAsset({
+        ownerId: user.id,
+        libraryId: library.id,
+        visibility: AssetVisibility.Hidden,
+      });
+
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: timelineAsset.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: archivedAsset.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: hiddenAsset.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: lockedAsset.id });
+      await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+
+      const count = await sut.getAssetCount(space.id);
+
+      expect(count).toBe(3);
+      expect(linkedTimelineAsset.id).toBeDefined();
     });
   });
 
@@ -680,6 +865,34 @@ describe(SharedSpaceRepository.name, () => {
 
       const since = new Date('2023-01-01T00:00:00.000Z');
       const count = await sut.getNewAssetCount(space.id, since);
+
+      expect(count).toBe(1);
+    });
+
+    it('should exclude hidden assets from new asset count', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { library } = await ctx.newLibrary({ ownerId: user.id });
+      const { asset: timelineAsset } = await ctx.newAsset({
+        ownerId: user.id,
+        visibility: AssetVisibility.Timeline,
+      });
+      const { asset: hiddenAsset } = await ctx.newAsset({
+        ownerId: user.id,
+        visibility: AssetVisibility.Hidden,
+      });
+      await ctx.newAsset({
+        ownerId: user.id,
+        libraryId: library.id,
+        visibility: AssetVisibility.Hidden,
+      });
+
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: timelineAsset.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: hiddenAsset.id });
+      await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+
+      const count = await sut.getNewAssetCount(space.id, new Date('2023-01-01T00:00:00.000Z'));
 
       expect(count).toBe(1);
     });
