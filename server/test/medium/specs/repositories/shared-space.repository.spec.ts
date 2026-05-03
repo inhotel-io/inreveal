@@ -1564,6 +1564,154 @@ describe(SharedSpaceRepository.name, () => {
     });
   });
 
+  describe('representative face picker queries', () => {
+    it('does not repair valid manual representative faces', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+      const person = await sut.createPerson({
+        spaceId: space.id,
+        representativeFaceId: faceId,
+        representativeFaceSource: 'manual',
+        type: 'person',
+      });
+      await sut.addPersonFaces([{ personId: person.id, assetFaceId: faceId }]);
+
+      await sut.repairInvalidRepresentativeFaces(space.id);
+
+      await expect(sut.getPersonById(person.id)).resolves.toMatchObject({
+        representativeFaceId: faceId,
+        representativeFaceSource: 'manual',
+      });
+    });
+
+    it('requires representative picker faces to belong to assets in the space', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id });
+      const person = await sut.createPerson({ spaceId: space.id, type: 'person', representativeFaceId: faceId });
+      await sut.addPersonFaces([{ personId: person.id, assetFaceId: faceId }]);
+
+      await expect(
+        sut.getSpaceRepresentativeFaceForUpdate({ spaceId: space.id, personId: person.id, assetFaceId: faceId }),
+      ).resolves.toBeUndefined();
+
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+
+      await expect(
+        sut.getSpaceRepresentativeFaceForUpdate({ spaceId: space.id, personId: person.id, assetFaceId: faceId }),
+      ).resolves.toMatchObject({ id: faceId, assetId: asset.id });
+    });
+
+    it('includes library-backed space assets in the representative face list', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { library } = await ctx.newLibrary({ ownerId: user.id });
+      await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, libraryId: library.id });
+      const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id });
+      const person = await sut.createPerson({ spaceId: space.id, type: 'person', representativeFaceId: faceId });
+      await sut.addPersonFaces([{ personId: person.id, assetFaceId: faceId }]);
+
+      const rows = await sut.getSpaceRepresentativeFaces({ spaceId: space.id, personId: person.id, take: 10, skip: 0 });
+
+      expect(rows).toEqual([expect.objectContaining({ id: faceId, assetId: asset.id })]);
+    });
+
+    const invalidators: Array<
+      [string, (ctx: any, faceId: string, assetId: string, spaceId: string, personId: string) => Promise<void>]
+    > = [
+      [
+        'hidden face',
+        async (ctx, faceId) => {
+          await ctx.database.updateTable('asset_face').set({ isVisible: false }).where('id', '=', faceId).execute();
+        },
+      ],
+      [
+        'deleted face',
+        async (ctx, faceId) => {
+          await ctx.database
+            .updateTable('asset_face')
+            .set({ deletedAt: new Date() })
+            .where('id', '=', faceId)
+            .execute();
+        },
+      ],
+      [
+        'offline asset',
+        async (ctx, _faceId, assetId) => {
+          await ctx.database.updateTable('asset').set({ isOffline: true }).where('id', '=', assetId).execute();
+        },
+      ],
+      [
+        'deleted asset',
+        async (ctx, _faceId, assetId) => {
+          await ctx.database.updateTable('asset').set({ deletedAt: new Date() }).where('id', '=', assetId).execute();
+        },
+      ],
+      [
+        'hidden asset',
+        async (ctx, _faceId, assetId) => {
+          await ctx.database
+            .updateTable('asset')
+            .set({ visibility: AssetVisibility.Hidden })
+            .where('id', '=', assetId)
+            .execute();
+        },
+      ],
+      [
+        'asset removed from space',
+        async (ctx, _faceId, assetId, spaceId) => {
+          await ctx.database
+            .deleteFrom('shared_space_asset')
+            .where('spaceId', '=', spaceId)
+            .where('assetId', '=', assetId)
+            .execute();
+        },
+      ],
+      [
+        'face no longer assigned to the space person',
+        async (ctx, faceId, _assetId, _spaceId, personId) => {
+          await ctx.database
+            .deleteFrom('shared_space_person_face')
+            .where('personId', '=', personId)
+            .where('assetFaceId', '=', faceId)
+            .execute();
+        },
+      ],
+    ];
+
+    it.each(invalidators)('clears invalid manual representative face when %s', async (_label, invalidate) => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+      const person = await sut.createPerson({
+        spaceId: space.id,
+        representativeFaceId: faceId,
+        representativeFaceSource: 'manual',
+        type: 'person',
+      });
+      await sut.addPersonFaces([{ personId: person.id, assetFaceId: faceId }]);
+      await invalidate(ctx, faceId, asset.id, space.id, person.id);
+
+      await sut.repairInvalidRepresentativeFaces(space.id);
+
+      await expect(sut.getPersonById(person.id)).resolves.toMatchObject({
+        representativeFaceId: null,
+        representativeFaceSource: 'auto',
+      });
+    });
+  });
+
   describe('getFilteredMapMarkers — space filter interaction', () => {
     it('should include tagged space assets when tagIds filter is applied with timelineSpaceIds', async () => {
       const { ctx, sut } = setup();

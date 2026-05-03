@@ -157,6 +157,102 @@ describe(FaceIdentityRepository.name, () => {
     }
   });
 
+  it('preserves manual space representative faces during space identity backfill', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    try {
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const identity = await ctx.database
+        .insertInto('face_identity')
+        .values({ type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      const { asset: manualAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: manualFace } = await ctx.newAssetFace({ assetId: manualAsset.id });
+      const { asset: identityAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: identityFace } = await ctx.newAssetFace({ assetId: identityAsset.id });
+      const person = await ctx.database
+        .insertInto('shared_space_person')
+        .values({
+          spaceId: space.id,
+          representativeFaceId: manualFace.id,
+          representativeFaceSource: 'manual',
+          type: 'person',
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await linkSpaceFace(ctx, person.id, manualFace.id);
+      await linkSpaceFace(ctx, person.id, identityFace.id);
+      await ctx.database
+        .insertInto('face_identity_face')
+        .values({ identityId: identity.id, assetFaceId: identityFace.id, source: 'backfill' })
+        .execute();
+
+      await sut.backfillSpacePersonIdentities({ limit: 100 });
+
+      const updated = await ctx.database
+        .selectFrom('shared_space_person')
+        .select(['identityId', 'representativeFaceId', 'representativeFaceSource'])
+        .where('id', '=', person.id)
+        .executeTakeFirstOrThrow();
+      expect(updated).toEqual({
+        identityId: identity.id,
+        representativeFaceId: manualFace.id,
+        representativeFaceSource: 'manual',
+      });
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
+  });
+
+  it('refreshes automatic space representative faces during space identity backfill', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    try {
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const identity = await ctx.database
+        .insertInto('face_identity')
+        .values({ type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      const { asset: staleAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: staleFace } = await ctx.newAssetFace({ assetId: staleAsset.id });
+      const { asset: identityAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: identityFace } = await ctx.newAssetFace({ assetId: identityAsset.id });
+      const person = await ctx.database
+        .insertInto('shared_space_person')
+        .values({
+          spaceId: space.id,
+          representativeFaceId: staleFace.id,
+          representativeFaceSource: 'auto',
+          type: 'person',
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await linkSpaceFace(ctx, person.id, staleFace.id);
+      await linkSpaceFace(ctx, person.id, identityFace.id);
+      await ctx.database
+        .insertInto('face_identity_face')
+        .values({ identityId: identity.id, assetFaceId: identityFace.id, source: 'backfill' })
+        .execute();
+
+      await sut.backfillSpacePersonIdentities({ limit: 100 });
+
+      const updated = await ctx.database
+        .selectFrom('shared_space_person')
+        .select(['identityId', 'representativeFaceId', 'representativeFaceSource'])
+        .where('id', '=', person.id)
+        .executeTakeFirstOrThrow();
+      expect(updated).toEqual({
+        identityId: identity.id,
+        representativeFaceId: identityFace.id,
+        representativeFaceSource: 'auto',
+      });
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
+  });
+
   it('enforces one identity per personal profile and one active identity per face', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();

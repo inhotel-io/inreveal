@@ -58,6 +58,7 @@ type SpacePersonBackfillRow = {
   spaceId: string;
   identityId: string | null;
   representativeFaceId: string | null;
+  representativeFaceSource: string;
   type: string;
 };
 
@@ -1295,7 +1296,7 @@ export class FaceIdentityRepository {
   async backfillSpacePersonIdentities(input: { cursor?: string; limit: number }): Promise<SpacePersonBackfillResult> {
     const people = await this.db
       .selectFrom('shared_space_person')
-      .select(['id', 'spaceId', 'identityId', 'representativeFaceId', 'type'])
+      .select(['id', 'spaceId', 'identityId', 'representativeFaceId', 'representativeFaceSource', 'type'])
       .$if(!!input.cursor, (qb) => qb.where('id', '>', input.cursor!))
       .orderBy('id')
       .limit(input.limit + 1)
@@ -1348,7 +1349,7 @@ export class FaceIdentityRepository {
             identityId: group.identityId,
             type: group.type,
           };
-          if (!person.representativeFaceId) {
+          if (person.representativeFaceSource !== 'manual' || !person.representativeFaceId) {
             update.representativeFaceId = group.representativeFaceId;
           }
           await this.db.updateTable('shared_space_person').set(update).where('id', '=', person.id).execute();

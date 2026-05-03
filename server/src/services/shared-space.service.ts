@@ -48,7 +48,7 @@ import {
 } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
 import { JobOf } from 'src/types';
-import { asBirthDateString } from 'src/utils/date';
+import { asBirthDateString, asDateString } from 'src/utils/date';
 import { ImmichMediaResponse } from 'src/utils/file';
 import { mimeTypes } from 'src/utils/mime-types';
 
@@ -821,10 +821,33 @@ export class SharedSpaceService extends BaseService {
     personId: string,
     dto: PersonFacePageQueryDto,
   ): Promise<PersonFacePageResponseDto> {
-    void personId;
-    void dto;
     await this.requireMembership(auth, spaceId);
-    return { faces: [], hasNextPage: false };
+    const person = await this.sharedSpaceRepository.getPersonById(personId);
+    if (!person || person.spaceId !== spaceId) {
+      throw new BadRequestException('Person not found');
+    }
+
+    const take = dto.size;
+    const skip = (dto.page - 1) * dto.size;
+    const rows = await this.sharedSpaceRepository.getSpaceRepresentativeFaces({ spaceId, personId, take, skip });
+    const page = rows.slice(0, take);
+
+    return {
+      faces: page.map((face) => ({
+        id: face.id,
+        assetId: face.assetId,
+        imageHeight: face.imageHeight,
+        imageWidth: face.imageWidth,
+        boundingBoxX1: face.boundingBoxX1,
+        boundingBoxX2: face.boundingBoxX2,
+        boundingBoxY1: face.boundingBoxY1,
+        boundingBoxY2: face.boundingBoxY2,
+        sourceType: face.sourceType,
+        fileCreatedAt: asDateString(face.fileCreatedAt) ?? undefined,
+        isRepresentative: face.id === person.representativeFaceId,
+      })),
+      hasNextPage: rows.length > take,
+    };
   }
 
   async updateSpacePersonRepresentativeFace(
@@ -834,7 +857,46 @@ export class SharedSpaceService extends BaseService {
     dto: SpaceRepresentativeFaceUpdateDto,
   ): Promise<SharedSpacePersonResponseDto> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
-    throw new BadRequestException(`Invalid representative face ${dto.assetFaceId ?? 'auto'}`);
+    const person = await this.sharedSpaceRepository.getPersonById(personId);
+    if (!person || person.spaceId !== spaceId) {
+      throw new BadRequestException('Person not found');
+    }
+
+    if (dto.assetFaceId === null) {
+      const representativeFaceId =
+        person.representativeFaceId &&
+        (await this.sharedSpaceRepository.isSpacePersonRepresentativeFaceValid(person.id, person.representativeFaceId))
+          ? person.representativeFaceId
+          : await this.sharedSpaceRepository.getFirstValidRepresentativeFaceForPerson(person.id);
+      const updated = await this.sharedSpaceRepository.updatePerson(person.id, {
+        representativeFaceSource: 'auto',
+        representativeFaceId,
+      });
+      const alias = await this.sharedSpaceRepository.getAlias(person.id, auth.user.id);
+      return this.mapSpacePerson(updated, alias?.alias ?? null);
+    }
+
+    const face = await this.sharedSpaceRepository.getSpaceRepresentativeFaceForUpdate({
+      spaceId,
+      personId,
+      assetFaceId: dto.assetFaceId,
+    });
+    if (!face) {
+      throw new BadRequestException('Representative face must belong to the space person');
+    }
+
+    const updated = await this.sharedSpaceRepository.updatePerson(person.id, {
+      representativeFaceId: face.id,
+      representativeFaceSource: 'manual',
+    });
+    if (person.identityId) {
+      await this.faceIdentityRepository.updateRepresentativeFace({
+        identityId: person.identityId,
+        assetFaceId: face.id,
+      });
+    }
+    const alias = await this.sharedSpaceRepository.getAlias(person.id, auth.user.id);
+    return this.mapSpacePerson(updated, alias?.alias ?? null);
   }
 
   async getSpacePerson(auth: AuthDto, spaceId: string, personId: string): Promise<SharedSpacePersonResponseDto> {
@@ -1328,6 +1390,7 @@ export class SharedSpaceService extends BaseService {
     // Repair persons that have faces but lost their representativeFaceId
     // (e.g., after force-detection reset). Without this, they are invisible
     // to getSpacePersonsWithEmbeddings due to the INNER JOIN on face_search.
+    await this.sharedSpaceRepository.repairInvalidRepresentativeFaces(job.spaceId);
     await this.sharedSpaceRepository.repairOrphanedRepresentativeFaces(job.spaceId);
 
     const MAX_PASSES = 100;
@@ -1417,12 +1480,14 @@ export class SharedSpaceService extends BaseService {
         }
 
         // Refresh representativeFaceId to a face with a valid embedding from the merged pool
-        const newRepFace = await this.sharedSpaceRepository.getFirstFaceIdForPerson(target.id);
-        if (newRepFace && newRepFace !== target.representativeFaceId) {
-          try {
-            await this.sharedSpaceRepository.updatePerson(target.id, { representativeFaceId: newRepFace });
-          } catch (error) {
-            this.logger.warn(`Dedup: failed to update representativeFaceId for target ${target.id}: ${error}`);
+        if (target.representativeFaceSource !== 'manual') {
+          const newRepFace = await this.sharedSpaceRepository.getFirstFaceIdForPerson(target.id);
+          if (newRepFace && newRepFace !== target.representativeFaceId) {
+            try {
+              await this.sharedSpaceRepository.updatePerson(target.id, { representativeFaceId: newRepFace });
+            } catch (error) {
+              this.logger.warn(`Dedup: failed to update representativeFaceId for target ${target.id}: ${error}`);
+            }
           }
         }
 

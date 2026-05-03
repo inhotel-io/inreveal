@@ -68,6 +68,7 @@ type SpacePersonWithEmbedding = {
   isHidden: boolean;
   faceCount: number;
   representativeFaceId: string | null;
+  representativeFaceSource?: string | null;
   embedding: string;
 };
 
@@ -780,6 +781,47 @@ export class SharedSpaceRepository {
       .executeTakeFirst();
   }
 
+  @GenerateSql({ params: [{ spaceId: DummyValue.UUID, personId: DummyValue.UUID, take: 50, skip: 0 }] })
+  getSpaceRepresentativeFaces(input: { spaceId: string; personId: string; take: number; skip: number }) {
+    return this.db
+      .selectFrom('shared_space_person_face')
+      .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
+      .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .selectAll('asset_face')
+      .select(['asset.fileCreatedAt', 'shared_space_person.representativeFaceId'])
+      .where('shared_space_person.spaceId', '=', input.spaceId)
+      .where('shared_space_person.id', '=', input.personId)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+      .where((eb) =>
+        eb.or([
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .select('shared_space_asset.assetId')
+              .whereRef('shared_space_asset.assetId', '=', 'asset_face.assetId')
+              .whereRef('shared_space_asset.spaceId', '=', 'shared_space_person.spaceId'),
+          ),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .select('shared_space_library.libraryId')
+              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+              .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
+          ),
+        ]),
+      )
+      .orderBy('asset.fileCreatedAt', 'desc')
+      .orderBy('asset_face.id')
+      .offset(input.skip)
+      .limit(input.take + 1)
+      .execute();
+  }
+
   createPerson(values: Insertable<SharedSpacePersonTable>) {
     return this.db.insertInto('shared_space_person').values(values).returningAll().executeTakeFirstOrThrow();
   }
@@ -1159,6 +1201,104 @@ export class SharedSpaceRepository {
     return result?.assetFaceId ?? null;
   }
 
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  async isSpacePersonRepresentativeFaceValid(personId: string, faceId: string): Promise<boolean> {
+    const row = await this.db
+      .selectFrom('shared_space_person_face')
+      .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
+      .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .select('asset_face.id')
+      .where('shared_space_person_face.personId', '=', personId)
+      .where('asset_face.id', '=', faceId)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+      .where((eb) =>
+        eb.or([
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .select('shared_space_asset.assetId')
+              .whereRef('shared_space_asset.assetId', '=', 'asset_face.assetId')
+              .whereRef('shared_space_asset.spaceId', '=', 'shared_space_person.spaceId'),
+          ),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .select('shared_space_library.libraryId')
+              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+              .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
+          ),
+        ]),
+      )
+      .executeTakeFirst();
+    return !!row;
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID] })
+  async getFirstValidRepresentativeFaceForPerson(personId: string): Promise<string | null> {
+    const row = await this.db
+      .selectFrom('shared_space_person_face')
+      .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
+      .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .select('asset_face.id')
+      .where('shared_space_person_face.personId', '=', personId)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+      .where((eb) =>
+        eb.or([
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .select('shared_space_asset.assetId')
+              .whereRef('shared_space_asset.assetId', '=', 'asset_face.assetId')
+              .whereRef('shared_space_asset.spaceId', '=', 'shared_space_person.spaceId'),
+          ),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .select('shared_space_library.libraryId')
+              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+              .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
+          ),
+        ]),
+      )
+      .orderBy('asset.fileCreatedAt', 'desc')
+      .orderBy('asset_face.id')
+      .executeTakeFirst();
+    return row?.id ?? null;
+  }
+
+  async repairInvalidRepresentativeFaces(spaceId: string): Promise<void> {
+    const people = await this.db
+      .selectFrom('shared_space_person')
+      .select(['id', 'representativeFaceId', 'representativeFaceSource'])
+      .where('spaceId', '=', spaceId)
+      .where('representativeFaceSource', '=', 'manual')
+      .execute();
+
+    for (const person of people) {
+      const valid =
+        !!person.representativeFaceId &&
+        (await this.isSpacePersonRepresentativeFaceValid(person.id, person.representativeFaceId));
+      if (valid) {
+        continue;
+      }
+
+      await this.updatePerson(person.id, {
+        representativeFaceSource: 'auto',
+        representativeFaceId: await this.getFirstValidRepresentativeFaceForPerson(person.id),
+      });
+    }
+  }
+
   @GenerateSql({ params: [DummyValue.UUID] })
   async repairOrphanedRepresentativeFaces(spaceId: string) {
     await this.db
@@ -1173,6 +1313,7 @@ export class SharedSpaceRepository {
       }))
       .where('shared_space_person.spaceId', '=', spaceId)
       .where('shared_space_person.representativeFaceId', 'is', null)
+      .where('shared_space_person.representativeFaceSource', '=', 'auto')
       .where((eb) =>
         eb.exists(
           eb
@@ -1431,6 +1572,7 @@ export class SharedSpaceRepository {
         'shared_space_person.isHidden',
         'shared_space_person.faceCount',
         'shared_space_person.representativeFaceId',
+        'shared_space_person.representativeFaceSource',
         'face_search.embedding',
       ])
       .where('shared_space_person.spaceId', '=', spaceId)
