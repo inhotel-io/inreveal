@@ -450,6 +450,8 @@ export enum ManualJobName {
   MemoryCleanup = 'memory-cleanup',
   MemoryCreate = 'memory-create',
   BackupDatabase = 'backup-database',
+  FaceIdentityBackfill = 'face-identity-backfill',
+  SharedSpacePersonMetadataBackfill = 'shared-space-person-metadata-backfill',
 }
 
 export const ManualJobNameSchema = z.enum(ManualJobName).describe('Manual job name').meta({ id: 'ManualJobName' });
@@ -812,6 +814,7 @@ export enum QueueName {
   SmartSearch = 'smartSearch',
   DuplicateDetection = 'duplicateDetection',
   BackgroundTask = 'backgroundTask',
+  PeopleBackfill = 'peopleBackfill',
   StorageTemplateMigration = 'storageTemplateMigration',
   Migration = 'migration',
   Search = 'search',
@@ -863,6 +866,7 @@ export enum JobName {
 
   FacialRecognitionQueueAll = 'FacialRecognitionQueueAll',
   FacialRecognition = 'FacialRecognition',
+  FaceIdentityBackfill = 'FaceIdentityBackfill',
 
   FileDelete = 'FileDelete',
   FileMigrationQueueAll = 'FileMigrationQueueAll',
@@ -931,6 +935,7 @@ export enum JobName {
   SharedSpaceFaceMatchAll = 'SharedSpaceFaceMatchAll',
   SharedSpaceLibraryFaceSync = 'SharedSpaceLibraryFaceSync',
   SharedSpacePersonDedup = 'SharedSpacePersonDedup',
+  SharedSpacePersonMetadataBackfill = 'SharedSpacePersonMetadataBackfill',
 
   // Shared Space Bulk Operations
   SharedSpaceBulkAddAssets = 'SharedSpaceBulkAddAssets',
