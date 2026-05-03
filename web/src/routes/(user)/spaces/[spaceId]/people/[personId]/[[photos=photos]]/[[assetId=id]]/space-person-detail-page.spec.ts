@@ -2,6 +2,7 @@ import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import {
+  RepresentativeFaceSource,
   SharedSpaceRole,
   type SharedSpaceMemberResponseDto,
   type SharedSpacePersonResponseDto,
@@ -231,7 +232,7 @@ describe('Spaces person detail page', () => {
   });
 
   it('opens the representative face picker for editors', async () => {
-    renderPage({ person: makePerson({ representativeFaceSource: 'auto' }) });
+    renderPage({ person: makePerson({ representativeFaceSource: RepresentativeFaceSource.Auto }) });
 
     await userEvent.click(screen.getByText('select_representative_face'));
 
@@ -254,7 +255,7 @@ describe('Spaces person detail page', () => {
   });
 
   it('passes a reset callback for manual space representative face overrides', async () => {
-    renderPage({ person: makePerson({ representativeFaceSource: 'manual' }) });
+    renderPage({ person: makePerson({ representativeFaceSource: RepresentativeFaceSource.Manual }) });
 
     await userEvent.click(screen.getByText('select_representative_face'));
 
@@ -265,13 +266,16 @@ describe('Spaces person detail page', () => {
   });
 
   it('uses exact-face SDK calls for space representative face selection and reset', async () => {
-    const person = makePerson({ representativeFaceSource: 'manual' });
+    const person = makePerson({ representativeFaceSource: RepresentativeFaceSource.Manual });
     sdkMock.getSpacePersonFaces.mockResolvedValue({ faces: [], hasNextPage: false });
-    sdkMock.updateSpacePersonRepresentativeFace.mockResolvedValue({ ...person, representativeFaceSource: 'auto' });
+    sdkMock.updateSpacePersonRepresentativeFace.mockResolvedValue({
+      ...person,
+      representativeFaceSource: RepresentativeFaceSource.Auto,
+    });
     renderPage({ person });
 
     await userEvent.click(screen.getByText('select_representative_face'));
-    const props = vi.mocked(modalManager.show).mock.calls[0][1] as {
+    const props = vi.mocked(modalManager.show).mock.calls[0][1] as unknown as {
       loadFaces: (request: { page: number; size: number }) => Promise<unknown>;
       updateFace: (faceId: string) => Promise<unknown>;
       resetFace: () => Promise<unknown>;

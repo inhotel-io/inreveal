@@ -1,6 +1,5 @@
 <script lang="ts">
   import RepresentativeFaceTile from '$lib/components/people/representative-face-tile.svelte';
-  import LoadingSpinner from '$lib/components/shared-components/LoadingSpinner.svelte';
   import { handleError } from '$lib/utils/handle-error';
   import type { PersonFacePageResponseDto, PersonFaceResponseDto } from '@immich/sdk';
   import { Button, HStack, Modal, ModalBody, ModalFooter, toastManager } from '@immich/ui';
@@ -22,6 +21,7 @@
   let { title, loadFaces, updateFace, getThumbnailUrl, onClose, resetFace, canUpdate = true }: Props = $props();
 
   const pageSize = 50;
+  const skeletonTiles = Array.from({ length: 18 }, (_, index) => index);
   let page = $state(1);
   let faces: PersonFaceResponseDto[] = $state([]);
   let hasNextPage = $state(false);
@@ -104,7 +104,7 @@
           data-testid="representative-face-grid"
           class="grid grid-cols-[repeat(auto-fill,88px)] justify-center gap-2 sm:grid-cols-[repeat(auto-fill,112px)]"
         >
-          {#each Array.from({ length: 18 }) as _}
+          {#each skeletonTiles as skeletonTile (skeletonTile)}
             <div
               data-testid="representative-face-skeleton"
               class="aspect-square animate-pulse rounded-lg bg-gray-200 dark:bg-gray-800"

@@ -45,13 +45,15 @@ const makePage = (overrides: Partial<PersonFacePageResponseDto> = {}): PersonFac
   ...overrides,
 });
 
+const getThumbnailUrl = (face: PersonFaceResponseDto) => `/thumbnail/${face.id}`;
+
 describe('RepresentativeFacePickerModal', () => {
   it('shows a stable skeleton grid while loading', () => {
     render(RepresentativeFacePickerModal, {
       title: 'select_representative_face',
       loadFaces: vi.fn(() => new Promise<PersonFacePageResponseDto>(() => {})),
       updateFace: vi.fn(),
-      getThumbnailUrl: (face) => `/thumbnail/${face.id}`,
+      getThumbnailUrl,
       onClose: vi.fn(),
     });
 
@@ -67,7 +69,7 @@ describe('RepresentativeFacePickerModal', () => {
       title: 'select_representative_face',
       loadFaces,
       updateFace,
-      getThumbnailUrl: (face) => `/thumbnail/${face.id}`,
+      getThumbnailUrl,
       onClose,
     });
 
@@ -90,7 +92,7 @@ describe('RepresentativeFacePickerModal', () => {
       title: 'select_representative_face',
       loadFaces,
       updateFace: vi.fn(),
-      getThumbnailUrl: (face) => `/thumbnail/${face.id}`,
+      getThumbnailUrl,
       onClose: vi.fn(),
     });
 
@@ -105,7 +107,7 @@ describe('RepresentativeFacePickerModal', () => {
       loadFaces: vi.fn().mockResolvedValue(makePage()),
       updateFace: vi.fn(),
       resetFace: vi.fn(),
-      getThumbnailUrl: (face) => `/thumbnail/${face.id}`,
+      getThumbnailUrl,
       onClose: vi.fn(),
     });
 
@@ -117,7 +119,7 @@ describe('RepresentativeFacePickerModal', () => {
       title: 'select_representative_face',
       loadFaces: vi.fn().mockResolvedValue({ faces: [], hasNextPage: false }),
       updateFace: vi.fn(),
-      getThumbnailUrl: (face) => `/thumbnail/${face.id}`,
+      getThumbnailUrl,
       onClose: vi.fn(),
     });
 
@@ -129,7 +131,7 @@ describe('RepresentativeFacePickerModal', () => {
       title: 'select_representative_face',
       loadFaces: vi.fn().mockRejectedValue(new Error('network failed')),
       updateFace: vi.fn(),
-      getThumbnailUrl: (face) => `/thumbnail/${face.id}`,
+      getThumbnailUrl,
       onClose: vi.fn(),
     });
 
@@ -151,11 +153,12 @@ describe('RepresentativeFacePickerModal', () => {
       loadFaces: vi.fn().mockResolvedValue(makePage()),
       updateFace,
       resetFace: vi.fn(),
-      getThumbnailUrl: (face) => `/thumbnail/${face.id}`,
+      getThumbnailUrl,
       onClose,
     });
 
-    await userEvent.click((await screen.findAllByRole('button', { name: 'select_representative_face' }))[1]);
+    const faceButtons = await screen.findAllByRole('button', { name: 'select_representative_face' });
+    await userEvent.click(faceButtons[1]);
 
     expect(screen.getByRole('button', { name: 'use_inherited_thumbnail' })).toBeDisabled();
     for (const button of screen.getAllByRole('button', { name: 'select_representative_face' })) {
@@ -172,7 +175,7 @@ describe('RepresentativeFacePickerModal', () => {
       loadFaces: vi.fn().mockResolvedValue(makePage()),
       updateFace: vi.fn(),
       resetFace: vi.fn(),
-      getThumbnailUrl: (face) => `/thumbnail/${face.id}`,
+      getThumbnailUrl,
       onClose: vi.fn(),
       canUpdate: false,
     });

@@ -221,7 +221,7 @@ describe('Person detail page', () => {
     renderPage();
 
     await userEvent.click(screen.getByText('select_representative_face'));
-    const props = vi.mocked(modalManager.show).mock.calls[0][1] as {
+    const props = vi.mocked(modalManager.show).mock.calls[0][1] as unknown as {
       loadFaces: (request: { page: number; size: number }) => Promise<unknown>;
       updateFace: (faceId: string) => Promise<unknown>;
     };
