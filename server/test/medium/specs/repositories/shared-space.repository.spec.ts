@@ -1255,6 +1255,119 @@ describe(SharedSpaceRepository.name, () => {
   // ==========================================
 
   describe('getPersonsBySpaceId', () => {
+    describe('getPersonalThumbnailForSpacePerson', () => {
+      it('returns a linked personal thumbnail when its feature face asset is in the space', async () => {
+        const { ctx, sut } = setup();
+        const { user: owner } = await ctx.newUser();
+        const { user: viewer } = await ctx.newUser();
+        const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+        await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id });
+        const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+        await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
+        const identity = await ctx.database
+          .insertInto('face_identity')
+          .values({ type: 'person' })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        const { result: person } = await ctx.newPerson({ ownerId: owner.id, thumbnailPath: '/owner-thumb.jpg' });
+        const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+        await ctx.database
+          .updateTable('person')
+          .set({ identityId: identity.id, faceAssetId: assetFace.id })
+          .where('id', '=', person.id)
+          .execute();
+
+        const result = await sut.getPersonalThumbnailForSpacePerson({
+          userId: viewer.id,
+          spaceId: space.id,
+          identityId: identity.id,
+        });
+
+        expect(result).toEqual({ personId: person.id, thumbnailPath: '/owner-thumb.jpg' });
+      });
+
+      it('does not return another user thumbnail when its feature face asset is outside the space', async () => {
+        const { ctx, sut } = setup();
+        const { user: owner } = await ctx.newUser();
+        const { user: viewer } = await ctx.newUser();
+        const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+        await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id });
+        const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+        const identity = await ctx.database
+          .insertInto('face_identity')
+          .values({ type: 'person' })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        const { result: person } = await ctx.newPerson({ ownerId: owner.id, thumbnailPath: '/private-thumb.jpg' });
+        const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+        await ctx.database
+          .updateTable('person')
+          .set({ identityId: identity.id, faceAssetId: assetFace.id })
+          .where('id', '=', person.id)
+          .execute();
+
+        const result = await sut.getPersonalThumbnailForSpacePerson({
+          userId: viewer.id,
+          spaceId: space.id,
+          identityId: identity.id,
+        });
+
+        expect(result).toBeUndefined();
+      });
+
+      it('prefers the viewer-owned personal thumbnail', async () => {
+        const { ctx, sut } = setup();
+        const { user: owner } = await ctx.newUser();
+        const { user: viewer } = await ctx.newUser();
+        const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+        await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id });
+        const identity = await ctx.database
+          .insertInto('face_identity')
+          .values({ type: 'person' })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+
+        const { asset: ownerAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+        await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: ownerAsset.id, addedById: owner.id });
+        const { result: ownerPerson } = await ctx.newPerson({
+          ownerId: owner.id,
+          thumbnailPath: '/owner-thumb.jpg',
+        });
+        const { assetFace: ownerFace } = await ctx.newAssetFace({ assetId: ownerAsset.id, personId: ownerPerson.id });
+        await ctx.database
+          .updateTable('person')
+          .set({ identityId: identity.id, faceAssetId: ownerFace.id })
+          .where('id', '=', ownerPerson.id)
+          .execute();
+
+        const { asset: viewerAsset } = await ctx.newAsset({
+          ownerId: viewer.id,
+          visibility: AssetVisibility.Timeline,
+        });
+        const { result: viewerPerson } = await ctx.newPerson({
+          ownerId: viewer.id,
+          thumbnailPath: '/viewer-thumb.jpg',
+        });
+        const { assetFace: viewerFace } = await ctx.newAssetFace({
+          assetId: viewerAsset.id,
+          personId: viewerPerson.id,
+        });
+        await ctx.database
+          .updateTable('person')
+          .set({ identityId: identity.id, faceAssetId: viewerFace.id })
+          .where('id', '=', viewerPerson.id)
+          .execute();
+
+        const result = await sut.getPersonalThumbnailForSpacePerson({
+          userId: viewer.id,
+          spaceId: space.id,
+          identityId: identity.id,
+        });
+
+        expect(result).toEqual({ personId: viewerPerson.id, thumbnailPath: '/viewer-thumb.jpg' });
+      });
+    });
+
     it('should return space persons whose global person has no thumbnail', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();

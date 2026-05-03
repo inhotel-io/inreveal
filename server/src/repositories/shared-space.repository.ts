@@ -26,6 +26,11 @@ export type LinkedSpacePerson = {
   type?: string;
 };
 
+export type SpacePersonPersonalThumbnail = {
+  personId: string;
+  thumbnailPath: string;
+};
+
 export type MetadataInheritanceCandidate = {
   personId: string;
   sourceProfileType?: 'user-person' | 'space-person';
@@ -749,6 +754,58 @@ export class SharedSpaceRepository {
       .selectAll()
       .where('spaceId', '=', spaceId)
       .where('identityId', '=', identityId)
+      .executeTakeFirst();
+  }
+
+  async getPersonalThumbnailForSpacePerson(input: {
+    userId: string;
+    spaceId: string;
+    identityId: string;
+  }): Promise<SpacePersonPersonalThumbnail | undefined> {
+    const ownThumbnail = await this.db
+      .selectFrom('person')
+      .select(['person.id as personId', 'person.thumbnailPath'])
+      .where('person.ownerId', '=', input.userId)
+      .where('person.identityId', '=', input.identityId)
+      .where('person.thumbnailPath', '!=', '')
+      .orderBy('person.updatedAt', 'desc')
+      .orderBy('person.id')
+      .executeTakeFirst();
+
+    if (ownThumbnail) {
+      return ownThumbnail;
+    }
+
+    return this.db
+      .selectFrom('person')
+      .innerJoin('asset_face', 'asset_face.id', 'person.faceAssetId')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .select(['person.id as personId', 'person.thumbnailPath'])
+      .where('person.identityId', '=', input.identityId)
+      .where('person.thumbnailPath', '!=', '')
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+      .where((eb) =>
+        eb.or([
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .whereRef('shared_space_asset.assetId', '=', 'asset.id')
+              .where('shared_space_asset.spaceId', '=', input.spaceId),
+          ),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+              .where('shared_space_library.spaceId', '=', input.spaceId),
+          ),
+        ]),
+      )
+      .orderBy('person.updatedAt', 'desc')
+      .orderBy('person.id')
       .executeTakeFirst();
   }
 

@@ -18,7 +18,7 @@ import {
   UserAvatarColor,
 } from 'src/enum';
 import { SharedSpaceService } from 'src/services/shared-space.service';
-import { ImmichStreamResponse } from 'src/utils/file';
+import { ImmichFileResponse, ImmichStreamResponse } from 'src/utils/file';
 import { factory, newDate, newUuid } from 'test/small.factory';
 import { newTestService, ServiceMocks } from 'test/utils';
 
@@ -4091,6 +4091,38 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getPersonById.mockResolvedValue(void 0);
 
       await expect(sut.getSpacePersonThumbnail(factory.auth(), 'space-1', 'person-1')).rejects.toThrow('Not Found');
+    });
+
+    it('should reuse an accessible linked personal thumbnail before cropping a space face', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const personId = newUuid();
+      const identityId = newUuid();
+      const representativeFaceId = newUuid();
+      const person = factory.sharedSpacePerson({ id: personId, spaceId, identityId, representativeFaceId });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
+      mocks.sharedSpace.getPersonById.mockResolvedValue(person);
+      mocks.sharedSpace.getPersonalThumbnailForSpacePerson.mockResolvedValue({
+        personId: newUuid(),
+        thumbnailPath: '/path/to/global-person-thumbnail.jpeg',
+      });
+
+      await expect(sut.getSpacePersonThumbnail(auth, spaceId, personId)).resolves.toEqual(
+        new ImmichFileResponse({
+          path: '/path/to/global-person-thumbnail.jpeg',
+          contentType: 'image/jpeg',
+          cacheControl: CacheControl.PrivateWithoutCache,
+        }),
+      );
+      expect(mocks.sharedSpace.getPersonalThumbnailForSpacePerson).toHaveBeenCalledWith({
+        userId: auth.user.id,
+        spaceId,
+        identityId,
+      });
+      expect(mocks.sharedSpace.isFaceInSpace).not.toHaveBeenCalled();
+      expect(mocks.person.getFaceById).not.toHaveBeenCalled();
+      expect(mocks.media.generateThumbnail).not.toHaveBeenCalled();
     });
 
     it('should serve a cropped thumbnail from the representative face asset preview', async () => {

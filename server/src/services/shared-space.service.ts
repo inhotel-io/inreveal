@@ -56,6 +56,7 @@ import { BaseService } from 'src/services/base.service';
 import { GenerateThumbnailOptions, ImageDimensions, JobOf } from 'src/types';
 import { asBirthDateString } from 'src/utils/date';
 import { ImmichMediaResponse, ImmichStreamResponse } from 'src/utils/file';
+import { mimeTypes } from 'src/utils/mime-types';
 import { clamp } from 'src/utils/misc';
 
 const ROLE_HIERARCHY: Record<SharedSpaceRole, number> = {
@@ -852,6 +853,22 @@ export class SharedSpaceService extends BaseService {
     const person = await this.sharedSpaceRepository.getPersonById(personId);
     if (!person || person.spaceId !== spaceId) {
       throw new NotFoundException();
+    }
+
+    if (person.identityId) {
+      const personalThumbnail = await this.sharedSpaceRepository.getPersonalThumbnailForSpacePerson({
+        userId: auth.user.id,
+        spaceId,
+        identityId: person.identityId,
+      });
+
+      if (personalThumbnail) {
+        return this.serveFromBackend(
+          personalThumbnail.thumbnailPath,
+          mimeTypes.lookup(personalThumbnail.thumbnailPath),
+          CacheControl.PrivateWithoutCache,
+        );
+      }
     }
 
     if (!person.representativeFaceId) {
