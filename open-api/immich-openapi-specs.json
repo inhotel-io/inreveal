@@ -5616,8 +5616,8 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|space-person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+                "description": "Legacy person ID or scoped identity filter token"
               }
             }
           },
@@ -8268,6 +8268,15 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "withSharedSpaces",
+            "required": false,
+            "in": "query",
+            "description": "Include identity-grouped people from timeline-enabled shared spaces",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -8431,6 +8440,104 @@
           }
         ],
         "x-immich-permission": "person.update",
+        "x-immich-state": "Stable"
+      }
+    },
+    "/people/detach-profile": {
+      "post": {
+        "description": "Separate one personal or space person profile from a grouped person identity.",
+        "operationId": "detachScopedPerson",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetachScopedPersonDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Detach a scoped person profile",
+        "tags": [
+          "People"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "person.merge",
+        "x-immich-state": "Stable"
+      }
+    },
+    "/people/same-person": {
+      "post": {
+        "description": "Mark personal and space people as the same person without exposing raw face identity IDs.",
+        "operationId": "mergeScopedPeople",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeScopedPeopleDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Merge scoped people by identity",
+        "tags": [
+          "People"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "person.merge",
         "x-immich-state": "Stable"
       }
     },
@@ -8616,6 +8723,151 @@
         "x-immich-state": "Stable"
       }
     },
+    "/people/{id}/faces": {
+      "get": {
+        "description": "Retrieve detected face crops for a person.",
+        "operationId": "getPersonFaces",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number",
+            "schema": {
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "default": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "size",
+            "required": false,
+            "in": "query",
+            "description": "Number of faces per page",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonFacePageResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Get person faces",
+        "tags": [
+          "People"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "person.read",
+        "x-immich-state": "Stable"
+      }
+    },
+    "/people/{id}/faces/{faceId}/thumbnail": {
+      "get": {
+        "description": "Retrieve an exact face-crop thumbnail for a person.",
+        "operationId": "getPersonFaceThumbnail",
+        "parameters": [
+          {
+            "name": "faceId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Get person face thumbnail",
+        "tags": [
+          "People"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "person.read",
+        "x-immich-state": "Stable"
+      }
+    },
     "/people/{id}/merge": {
       "post": {
         "description": "Merge a list of people into the person specified in the path parameter.",
@@ -8761,6 +9013,73 @@
           }
         ],
         "x-immich-permission": "person.reassign",
+        "x-immich-state": "Stable"
+      }
+    },
+    "/people/{id}/representative-face": {
+      "put": {
+        "description": "Update the exact face crop used as the person thumbnail.",
+        "operationId": "updateRepresentativeFace",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepresentativeFaceUpdateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Update representative face",
+        "tags": [
+          "People"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "person.update",
         "x-immich-state": "Stable"
       }
     },
@@ -9625,8 +9944,8 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|space-person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+                "description": "Legacy person ID or scoped identity filter token"
               }
             }
           },
@@ -9824,6 +10143,15 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "withSharedSpaces",
+            "required": false,
+            "in": "query",
+            "description": "Include shared spaces the user is a member of",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -9954,6 +10282,15 @@
             "required": false,
             "in": "query",
             "description": "Include hidden people",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "withSharedSpaces",
+            "required": false,
+            "in": "query",
+            "description": "Include shared spaces the user is a member of",
             "schema": {
               "type": "boolean"
             }
@@ -10394,8 +10731,8 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|space-person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+                "description": "Legacy person ID or scoped identity filter token"
               }
             }
           },
@@ -10613,8 +10950,8 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|space-person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+                "description": "Legacy person ID or scoped identity filter token"
               }
             }
           },
@@ -12766,7 +13103,18 @@
         "tags": [
           "Shared Spaces"
         ],
-        "x-immich-permission": "sharedSpace.read"
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "sharedSpace.read",
+        "x-immich-state": "Beta"
       }
     },
     "/shared-spaces/{id}/assets": {
@@ -13240,6 +13588,71 @@
         "x-immich-state": "Beta"
       }
     },
+    "/shared-spaces/{id}/members/me/preferences": {
+      "patch": {
+        "description": "Update timeline visibility and person metadata contribution for the current member.",
+        "operationId": "updateMemberPreferences",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharedSpaceMemberPreferencesDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedSpaceMemberResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Update current member preferences",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "sharedSpace.read",
+        "x-immich-state": "Beta"
+      }
+    },
     "/shared-spaces/{id}/members/me/timeline": {
       "patch": {
         "description": "Toggle whether this space's assets appear in the current user's personal timeline.",
@@ -13415,6 +13828,79 @@
           }
         ],
         "summary": "Update a member in a shared space",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "sharedSpaceMember.update",
+        "x-immich-state": "Beta"
+      }
+    },
+    "/shared-spaces/{id}/members/{userId}/metadata-contribution": {
+      "patch": {
+        "description": "Disable person metadata contribution for another member. Members must re-enable it themselves.",
+        "operationId": "updateMemberMetadataContribution",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharedSpaceMemberMetadataContributionDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedSpaceMemberResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Disable member person metadata contribution",
         "tags": [
           "Shared Spaces"
         ],
@@ -13608,6 +14094,134 @@
           }
         ],
         "x-immich-permission": "sharedSpace.update",
+        "x-immich-state": "Beta"
+      }
+    },
+    "/shared-spaces/{id}/people/statistics": {
+      "get": {
+        "description": "Retrieve people counts for a shared space.",
+        "operationId": "getSpacePeopleStatistics",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Maximum number of people to return (sorted by asset count)",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "name",
+            "required": false,
+            "in": "query",
+            "description": "Search by person name",
+            "schema": {
+              "minLength": 1,
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "named",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "description": "Number of people to skip",
+            "schema": {
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "takenAfter",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "example": "2024-01-01T00:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "takenBefore",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "example": "2024-01-01T00:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "withHidden",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedSpacePeopleStatisticsResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Get people statistics in a shared space",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "sharedSpace.read",
         "x-immich-state": "Beta"
       }
     },
@@ -13985,6 +14599,165 @@
         "x-immich-state": "Beta"
       }
     },
+    "/shared-spaces/{id}/people/{personId}/faces": {
+      "get": {
+        "description": "Retrieve detected face crops for a person in a shared space.",
+        "operationId": "getSpacePersonFaces",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number",
+            "schema": {
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "default": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "personId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "required": false,
+            "in": "query",
+            "description": "Number of faces per page",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonFacePageResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Get space person faces",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "sharedSpace.read",
+        "x-immich-state": "Stable"
+      }
+    },
+    "/shared-spaces/{id}/people/{personId}/faces/{faceId}/thumbnail": {
+      "get": {
+        "description": "Retrieve an exact face-crop thumbnail for a person in a shared space.",
+        "operationId": "getSpacePersonFaceThumbnail",
+        "parameters": [
+          {
+            "name": "faceId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "personId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Get space person face thumbnail",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "sharedSpace.read",
+        "x-immich-state": "Stable"
+      }
+    },
     "/shared-spaces/{id}/people/{personId}/merge": {
       "post": {
         "description": "Merge one or more people into the target person in a shared space.",
@@ -14049,6 +14822,79 @@
         ],
         "x-immich-permission": "sharedSpace.update",
         "x-immich-state": "Beta"
+      }
+    },
+    "/shared-spaces/{id}/people/{personId}/representative-face": {
+      "put": {
+        "description": "Update or clear the exact face crop used as the space person thumbnail.",
+        "operationId": "updateSpacePersonRepresentativeFace",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "personId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpaceRepresentativeFaceUpdateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedSpacePersonResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Update space person representative face",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "sharedSpace.update",
+        "x-immich-state": "Stable"
       }
     },
     "/shared-spaces/{id}/people/{personId}/thumbnail": {
@@ -16079,8 +16925,8 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|space-person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+                "description": "Legacy person ID or scoped identity filter token"
               }
             }
           },
@@ -16416,8 +17262,8 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|space-person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+                "description": "Legacy person ID or scoped identity filter token"
               }
             }
           },
@@ -20770,6 +21616,18 @@
         },
         "type": "object"
       },
+      "DetachScopedPersonDto": {
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ScopedPersonProfileRefDto",
+            "description": "Scoped profile to detach"
+          }
+        },
+        "required": [
+          "profile"
+        ],
+        "type": "object"
+      },
       "DownloadArchiveDto": {
         "properties": {
           "assetIds": {
@@ -21259,6 +22117,10 @@
           "name": {
             "description": "Person name",
             "type": "string"
+          },
+          "primaryProfile": {
+            "$ref": "#/components/schemas/ScopedPrimaryProfile",
+            "description": "Accessible profile used for thumbnails"
           }
         },
         "required": [
@@ -21415,6 +22277,7 @@
           "DatabaseBackup",
           "FacialRecognitionQueueAll",
           "FacialRecognition",
+          "FaceIdentityBackfill",
           "FileDelete",
           "FileMigrationQueueAll",
           "LibraryDeleteCheck",
@@ -21459,6 +22322,7 @@
           "SharedSpaceFaceMatchAll",
           "SharedSpaceLibraryFaceSync",
           "SharedSpacePersonDedup",
+          "SharedSpacePersonMetadataBackfill",
           "SharedSpaceBulkAddAssets",
           "AssetClassifyQueueAll",
           "AssetClassify"
@@ -21835,7 +22699,9 @@
           "user-cleanup",
           "memory-cleanup",
           "memory-create",
-          "backup-database"
+          "backup-database",
+          "face-identity-backfill",
+          "shared-space-person-metadata-backfill"
         ],
         "type": "string"
       },
@@ -22198,6 +23064,27 @@
         ],
         "type": "object"
       },
+      "MergeScopedPeopleDto": {
+        "properties": {
+          "sources": {
+            "description": "Source scoped profiles",
+            "items": {
+              "$ref": "#/components/schemas/ScopedPersonProfileRefDto"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ScopedPersonProfileRefDto",
+            "description": "Target scoped profile"
+          }
+        },
+        "required": [
+          "sources",
+          "target"
+        ],
+        "type": "object"
+      },
       "MetadataSearchDto": {
         "properties": {
           "albumIds": {
@@ -22319,8 +23206,8 @@
           "personIds": {
             "description": "Filter by person IDs",
             "items": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "description": "Legacy person ID or scoped identity filter token",
+              "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|space-person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
             "type": "array"
@@ -22450,6 +23337,10 @@
           },
           "withPeople": {
             "description": "Include people data in response",
+            "type": "boolean"
+          },
+          "withSharedSpaces": {
+            "description": "Include shared spaces the user is a member of",
             "type": "boolean"
           },
           "withStacked": {
@@ -23204,6 +24095,100 @@
         },
         "type": "object"
       },
+      "PersonFacePageResponseDto": {
+        "properties": {
+          "faces": {
+            "items": {
+              "$ref": "#/components/schemas/PersonFaceResponseDto"
+            },
+            "type": "array"
+          },
+          "hasNextPage": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "faces",
+          "hasNextPage"
+        ],
+        "type": "object"
+      },
+      "PersonFaceResponseDto": {
+        "properties": {
+          "assetId": {
+            "description": "Asset ID containing the face",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "boundingBoxX1": {
+            "description": "Bounding box X1 coordinate",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "boundingBoxX2": {
+            "description": "Bounding box X2 coordinate",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "boundingBoxY1": {
+            "description": "Bounding box Y1 coordinate",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "boundingBoxY2": {
+            "description": "Bounding box Y2 coordinate",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "fileCreatedAt": {
+            "description": "Asset creation date",
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "description": "Face ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "imageHeight": {
+            "description": "Image height in pixels",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "imageWidth": {
+            "description": "Image width in pixels",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "isRepresentative": {
+            "description": "Whether this face is the current representative face",
+            "type": "boolean"
+          },
+          "sourceType": {
+            "$ref": "#/components/schemas/SourceType"
+          }
+        },
+        "required": [
+          "assetId",
+          "boundingBoxX1",
+          "boundingBoxX2",
+          "boundingBoxY1",
+          "boundingBoxY2",
+          "id",
+          "imageHeight",
+          "imageWidth",
+          "isRepresentative"
+        ],
+        "type": "object"
+      },
       "PersonResponseDto": {
         "properties": {
           "birthDate": {
@@ -23226,6 +24211,10 @@
               }
             ],
             "x-immich-state": "Stable"
+          },
+          "filterId": {
+            "description": "Scoped identity filter token",
+            "type": "string"
           },
           "id": {
             "description": "Person ID",
@@ -23253,6 +24242,16 @@
           "name": {
             "description": "Person name",
             "type": "string"
+          },
+          "numberOfAssets": {
+            "description": "Accessible asset count for this grouped person",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "primaryProfile": {
+            "$ref": "#/components/schemas/ScopedPrimaryProfile",
+            "description": "Accessible profile used for navigation"
           },
           "species": {
             "description": "Pet species (e.g. dog, cat)",
@@ -23372,6 +24371,10 @@
             },
             "type": "array"
           },
+          "filterId": {
+            "description": "Scoped identity filter token",
+            "type": "string"
+          },
           "id": {
             "description": "Person ID",
             "type": "string"
@@ -23398,6 +24401,16 @@
           "name": {
             "description": "Person name",
             "type": "string"
+          },
+          "numberOfAssets": {
+            "description": "Accessible asset count for this grouped person",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "primaryProfile": {
+            "$ref": "#/components/schemas/ScopedPrimaryProfile",
+            "description": "Accessible profile used for navigation"
           },
           "spacePersonId": {
             "description": "Space person ID (when viewed through a space)",
@@ -23958,6 +24971,7 @@
           "smartSearch",
           "duplicateDetection",
           "backgroundTask",
+          "peopleBackfill",
           "storageTemplateMigration",
           "migration",
           "search",
@@ -24122,6 +25136,9 @@
           "ocr": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
+          "peopleBackfill": {
+            "$ref": "#/components/schemas/QueueResponseLegacyDto"
+          },
           "petDetection": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
@@ -24163,6 +25180,7 @@
           "migration",
           "notifications",
           "ocr",
+          "peopleBackfill",
           "petDetection",
           "search",
           "sidecar",
@@ -24259,8 +25277,8 @@
           "personIds": {
             "description": "Filter by person IDs",
             "items": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "description": "Legacy person ID or scoped identity filter token",
+              "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|space-person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
             "type": "array"
@@ -24384,6 +25402,10 @@
             "description": "Include people data in response",
             "type": "boolean"
           },
+          "withSharedSpaces": {
+            "description": "Include shared spaces the user is a member of",
+            "type": "boolean"
+          },
           "withStacked": {
             "description": "Include stacked assets",
             "type": "boolean"
@@ -24428,6 +25450,20 @@
         ],
         "type": "string"
       },
+      "RepresentativeFaceUpdateDto": {
+        "properties": {
+          "assetFaceId": {
+            "description": "Asset face ID used as the representative face",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assetFaceId"
+        ],
+        "type": "object"
+      },
       "ReverseGeocodingStateResponseDto": {
         "properties": {
           "lastImportFileName": {
@@ -24456,6 +25492,57 @@
         },
         "required": [
           "angle"
+        ],
+        "type": "object"
+      },
+      "ScopedPersonProfileRefDto": {
+        "properties": {
+          "id": {
+            "description": "Scoped profile ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "spaceId": {
+            "description": "Space ID for Space Person refs",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "type": {
+            "description": "Scoped profile type",
+            "enum": [
+              "person",
+              "space-person"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type"
+        ],
+        "type": "object"
+      },
+      "ScopedPrimaryProfile": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "user-person",
+              "space-person"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type"
         ],
         "type": "object"
       },
@@ -25711,6 +26798,34 @@
         ],
         "type": "object"
       },
+      "SharedSpaceMemberMetadataContributionDto": {
+        "properties": {
+          "sharePersonMetadata": {
+            "description": "Disable person metadata contribution for this member",
+            "enum": [
+              false
+            ],
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sharePersonMetadata"
+        ],
+        "type": "object"
+      },
+      "SharedSpaceMemberPreferencesDto": {
+        "properties": {
+          "sharePersonMetadata": {
+            "description": "Share person names and birth dates with this space",
+            "type": "boolean"
+          },
+          "showInTimeline": {
+            "description": "Show space assets in personal timeline",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "SharedSpaceMemberResponseDto": {
         "properties": {
           "avatarColor": {
@@ -25755,6 +26870,10 @@
             "$ref": "#/components/schemas/SharedSpaceRole",
             "description": "Member role"
           },
+          "sharePersonMetadata": {
+            "description": "Share person names and birth dates with this space",
+            "type": "boolean"
+          },
           "showInTimeline": {
             "description": "Show space assets in timeline",
             "type": "boolean"
@@ -25769,6 +26888,7 @@
           "joinedAt",
           "name",
           "role",
+          "sharePersonMetadata",
           "showInTimeline",
           "userId"
         ],
@@ -25795,6 +26915,27 @@
         },
         "required": [
           "role"
+        ],
+        "type": "object"
+      },
+      "SharedSpacePeopleStatisticsResponseDto": {
+        "properties": {
+          "hidden": {
+            "description": "Number of hidden people",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total number of people",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "hidden",
+          "total"
         ],
         "type": "object"
       },
@@ -25871,6 +27012,14 @@
             "nullable": true,
             "type": "string"
           },
+          "representativeFaceSource": {
+            "description": "Representative face source",
+            "enum": [
+              "auto",
+              "manual"
+            ],
+            "type": "string"
+          },
           "spaceId": {
             "description": "Space ID",
             "type": "string"
@@ -25895,6 +27044,7 @@
           "id",
           "isHidden",
           "name",
+          "representativeFaceSource",
           "spaceId",
           "thumbnailPath",
           "updatedAt"
@@ -26237,8 +27387,8 @@
           "personIds": {
             "description": "Filter by person IDs",
             "items": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "description": "Legacy person ID or scoped identity filter token",
+              "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|space-person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
             "type": "array"
@@ -26408,8 +27558,8 @@
           "personIds": {
             "description": "Filter by person IDs",
             "items": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "description": "Legacy person ID or scoped identity filter token",
+              "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|space-person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
             "type": "array"
@@ -26596,6 +27746,21 @@
         ],
         "type": "string"
       },
+      "SpaceRepresentativeFaceUpdateDto": {
+        "properties": {
+          "assetFaceId": {
+            "description": "Asset face ID used as the space representative face",
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assetFaceId"
+        ],
+        "type": "object"
+      },
       "StackCreateDto": {
         "properties": {
           "assetIds": {
@@ -26738,8 +27903,8 @@
           "personIds": {
             "description": "Filter by person IDs",
             "items": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "description": "Legacy person ID or scoped identity filter token",
+              "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|space-person:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
             "type": "array"
@@ -26844,6 +28009,10 @@
           },
           "visibility": {
             "$ref": "#/components/schemas/AssetVisibility"
+          },
+          "withSharedSpaces": {
+            "description": "Include shared spaces the user is a member of",
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -29243,6 +30412,9 @@
           "ocr": {
             "$ref": "#/components/schemas/JobSettingsDto"
           },
+          "peopleBackfill": {
+            "$ref": "#/components/schemas/JobSettingsDto"
+          },
           "petDetection": {
             "$ref": "#/components/schemas/JobSettingsDto"
           },
@@ -29275,6 +30447,7 @@
           "migration",
           "notifications",
           "ocr",
+          "peopleBackfill",
           "petDetection",
           "search",
           "sidecar",
