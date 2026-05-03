@@ -44,6 +44,7 @@ const setupSharedSpace = (db?: Kysely<DB>) => {
       AssetRepository,
       ConfigRepository,
       FaceIdentityRepository,
+      PersonRepository,
       SharedSpaceRepository,
       SystemMetadataRepository,
     ],

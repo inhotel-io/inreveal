@@ -5,6 +5,7 @@ import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+import { PersonRepository } from 'src/repositories/person.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { DB } from 'src/schema';
@@ -20,7 +21,14 @@ let defaultDatabase: Kysely<DB>;
 const setup = (db?: Kysely<DB>) => {
   const { ctx, sut } = newMediumService(SharedSpaceService, {
     database: db || defaultDatabase,
-    real: [AssetRepository, SharedSpaceRepository, FaceIdentityRepository, ConfigRepository, SystemMetadataRepository],
+    real: [
+      AssetRepository,
+      SharedSpaceRepository,
+      FaceIdentityRepository,
+      PersonRepository,
+      ConfigRepository,
+      SystemMetadataRepository,
+    ],
     mock: [LoggingRepository, JobRepository],
   });
   const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
