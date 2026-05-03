@@ -45,6 +45,8 @@ import { AssetMetadataAuditTable } from 'src/schema/tables/asset-metadata-audit.
 import { AssetMetadataTable } from 'src/schema/tables/asset-metadata.table';
 import { AssetOcrTable } from 'src/schema/tables/asset-ocr.table';
 import { AssetTable } from 'src/schema/tables/asset.table';
+import { FaceIdentityFaceTable } from 'src/schema/tables/face-identity-face.table';
+import { FaceIdentityTable } from 'src/schema/tables/face-identity.table';
 import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { GeodataPlacesTable } from 'src/schema/tables/geodata-places.table';
 import { LibraryAssetAuditTable } from 'src/schema/tables/library-asset-audit.table';
@@ -122,6 +124,8 @@ export class ImmichDatabase {
     AssetTable,
     AssetFileTable,
     AssetExifTable,
+    FaceIdentityTable,
+    FaceIdentityFaceTable,
     FaceSearchTable,
     GeodataPlacesTable,
     LibraryTable,
@@ -238,6 +242,8 @@ export interface DB {
   ocr_search: OcrSearchTable;
 
   face_search: FaceSearchTable;
+  face_identity: FaceIdentityTable;
+  face_identity_face: FaceIdentityFaceTable;
 
   geodata_places: GeodataPlacesTable;
 
