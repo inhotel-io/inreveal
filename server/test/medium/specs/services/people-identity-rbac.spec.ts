@@ -834,6 +834,10 @@ describe('People identity RBAC projection', () => {
       })
       .returningAll()
       .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: spacePerson.id, assetFaceId: faceId })
+      .execute();
 
     try {
       const result = await sut.getFilterSuggestions(factory.auth({ user }), { withSharedSpaces: true });
