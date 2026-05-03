@@ -172,15 +172,18 @@ SELECT
 FROM
   identity_counts
   INNER JOIN best_profiles ON best_profiles."identityId" = identity_counts."identityId"
+WHERE
+  NULLIF(best_profiles.name, '') IS NOT NULL
+  OR identity_counts."visibleAssetCount" >= $9
 ORDER BY
   NULLIF(best_profiles.name, '') IS NULL,
   lower(best_profiles.name),
   identity_counts."visibleAssetCount" DESC,
   identity_counts."identityId"
 LIMIT
-  $9
-OFFSET
   $10
+OFFSET
+  $11
 
 -- FaceIdentityRepository.getAccessiblePersonFilterSuggestions
 WITH
@@ -333,15 +336,18 @@ SELECT
 FROM
   identity_counts
   INNER JOIN best_profiles ON best_profiles."identityId" = identity_counts."identityId"
+WHERE
+  NULLIF(best_profiles.name, '') IS NOT NULL
+  OR identity_counts."visibleAssetCount" >= $9
 ORDER BY
   NULLIF(best_profiles.name, '') IS NULL,
   lower(best_profiles.name),
   identity_counts."visibleAssetCount" DESC,
   identity_counts."identityId"
 LIMIT
-  $9
-OFFSET
   $10
+OFFSET
+  $11
 
 -- FaceIdentityRepository.getAccessiblePeopleIdentityPage
 WITH
@@ -494,15 +500,18 @@ SELECT
 FROM
   identity_counts
   INNER JOIN best_profiles ON best_profiles."identityId" = identity_counts."identityId"
+WHERE
+  NULLIF(best_profiles.name, '') IS NOT NULL
+  OR identity_counts."visibleAssetCount" >= $9
 ORDER BY
   NULLIF(best_profiles.name, '') IS NULL,
   lower(best_profiles.name),
   identity_counts."visibleAssetCount" DESC,
   identity_counts."identityId"
 LIMIT
-  $9
-OFFSET
   $10
+OFFSET
+  $11
 
 -- FaceIdentityRepository.hydrateAccessiblePeople
 WITH

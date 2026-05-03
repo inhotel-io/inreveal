@@ -27,9 +27,12 @@ let defaultDatabase: Kysely<DB>;
 const setup = (db?: Kysely<DB>) => {
   const { ctx, sut } = newMediumService(PersonService, {
     database: db || defaultDatabase,
-    real: [AccessRepository, FaceIdentityRepository, PersonRepository],
-    mock: [JobRepository, LoggingRepository],
+    real: [AccessRepository, ConfigRepository, FaceIdentityRepository, PersonRepository],
+    mock: [JobRepository, LoggingRepository, SystemMetadataRepository],
   });
+  const metadata = ctx.getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository);
+  metadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } } as any);
+
   const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
   jobs.queue.mockResolvedValue();
   jobs.queueAll.mockResolvedValue();
@@ -57,11 +60,22 @@ const setupSharedSpace = (db?: Kysely<DB>) => {
 };
 
 const setupSearch = (db?: Kysely<DB>) => {
-  return newMediumService(SearchService, {
+  const { ctx, sut } = newMediumService(SearchService, {
     database: db || defaultDatabase,
-    real: [AccessRepository, FaceIdentityRepository, SearchRepository, SharedSpaceRepository, PartnerRepository],
-    mock: [LoggingRepository],
+    real: [
+      AccessRepository,
+      ConfigRepository,
+      FaceIdentityRepository,
+      SearchRepository,
+      SharedSpaceRepository,
+      PartnerRepository,
+    ],
+    mock: [LoggingRepository, SystemMetadataRepository],
   });
+  const metadata = ctx.getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository);
+  metadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } } as any);
+
+  return { ctx, sut };
 };
 
 beforeAll(async () => {
