@@ -188,11 +188,9 @@ export class S3StorageBackend implements StorageBackend {
       );
     }
 
-    const url = await getSignedUrl(
-      this.client,
-      new GetObjectCommand(commandInput),
-      { expiresIn: this.presignedUrlExpiry },
-    );
+    const url = await getSignedUrl(this.client, new GetObjectCommand(commandInput), {
+      expiresIn: this.presignedUrlExpiry,
+    });
 
     return { type: 'redirect', url };
   }
