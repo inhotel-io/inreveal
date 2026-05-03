@@ -86,6 +86,11 @@ vi.mock('$lib/components/people/people-merge-selector.svelte', async () => {
   return { default: MockComponent };
 });
 
+vi.mock('$lib/modals/RepresentativeFacePickerModal.svelte', async () => {
+  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
+  return { default: MockComponent };
+});
+
 function makePerson(overrides: Partial<PersonResponseDto> = {}): PersonResponseDto {
   return {
     id: 'person-1',
@@ -191,6 +196,54 @@ describe('Person detail page', () => {
         withSharedSpaces: true,
       }),
     );
+  });
+
+  it('opens the representative face picker from the person menu', async () => {
+    renderPage();
+
+    await userEvent.click(screen.getByText('select_representative_face'));
+
+    expect(modalManager.show).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        title: 'select_representative_face',
+        loadFaces: expect.any(Function),
+        updateFace: expect.any(Function),
+        canUpdate: true,
+        getThumbnailUrl: expect.any(Function),
+      }),
+    );
+  });
+
+  it('uses exact-face SDK calls for personal representative selection', async () => {
+    sdkMock.getPersonFaces.mockResolvedValue({ faces: [], hasNextPage: false });
+    sdkMock.updateRepresentativeFace.mockResolvedValue(makePerson({ updatedAt: '2026-02-01T00:00:00.000Z' }));
+    renderPage();
+
+    await userEvent.click(screen.getByText('select_representative_face'));
+    const props = vi.mocked(modalManager.show).mock.calls[0][1] as {
+      loadFaces: (request: { page: number; size: number }) => Promise<unknown>;
+      updateFace: (faceId: string) => Promise<unknown>;
+    };
+
+    await props.loadFaces({ page: 2, size: 50 });
+    await props.updateFace('face-1');
+
+    expect(sdkMock.getPersonFaces).toHaveBeenCalledWith({ id: 'person-1', page: 2, size: 50 });
+    expect(sdkMock.updateRepresentativeFace).toHaveBeenCalledWith({
+      id: 'person-1',
+      representativeFaceUpdateDto: { assetFaceId: 'face-1' },
+    });
+  });
+
+  it('does not enter timeline single-select mode for representative face picker', async () => {
+    renderPage();
+
+    await userEvent.click(screen.getByText('select_representative_face'));
+
+    expect(modalManager.show).toHaveBeenCalled();
+    expect(screen.getByTestId('timeline-stub')).not.toHaveAttribute('singleSelect');
+    expect(screen.getByTestId('timeline-stub')).not.toHaveAttribute('isSelectionMode');
   });
 
   it('detaches the personal profile after confirmation', async () => {

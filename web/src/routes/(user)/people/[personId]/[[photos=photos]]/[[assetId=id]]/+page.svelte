@@ -31,6 +31,7 @@
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
   import PersonMergeSuggestionModal from '$lib/modals/PersonMergeSuggestionModal.svelte';
+  import RepresentativeFacePickerModal from '$lib/modals/RepresentativeFacePickerModal.svelte';
   import { Route } from '$lib/route';
   import { getAssetBulkActions } from '$lib/services/asset.service';
   import { getPersonActions } from '$lib/services/person.service';
@@ -39,16 +40,20 @@
   import { createUrl, getPeopleThumbnailUrl } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
   import { isExternalUrl } from '$lib/utils/navigation';
+  import { getPersonFaceThumbnailUrl } from '$lib/utils/people-utils';
   import {
     AssetVisibility,
     detachScopedPerson,
     getAllPeople,
+    getPersonFaces,
     getPerson,
     mergePerson,
     mergeScopedPeople,
     searchPerson,
     Type2 as ScopedPersonProfileType,
+    updateRepresentativeFace,
     updatePerson,
+    type PersonFaceResponseDto,
     type PersonResponseDto,
     type ScopedPersonProfileRefDto,
   } from '@immich/sdk';
@@ -234,22 +239,6 @@
     await goto(Route.viewPerson(person, { previousRoute: Route.people(), action: 'merge' }));
   };
 
-  const handleSelectFeaturePhoto = async (asset: TimelineAsset) => {
-    if (viewMode !== PersonPageViewMode.SELECT_PERSON) {
-      return;
-    }
-    try {
-      person = await updatePerson({ id: person.id, personUpdateDto: { featureFaceAssetId: asset.id } });
-      toastManager.primary($t('feature_photo_updated'));
-    } catch (error) {
-      handleError(error, $t('errors.unable_to_set_feature_photo'));
-    }
-
-    assetMultiSelectManager.clear();
-
-    viewMode = PersonPageViewMode.VIEW_ASSETS;
-  };
-
   const handleMergeSuggestion = async (): Promise<{ merged: boolean }> => {
     if (!personMerge1 || !personMerge2) {
       return { merged: false };
@@ -399,11 +388,27 @@
   };
 
   const { SetDateOfBirth, Favorite, Unfavorite, HidePerson, ShowPerson } = $derived(getPersonActions($t, person));
-  const SelectFeaturePhoto: ActionItem = {
-    title: $t('select_featured_photo'),
+  const SelectRepresentativeFace: ActionItem = {
+    title: $t('select_representative_face'),
     icon: mdiAccountBoxOutline,
-    onAction: () => {
-      viewMode = PersonPageViewMode.SELECT_PERSON;
+    onAction: async () => {
+      const updated = await modalManager.show(RepresentativeFacePickerModal, {
+        title: $t('select_representative_face'),
+        loadFaces: ({ page, size }: { page: number; size: number }) => getPersonFaces({ id: person.id, page, size }),
+        updateFace: async (faceId: string) => {
+          person = await updateRepresentativeFace({
+            id: person.id,
+            representativeFaceUpdateDto: { assetFaceId: faceId },
+          });
+        },
+        getThumbnailUrl: (face: PersonFaceResponseDto) =>
+          getPersonFaceThumbnailUrl(person.id, face.id, person.updatedAt),
+        canUpdate: true,
+      });
+
+      if (updated) {
+        thumbnailData = getPeopleThumbnailUrl(person, Date.now().toString());
+      }
     },
   };
 
@@ -460,9 +465,6 @@
       bind:timelineManager
       {options}
       assetInteraction={assetMultiSelectManager}
-      isSelectionMode={viewMode === PersonPageViewMode.SELECT_PERSON}
-      singleSelect={viewMode === PersonPageViewMode.SELECT_PERSON}
-      onSelect={handleSelectFeaturePhoto}
       onEscape={handleEscape}
     >
       {#if viewMode === PersonPageViewMode.VIEW_ASSETS}
@@ -607,34 +609,24 @@
         />
       </ButtonContextMenu>
     </AssetSelectControlBar>
-  {:else}
-    {#if viewMode === PersonPageViewMode.VIEW_ASSETS}
-      <ControlAppBar showBackButton backIcon={mdiArrowLeft} onClose={() => goto(previousRoute)}>
-        {#snippet trailing()}
-          <ContextMenuButton
-            items={[
-              SelectFeaturePhoto,
-              HidePerson,
-              ShowPerson,
-              SetDateOfBirth,
-              Merge,
-              SeparateFromGroupedPerson,
-              Favorite,
-              Unfavorite,
-            ]}
-            aria-label={$t('open')}
-          />
-        {/snippet}
-      </ControlAppBar>
-    {/if}
-
-    {#if viewMode === PersonPageViewMode.SELECT_PERSON}
-      <ControlAppBar onClose={() => (viewMode = PersonPageViewMode.VIEW_ASSETS)}>
-        {#snippet leading()}
-          {$t('select_featured_photo')}
-        {/snippet}
-      </ControlAppBar>
-    {/if}
+  {:else if viewMode === PersonPageViewMode.VIEW_ASSETS}
+    <ControlAppBar showBackButton backIcon={mdiArrowLeft} onClose={() => goto(previousRoute)}>
+      {#snippet trailing()}
+        <ContextMenuButton
+          items={[
+            SelectRepresentativeFace,
+            HidePerson,
+            ShowPerson,
+            SetDateOfBirth,
+            Merge,
+            SeparateFromGroupedPerson,
+            Favorite,
+            Unfavorite,
+          ]}
+          aria-label={$t('open')}
+        />
+      {/snippet}
+    </ControlAppBar>
   {/if}
 </header>
 
