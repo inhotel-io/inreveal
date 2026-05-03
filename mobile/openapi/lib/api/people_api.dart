@@ -381,6 +381,144 @@ class PeopleApi {
     return null;
   }
 
+  /// Get person face thumbnail
+  ///
+  /// Retrieve an exact face-crop thumbnail for a person.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] faceId (required):
+  ///
+  /// * [String] id (required):
+  Future<Response> getPersonFaceThumbnailWithHttpInfo(String faceId, String id,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/people/{id}/faces/{faceId}/thumbnail'
+      .replaceAll('{faceId}', faceId)
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Get person face thumbnail
+  ///
+  /// Retrieve an exact face-crop thumbnail for a person.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] faceId (required):
+  ///
+  /// * [String] id (required):
+  Future<MultipartFile?> getPersonFaceThumbnail(String faceId, String id,) async {
+    final response = await getPersonFaceThumbnailWithHttpInfo(faceId, id,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'MultipartFile',) as MultipartFile;
+    
+    }
+    return null;
+  }
+
+  /// Get person faces
+  ///
+  /// Retrieve detected face crops for a person.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [int] page:
+  ///   Page number
+  ///
+  /// * [int] size:
+  ///   Number of faces per page
+  Future<Response> getPersonFacesWithHttpInfo(String id, { int? page, int? size, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/people/{id}/faces'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    if (page != null) {
+      queryParams.addAll(_queryParams('', 'page', page));
+    }
+    if (size != null) {
+      queryParams.addAll(_queryParams('', 'size', size));
+    }
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Get person faces
+  ///
+  /// Retrieve detected face crops for a person.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [int] page:
+  ///   Page number
+  ///
+  /// * [int] size:
+  ///   Number of faces per page
+  Future<PersonFacePageResponseDto?> getPersonFaces(String id, { int? page, int? size, }) async {
+    final response = await getPersonFacesWithHttpInfo(id,  page: page, size: size, );
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'PersonFacePageResponseDto',) as PersonFacePageResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Get person statistics
   ///
   /// Retrieve statistics about a specific person.
@@ -778,6 +916,67 @@ class PeopleApi {
   /// * [PersonUpdateDto] personUpdateDto (required):
   Future<PersonResponseDto?> updatePerson(String id, PersonUpdateDto personUpdateDto,) async {
     final response = await updatePersonWithHttpInfo(id, personUpdateDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'PersonResponseDto',) as PersonResponseDto;
+    
+    }
+    return null;
+  }
+
+  /// Update representative face
+  ///
+  /// Update the exact face crop used as the person thumbnail.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [RepresentativeFaceUpdateDto] representativeFaceUpdateDto (required):
+  Future<Response> updateRepresentativeFaceWithHttpInfo(String id, RepresentativeFaceUpdateDto representativeFaceUpdateDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/people/{id}/representative-face'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = representativeFaceUpdateDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'PUT',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Update representative face
+  ///
+  /// Update the exact face crop used as the person thumbnail.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [RepresentativeFaceUpdateDto] representativeFaceUpdateDto (required):
+  Future<PersonResponseDto?> updateRepresentativeFace(String id, RepresentativeFaceUpdateDto representativeFaceUpdateDto,) async {
+    final response = await updateRepresentativeFaceWithHttpInfo(id, representativeFaceUpdateDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

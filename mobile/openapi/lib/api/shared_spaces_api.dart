@@ -1051,6 +1051,154 @@ class SharedSpacesApi {
     return null;
   }
 
+  /// Get space person face thumbnail
+  ///
+  /// Retrieve an exact face-crop thumbnail for a person in a shared space.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] faceId (required):
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [String] personId (required):
+  Future<Response> getSpacePersonFaceThumbnailWithHttpInfo(String faceId, String id, String personId,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{id}/people/{personId}/faces/{faceId}/thumbnail'
+      .replaceAll('{faceId}', faceId)
+      .replaceAll('{id}', id)
+      .replaceAll('{personId}', personId);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Get space person face thumbnail
+  ///
+  /// Retrieve an exact face-crop thumbnail for a person in a shared space.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] faceId (required):
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [String] personId (required):
+  Future<MultipartFile?> getSpacePersonFaceThumbnail(String faceId, String id, String personId,) async {
+    final response = await getSpacePersonFaceThumbnailWithHttpInfo(faceId, id, personId,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'MultipartFile',) as MultipartFile;
+    
+    }
+    return null;
+  }
+
+  /// Get space person faces
+  ///
+  /// Retrieve detected face crops for a person in a shared space.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [String] personId (required):
+  ///
+  /// * [int] page:
+  ///   Page number
+  ///
+  /// * [int] size:
+  ///   Number of faces per page
+  Future<Response> getSpacePersonFacesWithHttpInfo(String id, String personId, { int? page, int? size, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{id}/people/{personId}/faces'
+      .replaceAll('{id}', id)
+      .replaceAll('{personId}', personId);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    if (page != null) {
+      queryParams.addAll(_queryParams('', 'page', page));
+    }
+    if (size != null) {
+      queryParams.addAll(_queryParams('', 'size', size));
+    }
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Get space person faces
+  ///
+  /// Retrieve detected face crops for a person in a shared space.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [String] personId (required):
+  ///
+  /// * [int] page:
+  ///   Page number
+  ///
+  /// * [int] size:
+  ///   Number of faces per page
+  Future<PersonFacePageResponseDto?> getSpacePersonFaces(String id, String personId, { int? page, int? size, }) async {
+    final response = await getSpacePersonFacesWithHttpInfo(id, personId,  page: page, size: size, );
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'PersonFacePageResponseDto',) as PersonFacePageResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Get a space person thumbnail
   ///
   /// Retrieve the thumbnail image for a person in a shared space.
@@ -1909,6 +2057,72 @@ class SharedSpacesApi {
   /// * [SharedSpacePersonUpdateDto] sharedSpacePersonUpdateDto (required):
   Future<SharedSpacePersonResponseDto?> updateSpacePerson(String id, String personId, SharedSpacePersonUpdateDto sharedSpacePersonUpdateDto,) async {
     final response = await updateSpacePersonWithHttpInfo(id, personId, sharedSpacePersonUpdateDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'SharedSpacePersonResponseDto',) as SharedSpacePersonResponseDto;
+    
+    }
+    return null;
+  }
+
+  /// Update space person representative face
+  ///
+  /// Update or clear the exact face crop used as the space person thumbnail.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [String] personId (required):
+  ///
+  /// * [SpaceRepresentativeFaceUpdateDto] spaceRepresentativeFaceUpdateDto (required):
+  Future<Response> updateSpacePersonRepresentativeFaceWithHttpInfo(String id, String personId, SpaceRepresentativeFaceUpdateDto spaceRepresentativeFaceUpdateDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{id}/people/{personId}/representative-face'
+      .replaceAll('{id}', id)
+      .replaceAll('{personId}', personId);
+
+    // ignore: prefer_final_locals
+    Object? postBody = spaceRepresentativeFaceUpdateDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'PUT',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Update space person representative face
+  ///
+  /// Update or clear the exact face crop used as the space person thumbnail.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [String] personId (required):
+  ///
+  /// * [SpaceRepresentativeFaceUpdateDto] spaceRepresentativeFaceUpdateDto (required):
+  Future<SharedSpacePersonResponseDto?> updateSpacePersonRepresentativeFace(String id, String personId, SpaceRepresentativeFaceUpdateDto spaceRepresentativeFaceUpdateDto,) async {
+    final response = await updateSpacePersonRepresentativeFaceWithHttpInfo(id, personId, spaceRepresentativeFaceUpdateDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

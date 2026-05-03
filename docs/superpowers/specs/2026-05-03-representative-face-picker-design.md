@@ -115,7 +115,7 @@ The generated personal person thumbnail remains the source reused by spaces when
 Add a column to `shared_space_person`:
 
 ```ts
-representativeFaceSource: 'auto' | 'manual'
+representativeFaceSource: 'auto' | 'manual';
 ```
 
 The default is `auto`.

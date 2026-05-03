@@ -516,6 +516,10 @@ class ApiClient {
           return PermissionTypeTransformer().decode(value);
         case 'PersonCreateDto':
           return PersonCreateDto.fromJson(value);
+        case 'PersonFacePageResponseDto':
+          return PersonFacePageResponseDto.fromJson(value);
+        case 'PersonFaceResponseDto':
+          return PersonFaceResponseDto.fromJson(value);
         case 'PersonResponseDto':
           return PersonResponseDto.fromJson(value);
         case 'PersonStatisticsResponseDto':
@@ -592,6 +596,8 @@ class ApiClient {
           return ReactionLevelTypeTransformer().decode(value);
         case 'ReactionType':
           return ReactionTypeTypeTransformer().decode(value);
+        case 'RepresentativeFaceUpdateDto':
+          return RepresentativeFaceUpdateDto.fromJson(value);
         case 'ReverseGeocodingStateResponseDto':
           return ReverseGeocodingStateResponseDto.fromJson(value);
         case 'RotateParameters':
@@ -718,6 +724,8 @@ class ApiClient {
           return SmartSearchFacetsResponseDto.fromJson(value);
         case 'SourceType':
           return SourceTypeTypeTransformer().decode(value);
+        case 'SpaceRepresentativeFaceUpdateDto':
+          return SpaceRepresentativeFaceUpdateDto.fromJson(value);
         case 'StackCreateDto':
           return StackCreateDto.fromJson(value);
         case 'StackResponseDto':

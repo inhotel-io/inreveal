@@ -510,9 +510,7 @@ describe('representative face', () => {
     ]);
 
     await expect(sut.getFacesForPicker(auth, person.id, { page: 1, size: 1 })).resolves.toEqual({
-      faces: [
-        expect.objectContaining({ id: 'face-1', assetId: 'asset-1', isRepresentative: true }),
-      ],
+      faces: [expect.objectContaining({ id: 'face-1', assetId: 'asset-1', isRepresentative: true })],
       hasNextPage: true,
     });
   });
@@ -1398,32 +1396,50 @@ it('includes library-backed space assets in the representative face list', async
 });
 
 it.each([
-  ['hidden face', async (ctx: any, faceId: string) => {
-    await ctx.database.updateTable('asset_face').set({ isVisible: false }).where('id', '=', faceId).execute();
-  }],
-  ['deleted face', async (ctx: any, faceId: string) => {
-    await ctx.database.updateTable('asset_face').set({ deletedAt: new Date() }).where('id', '=', faceId).execute();
-  }],
-  ['offline asset', async (ctx: any, _faceId: string, assetId: string) => {
-    await ctx.database.updateTable('asset').set({ isOffline: true }).where('id', '=', assetId).execute();
-  }],
-  ['deleted asset', async (ctx: any, _faceId: string, assetId: string) => {
-    await ctx.database.updateTable('asset').set({ deletedAt: new Date() }).where('id', '=', assetId).execute();
-  }],
-  ['hidden asset', async (ctx: any, _faceId: string, assetId: string) => {
-    await ctx.database
-      .updateTable('asset')
-      .set({ visibility: AssetVisibility.Hidden })
-      .where('id', '=', assetId)
-      .execute();
-  }],
-  ['asset removed from space', async (ctx: any, _faceId: string, assetId: string, spaceId: string) => {
-    await ctx.database
-      .deleteFrom('shared_space_asset')
-      .where('spaceId', '=', spaceId)
-      .where('assetId', '=', assetId)
-      .execute();
-  }],
+  [
+    'hidden face',
+    async (ctx: any, faceId: string) => {
+      await ctx.database.updateTable('asset_face').set({ isVisible: false }).where('id', '=', faceId).execute();
+    },
+  ],
+  [
+    'deleted face',
+    async (ctx: any, faceId: string) => {
+      await ctx.database.updateTable('asset_face').set({ deletedAt: new Date() }).where('id', '=', faceId).execute();
+    },
+  ],
+  [
+    'offline asset',
+    async (ctx: any, _faceId: string, assetId: string) => {
+      await ctx.database.updateTable('asset').set({ isOffline: true }).where('id', '=', assetId).execute();
+    },
+  ],
+  [
+    'deleted asset',
+    async (ctx: any, _faceId: string, assetId: string) => {
+      await ctx.database.updateTable('asset').set({ deletedAt: new Date() }).where('id', '=', assetId).execute();
+    },
+  ],
+  [
+    'hidden asset',
+    async (ctx: any, _faceId: string, assetId: string) => {
+      await ctx.database
+        .updateTable('asset')
+        .set({ visibility: AssetVisibility.Hidden })
+        .where('id', '=', assetId)
+        .execute();
+    },
+  ],
+  [
+    'asset removed from space',
+    async (ctx: any, _faceId: string, assetId: string, spaceId: string) => {
+      await ctx.database
+        .deleteFrom('shared_space_asset')
+        .where('spaceId', '=', spaceId)
+        .where('assetId', '=', assetId)
+        .execute();
+    },
+  ],
   [
     'face no longer assigned to the space person',
     async (ctx: any, faceId: string, _assetId: string, _spaceId: string, personId: string) => {
@@ -1464,7 +1480,11 @@ In `server/test/medium/specs/repositories/face-identity.repository.spec.ts`, add
 it('preserves manual space representative faces during space identity backfill', async () => {
   const { ctx, sut } = await setup();
   const { space } = await ctx.newSharedSpace();
-  const identity = await ctx.database.insertInto('face_identity').values({ type: 'person' }).returningAll().executeTakeFirstOrThrow();
+  const identity = await ctx.database
+    .insertInto('face_identity')
+    .values({ type: 'person' })
+    .returningAll()
+    .executeTakeFirstOrThrow();
   const { asset } = await ctx.newAsset();
   const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id });
   const person = await ctx.database
@@ -1478,8 +1498,14 @@ it('preserves manual space representative faces during space identity backfill',
     })
     .returningAll()
     .executeTakeFirstOrThrow();
-  await ctx.database.insertInto('shared_space_person_face').values({ personId: person.id, assetFaceId: faceId }).execute();
-  await ctx.database.insertInto('face_identity_face').values({ identityId: identity.id, assetFaceId: faceId, source: 'manual' }).execute();
+  await ctx.database
+    .insertInto('shared_space_person_face')
+    .values({ personId: person.id, assetFaceId: faceId })
+    .execute();
+  await ctx.database
+    .insertInto('face_identity_face')
+    .values({ identityId: identity.id, assetFaceId: faceId, source: 'manual' })
+    .execute();
 
   await sut.backfillSpacePersonIdentities({ limit: 100 });
 
@@ -2037,12 +2063,8 @@ Add:
 export const getPersonFaceThumbnailUrl = (personId: string, faceId: string, updatedAt?: string) =>
   createUrl(`/people/${personId}/faces/${faceId}/thumbnail`, { updatedAt });
 
-export const getSpacePersonFaceThumbnailUrl = (
-  spaceId: string,
-  personId: string,
-  faceId: string,
-  updatedAt?: string,
-) => createUrl(`/shared-spaces/${spaceId}/people/${personId}/faces/${faceId}/thumbnail`, { updatedAt });
+export const getSpacePersonFaceThumbnailUrl = (spaceId: string, personId: string, faceId: string, updatedAt?: string) =>
+  createUrl(`/shared-spaces/${spaceId}/people/${personId}/faces/${faceId}/thumbnail`, { updatedAt });
 ```
 
 - [ ] **Step 5: Implement the tile component**
@@ -2143,8 +2165,28 @@ import RepresentativeFacePickerModal from './RepresentativeFacePickerModal.svelt
 
 const makePage = (overrides = {}) => ({
   faces: [
-    { id: 'face-1', assetId: 'asset-1', imageWidth: 100, imageHeight: 100, boundingBoxX1: 0, boundingBoxY1: 0, boundingBoxX2: 50, boundingBoxY2: 50, isRepresentative: true },
-    { id: 'face-2', assetId: 'asset-2', imageWidth: 100, imageHeight: 100, boundingBoxX1: 10, boundingBoxY1: 10, boundingBoxX2: 60, boundingBoxY2: 60, isRepresentative: false },
+    {
+      id: 'face-1',
+      assetId: 'asset-1',
+      imageWidth: 100,
+      imageHeight: 100,
+      boundingBoxX1: 0,
+      boundingBoxY1: 0,
+      boundingBoxX2: 50,
+      boundingBoxY2: 50,
+      isRepresentative: true,
+    },
+    {
+      id: 'face-2',
+      assetId: 'asset-2',
+      imageWidth: 100,
+      imageHeight: 100,
+      boundingBoxX1: 10,
+      boundingBoxY1: 10,
+      boundingBoxX2: 60,
+      boundingBoxY2: 60,
+      isRepresentative: false,
+    },
   ],
   hasNextPage: false,
   ...overrides,
@@ -2657,7 +2699,10 @@ it('passes a reset callback for manual space representative overrides', async ()
 
   await userEvent.click(screen.getByText('select_representative_face'));
 
-  expect(modalManager.show).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ resetFace: expect.any(Function) }));
+  expect(modalManager.show).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ resetFace: expect.any(Function) }),
+  );
 });
 
 it('uses exact-face SDK calls for space representative selection and reset', async () => {
@@ -2706,11 +2751,7 @@ In the space person page imports, add:
 ```ts
 import RepresentativeFacePickerModal from '$lib/modals/RepresentativeFacePickerModal.svelte';
 import { getSpacePersonFaceThumbnailUrl } from '$lib/utils/people-utils';
-import {
-  getSpacePersonFaces,
-  updateSpacePersonRepresentativeFace,
-  type PersonFaceResponseDto,
-} from '@immich/sdk';
+import { getSpacePersonFaces, updateSpacePersonRepresentativeFace, type PersonFaceResponseDto } from '@immich/sdk';
 import { mdiAccountBoxOutline } from '@mdi/js';
 ```
 
