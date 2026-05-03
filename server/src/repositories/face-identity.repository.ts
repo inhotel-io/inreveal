@@ -1228,6 +1228,21 @@ export class FaceIdentityRepository {
       .executeTakeFirstOrThrow();
   }
 
+  @GenerateSql({ params: [{ identityId: DummyValue.UUID, assetFaceId: DummyValue.UUID }] })
+  async updateRepresentativeFace(input: { identityId: string; assetFaceId: string }): Promise<void> {
+    await this.db
+      .updateTable('face_identity')
+      .set({ representativeFaceId: input.assetFaceId })
+      .where('id', '=', input.identityId)
+      .execute();
+
+    await this.replaceFaceIdentity({
+      identityId: input.identityId,
+      assetFaceId: input.assetFaceId,
+      source: 'manual',
+    });
+  }
+
   @GenerateSql({ params: [[DummyValue.UUID]] })
   async unlinkFaces(assetFaceIds: string[]): Promise<void> {
     if (assetFaceIds.length === 0) {

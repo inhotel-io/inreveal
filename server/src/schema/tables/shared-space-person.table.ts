@@ -48,7 +48,7 @@ export class SharedSpacePersonTable {
   representativeFaceId!: string | null;
 
   @Column({ type: 'character varying', default: 'auto' })
-  representativeFaceSource!: Generated<string>;
+  representativeFaceSource!: Generated<'auto' | 'manual'>;
 
   @Column({ type: 'boolean', default: false })
   isHidden!: Generated<boolean>;

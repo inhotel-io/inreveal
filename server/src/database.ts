@@ -374,7 +374,7 @@ export type SharedSpacePerson = {
   spaceId: string;
   name: string;
   representativeFaceId: string | null;
-  representativeFaceSource: string;
+  representativeFaceSource: 'auto' | 'manual';
   isHidden: boolean;
   type: string;
   birthDate: string | null;

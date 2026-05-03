@@ -291,6 +291,93 @@ describe(PersonService.name, () => {
     });
   });
 
+  describe('representative face', () => {
+    it('updates a personal representative face by exact assetFaceId', async () => {
+      const auth = AuthFactory.create();
+      const person = PersonFactory.create({ identityId: 'identity-1' });
+      const face = AssetFaceFactory.create({ id: 'face-1', assetId: 'asset-1', personId: person.id });
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([person.id]));
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([face.assetId]));
+      mocks.person.getRepresentativeFaceForUpdate.mockResolvedValue(face);
+      mocks.person.getById.mockResolvedValue(person);
+      mocks.person.update.mockResolvedValue({ ...person, faceAssetId: face.id });
+
+      await expect(sut.updateRepresentativeFace(auth, person.id, { assetFaceId: face.id })).resolves.toEqual(
+        expect.objectContaining({ id: person.id }),
+      );
+
+      expect(mocks.person.getRepresentativeFaceForUpdate).toHaveBeenCalledWith({
+        personId: person.id,
+        assetFaceId: face.id,
+      });
+      expect(mocks.person.update).toHaveBeenCalledWith({ id: person.id, faceAssetId: face.id });
+      expect(mocks.faceIdentity.updateRepresentativeFace).toHaveBeenCalledWith({
+        identityId: person.identityId,
+        assetFaceId: face.id,
+      });
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.PersonGenerateThumbnail, data: { id: person.id } });
+    });
+
+    it('rejects a face that does not belong to the requested person or identity', async () => {
+      const auth = AuthFactory.create();
+      const person = PersonFactory.create();
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([person.id]));
+      mocks.person.getById.mockResolvedValue(person);
+      mocks.person.getRepresentativeFaceForUpdate.mockResolvedValue(
+        undefined as Awaited<ReturnType<typeof mocks.person.getRepresentativeFaceForUpdate>>,
+      );
+
+      await expect(sut.updateRepresentativeFace(auth, person.id, { assetFaceId: 'face-1' })).rejects.toThrow(
+        BadRequestException,
+      );
+
+      expect(mocks.person.update).not.toHaveBeenCalled();
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('rejects a selected face when the actor cannot read the face asset', async () => {
+      const auth = AuthFactory.create();
+      const person = PersonFactory.create();
+      const face = AssetFaceFactory.create({ id: 'face-1', assetId: 'asset-1', personId: person.id });
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([person.id]));
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.person.getById.mockResolvedValue(person);
+      mocks.person.getRepresentativeFaceForUpdate.mockResolvedValue(face);
+
+      await expect(sut.updateRepresentativeFace(auth, person.id, { assetFaceId: face.id })).rejects.toThrow(
+        BadRequestException,
+      );
+
+      expect(mocks.person.update).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.updateRepresentativeFace).not.toHaveBeenCalled();
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('lists exact personal face crops for the picker', async () => {
+      const auth = AuthFactory.create();
+      const person = PersonFactory.create({ faceAssetId: 'face-1' });
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([person.id]));
+      mocks.person.getById.mockResolvedValue(person);
+      mocks.person.getRepresentativeFaces.mockResolvedValue([
+        {
+          ...AssetFaceFactory.create({ id: 'face-1', assetId: 'asset-1', personId: person.id }),
+          fileCreatedAt: new Date('2024-01-01T00:00:00.000Z'),
+          representativeFaceId: person.faceAssetId,
+        },
+        {
+          ...AssetFaceFactory.create({ id: 'face-2', assetId: 'asset-2', personId: person.id }),
+          fileCreatedAt: new Date('2024-01-02T00:00:00.000Z'),
+          representativeFaceId: person.faceAssetId,
+        },
+      ]);
+
+      await expect(sut.getFacesForPicker(auth, person.id, { page: 1, size: 1 })).resolves.toEqual({
+        faces: [expect.objectContaining({ id: 'face-1', assetId: 'asset-1', isRepresentative: true })],
+        hasNextPage: true,
+      });
+    });
+  });
+
   describe('update', () => {
     it('should require person.write permission', async () => {
       const auth = AuthFactory.create();

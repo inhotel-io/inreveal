@@ -3,7 +3,7 @@ import { Kysely, sql } from 'kysely';
 export async function up(db: Kysely<unknown>): Promise<void> {
   await db.schema
     .alterTable('shared_space_person')
-    .addColumn('representativeFaceSource', 'character varying', (column) => column.notNull().defaultTo('auto'))
+    .addColumn('representativeFaceSource', 'varchar', (column) => column.notNull().defaultTo('auto'))
     .execute();
 
   await sql`

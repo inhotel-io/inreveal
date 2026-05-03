@@ -49,6 +49,7 @@ import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { BaseService } from 'src/services/base.service';
 import { JobItem, JobOf } from 'src/types';
 import { getDimensions } from 'src/utils/asset.util';
+import { asDateString } from 'src/utils/date';
 import { ImmichMediaResponse } from 'src/utils/file';
 import { mimeTypes } from 'src/utils/mime-types';
 import { isFacialRecognitionEnabled } from 'src/utils/misc';
@@ -226,14 +227,33 @@ export class PersonService extends BaseService {
     return this.findOrFail(id).then(mapPerson);
   }
 
-  async getFacesForPicker(
-    auth: AuthDto,
-    id: string,
-    dto: PersonFacePageQueryDto,
-  ): Promise<PersonFacePageResponseDto> {
-    void dto;
+  async getFacesForPicker(auth: AuthDto, id: string, dto: PersonFacePageQueryDto): Promise<PersonFacePageResponseDto> {
     await this.requireAccess({ auth, permission: Permission.PersonRead, ids: [id] });
-    return { faces: [], hasNextPage: false };
+    const person = await this.findOrFail(id);
+    const take = dto.size;
+    const rows = await this.personRepository.getRepresentativeFaces({
+      personId: id,
+      take,
+      skip: (dto.page - 1) * dto.size,
+    });
+    const faces = rows.slice(0, take);
+
+    return {
+      faces: faces.map((face) => ({
+        id: face.id,
+        assetId: face.assetId,
+        imageHeight: face.imageHeight,
+        imageWidth: face.imageWidth,
+        boundingBoxX1: face.boundingBoxX1,
+        boundingBoxX2: face.boundingBoxX2,
+        boundingBoxY1: face.boundingBoxY1,
+        boundingBoxY2: face.boundingBoxY2,
+        sourceType: face.sourceType,
+        fileCreatedAt: asDateString(face.fileCreatedAt) ?? undefined,
+        isRepresentative: face.id === person.faceAssetId,
+      })),
+      hasNextPage: rows.length > take,
+    };
   }
 
   async updateRepresentativeFace(
@@ -242,7 +262,26 @@ export class PersonService extends BaseService {
     dto: RepresentativeFaceUpdateDto,
   ): Promise<PersonResponseDto> {
     await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [id] });
-    throw new BadRequestException(`Invalid representative face ${dto.assetFaceId}`);
+    const current = await this.findOrFail(id);
+    const face = await this.personRepository.getRepresentativeFaceForUpdate({
+      personId: id,
+      assetFaceId: dto.assetFaceId,
+    });
+    if (!face) {
+      throw new BadRequestException('Representative face must belong to the person');
+    }
+
+    await this.requireAccess({ auth, permission: Permission.AssetRead, ids: [face.assetId] });
+    const person = await this.personRepository.update({ id, faceAssetId: face.id });
+    if (current.identityId) {
+      await this.faceIdentityRepository.updateRepresentativeFace({
+        identityId: current.identityId,
+        assetFaceId: face.id,
+      });
+    }
+
+    await this.jobRepository.queue({ name: JobName.PersonGenerateThumbnail, data: { id } });
+    return mapPerson(person);
   }
 
   async getStatistics(auth: AuthDto, id: string): Promise<PersonStatisticsResponseDto> {
