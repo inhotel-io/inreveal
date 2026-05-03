@@ -831,12 +831,19 @@ export type AssetFaceWithoutPersonResponseDto = {
     imageWidth: number;
     sourceType?: SourceType;
 };
+export type ScopedPrimaryProfile = {
+    id: string;
+    spaceId?: string;
+    "type": Type;
+};
 export type PersonWithFacesResponseDto = {
     /** Person date of birth */
     birthDate: string | null;
     /** Person color (hex) */
     color?: string;
     faces: AssetFaceWithoutPersonResponseDto[];
+    /** Scoped identity filter token */
+    filterId?: string;
     /** Person ID */
     id: string;
     /** Is favorite */
@@ -845,6 +852,10 @@ export type PersonWithFacesResponseDto = {
     isHidden: boolean;
     /** Person name */
     name: string;
+    /** Accessible asset count for this grouped person */
+    numberOfAssets?: number;
+    /** Accessible profile used for navigation */
+    primaryProfile?: ScopedPrimaryProfile;
     /** Space person ID (when viewed through a space) */
     spacePersonId?: string;
     /** Pet species (e.g. dog, cat) */
@@ -1184,6 +1195,8 @@ export type PersonResponseDto = {
     birthDate: string | null;
     /** Person color (hex) */
     color?: string;
+    /** Scoped identity filter token */
+    filterId?: string;
     /** Person ID */
     id: string;
     /** Is favorite */
@@ -1192,6 +1205,10 @@ export type PersonResponseDto = {
     isHidden: boolean;
     /** Person name */
     name: string;
+    /** Accessible asset count for this grouped person */
+    numberOfAssets?: number;
+    /** Accessible profile used for navigation */
+    primaryProfile?: ScopedPrimaryProfile;
     /** Pet species (e.g. dog, cat) */
     species?: string | null;
     /** Thumbnail path */
@@ -1282,6 +1299,7 @@ export type QueuesResponseLegacyDto = {
     migration: QueueResponseLegacyDto;
     notifications: QueueResponseLegacyDto;
     ocr: QueueResponseLegacyDto;
+    peopleBackfill: QueueResponseLegacyDto;
     petDetection: QueueResponseLegacyDto;
     search: QueueResponseLegacyDto;
     sidecar: QueueResponseLegacyDto;
@@ -1539,6 +1557,24 @@ export type PeopleUpdateDto = {
     /** People to update */
     people: PeopleUpdateItem[];
 };
+export type ScopedPersonProfileRefDto = {
+    /** Scoped profile ID */
+    id: string;
+    /** Space ID for Space Person refs */
+    spaceId?: string;
+    /** Scoped profile type */
+    "type": Type2;
+};
+export type DetachScopedPersonDto = {
+    /** Scoped profile to detach */
+    profile: ScopedPersonProfileRefDto;
+};
+export type MergeScopedPeopleDto = {
+    /** Source scoped profiles */
+    sources: ScopedPersonProfileRefDto[];
+    /** Target scoped profile */
+    target: ScopedPersonProfileRefDto;
+};
 export type PersonUpdateDto = {
     /** Person date of birth */
     birthDate?: string | null;
@@ -1553,6 +1589,33 @@ export type PersonUpdateDto = {
     /** Person name */
     name?: string;
 };
+export type PersonFaceResponseDto = {
+    /** Asset ID containing the face */
+    assetId: string;
+    /** Bounding box X1 coordinate */
+    boundingBoxX1: number;
+    /** Bounding box X2 coordinate */
+    boundingBoxX2: number;
+    /** Bounding box Y1 coordinate */
+    boundingBoxY1: number;
+    /** Bounding box Y2 coordinate */
+    boundingBoxY2: number;
+    /** Asset creation date */
+    fileCreatedAt?: string;
+    /** Face ID */
+    id: string;
+    /** Image height in pixels */
+    imageHeight: number;
+    /** Image width in pixels */
+    imageWidth: number;
+    /** Whether this face is the current representative face */
+    isRepresentative: boolean;
+    sourceType?: SourceType;
+};
+export type PersonFacePageResponseDto = {
+    faces: PersonFaceResponseDto[];
+    hasNextPage: boolean;
+};
 export type MergePersonDto = {
     /** Person IDs to merge */
     ids: string[];
@@ -1566,6 +1629,10 @@ export type AssetFaceUpdateItem = {
 export type AssetFaceUpdateDto = {
     /** Face update items */
     data: AssetFaceUpdateItem[];
+};
+export type RepresentativeFaceUpdateDto = {
+    /** Asset face ID used as the representative face */
+    assetFaceId: string;
 };
 export type PersonStatisticsResponseDto = {
     /** Number of assets */
@@ -1749,6 +1816,8 @@ export type MetadataSearchDto = {
     withExif?: boolean;
     /** Include people data in response */
     withPeople?: boolean;
+    /** Include shared spaces the user is a member of */
+    withSharedSpaces?: boolean;
     /** Include stacked assets */
     withStacked?: boolean;
 };
@@ -1862,6 +1931,8 @@ export type RandomSearchDto = {
     withExif?: boolean;
     /** Include people data in response */
     withPeople?: boolean;
+    /** Include shared spaces the user is a member of */
+    withSharedSpaces?: boolean;
     /** Include stacked assets */
     withStacked?: boolean;
 };
@@ -1981,6 +2052,8 @@ export type FilterSuggestionsPersonDto = {
     id: string;
     /** Person name */
     name: string;
+    /** Accessible profile used for thumbnails */
+    primaryProfile?: ScopedPrimaryProfile;
 };
 export type FilterSuggestionsTagDto = {
     /** Tag ID */
@@ -2077,6 +2150,8 @@ export type StatisticsSearchDto = {
     /** Filter by update date (before) */
     updatedBefore?: string;
     visibility?: AssetVisibility;
+    /** Include shared spaces the user is a member of */
+    withSharedSpaces?: boolean;
 };
 export type SearchStatisticsResponseDto = {
     /** Total number of matching assets */
@@ -2452,6 +2527,8 @@ export type SharedSpaceMemberResponseDto = {
     recentAssetId?: string | null;
     /** Member role */
     role: SharedSpaceRole;
+    /** Share person names and birth dates with this space */
+    sharePersonMetadata: boolean;
     /** Show space assets in timeline */
     showInTimeline: boolean;
     /** User ID */
@@ -2569,6 +2646,12 @@ export type SharedSpaceMemberCreateDto = {
     /** User ID */
     userId: string;
 };
+export type SharedSpaceMemberPreferencesDto = {
+    /** Share person names and birth dates with this space */
+    sharePersonMetadata?: boolean;
+    /** Show space assets in personal timeline */
+    showInTimeline?: boolean;
+};
 export type SharedSpaceMemberTimelineDto = {
     /** Show space assets in personal timeline */
     showInTimeline: boolean;
@@ -2576,6 +2659,10 @@ export type SharedSpaceMemberTimelineDto = {
 export type SharedSpaceMemberUpdateDto = {
     /** Member role */
     role: SharedSpaceRole;
+};
+export type SharedSpaceMemberMetadataContributionDto = {
+    /** Disable person metadata contribution for this member */
+    sharePersonMetadata: false;
 };
 export type SharedSpacePersonResponseDto = {
     /** User-specific alias for this person */
@@ -2596,6 +2683,8 @@ export type SharedSpacePersonResponseDto = {
     name: string;
     /** Representative face ID */
     representativeFaceId?: string | null;
+    /** Representative face source */
+    representativeFaceSource: RepresentativeFaceSource;
     /** Space ID */
     spaceId: string;
     /** Thumbnail path */
@@ -2604,6 +2693,12 @@ export type SharedSpacePersonResponseDto = {
     "type"?: string;
     /** Last update date */
     updatedAt: string;
+};
+export type SharedSpacePeopleStatisticsResponseDto = {
+    /** Number of hidden people */
+    hidden: number;
+    /** Total number of people */
+    total: number;
 };
 export type SharedSpacePersonUpdateDto = {
     /** Person date of birth */
@@ -2622,6 +2717,10 @@ export type SharedSpacePersonAliasDto = {
 export type SharedSpacePersonMergeDto = {
     /** Person IDs to merge into target */
     ids: string[];
+};
+export type SpaceRepresentativeFaceUpdateDto = {
+    /** Asset face ID used as the space representative face */
+    assetFaceId: string | null;
 };
 export type StackResponseDto = {
     assets: AssetResponseDto[];
@@ -2798,6 +2897,7 @@ export type SystemConfigJobDto = {
     migration: JobSettingsDto;
     notifications: JobSettingsDto;
     ocr: JobSettingsDto;
+    peopleBackfill: JobSettingsDto;
     petDetection: JobSettingsDto;
     search: JobSettingsDto;
     sidecar: JobSettingsDto;
@@ -5900,12 +6000,13 @@ export function deletePeople({ bulkIdsDto }: {
 /**
  * Get all people
  */
-export function getAllPeople({ closestAssetId, closestPersonId, page, size, withHidden }: {
+export function getAllPeople({ closestAssetId, closestPersonId, page, size, withHidden, withSharedSpaces }: {
     closestAssetId?: string;
     closestPersonId?: string;
     page?: number;
     size?: number;
     withHidden?: boolean;
+    withSharedSpaces?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
@@ -5915,7 +6016,8 @@ export function getAllPeople({ closestAssetId, closestPersonId, page, size, with
         closestPersonId,
         page,
         size,
-        withHidden
+        withHidden,
+        withSharedSpaces
     }))}`, {
         ...opts
     }));
@@ -5948,6 +6050,30 @@ export function updatePeople({ peopleUpdateDto }: {
         ...opts,
         method: "PUT",
         body: peopleUpdateDto
+    })));
+}
+/**
+ * Detach a scoped person profile
+ */
+export function detachScopedPerson({ detachScopedPersonDto }: {
+    detachScopedPersonDto: DetachScopedPersonDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText("/people/detach-profile", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: detachScopedPersonDto
+    })));
+}
+/**
+ * Merge scoped people by identity
+ */
+export function mergeScopedPeople({ mergeScopedPeopleDto }: {
+    mergeScopedPeopleDto: MergeScopedPeopleDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText("/people/same-person", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: mergeScopedPeopleDto
     })));
 }
 /**
@@ -5991,6 +6117,38 @@ export function updatePerson({ id, personUpdateDto }: {
     })));
 }
 /**
+ * Get person faces
+ */
+export function getPersonFaces({ id, page, size }: {
+    id: string;
+    page?: number;
+    size?: number;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PersonFacePageResponseDto;
+    }>(`/people/${encodeURIComponent(id)}/faces${QS.query(QS.explode({
+        page,
+        size
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * Get person face thumbnail
+ */
+export function getPersonFaceThumbnail({ faceId, id }: {
+    faceId: string;
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: Blob;
+    }>(`/people/${encodeURIComponent(id)}/faces/${encodeURIComponent(faceId)}/thumbnail`, {
+        ...opts
+    }));
+}
+/**
  * Merge people
  */
 export function mergePerson({ id, mergePersonDto }: {
@@ -6020,6 +6178,22 @@ export function reassignFaces({ id, assetFaceUpdateDto }: {
         ...opts,
         method: "PUT",
         body: assetFaceUpdateDto
+    })));
+}
+/**
+ * Update representative face
+ */
+export function updateRepresentativeFace({ id, representativeFaceUpdateDto }: {
+    id: string;
+    representativeFaceUpdateDto: RepresentativeFaceUpdateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PersonResponseDto;
+    }>(`/people/${encodeURIComponent(id)}/representative-face`, oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: representativeFaceUpdateDto
     })));
 }
 /**
@@ -6222,7 +6396,7 @@ export function getExploreData(opts?: Oazapfts.RequestOpts) {
 /**
  * Search large assets
  */
-export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, spaceId, spacePersonIds, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
+export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, spaceId, spacePersonIds, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif, withSharedSpaces }: {
     albumIds?: string[];
     city?: string | null;
     country?: string | null;
@@ -6256,6 +6430,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
     visibility?: AssetVisibility;
     withDeleted?: boolean;
     withExif?: boolean;
+    withSharedSpaces?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
@@ -6293,7 +6468,8 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
         updatedBefore,
         visibility,
         withDeleted,
-        withExif
+        withExif,
+        withSharedSpaces
     }))}`, {
         ...opts,
         method: "POST"
@@ -6317,16 +6493,18 @@ export function searchAssets({ metadataSearchDto }: {
 /**
  * Search people
  */
-export function searchPerson({ name, withHidden }: {
+export function searchPerson({ name, withHidden, withSharedSpaces }: {
     name: string;
     withHidden?: boolean;
+    withSharedSpaces?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: PersonResponseDto[];
     }>(`/search/person${QS.query(QS.explode({
         name,
-        withHidden
+        withHidden,
+        withSharedSpaces
     }))}`, {
         ...opts
     }));
@@ -7085,6 +7263,22 @@ export function addMember({ id, sharedSpaceMemberCreateDto }: {
     })));
 }
 /**
+ * Update current member preferences
+ */
+export function updateMemberPreferences({ id, sharedSpaceMemberPreferencesDto }: {
+    id: string;
+    sharedSpaceMemberPreferencesDto: SharedSpaceMemberPreferencesDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: SharedSpaceMemberResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/members/me/preferences`, oazapfts.json({
+        ...opts,
+        method: "PATCH",
+        body: sharedSpaceMemberPreferencesDto
+    })));
+}
+/**
  * Update timeline visibility for current member
  */
 export function updateMemberTimeline({ id, sharedSpaceMemberTimelineDto }: {
@@ -7130,6 +7324,23 @@ export function updateMember({ id, userId, sharedSpaceMemberUpdateDto }: {
     })));
 }
 /**
+ * Disable member person metadata contribution
+ */
+export function updateMemberMetadataContribution({ id, userId, sharedSpaceMemberMetadataContributionDto }: {
+    id: string;
+    userId: string;
+    sharedSpaceMemberMetadataContributionDto: SharedSpaceMemberMetadataContributionDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: SharedSpaceMemberResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}/metadata-contribution`, oazapfts.json({
+        ...opts,
+        method: "PATCH",
+        body: sharedSpaceMemberMetadataContributionDto
+    })));
+}
+/**
  * Get people in a shared space
  */
 export function getSpacePeople({ id, limit, name, named, offset, takenAfter, takenBefore, withHidden }: {
@@ -7166,6 +7377,34 @@ export function deduplicateSpacePeople({ id }: {
     return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/deduplicate`, {
         ...opts,
         method: "POST"
+    }));
+}
+/**
+ * Get people statistics in a shared space
+ */
+export function getSpacePeopleStatistics({ id, limit, name, named, offset, takenAfter, takenBefore, withHidden }: {
+    id: string;
+    limit?: number;
+    name?: string;
+    named?: boolean;
+    offset?: number;
+    takenAfter?: string;
+    takenBefore?: string;
+    withHidden?: boolean;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: SharedSpacePeopleStatisticsResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/people/statistics${QS.query(QS.explode({
+        limit,
+        name,
+        named,
+        offset,
+        takenAfter,
+        takenBefore,
+        withHidden
+    }))}`, {
+        ...opts
     }));
 }
 /**
@@ -7252,6 +7491,40 @@ export function getSpacePersonAssets({ id, personId }: {
     }));
 }
 /**
+ * Get space person faces
+ */
+export function getSpacePersonFaces({ id, page, personId, size }: {
+    id: string;
+    page?: number;
+    personId: string;
+    size?: number;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PersonFacePageResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/faces${QS.query(QS.explode({
+        page,
+        size
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * Get space person face thumbnail
+ */
+export function getSpacePersonFaceThumbnail({ faceId, id, personId }: {
+    faceId: string;
+    id: string;
+    personId: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: Blob;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/faces/${encodeURIComponent(faceId)}/thumbnail`, {
+        ...opts
+    }));
+}
+/**
  * Merge people in a shared space
  */
 export function mergeSpacePeople({ id, personId, sharedSpacePersonMergeDto }: {
@@ -7263,6 +7536,23 @@ export function mergeSpacePeople({ id, personId, sharedSpacePersonMergeDto }: {
         ...opts,
         method: "POST",
         body: sharedSpacePersonMergeDto
+    })));
+}
+/**
+ * Update space person representative face
+ */
+export function updateSpacePersonRepresentativeFace({ id, personId, spaceRepresentativeFaceUpdateDto }: {
+    id: string;
+    personId: string;
+    spaceRepresentativeFaceUpdateDto: SpaceRepresentativeFaceUpdateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: SharedSpacePersonResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/representative-face`, oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: spaceRepresentativeFaceUpdateDto
     })));
 }
 /**
@@ -8565,6 +8855,10 @@ export enum SourceType {
     Exif = "exif",
     Manual = "manual"
 }
+export enum Type {
+    UserPerson = "user-person",
+    SpacePerson = "space-person"
+}
 export enum AssetTypeEnum {
     Image = "IMAGE",
     Video = "VIDEO",
@@ -8597,7 +8891,9 @@ export enum ManualJobName {
     UserCleanup = "user-cleanup",
     MemoryCleanup = "memory-cleanup",
     MemoryCreate = "memory-create",
-    BackupDatabase = "backup-database"
+    BackupDatabase = "backup-database",
+    FaceIdentityBackfill = "face-identity-backfill",
+    SharedSpacePersonMetadataBackfill = "shared-space-person-metadata-backfill"
 }
 export enum QueueName {
     ThumbnailGeneration = "thumbnailGeneration",
@@ -8608,6 +8904,7 @@ export enum QueueName {
     SmartSearch = "smartSearch",
     DuplicateDetection = "duplicateDetection",
     BackgroundTask = "backgroundTask",
+    PeopleBackfill = "peopleBackfill",
     StorageTemplateMigration = "storageTemplateMigration",
     Migration = "migration",
     Search = "search",
@@ -8641,6 +8938,10 @@ export enum MemoryType {
 export enum PartnerDirection {
     SharedBy = "shared-by",
     SharedWith = "shared-with"
+}
+export enum Type2 {
+    Person = "person",
+    SpacePerson = "space-person"
 }
 export enum WorkflowType {
     AssetV1 = "AssetV1",
@@ -8679,6 +8980,7 @@ export enum JobName {
     DatabaseBackup = "DatabaseBackup",
     FacialRecognitionQueueAll = "FacialRecognitionQueueAll",
     FacialRecognition = "FacialRecognition",
+    FaceIdentityBackfill = "FaceIdentityBackfill",
     FileDelete = "FileDelete",
     FileMigrationQueueAll = "FileMigrationQueueAll",
     LibraryDeleteCheck = "LibraryDeleteCheck",
@@ -8724,6 +9026,7 @@ export enum JobName {
     SharedSpaceFaceMatchAll = "SharedSpaceFaceMatchAll",
     SharedSpaceLibraryFaceSync = "SharedSpaceLibraryFaceSync",
     SharedSpacePersonDedup = "SharedSpacePersonDedup",
+    SharedSpacePersonMetadataBackfill = "SharedSpacePersonMetadataBackfill",
     SharedSpaceBulkAddAssets = "SharedSpaceBulkAddAssets",
     AssetClassifyQueueAll = "AssetClassifyQueueAll",
     AssetClassify = "AssetClassify"
@@ -8749,6 +9052,10 @@ export enum SharedSpaceRole {
     Owner = "owner",
     Editor = "editor",
     Viewer = "viewer"
+}
+export enum RepresentativeFaceSource {
+    Auto = "auto",
+    Manual = "manual"
 }
 export enum StorageMigrationDirection {
     ToS3 = "toS3",
