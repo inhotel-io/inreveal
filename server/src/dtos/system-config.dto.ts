@@ -105,6 +105,7 @@ const SystemConfigJobSchema = z
     faceDetection: JobSettingsSchema,
     smartSearch: JobSettingsSchema,
     backgroundTask: JobSettingsSchema,
+    peopleBackfill: JobSettingsSchema,
     migration: JobSettingsSchema,
     search: JobSettingsSchema,
     sidecar: JobSettingsSchema,
