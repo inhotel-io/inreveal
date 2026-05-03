@@ -18,12 +18,14 @@ import { NextFunction, Response } from 'express';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { MapMarkerResponseDto } from 'src/dtos/map.dto';
+import { PersonFacePageQueryDto, PersonFacePageResponseDto } from 'src/dtos/person.dto';
 import {
   SharedSpacePeopleStatisticsResponseDto,
   SharedSpacePersonAliasDto,
   SharedSpacePersonMergeDto,
   SharedSpacePersonResponseDto,
   SharedSpacePersonUpdateDto,
+  SpaceRepresentativeFaceUpdateDto,
   SpacePeopleQueryDto,
 } from 'src/dtos/shared-space-person.dto';
 import {
@@ -337,6 +339,38 @@ export class SharedSpaceController {
   })
   deduplicateSpacePeople(@Auth() auth: AuthDto, @Param('id') id: string): Promise<void> {
     return this.service.deduplicateSpacePeople(auth, id);
+  }
+
+  @Get(':id/people/:personId/faces')
+  @Authenticated({ permission: Permission.SharedSpaceRead })
+  @Endpoint({
+    summary: 'Get space person faces',
+    description: 'Retrieve detected face crops for a person in a shared space.',
+    history: new HistoryBuilder().added('v2').stable('v2'),
+  })
+  getSpacePersonFaces(
+    @Auth() auth: AuthDto,
+    @Param('id') id: string,
+    @Param('personId') personId: string,
+    @Query() dto: PersonFacePageQueryDto,
+  ): Promise<PersonFacePageResponseDto> {
+    return this.service.getSpacePersonFaces(auth, id, personId, dto);
+  }
+
+  @Put(':id/people/:personId/representative-face')
+  @Authenticated({ permission: Permission.SharedSpaceUpdate })
+  @Endpoint({
+    summary: 'Update space person representative face',
+    description: 'Update or clear the exact face crop used as the space person thumbnail.',
+    history: new HistoryBuilder().added('v2').stable('v2'),
+  })
+  updateSpacePersonRepresentativeFace(
+    @Auth() auth: AuthDto,
+    @Param('id') id: string,
+    @Param('personId') personId: string,
+    @Body() dto: SpaceRepresentativeFaceUpdateDto,
+  ): Promise<SharedSpacePersonResponseDto> {
+    return this.service.updateSpacePersonRepresentativeFace(auth, id, personId, dto);
   }
 
   @Get(':id/people/:personId')

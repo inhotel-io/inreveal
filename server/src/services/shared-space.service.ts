@@ -12,12 +12,14 @@ import { AssetEditAction, type CropParameters } from 'src/dtos/editing.dto';
 import type { FilteredMapMarkerDto } from 'src/dtos/gallery-map.dto';
 import type { MapMarkerResponseDto } from 'src/dtos/map.dto';
 import { mapNotification } from 'src/dtos/notification.dto';
+import { PersonFacePageQueryDto, PersonFacePageResponseDto } from 'src/dtos/person.dto';
 import {
   SharedSpacePeopleStatisticsResponseDto,
   SharedSpacePersonAliasDto,
   SharedSpacePersonMergeDto,
   SharedSpacePersonResponseDto,
   SharedSpacePersonUpdateDto,
+  SpaceRepresentativeFaceUpdateDto,
   SpacePeopleQueryDto,
 } from 'src/dtos/shared-space-person.dto';
 import {
@@ -827,6 +829,28 @@ export class SharedSpaceService extends BaseService {
       takenAfter: query?.takenAfter,
       takenBefore: query?.takenBefore,
     });
+  }
+
+  async getSpacePersonFaces(
+    auth: AuthDto,
+    spaceId: string,
+    personId: string,
+    dto: PersonFacePageQueryDto,
+  ): Promise<PersonFacePageResponseDto> {
+    void personId;
+    void dto;
+    await this.requireMembership(auth, spaceId);
+    return { faces: [], hasNextPage: false };
+  }
+
+  async updateSpacePersonRepresentativeFace(
+    auth: AuthDto,
+    spaceId: string,
+    personId: string,
+    dto: SpaceRepresentativeFaceUpdateDto,
+  ): Promise<SharedSpacePersonResponseDto> {
+    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+    throw new BadRequestException(`Invalid representative face ${dto.assetFaceId ?? 'auto'}`);
   }
 
   async getSpacePerson(auth: AuthDto, spaceId: string, personId: string): Promise<SharedSpacePersonResponseDto> {
@@ -2118,6 +2142,7 @@ export class SharedSpaceService extends BaseService {
       isHidden: person.isHidden,
       birthDate: asBirthDateString(person.birthDate),
       representativeFaceId: person.representativeFaceId,
+      representativeFaceSource: person.representativeFaceSource ?? 'auto',
       faceCount: person.faceCount,
       assetCount: person.assetCount,
       alias,

@@ -1,4 +1,5 @@
 import {
+  Check,
   Column,
   CreateDateColumn,
   ForeignKeyColumn,
@@ -29,6 +30,10 @@ import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
   columns: ['identityId', 'spaceId'],
   where: '"identityId" IS NOT NULL',
 })
+@Check({
+  name: 'shared_space_person_representativeFaceSource_chk',
+  expression: `"representativeFaceSource" IN ('auto', 'manual')`,
+})
 export class SharedSpacePersonTable {
   @PrimaryGeneratedColumn()
   id!: Generated<string>;
@@ -41,6 +46,9 @@ export class SharedSpacePersonTable {
 
   @ForeignKeyColumn(() => AssetFaceTable, { onDelete: 'SET NULL', nullable: true })
   representativeFaceId!: string | null;
+
+  @Column({ type: 'character varying', default: 'auto' })
+  representativeFaceSource!: Generated<string>;
 
   @Column({ type: 'boolean', default: false })
   isHidden!: Generated<boolean>;

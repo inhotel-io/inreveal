@@ -156,6 +156,37 @@ export const AssetFaceWithoutPersonResponseSchema = z
 
 class AssetFaceWithoutPersonResponseDto extends createZodDto(AssetFaceWithoutPersonResponseSchema) {}
 
+const PersonFacePageQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1).describe('Page number'),
+    size: z.coerce.number().int().min(1).max(100).default(50).describe('Number of faces per page'),
+  })
+  .meta({ id: 'PersonFacePageQueryDto' });
+
+const RepresentativeFaceUpdateSchema = z
+  .object({
+    assetFaceId: z.uuidv4().describe('Asset face ID used as the representative face'),
+  })
+  .meta({ id: 'RepresentativeFaceUpdateDto' });
+
+const PersonFaceResponseSchema = AssetFaceWithoutPersonResponseSchema.extend({
+  assetId: z.uuidv4().describe('Asset ID containing the face'),
+  isRepresentative: z.boolean().describe('Whether this face is the current representative face'),
+  fileCreatedAt: z.string().meta({ format: 'date-time' }).optional().describe('Asset creation date'),
+}).meta({ id: 'PersonFaceResponseDto' });
+
+const PersonFacePageResponseSchema = z
+  .object({
+    faces: z.array(PersonFaceResponseSchema),
+    hasNextPage: z.boolean(),
+  })
+  .meta({ id: 'PersonFacePageResponseDto' });
+
+export class PersonFacePageQueryDto extends createZodDto(PersonFacePageQuerySchema) {}
+export class RepresentativeFaceUpdateDto extends createZodDto(RepresentativeFaceUpdateSchema) {}
+export class PersonFaceResponseDto extends createZodDto(PersonFaceResponseSchema) {}
+export class PersonFacePageResponseDto extends createZodDto(PersonFacePageResponseSchema) {}
+
 export const PersonWithFacesResponseSchema = PersonResponseSchema.extend({
   faces: z.array(AssetFaceWithoutPersonResponseSchema),
   spacePersonId: z.string().optional().describe('Space person ID (when viewed through a space)'),

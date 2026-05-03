@@ -194,6 +194,32 @@ describe(PersonController.name, () => {
     });
   });
 
+  describe('representative face routes', () => {
+    it('should require representative assetFaceId to be a uuid', async () => {
+      const { status, body } = await request(ctx.getHttpServer())
+        .put('/people/00000000-0000-4000-8000-000000000001/representative-face')
+        .send({ assetFaceId: 'invalid' })
+        .set('Authorization', `Bearer token`);
+
+      expect(status).toBe(400);
+      expect(body).toEqual(errorDto.badRequest(['[assetFaceId] Invalid UUID']));
+    });
+
+    it('should parse person face page query values', async () => {
+      service.getFacesForPicker.mockResolvedValue({ faces: [], hasNextPage: false });
+
+      const { status } = await request(ctx.getHttpServer())
+        .get('/people/00000000-0000-4000-8000-000000000001/faces?page=1&size=25')
+        .set('Authorization', `Bearer token`);
+
+      expect(status).toBe(200);
+      expect(service.getFacesForPicker).toHaveBeenCalledWith(undefined, '00000000-0000-4000-8000-000000000001', {
+        page: 1,
+        size: 25,
+      });
+    });
+  });
+
   describe('GET /people/:id', () => {
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).get(`/people/${factory.uuid()}`);

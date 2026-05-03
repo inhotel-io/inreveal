@@ -20,10 +20,13 @@ import {
   PeopleResponseDto,
   PeopleUpdateDto,
   PersonCreateDto,
+  PersonFacePageQueryDto,
+  PersonFacePageResponseDto,
   PersonResponseDto,
   PersonSearchDto,
   PersonStatisticsResponseDto,
   PersonUpdateDto,
+  RepresentativeFaceUpdateDto,
 } from 'src/dtos/person.dto';
 import {
   AssetVisibility,
@@ -221,6 +224,25 @@ export class PersonService extends BaseService {
   async getById(auth: AuthDto, id: string): Promise<PersonResponseDto> {
     await this.requireAccess({ auth, permission: Permission.PersonRead, ids: [id] });
     return this.findOrFail(id).then(mapPerson);
+  }
+
+  async getFacesForPicker(
+    auth: AuthDto,
+    id: string,
+    dto: PersonFacePageQueryDto,
+  ): Promise<PersonFacePageResponseDto> {
+    void dto;
+    await this.requireAccess({ auth, permission: Permission.PersonRead, ids: [id] });
+    return { faces: [], hasNextPage: false };
+  }
+
+  async updateRepresentativeFace(
+    auth: AuthDto,
+    id: string,
+    dto: RepresentativeFaceUpdateDto,
+  ): Promise<PersonResponseDto> {
+    await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [id] });
+    throw new BadRequestException(`Invalid representative face ${dto.assetFaceId}`);
   }
 
   async getStatistics(auth: AuthDto, id: string): Promise<PersonStatisticsResponseDto> {

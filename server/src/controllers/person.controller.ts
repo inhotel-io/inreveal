@@ -25,10 +25,13 @@ import {
   PeopleResponseDto,
   PeopleUpdateDto,
   PersonCreateDto,
+  PersonFacePageQueryDto,
+  PersonFacePageResponseDto,
   PersonResponseDto,
   PersonSearchDto,
   PersonStatisticsResponseDto,
   PersonUpdateDto,
+  RepresentativeFaceUpdateDto,
 } from 'src/dtos/person.dto';
 import { ApiTag, Permission } from 'src/enum';
 import { Auth, Authenticated, FileResponse } from 'src/middleware/auth.guard';
@@ -114,6 +117,36 @@ export class PersonController {
   })
   detachScopedPerson(@Auth() auth: AuthDto, @Body() dto: DetachScopedPersonDto): Promise<void> {
     return this.service.detachScopedPerson(auth, dto);
+  }
+
+  @Get(':id/faces')
+  @Authenticated({ permission: Permission.PersonRead })
+  @Endpoint({
+    summary: 'Get person faces',
+    description: 'Retrieve detected face crops for a person.',
+    history: new HistoryBuilder().added('v2').stable('v2'),
+  })
+  getPersonFaces(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Query() dto: PersonFacePageQueryDto,
+  ): Promise<PersonFacePageResponseDto> {
+    return this.service.getFacesForPicker(auth, id, dto);
+  }
+
+  @Put(':id/representative-face')
+  @Authenticated({ permission: Permission.PersonUpdate })
+  @Endpoint({
+    summary: 'Update representative face',
+    description: 'Update the exact face crop used as the person thumbnail.',
+    history: new HistoryBuilder().added('v2').stable('v2'),
+  })
+  updateRepresentativeFace(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: RepresentativeFaceUpdateDto,
+  ): Promise<PersonResponseDto> {
+    return this.service.updateRepresentativeFace(auth, id, dto);
   }
 
   @Get(':id')
