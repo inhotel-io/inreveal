@@ -71,9 +71,15 @@ export class PersonService extends BaseService {
 
   async getAll(auth: AuthDto, dto: PersonSearchDto): Promise<PeopleResponseDto> {
     const { withHidden = false, withSharedSpaces = false, closestAssetId, closestPersonId, page, size } = dto;
+    const { machineLearning } = await this.getConfig({ withCache: false });
 
     if (withSharedSpaces) {
-      return this.faceIdentityRepository.getAccessiblePeople(auth.user.id, { withHidden, page, size });
+      return this.faceIdentityRepository.getAccessiblePeople(auth.user.id, {
+        withHidden,
+        page,
+        size,
+        minimumFaceCount: machineLearning.facialRecognition.minFaces,
+      });
     }
 
     let closestFaceAssetId = closestAssetId;
@@ -89,7 +95,6 @@ export class PersonService extends BaseService {
       }
       closestFaceAssetId = person.faceAssetId;
     }
-    const { machineLearning } = await this.getConfig({ withCache: false });
     const { items, hasNextPage } = await this.personRepository.getAllForUser(pagination, auth.user.id, {
       minimumFaceCount: machineLearning.facialRecognition.minFaces,
       withHidden,

@@ -125,6 +125,7 @@ describe(PersonService.name, () => {
         withHidden: true,
         page: 1,
         size: 50,
+        minimumFaceCount: 3,
       });
       expect(mocks.person.getAllForUser).not.toHaveBeenCalled();
     });

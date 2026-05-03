@@ -291,6 +291,56 @@ describe(FaceIdentityRepository.name, () => {
     }
   });
 
+  it('filters unnamed identity-grouped people below the configured minimum face count', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+
+    try {
+      const { person: singletonPerson } = await ctx.newPerson({ ownerId: user.id, name: '' });
+      const { asset: singletonAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: singletonFace } = await ctx.newAssetFace({
+        assetId: singletonAsset.id,
+        personId: singletonPerson.id,
+      });
+      const singletonIdentity = await sut.ensurePersonIdentity(singletonPerson.id);
+      await sut.linkFace({ assetFaceId: singletonFace.id, identityId: singletonIdentity.id, source: 'owner-person' });
+
+      const { person: namedSingletonPerson } = await ctx.newPerson({ ownerId: user.id, name: 'Named singleton' });
+      const { asset: namedAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: namedFace } = await ctx.newAssetFace({
+        assetId: namedAsset.id,
+        personId: namedSingletonPerson.id,
+      });
+      const namedIdentity = await sut.ensurePersonIdentity(namedSingletonPerson.id);
+      await sut.linkFace({ assetFaceId: namedFace.id, identityId: namedIdentity.id, source: 'owner-person' });
+
+      const { person: eligiblePerson } = await ctx.newPerson({ ownerId: user.id, name: '' });
+      const eligibleIdentity = await sut.ensurePersonIdentity(eligiblePerson.id);
+      for (let index = 0; index < 3; index++) {
+        const { asset } = await ctx.newAsset({ ownerId: user.id });
+        const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: eligiblePerson.id });
+        await sut.linkFace({ assetFaceId: assetFace.id, identityId: eligibleIdentity.id, source: 'owner-person' });
+      }
+
+      const result = await sut.getAccessiblePeople(user.id, {
+        withHidden: false,
+        page: 1,
+        size: 50,
+        minimumFaceCount: 3,
+      });
+
+      expect(result.total).toBe(2);
+      expect(result.people.map((person) => person.id)).toEqual(
+        expect.arrayContaining([namedSingletonPerson.id, eligiblePerson.id]),
+      );
+      expect(result.people.map((person) => person.id)).not.toContain(singletonPerson.id);
+      expect(result.people.find((person) => person.id === namedSingletonPerson.id)?.numberOfAssets).toBe(1);
+      expect(result.people.find((person) => person.id === eligiblePerson.id)?.numberOfAssets).toBe(3);
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
+  });
+
   it('infers shared-space person identity from linked personal faces and reports conflicts', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();

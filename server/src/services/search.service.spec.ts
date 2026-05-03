@@ -73,6 +73,7 @@ describe(SearchService.name, () => {
         name: 'alice',
         withHidden: false,
         limit: 50,
+        minimumFaceCount: 3,
       });
       expect(mocks.person.getByName).not.toHaveBeenCalled();
     });

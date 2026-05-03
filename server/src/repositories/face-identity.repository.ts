@@ -42,12 +42,14 @@ type AccessiblePeopleOptions = {
   withHidden: boolean;
   page: number;
   size: number;
+  minimumFaceCount?: number;
 };
 
 type AccessiblePeopleSearchOptions = {
   name: string;
   withHidden?: boolean;
   limit?: number;
+  minimumFaceCount?: number;
 };
 
 type ProfileKind = 'person' | 'space-person';
@@ -349,6 +351,7 @@ export class FaceIdentityRepository {
       limit: options.limit ?? 50,
       offset: 0,
       searchName: options.name,
+      minimumFaceCount: options.minimumFaceCount ?? 1,
     });
 
     return this.hydrateAccessiblePeople({
@@ -361,12 +364,13 @@ export class FaceIdentityRepository {
   @GenerateSql({ params: [DummyValue.UUID, { limit: 100 }] })
   async getAccessiblePersonFilterSuggestions(
     userId: string,
-    options: { limit?: number } = {},
+    options: { limit?: number; minimumFaceCount?: number } = {},
   ): Promise<{ people: Array<{ id: string; name: string }>; hasUnnamedPeople: boolean }> {
     const people = await this.searchAccessiblePeople(userId, {
       name: '',
       withHidden: false,
       limit: options.limit ?? 100,
+      minimumFaceCount: options.minimumFaceCount,
     });
 
     return {
@@ -380,11 +384,13 @@ export class FaceIdentityRepository {
   async getAccessiblePeople(userId: string, options: AccessiblePeopleOptions): Promise<PeopleResponseDto> {
     const page = Math.max(1, options.page);
     const size = Math.max(1, options.size);
+    const minimumFaceCount = options.minimumFaceCount ?? 1;
     const rows = await this.getAccessiblePeopleIdentityPage({
       userId,
       withHidden: options.withHidden,
       limit: size + 1,
       offset: (page - 1) * size,
+      minimumFaceCount,
     });
     const pageRows = rows.slice(0, size);
     const people = await this.hydrateAccessiblePeople({
@@ -392,7 +398,7 @@ export class FaceIdentityRepository {
       identityIds: pageRows.map((row) => row.identityId),
       withHidden: options.withHidden,
     });
-    const counts = await this.getAccessiblePeopleCounts(userId);
+    const counts = await this.getAccessiblePeopleCounts(userId, minimumFaceCount);
 
     return {
       total: Number(counts.total ?? 0),
@@ -745,12 +751,15 @@ export class FaceIdentityRepository {
     return spaceRows.every((row) => this.isRepairRole(row.role));
   }
 
-  @GenerateSql({ params: [{ userId: DummyValue.UUID, withHidden: true, limit: 51, offset: 0 }] })
+  @GenerateSql({
+    params: [{ userId: DummyValue.UUID, withHidden: true, limit: 51, offset: 0, minimumFaceCount: 3 }],
+  })
   async getAccessiblePeopleIdentityPage(input: {
     userId: string;
     withHidden: boolean;
     limit: number;
     offset: number;
+    minimumFaceCount: number;
     searchName?: string;
   }): Promise<AccessiblePeopleIdentityPageRow[]> {
     const searchName = input.searchName ?? '';
@@ -854,6 +863,8 @@ export class FaceIdentityRepository {
         identity_counts."visibleAssetCount"
       FROM identity_counts
       INNER JOIN best_profiles ON best_profiles."identityId" = identity_counts."identityId"
+      WHERE NULLIF(best_profiles.name, '') IS NOT NULL
+        OR identity_counts."visibleAssetCount" >= ${input.minimumFaceCount}
       ORDER BY
         NULLIF(best_profiles.name, '') IS NULL,
         lower(best_profiles.name),
@@ -866,7 +877,10 @@ export class FaceIdentityRepository {
     return result.rows;
   }
 
-  async getAccessiblePeopleCounts(userId: string): Promise<{ total: number; hidden: number }> {
+  async getAccessiblePeopleCounts(
+    userId: string,
+    minimumFaceCount: number,
+  ): Promise<{ total: number; hidden: number }> {
     const result = await sql<AccessiblePeopleCountRow>`
       WITH timeline_spaces AS (
         SELECT "spaceId"
@@ -875,7 +889,9 @@ export class FaceIdentityRepository {
           AND "showInTimeline" = true
       ),
       accessible_faces AS (
-        SELECT DISTINCT face_identity_face."identityId"
+        SELECT
+          face_identity_face."identityId",
+          asset_face."assetId"
         FROM face_identity_face
         INNER JOIN asset_face ON asset_face.id = face_identity_face."assetFaceId"
         INNER JOIN asset ON asset.id = asset_face."assetId"
@@ -899,16 +915,29 @@ export class FaceIdentityRepository {
             )
           )
       ),
+      identity_counts AS (
+        SELECT
+          accessible_faces."identityId",
+          COUNT(DISTINCT accessible_faces."assetId") AS "visibleAssetCount"
+        FROM accessible_faces
+        GROUP BY accessible_faces."identityId"
+      ),
       accessible_profiles AS (
-        SELECT person."identityId", person."isHidden"
+        SELECT person."identityId", person."isHidden", person.name
         FROM person
         WHERE person."ownerId" = ${userId}
           AND person."identityId" IS NOT NULL
           AND EXISTS (SELECT 1 FROM accessible_faces WHERE accessible_faces."identityId" = person."identityId")
         UNION ALL
-        SELECT shared_space_person."identityId", shared_space_person."isHidden"
+        SELECT
+          shared_space_person."identityId",
+          shared_space_person."isHidden",
+          COALESCE(NULLIF(shared_space_person_alias.alias, ''), shared_space_person.name, '') AS name
         FROM shared_space_person
         INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_person."spaceId"
+        LEFT JOIN shared_space_person_alias
+          ON shared_space_person_alias."personId" = shared_space_person.id
+          AND shared_space_person_alias."userId" = ${userId}
         WHERE shared_space_person."identityId" IS NOT NULL
           AND EXISTS (
             SELECT 1 FROM accessible_faces WHERE accessible_faces."identityId" = shared_space_person."identityId"
@@ -917,7 +946,8 @@ export class FaceIdentityRepository {
       identity_visibility AS (
         SELECT
           "identityId",
-          bool_or("isHidden" = false) AS "hasVisibleProfile"
+          bool_or("isHidden" = false) AS "hasVisibleProfile",
+          bool_or(NULLIF(name, '') IS NOT NULL) AS "hasNamedProfile"
         FROM accessible_profiles
         GROUP BY "identityId"
       )
@@ -925,6 +955,9 @@ export class FaceIdentityRepository {
         COUNT(*) AS total,
         COUNT(*) FILTER (WHERE "hasVisibleProfile" = false) AS hidden
       FROM identity_visibility
+      INNER JOIN identity_counts ON identity_counts."identityId" = identity_visibility."identityId"
+      WHERE identity_visibility."hasNamedProfile" = true
+        OR identity_counts."visibleAssetCount" >= ${minimumFaceCount}
     `.execute(this.db);
 
     const row = result.rows[0];
@@ -1375,10 +1408,7 @@ export class FaceIdentityRepository {
       .where(
         'assetFaceId',
         'in',
-        this.db
-          .selectFrom('shared_space_person_face')
-          .select('assetFaceId')
-          .where('personId', '=', input.toPersonId),
+        this.db.selectFrom('shared_space_person_face').select('assetFaceId').where('personId', '=', input.toPersonId),
       )
       .execute();
 
@@ -1417,7 +1447,10 @@ export class FaceIdentityRepository {
           .where('asset.deletedAt', 'is', null)
           .where('asset.visibility', '=', sql.lit(AssetVisibility.Timeline))
           .select((eb2) =>
-            eb2.fn.count(eb2.fn('distinct', ['asset_face.assetId'])).$castTo<number>().as('count'),
+            eb2.fn
+              .count(eb2.fn('distinct', ['asset_face.assetId']))
+              .$castTo<number>()
+              .as('count'),
           )
           .whereRef('shared_space_person_face.personId', '=', 'shared_space_person.id'),
       }))

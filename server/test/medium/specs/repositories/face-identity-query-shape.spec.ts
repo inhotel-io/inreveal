@@ -60,6 +60,7 @@ describe('Face identity query shape', () => {
       withHidden: true,
       limit: 3,
       offset: 0,
+      minimumFaceCount: 1,
     });
     const hydrated = await sut.hydrateAccessiblePeople({
       userId: viewer.id,

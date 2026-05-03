@@ -68,10 +68,12 @@ export class SearchService extends BaseService {
 
   async searchPerson(auth: AuthDto, dto: SearchPeopleDto): Promise<PersonResponseDto[]> {
     if (dto.withSharedSpaces) {
+      const { machineLearning } = await this.getConfig({ withCache: false });
       return this.faceIdentityRepository.searchAccessiblePeople(auth.user.id, {
         name: dto.name,
         withHidden: dto.withHidden,
         limit: 50,
+        minimumFaceCount: machineLearning.facialRecognition.minFaces,
       });
     }
 
