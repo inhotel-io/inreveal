@@ -2662,6 +2662,12 @@ export type SharedSpacePersonResponseDto = {
     /** Last update date */
     updatedAt: string;
 };
+export type SharedSpacePeopleStatisticsResponseDto = {
+    /** Number of hidden people */
+    hidden: number;
+    /** Total number of people */
+    total: number;
+};
 export type SharedSpacePersonUpdateDto = {
     /** Person date of birth */
     birthDate?: string | null;
@@ -7028,6 +7034,34 @@ export function deduplicateSpacePeople({ id }: {
     return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/deduplicate`, {
         ...opts,
         method: "POST"
+    }));
+}
+/**
+ * Get people statistics in a shared space
+ */
+export function getSpacePeopleStatistics({ id, limit, name, named, offset, takenAfter, takenBefore, withHidden }: {
+    id: string;
+    limit?: number;
+    name?: string;
+    named?: boolean;
+    offset?: number;
+    takenAfter?: string;
+    takenBefore?: string;
+    withHidden?: boolean;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: SharedSpacePeopleStatisticsResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/people/statistics${QS.query(QS.explode({
+        limit,
+        name,
+        named,
+        offset,
+        takenAfter,
+        takenBefore,
+        withHidden
+    }))}`, {
+        ...opts
     }));
 }
 /**

@@ -263,6 +263,50 @@ export class FaceIdentityRepository {
         )
         OR EXISTS (
           SELECT 1
+          FROM asset_face
+          INNER JOIN asset ON asset.id = asset_face."assetId"
+          INNER JOIN face_identity_face ON face_identity_face."assetFaceId" = asset_face.id
+          WHERE asset_face."personId" IS NOT NULL
+            AND asset_face."deletedAt" IS NULL
+            AND asset_face."isVisible" = true
+            AND asset."deletedAt" IS NULL
+            AND asset."isOffline" = false
+            AND asset.visibility IN (${AssetVisibility.Timeline}, ${AssetVisibility.Archive})
+            AND (
+              EXISTS (
+                SELECT 1
+                FROM shared_space_asset
+                INNER JOIN shared_space ON shared_space.id = shared_space_asset."spaceId"
+                WHERE shared_space_asset."assetId" = asset.id
+                  AND shared_space."faceRecognitionEnabled" = true
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM shared_space_person_face
+                    INNER JOIN shared_space_person
+                      ON shared_space_person.id = shared_space_person_face."personId"
+                    WHERE shared_space_person_face."assetFaceId" = asset_face.id
+                      AND shared_space_person."spaceId" = shared_space.id
+                  )
+              )
+              OR EXISTS (
+                SELECT 1
+                FROM shared_space_library
+                INNER JOIN shared_space ON shared_space.id = shared_space_library."spaceId"
+                WHERE shared_space_library."libraryId" = asset."libraryId"
+                  AND shared_space."faceRecognitionEnabled" = true
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM shared_space_person_face
+                    INNER JOIN shared_space_person
+                      ON shared_space_person.id = shared_space_person_face."personId"
+                    WHERE shared_space_person_face."assetFaceId" = asset_face.id
+                      AND shared_space_person."spaceId" = shared_space.id
+                  )
+              )
+            )
+        )
+        OR EXISTS (
+          SELECT 1
           FROM (
             SELECT
               shared_space_person.id,

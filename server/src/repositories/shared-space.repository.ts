@@ -685,6 +685,50 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  @GenerateSql({
+    params: [DummyValue.UUID, { petsEnabled: true, named: false, name: 'Alice' }],
+  })
+  countPersonsBySpaceId(
+    spaceId: string,
+    options: {
+      petsEnabled?: boolean;
+      named?: boolean;
+      name?: string;
+      takenAfter?: Date;
+      takenBefore?: Date;
+    },
+  ) {
+    const escapedName = options.name
+      ?.replaceAll('\\', String.raw`\\`)
+      .replaceAll('%', String.raw`\%`)
+      .replaceAll('_', String.raw`\_`);
+    const namePattern = escapedName ? `%${escapedName}%` : undefined;
+    const zero = sql.lit(0);
+
+    return this.db
+      .selectFrom('shared_space_person')
+      .where('shared_space_person.spaceId', '=', spaceId)
+      .$if(!options.petsEnabled, (qb) => qb.where('shared_space_person.type', '!=', 'pet'))
+      .$if(!!options.named, (qb) => qb.where('shared_space_person.name', '!=', ''))
+      .$if(!!namePattern, (qb) => qb.where(() => sql`"shared_space_person"."name" ILIKE ${namePattern} ESCAPE '\\'`))
+      .$if(!!options.takenAfter || !!options.takenBefore, (qb) =>
+        qb.where((eb) =>
+          eb.exists(
+            eb
+              .selectFrom('shared_space_person_face as spf2')
+              .innerJoin('asset_face as af2', 'af2.id', 'spf2.assetFaceId')
+              .innerJoin('asset', 'asset.id', 'af2.assetId')
+              .whereRef('spf2.personId', '=', 'shared_space_person.id')
+              .$if(!!options.takenAfter, (qb2) => qb2.where('asset.fileCreatedAt', '>=', options.takenAfter!))
+              .$if(!!options.takenBefore, (qb2) => qb2.where('asset.fileCreatedAt', '<', options.takenBefore!)),
+          ),
+        ),
+      )
+      .select((eb) => eb.fn.coalesce(eb.fn.countAll<number>(), zero).as('total'))
+      .select((eb) => eb.fn.coalesce(eb.fn.countAll<number>().filterWhere('isHidden', '=', true), zero).as('hidden'))
+      .executeTakeFirstOrThrow();
+  }
+
   @GenerateSql({ params: [DummyValue.UUID] })
   getPersonById(id: string) {
     return this.db

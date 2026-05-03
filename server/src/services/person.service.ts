@@ -359,11 +359,14 @@ export class PersonService extends BaseService {
     stage = 'person',
     cursor,
   }: JobOf<JobName.FaceIdentityBackfill>): Promise<JobStatus> {
+    let processed = 0;
+
     if (stage === 'person') {
       const result = await this.faceIdentityRepository.backfillPersonalIdentities({
         cursor,
         limit: FACE_IDENTITY_BACKFILL_CHUNK_SIZE,
       });
+      processed += result.processed;
 
       if (result.nextCursor) {
         await this.jobRepository.queue({
@@ -378,6 +381,7 @@ export class PersonService extends BaseService {
       cursor: stage === 'space-person' ? cursor : undefined,
       limit: FACE_IDENTITY_BACKFILL_CHUNK_SIZE,
     });
+    processed += result.processed;
 
     if (result.conflictCount > 0) {
       this.logger.warn(`Face identity backfill left ${result.conflictCount} space people unresolved`);
@@ -391,7 +395,16 @@ export class PersonService extends BaseService {
       return JobStatus.Success;
     }
 
-    if (result.processed > 0) {
+    const shouldRebuildSpacePeople = processed > 0 || (await this.faceIdentityRepository.hasBackfillWork());
+
+    if (shouldRebuildSpacePeople) {
+      const spaceIds = await this.sharedSpaceRepository.getSpaceIdsWithFaceRecognitionEnabled();
+      await this.jobRepository.queueAll(
+        spaceIds.map((spaceId) => ({
+          name: JobName.SharedSpaceFaceMatchAll as const,
+          data: { spaceId },
+        })),
+      );
       await this.queueSpacePersonMetadataBackfill();
     }
 

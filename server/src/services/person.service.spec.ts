@@ -48,6 +48,7 @@ describe(PersonService.name, () => {
     mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identity-1' } as any);
     (mocks.faceIdentity as any).getAccessiblePeople ??= vi.fn();
     (mocks.faceIdentity as any).hasBackfillWork ??= vi.fn();
+    mocks.sharedSpace.getSpaceIdsWithFaceRecognitionEnabled.mockResolvedValue([]);
   });
 
   it('should be defined', () => {
@@ -1381,6 +1382,44 @@ describe(PersonService.name, () => {
 
       await expect(sut.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
 
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
+      });
+    });
+
+    it('should queue space face matching after identity links are backfilled', async () => {
+      mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 1 });
+      mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({
+        processed: 0,
+        conflictCount: 0,
+      });
+      mocks.sharedSpace.getSpaceIdsWithFaceRecognitionEnabled.mockResolvedValue(['space-1', 'space-2']);
+
+      await expect(sut.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.sharedSpace.getSpaceIdsWithFaceRecognitionEnabled).toHaveBeenCalled();
+      expect(mocks.job.queueAll).toHaveBeenCalledWith([
+        { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: 'space-1' } },
+        { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: 'space-2' } },
+      ]);
+    });
+
+    it('should queue space face matching when projection backfill work remains after an idempotent rerun', async () => {
+      mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 0 });
+      mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({
+        processed: 0,
+        conflictCount: 0,
+      });
+      mocks.faceIdentity.hasBackfillWork.mockResolvedValue(true);
+      mocks.sharedSpace.getSpaceIdsWithFaceRecognitionEnabled.mockResolvedValue(['space-1']);
+
+      await expect(sut.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.faceIdentity.hasBackfillWork).toHaveBeenCalled();
+      expect(mocks.job.queueAll).toHaveBeenCalledWith([
+        { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: 'space-1' } },
+      ]);
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.SharedSpacePersonMetadataBackfill,
         data: {},

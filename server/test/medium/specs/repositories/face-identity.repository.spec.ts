@@ -90,6 +90,35 @@ describe(FaceIdentityRepository.name, () => {
     }
   });
 
+  it('reports backfill work for identity-linked faces missing from linked-library space people', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    try {
+      const { library } = await ctx.newLibrary({ ownerId: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, libraryId: library.id });
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+      const identity = await sut.ensurePersonIdentity(person.id);
+      await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'backfill' });
+      const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
+
+      await expect(sut.hasBackfillWork()).resolves.toBe(true);
+
+      const spacePerson = await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: space.id, identityId: identity.id, representativeFaceId: assetFace.id })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+
+      await expect(sut.hasBackfillWork()).resolves.toBe(false);
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
+  });
+
   it('does not report unresolved space-person conflicts as recurring backfill work', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();

@@ -62,8 +62,16 @@ const SharedSpacePersonResponseSchema = z
   })
   .meta({ id: 'SharedSpacePersonResponseDto' });
 
+const SharedSpacePeopleStatisticsResponseSchema = z
+  .object({
+    total: z.int().min(0).describe('Total number of people'),
+    hidden: z.int().min(0).describe('Number of hidden people'),
+  })
+  .meta({ id: 'SharedSpacePeopleStatisticsResponseDto' });
+
 export class SpacePeopleQueryDto extends createZodDto(SpacePeopleQuerySchema) {}
 export class SharedSpacePersonUpdateDto extends createZodDto(SharedSpacePersonUpdateSchema) {}
 export class SharedSpacePersonAliasDto extends createZodDto(SharedSpacePersonAliasSchema) {}
 export class SharedSpacePersonMergeDto extends createZodDto(SharedSpacePersonMergeSchema) {}
 export class SharedSpacePersonResponseDto extends createZodDto(SharedSpacePersonResponseSchema) {}
+export class SharedSpacePeopleStatisticsResponseDto extends createZodDto(SharedSpacePeopleStatisticsResponseSchema) {}

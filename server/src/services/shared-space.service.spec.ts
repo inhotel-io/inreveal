@@ -3934,6 +3934,30 @@ describe(SharedSpaceService.name, () => {
     });
   });
 
+  describe('getSpacePeopleStatistics', () => {
+    it('should return exact totals for visible and hidden space people', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true, petsEnabled: false });
+      const takenAfter = new Date('2025-06-01');
+
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
+      mocks.sharedSpace.getById.mockResolvedValue(space);
+      mocks.sharedSpace.countPersonsBySpaceId.mockResolvedValue({ total: 152, hidden: 3 });
+
+      const result = await sut.getSpacePeopleStatistics(auth, spaceId, { name: 'Ali', takenAfter } as never);
+
+      expect(result).toEqual({ total: 152, hidden: 3 });
+      expect(mocks.sharedSpace.countPersonsBySpaceId).toHaveBeenCalledWith(spaceId, {
+        petsEnabled: false,
+        named: undefined,
+        name: 'Ali',
+        takenAfter,
+        takenBefore: undefined,
+      });
+    });
+  });
+
   describe('getSpacePerson', () => {
     it('should require membership', async () => {
       mocks.sharedSpace.getMember.mockResolvedValue(void 0);

@@ -19,6 +19,7 @@ import { Endpoint, HistoryBuilder } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { MapMarkerResponseDto } from 'src/dtos/map.dto';
 import {
+  SharedSpacePeopleStatisticsResponseDto,
   SharedSpacePersonAliasDto,
   SharedSpacePersonMergeDto,
   SharedSpacePersonResponseDto,
@@ -309,6 +310,21 @@ export class SharedSpaceController {
     @Query() query: SpacePeopleQueryDto,
   ): Promise<SharedSpacePersonResponseDto[]> {
     return this.service.getSpacePeople(auth, id, query);
+  }
+
+  @Get(':id/people/statistics')
+  @Authenticated({ permission: Permission.SharedSpaceRead })
+  @Endpoint({
+    summary: 'Get people statistics in a shared space',
+    description: 'Retrieve people counts for a shared space.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  getSpacePeopleStatistics(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Query() query: SpacePeopleQueryDto,
+  ): Promise<SharedSpacePeopleStatisticsResponseDto> {
+    return this.service.getSpacePeopleStatistics(auth, id, query);
   }
 
   @Post(':id/people/deduplicate')

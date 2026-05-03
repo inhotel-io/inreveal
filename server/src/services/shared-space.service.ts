@@ -13,6 +13,7 @@ import type { FilteredMapMarkerDto } from 'src/dtos/gallery-map.dto';
 import type { MapMarkerResponseDto } from 'src/dtos/map.dto';
 import { mapNotification } from 'src/dtos/notification.dto';
 import {
+  SharedSpacePeopleStatisticsResponseDto,
   SharedSpacePersonAliasDto,
   SharedSpacePersonMergeDto,
   SharedSpacePersonResponseDto,
@@ -804,6 +805,27 @@ export class SharedSpaceService extends BaseService {
     const aliasMap = new Map(aliases.map((a) => [a.personId, a.alias]));
 
     return persons.map((person) => this.mapSpacePerson(person, aliasMap.get(person.id) ?? null));
+  }
+
+  async getSpacePeopleStatistics(
+    auth: AuthDto,
+    spaceId: string,
+    query?: SpacePeopleQueryDto,
+  ): Promise<SharedSpacePeopleStatisticsResponseDto> {
+    await this.requireMembership(auth, spaceId);
+
+    const space = await this.sharedSpaceRepository.getById(spaceId);
+    if (!space?.faceRecognitionEnabled) {
+      return { total: 0, hidden: 0 };
+    }
+
+    return this.sharedSpaceRepository.countPersonsBySpaceId(spaceId, {
+      petsEnabled: space.petsEnabled,
+      named: query?.named,
+      name: query?.name,
+      takenAfter: query?.takenAfter,
+      takenBefore: query?.takenBefore,
+    });
   }
 
   async getSpacePerson(auth: AuthDto, spaceId: string, personId: string): Promise<SharedSpacePersonResponseDto> {

@@ -1421,6 +1421,36 @@ describe(SharedSpaceRepository.name, () => {
     });
   });
 
+  describe('countPersonsBySpaceId', () => {
+    it('should count total and hidden people with name and pet filters', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+
+      await sut.createPerson({ spaceId: space.id, name: 'Alice', representativeFaceId: null, type: 'person' });
+      await sut.createPerson({
+        spaceId: space.id,
+        name: 'Alicia',
+        representativeFaceId: null,
+        isHidden: true,
+        type: 'person',
+      });
+      await sut.createPerson({
+        spaceId: space.id,
+        name: 'Alice Pet',
+        representativeFaceId: null,
+        isHidden: true,
+        type: 'pet',
+      });
+      await sut.createPerson({ spaceId: space.id, name: 'Bob', representativeFaceId: null, type: 'person' });
+
+      const result = await sut.countPersonsBySpaceId(space.id, { name: 'Ali', petsEnabled: false });
+
+      expect(Number(result.total)).toBe(2);
+      expect(Number(result.hidden)).toBe(1);
+    });
+  });
+
   describe('getFilteredMapMarkers — space filter interaction', () => {
     it('should include tagged space assets when tagIds filter is applied with timelineSpaceIds', async () => {
       const { ctx, sut } = setup();
