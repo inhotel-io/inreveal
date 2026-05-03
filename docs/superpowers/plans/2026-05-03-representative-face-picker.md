@@ -38,10 +38,12 @@
   - Add space exact-face list, update/reset, and thumbnail endpoints.
 - Modify `server/src/services/person.service.spec.ts`
   - Add personal exact-face update unit tests.
+- Modify `server/test/medium/specs/repositories/person.repository.spec.ts`
+  - Add personal representative-face query coverage for hidden/deleted/offline faces and assets.
 - Modify `server/src/services/shared-space.service.spec.ts`
   - Add space exact-face update, thumbnail precedence, and job guard unit tests.
 - Modify `server/test/medium/specs/repositories/shared-space.repository.spec.ts`
-  - Add manual representative repair coverage.
+  - Add space asset-membership and manual representative repair coverage.
 - Modify `server/test/medium/specs/repositories/face-identity.repository.spec.ts`
   - Add identity backfill preservation coverage.
 - Modify `server/src/queries/person.repository.sql`, `server/src/queries/shared.space.repository.sql`, `server/src/queries/face.identity.repository.sql`
@@ -88,42 +90,71 @@ In `server/src/controllers/person.controller.spec.ts`, add tests that validate t
 
 ```ts
 it('should require representative assetFaceId to be a uuid', async () => {
-  const { status, body } = await request(app.getHttpServer())
+  const { status, body } = await request(ctx.getHttpServer())
     .put('/people/00000000-0000-4000-8000-000000000001/representative-face')
-    .send({ assetFaceId: 'invalid' });
+    .send({ assetFaceId: 'invalid' })
+    .set('Authorization', `Bearer token`);
 
   expect(status).toBe(400);
   expect(body).toEqual(errorDto.badRequest(['[assetFaceId] Invalid UUID']));
 });
 
 it('should parse person face page query values', async () => {
-  const { status } = await request(app.getHttpServer()).get(
-    '/people/00000000-0000-4000-8000-000000000001/faces?page=1&size=25',
-  );
+  service.getFacesForPicker.mockResolvedValue({ faces: [], hasNextPage: false });
 
-  expect(status).not.toBe(400);
+  const { status } = await request(ctx.getHttpServer())
+    .get('/people/00000000-0000-4000-8000-000000000001/faces?page=1&size=25')
+    .set('Authorization', `Bearer token`);
+
+  expect(status).toBe(200);
+  expect(service.getFacesForPicker).toHaveBeenCalledWith(undefined, '00000000-0000-4000-8000-000000000001', {
+    page: 1,
+    size: 25,
+  });
 });
 ```
 
-In `server/src/controllers/shared-space.controller.spec.ts`, add tests for the space DTO:
+In `server/src/controllers/shared-space.controller.spec.ts`, add `import { errorDto } from 'test/medium/responses';`, then add tests for the space DTO:
 
 ```ts
 it('should allow clearing a space representative face override', async () => {
-  const { status } = await request(app.getHttpServer())
-    .put(
-      '/shared-spaces/00000000-0000-4000-8000-000000000001/people/00000000-0000-4000-8000-000000000002/representative-face',
-    )
-    .send({ assetFaceId: null });
+  const spaceId = '00000000-0000-4000-8000-000000000001';
+  const personId = '00000000-0000-4000-8000-000000000002';
+  service.updateSpacePersonRepresentativeFace.mockResolvedValue({
+    id: personId,
+    spaceId,
+    name: '',
+    thumbnailPath: '',
+    isHidden: false,
+    birthDate: null,
+    representativeFaceId: null,
+    representativeFaceSource: 'auto',
+    faceCount: 0,
+    assetCount: 0,
+    alias: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    type: 'person',
+  });
 
-  expect(status).not.toBe(400);
+  const { status } = await request(ctx.getHttpServer())
+    .put(`/shared-spaces/${spaceId}/people/${personId}/representative-face`)
+    .send({ assetFaceId: null })
+    .set('Authorization', `Bearer token`);
+
+  expect(status).toBe(200);
+  expect(service.updateSpacePersonRepresentativeFace).toHaveBeenCalledWith(undefined, spaceId, personId, {
+    assetFaceId: null,
+  });
 });
 
 it('should require space representative assetFaceId to be null or uuid', async () => {
-  const { status, body } = await request(app.getHttpServer())
+  const { status, body } = await request(ctx.getHttpServer())
     .put(
       '/shared-spaces/00000000-0000-4000-8000-000000000001/people/00000000-0000-4000-8000-000000000002/representative-face',
     )
-    .send({ assetFaceId: 'invalid' });
+    .send({ assetFaceId: 'invalid' })
+    .set('Authorization', `Bearer token`);
 
   expect(status).toBe(400);
   expect(body).toEqual(errorDto.badRequest(['[assetFaceId] Invalid UUID']));
@@ -405,6 +436,7 @@ git commit -m "feat: add representative face API contract"
 - Modify: `server/src/repositories/face-identity.repository.ts`
 - Modify: `server/src/services/person.service.ts`
 - Modify: `server/src/services/person.service.spec.ts`
+- Modify: `server/test/medium/specs/repositories/person.repository.spec.ts`
 
 - [ ] **Step 1: Write failing service tests**
 
@@ -451,6 +483,23 @@ describe('representative face', () => {
     expect(mocks.job.queue).not.toHaveBeenCalled();
   });
 
+  it('rejects a selected face when the actor cannot read the face asset', async () => {
+    const auth = AuthFactory.create();
+    const person = PersonFactory.create();
+    const face = AssetFaceFactory.create({ id: 'face-1', assetId: 'asset-1', personId: person.id });
+    mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([person.id]));
+    mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    mocks.person.getRepresentativeFaceForUpdate.mockResolvedValue(face);
+
+    await expect(sut.updateRepresentativeFace(auth, person.id, { assetFaceId: face.id })).rejects.toThrow(
+      BadRequestException,
+    );
+
+    expect(mocks.person.update).not.toHaveBeenCalled();
+    expect(mocks.faceIdentity.updateRepresentativeFace).not.toHaveBeenCalled();
+    expect(mocks.job.queue).not.toHaveBeenCalled();
+  });
+
   it('lists exact personal face crops for the picker', async () => {
     const auth = AuthFactory.create();
     const person = PersonFactory.create({ faceAssetId: 'face-1' });
@@ -470,10 +519,55 @@ describe('representative face', () => {
 });
 ```
 
+In `server/test/medium/specs/repositories/person.repository.spec.ts`, add:
+
+```ts
+describe('representative face picker queries', () => {
+  it('filters deleted, hidden, and offline representative face candidates', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+    const { asset: validAsset } = await ctx.newAsset({ ownerId: user.id });
+    const { result: validFaceId } = await ctx.newAssetFace({ assetId: validAsset.id, personId: person.id });
+    const { asset: offlineAsset } = await ctx.newAsset({ ownerId: user.id, isOffline: true });
+    const { result: offlineFaceId } = await ctx.newAssetFace({ assetId: offlineAsset.id, personId: person.id });
+    const { asset: deletedAsset } = await ctx.newAsset({ ownerId: user.id, deletedAt: new Date() });
+    const { result: deletedAssetFaceId } = await ctx.newAssetFace({ assetId: deletedAsset.id, personId: person.id });
+    const { result: hiddenFaceId } = await ctx.newAssetFace({
+      assetId: validAsset.id,
+      personId: person.id,
+      isVisible: false,
+    });
+    const { result: deletedFaceId } = await ctx.newAssetFace({
+      assetId: validAsset.id,
+      personId: person.id,
+      deletedAt: new Date(),
+    });
+
+    const faces = await sut.getRepresentativeFaces({ personId: person.id, take: 20, skip: 0 });
+
+    expect(faces.map((face) => face.id)).toEqual([validFaceId]);
+    await expect(
+      sut.getRepresentativeFaceForUpdate({ personId: person.id, assetFaceId: offlineFaceId }),
+    ).resolves.toBeUndefined();
+    await expect(
+      sut.getRepresentativeFaceForUpdate({ personId: person.id, assetFaceId: deletedAssetFaceId }),
+    ).resolves.toBeUndefined();
+    await expect(
+      sut.getRepresentativeFaceForUpdate({ personId: person.id, assetFaceId: hiddenFaceId }),
+    ).resolves.toBeUndefined();
+    await expect(
+      sut.getRepresentativeFaceForUpdate({ personId: person.id, assetFaceId: deletedFaceId }),
+    ).resolves.toBeUndefined();
+  });
+});
+```
+
 - [ ] **Step 2: Run service tests and verify failure**
 
 ```bash
 pnpm --dir server test -- src/services/person.service.spec.ts -t "representative face"
+pnpm --dir server test:medium -- test/medium/specs/repositories/person.repository.spec.ts -t "representative face picker"
 ```
 
 Expected: FAIL because repository methods and service behavior are missing.
@@ -653,6 +747,7 @@ Add `asDateString` to the imports from `src/utils/date`.
 
 ```bash
 pnpm --dir server test -- src/services/person.service.spec.ts -t "representative face"
+pnpm --dir server test:medium -- test/medium/specs/repositories/person.repository.spec.ts -t "representative face picker"
 ```
 
 Expected: PASS.
@@ -660,7 +755,11 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add server/src/repositories/person.repository.ts server/src/repositories/face-identity.repository.ts server/src/services/person.service.ts server/src/services/person.service.spec.ts
+git add server/src/repositories/person.repository.ts \
+  server/src/repositories/face-identity.repository.ts \
+  server/src/services/person.service.ts \
+  server/src/services/person.service.spec.ts \
+  server/test/medium/specs/repositories/person.repository.spec.ts
 git commit -m "feat: update personal representative faces by face id"
 ```
 
@@ -700,8 +799,7 @@ it('serves a manual space representative face before a personal thumbnail', asyn
   const cleanup = vi.fn();
   mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
   mocks.sharedSpace.getPersonById.mockResolvedValue(person);
-  mocks.sharedSpace.isFaceInSpace.mockResolvedValue(true);
-  mocks.person.getFaceById.mockResolvedValue(face);
+  mocks.sharedSpace.getSpaceRepresentativeFaceForUpdate.mockResolvedValue(face);
   mocks.asset.getForThumbnail.mockResolvedValue({ path: '/preview.jpg' } as any);
   mocks.sharedSpace.getPersonalThumbnailForSpacePerson.mockResolvedValue({
     personId: 'personal-person',
@@ -718,7 +816,13 @@ it('serves a manual space representative face before a personal thumbnail', asyn
 
   const result = await sut.getSpacePersonThumbnail(auth, person.spaceId, person.id);
 
+  expect(mocks.sharedSpace.getSpaceRepresentativeFaceForUpdate).toHaveBeenCalledWith({
+    spaceId: person.spaceId,
+    personId: person.id,
+    assetFaceId: face.id,
+  });
   expect(mocks.sharedSpace.getPersonalThumbnailForSpacePerson).not.toHaveBeenCalled();
+  expect(mocks.person.getFaceById).not.toHaveBeenCalled();
   expect(mocks.media.generateThumbnail).toHaveBeenCalled();
   expect(cleanup).toHaveBeenCalled();
   if (result instanceof ImmichStreamResponse) {
@@ -932,9 +1036,30 @@ getSpaceRepresentativeFaceForUpdate(input: { spaceId: string; personId: string; 
     .where('asset_face.isVisible', '=', true)
     .where('asset.deletedAt', 'is', null)
     .where('asset.isOffline', '=', false)
+    .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+    .where((eb) =>
+      eb.or([
+        eb.exists(
+          eb
+            .selectFrom('shared_space_asset')
+            .select('shared_space_asset.assetId')
+            .whereRef('shared_space_asset.assetId', '=', 'asset_face.assetId')
+            .whereRef('shared_space_asset.spaceId', '=', 'shared_space_person.spaceId'),
+        ),
+        eb.exists(
+          eb
+            .selectFrom('shared_space_library')
+            .select('shared_space_library.libraryId')
+            .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+            .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
+        ),
+      ]),
+    )
     .executeTakeFirst();
 }
 ```
+
+Use the existing `visibleSpaceAssetVisibilities` constant so direct and library-backed space assets follow the same visibility rules as the rest of shared-space media access.
 
 In `SharedSpaceService`, add:
 
@@ -997,12 +1122,15 @@ if (person.representativeFaceSource === 'manual') {
     throw new NotFoundException();
   }
 
-  const isInSpace = await this.sharedSpaceRepository.isFaceInSpace(spaceId, person.representativeFaceId);
-  if (!isInSpace) {
+  const face = await this.sharedSpaceRepository.getSpaceRepresentativeFaceForUpdate({
+    spaceId,
+    personId: person.id,
+    assetFaceId: person.representativeFaceId,
+  });
+  if (!face) {
     throw new NotFoundException();
   }
 
-  const face = await this.personRepository.getFaceById(person.representativeFaceId);
   const sourcePath = await this.getFaceThumbnailSource(face.assetId);
   if (!sourcePath) {
     throw new NotFoundException();
@@ -1101,6 +1229,47 @@ it('clears a manual representative face override for a space person', async () =
   });
 });
 
+it('rejects a representative face that is not assigned to the requested space person', async () => {
+  const auth = factory.auth();
+  const person = factory.sharedSpacePerson({ id: 'space-person-1', spaceId: 'space-1' });
+  mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+  mocks.sharedSpace.getPersonById.mockResolvedValue(person);
+  mocks.sharedSpace.getSpaceRepresentativeFaceForUpdate.mockResolvedValue(undefined);
+
+  await expect(
+    sut.updateSpacePersonRepresentativeFace(auth, 'space-1', person.id, { assetFaceId: 'face-from-another-person' }),
+  ).rejects.toThrow(BadRequestException);
+
+  expect(mocks.sharedSpace.updatePerson).not.toHaveBeenCalled();
+  expect(mocks.faceIdentity.updateRepresentativeFace).not.toHaveBeenCalled();
+});
+
+it('selects a new automatic fallback when clearing an invalid manual override', async () => {
+  const auth = factory.auth();
+  const person = factory.sharedSpacePerson({
+    id: 'space-person-1',
+    spaceId: 'space-1',
+    representativeFaceId: 'missing-face',
+    representativeFaceSource: 'manual',
+  });
+  mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+  mocks.sharedSpace.getPersonById.mockResolvedValue(person);
+  mocks.sharedSpace.isSpacePersonRepresentativeFaceValid.mockResolvedValue(false);
+  mocks.sharedSpace.getFirstValidRepresentativeFaceForPerson.mockResolvedValue('fallback-face');
+  mocks.sharedSpace.updatePerson.mockResolvedValue({
+    ...person,
+    representativeFaceId: 'fallback-face',
+    representativeFaceSource: 'auto',
+  });
+
+  await sut.updateSpacePersonRepresentativeFace(auth, 'space-1', person.id, { assetFaceId: null });
+
+  expect(mocks.sharedSpace.updatePerson).toHaveBeenCalledWith(person.id, {
+    representativeFaceSource: 'auto',
+    representativeFaceId: 'fallback-face',
+  });
+});
+
 it('lists exact space face crops for the picker', async () => {
   const auth = factory.auth();
   const person = factory.sharedSpacePerson({ id: 'space-person-1', representativeFaceId: 'face-1' });
@@ -1116,6 +1285,54 @@ it('lists exact space face crops for the picker', async () => {
     hasNextPage: true,
   });
 });
+
+it('does not refresh a valid manual representative face during dedup', async () => {
+  const spaceId = newUuid();
+  const targetId = newUuid();
+  const sourceId = newUuid();
+  mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+  mocks.sharedSpace.repairInvalidRepresentativeFaces.mockResolvedValue(void 0 as any);
+  mocks.sharedSpace.repairOrphanedRepresentativeFaces.mockResolvedValue(void 0 as any);
+  mocks.sharedSpace.getSpacePersonsWithEmbeddings
+    .mockResolvedValueOnce([
+      {
+        ...factory.sharedSpacePerson({
+          id: targetId,
+          spaceId,
+          representativeFaceId: 'manual-face',
+          representativeFaceSource: 'manual',
+        }),
+        embedding: '[0.1,0.2]',
+      },
+      {
+        ...factory.sharedSpacePerson({ id: sourceId, spaceId, representativeFaceId: 'source-face' }),
+        embedding: '[0.11,0.21]',
+      },
+    ] as any)
+    .mockResolvedValueOnce([
+      {
+        ...factory.sharedSpacePerson({
+          id: targetId,
+          spaceId,
+          representativeFaceId: 'manual-face',
+          representativeFaceSource: 'manual',
+        }),
+        embedding: '[0.1,0.2]',
+      },
+    ] as any);
+  mocks.sharedSpace.findClosestSpacePerson.mockResolvedValue([{ personId: sourceId, distance: 0.05, name: '' }] as any);
+  mocks.sharedSpace.reassignPersonFacesSafe.mockResolvedValue(void 0 as any);
+  mocks.sharedSpace.migrateAliases.mockResolvedValue(void 0 as any);
+  mocks.sharedSpace.deletePerson.mockResolvedValue(void 0 as any);
+
+  await sut.handleSharedSpacePersonDedup({ spaceId });
+
+  expect(mocks.sharedSpace.getFirstFaceIdForPerson).not.toHaveBeenCalledWith(targetId);
+  expect(mocks.sharedSpace.updatePerson).not.toHaveBeenCalledWith(
+    targetId,
+    expect.objectContaining({ representativeFaceId: expect.any(String) }),
+  );
+});
 ```
 
 - [ ] **Step 2: Write failing job guard tests**
@@ -1128,6 +1345,7 @@ it('does not repair valid manual representative faces', async () => {
   const { space } = await ctx.newSharedSpace();
   const { asset } = await ctx.newAsset();
   const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id });
+  await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
   const person = await sut.createPerson({
     spaceId: space.id,
     representativeFaceId: faceId,
@@ -1141,6 +1359,101 @@ it('does not repair valid manual representative faces', async () => {
   await expect(sut.getPersonById(person.id)).resolves.toMatchObject({
     representativeFaceId: faceId,
     representativeFaceSource: 'manual',
+  });
+});
+
+it('requires representative picker faces to belong to assets in the space', async () => {
+  const { ctx, sut } = await setup();
+  const { space } = await ctx.newSharedSpace();
+  const { asset } = await ctx.newAsset();
+  const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id });
+  const person = await sut.createPerson({ spaceId: space.id, type: 'person', representativeFaceId: faceId });
+  await sut.addPersonFaces([{ personId: person.id, assetFaceId: faceId }]);
+
+  await expect(
+    sut.getSpaceRepresentativeFaceForUpdate({ spaceId: space.id, personId: person.id, assetFaceId: faceId }),
+  ).resolves.toBeUndefined();
+
+  await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+
+  await expect(
+    sut.getSpaceRepresentativeFaceForUpdate({ spaceId: space.id, personId: person.id, assetFaceId: faceId }),
+  ).resolves.toMatchObject({ id: faceId, assetId: asset.id });
+});
+
+it('includes library-backed space assets in the representative face list', async () => {
+  const { ctx, sut } = await setup();
+  const { user } = await ctx.newUser();
+  const { space } = await ctx.newSharedSpace({ createdById: user.id });
+  const { library } = await ctx.newLibrary({ ownerId: user.id });
+  await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
+  const { asset } = await ctx.newAsset({ ownerId: user.id, libraryId: library.id });
+  const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id });
+  const person = await sut.createPerson({ spaceId: space.id, type: 'person', representativeFaceId: faceId });
+  await sut.addPersonFaces([{ personId: person.id, assetFaceId: faceId }]);
+
+  const rows = await sut.getSpaceRepresentativeFaces({ spaceId: space.id, personId: person.id, take: 10, skip: 0 });
+
+  expect(rows).toEqual([expect.objectContaining({ id: faceId, assetId: asset.id })]);
+});
+
+it.each([
+  ['hidden face', async (ctx: any, faceId: string) => {
+    await ctx.database.updateTable('asset_face').set({ isVisible: false }).where('id', '=', faceId).execute();
+  }],
+  ['deleted face', async (ctx: any, faceId: string) => {
+    await ctx.database.updateTable('asset_face').set({ deletedAt: new Date() }).where('id', '=', faceId).execute();
+  }],
+  ['offline asset', async (ctx: any, _faceId: string, assetId: string) => {
+    await ctx.database.updateTable('asset').set({ isOffline: true }).where('id', '=', assetId).execute();
+  }],
+  ['deleted asset', async (ctx: any, _faceId: string, assetId: string) => {
+    await ctx.database.updateTable('asset').set({ deletedAt: new Date() }).where('id', '=', assetId).execute();
+  }],
+  ['hidden asset', async (ctx: any, _faceId: string, assetId: string) => {
+    await ctx.database
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Hidden })
+      .where('id', '=', assetId)
+      .execute();
+  }],
+  ['asset removed from space', async (ctx: any, _faceId: string, assetId: string, spaceId: string) => {
+    await ctx.database
+      .deleteFrom('shared_space_asset')
+      .where('spaceId', '=', spaceId)
+      .where('assetId', '=', assetId)
+      .execute();
+  }],
+  [
+    'face no longer assigned to the space person',
+    async (ctx: any, faceId: string, _assetId: string, _spaceId: string, personId: string) => {
+      await ctx.database
+        .deleteFrom('shared_space_person_face')
+        .where('personId', '=', personId)
+        .where('assetFaceId', '=', faceId)
+        .execute();
+    },
+  ],
+])('clears invalid manual representative face when %s', async (_label, invalidate) => {
+  const { ctx, sut } = await setup();
+  const { space } = await ctx.newSharedSpace();
+  const { asset } = await ctx.newAsset();
+  const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id });
+  await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+  const person = await sut.createPerson({
+    spaceId: space.id,
+    representativeFaceId: faceId,
+    representativeFaceSource: 'manual',
+    type: 'person',
+  });
+  await sut.addPersonFaces([{ personId: person.id, assetFaceId: faceId }]);
+  await invalidate(ctx, faceId, asset.id, space.id, person.id);
+
+  await sut.repairInvalidRepresentativeFaces(space.id);
+
+  await expect(sut.getPersonById(person.id)).resolves.toMatchObject({
+    representativeFaceId: null,
+    representativeFaceSource: 'auto',
   });
 });
 ```
@@ -1183,7 +1496,7 @@ it('preserves manual space representative faces during space identity backfill',
 
 ```bash
 pnpm --dir server test -- src/services/shared-space.service.spec.ts -t "representative face"
-pnpm --dir server test:medium -- test/medium/specs/repositories/shared-space.repository.spec.ts test/medium/specs/repositories/face-identity.repository.spec.ts -t "manual representative"
+pnpm --dir server test:medium -- test/medium/specs/repositories/shared-space.repository.spec.ts test/medium/specs/repositories/face-identity.repository.spec.ts -t "manual representative|representative picker|invalid manual"
 ```
 
 Expected: FAIL because update/reset and repair guards are missing.
@@ -1216,6 +1529,25 @@ getSpaceRepresentativeFaces(input: { spaceId: string; personId: string; take: nu
     .where('asset_face.isVisible', '=', true)
     .where('asset.deletedAt', 'is', null)
     .where('asset.isOffline', '=', false)
+    .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+    .where((eb) =>
+      eb.or([
+        eb.exists(
+          eb
+            .selectFrom('shared_space_asset')
+            .select('shared_space_asset.assetId')
+            .whereRef('shared_space_asset.assetId', '=', 'asset_face.assetId')
+            .whereRef('shared_space_asset.spaceId', '=', 'shared_space_person.spaceId'),
+        ),
+        eb.exists(
+          eb
+            .selectFrom('shared_space_library')
+            .select('shared_space_library.libraryId')
+            .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+            .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
+        ),
+      ]),
+    )
     .orderBy('asset.fileCreatedAt', 'desc')
     .orderBy('asset_face.id')
     .offset(input.skip)
@@ -1227,6 +1559,7 @@ getSpaceRepresentativeFaces(input: { spaceId: string; personId: string; take: nu
 async isSpacePersonRepresentativeFaceValid(personId: string, faceId: string): Promise<boolean> {
   const row = await this.db
     .selectFrom('shared_space_person_face')
+    .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
     .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
     .innerJoin('asset', 'asset.id', 'asset_face.assetId')
     .select('asset_face.id')
@@ -1236,6 +1569,25 @@ async isSpacePersonRepresentativeFaceValid(personId: string, faceId: string): Pr
     .where('asset_face.isVisible', '=', true)
     .where('asset.deletedAt', 'is', null)
     .where('asset.isOffline', '=', false)
+    .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+    .where((eb) =>
+      eb.or([
+        eb.exists(
+          eb
+            .selectFrom('shared_space_asset')
+            .select('shared_space_asset.assetId')
+            .whereRef('shared_space_asset.assetId', '=', 'asset_face.assetId')
+            .whereRef('shared_space_asset.spaceId', '=', 'shared_space_person.spaceId'),
+        ),
+        eb.exists(
+          eb
+            .selectFrom('shared_space_library')
+            .select('shared_space_library.libraryId')
+            .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+            .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
+        ),
+      ]),
+    )
     .executeTakeFirst();
   return !!row;
 }
@@ -1244,6 +1596,7 @@ async isSpacePersonRepresentativeFaceValid(personId: string, faceId: string): Pr
 async getFirstValidRepresentativeFaceForPerson(personId: string): Promise<string | null> {
   const row = await this.db
     .selectFrom('shared_space_person_face')
+    .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
     .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
     .innerJoin('asset', 'asset.id', 'asset_face.assetId')
     .select('asset_face.id')
@@ -1252,6 +1605,25 @@ async getFirstValidRepresentativeFaceForPerson(personId: string): Promise<string
     .where('asset_face.isVisible', '=', true)
     .where('asset.deletedAt', 'is', null)
     .where('asset.isOffline', '=', false)
+    .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+    .where((eb) =>
+      eb.or([
+        eb.exists(
+          eb
+            .selectFrom('shared_space_asset')
+            .select('shared_space_asset.assetId')
+            .whereRef('shared_space_asset.assetId', '=', 'asset_face.assetId')
+            .whereRef('shared_space_asset.spaceId', '=', 'shared_space_person.spaceId'),
+        ),
+        eb.exists(
+          eb
+            .selectFrom('shared_space_library')
+            .select('shared_space_library.libraryId')
+            .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+            .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
+        ),
+      ]),
+    )
     .orderBy('asset.fileCreatedAt', 'desc')
     .orderBy('asset_face.id')
     .executeTakeFirst();
@@ -1380,6 +1752,25 @@ async updateSpacePersonRepresentativeFace(
 
 - [ ] **Step 7: Preserve manual choices in jobs**
 
+In `SharedSpaceRepository.getSpacePersonsWithEmbeddings`, include `shared_space_person.representativeFaceSource` in the selected fields and add it to the `SpacePersonWithEmbedding` type so dedup can distinguish manual and automatic rows:
+
+```ts
+type SpacePersonWithEmbedding = {
+  id: string;
+  name: string;
+  type: string;
+  identityId?: string | null;
+  isHidden: boolean;
+  faceCount: number;
+  representativeFaceId: string | null;
+  representativeFaceSource: string;
+  embedding: string;
+};
+
+// In getSpacePersonsWithEmbeddings select([...]):
+'shared_space_person.representativeFaceSource',
+```
+
 In `handleSharedSpacePersonDedup`, replace the representative refresh condition:
 
 ```ts
@@ -1391,18 +1782,23 @@ if (target.representativeFaceSource !== 'manual') {
 }
 ```
 
-Before dedup gets persons, call:
+Before dedup gets persons, call invalid-manual repair before orphan repair:
 
 ```ts
 await this.sharedSpaceRepository.repairInvalidRepresentativeFaces(job.spaceId);
+await this.sharedSpaceRepository.repairOrphanedRepresentativeFaces(job.spaceId);
 ```
 
-Keep `repairOrphanedRepresentativeFaces` for null automatic rows. Do not call it for valid manual rows.
-
-In `FaceIdentityRepository.repairSpacePersonIdentityAssignments`, include `representativeFaceSource` in `SpacePersonBackfillRow` and only set `representativeFaceId` when the current source is `auto`:
+Keep `repairOrphanedRepresentativeFaces` for null automatic rows by adding this filter to its update query:
 
 ```ts
-if (person.representativeFaceSource === 'auto' && !person.representativeFaceId) {
+.where('shared_space_person.representativeFaceSource', '=', 'auto')
+```
+
+In `FaceIdentityRepository.repairSpacePersonIdentityAssignments`, include `representativeFaceSource` in `SpacePersonBackfillRow`. Preserve valid manual choices, but restore a missing representative face for automatic rows and rows whose current value is null:
+
+```ts
+if (person.representativeFaceSource !== 'manual' || !person.representativeFaceId) {
   update.representativeFaceId = group.representativeFaceId;
 }
 ```
@@ -1411,7 +1807,7 @@ if (person.representativeFaceSource === 'auto' && !person.representativeFaceId) 
 
 ```bash
 pnpm --dir server test -- src/services/shared-space.service.spec.ts -t "representative face"
-pnpm --dir server test:medium -- test/medium/specs/repositories/shared-space.repository.spec.ts test/medium/specs/repositories/face-identity.repository.spec.ts -t "manual representative"
+pnpm --dir server test:medium -- test/medium/specs/repositories/shared-space.repository.spec.ts test/medium/specs/repositories/face-identity.repository.spec.ts -t "manual representative|representative picker|invalid manual"
 ```
 
 Expected: PASS.
@@ -1471,7 +1867,8 @@ Expected: exit code 0. `open-api/typescript-sdk/src/fetch-client.ts` exports SDK
 
 ```bash
 pnpm --dir server test -- src/services/person.service.spec.ts src/services/shared-space.service.spec.ts src/controllers/person.controller.spec.ts src/controllers/shared-space.controller.spec.ts -t "representative"
-pnpm --dir server test:medium -- test/medium/specs/repositories/shared-space.repository.spec.ts test/medium/specs/repositories/face-identity.repository.spec.ts -t "manual representative"
+pnpm --dir server test:medium -- test/medium/specs/repositories/person.repository.spec.ts -t "representative face picker"
+pnpm --dir server test:medium -- test/medium/specs/repositories/shared-space.repository.spec.ts test/medium/specs/repositories/face-identity.repository.spec.ts -t "manual representative|representative picker|invalid manual"
 ```
 
 Expected: PASS.
@@ -1517,7 +1914,7 @@ Create `web/src/lib/components/people/representative-face-tile.spec.ts`:
 
 ```ts
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import RepresentativeFaceTile from './representative-face-tile.svelte';
 
@@ -1562,6 +1959,34 @@ describe('RepresentativeFaceTile', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'select_representative_face' }));
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('shows a stable pending state while an update is running', () => {
+    render(RepresentativeFaceTile, {
+      faceId: 'face-1',
+      thumbnailUrl: '/thumb.jpg',
+      selected: false,
+      disabled: false,
+      pending: true,
+      onSelect: vi.fn(),
+    });
+
+    expect(screen.getByRole('button', { name: 'select_representative_face' })).toBeDisabled();
+    expect(screen.getByTestId('representative-face-pending')).toHaveClass('absolute', 'inset-0');
+  });
+
+  it('keeps the tile size stable when the image fallback renders', async () => {
+    const { container } = render(RepresentativeFaceTile, {
+      faceId: 'face-1',
+      thumbnailUrl: '/broken.jpg',
+      selected: false,
+      disabled: false,
+      onSelect: vi.fn(),
+    });
+
+    await fireEvent.error(container.querySelector('img')!);
+
+    expect(container.querySelector('[data-broken-asset]')).toHaveClass('size-full');
   });
 });
 ```
@@ -1661,6 +2086,7 @@ Create `web/src/lib/components/people/representative-face-tile.svelte`:
     altText={$t('select_representative_face')}
     widthStyle="100%"
     heightStyle="100%"
+    brokenAssetClass="size-full"
     preload={false}
   />
 
@@ -1671,7 +2097,7 @@ Create `web/src/lib/components/people/representative-face-tile.svelte`:
   {/if}
 
   {#if pending}
-    <span class="absolute inset-0 flex items-center justify-center bg-black/25">
+    <span data-testid="representative-face-pending" class="absolute inset-0 flex items-center justify-center bg-black/25">
       <LoadingSpinner />
     </span>
   {/if}
@@ -1725,6 +2151,18 @@ const makePage = (overrides = {}) => ({
 });
 
 describe('RepresentativeFacePickerModal', () => {
+  it('shows a stable skeleton grid while loading', () => {
+    render(RepresentativeFacePickerModal, {
+      title: 'select_representative_face',
+      loadFaces: vi.fn(() => new Promise(() => {})),
+      updateFace: vi.fn(),
+      getThumbnailUrl: (face) => `/thumbnail/${face.id}`,
+      onClose: vi.fn(),
+    });
+
+    expect(screen.getAllByTestId('representative-face-skeleton')).toHaveLength(18);
+  });
+
   it('loads faces and updates the exact selected face', async () => {
     const loadFaces = vi.fn().mockResolvedValue(makePage());
     const updateFace = vi.fn().mockResolvedValue(undefined);
@@ -1739,6 +2177,8 @@ describe('RepresentativeFacePickerModal', () => {
     });
 
     await waitFor(() => expect(loadFaces).toHaveBeenCalledWith({ page: 1, size: 50 }));
+    await screen.findAllByRole('button', { name: 'select_representative_face' });
+    expect(screen.getByTestId('representative-face-grid')).toHaveClass('grid-cols-[repeat(auto-fill,88px)]');
     await userEvent.click(screen.getAllByRole('button', { name: 'select_representative_face' })[1]);
 
     expect(updateFace).toHaveBeenCalledWith('face-2');
@@ -1776,6 +2216,76 @@ describe('RepresentativeFacePickerModal', () => {
 
     expect(await screen.findByRole('button', { name: 'use_inherited_thumbnail' })).toBeInTheDocument();
   });
+
+  it('shows an empty state when no faces are selectable', async () => {
+    render(RepresentativeFacePickerModal, {
+      title: 'select_representative_face',
+      loadFaces: vi.fn().mockResolvedValue({ faces: [], hasNextPage: false }),
+      updateFace: vi.fn(),
+      getThumbnailUrl: (face) => `/thumbnail/${face.id}`,
+      onClose: vi.fn(),
+    });
+
+    expect(await screen.findByText('no_faces_found')).toBeInTheDocument();
+  });
+
+  it('shows an error state when the initial face load fails', async () => {
+    render(RepresentativeFacePickerModal, {
+      title: 'select_representative_face',
+      loadFaces: vi.fn().mockRejectedValue(new Error('network failed')),
+      updateFace: vi.fn(),
+      getThumbnailUrl: (face) => `/thumbnail/${face.id}`,
+      onClose: vi.fn(),
+    });
+
+    expect(await screen.findByText('errors.unable_to_load_faces')).toBeInTheDocument();
+  });
+
+  it('disables all picker actions while an update is pending', async () => {
+    let resolveUpdate!: () => void;
+    const updateFace = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveUpdate = resolve;
+        }),
+    );
+    const onClose = vi.fn();
+    render(RepresentativeFacePickerModal, {
+      title: 'select_representative_face',
+      loadFaces: vi.fn().mockResolvedValue(makePage()),
+      updateFace,
+      resetFace: vi.fn(),
+      getThumbnailUrl: (face) => `/thumbnail/${face.id}`,
+      onClose,
+    });
+
+    await userEvent.click((await screen.findAllByRole('button', { name: 'select_representative_face' }))[1]);
+
+    expect(screen.getByRole('button', { name: 'use_inherited_thumbnail' })).toBeDisabled();
+    for (const button of screen.getAllByRole('button', { name: 'select_representative_face' })) {
+      expect(button).toBeDisabled();
+    }
+
+    resolveUpdate();
+    await waitFor(() => expect(onClose).toHaveBeenCalledWith(true));
+  });
+
+  it('renders read-only when updates are not allowed', async () => {
+    render(RepresentativeFacePickerModal, {
+      title: 'select_representative_face',
+      loadFaces: vi.fn().mockResolvedValue(makePage()),
+      updateFace: vi.fn(),
+      resetFace: vi.fn(),
+      getThumbnailUrl: (face) => `/thumbnail/${face.id}`,
+      onClose: vi.fn(),
+      canUpdate: false,
+    });
+
+    for (const button of await screen.findAllByRole('button', { name: 'select_representative_face' })) {
+      expect(button).toBeDisabled();
+    }
+    expect(screen.queryByRole('button', { name: 'use_inherited_thumbnail' })).not.toBeInTheDocument();
+  });
 });
 ```
 
@@ -1810,15 +2320,17 @@ Create `web/src/lib/modals/RepresentativeFacePickerModal.svelte`:
     getThumbnailUrl: (face: PersonFaceResponseDto) => string;
     onClose: (updated?: boolean) => void;
     resetFace?: () => Promise<void>;
+    canUpdate?: boolean;
   }
 
-  let { title, loadFaces, updateFace, getThumbnailUrl, onClose, resetFace }: Props = $props();
+  let { title, loadFaces, updateFace, getThumbnailUrl, onClose, resetFace, canUpdate = true }: Props = $props();
 
   const pageSize = 50;
   let page = $state(1);
   let faces: PersonFaceResponseDto[] = $state([]);
   let hasNextPage = $state(false);
   let loading = $state(true);
+  let loadFailed = $state(false);
   let loadingMore = $state(false);
   let pendingFaceId = $state<string | null>(null);
   let resetting = $state(false);
@@ -1832,8 +2344,10 @@ Create `web/src/lib/modals/RepresentativeFacePickerModal.svelte`:
 
   onMount(async () => {
     try {
+      loadFailed = false;
       await loadPage(1);
     } catch (error) {
+      loadFailed = true;
       handleError(error, $t('errors.unable_to_load_faces'));
     } finally {
       loading = false;
@@ -1841,6 +2355,9 @@ Create `web/src/lib/modals/RepresentativeFacePickerModal.svelte`:
   });
 
   async function selectFace(faceId: string) {
+    if (!canUpdate) {
+      return;
+    }
     try {
       pendingFaceId = faceId;
       await updateFace(faceId);
@@ -1865,7 +2382,7 @@ Create `web/src/lib/modals/RepresentativeFacePickerModal.svelte`:
   }
 
   async function reset() {
-    if (!resetFace) {
+    if (!resetFace || !canUpdate) {
       return;
     }
     try {
@@ -1885,21 +2402,23 @@ Create `web/src/lib/modals/RepresentativeFacePickerModal.svelte`:
   <ModalBody>
     <div class="min-h-80">
       {#if loading}
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-2 sm:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
+        <div data-testid="representative-face-grid" class="grid grid-cols-[repeat(auto-fill,88px)] justify-center gap-2 sm:grid-cols-[repeat(auto-fill,112px)]">
           {#each Array.from({ length: 18 }) as _}
-            <div class="aspect-square animate-pulse rounded-lg bg-gray-200 dark:bg-gray-800"></div>
+            <div data-testid="representative-face-skeleton" class="aspect-square animate-pulse rounded-lg bg-gray-200 dark:bg-gray-800"></div>
           {/each}
         </div>
+      {:else if loadFailed}
+        <p class="py-12 text-center text-sm text-gray-500 dark:text-gray-400">{$t('errors.unable_to_load_faces')}</p>
       {:else if faces.length === 0}
         <p class="py-12 text-center text-sm text-gray-500 dark:text-gray-400">{$t('no_faces_found')}</p>
       {:else}
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-2 sm:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
+        <div data-testid="representative-face-grid" class="grid grid-cols-[repeat(auto-fill,88px)] justify-center gap-2 sm:grid-cols-[repeat(auto-fill,112px)]">
           {#each faces as face (face.id)}
             <RepresentativeFaceTile
               faceId={face.id}
               thumbnailUrl={getThumbnailUrl(face)}
               selected={face.isRepresentative}
-              disabled={!!pendingFaceId || resetting}
+              disabled={!canUpdate || !!pendingFaceId || resetting}
               pending={pendingFaceId === face.id}
               onSelect={selectFace}
             />
@@ -1911,7 +2430,7 @@ Create `web/src/lib/modals/RepresentativeFacePickerModal.svelte`:
 
   <ModalFooter>
     <HStack fullWidth gap={3}>
-      {#if resetFace}
+      {#if resetFace && canUpdate}
         <Button shape="round" color="secondary" disabled={resetting || !!pendingFaceId} onclick={reset}>
           {$t('use_inherited_thumbnail')}
         </Button>
@@ -1976,6 +2495,7 @@ it('opens the representative face picker from the person menu', async () => {
       title: 'select_representative_face',
       loadFaces: expect.any(Function),
       updateFace: expect.any(Function),
+      canUpdate: true,
       getThumbnailUrl: expect.any(Function),
     }),
   );
@@ -2000,6 +2520,16 @@ it('uses exact-face SDK calls for personal representative selection', async () =
     id: 'person-1',
     representativeFaceUpdateDto: { assetFaceId: 'face-1' },
   });
+});
+
+it('does not enter timeline single-select mode for representative face selection', async () => {
+  renderPage();
+
+  await userEvent.click(screen.getByText('select_representative_face'));
+
+  expect(modalManager.show).toHaveBeenCalled();
+  expect(screen.getByTestId('timeline-stub')).not.toHaveAttribute('singleSelect');
+  expect(screen.getByTestId('timeline-stub')).not.toHaveAttribute('isSelectionMode');
 });
 ```
 
@@ -2038,6 +2568,7 @@ const SelectRepresentativeFace: ActionItem = {
         });
       },
       getThumbnailUrl: (face: PersonFaceResponseDto) => getPersonFaceThumbnailUrl(person.id, face.id, person.updatedAt),
+      canUpdate: true,
     });
 
     if (updated) {
@@ -2110,8 +2641,15 @@ it('opens the representative face picker for editors', async () => {
       loadFaces: expect.any(Function),
       updateFace: expect.any(Function),
       resetFace: undefined,
+      canUpdate: true,
     }),
   );
+});
+
+it('does not show the representative face picker action for viewers', () => {
+  renderPage({ members: [makeMember({ role: SharedSpaceRole.Viewer })] });
+
+  expect(screen.queryByText('select_representative_face')).not.toBeInTheDocument();
 });
 
 it('passes a reset callback for manual space representative overrides', async () => {
@@ -2205,6 +2743,7 @@ async function openRepresentativeFacePicker() {
         : undefined,
     getThumbnailUrl: (face: PersonFaceResponseDto) =>
       getSpacePersonFaceThumbnailUrl(space.id, person.id, face.id, person.updatedAt),
+    canUpdate: isEditor,
   });
 
   if (updated) {
@@ -2259,7 +2798,8 @@ Expected: PASS.
 
 ```bash
 pnpm --dir server test -- src/services/person.service.spec.ts src/services/shared-space.service.spec.ts src/controllers/person.controller.spec.ts src/controllers/shared-space.controller.spec.ts -t "representative"
-pnpm --dir server test:medium -- test/medium/specs/repositories/shared-space.repository.spec.ts test/medium/specs/repositories/face-identity.repository.spec.ts -t "manual representative"
+pnpm --dir server test:medium -- test/medium/specs/repositories/person.repository.spec.ts -t "representative face picker"
+pnpm --dir server test:medium -- test/medium/specs/repositories/shared-space.repository.spec.ts test/medium/specs/repositories/face-identity.repository.spec.ts -t "manual representative|representative picker|invalid manual"
 ```
 
 Expected: PASS.
