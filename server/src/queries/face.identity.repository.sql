@@ -742,6 +742,29 @@ set
 returning
   *
 
+-- FaceIdentityRepository.updateRepresentativeFace
+update "face_identity"
+set
+  "representativeFaceId" = $1
+where
+  "id" = $2
+insert into
+  "face_identity_face" (
+    "assetFaceId",
+    "identityId",
+    "source",
+    "confidence"
+  )
+values
+  ($1, $2, $3, $4)
+on conflict ("assetFaceId") do update
+set
+  "identityId" = $5,
+  "source" = $6,
+  "confidence" = $7
+returning
+  *
+
 -- FaceIdentityRepository.unlinkFaces
 delete from "face_identity_face"
 where

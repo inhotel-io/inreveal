@@ -1573,6 +1573,33 @@ export type PersonUpdateDto = {
     /** Person name */
     name?: string;
 };
+export type PersonFaceResponseDto = {
+    /** Asset ID containing the face */
+    assetId: string;
+    /** Bounding box X1 coordinate */
+    boundingBoxX1: number;
+    /** Bounding box X2 coordinate */
+    boundingBoxX2: number;
+    /** Bounding box Y1 coordinate */
+    boundingBoxY1: number;
+    /** Bounding box Y2 coordinate */
+    boundingBoxY2: number;
+    /** Asset creation date */
+    fileCreatedAt?: string;
+    /** Face ID */
+    id: string;
+    /** Image height in pixels */
+    imageHeight: number;
+    /** Image width in pixels */
+    imageWidth: number;
+    /** Whether this face is the current representative face */
+    isRepresentative: boolean;
+    sourceType?: SourceType;
+};
+export type PersonFacePageResponseDto = {
+    faces: PersonFaceResponseDto[];
+    hasNextPage: boolean;
+};
 export type MergePersonDto = {
     /** Person IDs to merge */
     ids: string[];
@@ -1586,6 +1613,10 @@ export type AssetFaceUpdateItem = {
 export type AssetFaceUpdateDto = {
     /** Face update items */
     data: AssetFaceUpdateItem[];
+};
+export type RepresentativeFaceUpdateDto = {
+    /** Asset face ID used as the representative face */
+    assetFaceId: string;
 };
 export type PersonStatisticsResponseDto = {
     /** Number of assets */
@@ -2653,6 +2684,8 @@ export type SharedSpacePersonResponseDto = {
     name: string;
     /** Representative face ID */
     representativeFaceId?: string | null;
+    /** Representative face source */
+    representativeFaceSource?: RepresentativeFaceSource;
     /** Space ID */
     spaceId: string;
     /** Thumbnail path */
@@ -2685,6 +2718,10 @@ export type SharedSpacePersonAliasDto = {
 export type SharedSpacePersonMergeDto = {
     /** Person IDs to merge into target */
     ids: string[];
+};
+export type SpaceRepresentativeFaceUpdateDto = {
+    /** Asset face ID used as the space representative face */
+    assetFaceId: string | null;
 };
 export type StackResponseDto = {
     assets: AssetResponseDto[];
@@ -5872,6 +5909,38 @@ export function updatePerson({ id, personUpdateDto }: {
     })));
 }
 /**
+ * Get person faces
+ */
+export function getPersonFaces({ id, page, size }: {
+    id: string;
+    page?: number;
+    size?: number;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PersonFacePageResponseDto;
+    }>(`/people/${encodeURIComponent(id)}/faces${QS.query(QS.explode({
+        page,
+        size
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * Get person face thumbnail
+ */
+export function getPersonFaceThumbnail({ faceId, id }: {
+    faceId: string;
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: Blob;
+    }>(`/people/${encodeURIComponent(id)}/faces/${encodeURIComponent(faceId)}/thumbnail`, {
+        ...opts
+    }));
+}
+/**
  * Merge people
  */
 export function mergePerson({ id, mergePersonDto }: {
@@ -5901,6 +5970,22 @@ export function reassignFaces({ id, assetFaceUpdateDto }: {
         ...opts,
         method: "PUT",
         body: assetFaceUpdateDto
+    })));
+}
+/**
+ * Update representative face
+ */
+export function updateRepresentativeFace({ id, representativeFaceUpdateDto }: {
+    id: string;
+    representativeFaceUpdateDto: RepresentativeFaceUpdateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PersonResponseDto;
+    }>(`/people/${encodeURIComponent(id)}/representative-face`, oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: representativeFaceUpdateDto
     })));
 }
 /**
@@ -7148,6 +7233,40 @@ export function getSpacePersonAssets({ id, personId }: {
     }));
 }
 /**
+ * Get space person faces
+ */
+export function getSpacePersonFaces({ id, page, personId, size }: {
+    id: string;
+    page?: number;
+    personId: string;
+    size?: number;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PersonFacePageResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/faces${QS.query(QS.explode({
+        page,
+        size
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * Get space person face thumbnail
+ */
+export function getSpacePersonFaceThumbnail({ faceId, id, personId }: {
+    faceId: string;
+    id: string;
+    personId: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: Blob;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/faces/${encodeURIComponent(faceId)}/thumbnail`, {
+        ...opts
+    }));
+}
+/**
  * Merge people in a shared space
  */
 export function mergeSpacePeople({ id, personId, sharedSpacePersonMergeDto }: {
@@ -7159,6 +7278,23 @@ export function mergeSpacePeople({ id, personId, sharedSpacePersonMergeDto }: {
         ...opts,
         method: "POST",
         body: sharedSpacePersonMergeDto
+    })));
+}
+/**
+ * Update space person representative face
+ */
+export function updateSpacePersonRepresentativeFace({ id, personId, spaceRepresentativeFaceUpdateDto }: {
+    id: string;
+    personId: string;
+    spaceRepresentativeFaceUpdateDto: SpaceRepresentativeFaceUpdateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: SharedSpacePersonResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/representative-face`, oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: spaceRepresentativeFaceUpdateDto
     })));
 }
 /**
@@ -8602,6 +8738,10 @@ export enum SharedSpaceRole {
     Owner = "owner",
     Editor = "editor",
     Viewer = "viewer"
+}
+export enum RepresentativeFaceSource {
+    Auto = "auto",
+    Manual = "manual"
 }
 export enum StorageMigrationDirection {
     ToS3 = "toS3",

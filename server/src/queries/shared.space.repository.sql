@@ -474,6 +474,90 @@ from
 where
   "shared_space_person"."id" = $1
 
+-- SharedSpaceRepository.getSpaceRepresentativeFaceForUpdate
+select
+  "asset_face".*
+from
+  "shared_space_person_face"
+  inner join "shared_space_person" on "shared_space_person"."id" = "shared_space_person_face"."personId"
+  inner join "asset_face" on "asset_face"."id" = "shared_space_person_face"."assetFaceId"
+  inner join "asset" on "asset"."id" = "asset_face"."assetId"
+where
+  "shared_space_person"."spaceId" = $1
+  and "shared_space_person"."id" = $2
+  and "asset_face"."id" = $3
+  and "asset_face"."deletedAt" is null
+  and "asset_face"."isVisible" = $4
+  and "asset"."deletedAt" is null
+  and "asset"."isOffline" = $5
+  and "asset"."visibility" in ($6, $7)
+  and (
+    exists (
+      select
+        "shared_space_asset"."assetId"
+      from
+        "shared_space_asset"
+      where
+        "shared_space_asset"."assetId" = "asset_face"."assetId"
+        and "shared_space_asset"."spaceId" = "shared_space_person"."spaceId"
+    )
+    or exists (
+      select
+        "shared_space_library"."libraryId"
+      from
+        "shared_space_library"
+      where
+        "shared_space_library"."libraryId" = "asset"."libraryId"
+        and "shared_space_library"."spaceId" = "shared_space_person"."spaceId"
+    )
+  )
+
+-- SharedSpaceRepository.getSpaceRepresentativeFaces
+select
+  "asset_face".*,
+  "asset"."fileCreatedAt",
+  "shared_space_person"."representativeFaceId"
+from
+  "shared_space_person_face"
+  inner join "shared_space_person" on "shared_space_person"."id" = "shared_space_person_face"."personId"
+  inner join "asset_face" on "asset_face"."id" = "shared_space_person_face"."assetFaceId"
+  inner join "asset" on "asset"."id" = "asset_face"."assetId"
+where
+  "shared_space_person"."spaceId" = $1
+  and "shared_space_person"."id" = $2
+  and "asset_face"."deletedAt" is null
+  and "asset_face"."isVisible" = $3
+  and "asset"."deletedAt" is null
+  and "asset"."isOffline" = $4
+  and "asset"."visibility" in ($5, $6)
+  and (
+    exists (
+      select
+        "shared_space_asset"."assetId"
+      from
+        "shared_space_asset"
+      where
+        "shared_space_asset"."assetId" = "asset_face"."assetId"
+        and "shared_space_asset"."spaceId" = "shared_space_person"."spaceId"
+    )
+    or exists (
+      select
+        "shared_space_library"."libraryId"
+      from
+        "shared_space_library"
+      where
+        "shared_space_library"."libraryId" = "asset"."libraryId"
+        and "shared_space_library"."spaceId" = "shared_space_person"."spaceId"
+    )
+  )
+order by
+  "asset"."fileCreatedAt" desc,
+  "asset_face"."id"
+limit
+  $7
+offset
+  $8
+
 -- SharedSpaceRepository.getSpacePersonByIdentity
 select
   *
@@ -703,6 +787,82 @@ where
 limit
   $2
 
+-- SharedSpaceRepository.isSpacePersonRepresentativeFaceValid
+select
+  "asset_face"."id"
+from
+  "shared_space_person_face"
+  inner join "shared_space_person" on "shared_space_person"."id" = "shared_space_person_face"."personId"
+  inner join "asset_face" on "asset_face"."id" = "shared_space_person_face"."assetFaceId"
+  inner join "asset" on "asset"."id" = "asset_face"."assetId"
+where
+  "shared_space_person_face"."personId" = $1
+  and "asset_face"."id" = $2
+  and "asset_face"."deletedAt" is null
+  and "asset_face"."isVisible" = $3
+  and "asset"."deletedAt" is null
+  and "asset"."isOffline" = $4
+  and "asset"."visibility" in ($5, $6)
+  and (
+    exists (
+      select
+        "shared_space_asset"."assetId"
+      from
+        "shared_space_asset"
+      where
+        "shared_space_asset"."assetId" = "asset_face"."assetId"
+        and "shared_space_asset"."spaceId" = "shared_space_person"."spaceId"
+    )
+    or exists (
+      select
+        "shared_space_library"."libraryId"
+      from
+        "shared_space_library"
+      where
+        "shared_space_library"."libraryId" = "asset"."libraryId"
+        and "shared_space_library"."spaceId" = "shared_space_person"."spaceId"
+    )
+  )
+
+-- SharedSpaceRepository.getFirstValidRepresentativeFaceForPerson
+select
+  "asset_face"."id"
+from
+  "shared_space_person_face"
+  inner join "shared_space_person" on "shared_space_person"."id" = "shared_space_person_face"."personId"
+  inner join "asset_face" on "asset_face"."id" = "shared_space_person_face"."assetFaceId"
+  inner join "asset" on "asset"."id" = "asset_face"."assetId"
+where
+  "shared_space_person_face"."personId" = $1
+  and "asset_face"."deletedAt" is null
+  and "asset_face"."isVisible" = $2
+  and "asset"."deletedAt" is null
+  and "asset"."isOffline" = $3
+  and "asset"."visibility" in ($4, $5)
+  and (
+    exists (
+      select
+        "shared_space_asset"."assetId"
+      from
+        "shared_space_asset"
+      where
+        "shared_space_asset"."assetId" = "asset_face"."assetId"
+        and "shared_space_asset"."spaceId" = "shared_space_person"."spaceId"
+    )
+    or exists (
+      select
+        "shared_space_library"."libraryId"
+      from
+        "shared_space_library"
+      where
+        "shared_space_library"."libraryId" = "asset"."libraryId"
+        and "shared_space_library"."spaceId" = "shared_space_person"."spaceId"
+    )
+  )
+order by
+  "asset"."fileCreatedAt" desc,
+  "asset_face"."id"
+
 -- SharedSpaceRepository.repairOrphanedRepresentativeFaces
 update "shared_space_person"
 set
@@ -720,6 +880,7 @@ set
 where
   "shared_space_person"."spaceId" = $2
   and "shared_space_person"."representativeFaceId" is null
+  and "shared_space_person"."representativeFaceSource" = $3
   and exists (
     select
     from
@@ -949,6 +1110,7 @@ select
   "shared_space_person"."isHidden",
   "shared_space_person"."faceCount",
   "shared_space_person"."representativeFaceId",
+  "shared_space_person"."representativeFaceSource",
   "face_search"."embedding"
 from
   "shared_space_person"
