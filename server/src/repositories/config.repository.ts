@@ -107,6 +107,7 @@ export interface EnvData {
 
   demo: {
     enabled: boolean;
+    autoLogin: boolean;
     email: string;
     password: string;
   };
@@ -381,6 +382,7 @@ const getEnv = (): EnvData => {
 
     demo: {
       enabled: dto.IMMICH_DEMO_MODE ?? false,
+      autoLogin: dto.IMMICH_DEMO_AUTO_LOGIN ?? false,
       email: dto.IMMICH_DEMO_USER_EMAIL ?? '',
       password: dto.IMMICH_DEMO_USER_PASSWORD ?? '',
     },

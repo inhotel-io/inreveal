@@ -75,6 +75,7 @@ export const EnvSchema = z
     IMMICH_THIRD_PARTY_SUPPORT_URL: z.string().optional(),
     IMMICH_ALLOW_SETUP: stringBool.optional(),
     IMMICH_DEMO_MODE: stringBool.optional(),
+    IMMICH_DEMO_AUTO_LOGIN: stringBool.optional(),
     IMMICH_DEMO_USER_EMAIL: z.string().optional(),
     IMMICH_DEMO_USER_PASSWORD: z.string().optional(),
     IMMICH_TRUSTED_PROXIES: trustedProxiesSchema,

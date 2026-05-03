@@ -154,6 +154,7 @@ export class ServerService extends BaseService {
 
     return {
       demoMode: demo.enabled,
+      demoAutoLogin: demo.autoLogin,
       loginPageMessage: config.server.loginPageMessage,
       trashDays: config.trash.days,
       userDeleteDelay: config.user.deleteDelay,

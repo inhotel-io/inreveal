@@ -2164,6 +2164,8 @@ export type ServerApkLinksDto = {
     x86_64: string;
 };
 export type ServerConfigDto = {
+    /** Whether demo auto-login is enabled */
+    demoAutoLogin: boolean;
     demoMode: boolean;
     /** External domain URL */
     externalDomain: string;

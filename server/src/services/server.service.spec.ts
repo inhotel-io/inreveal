@@ -173,6 +173,7 @@ describe(ServerService.name, () => {
   describe('getSystemConfig', () => {
     it('should respond the server configuration', async () => {
       await expect(sut.getSystemConfig()).resolves.toEqual({
+        demoAutoLogin: false,
         demoMode: false,
         loginPageMessage: '',
         oauthButtonText: 'Login with OAuth',
@@ -187,6 +188,17 @@ describe(ServerService.name, () => {
         maintenanceMode: false,
       });
       expect(mocks.systemMetadata.get).toHaveBeenCalled();
+    });
+
+    it('should expose whether demo auto-login is enabled', async () => {
+      mocks.config.getEnv.mockReturnValue(
+        mockEnvData({ demo: { enabled: true, email: 'demo@test.com', password: '', autoLogin: true } as any }),
+      );
+
+      await expect(sut.getSystemConfig()).resolves.toMatchObject({
+        demoAutoLogin: true,
+        demoMode: true,
+      });
     });
 
     // Regression guard: getSystemConfig is hit on every page load; must read from cache.

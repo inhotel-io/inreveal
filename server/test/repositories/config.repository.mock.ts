@@ -90,6 +90,7 @@ const envData: EnvData = {
 
   demo: {
     enabled: false,
+    autoLogin: false,
     email: '',
     password: '',
   },

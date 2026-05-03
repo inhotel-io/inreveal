@@ -24775,6 +24775,10 @@
       },
       "ServerConfigDto": {
         "properties": {
+          "demoAutoLogin": {
+            "description": "Whether demo auto-login is enabled",
+            "type": "boolean"
+          },
           "demoMode": {
             "type": "boolean"
           },
@@ -24828,6 +24832,7 @@
           }
         },
         "required": [
+          "demoAutoLogin",
           "demoMode",
           "externalDomain",
           "isInitialized",
