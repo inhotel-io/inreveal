@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { writeFile } from 'node:fs/promises';
 import { DiskStorageBackend } from 'src/backends/disk-storage.backend';
 import { BulkIdErrorReason } from 'src/dtos/asset-ids.response.dto';
 import { mapFaces, mapPerson } from 'src/dtos/person.dto';
@@ -17,7 +18,7 @@ import {
 import { FaceSearchResult } from 'src/repositories/search.repository';
 import { PersonService } from 'src/services/person.service';
 import { StorageService } from 'src/services/storage.service';
-import { ImmichFileResponse } from 'src/utils/file';
+import { ImmichFileResponse, ImmichStreamResponse } from 'src/utils/file';
 import { AssetFaceFactory } from 'test/factories/asset-face.factory';
 import { AssetFactory } from 'test/factories/asset.factory';
 import { AuthFactory } from 'test/factories/auth.factory';
@@ -375,6 +376,36 @@ describe(PersonService.name, () => {
         faces: [expect.objectContaining({ id: 'face-1', assetId: 'asset-1', isRepresentative: true })],
         hasNextPage: true,
       });
+    });
+
+    it('serves a personal picker face crop only for faces belonging to the person', async () => {
+      const auth = AuthFactory.create();
+      const face = AssetFaceFactory.create({ id: 'face-1', assetId: 'asset-1' });
+      const cleanup = vi.fn();
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set(['person-1']));
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([face.assetId]));
+      mocks.person.getRepresentativeFaceForUpdate.mockResolvedValue(face);
+      mocks.asset.getForThumbnail.mockResolvedValue({ path: '/preview.jpg' } as any);
+      vi.spyOn(sut as any, 'ensureLocalFile').mockResolvedValue({ localPath: '/preview.jpg', cleanup });
+      mocks.media.decodeImage.mockResolvedValue({
+        data: Buffer.from('decoded-image'),
+        info: { width: 250, height: 250, channels: 3 },
+      } as any);
+      mocks.media.generateThumbnail.mockImplementation(async (_input, _options, output) => {
+        await writeFile(output, Buffer.from('cropped-face'));
+      });
+
+      const result = await sut.getFaceThumbnail(auth, 'person-1', 'face-1');
+
+      expect(mocks.person.getRepresentativeFaceForUpdate).toHaveBeenCalledWith({
+        personId: 'person-1',
+        assetFaceId: 'face-1',
+      });
+      expect(mocks.media.generateThumbnail).toHaveBeenCalled();
+      expect(cleanup).toHaveBeenCalled();
+      if (result instanceof ImmichStreamResponse) {
+        result.stream.destroy();
+      }
     });
   });
 

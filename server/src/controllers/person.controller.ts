@@ -134,6 +134,24 @@ export class PersonController {
     return this.service.getFacesForPicker(auth, id, dto);
   }
 
+  @Get(':id/faces/:faceId/thumbnail')
+  @FileResponse()
+  @Authenticated({ permission: Permission.PersonRead })
+  @Endpoint({
+    summary: 'Get person face thumbnail',
+    description: 'Retrieve an exact face-crop thumbnail for a person.',
+    history: new HistoryBuilder().added('v2').stable('v2'),
+  })
+  async getPersonFaceThumbnail(
+    @Res() res: Response,
+    @Next() next: NextFunction,
+    @Auth() auth: AuthDto,
+    @Param('id') id: string,
+    @Param('faceId') faceId: string,
+  ) {
+    await sendFile(res, next, () => this.service.getFaceThumbnail(auth, id, faceId), this.logger);
+  }
+
   @Put(':id/representative-face')
   @Authenticated({ permission: Permission.PersonUpdate })
   @Endpoint({

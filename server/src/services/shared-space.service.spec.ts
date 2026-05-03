@@ -4189,6 +4189,64 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.media.generateThumbnail).not.toHaveBeenCalled();
     });
 
+    it('should serve a manual space representative face before a personal thumbnail', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const personId = newUuid();
+      const identityId = newUuid();
+      const faceId = newUuid();
+      const assetId = newUuid();
+      const face = {
+        id: faceId,
+        assetId,
+        boundingBoxX1: 100,
+        boundingBoxY1: 100,
+        boundingBoxX2: 200,
+        boundingBoxY2: 200,
+        imageWidth: 500,
+        imageHeight: 500,
+      } as any;
+      const person = factory.sharedSpacePerson({
+        id: personId,
+        spaceId,
+        identityId,
+        representativeFaceId: faceId,
+        representativeFaceSource: 'manual',
+      });
+      const cleanup = vi.fn();
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
+      mocks.sharedSpace.getPersonById.mockResolvedValue(person);
+      (mocks.sharedSpace as any).getSpaceRepresentativeFaceForUpdate = vi.fn().mockResolvedValue(face);
+      mocks.asset.getForThumbnail.mockResolvedValue({ path: '/preview.jpg' } as any);
+      mocks.sharedSpace.getPersonalThumbnailForSpacePerson.mockResolvedValue({
+        personId: newUuid(),
+        thumbnailPath: '/personal.jpg',
+      });
+      vi.spyOn(sut as any, 'ensureLocalFile').mockResolvedValue({ localPath: '/preview.jpg', cleanup });
+      mocks.media.decodeImage.mockResolvedValue({
+        data: Buffer.from('decoded-image'),
+        info: { width: 250, height: 250, channels: 3 },
+      } as any);
+      mocks.media.generateThumbnail.mockImplementation(async (_input, _options, output) => {
+        await writeFile(output, Buffer.from('cropped-face'));
+      });
+
+      const result = await sut.getSpacePersonThumbnail(auth, spaceId, personId);
+
+      expect((mocks.sharedSpace as any).getSpaceRepresentativeFaceForUpdate).toHaveBeenCalledWith({
+        spaceId,
+        personId,
+        assetFaceId: faceId,
+      });
+      expect(mocks.sharedSpace.getPersonalThumbnailForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.person.getFaceById).not.toHaveBeenCalled();
+      expect(mocks.media.generateThumbnail).toHaveBeenCalled();
+      expect(cleanup).toHaveBeenCalled();
+      if (result instanceof ImmichStreamResponse) {
+        result.stream.destroy();
+      }
+    });
+
     it('should serve a cropped thumbnail from the representative face asset preview', async () => {
       const spaceId = newUuid();
       const personId = newUuid();

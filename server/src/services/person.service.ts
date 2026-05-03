@@ -256,6 +256,22 @@ export class PersonService extends BaseService {
     };
   }
 
+  async getFaceThumbnail(auth: AuthDto, personId: string, faceId: string): Promise<ImmichMediaResponse> {
+    await this.requireAccess({ auth, permission: Permission.PersonRead, ids: [personId] });
+    const face = await this.personRepository.getRepresentativeFaceForUpdate({ personId, assetFaceId: faceId });
+    if (!face) {
+      throw new NotFoundException();
+    }
+
+    await this.requireAccess({ auth, permission: Permission.AssetRead, ids: [face.assetId] });
+    const sourcePath = await this.getFaceThumbnailSource(face.assetId);
+    if (!sourcePath) {
+      throw new NotFoundException();
+    }
+
+    return this.generateFaceThumbnailResponse(face, sourcePath);
+  }
+
   async updateRepresentativeFace(
     auth: AuthDto,
     id: string,

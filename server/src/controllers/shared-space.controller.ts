@@ -25,8 +25,8 @@ import {
   SharedSpacePersonMergeDto,
   SharedSpacePersonResponseDto,
   SharedSpacePersonUpdateDto,
-  SpaceRepresentativeFaceUpdateDto,
   SpacePeopleQueryDto,
+  SpaceRepresentativeFaceUpdateDto,
 } from 'src/dtos/shared-space-person.dto';
 import {
   SharedSpaceActivityQueryDto,
@@ -355,6 +355,25 @@ export class SharedSpaceController {
     @Query() dto: PersonFacePageQueryDto,
   ): Promise<PersonFacePageResponseDto> {
     return this.service.getSpacePersonFaces(auth, id, personId, dto);
+  }
+
+  @Get(':id/people/:personId/faces/:faceId/thumbnail')
+  @FileResponse()
+  @Authenticated({ permission: Permission.SharedSpaceRead })
+  @Endpoint({
+    summary: 'Get space person face thumbnail',
+    description: 'Retrieve an exact face-crop thumbnail for a person in a shared space.',
+    history: new HistoryBuilder().added('v2').stable('v2'),
+  })
+  async getSpacePersonFaceThumbnail(
+    @Res() res: Response,
+    @Next() next: NextFunction,
+    @Auth() auth: AuthDto,
+    @Param('id') id: string,
+    @Param('personId') personId: string,
+    @Param('faceId') faceId: string,
+  ) {
+    await sendFile(res, next, () => this.service.getSpacePersonFaceThumbnail(auth, id, personId, faceId), this.logger);
   }
 
   @Put(':id/people/:personId/representative-face')
