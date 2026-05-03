@@ -26977,7 +26977,6 @@
             "type": "string"
           },
           "representativeFaceSource": {
-            "default": "auto",
             "description": "Representative face source",
             "enum": [
               "auto",
@@ -27009,6 +27008,7 @@
           "id",
           "isHidden",
           "name",
+          "representativeFaceSource",
           "spaceId",
           "thumbnailPath",
           "updatedAt"

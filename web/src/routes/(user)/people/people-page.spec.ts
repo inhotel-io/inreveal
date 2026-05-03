@@ -1,7 +1,7 @@
 import { getAnimateMock } from '$lib/__mocks__/animate.mock';
 import { getIntersectionObserverMock } from '$lib/__mocks__/intersection-observer.mock';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
-import { Type, type PersonResponseDto, type SharedSpacePersonResponseDto } from '@immich/sdk';
+import { RepresentativeFaceSource, Type, type PersonResponseDto, type SharedSpacePersonResponseDto } from '@immich/sdk';
 import { personFactory } from '@test-data/factories/person-factory';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
@@ -65,6 +65,7 @@ function makeSpacePerson(overrides: Partial<SharedSpacePersonResponseDto> = {}):
     isHidden: false,
     birthDate: null,
     representativeFaceId: null,
+    representativeFaceSource: RepresentativeFaceSource.Auto,
     faceCount: 1,
     assetCount: 4,
     alias: null,

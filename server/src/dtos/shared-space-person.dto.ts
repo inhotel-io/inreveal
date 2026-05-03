@@ -59,7 +59,7 @@ const SharedSpacePersonResponseSchema = z
     isHidden: z.boolean().describe('Is hidden'),
     birthDate: z.string().nullable().optional().describe('Person date of birth').meta({ format: 'date' }),
     representativeFaceId: z.string().nullable().optional().describe('Representative face ID'),
-    representativeFaceSource: z.enum(['auto', 'manual']).default('auto').describe('Representative face source'),
+    representativeFaceSource: z.enum(['auto', 'manual']).describe('Representative face source'),
     faceCount: z.number().describe('Number of faces assigned to this person'),
     assetCount: z.number().describe('Number of unique assets with this person'),
     alias: z.string().nullable().optional().describe('User-specific alias for this person'),

@@ -2685,7 +2685,7 @@ export type SharedSpacePersonResponseDto = {
     /** Representative face ID */
     representativeFaceId?: string | null;
     /** Representative face source */
-    representativeFaceSource?: RepresentativeFaceSource;
+    representativeFaceSource: RepresentativeFaceSource;
     /** Space ID */
     spaceId: string;
     /** Thumbnail path */
