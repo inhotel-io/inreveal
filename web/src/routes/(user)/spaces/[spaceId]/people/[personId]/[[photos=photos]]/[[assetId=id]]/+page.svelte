@@ -22,19 +22,25 @@
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import { timeBeforeShowLoadingSpinner } from '$lib/constants';
   import PersonEditBirthDateModal from '$lib/modals/PersonEditBirthDateModal.svelte';
+  import RepresentativeFacePickerModal from '$lib/modals/RepresentativeFacePickerModal.svelte';
   import { Route } from '$lib/route';
   import { createUrl, getPeopleThumbnailUrl } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
   import { locale } from '$lib/stores/preferences.store';
+  import { getSpacePersonFaceThumbnailUrl } from '$lib/utils/people-utils';
   import {
     detachScopedPerson,
+    getSpacePersonFaces,
     getSpacePeople,
     mergeSpacePeople,
     mergeScopedPeople,
+    RepresentativeFaceSource,
     searchPerson,
     SharedSpaceRole,
     Type2 as ScopedPersonProfileType,
+    updateSpacePersonRepresentativeFace,
     updateSpacePerson,
+    type PersonFaceResponseDto,
     type PersonResponseDto,
     type ScopedPersonProfileRefDto,
     type SharedSpaceMemberResponseDto,
@@ -42,6 +48,7 @@
   } from '@immich/sdk';
   import { ContextMenuButton, LoadingSpinner, modalManager, toastManager, type ActionItem } from '@immich/ui';
   import {
+    mdiAccountBoxOutline,
     mdiAccountMultipleCheckOutline,
     mdiArrowLeft,
     mdiCalendarEditOutline,
@@ -350,6 +357,40 @@
     });
   }
 
+  async function openRepresentativeFacePicker() {
+    const updated = await modalManager.show(RepresentativeFacePickerModal, {
+      title: $t('select_representative_face'),
+      loadFaces: ({ page, size }: { page: number; size: number }) =>
+        getSpacePersonFaces({ id: space.id, personId: person.id, page, size }),
+      updateFace: async (faceId: string) => {
+        const updatedPerson = await updateSpacePersonRepresentativeFace({
+          id: space.id,
+          personId: person.id,
+          spaceRepresentativeFaceUpdateDto: { assetFaceId: faceId },
+        });
+        setPerson({ ...person, ...updatedPerson });
+      },
+      resetFace:
+        person.representativeFaceSource === RepresentativeFaceSource.Manual
+          ? async () => {
+              const updatedPerson = await updateSpacePersonRepresentativeFace({
+                id: space.id,
+                personId: person.id,
+                spaceRepresentativeFaceUpdateDto: { assetFaceId: null },
+              });
+              setPerson({ ...person, ...updatedPerson });
+            }
+          : undefined,
+      getThumbnailUrl: (face: PersonFaceResponseDto) =>
+        getSpacePersonFaceThumbnailUrl(space.id, person.id, face.id, person.updatedAt),
+      canUpdate: isEditor,
+    });
+
+    if (updated) {
+      await invalidateAll();
+    }
+  }
+
   async function handleHidePerson() {
     try {
       await updateSpacePerson({
@@ -388,6 +429,11 @@
 
     if (isEditor) {
       items.push(
+        {
+          title: $t('select_representative_face'),
+          icon: mdiAccountBoxOutline,
+          onAction: () => void openRepresentativeFacePicker(),
+        },
         {
           title: $t('set_date_of_birth'),
           icon: mdiCalendarEditOutline,

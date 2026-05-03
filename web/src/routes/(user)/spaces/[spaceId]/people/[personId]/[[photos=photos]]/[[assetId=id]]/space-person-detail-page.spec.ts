@@ -63,6 +63,11 @@ vi.mock('$lib/components/people/people-merge-selector.svelte', async () => {
   return { default: MockComponent };
 });
 
+vi.mock('$lib/modals/RepresentativeFacePickerModal.svelte', async () => {
+  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
+  return { default: MockComponent };
+});
+
 function makeSpace(overrides: Partial<SharedSpaceResponseDto> = {}): SharedSpaceResponseDto {
   return {
     id: 'space-1',
@@ -223,6 +228,75 @@ describe('Spaces person detail page', () => {
     expect(screen.queryByText('set_date_of_birth')).not.toBeInTheDocument();
     expect(screen.queryByText('merge_people')).not.toBeInTheDocument();
     expect(screen.queryByText('separate_from_grouped_person')).not.toBeInTheDocument();
+  });
+
+  it('opens the representative face picker for editors', async () => {
+    renderPage({ person: makePerson({ representativeFaceSource: 'auto' }) });
+
+    await userEvent.click(screen.getByText('select_representative_face'));
+
+    expect(modalManager.show).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        title: 'select_representative_face',
+        loadFaces: expect.any(Function),
+        updateFace: expect.any(Function),
+        resetFace: undefined,
+        canUpdate: true,
+      }),
+    );
+  });
+
+  it('does not show the representative face picker action for viewers', () => {
+    renderPage({ members: [makeMember({ role: SharedSpaceRole.Viewer })] });
+
+    expect(screen.queryByText('select_representative_face')).not.toBeInTheDocument();
+  });
+
+  it('passes a reset callback for manual space representative face overrides', async () => {
+    renderPage({ person: makePerson({ representativeFaceSource: 'manual' }) });
+
+    await userEvent.click(screen.getByText('select_representative_face'));
+
+    expect(modalManager.show).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ resetFace: expect.any(Function) }),
+    );
+  });
+
+  it('uses exact-face SDK calls for space representative face selection and reset', async () => {
+    const person = makePerson({ representativeFaceSource: 'manual' });
+    sdkMock.getSpacePersonFaces.mockResolvedValue({ faces: [], hasNextPage: false });
+    sdkMock.updateSpacePersonRepresentativeFace.mockResolvedValue({ ...person, representativeFaceSource: 'auto' });
+    renderPage({ person });
+
+    await userEvent.click(screen.getByText('select_representative_face'));
+    const props = vi.mocked(modalManager.show).mock.calls[0][1] as {
+      loadFaces: (request: { page: number; size: number }) => Promise<unknown>;
+      updateFace: (faceId: string) => Promise<unknown>;
+      resetFace: () => Promise<unknown>;
+    };
+
+    await props.loadFaces({ page: 1, size: 50 });
+    await props.updateFace('face-1');
+    await props.resetFace();
+
+    expect(sdkMock.getSpacePersonFaces).toHaveBeenCalledWith({
+      id: 'space-1',
+      personId: 'person-1',
+      page: 1,
+      size: 50,
+    });
+    expect(sdkMock.updateSpacePersonRepresentativeFace).toHaveBeenCalledWith({
+      id: 'space-1',
+      personId: 'person-1',
+      spaceRepresentativeFaceUpdateDto: { assetFaceId: 'face-1' },
+    });
+    expect(sdkMock.updateSpacePersonRepresentativeFace).toHaveBeenCalledWith({
+      id: 'space-1',
+      personId: 'person-1',
+      spaceRepresentativeFaceUpdateDto: { assetFaceId: null },
+    });
   });
 
   it('ignores a forced merge action for viewers', () => {
