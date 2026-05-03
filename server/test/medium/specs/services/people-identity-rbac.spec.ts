@@ -851,6 +851,11 @@ describe('People identity RBAC projection', () => {
       ]);
     } finally {
       await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
+      await ctx.database
+        .deleteFrom('shared_space_asset')
+        .where('spaceId', '=', space.id)
+        .where('assetId', '=', asset.id)
+        .execute();
     }
   });
 
@@ -898,6 +903,11 @@ describe('People identity RBAC projection', () => {
       ]);
     } finally {
       await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
+      await ctx.database
+        .deleteFrom('shared_space_asset')
+        .where('spaceId', '=', space.id)
+        .where('assetId', '=', asset.id)
+        .execute();
     }
   });
 
