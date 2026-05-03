@@ -450,6 +450,22 @@ order by
 limit
   $3
 
+-- SharedSpaceRepository.countPersonsBySpaceId
+select
+  coalesce(count(*), 0) as "total",
+  coalesce(
+    count(*) filter (
+      where
+        "isHidden" = $1
+    ),
+    0
+  ) as "hidden"
+from
+  "shared_space_person"
+where
+  "shared_space_person"."spaceId" = $2
+  and "shared_space_person"."name" ILIKE $3 ESCAPE '\'
+
 -- SharedSpaceRepository.getPersonById
 select
   "shared_space_person".*

@@ -690,6 +690,8 @@ class ApiClient {
           return SharedSpaceMemberTimelineDto.fromJson(value);
         case 'SharedSpaceMemberUpdateDto':
           return SharedSpaceMemberUpdateDto.fromJson(value);
+        case 'SharedSpacePeopleStatisticsResponseDto':
+          return SharedSpacePeopleStatisticsResponseDto.fromJson(value);
         case 'SharedSpacePersonAliasDto':
           return SharedSpacePersonAliasDto.fromJson(value);
         case 'SharedSpacePersonMergeDto':

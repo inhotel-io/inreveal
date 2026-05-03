@@ -273,6 +273,7 @@ Class | Method | HTTP request | Description
 *SharedSpacesApi* | [**getSpaceActivities**](doc//SharedSpacesApi.md#getspaceactivities) | **GET** /shared-spaces/{id}/activities | Get space activity feed
 *SharedSpacesApi* | [**getSpaceMapMarkers**](doc//SharedSpacesApi.md#getspacemapmarkers) | **GET** /shared-spaces/{id}/map-markers | Get map markers for a shared space
 *SharedSpacesApi* | [**getSpacePeople**](doc//SharedSpacesApi.md#getspacepeople) | **GET** /shared-spaces/{id}/people | Get people in a shared space
+*SharedSpacesApi* | [**getSpacePeopleStatistics**](doc//SharedSpacesApi.md#getspacepeoplestatistics) | **GET** /shared-spaces/{id}/people/statistics | Get people statistics in a shared space
 *SharedSpacesApi* | [**getSpacePerson**](doc//SharedSpacesApi.md#getspaceperson) | **GET** /shared-spaces/{id}/people/{personId} | Get a person in a shared space
 *SharedSpacesApi* | [**getSpacePersonAssets**](doc//SharedSpacesApi.md#getspacepersonassets) | **GET** /shared-spaces/{id}/people/{personId}/assets | Get assets for a person in a shared space
 *SharedSpacesApi* | [**getSpacePersonThumbnail**](doc//SharedSpacesApi.md#getspacepersonthumbnail) | **GET** /shared-spaces/{id}/people/{personId}/thumbnail | Get a space person thumbnail
@@ -623,6 +624,7 @@ Class | Method | HTTP request | Description
  - [SharedSpaceMemberResponseDto](doc//SharedSpaceMemberResponseDto.md)
  - [SharedSpaceMemberTimelineDto](doc//SharedSpaceMemberTimelineDto.md)
  - [SharedSpaceMemberUpdateDto](doc//SharedSpaceMemberUpdateDto.md)
+ - [SharedSpacePeopleStatisticsResponseDto](doc//SharedSpacePeopleStatisticsResponseDto.md)
  - [SharedSpacePersonAliasDto](doc//SharedSpacePersonAliasDto.md)
  - [SharedSpacePersonMergeDto](doc//SharedSpacePersonMergeDto.md)
  - [SharedSpacePersonResponseDto](doc//SharedSpacePersonResponseDto.md)

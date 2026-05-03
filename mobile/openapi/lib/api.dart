@@ -327,6 +327,7 @@ part 'model/shared_space_member_preferences_dto.dart';
 part 'model/shared_space_member_response_dto.dart';
 part 'model/shared_space_member_timeline_dto.dart';
 part 'model/shared_space_member_update_dto.dart';
+part 'model/shared_space_people_statistics_response_dto.dart';
 part 'model/shared_space_person_alias_dto.dart';
 part 'model/shared_space_person_merge_dto.dart';
 part 'model/shared_space_person_response_dto.dart';
