@@ -1680,6 +1680,7 @@ export class SharedSpaceService extends BaseService {
         ? await this.findOrCreateSpacePersonForFace({
             spaceId,
             faceId: face.id,
+            personId: face.personId,
             identityId: face.identityId,
             embedding: face.embedding,
             type: face.type ?? 'person',
@@ -1731,11 +1732,16 @@ export class SharedSpaceService extends BaseService {
         ? await this.sharedSpaceRepository.getSpacePersonByIdentity(spaceId, petFace.identityId)
         : undefined;
       if (!spacePerson && petFace.identityId) {
+        const representativeFaceId = await this.getNewSpacePersonRepresentativeFaceId({
+          spaceId,
+          fallbackFaceId: petFace.id,
+          personalPersonId: petFace.personId,
+        });
         spacePerson = await this.sharedSpaceRepository.createPerson({
           spaceId,
           identityId: petFace.identityId,
           name: '',
-          representativeFaceId: petFace.id,
+          representativeFaceId,
           type: 'pet',
         });
       } else if (!spacePerson) {
@@ -1743,12 +1749,19 @@ export class SharedSpaceService extends BaseService {
           spaceId,
           petFace.personId,
         );
+        const representativeFaceId = existingSpacePerson
+          ? petFace.id
+          : await this.getNewSpacePersonRepresentativeFaceId({
+              spaceId,
+              fallbackFaceId: petFace.id,
+              personalPersonId: petFace.personId,
+            });
         spacePerson =
           existingSpacePerson ??
           (await this.sharedSpaceRepository.createPerson({
             spaceId,
             name: '',
-            representativeFaceId: petFace.id,
+            representativeFaceId,
             type: 'pet',
           }));
       }
@@ -1770,6 +1783,7 @@ export class SharedSpaceService extends BaseService {
   private async findOrCreateSpacePersonForFace(input: {
     spaceId: string;
     faceId: string;
+    personId: string;
     identityId: string;
     embedding: string;
     type: string;
@@ -1804,11 +1818,17 @@ export class SharedSpaceService extends BaseService {
       };
     }
 
+    const representativeFaceId = await this.getNewSpacePersonRepresentativeFaceId({
+      spaceId: input.spaceId,
+      fallbackFaceId: input.faceId,
+      personalPersonId: input.personId,
+    });
+
     return this.sharedSpaceRepository.createPerson({
       spaceId: input.spaceId,
       identityId: input.identityId,
       name: '',
-      representativeFaceId: input.faceId,
+      representativeFaceId,
       type: input.type,
     });
   }
@@ -1838,12 +1858,40 @@ export class SharedSpaceService extends BaseService {
       return { id: matches[0].personId, identityId: matches[0].identityId ?? null };
     }
 
+    const representativeFaceId = await this.getNewSpacePersonRepresentativeFaceId({
+      spaceId: input.spaceId,
+      fallbackFaceId: input.faceId,
+      personalPersonId: input.personId,
+    });
+
     return this.sharedSpaceRepository.createPerson({
       spaceId: input.spaceId,
       name: '',
-      representativeFaceId: input.faceId,
+      representativeFaceId,
       type: 'person',
     });
+  }
+
+  private async getNewSpacePersonRepresentativeFaceId(input: {
+    spaceId: string;
+    fallbackFaceId: string;
+    personalPersonId: string | null;
+  }): Promise<string> {
+    if (!input.personalPersonId) {
+      return input.fallbackFaceId;
+    }
+
+    const person = await this.personRepository.getById(input.personalPersonId);
+    if (!person?.thumbnailPath || !person.faceAssetId) {
+      return input.fallbackFaceId;
+    }
+
+    if (person.faceAssetId === input.fallbackFaceId) {
+      return input.fallbackFaceId;
+    }
+
+    const isFeatureFaceInSpace = await this.sharedSpaceRepository.isFaceInSpace(input.spaceId, person.faceAssetId);
+    return isFeatureFaceInSpace ? person.faceAssetId : input.fallbackFaceId;
   }
 
   private async mergeIdentitiesForSpacePersonEvidence(input: {
