@@ -51,13 +51,20 @@ type AccessiblePeopleSearchOptions = {
 };
 
 type ProfileKind = 'person' | 'space-person';
-type SpacePersonBackfillIdentityCandidate = {
-  identityId: string;
-  faceCount: number | string | bigint;
+type SpacePersonBackfillRow = {
+  id: string;
+  spaceId: string;
+  identityId: string | null;
+  representativeFaceId: string | null;
+  type: string;
 };
 
-const SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_FACE_COUNT = 20;
-const SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_RATIO = 0.9;
+type SpacePersonBackfillIdentityGroup = {
+  identityId: string;
+  type: string;
+  faceCount: number | string | bigint;
+  representativeFaceId: string;
+};
 
 export type ScopedPersonTokenResolution = {
   identityIds: string[];
@@ -307,36 +314,18 @@ export class FaceIdentityRepository {
         )
         OR EXISTS (
           SELECT 1
-          FROM (
-            SELECT
-              shared_space_person.id,
-              shared_space_person."spaceId",
-              face_identity_face."identityId",
-              COUNT(*) AS "faceCount",
-              SUM(COUNT(*)) OVER (PARTITION BY shared_space_person.id) AS "totalFaceCount",
-              ROW_NUMBER() OVER (PARTITION BY shared_space_person.id ORDER BY COUNT(*) DESC) AS "identityRank"
-            FROM shared_space_person
-            INNER JOIN shared_space_person_face
-              ON shared_space_person_face."personId" = shared_space_person.id
-            INNER JOIN asset_face
-              ON asset_face.id = shared_space_person_face."assetFaceId"
-            INNER JOIN face_identity_face
-              ON face_identity_face."assetFaceId" = asset_face.id
-            WHERE shared_space_person."identityId" IS NULL
-              AND asset_face."deletedAt" IS NULL
-              AND asset_face."isVisible" = true
-            GROUP BY shared_space_person.id, shared_space_person."spaceId", face_identity_face."identityId"
-          ) AS candidate
-          WHERE candidate."identityRank" = 1
-            AND candidate."faceCount" >= ${SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_FACE_COUNT}
-            AND candidate."faceCount"::numeric / candidate."totalFaceCount"::numeric >= ${SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_RATIO}
-            AND NOT EXISTS (
-              SELECT 1
-              FROM shared_space_person existing_space_person
-              WHERE existing_space_person."spaceId" = candidate."spaceId"
-                AND existing_space_person."identityId" = candidate."identityId"
-                AND existing_space_person.id != candidate.id
-            )
+          FROM shared_space_person
+          INNER JOIN shared_space ON shared_space.id = shared_space_person."spaceId"
+          INNER JOIN shared_space_person_face
+            ON shared_space_person_face."personId" = shared_space_person.id
+          INNER JOIN asset_face
+            ON asset_face.id = shared_space_person_face."assetFaceId"
+          INNER JOIN face_identity_face
+            ON face_identity_face."assetFaceId" = asset_face.id
+          WHERE shared_space."faceRecognitionEnabled" = true
+            AND asset_face."deletedAt" IS NULL
+            AND asset_face."isVisible" = true
+            AND shared_space_person."identityId" IS DISTINCT FROM face_identity_face."identityId"
         ) AS "hasWork"
     `.execute(this.db);
 
@@ -1258,82 +1247,202 @@ export class FaceIdentityRepository {
   async backfillSpacePersonIdentities(input: { cursor?: string; limit: number }): Promise<SpacePersonBackfillResult> {
     const people = await this.db
       .selectFrom('shared_space_person')
-      .select(['id', 'spaceId', 'identityId'])
+      .select(['id', 'spaceId', 'identityId', 'representativeFaceId', 'type'])
       .$if(!!input.cursor, (qb) => qb.where('id', '>', input.cursor!))
       .orderBy('id')
       .limit(input.limit + 1)
       .execute();
 
-    let conflictCount = 0;
     const page = people.slice(0, input.limit);
     for (const person of page) {
-      if (person.identityId) {
-        continue;
-      }
-
-      const linkedIdentities = await this.db
-        .selectFrom('shared_space_person_face')
-        .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
-        .innerJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
-        .select('face_identity_face.identityId')
-        .select(() => sql<number>`count(*)::int`.as('faceCount'))
-        .where('shared_space_person_face.personId', '=', person.id)
-        .where('asset_face.deletedAt', 'is', null)
-        .where('asset_face.isVisible', '=', true)
-        .groupBy('face_identity_face.identityId')
-        .execute();
-
-      const identityId = this.getSpacePersonBackfillIdentityId(linkedIdentities);
-      if (identityId) {
-        const existingPerson = await this.db
-          .selectFrom('shared_space_person')
-          .select('id')
-          .where('spaceId', '=', person.spaceId)
-          .where('identityId', '=', identityId)
-          .where('id', '!=', person.id)
-          .executeTakeFirst();
-
-        if (existingPerson) {
-          conflictCount++;
-          continue;
-        }
-
-        await this.db.updateTable('shared_space_person').set({ identityId }).where('id', '=', person.id).execute();
-      } else if (linkedIdentities.length > 1) {
-        conflictCount++;
-      }
+      await this.repairSpacePersonIdentityAssignments(person);
     }
 
     return {
       processed: page.length,
-      nextCursor: people.length > input.limit ? page.at(-1)?.id : undefined,
-      conflictCount,
+      conflictCount: 0,
+      ...(people.length > input.limit ? { nextCursor: page.at(-1)?.id } : {}),
     };
   }
 
-  private getSpacePersonBackfillIdentityId(candidates: SpacePersonBackfillIdentityCandidate[]): string | null {
-    if (candidates.length === 0) {
-      return null;
+  private async repairSpacePersonIdentityAssignments(person: SpacePersonBackfillRow): Promise<void> {
+    const groups = await this.getSpacePersonBackfillIdentityGroups(person.id);
+    if (groups.length === 0) {
+      return;
     }
 
-    if (candidates.length === 1) {
-      return candidates[0].identityId;
+    let currentIdentityId = person.identityId;
+    const affectedPersonIds = new Set<string>([person.id]);
+
+    for (const group of groups) {
+      let targetPersonId: string | undefined;
+
+      if (currentIdentityId === group.identityId) {
+        targetPersonId = person.id;
+      } else {
+        const existingPerson = await this.getSpacePersonByIdentity(person.spaceId, group.identityId, person.id);
+        if (existingPerson) {
+          targetPersonId = existingPerson.id;
+        } else if (currentIdentityId) {
+          const createdPerson = await this.db
+            .insertInto('shared_space_person')
+            .values({
+              spaceId: person.spaceId,
+              identityId: group.identityId,
+              representativeFaceId: group.representativeFaceId,
+              type: group.type,
+            })
+            .returning(['id'])
+            .executeTakeFirstOrThrow();
+          targetPersonId = createdPerson.id;
+        } else {
+          const update: { identityId: string; type: string; representativeFaceId?: string } = {
+            identityId: group.identityId,
+            type: group.type,
+          };
+          if (!person.representativeFaceId) {
+            update.representativeFaceId = group.representativeFaceId;
+          }
+          await this.db.updateTable('shared_space_person').set(update).where('id', '=', person.id).execute();
+          currentIdentityId = group.identityId;
+          targetPersonId = person.id;
+        }
+      }
+
+      affectedPersonIds.add(targetPersonId);
+      if (targetPersonId !== person.id) {
+        await this.moveSpacePersonFacesForIdentity({
+          fromPersonId: person.id,
+          toPersonId: targetPersonId,
+          identityId: group.identityId,
+        });
+      }
     }
 
-    const rankedCandidates = candidates
-      .map((candidate) => ({ identityId: candidate.identityId, faceCount: Number(candidate.faceCount) }))
-      .toSorted((a, b) => b.faceCount - a.faceCount);
-    const totalFaces = rankedCandidates.reduce((total, candidate) => total + candidate.faceCount, 0);
-    const dominantCandidate = rankedCandidates[0];
+    await this.recountSpacePersons([...affectedPersonIds]);
+    await this.deleteOrphanedSpacePersons([...affectedPersonIds]);
+  }
 
-    if (
-      dominantCandidate.faceCount >= SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_FACE_COUNT &&
-      dominantCandidate.faceCount / totalFaces >= SPACE_PERSON_BACKFILL_DOMINANT_IDENTITY_MIN_RATIO
-    ) {
-      return dominantCandidate.identityId;
+  private getSpacePersonBackfillIdentityGroups(personId: string): Promise<SpacePersonBackfillIdentityGroup[]> {
+    return this.db
+      .selectFrom('shared_space_person_face')
+      .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .innerJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
+      .innerJoin('face_identity', 'face_identity.id', 'face_identity_face.identityId')
+      .select(['face_identity_face.identityId', 'face_identity.type'])
+      .select(() => [
+        sql<number>`count(*)::int`.as('faceCount'),
+        sql<string>`min(asset_face.id::text)::uuid`.as('representativeFaceId'),
+      ])
+      .where('shared_space_person_face.personId', '=', personId)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .groupBy(['face_identity_face.identityId', 'face_identity.type'])
+      .orderBy(sql`count(*)`, 'desc')
+      .$castTo<SpacePersonBackfillIdentityGroup>()
+      .execute();
+  }
+
+  private getSpacePersonByIdentity(spaceId: string, identityId: string, excludePersonId?: string) {
+    return this.db
+      .selectFrom('shared_space_person')
+      .select(['id'])
+      .where('spaceId', '=', spaceId)
+      .where('identityId', '=', identityId)
+      .$if(!!excludePersonId, (qb) => qb.where('id', '!=', excludePersonId!))
+      .executeTakeFirst();
+  }
+
+  private async moveSpacePersonFacesForIdentity(input: {
+    fromPersonId: string;
+    toPersonId: string;
+    identityId: string;
+  }): Promise<void> {
+    const identityFaceIds = this.db
+      .selectFrom('shared_space_person_face')
+      .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .innerJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
+      .select('shared_space_person_face.assetFaceId')
+      .where('shared_space_person_face.personId', '=', input.fromPersonId)
+      .where('face_identity_face.identityId', '=', input.identityId)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true);
+
+    await this.db
+      .deleteFrom('shared_space_person_face')
+      .where('personId', '=', input.fromPersonId)
+      .where('assetFaceId', 'in', identityFaceIds)
+      .where(
+        'assetFaceId',
+        'in',
+        this.db
+          .selectFrom('shared_space_person_face')
+          .select('assetFaceId')
+          .where('personId', '=', input.toPersonId),
+      )
+      .execute();
+
+    await this.db
+      .updateTable('shared_space_person_face')
+      .set({ personId: input.toPersonId })
+      .where('personId', '=', input.fromPersonId)
+      .where('assetFaceId', 'in', identityFaceIds)
+      .execute();
+  }
+
+  private async recountSpacePersons(personIds: string[]): Promise<void> {
+    if (personIds.length === 0) {
+      return;
     }
 
-    return null;
+    await this.db
+      .updateTable('shared_space_person')
+      .set((eb) => ({
+        faceCount: eb
+          .selectFrom('shared_space_person_face')
+          .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+          .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+          .where('asset_face.deletedAt', 'is', null)
+          .where('asset_face.isVisible', 'is', true)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.visibility', '=', sql.lit(AssetVisibility.Timeline))
+          .select((eb2) => eb2.fn.countAll().$castTo<number>().as('count'))
+          .whereRef('shared_space_person_face.personId', '=', 'shared_space_person.id'),
+        assetCount: eb
+          .selectFrom('shared_space_person_face')
+          .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+          .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+          .where('asset_face.deletedAt', 'is', null)
+          .where('asset_face.isVisible', 'is', true)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.visibility', '=', sql.lit(AssetVisibility.Timeline))
+          .select((eb2) =>
+            eb2.fn.count(eb2.fn('distinct', ['asset_face.assetId'])).$castTo<number>().as('count'),
+          )
+          .whereRef('shared_space_person_face.personId', '=', 'shared_space_person.id'),
+      }))
+      .where('id', 'in', personIds)
+      .execute();
+  }
+
+  private async deleteOrphanedSpacePersons(personIds: string[]): Promise<void> {
+    if (personIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .deleteFrom('shared_space_person')
+      .where('id', 'in', personIds)
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_person_face')
+              .whereRef('shared_space_person_face.personId', '=', 'shared_space_person.id'),
+          ),
+        ),
+      )
+      .execute();
   }
 
   async mergeIdentities(input: {

@@ -119,7 +119,7 @@ describe(FaceIdentityRepository.name, () => {
     }
   });
 
-  it('does not report unresolved space-person conflicts as recurring backfill work', async () => {
+  it('reports mixed and duplicate space-person links as repairable backfill work', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
     try {
@@ -149,6 +149,8 @@ describe(FaceIdentityRepository.name, () => {
       const duplicateSpacePerson = await newSpacePerson(ctx, space.id);
       await linkSpaceFace(ctx, duplicateSpacePerson.id, firstFace.id);
 
+      await expect(sut.hasBackfillWork()).resolves.toBe(true);
+      await sut.backfillSpacePersonIdentities({ limit: 100 });
       await expect(sut.hasBackfillWork()).resolves.toBe(false);
     } finally {
       await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
@@ -312,13 +314,60 @@ describe(FaceIdentityRepository.name, () => {
 
     const spacePeople = await ctx.database
       .selectFrom('shared_space_person')
-      .select(['id', 'identityId'])
-      .where('id', 'in', [singleIdentityPerson.id, conflictingPerson.id])
+      .leftJoin('shared_space_person_face', 'shared_space_person_face.personId', 'shared_space_person.id')
+      .select(['shared_space_person.identityId'])
+      .select((eb) => eb.fn.count('shared_space_person_face.assetFaceId').$castTo<number>().as('faceCount'))
+      .where('shared_space_person.spaceId', '=', space.id)
+      .groupBy(['shared_space_person.id', 'shared_space_person.identityId'])
       .execute();
 
-    expect(result).toEqual({ processed: 2, conflictCount: 1 });
-    expect(spacePeople.find((person) => person.id === singleIdentityPerson.id)?.identityId).toBe(aliceIdentity.id);
-    expect(spacePeople.find((person) => person.id === conflictingPerson.id)?.identityId).toBeNull();
+    expect(result).toEqual(expect.objectContaining({ processed: 2, conflictCount: 0 }));
+    expect(spacePeople.filter((person) => person.identityId === aliceIdentity.id)).toHaveLength(1);
+    expect(spacePeople.filter((person) => person.identityId === bobIdentity.id)).toHaveLength(1);
+    expect(spacePeople.filter((person) => person.identityId === null && person.faceCount > 0)).toHaveLength(0);
+  });
+
+  it('splits mixed legacy space people by linked face identity when backfill is rerun', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    try {
+      const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+      const { person: alice } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+      const { person: bob } = await ctx.newPerson({ ownerId: user.id, name: 'Bob' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: aliceFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alice.id });
+      const { assetFace: bobFace } = await ctx.newAssetFace({ assetId: asset.id, personId: bob.id });
+      const aliceIdentity = await sut.ensurePersonIdentity(alice.id);
+      const bobIdentity = await sut.ensurePersonIdentity(bob.id);
+      await sut.linkFace({ assetFaceId: aliceFace.id, identityId: aliceIdentity.id, source: 'backfill' });
+      await sut.linkFace({ assetFaceId: bobFace.id, identityId: bobIdentity.id, source: 'backfill' });
+      const mixedSpacePerson = await newSpacePerson(ctx, space.id);
+      await linkSpaceFace(ctx, mixedSpacePerson.id, aliceFace.id);
+      await linkSpaceFace(ctx, mixedSpacePerson.id, bobFace.id);
+
+      await expect(sut.hasBackfillWork()).resolves.toBe(true);
+
+      const result = await sut.backfillSpacePersonIdentities({ limit: 100 });
+
+      const spacePeople = await ctx.database
+        .selectFrom('shared_space_person')
+        .leftJoin('shared_space_person_face', 'shared_space_person_face.personId', 'shared_space_person.id')
+        .select(['shared_space_person.id', 'shared_space_person.identityId'])
+        .select((eb) => eb.fn.count('shared_space_person_face.assetFaceId').$castTo<number>().as('faceCount'))
+        .where('shared_space_person.spaceId', '=', space.id)
+        .groupBy(['shared_space_person.id', 'shared_space_person.identityId'])
+        .execute();
+
+      expect(result.conflictCount).toBe(0);
+      expect(spacePeople.filter((person) => person.identityId === aliceIdentity.id)).toHaveLength(1);
+      expect(spacePeople.filter((person) => person.identityId === bobIdentity.id)).toHaveLength(1);
+      expect(spacePeople.find((person) => person.identityId === aliceIdentity.id)?.faceCount).toBe(1);
+      expect(spacePeople.find((person) => person.identityId === bobIdentity.id)?.faceCount).toBe(1);
+      expect(spacePeople.filter((person) => person.identityId === null && person.faceCount > 0)).toHaveLength(0);
+      await expect(sut.hasBackfillWork()).resolves.toBe(false);
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
   });
 
   it('infers shared-space person identity from a dominant linked identity with tiny noisy candidates', async () => {
@@ -432,7 +481,7 @@ describe(FaceIdentityRepository.name, () => {
     expect(updatedSpacePerson.identityId).toBe(dominantIdentity.id);
   });
 
-  it('does not infer shared-space person identity when noisy evidence exceeds the proportional tolerance', async () => {
+  it('splits shared-space person identity when noisy evidence exceeds the old proportional tolerance', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
     const { space } = await ctx.newSharedSpace({ createdById: user.id });
@@ -458,16 +507,17 @@ describe(FaceIdentityRepository.name, () => {
 
     await sut.backfillSpacePersonIdentities({ limit: 100 });
 
-    const updatedSpacePerson = await ctx.database
+    const spacePeople = await ctx.database
       .selectFrom('shared_space_person')
       .select('identityId')
-      .where('id', '=', spacePerson.id)
-      .executeTakeFirstOrThrow();
+      .where('spaceId', '=', space.id)
+      .execute();
 
-    expect(updatedSpacePerson.identityId).toBeNull();
+    expect(spacePeople.filter((person) => person.identityId === dominantIdentity.id)).toHaveLength(1);
+    expect(spacePeople.filter((person) => person.identityId === noisyIdentity.id)).toHaveLength(1);
   });
 
-  it('reports duplicate space-person rows for the same identity instead of violating uniqueness', async () => {
+  it('repairs duplicate space-person rows for the same identity instead of leaving conflicts', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
     const { space } = await ctx.newSharedSpace({ createdById: user.id });
@@ -491,9 +541,9 @@ describe(FaceIdentityRepository.name, () => {
       .where('id', 'in', [firstSpacePerson.id, duplicateSpacePerson.id])
       .execute();
 
-    expect(result.conflictCount).toBeGreaterThanOrEqual(1);
+    expect(result.conflictCount).toBe(0);
     expect(spacePeople.filter((person) => person.identityId === identity.id)).toHaveLength(1);
-    expect(spacePeople.filter((person) => person.identityId === null)).toHaveLength(1);
+    expect(spacePeople.filter((person) => person.identityId === null)).toHaveLength(0);
   });
 
   it('replaces, unlinks, and merges identity face links without violating scoped profile uniqueness', async () => {

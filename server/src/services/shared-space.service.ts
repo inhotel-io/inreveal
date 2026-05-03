@@ -1465,6 +1465,10 @@ export class SharedSpaceService extends BaseService {
           continue;
         }
 
+        if (person.identityId) {
+          continue;
+        }
+
         const matches = await this.sharedSpaceRepository.findClosestSpacePerson(job.spaceId, person.embedding, {
           maxDistance,
           numResults: 1,
@@ -1482,6 +1486,10 @@ export class SharedSpaceService extends BaseService {
           this.logger.debug(
             `Dedup: skipping stale match ${match.personId} for person ${person.id} (already merged in this pass)`,
           );
+          continue;
+        }
+
+        if (matchPerson.identityId) {
           continue;
         }
 
@@ -1682,9 +1690,7 @@ export class SharedSpaceService extends BaseService {
             faceId: face.id,
             personId: face.personId,
             identityId: face.identityId,
-            embedding: face.embedding,
             type: face.type ?? 'person',
-            maxDistance,
           })
         : await this.findOrCreateSpacePersonForLegacyFace({
             spaceId,
@@ -1785,9 +1791,7 @@ export class SharedSpaceService extends BaseService {
     faceId: string;
     personId: string;
     identityId: string;
-    embedding: string;
     type: string;
-    maxDistance: number;
   }): Promise<SpacePersonMatchResult> {
     const existingByIdentity = await this.sharedSpaceRepository.getSpacePersonByIdentity(
       input.spaceId,
@@ -1795,27 +1799,6 @@ export class SharedSpaceService extends BaseService {
     );
     if (existingByIdentity) {
       return existingByIdentity;
-    }
-
-    const matches = await this.sharedSpaceRepository.findClosestSpacePerson(input.spaceId, input.embedding, {
-      maxDistance: input.maxDistance,
-      numResults: 1,
-      type: input.type,
-    });
-
-    if (matches.length > 0) {
-      const match = matches[0];
-      const targetIdentityId = match.identityId ?? input.identityId;
-
-      if (!match.identityId) {
-        await this.sharedSpaceRepository.updatePerson(match.personId, { identityId: targetIdentityId });
-      }
-
-      return {
-        id: match.personId,
-        identityId: targetIdentityId,
-        sourceIdentityId: match.identityId && match.identityId !== input.identityId ? input.identityId : null,
-      };
     }
 
     const representativeFaceId = await this.getNewSpacePersonRepresentativeFaceId({
