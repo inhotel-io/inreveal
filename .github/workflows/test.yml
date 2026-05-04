@@ -364,6 +364,8 @@ jobs:
         if: ${{ !cancelled() }}
 
       - name: Start Docker Compose
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: docker compose up -d --build --renew-anon-volumes --force-recreate --remove-orphans --wait --wait-timeout 300
         if: ${{ !cancelled() }}
 
@@ -438,6 +440,8 @@ jobs:
         if: ${{ !cancelled() }}
 
       - name: Docker build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: docker compose up -d --build --renew-anon-volumes --force-recreate --remove-orphans --wait --wait-timeout 300
         if: ${{ !cancelled() }}
 
