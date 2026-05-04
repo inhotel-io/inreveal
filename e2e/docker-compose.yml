@@ -14,6 +14,8 @@ services:
     build:
       context: ../
       dockerfile: server/Dockerfile
+      # Build-only token for mise tool downloads; passed as a BuildKit secret,
+      # not as a runtime environment variable or image layer.
       secrets:
         - github_token
     environment:
