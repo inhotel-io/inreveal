@@ -115,6 +115,8 @@ jobs:
           context: .
           file: server/Dockerfile
           platforms: ${{ matrix.platform }}
+          secrets: |
+            github_token=${{ github.token }}
           build-args: |
             DEVICE=cpu
             BUILD_ID=${{ github.run_id }}
