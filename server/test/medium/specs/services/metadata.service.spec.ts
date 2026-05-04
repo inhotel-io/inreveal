@@ -120,6 +120,21 @@ const setupPersonService = (db?: Kysely<DB>) => {
   return { sut, ctx };
 };
 
+const setupFaceIdentityBackfillService = (db?: Kysely<DB>) => {
+  clearConfigCache();
+
+  const { sut, ctx } = newMediumService(PersonService, {
+    database: db || defaultDatabase,
+    real: [FaceIdentityRepository, SharedSpaceRepository],
+    mock: [JobRepository, LoggingRepository],
+  });
+
+  ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository).queue.mockResolvedValue();
+  ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository).queueAll.mockResolvedValue();
+
+  return { sut, ctx };
+};
+
 const setupSharedSpaceService = (db?: Kysely<DB>) => {
   clearConfigCache();
 
@@ -422,6 +437,79 @@ describe(MetadataService.name, () => {
         name: JobName.SharedSpacePersonDedup,
         data: { spaceId: space.id },
       });
+    });
+
+    it('should backfill legacy imported metadata faces into shared spaces without embeddings', async () => {
+      const { ctx } = setupFaceImport();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({
+        ownerId: user.id,
+        name: 'Legacy Metadata',
+        faceAssetId: null,
+        identityId: null,
+      });
+      const { asset } = await ctx.newAsset({
+        ownerId: user.id,
+        originalPath: '/photos/legacy-space-person.jpg',
+        visibility: AssetVisibility.Timeline,
+      });
+      const { assetFace } = await ctx.newAssetFace({
+        assetId: asset.id,
+        personId: person.id,
+        sourceType: SourceType.Exif,
+      });
+      await ctx.database.updateTable('person').set({ faceAssetId: assetFace.id }).where('id', '=', person.id).execute();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+      const { sut: backfillService, ctx: backfillCtx } = setupFaceIdentityBackfillService(ctx.database);
+      const { sut: sharedSpaceService } = setupSharedSpaceService(ctx.database);
+
+      await expect(
+        ctx.database
+          .selectFrom('asset_face')
+          .leftJoin('face_search', 'face_search.faceId', 'asset_face.id')
+          .leftJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
+          .select(['face_search.faceId', 'face_identity_face.identityId'])
+          .where('asset_face.id', '=', assetFace.id)
+          .executeTakeFirstOrThrow(),
+      ).resolves.toEqual({ faceId: null, identityId: null });
+
+      await expect(backfillService.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
+      await expect(sharedSpaceService.handleSharedSpaceFaceMatchAll({ spaceId: space.id })).resolves.toBe(
+        JobStatus.Success,
+      );
+
+      const identityLinks = await ctx.database
+        .selectFrom('face_identity_face')
+        .select(['assetFaceId', 'source'])
+        .where('assetFaceId', '=', assetFace.id)
+        .execute();
+      const spacePeople = await ctx.database
+        .selectFrom('shared_space_person')
+        .innerJoin('shared_space_person_face', 'shared_space_person_face.personId', 'shared_space_person.id')
+        .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+        .select([
+          'shared_space_person.name',
+          'shared_space_person.faceCount',
+          'shared_space_person.identityId',
+          'asset_face.sourceType',
+        ])
+        .where('shared_space_person.spaceId', '=', space.id)
+        .execute();
+
+      expect(identityLinks).toEqual([{ assetFaceId: assetFace.id, source: 'backfill' }]);
+      expect(backfillCtx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository).queueAll).toHaveBeenCalledWith(
+        expect.arrayContaining([{ name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: space.id } }]),
+      );
+      expect(spacePeople).toEqual([
+        expect.objectContaining({
+          name: 'Legacy Metadata',
+          faceCount: 1,
+          identityId: expect.any(String),
+          sourceType: SourceType.Exif,
+        }),
+      ]);
     });
   });
 });
