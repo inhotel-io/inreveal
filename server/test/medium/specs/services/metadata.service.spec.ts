@@ -3,7 +3,7 @@ import { Stats } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AssetVisibility, SourceType } from 'src/enum';
+import { AssetVisibility, JobName, JobStatus, SharedSpaceRole, SourceType } from 'src/enum';
 import { AssetJobRepository } from 'src/repositories/asset-job.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
@@ -21,6 +21,7 @@ import { TagRepository } from 'src/repositories/tag.repository';
 import { DB } from 'src/schema';
 import { MetadataService } from 'src/services/metadata.service';
 import { PersonService } from 'src/services/person.service';
+import { SharedSpaceService } from 'src/services/shared-space.service';
 import { clearConfigCache } from 'src/utils/config';
 import { newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
@@ -118,6 +119,47 @@ const setupPersonService = (db?: Kysely<DB>) => {
 
   return { sut, ctx };
 };
+
+const setupSharedSpaceService = (db?: Kysely<DB>) => {
+  clearConfigCache();
+
+  const { sut, ctx } = newMediumService(SharedSpaceService, {
+    database: db || defaultDatabase,
+    real: [ConfigRepository, PersonRepository, SharedSpaceRepository],
+    mock: [JobRepository, LoggingRepository, SystemMetadataRepository],
+  });
+
+  ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository).queue.mockResolvedValue();
+  ctx
+    .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
+    .get.mockResolvedValue({
+      machineLearning: { facialRecognition: { maxDistance: 0.5 } },
+    } as any);
+
+  return { sut, ctx };
+};
+
+const metadataFaceTags = (name: string) => ({
+  RegionInfo: {
+    AppliedToDimensions: { W: 1000, H: 100, Unit: 'pixel' },
+    RegionList: [
+      {
+        Type: 'face',
+        Name: name,
+        Area: { X: 0.1, Y: 0.4, W: 0.2, H: 0.4, Unit: 'normalized' },
+      },
+    ],
+  },
+});
+
+const getAssetFaceIdentityLinks = (db: Kysely<DB>, assetId: string) =>
+  db
+    .selectFrom('face_identity_face')
+    .innerJoin('asset_face', 'asset_face.id', 'face_identity_face.assetFaceId')
+    .innerJoin('person', 'person.id', 'asset_face.personId')
+    .select(['asset_face.id as assetFaceId', 'person.name', 'face_identity_face.source', 'asset_face.sourceType'])
+    .where('asset_face.assetId', '=', assetId)
+    .execute();
 
 const createTestFile = async (exifData: Record<string, any>) => {
   const { ctx } = setup();
@@ -228,18 +270,7 @@ describe(MetadataService.name, () => {
         visibility: AssetVisibility.Timeline,
       });
       await ctx.newExif({ assetId: asset.id, description: '' });
-      vi.spyOn(ctx.get(MetadataRepository), 'readTags').mockResolvedValue({
-        RegionInfo: {
-          AppliedToDimensions: { W: 1000, H: 100, Unit: 'pixel' },
-          RegionList: [
-            {
-              Type: 'face',
-              Name: 'Alice Metadata',
-              Area: { X: 0.1, Y: 0.4, W: 0.2, H: 0.4, Unit: 'normalized' },
-            },
-          ],
-        },
-      });
+      vi.spyOn(ctx.get(MetadataRepository), 'readTags').mockResolvedValue(metadataFaceTags('Alice Metadata'));
 
       await sut.handleMetadataExtraction({ id: asset.id });
 
@@ -265,6 +296,132 @@ describe(MetadataService.name, () => {
         }),
       ]);
       expect(identityLinks).toEqual([{ source: 'import', sourceType: SourceType.Exif }]);
+    });
+
+    it('should remove stale imported identity links when metadata faces are re-imported', async () => {
+      const { sut, ctx } = setupFaceImport();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({
+        ownerId: user.id,
+        originalPath: '/photos/renamed-face.jpg',
+        visibility: AssetVisibility.Timeline,
+      });
+      await ctx.newExif({ assetId: asset.id, description: '' });
+      vi.spyOn(ctx.get(MetadataRepository), 'readTags')
+        .mockResolvedValueOnce(metadataFaceTags('Alice Metadata'))
+        .mockResolvedValueOnce(metadataFaceTags('Bob Metadata'));
+
+      await sut.handleMetadataExtraction({ id: asset.id });
+      expect(await getAssetFaceIdentityLinks(ctx.database, asset.id)).toEqual([
+        expect.objectContaining({ name: 'Alice Metadata', source: 'import', sourceType: SourceType.Exif }),
+      ]);
+
+      await sut.handleMetadataExtraction({ id: asset.id });
+
+      expect(await getAssetFaceIdentityLinks(ctx.database, asset.id)).toEqual([
+        expect.objectContaining({ name: 'Bob Metadata', source: 'import', sourceType: SourceType.Exif }),
+      ]);
+    });
+
+    it('should link imported metadata faces to an existing person without an identity', async () => {
+      const { sut, ctx } = setupFaceImport();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({
+        ownerId: user.id,
+        name: 'Existing Metadata',
+        faceAssetId: null,
+        identityId: null,
+      });
+      const { asset } = await ctx.newAsset({
+        ownerId: user.id,
+        originalPath: '/photos/existing-person.jpg',
+        visibility: AssetVisibility.Timeline,
+      });
+      await ctx.newExif({ assetId: asset.id, description: '' });
+      vi.spyOn(ctx.get(MetadataRepository), 'readTags').mockResolvedValue(metadataFaceTags('Existing Metadata'));
+
+      await sut.handleMetadataExtraction({ id: asset.id });
+
+      const [{ identityId }] = await ctx.database
+        .selectFrom('person')
+        .select('identityId')
+        .where('id', '=', person.id)
+        .execute();
+      const { sut: personService } = setupPersonService(ctx.database);
+      const people = await personService.getAll(factory.auth({ user }), {
+        withHidden: true,
+        withSharedSpaces: true,
+        page: 1,
+        size: 50,
+      } as any);
+
+      expect(identityId).toEqual(expect.any(String));
+      expect(await getAssetFaceIdentityLinks(ctx.database, asset.id)).toEqual([
+        expect.objectContaining({ name: 'Existing Metadata', source: 'import', sourceType: SourceType.Exif }),
+      ]);
+      expect(people.people).toContainEqual(
+        expect.objectContaining({
+          name: 'Existing Metadata',
+          numberOfAssets: 1,
+          primaryProfile: expect.objectContaining({ id: person.id, type: 'user-person' }),
+        }),
+      );
+    });
+
+    it('should expose imported metadata people in shared spaces before face detection creates embeddings', async () => {
+      const { sut, ctx } = setupFaceImport();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({
+        ownerId: user.id,
+        originalPath: '/photos/space-person.jpg',
+        visibility: AssetVisibility.Timeline,
+      });
+      const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+      await ctx.newExif({ assetId: asset.id, description: '' });
+      vi.spyOn(ctx.get(MetadataRepository), 'readTags').mockResolvedValue(metadataFaceTags('Space Metadata'));
+
+      await sut.handleMetadataExtraction({ id: asset.id });
+      const importedFacesWithoutEmbeddings = await ctx.database
+        .selectFrom('asset_face')
+        .leftJoin('face_search', 'face_search.faceId', 'asset_face.id')
+        .select(['asset_face.id', 'face_search.faceId'])
+        .where('asset_face.assetId', '=', asset.id)
+        .where('asset_face.sourceType', '=', SourceType.Exif)
+        .execute();
+      const { sut: sharedSpaceService, ctx: sharedSpaceCtx } = setupSharedSpaceService(ctx.database);
+
+      await expect(
+        sharedSpaceService.handleSharedSpaceFaceMatch({ spaceId: space.id, assetId: asset.id }),
+      ).resolves.toBe(JobStatus.Success);
+
+      const spacePeople = await ctx.database
+        .selectFrom('shared_space_person')
+        .innerJoin('shared_space_person_face', 'shared_space_person_face.personId', 'shared_space_person.id')
+        .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+        .select([
+          'shared_space_person.name',
+          'shared_space_person.faceCount',
+          'shared_space_person.identityId',
+          'asset_face.sourceType',
+        ])
+        .where('shared_space_person.spaceId', '=', space.id)
+        .execute();
+
+      expect(importedFacesWithoutEmbeddings).toEqual([{ id: expect.any(String), faceId: null }]);
+      expect(spacePeople).toEqual([
+        expect.objectContaining({
+          name: 'Space Metadata',
+          faceCount: 1,
+          identityId: expect.any(String),
+          sourceType: SourceType.Exif,
+        }),
+      ]);
+      expect(sharedSpaceCtx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository).queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonDedup,
+        data: { spaceId: space.id },
+      });
     });
   });
 });
