@@ -3,19 +3,29 @@ import { Stats } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { AssetVisibility, SourceType } from 'src/enum';
 import { AssetJobRepository } from 'src/repositories/asset-job.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { CryptoRepository } from 'src/repositories/crypto.repository';
 import { EventRepository } from 'src/repositories/event.repository';
+import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MetadataRepository } from 'src/repositories/metadata.repository';
+import { PersonRepository } from 'src/repositories/person.repository';
+import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { StorageRepository } from 'src/repositories/storage.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { TagRepository } from 'src/repositories/tag.repository';
 import { DB } from 'src/schema';
 import { MetadataService } from 'src/services/metadata.service';
+import { PersonService } from 'src/services/person.service';
+import { clearConfigCache } from 'src/utils/config';
 import { newMediumService } from 'test/medium.factory';
+import { factory } from 'test/small.factory';
 import { getKyselyDB, newRandomImage } from 'test/utils';
+import { Mocked } from 'vitest';
 
 type TimeZoneTest = {
   description: string;
@@ -54,6 +64,61 @@ const setup = (db?: Kysely<DB>) => {
   return { sut, ctx };
 };
 
+const setupFaceImport = (db?: Kysely<DB>) => {
+  clearConfigCache();
+
+  const { sut, ctx } = newMediumService(MetadataService, {
+    database: db || defaultDatabase,
+    real: [
+      AssetRepository,
+      AssetJobRepository,
+      ConfigRepository,
+      CryptoRepository,
+      FaceIdentityRepository,
+      MetadataRepository,
+      PersonRepository,
+      SharedSpaceRepository,
+      TagRepository,
+    ],
+    mock: [EventRepository, JobRepository, LoggingRepository, StorageRepository, SystemMetadataRepository],
+  });
+
+  ctx.getMock(EventRepository).emit.mockResolvedValue();
+  ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository).queueAll.mockResolvedValue();
+  ctx
+    .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
+    .get.mockResolvedValue({
+      metadata: { faces: { import: true } },
+      machineLearning: { facialRecognition: { minFaces: 1 } },
+    } as any);
+  ctx.getMock(StorageRepository).stat.mockResolvedValue({
+    size: 123_456,
+    mtime: new Date(654_321),
+    mtimeMs: 654_321,
+    birthtimeMs: 654_322,
+  } as Stats);
+
+  return { sut, ctx };
+};
+
+const setupPersonService = (db?: Kysely<DB>) => {
+  clearConfigCache();
+
+  const { sut, ctx } = newMediumService(PersonService, {
+    database: db || defaultDatabase,
+    real: [ConfigRepository, FaceIdentityRepository],
+    mock: [LoggingRepository, SystemMetadataRepository],
+  });
+
+  ctx
+    .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
+    .get.mockResolvedValue({
+      machineLearning: { facialRecognition: { minFaces: 1 } },
+    } as any);
+
+  return { sut, ctx };
+};
+
 const createTestFile = async (exifData: Record<string, any>) => {
   const { ctx } = setup();
   const data = newRandomImage();
@@ -70,6 +135,8 @@ beforeAll(async () => {
 describe(MetadataService.name, () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    clearConfigCache();
   });
 
   it('should be defined', () => {
@@ -150,6 +217,54 @@ describe(MetadataService.name, () => {
           .executeTakeFirstOrThrow(),
         // note that this date is technically wrong. it does not throw though and should get the user's attention either way.
       ).resolves.toEqual({ dateTimeOriginal: new Date('4260-03-05T04:04:12.000Z') });
+    });
+
+    it('should expose imported metadata people through identity-backed people', async () => {
+      const { sut, ctx } = setupFaceImport();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({
+        ownerId: user.id,
+        originalPath: '/photos/alice.jpg',
+        visibility: AssetVisibility.Timeline,
+      });
+      await ctx.newExif({ assetId: asset.id, description: '' });
+      vi.spyOn(ctx.get(MetadataRepository), 'readTags').mockResolvedValue({
+        RegionInfo: {
+          AppliedToDimensions: { W: 1000, H: 100, Unit: 'pixel' },
+          RegionList: [
+            {
+              Type: 'face',
+              Name: 'Alice Metadata',
+              Area: { X: 0.1, Y: 0.4, W: 0.2, H: 0.4, Unit: 'normalized' },
+            },
+          ],
+        },
+      });
+
+      await sut.handleMetadataExtraction({ id: asset.id });
+
+      const { sut: personService } = setupPersonService(ctx.database);
+      const people = await personService.getAll(factory.auth({ user }), {
+        withHidden: true,
+        withSharedSpaces: true,
+        page: 1,
+        size: 50,
+      } as any);
+      const identityLinks = await ctx.database
+        .selectFrom('face_identity_face')
+        .innerJoin('asset_face', 'asset_face.id', 'face_identity_face.assetFaceId')
+        .select(['face_identity_face.source', 'asset_face.sourceType'])
+        .where('asset_face.assetId', '=', asset.id)
+        .execute();
+
+      expect(people.people).toEqual([
+        expect.objectContaining({
+          name: 'Alice Metadata',
+          numberOfAssets: 1,
+          primaryProfile: expect.objectContaining({ type: 'user-person' }),
+        }),
+      ]);
+      expect(identityLinks).toEqual([{ source: 'import', sourceType: SourceType.Exif }]);
     });
   });
 });
