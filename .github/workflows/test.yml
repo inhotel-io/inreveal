@@ -391,6 +391,7 @@ jobs:
         env:
           E2E_CACHE_FROM: ${{ steps.cache.outputs.from }}
           E2E_CACHE_TO: ${{ github.event_name == 'push' && !github.event.pull_request.head.repo.fork && format('type=registry,ref={0},mode=max', steps.cache.outputs.ref) || '' }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: docker compose up -d --build --renew-anon-volumes --force-recreate --remove-orphans --wait --wait-timeout 300
         if: ${{ !cancelled() }}
 
@@ -482,6 +483,7 @@ jobs:
         id: docker
         env:
           E2E_CACHE_FROM: ${{ steps.cache.outputs.from }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: docker compose up -d --build --renew-anon-volumes --force-recreate --remove-orphans --wait --wait-timeout 300
         if: ${{ !cancelled() }}
 
