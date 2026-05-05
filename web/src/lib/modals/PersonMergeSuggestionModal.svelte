@@ -35,19 +35,17 @@
 
   const onSubmit = async () => {
     try {
-      if (isSpaceScopedPerson(personToMerge) || isSpaceScopedPerson(personToBeMergedInto)) {
-        await mergeScopedPeople({
-          mergeScopedPeopleDto: {
-            target: toScopedPersonRef(personToBeMergedInto),
-            sources: [toScopedPersonRef(personToMerge)],
-          },
-        });
-      } else {
-        await mergePerson({
-          id: personToBeMergedInto.id,
-          mergePersonDto: { ids: [personToMerge.id] },
-        });
-      }
+      await (isSpaceScopedPerson(personToMerge) || isSpaceScopedPerson(personToBeMergedInto)
+        ? mergeScopedPeople({
+            mergeScopedPeopleDto: {
+              target: toScopedPersonRef(personToBeMergedInto),
+              sources: [toScopedPersonRef(personToMerge)],
+            },
+          })
+        : mergePerson({
+            id: personToBeMergedInto.id,
+            mergePersonDto: { ids: [personToMerge.id] },
+          }));
       toastManager.primary($t('merge_people_successfully'));
       onClose([personToMerge, personToBeMergedInto]);
     } catch (error) {

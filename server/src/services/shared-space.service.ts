@@ -1296,14 +1296,16 @@ export class SharedSpaceService extends BaseService {
     const { machineLearning } = await this.getConfig({ withCache: true });
     const maxDistance = machineLearning.facialRecognition.maxDistance;
 
-    const members = job.userId
-      ? await (async () => {
-          const member = await this.sharedSpaceRepository.getMember(job.spaceId, job.userId!);
-          return member ? [member] : [];
-        })()
-      : await this.sharedSpaceRepository.getMembers(job.spaceId);
+    let members;
+    if (job.userId) {
+      const member = await this.sharedSpaceRepository.getMember(job.spaceId, job.userId);
+      members = member ? [member] : [];
+    } else {
+      members = await this.sharedSpaceRepository.getMembers(job.spaceId);
+    }
 
-    const spacePeople = (await this.sharedSpaceRepository.getSpacePersonsWithEmbeddings(job.spaceId)).filter(
+    const spacePeopleWithEmbeddings = await this.sharedSpaceRepository.getSpacePersonsWithEmbeddings(job.spaceId);
+    const spacePeople = spacePeopleWithEmbeddings.filter(
       (person) => (!job.spacePersonId || person.id === job.spacePersonId) && person.identityId && !person.isHidden,
     );
 

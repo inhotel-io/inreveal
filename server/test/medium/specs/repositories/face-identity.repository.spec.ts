@@ -31,43 +31,43 @@ const linkSpaceFace = async (ctx: ReturnType<typeof setup>['ctx'], personId: str
   await ctx.database.insertInto('shared_space_person_face').values({ personId, assetFaceId }).execute();
 };
 
+const createAccessibleSpaceIdentity = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  sut: FaceIdentityRepository,
+  input: { memberUserId: string; ownerUserId: string; showInTimeline?: boolean; embedding: string },
+) => {
+  const { space } = await ctx.newSharedSpace({ createdById: input.ownerUserId, faceRecognitionEnabled: true });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: input.ownerUserId, role: SharedSpaceRole.Owner });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: input.memberUserId, role: SharedSpaceRole.Viewer });
+  await ctx.database
+    .updateTable('shared_space_member')
+    .set({ showInTimeline: input.showInTimeline ?? true })
+    .where('spaceId', '=', space.id)
+    .where('userId', '=', input.memberUserId)
+    .execute();
+  const { person } = await ctx.newPerson({ ownerId: input.ownerUserId });
+  const identity = await sut.ensurePersonIdentity(person.id);
+  const { asset } = await ctx.newAsset({ ownerId: input.ownerUserId, visibility: AssetVisibility.Timeline });
+  await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: input.ownerUserId });
+  const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+  await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: input.embedding }).execute();
+  await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+  const spacePerson = await ctx.database
+    .insertInto('shared_space_person')
+    .values({
+      spaceId: space.id,
+      identityId: identity.id,
+      representativeFaceId: assetFace.id,
+      type: 'person',
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+
+  return { space, spacePerson, identity };
+};
+
 describe(FaceIdentityRepository.name, () => {
-  const createAccessibleSpaceIdentity = async (
-    ctx: ReturnType<typeof setup>['ctx'],
-    sut: FaceIdentityRepository,
-    input: { memberUserId: string; ownerUserId: string; showInTimeline?: boolean; embedding: string },
-  ) => {
-    const { space } = await ctx.newSharedSpace({ createdById: input.ownerUserId, faceRecognitionEnabled: true });
-    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: input.ownerUserId, role: SharedSpaceRole.Owner });
-    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: input.memberUserId, role: SharedSpaceRole.Viewer });
-    await ctx.database
-      .updateTable('shared_space_member')
-      .set({ showInTimeline: input.showInTimeline ?? true })
-      .where('spaceId', '=', space.id)
-      .where('userId', '=', input.memberUserId)
-      .execute();
-    const { person } = await ctx.newPerson({ ownerId: input.ownerUserId });
-    const identity = await sut.ensurePersonIdentity(person.id);
-    const { asset } = await ctx.newAsset({ ownerId: input.ownerUserId, visibility: AssetVisibility.Timeline });
-    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: input.ownerUserId });
-    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
-    await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: input.embedding }).execute();
-    await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
-    const spacePerson = await ctx.database
-      .insertInto('shared_space_person')
-      .values({
-        spaceId: space.id,
-        identityId: identity.id,
-        representativeFaceId: assetFace.id,
-        type: 'person',
-      })
-      .returningAll()
-      .executeTakeFirstOrThrow();
-    await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
-
-    return { space, spacePerson, identity };
-  };
-
   it('returns no accessible identity match when multiple shared identities are within threshold', async () => {
     const { ctx, sut } = setup();
     const { user: member } = await ctx.newUser();
@@ -455,6 +455,7 @@ describe(FaceIdentityRepository.name, () => {
     const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
     const identity = await sut.ensurePersonIdentity(person.id);
     await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
     const spacePerson = await ctx.database
       .insertInto('shared_space_person')
       .values({
@@ -466,6 +467,10 @@ describe(FaceIdentityRepository.name, () => {
       })
       .returningAll()
       .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: spacePerson.id, assetFaceId: assetFace.id })
+      .execute();
 
     try {
       const result = await sut.getAccessiblePeople(user.id, { withHidden: false, page: 1, size: 50 });
@@ -480,6 +485,11 @@ describe(FaceIdentityRepository.name, () => {
       ]);
     } finally {
       await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
+      await ctx.database
+        .deleteFrom('shared_space_asset')
+        .where('spaceId', '=', space.id)
+        .where('assetId', '=', asset.id)
+        .execute();
     }
   });
 
