@@ -383,6 +383,7 @@ export class SharedSpaceService extends BaseService {
     });
 
     await this.queueSpacePersonMetadataBackfill();
+    await this.queueSpaceIdentityReconciliation({ spaceId, userId: dto.userId });
 
     return this.mapMember(member);
   }
@@ -1160,6 +1161,17 @@ export class SharedSpaceService extends BaseService {
     });
   }
 
+  private async queueSpaceIdentityReconciliation(input: {
+    spaceId: string;
+    userId?: string;
+    spacePersonId?: string;
+  }): Promise<void> {
+    await this.jobRepository.queue({
+      name: JobName.SharedSpaceIdentityReconciliation,
+      data: input,
+    });
+  }
+
   async mergeSpacePeople(
     auth: AuthDto,
     spaceId: string,
@@ -1258,6 +1270,24 @@ export class SharedSpaceService extends BaseService {
 
     const assets = await this.sharedSpaceRepository.getPersonAssetIds(personId);
     return assets.map((a) => a.assetId);
+  }
+
+  @OnJob({ name: JobName.SharedSpaceIdentityReconciliation, queue: QueueName.FacialRecognition })
+  async handleSharedSpaceIdentityReconciliation(
+    job: JobOf<JobName.SharedSpaceIdentityReconciliation>,
+  ): Promise<JobStatus> {
+    return this.reconcileSharedSpaceIdentities(job);
+  }
+
+  private async reconcileSharedSpaceIdentities(
+    job: JobOf<JobName.SharedSpaceIdentityReconciliation>,
+  ): Promise<JobStatus> {
+    const space = await this.sharedSpaceRepository.getById(job.spaceId);
+    if (!space || !space.faceRecognitionEnabled) {
+      return JobStatus.Skipped;
+    }
+
+    return JobStatus.Success;
   }
 
   @OnJob({ name: JobName.SharedSpaceFaceMatch, queue: QueueName.FacialRecognition })

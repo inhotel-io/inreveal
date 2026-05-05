@@ -1416,6 +1416,25 @@ describe(SharedSpaceService.name, () => {
         data: {},
       });
     });
+
+    it('should queue identity reconciliation for the joined member', async () => {
+      const auth = factory.auth();
+      const spaceId = 'space-1';
+      const userId = 'new-user';
+
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(makeMemberResult({ role: SharedSpaceRole.Owner }));
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(void 0);
+      mocks.sharedSpace.addMember.mockResolvedValue(factory.sharedSpaceMember({ spaceId, userId }));
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(makeMemberResult({ spaceId, userId }));
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.addMember(auth, spaceId, { userId });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: 'SharedSpaceIdentityReconciliation',
+        data: { spaceId, userId },
+      });
+    });
   });
 
   describe('updateMember', () => {
