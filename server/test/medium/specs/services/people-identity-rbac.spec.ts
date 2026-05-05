@@ -48,6 +48,7 @@ const setupSharedSpace = (db?: Kysely<DB>) => {
       ConfigRepository,
       FaceIdentityRepository,
       PersonRepository,
+      SearchRepository,
       SharedSpaceRepository,
       SystemMetadataRepository,
     ],
@@ -300,6 +301,90 @@ const setSpaceTimeline = async (
 
 const addCity = async (ctx: IdentityRbacContext, assetId: string, city: string) => {
   await ctx.newExif({ assetId, city, country: 'Germany', fileSizeInByte: 2048 });
+};
+
+const setupJoinAfterDuplicatesFixture = async (
+  input: { showInTimeline?: boolean; memberBeforeSpaceEvidence?: boolean } = {},
+) => {
+  const { ctx, sut: personService, faceIdentityRepository } = setup();
+  const { sut: sharedSpaceService } = setupSharedSpace();
+  const { sut: searchService } = setupSearch();
+  const { user: owner } = await ctx.newUser();
+  const { user: member } = await ctx.newUser();
+  const embedding = newEmbedding();
+
+  const { result: ownerPerson } = await ctx.newPerson({ ownerId: owner.id, name: 'Owner Shared Name' });
+  const { asset: spaceAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+  const { result: ownerFace } = await ctx.newAssetFace({ assetId: spaceAsset.id, personId: ownerPerson.id });
+  await ctx.database.insertInto('face_search').values({ faceId: ownerFace, embedding }).execute();
+  const ownerIdentity = await faceIdentityRepository.ensurePersonIdentity(ownerPerson.id);
+  await faceIdentityRepository.linkFace({
+    assetFaceId: ownerFace,
+    identityId: ownerIdentity.id,
+    source: 'owner-person',
+  });
+
+  const { result: memberPerson } = await ctx.newPerson({ ownerId: member.id, name: 'Member Private Name' });
+  const { asset: memberAsset } = await ctx.newAsset({ ownerId: member.id, visibility: AssetVisibility.Timeline });
+  const { result: memberFace } = await ctx.newAssetFace({ assetId: memberAsset.id, personId: memberPerson.id });
+  await ctx.database.insertInto('face_search').values({ faceId: memberFace, embedding }).execute();
+  const memberIdentity = await faceIdentityRepository.ensurePersonIdentity(memberPerson.id);
+  await faceIdentityRepository.linkFace({
+    assetFaceId: memberFace,
+    identityId: memberIdentity.id,
+    source: 'owner-person',
+  });
+
+  const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+  if (input.memberBeforeSpaceEvidence) {
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+  }
+
+  await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: spaceAsset.id, addedById: owner.id });
+  const spacePerson = await ctx.database
+    .insertInto('shared_space_person')
+    .values({
+      spaceId: space.id,
+      identityId: ownerIdentity.id,
+      name: 'Owner Shared Name',
+      representativeFaceId: ownerFace,
+      type: 'person',
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  await ctx.database
+    .insertInto('shared_space_person_face')
+    .values({ personId: spacePerson.id, assetFaceId: ownerFace })
+    .execute();
+
+  if (!input.memberBeforeSpaceEvidence) {
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+  }
+  await setSpaceTimeline(ctx, {
+    spaceId: space.id,
+    userId: member.id,
+    showInTimeline: input.showInTimeline ?? true,
+  });
+
+  return {
+    ctx,
+    personService,
+    sharedSpaceService,
+    searchService,
+    faceIdentityRepository,
+    owner,
+    member,
+    memberAuth: authFor(member),
+    space,
+    spaceAsset,
+    memberAsset,
+    ownerPerson,
+    memberPerson,
+    spacePerson,
+    ownerIdentity,
+    memberIdentity,
+  };
 };
 
 describe('People identity RBAC projection', () => {
@@ -761,6 +846,253 @@ describe('People identity RBAC projection', () => {
         }),
       ]),
     );
+  });
+
+  it('join-after-duplicates reconciles strict local and space identities', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture();
+
+    await fixture.sharedSpaceService.handleSharedSpaceIdentityReconciliation({
+      spaceId: fixture.space.id,
+      userId: fixture.member.id,
+    });
+
+    const people = await fixture.personService.getAll(fixture.memberAuth, {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(people.people.filter((person) => person.type === 'person')).toHaveLength(1);
+    expect(people.people[0]).toEqual(
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: fixture.memberPerson.id },
+        numberOfAssets: 2,
+      }),
+    );
+  });
+
+  it('new-space-evidence reconciliation links an existing member local identity', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture({ memberBeforeSpaceEvidence: true });
+
+    await fixture.sharedSpaceService.handleSharedSpaceIdentityReconciliation({
+      spaceId: fixture.space.id,
+      spacePersonId: fixture.spacePerson.id,
+    });
+
+    const people = await fixture.personService.getAll(fixture.memberAuth, {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(people.people.filter((person) => person.type === 'person')).toHaveLength(1);
+    expect(people.people[0]).toEqual(
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: fixture.memberPerson.id },
+        numberOfAssets: 2,
+      }),
+    );
+  });
+
+  it('removes shared-space assets from the accessible identity after the member leaves', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture();
+
+    await fixture.sharedSpaceService.handleSharedSpaceIdentityReconciliation({
+      spaceId: fixture.space.id,
+      userId: fixture.member.id,
+    });
+    await fixture.ctx.database
+      .deleteFrom('shared_space_member')
+      .where('spaceId', '=', fixture.space.id)
+      .where('userId', '=', fixture.member.id)
+      .execute();
+
+    const result = await fixture.personService.getAll(fixture.memberAuth, {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(result.people).toEqual([
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: fixture.memberPerson.id },
+        numberOfAssets: 1,
+      }),
+    ]);
+  });
+
+  it('handles concurrent reconciliation attempts without duplicate visible identities', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture();
+
+    const results = await Promise.allSettled([
+      fixture.sharedSpaceService.handleSharedSpaceIdentityReconciliation({
+        spaceId: fixture.space.id,
+        userId: fixture.member.id,
+      }),
+      fixture.sharedSpaceService.handleSharedSpaceIdentityReconciliation({
+        spaceId: fixture.space.id,
+        userId: fixture.member.id,
+      }),
+    ]);
+
+    expect(results.every((result) => result.status === 'fulfilled')).toBe(true);
+
+    const people = await fixture.personService.getAll(fixture.memberAuth, {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(people.people.filter((person) => person.type === 'person')).toHaveLength(1);
+    expect(people.people[0]).toEqual(
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: fixture.memberPerson.id },
+        numberOfAssets: 2,
+      }),
+    );
+  });
+
+  it('keeps timeline-disabled space evidence out of global people while explicit space people still resolve', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture({ showInTimeline: false });
+
+    const globalPeople = await fixture.personService.getAll(fixture.memberAuth, {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(globalPeople.people.some((person) => person.primaryProfile?.type === 'space-person')).toBe(false);
+
+    const explicitSpacePeople = await fixture.sharedSpaceService.getSpacePeople(fixture.memberAuth, fixture.space.id);
+    expect(explicitSpacePeople).toEqual([
+      expect.objectContaining({ id: fixture.spacePerson.id, name: 'Owner Shared Name' }),
+    ]);
+  });
+
+  it('restores identity grouping after the member rejoins the shared space', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture();
+
+    await fixture.sharedSpaceService.handleSharedSpaceIdentityReconciliation({
+      spaceId: fixture.space.id,
+      userId: fixture.member.id,
+    });
+    await fixture.ctx.database
+      .deleteFrom('shared_space_member')
+      .where('spaceId', '=', fixture.space.id)
+      .where('userId', '=', fixture.member.id)
+      .execute();
+    await fixture.ctx.newSharedSpaceMember({
+      spaceId: fixture.space.id,
+      userId: fixture.member.id,
+      role: SharedSpaceRole.Viewer,
+    });
+
+    const result = await fixture.personService.getAll(fixture.memberAuth, {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(result.people.filter((person) => person.type === 'person')).toHaveLength(1);
+    expect(result.people[0]).toEqual(
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: fixture.memberPerson.id },
+        numberOfAssets: 2,
+      }),
+    );
+  });
+
+  it('restores global contribution after showInTimeline is re-enabled', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture({ showInTimeline: false });
+
+    await setSpaceTimeline(fixture.ctx, {
+      spaceId: fixture.space.id,
+      userId: fixture.member.id,
+      showInTimeline: true,
+    });
+    await fixture.sharedSpaceService.handleSharedSpaceIdentityReconciliation({
+      spaceId: fixture.space.id,
+      userId: fixture.member.id,
+    });
+
+    const result = await fixture.personService.getAll(fixture.memberAuth, {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    expect(result.people.filter((person) => person.type === 'person')).toHaveLength(1);
+    expect(result.people[0]).toEqual(
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: fixture.memberPerson.id },
+        numberOfAssets: 2,
+      }),
+    );
+  });
+
+  it('removes a removed shared-space asset from visible identity counts without splitting identities', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture();
+
+    await fixture.sharedSpaceService.handleSharedSpaceIdentityReconciliation({
+      spaceId: fixture.space.id,
+      userId: fixture.member.id,
+    });
+    await fixture.ctx.database
+      .deleteFrom('shared_space_asset')
+      .where('spaceId', '=', fixture.space.id)
+      .where('assetId', '=', fixture.spaceAsset.id)
+      .execute();
+
+    const result = await fixture.personService.getAll(fixture.memberAuth, {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const filters = await fixture.searchService.getFilterSuggestions(fixture.memberAuth, { withSharedSpaces: true });
+    expect(result.people.filter((person) => person.type === 'person')).toHaveLength(1);
+    expect(result.people[0]).toEqual(
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: fixture.memberPerson.id },
+        numberOfAssets: 1,
+      }),
+    );
+    expect(filters.people).not.toContainEqual(
+      expect.objectContaining({ id: `space-person:${fixture.spacePerson.id}` }),
+    );
+  });
+
+  it('does not surface a stale space person after its backing face is removed', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture();
+
+    await fixture.ctx.database
+      .deleteFrom('shared_space_person_face')
+      .where('personId', '=', fixture.spacePerson.id)
+      .execute();
+
+    try {
+      const result = await fixture.personService.getAll(fixture.memberAuth, {
+        withHidden: false,
+        withSharedSpaces: true,
+        page: 1,
+        size: 50,
+      } as any);
+      const filters = await fixture.searchService.getFilterSuggestions(fixture.memberAuth, { withSharedSpaces: true });
+
+      expect(result.people.some((person) => person.primaryProfile?.id === fixture.spacePerson.id)).toBe(false);
+      expect(filters.people).not.toContainEqual(
+        expect.objectContaining({ id: `space-person:${fixture.spacePerson.id}` }),
+      );
+    } finally {
+      await fixture.ctx.database
+        .insertInto('shared_space_person_face')
+        .values({
+          personId: fixture.spacePerson.id,
+          assetFaceId: fixture.spacePerson.representativeFaceId as string,
+        })
+        .onConflict((oc) => oc.doNothing())
+        .execute();
+    }
   });
 
   it('prefers the viewer personal name in global people after a shared identity is linked', async () => {

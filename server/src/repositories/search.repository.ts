@@ -1546,6 +1546,15 @@ export class SearchRepository {
         WHERE shared_space_person."spaceId" = ${anyUuid(timelineSpaceIds)}
           AND shared_space_person."identityId" IS NOT NULL
           AND EXISTS (
+            SELECT 1
+            FROM shared_space_person_face
+            INNER JOIN asset_face AS profile_face
+              ON profile_face.id = shared_space_person_face."assetFaceId"
+            WHERE shared_space_person_face."personId" = shared_space_person.id
+              AND profile_face."deletedAt" IS NULL
+              AND profile_face."isVisible" = true
+          )
+          AND EXISTS (
             SELECT 1 FROM identity_faces WHERE identity_faces."identityId" = shared_space_person."identityId"
           )
       ),

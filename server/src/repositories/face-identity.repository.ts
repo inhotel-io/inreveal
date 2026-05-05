@@ -226,6 +226,16 @@ export class FaceIdentityRepository {
           'shared_space_member.showInTimeline',
         ])
         .where('shared_space_person.id', 'in', [...scopedSpacePersonIds])
+        .where((eb) =>
+          eb.exists(
+            eb
+              .selectFrom('shared_space_person_face')
+              .innerJoin('asset_face as profile_face', 'profile_face.id', 'shared_space_person_face.assetFaceId')
+              .whereRef('shared_space_person_face.personId', '=', 'shared_space_person.id')
+              .where('profile_face.deletedAt', 'is', null)
+              .where('profile_face.isVisible', '=', true),
+          ),
+        )
         .execute();
       const rowsById = new Map(rows.map((row) => [row.id, row]));
       const timelineSpaceIds = new Set(input.scope.timelineSpaceIds);
@@ -510,6 +520,15 @@ export class FaceIdentityRepository {
       WHERE shared_space_person.id = ${profileId}
         AND shared_space_person."identityId" IS NOT NULL
         AND shared_space_person."isHidden" = false
+        AND EXISTS (
+          SELECT 1
+          FROM shared_space_person_face
+          INNER JOIN asset_face AS profile_face
+            ON profile_face.id = shared_space_person_face."assetFaceId"
+          WHERE shared_space_person_face."personId" = shared_space_person.id
+            AND profile_face."deletedAt" IS NULL
+            AND profile_face."isVisible" = true
+        )
       LIMIT 1
     `.execute(this.db);
 
@@ -940,6 +959,15 @@ export class FaceIdentityRepository {
           AND shared_space_person_alias."userId" = ${input.userId}
         WHERE shared_space_person."identityId" IS NOT NULL
           AND EXISTS (
+            SELECT 1
+            FROM shared_space_person_face
+            INNER JOIN asset_face AS profile_face
+              ON profile_face.id = shared_space_person_face."assetFaceId"
+            WHERE shared_space_person_face."personId" = shared_space_person.id
+              AND profile_face."deletedAt" IS NULL
+              AND profile_face."isVisible" = true
+          )
+          AND EXISTS (
             SELECT 1 FROM accessible_faces WHERE accessible_faces."identityId" = shared_space_person."identityId"
           )
       ),
@@ -1053,6 +1081,15 @@ export class FaceIdentityRepository {
           ON shared_space_person_alias."personId" = shared_space_person.id
           AND shared_space_person_alias."userId" = ${userId}
         WHERE shared_space_person."identityId" IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM shared_space_person_face
+            INNER JOIN asset_face AS profile_face
+              ON profile_face.id = shared_space_person_face."assetFaceId"
+            WHERE shared_space_person_face."personId" = shared_space_person.id
+              AND profile_face."deletedAt" IS NULL
+              AND profile_face."isVisible" = true
+          )
           AND EXISTS (
             SELECT 1 FROM accessible_faces WHERE accessible_faces."identityId" = shared_space_person."identityId"
           )
@@ -1179,7 +1216,16 @@ export class FaceIdentityRepository {
         LEFT JOIN shared_space_person_alias
           ON shared_space_person_alias."personId" = shared_space_person.id
           AND shared_space_person_alias."userId" = ${input.userId}
-        WHERE ${input.withHidden}::boolean OR shared_space_person."isHidden" = false
+        WHERE (${input.withHidden}::boolean OR shared_space_person."isHidden" = false)
+          AND EXISTS (
+            SELECT 1
+            FROM shared_space_person_face
+            INNER JOIN asset_face AS profile_face
+              ON profile_face.id = shared_space_person_face."assetFaceId"
+            WHERE shared_space_person_face."personId" = shared_space_person.id
+              AND profile_face."deletedAt" IS NULL
+              AND profile_face."isVisible" = true
+          )
       ),
       ranked_profiles AS (
         SELECT
