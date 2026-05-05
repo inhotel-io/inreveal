@@ -82,7 +82,7 @@
   let numberOfAssets = $derived(timelineManager?.isInitialized ? timelineManager.assetCount : data.statistics.assets);
   const options = $derived({
     visibility: AssetVisibility.Timeline,
-    personId: data.person.id,
+    personIds: [data.person.filterId ?? data.person.id],
     withSharedSpaces: true,
   });
 

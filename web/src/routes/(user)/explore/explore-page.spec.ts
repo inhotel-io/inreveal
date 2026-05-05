@@ -59,7 +59,7 @@ describe('Explore page', () => {
     );
   });
 
-  it('routes a space-primary person to the space person page and thumbnail', () => {
+  it('routes a space-primary person to the identity-wide person page and space thumbnail', () => {
     renderPage([
       makePerson({
         id: 'identity-1',
@@ -70,7 +70,7 @@ describe('Explore page', () => {
 
     expect(screen.getByRole('link', { name: 'Shared Alice' })).toHaveAttribute(
       'href',
-      '/spaces/space-1/people/space-person-1?previousRoute=%2Fexplore',
+      '/people/space-person-1?previousRoute=%2Fexplore',
     );
     expect(document.querySelector('img')).toHaveAttribute(
       'src',

@@ -21,6 +21,72 @@ from
 where
   "shared_space_person"."id" in ($2)
 
+-- FaceIdentityRepository.findClosestAccessibleIdentityForFace
+begin
+set
+  local vchordrq.probes = 1
+WITH
+  identity_matches AS (
+    SELECT
+      shared_space_person."identityId" AS "identityId",
+      shared_space_person.type,
+      MIN(face_search.embedding <=> $1)::float8 AS distance
+    FROM
+      shared_space_person
+      INNER JOIN shared_space_member ON shared_space_member."spaceId" = shared_space_person."spaceId"
+      AND shared_space_member."userId" = $2
+      AND shared_space_member."showInTimeline" = true
+      INNER JOIN shared_space_person_face ON shared_space_person_face."personId" = shared_space_person.id
+      INNER JOIN asset_face ON asset_face.id = shared_space_person_face."assetFaceId"
+      INNER JOIN asset ON asset.id = asset_face."assetId"
+      INNER JOIN face_search ON face_search."faceId" = asset_face.id
+    WHERE
+      shared_space_person."identityId" IS NOT NULL
+      AND shared_space_person.type = $3
+      AND shared_space_person."isHidden" = false
+      AND shared_space_person."identityId" <> $4
+      AND asset_face."deletedAt" IS NULL
+      AND asset_face."isVisible" = true
+      AND asset."deletedAt" IS NULL
+      AND asset."isOffline" = false
+      AND asset.visibility = $5
+      AND NOT EXISTS (
+        SELECT
+          1
+        FROM
+          person existing_person
+        WHERE
+          existing_person."ownerId" = $6
+          AND existing_person."identityId" = shared_space_person."identityId"
+      )
+      AND NOT EXISTS (
+        SELECT
+          1
+        FROM
+          shared_space_person source_space_person
+          INNER JOIN shared_space_person target_space_person ON target_space_person."spaceId" = source_space_person."spaceId"
+          AND target_space_person."identityId" = shared_space_person."identityId"
+        WHERE
+          source_space_person."identityId" = $7
+      )
+    GROUP BY
+      shared_space_person."identityId",
+      shared_space_person.type
+  )
+SELECT
+  "identityId",
+  type,
+  distance
+FROM
+  identity_matches
+WHERE
+  distance <= $8
+ORDER BY
+  distance
+LIMIT
+  1
+rollback
+
 -- FaceIdentityRepository.searchAccessiblePeople
 WITH
   timeline_spaces AS (
@@ -348,6 +414,21 @@ LIMIT
   $10
 OFFSET
   $11
+
+-- FaceIdentityRepository.getAccessiblePersonByProfileId
+SELECT
+  shared_space_person."identityId"
+FROM
+  shared_space_person
+  INNER JOIN shared_space_member ON shared_space_member."spaceId" = shared_space_person."spaceId"
+  AND shared_space_member."userId" = $1
+  AND shared_space_member."showInTimeline" = true
+WHERE
+  shared_space_person.id = $2
+  AND shared_space_person."identityId" IS NOT NULL
+  AND shared_space_person."isHidden" = false
+LIMIT
+  1
 
 -- FaceIdentityRepository.getAccessiblePeopleIdentityPage
 WITH

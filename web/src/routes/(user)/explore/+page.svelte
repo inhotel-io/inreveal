@@ -38,9 +38,12 @@
 
   const getPersonHref = (person: PersonResponseDto) =>
     person.primaryProfile?.type === 'space-person' && person.primaryProfile.spaceId
-      ? Route.viewSpacePerson(person.primaryProfile.spaceId, person.primaryProfile.id, {
-          previousRoute: Route.explore(),
-        })
+      ? Route.viewPerson(
+          { id: person.primaryProfile.id },
+          {
+            previousRoute: Route.explore(),
+          },
+        )
       : Route.viewPerson({ ...person, id: person.primaryProfile?.id ?? person.id });
 
   const getPersonThumbnail = (person: PersonResponseDto) =>

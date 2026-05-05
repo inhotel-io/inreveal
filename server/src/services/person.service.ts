@@ -223,8 +223,17 @@ export class PersonService extends BaseService {
   }
 
   async getById(auth: AuthDto, id: string): Promise<PersonResponseDto> {
-    await this.requireAccess({ auth, permission: Permission.PersonRead, ids: [id] });
-    return this.findOrFail(id).then(mapPerson);
+    const allowedIds = await this.checkAccess({ auth, permission: Permission.PersonRead, ids: [id] });
+    if (allowedIds.has(id)) {
+      return this.findOrFail(id).then(mapPerson);
+    }
+
+    const accessiblePerson = await this.faceIdentityRepository.getAccessiblePersonByProfileId(auth.user.id, id);
+    if (accessiblePerson) {
+      return accessiblePerson;
+    }
+
+    throw new BadRequestException(`Not found or no ${Permission.PersonRead} access`);
   }
 
   async getFacesForPicker(auth: AuthDto, id: string, dto: PersonFacePageQueryDto): Promise<PersonFacePageResponseDto> {
@@ -789,17 +798,27 @@ export class PersonService extends BaseService {
       }
     }
 
+    let createdPersonId: string | undefined;
     if (isCore && !personId) {
       this.logger.log(`Creating new person for face ${id}`);
       const newPerson = await this.personRepository.create({ ownerId: face.asset.ownerId, faceAssetId: face.id });
       await this.jobRepository.queue({ name: JobName.PersonGenerateThumbnail, data: { id: newPerson.id } });
       personId = newPerson.id;
+      createdPersonId = newPerson.id;
     }
 
     if (personId) {
       this.logger.debug(`Assigning face ${id} to person ${personId}`);
       await this.personRepository.reassignFaces({ faceIds: [id], newPersonId: personId });
-      await this.replaceFaceIdentity(personId, id, 'owner-person');
+      const sourceIdentityId = await this.replaceFaceIdentity(personId, id, 'owner-person');
+      if (personId === createdPersonId) {
+        await this.mergeWithAccessibleSharedIdentity({
+          userId: face.asset.ownerId,
+          embedding: face.faceSearch.embedding,
+          maxDistance: machineLearning.facialRecognition.maxDistance,
+          sourceIdentityId,
+        });
+      }
     }
 
     // Queue shared space face matching for any spaces containing this asset
@@ -818,9 +837,42 @@ export class PersonService extends BaseService {
     personId: string,
     assetFaceId: string,
     source: 'owner-person' | 'manual',
-  ): Promise<void> {
+  ): Promise<string> {
     const identity = await this.faceIdentityRepository.ensurePersonIdentity(personId);
     await this.faceIdentityRepository.replaceFaceIdentity({ assetFaceId, identityId: identity.id, source });
+    return identity.id;
+  }
+
+  private async mergeWithAccessibleSharedIdentity(input: {
+    userId: string;
+    embedding: string;
+    maxDistance: number;
+    sourceIdentityId: string;
+  }): Promise<void> {
+    const match = await this.faceIdentityRepository.findClosestAccessibleIdentityForFace({
+      userId: input.userId,
+      embedding: input.embedding,
+      maxDistance: input.maxDistance,
+      type: 'person',
+      excludeIdentityId: input.sourceIdentityId,
+    });
+    if (!match || match.identityId === input.sourceIdentityId) {
+      return;
+    }
+
+    const result = await this.faceIdentityRepository.mergeIdentities({
+      targetIdentityId: match.identityId,
+      sourceIdentityIds: [input.sourceIdentityId],
+      source: 'shared-space-evidence',
+    });
+
+    if (result.personalProfileConflictCount > 0 || result.spaceProfileConflictCount > 0) {
+      this.logger.warn(
+        `Accessible identity merge had conflicts: ${result.personalProfileConflictCount} personal, ${result.spaceProfileConflictCount} space`,
+      );
+    }
+
+    await this.queueSpacePersonMetadataBackfill(match.identityId);
   }
 
   @OnJob({ name: JobName.PersonFileMigration, queue: QueueName.Migration })

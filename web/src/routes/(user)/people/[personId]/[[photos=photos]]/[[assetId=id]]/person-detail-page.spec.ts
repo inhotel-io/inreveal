@@ -1,7 +1,7 @@
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
-import type { PersonResponseDto } from '@immich/sdk';
+import { Type, type PersonResponseDto } from '@immich/sdk';
 import { modalManager } from '@immich/ui';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
@@ -191,7 +191,26 @@ describe('Person detail page', () => {
     const options = JSON.parse(screen.getByTestId('timeline-stub').dataset.options ?? '{}');
     expect(options).toEqual(
       expect.objectContaining({
-        personId: 'person-1',
+        personIds: ['person-1'],
+        visibility: 'timeline',
+        withSharedSpaces: true,
+      }),
+    );
+  });
+
+  it('uses the scoped person token for identity-wide shared-space timelines', () => {
+    renderPage(
+      makePerson({
+        id: 'space-person-1',
+        filterId: 'space-person:space-person-1',
+        primaryProfile: { type: Type.SpacePerson, id: 'space-person-1', spaceId: 'space-1' },
+      }),
+    );
+
+    const options = JSON.parse(screen.getByTestId('timeline-stub').dataset.options ?? '{}');
+    expect(options).toEqual(
+      expect.objectContaining({
+        personIds: ['space-person:space-person-1'],
         visibility: 'timeline',
         withSharedSpaces: true,
       }),
