@@ -20,6 +20,16 @@ from
   and "shared_space_member"."userId" = $1
 where
   "shared_space_person"."id" in ($2)
+  and exists (
+    select
+    from
+      "shared_space_person_face"
+      inner join "asset_face" as "profile_face" on "profile_face"."id" = "shared_space_person_face"."assetFaceId"
+    where
+      "shared_space_person_face"."personId" = "shared_space_person"."id"
+      and "profile_face"."deletedAt" is null
+      and "profile_face"."isVisible" = $3
+  )
 
 -- FaceIdentityRepository.findClosestAccessibleIdentityForFace
 begin
@@ -84,8 +94,8 @@ WHERE
 ORDER BY
   distance
 LIMIT
-  1
-rollback
+  2
+commit
 
 -- FaceIdentityRepository.searchAccessiblePeople
 WITH
@@ -176,6 +186,17 @@ WITH
       AND shared_space_person_alias."userId" = $5
     WHERE
       shared_space_person."identityId" IS NOT NULL
+      AND EXISTS (
+        SELECT
+          1
+        FROM
+          shared_space_person_face
+          INNER JOIN asset_face AS profile_face ON profile_face.id = shared_space_person_face."assetFaceId"
+        WHERE
+          shared_space_person_face."personId" = shared_space_person.id
+          AND profile_face."deletedAt" IS NULL
+          AND profile_face."isVisible" = true
+      )
       AND EXISTS (
         SELECT
           1
@@ -344,6 +365,17 @@ WITH
         SELECT
           1
         FROM
+          shared_space_person_face
+          INNER JOIN asset_face AS profile_face ON profile_face.id = shared_space_person_face."assetFaceId"
+        WHERE
+          shared_space_person_face."personId" = shared_space_person.id
+          AND profile_face."deletedAt" IS NULL
+          AND profile_face."isVisible" = true
+      )
+      AND EXISTS (
+        SELECT
+          1
+        FROM
           accessible_faces
         WHERE
           accessible_faces."identityId" = shared_space_person."identityId"
@@ -427,6 +459,17 @@ WHERE
   shared_space_person.id = $2
   AND shared_space_person."identityId" IS NOT NULL
   AND shared_space_person."isHidden" = false
+  AND EXISTS (
+    SELECT
+      1
+    FROM
+      shared_space_person_face
+      INNER JOIN asset_face AS profile_face ON profile_face.id = shared_space_person_face."assetFaceId"
+    WHERE
+      shared_space_person_face."personId" = shared_space_person.id
+      AND profile_face."deletedAt" IS NULL
+      AND profile_face."isVisible" = true
+  )
 LIMIT
   1
 
@@ -519,6 +562,17 @@ WITH
       AND shared_space_person_alias."userId" = $5
     WHERE
       shared_space_person."identityId" IS NOT NULL
+      AND EXISTS (
+        SELECT
+          1
+        FROM
+          shared_space_person_face
+          INNER JOIN asset_face AS profile_face ON profile_face.id = shared_space_person_face."assetFaceId"
+        WHERE
+          shared_space_person_face."personId" = shared_space_person.id
+          AND profile_face."deletedAt" IS NULL
+          AND profile_face."isVisible" = true
+      )
       AND EXISTS (
         SELECT
           1
@@ -711,8 +765,21 @@ WITH
       LEFT JOIN shared_space_person_alias ON shared_space_person_alias."personId" = shared_space_person.id
       AND shared_space_person_alias."userId" = $7
     WHERE
-      $8::boolean
-      OR shared_space_person."isHidden" = false
+      (
+        $8::boolean
+        OR shared_space_person."isHidden" = false
+      )
+      AND EXISTS (
+        SELECT
+          1
+        FROM
+          shared_space_person_face
+          INNER JOIN asset_face AS profile_face ON profile_face.id = shared_space_person_face."assetFaceId"
+        WHERE
+          shared_space_person_face."personId" = shared_space_person.id
+          AND profile_face."deletedAt" IS NULL
+          AND profile_face."isVisible" = true
+      )
   ),
   ranked_profiles AS (
     SELECT
