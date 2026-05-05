@@ -2635,6 +2635,28 @@ describe(SharedSpaceService.name, () => {
     });
   });
 
+  function mockOneAffectedSpacePerson() {
+    mocks.sharedSpace.isAssetInSpace.mockResolvedValue(true);
+    mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([
+      {
+        id: 'face-1',
+        assetId: 'asset-1',
+        personId: 'owner-person-1',
+        identityId: 'identity-1',
+        type: 'person',
+        embedding: '[1,2,3]',
+      },
+    ] as any);
+    mocks.sharedSpace.isPersonFaceAssigned.mockResolvedValue(false);
+    mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue({
+      id: 'space-person-1',
+      identityId: 'identity-1',
+    } as any);
+    mocks.sharedSpace.getSpaceAssetAdder.mockResolvedValue({ addedById: 'member-1' });
+    mocks.sharedSpace.addPersonFaces.mockResolvedValue([]);
+    mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
+  }
+
   describe('handleSharedSpaceFaceMatch', () => {
     it('should skip when space not found', async () => {
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
@@ -3371,6 +3393,18 @@ describe(SharedSpaceService.name, () => {
         data: { spaceId },
       });
     });
+
+    it('should queue identity reconciliation for affected space people after matching one asset', async () => {
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', faceRecognitionEnabled: true }));
+      mockOneAffectedSpacePerson();
+
+      await sut.handleSharedSpaceFaceMatch({ spaceId: 'space-1', assetId: 'asset-1' });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpaceIdentityReconciliation,
+        data: { spaceId: 'space-1', spacePersonId: 'space-person-1' },
+      });
+    });
   });
 
   describe('handleSharedSpaceFaceMatchAll', () => {
@@ -3408,7 +3442,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getAssetIdsInSpacePage
         .mockResolvedValueOnce([{ assetId: 'a1' }, { assetId: 'a2' }])
         .mockResolvedValueOnce([{ assetId: 'a3' }]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
+      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => []);
 
       const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
 
@@ -3437,7 +3471,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getAssetIdsInSpacePage
         .mockResolvedValueOnce([{ assetId: 'asset-1' }, { assetId: 'asset-2' }])
         .mockResolvedValueOnce([]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
+      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => []);
 
       const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
 
@@ -3456,7 +3490,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getById.mockResolvedValue(space);
       mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
+      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => []);
 
       const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
 
@@ -3478,7 +3512,7 @@ describe(SharedSpaceService.name, () => {
         .mockResolvedValueOnce(enabled)
         .mockResolvedValueOnce(disabled);
       mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }, { assetId: 'a2' }]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
+      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => []);
 
       const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
 
@@ -3500,7 +3534,7 @@ describe(SharedSpaceService.name, () => {
         .mockResolvedValueOnce(enabled)
         .mockImplementationOnce(async () => {});
       mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }, { assetId: 'a2' }]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
+      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => []);
 
       const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
 
@@ -3523,7 +3557,7 @@ describe(SharedSpaceService.name, () => {
         .mockResolvedValueOnce(enabled)
         .mockResolvedValueOnce(disabled);
       mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'a1' }]);
-      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => {});
+      const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockImplementation(async () => []);
 
       const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
 
@@ -3532,6 +3566,19 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.job.queue).not.toHaveBeenCalledWith(
         expect.objectContaining({ name: JobName.SharedSpacePersonDedup }),
       );
+    });
+
+    it('should queue full-space identity reconciliation after matching all assets', async () => {
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', faceRecognitionEnabled: true }));
+      mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValueOnce([{ assetId: 'asset-1' }]).mockResolvedValueOnce([]);
+      mockOneAffectedSpacePerson();
+
+      await sut.handleSharedSpaceFaceMatchAll({ spaceId: 'space-1' });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpaceIdentityReconciliation,
+        data: { spaceId: 'space-1' },
+      });
     });
   });
 
@@ -6377,6 +6424,20 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.SharedSpacePersonDedup,
         data: { spaceId },
+      });
+    });
+
+    it('should queue full-space identity reconciliation after linked library face sync changes space evidence', async () => {
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', faceRecognitionEnabled: true }));
+      mocks.sharedSpace.hasLibraryLink.mockResolvedValue(true);
+      mocks.asset.getByLibraryIdWithFaces.mockResolvedValueOnce([{ id: 'asset-1' }]).mockResolvedValueOnce([]);
+      mockOneAffectedSpacePerson();
+
+      await sut.handleSharedSpaceLibraryFaceSync({ spaceId: 'space-1', libraryId: 'library-1' });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpaceIdentityReconciliation,
+        data: { spaceId: 'space-1' },
       });
     });
   });

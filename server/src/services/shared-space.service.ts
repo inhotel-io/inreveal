@@ -1426,7 +1426,10 @@ export class SharedSpaceService extends BaseService {
       return JobStatus.Skipped;
     }
 
-    await this.processSpaceFaceMatch(spaceId, assetId);
+    const affectedPersonIds = await this.processSpaceFaceMatch(spaceId, assetId);
+    for (const spacePersonId of affectedPersonIds) {
+      await this.queueSpaceIdentityReconciliation({ spaceId, spacePersonId });
+    }
 
     // Queue dedup pass (jobId deduplication prevents queue spam)
     await this.jobRepository.queue({
@@ -1451,6 +1454,7 @@ export class SharedSpaceService extends BaseService {
 
     const batchSize = 1000;
     let offset = 0;
+    let affectedAny = false;
 
     while (true) {
       // Re-check link each batch to handle concurrent unlink
@@ -1466,10 +1470,15 @@ export class SharedSpaceService extends BaseService {
       }
 
       for (const asset of assets) {
-        await this.processSpaceFaceMatch(job.spaceId, asset.id);
+        const affectedPersonIds = await this.processSpaceFaceMatch(job.spaceId, asset.id);
+        affectedAny ||= affectedPersonIds.length > 0;
       }
 
       offset += assets.length;
+    }
+
+    if (affectedAny) {
+      await this.queueSpaceIdentityReconciliation({ spaceId: job.spaceId });
     }
 
     // Queue dedup pass after library sync completes
@@ -1485,6 +1494,7 @@ export class SharedSpaceService extends BaseService {
   async handleSharedSpaceFaceMatchAll({ spaceId }: JobOf<JobName.SharedSpaceFaceMatchAll>): Promise<JobStatus> {
     const batchSize = this.sharedSpaceFaceMatchBatchSize;
     let processedAny = false;
+    let affectedAny = false;
     let afterAssetId: string | undefined;
 
     const initialSpace = await this.sharedSpaceRepository.getById(spaceId);
@@ -1508,7 +1518,8 @@ export class SharedSpaceService extends BaseService {
       }
 
       for (const { assetId } of assets) {
-        await this.processSpaceFaceMatch(spaceId, assetId);
+        const affectedPersonIds = await this.processSpaceFaceMatch(spaceId, assetId);
+        affectedAny ||= affectedPersonIds.length > 0;
         processedAny = true;
       }
 
@@ -1530,6 +1541,9 @@ export class SharedSpaceService extends BaseService {
         name: JobName.SharedSpacePersonDedup,
         data: { spaceId },
       });
+      if (affectedAny) {
+        await this.queueSpaceIdentityReconciliation({ spaceId });
+      }
     }
 
     return JobStatus.Success;
@@ -1775,10 +1789,10 @@ export class SharedSpaceService extends BaseService {
     return JobStatus.Success;
   }
 
-  private async processSpaceFaceMatch(spaceId: string, assetId: string): Promise<void> {
+  private async processSpaceFaceMatch(spaceId: string, assetId: string): Promise<string[]> {
     const isAssetInSpace = await this.sharedSpaceRepository.isAssetInSpace(spaceId, assetId);
     if (!isAssetInSpace) {
-      return;
+      return [];
     }
 
     const spaceAsset = await this.sharedSpaceRepository.getSpaceAssetAdder(spaceId, assetId);
@@ -1915,6 +1929,7 @@ export class SharedSpaceService extends BaseService {
     if (affectedPersonIds.size > 0) {
       await this.sharedSpaceRepository.recountPersons([...affectedPersonIds]);
     }
+    return [...affectedPersonIds];
   }
 
   private async findOrCreateSpacePersonForFace(input: {
