@@ -837,6 +837,48 @@ describe(FaceIdentityRepository.name, () => {
     expect(sourceSpaceProfile.identityId).toBe(targetIdentity.id);
   });
 
+  it('counts same-owner personal conflicts before identity merge', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    try {
+      const { person: targetPerson } = await ctx.newPerson({ ownerId: user.id });
+      const { person: sourcePerson } = await ctx.newPerson({ ownerId: user.id });
+      const targetIdentity = await sut.ensurePersonIdentity(targetPerson.id);
+      const sourceIdentity = await sut.ensurePersonIdentity(sourcePerson.id);
+
+      await expect(
+        sut.getMergeConflicts({
+          targetIdentityId: targetIdentity.id,
+          sourceIdentityIds: [sourceIdentity.id],
+        }),
+      ).resolves.toEqual({ personalProfileConflictCount: 1, spaceProfileConflictCount: 0 });
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
+  });
+
+  it('counts same-space profile conflicts before identity merge', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    try {
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+      const targetSpacePerson = await newSpacePerson(ctx, space.id);
+      const sourceSpacePerson = await newSpacePerson(ctx, space.id);
+      const targetIdentity = await sut.ensureSpacePersonIdentity(targetSpacePerson.id);
+      const sourceIdentity = await sut.ensureSpacePersonIdentity(sourceSpacePerson.id);
+
+      await expect(
+        sut.getMergeConflicts({
+          targetIdentityId: targetIdentity.id,
+          sourceIdentityIds: [sourceIdentity.id],
+        }),
+      ).resolves.toEqual({ personalProfileConflictCount: 0, spaceProfileConflictCount: 1 });
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
+  });
+
   describe('repair', () => {
     it('merges non-conflicting identities by moving face links without merging scoped metadata', async () => {
       const { ctx, sut } = setup();

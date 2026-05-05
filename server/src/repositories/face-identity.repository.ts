@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Insertable, Kysely, Selectable, sql } from 'kysely';
+import { Insertable, Kysely, Selectable, sql, Transaction } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DummyValue, GenerateSql } from 'src/decorators';
 import {
@@ -1634,27 +1634,10 @@ export class FaceIdentityRepository {
         throw new Error('Cannot merge face identities with different types');
       }
 
-      const personalConflicts = await trx
-        .selectFrom('person as source_person')
-        .innerJoin('person as target_person', (join) =>
-          join
-            .onRef('target_person.ownerId', '=', 'source_person.ownerId')
-            .on('target_person.identityId', '=', input.targetIdentityId),
-        )
-        .select('source_person.id')
-        .where('source_person.identityId', 'in', sourceIdentityIds)
-        .execute();
-
-      const spaceConflicts = await trx
-        .selectFrom('shared_space_person as source_person')
-        .innerJoin('shared_space_person as target_person', (join) =>
-          join
-            .onRef('target_person.spaceId', '=', 'source_person.spaceId')
-            .on('target_person.identityId', '=', input.targetIdentityId),
-        )
-        .select('source_person.id')
-        .where('source_person.identityId', 'in', sourceIdentityIds)
-        .execute();
+      const { personalProfileConflictCount, spaceProfileConflictCount } = await this.countMergeConflicts(trx, {
+        targetIdentityId: input.targetIdentityId,
+        sourceIdentityIds,
+      });
 
       await trx
         .updateTable('face_identity_face')
@@ -1712,9 +1695,57 @@ export class FaceIdentityRepository {
       }
 
       return {
-        personalProfileConflictCount: personalConflicts.length,
-        spaceProfileConflictCount: spaceConflicts.length,
+        personalProfileConflictCount,
+        spaceProfileConflictCount,
       };
     });
+  }
+
+  private async countMergeConflicts(
+    db: Kysely<DB> | Transaction<DB>,
+    input: {
+      targetIdentityId: string;
+      sourceIdentityIds: string[];
+    },
+  ): Promise<MergeIdentitiesResult> {
+    const sourceIdentityIds = [...new Set(input.sourceIdentityIds)].filter((id) => id !== input.targetIdentityId);
+    if (sourceIdentityIds.length === 0) {
+      return { personalProfileConflictCount: 0, spaceProfileConflictCount: 0 };
+    }
+
+    const [personalConflicts, spaceConflicts] = await Promise.all([
+      db
+        .selectFrom('person as source_person')
+        .innerJoin('person as target_person', (join) =>
+          join
+            .onRef('target_person.ownerId', '=', 'source_person.ownerId')
+            .on('target_person.identityId', '=', input.targetIdentityId),
+        )
+        .select('source_person.id')
+        .where('source_person.identityId', 'in', sourceIdentityIds)
+        .execute(),
+      db
+        .selectFrom('shared_space_person as source_person')
+        .innerJoin('shared_space_person as target_person', (join) =>
+          join
+            .onRef('target_person.spaceId', '=', 'source_person.spaceId')
+            .on('target_person.identityId', '=', input.targetIdentityId),
+        )
+        .select('source_person.id')
+        .where('source_person.identityId', 'in', sourceIdentityIds)
+        .execute(),
+    ]);
+
+    return {
+      personalProfileConflictCount: personalConflicts.length,
+      spaceProfileConflictCount: spaceConflicts.length,
+    };
+  }
+
+  async getMergeConflicts(input: {
+    targetIdentityId: string;
+    sourceIdentityIds: string[];
+  }): Promise<MergeIdentitiesResult> {
+    return this.countMergeConflicts(this.db, input);
   }
 }
