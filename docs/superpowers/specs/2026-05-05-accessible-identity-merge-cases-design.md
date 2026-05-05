@@ -56,35 +56,63 @@ For the first implementation, "single clear candidate" should be implemented con
 
 No suggested-merge state is required in this pass. Ambiguous duplicates remain visible and can be manually merged.
 
+## Reconciliation Scope
+
+Automatic reconciliation must use the same visibility scope as the event that triggered it:
+
+- A personal upload uses the uploader's global people scope. Shared-space evidence is eligible only from spaces that currently contribute to that user's global timeline.
+- Adding an asset to a specific space uses that explicit space as the access bridge, even if that member has disabled the space in their global timeline.
+- Joining or rejoining a space reconciles the joined space against the new member's local people because membership now grants explicit space access.
+- Explicit space jobs must not use people from unrelated spaces unless the user has a separate current access bridge to those spaces.
+
+This keeps `showInTimeline` semantics intact: a timeline-disabled space does not influence global recognition, search, filters, or labels, but it can still be used when the user is acting inside that space.
+
+## Job Semantics
+
+Reconciliation should run as background work wherever it could be expensive:
+
+- Add-member and rejoin flows should queue a member identity reconciliation job after membership is persisted.
+- Shared-space face match jobs should queue reconciliation for affected space people after they create or update space evidence.
+- Dedup and reconciliation jobs must be idempotent. Re-running the same job should not create duplicate profiles, duplicate face links, or additional visible people.
+- Concurrent jobs must be safe. If two jobs try to merge the same identity pair, one should win and the other should observe the merged state or no-op.
+- User-facing operations such as adding a member or adding assets should not fail just because reconciliation skipped or failed a candidate.
+
+Identity target selection should be deterministic:
+
+- Manual personal merge targets the selected personal target identity.
+- Manual same-space merge targets the selected space target identity after physical profile merge.
+- Automatic shared-space reconciliation should prefer the already-accessible space identity as the target when merging a newly created or pre-existing local identity into shared evidence.
+- If neither side is clearly preferred, choose the identity with stronger evidence, then by stable id as a tie-breaker.
+
 ## Automatic Merge Cases
 
 ### Upload After Shared Access, No Local Profile Yet
 
-B is already a member of a space containing A's Pierre. B uploads a new Pierre photo, but B has never had a personal Pierre profile.
+B is already a member of a space containing A's person. B uploads a new photo of that same person, but B has never had a personal profile for them.
 
 Expected behavior:
 
-- B does not see a second Pierre in `/people` or `/explore`.
-- The uploaded face is attached to the accessible Pierre identity.
-- B's uploaded photo appears on the identity-wide Pierre view.
-- If B later leaves the space, B still sees B's uploaded Pierre photo and loses A's shared-space photos.
+- B does not see a second visible person in `/people` or `/explore`.
+- The uploaded face is attached to the accessible identity.
+- B's uploaded photo appears on the identity-wide person view.
+- If B later leaves the space, B still sees B's uploaded photo and loses A's shared-space photos.
 
 The backend may still create a B-owned `person` row as the backing profile for B's face because `asset_face.personId` is owner-scoped. If it does, that profile must be linked to the existing accessible identity before user-facing people results can surface it as a duplicate.
 
 ### Upload After Shared Access, Existing Local Duplicate
 
-B is already a member of a space containing A's Pierre. B already has a local Pierre profile from earlier uploads. B uploads another Pierre photo.
+B is already a member of a space containing A's person. B already has a local profile for the same person from earlier uploads. B uploads another photo of them.
 
 Expected behavior:
 
 - Recognition can use B's local person for `asset_face.personId`.
 - The local identity should still be compared with accessible shared identities.
-- If the match is strict, B's local Pierre identity merges into the accessible Pierre identity.
-- B sees one Pierre identity, not one local Pierre and one space Pierre.
+- If the match is strict, B's local identity merges into the accessible shared identity.
+- B sees one identity, not one local person and one space person.
 
 ### Join After Both Users Already Have Local People
 
-A uploads Pierre. B uploads Pierre. A creates space X, adds A's Pierre photo, then invites B.
+A uploads a photo of a person. B uploads a photo of the same person. A creates space X, adds A's photo to it, then invites B.
 
 Expected behavior:
 
@@ -97,7 +125,7 @@ This reconciliation must run after the membership exists, because the membership
 
 ### New Space Evidence While Members Already Exist
 
-A and B are already members of space X. A later adds a Pierre photo to the space, or a linked library sync adds new Pierre evidence.
+A and B are already members of space X. A later adds a photo of the same person to the space, or a linked library sync adds new evidence for that person.
 
 Expected behavior:
 
@@ -108,14 +136,14 @@ Expected behavior:
 
 This covers the inverse of the join case: access already exists, but the space evidence arrives later.
 
-### Member Adds Their Own Photo To A Space With Existing Pierre
+### Member Adds Their Own Photo To A Space With An Existing Person
 
-Space X already has A's Pierre. B adds a B-owned Pierre photo to X.
+Space X already has A's profile for a person. B adds a B-owned photo of the same person to X.
 
 Expected behavior:
 
 - B's face keeps a B-owned backing person profile.
-- The space should not keep two Pierre space people when the match is strict.
+- The space should not keep two space people when the match is strict.
 - The B-owned identity and A-backed space identity merge.
 - The shared-space profile remains scoped to X and continues to use only faces/assets visible in X.
 
@@ -126,10 +154,21 @@ Two space people in the same space can represent the same real person.
 Expected behavior:
 
 - If both are identity-less and are a strict match, physically merge the space profiles.
-- If one or both already have identities and are a strict match with no same-space conflict, merge identities and then physically merge the same-space profiles when safe.
-- If identity merge would create a same-space conflict that cannot be physically resolved first, skip automatic merge.
+- If one or both already have identities and are a strict match, physically merge the same-space profiles first, then merge supporting identities after the same-space profile conflict has been removed.
+- If physical profile merge cannot safely resolve the same-space conflict first, skip automatic identity merge.
 
 The current "skip identity-backed space people" behavior is too conservative for this policy.
+
+### Asset Or Face Removal
+
+A shared-space asset can be removed from a space, deleted, hidden, or lose face evidence after a recognition reset.
+
+Expected behavior:
+
+- Identity links do not need to be undone solely because evidence was removed.
+- Removed or inaccessible assets stop contributing to visible counts, thumbnails, filters, and detail timelines.
+- If a space person loses all backing faces, cleanup or backfill should prevent it from appearing as a visible global person.
+- If face evidence is regenerated later, reconciliation should be able to reattach to the existing identity without creating duplicates.
 
 ### Manual Personal Merge
 
@@ -186,7 +225,7 @@ When B leaves or is removed from a space:
 
 - B keeps B-owned photos and B-owned personal profiles.
 - B loses A's shared-space photos and space-only profiles from global people, search, filters, and timeline.
-- If B had uploaded Pierre while access existed, B still sees B's uploaded Pierre under the same local identity-backed profile.
+- If B had uploaded photos of the same person while access existed, B still sees B's uploaded photos under the same local identity-backed profile.
 - If B rejoins later, the previously merged identity becomes unified again through current access.
 
 When a space is deleted or face recognition is disabled:
@@ -194,6 +233,12 @@ When a space is deleted or face recognition is disabled:
 - Personal profiles and identity links remain.
 - Space profiles stop contributing to global results once access or space evidence is gone.
 - Backfill should refresh metadata so inaccessible space profiles no longer determine visible labels or thumbnails.
+
+When a member disables `showInTimeline` for a space:
+
+- That space stops contributing to global people, search, filters, metadata inheritance, and personal-upload reconciliation.
+- Explicit space pages and explicit space jobs may still use that space's people because the user still has direct membership access.
+- Re-enabling `showInTimeline` should restore global contribution after normal sync or backfill.
 
 ## Non-Merge Cases
 
@@ -210,6 +255,26 @@ Automatic merge must not happen for:
 - profiles blocked by a manual split or do-not-merge rule
 
 Names alone must not drive automatic merging. Names may help display metadata after identities are merged, but face evidence and access are the merge gates.
+
+## TDD Requirements
+
+Implementation must follow red-green-refactor:
+
+1. Add the smallest failing test for one behavior.
+2. Run that focused test and verify it fails for the expected reason.
+3. Write the minimal production code to pass that test.
+4. Re-run the focused test and the nearest affected suite.
+5. Refactor only after the tests are green.
+6. Repeat for the next behavior.
+
+New or still-broken behaviors must be captured as red tests before implementation. Behaviors already fixed on this branch should keep their existing regression tests and get additional red tests only when new edge-case behavior is added.
+
+- Joining a space after A and B already have separate local profiles for the same person does not reconcile them.
+- Adding new evidence for a person to a space after A and B are already members does not reconcile B's existing local profile for that person.
+- Automatic reconciliation does not yet prove ambiguity, hidden-profile, timeline-disabled, idempotency, and concurrency behavior.
+- Any UI path that can select a personal + space-person merge candidate must use scoped identity repair and must not fall through to the legacy physical merge endpoints.
+
+Do not add production reconciliation code until its red test has been observed failing. Commit history does not need one commit per test, but the working sequence should be test-first.
 
 ## Error Handling
 
@@ -231,22 +296,32 @@ Manual merge should fail clearly:
 
 Add focused unit tests first, then medium or route tests where the behavior depends on query access rules.
 
+The implementation plan should name the exact test file for each behavior and should not mark an implementation step complete until its red and green runs have both been observed.
+
 Required automatic merge tests:
 
-- B uploads Pierre after joining a space with A's Pierre and has no local Pierre yet; one visible identity is produced and B keeps B's photo after leaving.
-- B uploads Pierre after joining a space with A's Pierre and already has a local duplicate; strict match merges the local identity into the accessible shared identity.
-- A and B already have local Pierre profiles, then B joins A's space; add-member reconciliation merges strict matches.
-- A adds Pierre evidence to a space after B is already a member; new-space-evidence reconciliation merges B's existing local Pierre.
-- B adds a B-owned Pierre photo to a space with A's Pierre; space dedup and identity merge produce one Pierre.
+- B uploads a photo of a person after joining a space with that same accessible person and has no local profile yet; one visible identity is produced and B keeps B's photo after leaving.
+- B uploads a photo of a person after joining a space with that same accessible person and already has a local duplicate; strict match merges the local identity into the accessible shared identity.
+- A and B already have local profiles for the same person, then B joins A's space; add-member reconciliation merges strict matches.
+- A adds evidence for a person to a space after B is already a member; new-space-evidence reconciliation merges B's existing local profile for that person.
+- B adds a B-owned photo of a person to a space with A's profile for that same person; space dedup and identity merge produce one visible identity.
 - Ambiguous matches within threshold are skipped.
 - Type mismatches are skipped.
 - Same-owner and same-space conflicts are skipped.
+- Hidden or ignored profiles are not automatic merge targets.
+- Re-running the same reconciliation job is idempotent.
+- Two concurrent reconciliation jobs for the same identity pair do not produce duplicate profiles or failed user-visible work.
+- A match from a timeline-disabled space is not used for personal-upload reconciliation, but is eligible in explicit space scope.
 
 Required lifecycle tests:
 
-- After B leaves a space, B still sees B-owned Pierre photos and no longer sees A's shared-space Pierre photos.
+- After B leaves a space, B still sees B-owned photos of the person and no longer sees A's shared-space photos of that person.
 - A shared-space profile id stops resolving for B after B loses access.
 - B rejoins later and the identity resolves as unified again.
+- Disabling `showInTimeline` removes the space from global people and personal-upload reconciliation.
+- Re-enabling `showInTimeline` restores global identity grouping after sync or backfill.
+- Removing an asset from a space removes its contribution from counts, thumbnails, filters, and detail timelines without splitting identities.
+- Face-detection reset or missing representative faces do not make stale space people visible globally.
 
 Required manual merge tests:
 
@@ -262,6 +337,16 @@ Required web tests:
 - The personal detail merge UI calls `mergeScopedPeople` when a selected candidate has a space primary profile.
 - The space person detail merge UI calls `mergeScopedPeople` for mixed personal/space candidates.
 - Any remaining merge modal that can receive mixed candidates uses scoped refs instead of raw `/people/:id/merge`.
+- Cross-scope manual merge refreshes the visible identity row and does not navigate to an inaccessible profile after merge.
+- Leaving a space or disabling `showInTimeline` updates the people/detail page to show only currently accessible assets.
+
+Required API and repository tests:
+
+- Scoped repair rejects raw identity ids and inaccessible scoped profile refs.
+- Identity merge refuses incompatible types before moving face links.
+- Identity merge either preflights same-scope conflicts or reports them so automatic reconciliation can skip safely.
+- Accessible people, filter suggestions, search suggestions, and person detail timelines all return one row per accessible identity and only accessible assets.
+- Shared-space thumbnail selection never uses a face asset outside the explicit space.
 
 ## Non-Goals
 
