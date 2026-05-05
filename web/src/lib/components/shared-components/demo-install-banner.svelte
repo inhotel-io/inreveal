@@ -8,7 +8,7 @@
   let { visible }: Props = $props();
 
   const INSTALL_URL =
-    'https://opennoodle.de/install?utm_source=demo.opennoodle.de&utm_medium=banner&utm_campaign=demo_install_banner';
+    'https://opennoodle.de/install?utm_source=demo.opennoodle.de&utm_medium=banner&utm_campaign=demo_to_install&utm_content=install_banner';
 
   $effect(() => {
     if (!browser) {
@@ -57,6 +57,8 @@
       <a
         href={INSTALL_URL}
         rel="noreferrer"
+        data-umami-event="cta-install-demo-banner"
+        data-umami-event-location="demo-install-banner"
         class="group inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-[#f7f1df]/70 bg-[#f7f1df] px-3 text-sm font-semibold text-[#101611] shadow-[0_1px_0_rgba(255,255,255,0.45)_inset,0_10px_22px_rgba(0,0,0,0.28)] transition hover:-translate-y-px hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#52df91] sm:px-4"
       >
         <span>Install your own</span>

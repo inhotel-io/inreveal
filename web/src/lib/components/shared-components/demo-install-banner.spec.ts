@@ -12,8 +12,10 @@ describe('DemoInstallBanner', () => {
     const link = screen.getByRole('link', { name: 'Install your own \u2192' });
     expect(link).toHaveAttribute(
       'href',
-      'https://opennoodle.de/install?utm_source=demo.opennoodle.de&utm_medium=banner&utm_campaign=demo_install_banner',
+      'https://opennoodle.de/install?utm_source=demo.opennoodle.de&utm_medium=banner&utm_campaign=demo_to_install&utm_content=install_banner',
     );
+    expect(link).toHaveAttribute('data-umami-event', 'cta-install-demo-banner');
+    expect(link).toHaveAttribute('data-umami-event-location', 'demo-install-banner');
   });
 
   it('does not render when hidden', () => {
