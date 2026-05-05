@@ -1755,7 +1755,7 @@ describe(PersonService.name, () => {
       });
     });
 
-    it('should not merge an existing matched person identity into an accessible shared identity', async () => {
+    it('should merge an existing matched local person identity into an accessible shared identity', async () => {
       const asset = AssetFactory.create();
       const [noPerson, matchedFace] = [
         AssetFaceFactory.create({ assetId: asset.id }),
@@ -1765,18 +1765,36 @@ describe(PersonService.name, () => {
         { ...noPerson, distance: 0 },
         { ...matchedFace, distance: 0.2 },
       ] as FaceSearchResult[];
+      const sourceIdentityId = 'source-identity';
+      const targetIdentityId = 'target-identity';
+
       mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
       mocks.search.searchFaces.mockResolvedValue(faces);
       mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
-      mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'source-identity' } as any);
+      mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: sourceIdentityId } as any);
       (mocks.faceIdentity as any).findClosestAccessibleIdentityForFace.mockResolvedValue({
-        identityId: 'target-identity',
+        identityId: targetIdentityId,
         distance: 0.2,
+      });
+      mocks.faceIdentity.mergeIdentities.mockResolvedValue({
+        personalProfileConflictCount: 0,
+        spaceProfileConflictCount: 0,
       });
 
       await sut.handleRecognizeFaces({ id: noPerson.id });
 
-      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+      expect((mocks.faceIdentity as any).findClosestAccessibleIdentityForFace).toHaveBeenCalledWith({
+        userId: asset.ownerId,
+        embedding: '[1, 2, 3, 4]',
+        maxDistance: 0.5,
+        type: 'person',
+        excludeIdentityId: sourceIdentityId,
+      });
+      expect(mocks.faceIdentity.mergeIdentities).toHaveBeenCalledWith({
+        targetIdentityId,
+        sourceIdentityIds: [sourceIdentityId],
+        source: 'shared-space-evidence',
+      });
     });
 
     it('should match existing person if their birth date is unknown', async () => {

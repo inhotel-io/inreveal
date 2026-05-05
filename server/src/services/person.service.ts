@@ -820,15 +820,13 @@ export class PersonService extends BaseService {
       this.logger.debug(`Assigning face ${id} to person ${personId}`);
       await this.personRepository.reassignFaces({ faceIds: [id], newPersonId: personId });
       const sourceIdentityId = await this.replaceFaceIdentity(personId, id, 'owner-person');
-      if (personId === createdPersonId) {
-        await this.mergeWithAccessibleSharedIdentity({
-          userId: face.asset.ownerId,
-          embedding: face.faceSearch.embedding,
-          maxDistance: machineLearning.facialRecognition.maxDistance,
-          sourceIdentityId,
-          match: accessibleIdentityMatch,
-        });
-      }
+      await this.mergeWithAccessibleSharedIdentity({
+        userId: face.asset.ownerId,
+        embedding: face.faceSearch.embedding,
+        maxDistance: machineLearning.facialRecognition.maxDistance,
+        sourceIdentityId,
+        match: personId === createdPersonId ? accessibleIdentityMatch : undefined,
+      });
     }
 
     // Queue shared space face matching for any spaces containing this asset

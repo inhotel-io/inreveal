@@ -1,10 +1,11 @@
 import { Kysely } from 'kysely';
-import { SharedSpaceRole } from 'src/enum';
+import { AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
 import { newMediumService } from 'test/medium.factory';
+import { newEmbedding } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
 
 let defaultDatabase: Kysely<DB>;
@@ -31,6 +32,101 @@ const linkSpaceFace = async (ctx: ReturnType<typeof setup>['ctx'], personId: str
 };
 
 describe(FaceIdentityRepository.name, () => {
+  const createAccessibleSpaceIdentity = async (
+    ctx: ReturnType<typeof setup>['ctx'],
+    sut: FaceIdentityRepository,
+    input: { memberUserId: string; ownerUserId: string; showInTimeline?: boolean; embedding: string },
+  ) => {
+    const { space } = await ctx.newSharedSpace({ createdById: input.ownerUserId, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: input.ownerUserId, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: input.memberUserId, role: SharedSpaceRole.Viewer });
+    await ctx.database
+      .updateTable('shared_space_member')
+      .set({ showInTimeline: input.showInTimeline ?? true })
+      .where('spaceId', '=', space.id)
+      .where('userId', '=', input.memberUserId)
+      .execute();
+    const { person } = await ctx.newPerson({ ownerId: input.ownerUserId });
+    const identity = await sut.ensurePersonIdentity(person.id);
+    const { asset } = await ctx.newAsset({ ownerId: input.ownerUserId, visibility: AssetVisibility.Timeline });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: input.ownerUserId });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: input.embedding }).execute();
+    await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+    const spacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: space.id,
+        identityId: identity.id,
+        representativeFaceId: assetFace.id,
+        type: 'person',
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+
+    return { space, spacePerson, identity };
+  };
+
+  it('returns no accessible identity match when multiple shared identities are within threshold', async () => {
+    const { ctx, sut } = setup();
+    const { user: member } = await ctx.newUser();
+    const { user: ownerA } = await ctx.newUser();
+    const { user: ownerB } = await ctx.newUser();
+    const embedding = newEmbedding();
+    try {
+      await createAccessibleSpaceIdentity(ctx, sut, {
+        memberUserId: member.id,
+        ownerUserId: ownerA.id,
+        embedding,
+      });
+      await createAccessibleSpaceIdentity(ctx, sut, {
+        memberUserId: member.id,
+        ownerUserId: ownerB.id,
+        embedding,
+      });
+
+      await expect(
+        sut.findClosestAccessibleIdentityForFace({
+          userId: member.id,
+          embedding,
+          maxDistance: 0.5,
+          type: 'person',
+          excludeIdentityId: null,
+        }),
+      ).resolves.toBeUndefined();
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', 'in', [member.id, ownerA.id, ownerB.id]).execute();
+    }
+  });
+
+  it('does not use timeline-disabled spaces for global accessible identity matching', async () => {
+    const { ctx, sut } = setup();
+    const { user: member } = await ctx.newUser();
+    const { user: owner } = await ctx.newUser();
+    const embedding = newEmbedding();
+    try {
+      await createAccessibleSpaceIdentity(ctx, sut, {
+        memberUserId: member.id,
+        ownerUserId: owner.id,
+        showInTimeline: false,
+        embedding,
+      });
+
+      await expect(
+        sut.findClosestAccessibleIdentityForFace({
+          userId: member.id,
+          embedding,
+          maxDistance: 0.5,
+          type: 'person',
+          excludeIdentityId: null,
+        }),
+      ).resolves.toBeUndefined();
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', 'in', [member.id, owner.id]).execute();
+    }
+  });
+
   it('reports backfill work for legacy people, unlinked visible faces, and legacy space people', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();

@@ -334,10 +334,10 @@ export class FaceIdentityRepository {
         FROM identity_matches
         WHERE distance <= ${input.maxDistance}
         ORDER BY distance
-        LIMIT 1
+        LIMIT 2
       `.execute(trx);
 
-      return result.rows[0];
+      return result.rows.length === 1 ? result.rows[0] : undefined;
     });
   }
 
