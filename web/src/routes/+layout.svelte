@@ -12,6 +12,7 @@
   import DownloadPanel from './download-panel.svelte';
   import ErrorLayout from './ErrorLayout.svelte';
   import OnEvents from '$lib/components/OnEvents.svelte';
+  import DemoInstallBanner from '$lib/components/shared-components/demo-install-banner.svelte';
   import NavigationLoadingBar from './navigation-loading-bar.svelte';
   import OpenInAppBanner from '$lib/components/shared-components/open-in-app-banner.svelte';
   import UploadPanel from './upload-panel.svelte';
@@ -79,6 +80,13 @@
   let { children }: Props = $props();
 
   let showNavigationLoadingBar = $state(false);
+  const showDemoInstallBanner = $derived.by(() => {
+    try {
+      return serverConfigManager.value.demoMode;
+    } catch {
+      return false;
+    }
+  });
 
   toastManager.setOptions({ class: 'top-16 fixed' });
 
@@ -223,6 +231,7 @@
 />
 
 <TooltipProvider>
+  <DemoInstallBanner visible={showDemoInstallBanner} />
   <OpenInAppBanner />
   {#if page.data.error}
     <ErrorLayout error={page.data.error}></ErrorLayout>

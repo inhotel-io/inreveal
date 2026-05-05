@@ -58,9 +58,11 @@
 <div
   tabindex="-1"
   class="relative z-0 grid grid-cols-[--spacing(0)_auto] overflow-hidden sidebar:grid-cols-[--spacing(64)_auto]
-    {hideNavbar ? 'h-dvh' : 'h-[calc(100dvh-var(--navbar-height))] max-md:h-[calc(100dvh-var(--navbar-height-md))]'}
-    {hideNavbar ? 'pt-(--navbar-height)' : ''}
-    {hideNavbar ? 'max-md:pt-(--navbar-height-md)' : ''}"
+    {hideNavbar
+    ? 'h-[calc(100dvh-var(--demo-install-banner-height))]'
+    : 'h-[calc(100dvh-var(--demo-install-banner-height)-var(--navbar-height))] max-md:h-[calc(100dvh-var(--demo-install-banner-height)-var(--navbar-height-md))]'}
+    {hideNavbar ? 'pt-[calc(var(--demo-install-banner-height)+var(--navbar-height))]' : ''}
+    {hideNavbar ? 'max-md:pt-[calc(var(--demo-install-banner-height)+var(--navbar-height-md))]' : ''}"
 >
   {#if sidebar}
     {@render sidebar()}

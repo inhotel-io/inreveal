@@ -107,6 +107,17 @@
     /* Used by layouts to ensure proper spacing between navbar and content */
     --navbar-height: calc(4.5rem + 4px);
     --navbar-height-md: calc(4.5rem + 4px - 14px);
+    --demo-install-banner-height: 0px;
+  }
+
+  :root[data-demo-install-banner='true'] {
+    --demo-install-banner-height: 52px;
+  }
+
+  @media (min-width: 640px) {
+    :root[data-demo-install-banner='true'] {
+      --demo-install-banner-height: 48px;
+    }
   }
 
   :root.dark {
