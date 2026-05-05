@@ -1599,13 +1599,13 @@ export class SharedSpaceService extends BaseService {
           continue;
         }
 
-        if (person.identityId) {
+        if (person.isHidden) {
           continue;
         }
 
         const matches = await this.sharedSpaceRepository.findClosestSpacePerson(job.spaceId, person.embedding, {
           maxDistance,
-          numResults: 1,
+          numResults: 2,
           excludePersonIds: [person.id, ...deletedIds],
           type: person.type,
         });
@@ -1614,25 +1614,33 @@ export class SharedSpaceService extends BaseService {
           continue;
         }
 
-        const match = matches[0];
-        const matchPerson = persons.find((p) => p.id === match.personId);
-        if (!matchPerson || deletedIds.has(match.personId)) {
-          this.logger.debug(
-            `Dedup: skipping stale match ${match.personId} for person ${person.id} (already merged in this pass)`,
-          );
+        const compatibleMatches: Array<{ person: (typeof persons)[number]; distance: number }> = [];
+        for (const match of matches) {
+          const matchPerson = persons.find((p) => p.id === match.personId);
+          if (!matchPerson || deletedIds.has(match.personId)) {
+            this.logger.debug(
+              `Dedup: skipping stale match ${match.personId} for person ${person.id} (already merged in this pass)`,
+            );
+            continue;
+          }
+          if (matchPerson.isHidden || matchPerson.type !== person.type) {
+            continue;
+          }
+          compatibleMatches.push({ person: matchPerson, distance: match.distance });
+        }
+
+        if (compatibleMatches.length !== 1) {
           continue;
         }
 
-        if (matchPerson.identityId) {
-          continue;
-        }
+        const { person: matchPerson, distance } = compatibleMatches[0];
 
         // Determine target (more faces) and source
         const [target, source] =
           person.faceCount >= matchPerson.faceCount ? [person, matchPerson] : [matchPerson, person];
 
         this.logger.log(
-          `Dedup: merging person ${source.id} (${source.name || 'unnamed'}, ${source.faceCount} faces) into ${target.id} (${target.name || 'unnamed'}, ${target.faceCount} faces), distance=${match.distance.toFixed(4)}`,
+          `Dedup: merging person ${source.id} (${source.name || 'unnamed'}, ${source.faceCount} faces) into ${target.id} (${target.name || 'unnamed'}, ${target.faceCount} faces), distance=${distance.toFixed(4)}`,
         );
 
         // Reassign faces and migrate aliases
@@ -1668,9 +1676,6 @@ export class SharedSpaceService extends BaseService {
         const updates: Partial<{ name: string; isHidden: boolean }> = {};
         if (!target.name && source.name) {
           updates.name = source.name;
-        }
-        if (target.isHidden && !source.isHidden) {
-          updates.isHidden = false;
         }
 
         // Update and delete separately so deletePerson still runs if updatePerson fails
