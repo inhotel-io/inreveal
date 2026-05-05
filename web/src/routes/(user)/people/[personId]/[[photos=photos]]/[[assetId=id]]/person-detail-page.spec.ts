@@ -77,7 +77,7 @@ vi.mock('$lib/components/timeline/Timeline.svelte', async () => {
 });
 
 vi.mock('$lib/components/assets/thumbnail/image-thumbnail.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
+  const { default: MockComponent } = await import('@test-data/mocks/image-thumbnail.stub.svelte');
   return { default: MockComponent };
 });
 
@@ -214,6 +214,20 @@ describe('Person detail page', () => {
         visibility: 'timeline',
         withSharedSpaces: true,
       }),
+    );
+  });
+
+  it('uses the shared-space thumbnail for a space-primary identity-wide person page', () => {
+    renderPage(
+      makePerson({
+        id: 'space-person-1',
+        filterId: 'space-person:space-person-1',
+        primaryProfile: { type: Type.SpacePerson, id: 'space-person-1', spaceId: 'space-1' },
+      }),
+    );
+
+    expect(screen.getByRole('img', { name: 'Alice' }).getAttribute('src')).toContain(
+      '/shared-spaces/space-1/people/space-person-1/thumbnail?updatedAt=2026-01-02T00%3A00%3A00.000Z',
     );
   });
 

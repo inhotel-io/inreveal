@@ -124,14 +124,14 @@
   const isSpaceScoped = (person: PersonResponseDto) =>
     toScopedPersonRef(person).type === ScopedPersonProfileType.SpacePerson;
 
-  const getScopedThumbnailUrl = (person: PersonResponseDto): string => {
+  const getScopedThumbnailUrl = (person: PersonResponseDto, updatedAt?: string): string => {
     const profile = person.primaryProfile;
     if (profile?.type === 'space-person' && profile.spaceId) {
       return createUrl(`/shared-spaces/${profile.spaceId}/people/${profile.id}/thumbnail`, {
-        updatedAt: person.updatedAt,
+        updatedAt: updatedAt ?? person.updatedAt,
       });
     }
-    return getPeopleThumbnailUrl(person);
+    return getPeopleThumbnailUrl(person, updatedAt);
   };
 
   onMount(() => {
@@ -146,7 +146,7 @@
 
     return websocketEvents.on('on_person_thumbnail', (personId: string) => {
       if (person.id === personId) {
-        thumbnailData = getPeopleThumbnailUrl(person, Date.now().toString());
+        thumbnailData = getScopedThumbnailUrl(person, Date.now().toString());
       }
     });
   });
@@ -359,7 +359,7 @@
 
   let person = $derived(data.person);
 
-  let thumbnailData = $derived(getPeopleThumbnailUrl(person));
+  let thumbnailData = $derived(getScopedThumbnailUrl(person));
 
   const handleSetVisibility = (assetIds: string[]) => {
     timelineManager.removeAssets(assetIds);
@@ -407,7 +407,7 @@
       });
 
       if (updated) {
-        thumbnailData = getPeopleThumbnailUrl(person, Date.now().toString());
+        thumbnailData = getScopedThumbnailUrl(person, Date.now().toString());
       }
     },
   };

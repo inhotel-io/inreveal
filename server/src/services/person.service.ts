@@ -42,6 +42,7 @@ import {
   SystemMetadataKey,
   VectorIndex,
 } from 'src/enum';
+import type { AccessibleIdentityFaceMatch } from 'src/repositories/face-identity.repository';
 import { BoundingBox } from 'src/repositories/machine-learning.repository';
 import { UpdateFacesData } from 'src/repositories/person.repository';
 import { AssetFaceTable } from 'src/schema/tables/asset-face.table';
@@ -765,16 +766,25 @@ export class PersonService extends BaseService {
       minBirthDate: new Date(face.asset.fileCreatedAt),
     });
 
+    this.logger.debug(`Face ${id} has ${matches.length} matches`);
+
+    let personId = matches.find((match) => match.personId)?.personId;
+    const accessibleIdentityMatch = personId
+      ? undefined
+      : await this.findClosestAccessibleSharedIdentity({
+          userId: face.asset.ownerId,
+          embedding: face.faceSearch.embedding,
+          maxDistance: machineLearning.facialRecognition.maxDistance,
+        });
+
     // `matches` also includes the face itself
-    if (machineLearning.facialRecognition.minFaces > 1 && matches.length <= 1) {
+    if (machineLearning.facialRecognition.minFaces > 1 && matches.length <= 1 && !accessibleIdentityMatch) {
       this.logger.debug(`Face ${id} only matched the face itself, skipping`);
       return JobStatus.Skipped;
     }
 
-    this.logger.debug(`Face ${id} has ${matches.length} matches`);
-
     const isCore =
-      matches.length >= machineLearning.facialRecognition.minFaces &&
+      (matches.length >= machineLearning.facialRecognition.minFaces || !!accessibleIdentityMatch) &&
       face.asset.visibility === AssetVisibility.Timeline;
     if (!isCore && !deferred) {
       this.logger.debug(`Deferring non-core face ${id} for later processing`);
@@ -782,7 +792,6 @@ export class PersonService extends BaseService {
       return JobStatus.Skipped;
     }
 
-    let personId = matches.find((match) => match.personId)?.personId;
     if (!personId) {
       const matchWithPerson = await this.searchRepository.searchFaces({
         userIds: [face.asset.ownerId],
@@ -817,6 +826,7 @@ export class PersonService extends BaseService {
           embedding: face.faceSearch.embedding,
           maxDistance: machineLearning.facialRecognition.maxDistance,
           sourceIdentityId,
+          match: accessibleIdentityMatch,
         });
       }
     }
@@ -848,14 +858,16 @@ export class PersonService extends BaseService {
     embedding: string;
     maxDistance: number;
     sourceIdentityId: string;
+    match?: AccessibleIdentityFaceMatch;
   }): Promise<void> {
-    const match = await this.faceIdentityRepository.findClosestAccessibleIdentityForFace({
-      userId: input.userId,
-      embedding: input.embedding,
-      maxDistance: input.maxDistance,
-      type: 'person',
-      excludeIdentityId: input.sourceIdentityId,
-    });
+    const match =
+      input.match ??
+      (await this.findClosestAccessibleSharedIdentity({
+        userId: input.userId,
+        embedding: input.embedding,
+        maxDistance: input.maxDistance,
+        excludeIdentityId: input.sourceIdentityId,
+      }));
     if (!match || match.identityId === input.sourceIdentityId) {
       return;
     }
@@ -873,6 +885,21 @@ export class PersonService extends BaseService {
     }
 
     await this.queueSpacePersonMetadataBackfill(match.identityId);
+  }
+
+  private findClosestAccessibleSharedIdentity(input: {
+    userId: string;
+    embedding: string;
+    maxDistance: number;
+    excludeIdentityId?: string | null;
+  }): Promise<AccessibleIdentityFaceMatch | undefined> {
+    return this.faceIdentityRepository.findClosestAccessibleIdentityForFace({
+      userId: input.userId,
+      embedding: input.embedding,
+      maxDistance: input.maxDistance,
+      type: 'person',
+      excludeIdentityId: input.excludeIdentityId ?? null,
+    });
   }
 
   @OnJob({ name: JobName.PersonFileMigration, queue: QueueName.Migration })
