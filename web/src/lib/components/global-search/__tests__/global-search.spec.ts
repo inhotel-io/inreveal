@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -491,6 +491,26 @@ describe('global-search root', () => {
     const liveFilterHeading = screen.getByText(/cmdk_filter_match_person|person filter matches/i);
     const topResultHeading = screen.getByText(/cmdk_top_result|top result/i);
     expect(liveFilterHeading.compareDocumentPosition(topResultHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('updates active typed filter token when pointer moves the input caret', async () => {
+    const query = 'beach person:ann tag:family';
+    const m = new GlobalSearchManager();
+    m.open();
+    m.setQuery(query);
+    m.setInputCaret('beach person:ann'.length);
+    render(GlobalSearch, { props: { manager: m } });
+
+    expect(m.activeTypedSearchToken).toMatchObject({ key: 'person', raw: 'person:ann' });
+
+    const input = screen.getByRole('combobox') as HTMLInputElement;
+    Object.defineProperty(input, 'selectionStart', { configurable: true, get: () => query.length });
+    Object.defineProperty(input, 'selectionEnd', { configurable: true, get: () => query.length });
+    expect(m.activeTypedSearchToken).toMatchObject({ key: 'person', raw: 'person:ann' });
+
+    await fireEvent.pointerUp(input);
+
+    expect(m.activeTypedSearchToken).toMatchObject({ key: 'tag', raw: 'tag:family' });
   });
 
   it('combobox has maxlength="256"', () => {

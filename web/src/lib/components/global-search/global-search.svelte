@@ -291,6 +291,10 @@
     manager.close();
   }
 
+  function syncInputCaret(event: Event) {
+    manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart);
+  }
+
   function moveSelectionFromTopSearch(direction: 1 | -1) {
     const topSearchId = manager.topSearchMatch?.id;
     const currentValue = selectedValue || manager.activeItemId;
@@ -451,14 +455,15 @@
           onfocus={openDropdown}
           oninput={(event) => {
             inputEditRevision++;
-            manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart);
+            syncInputCaret(event);
           }}
-          onselect={(event) => manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart)}
-          onkeyup={(event) => manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart)}
+          onselect={syncInputCaret}
+          onkeyup={syncInputCaret}
+          onpointerup={syncInputCaret}
           oncompositionstart={() => manager.setInputComposing(true)}
           oncompositionend={(event) => {
             manager.setInputComposing(false);
-            manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart);
+            syncInputCaret(event);
           }}
           class="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-500 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-300"
         />
@@ -814,14 +819,15 @@
             maxlength={256}
             oninput={(event) => {
               inputEditRevision++;
-              manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart);
+              syncInputCaret(event);
             }}
-            onselect={(event) => manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart)}
-            onkeyup={(event) => manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart)}
+            onselect={syncInputCaret}
+            onkeyup={syncInputCaret}
+            onpointerup={syncInputCaret}
             oncompositionstart={() => manager.setInputComposing(true)}
             oncompositionend={(event) => {
               manager.setInputComposing(false);
-              manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart);
+              syncInputCaret(event);
             }}
             class="min-w-0 flex-1 bg-transparent px-4 py-3 text-sm focus:outline-none"
           />
