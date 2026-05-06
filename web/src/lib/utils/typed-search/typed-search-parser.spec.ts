@@ -30,6 +30,55 @@ describe('parseTypedSearch', () => {
     ]);
   });
 
+  it('returns token spans for plain and quoted typed filters', () => {
+    const result = parseTypedSearch('beach person:"Anna Maria" city:Paris');
+
+    expect(result.tokens).toMatchObject([
+      {
+        raw: 'person:"Anna Maria"',
+        key: 'person',
+        value: 'Anna Maria',
+        start: 6,
+        end: 25,
+        valueStart: 14,
+        valueEnd: 24,
+        quoted: true,
+      },
+      {
+        raw: 'city:Paris',
+        key: 'city',
+        value: 'Paris',
+        start: 26,
+        end: 36,
+        valueStart: 31,
+        valueEnd: 36,
+        quoted: false,
+      },
+    ]);
+  });
+
+  it('keeps empty known filters quiet in draft mode but blocking in commit mode', () => {
+    const draft = parseTypedSearch('person: tag: country: city:', { mode: 'draft' });
+    const commit = parseTypedSearch('person: tag: country: city:');
+
+    expect(draft.issues).toEqual([]);
+    expect(draft.tokens.map((token) => token.raw)).toEqual(['person:', 'tag:', 'country:', 'city:']);
+    expect(commit.issues.map((issue) => issue.code)).toEqual([
+      'empty-value',
+      'empty-value',
+      'empty-value',
+      'empty-value',
+    ]);
+  });
+
+  it('keeps unterminated quoted filters as draft issues', () => {
+    const result = parseTypedSearch('person:"Anna Maria', { mode: 'draft' });
+
+    expect(result.issues).toEqual([
+      expect.objectContaining({ code: 'unterminated-quote', raw: 'person:"Anna Maria' }),
+    ]);
+  });
+
   it('accepts plural people and tags aliases', () => {
     const result = parseTypedSearch('people:anna tags:nature beach');
 
