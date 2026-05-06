@@ -1,6 +1,6 @@
 # Live Typed Filter Suggestions Design
 
-Status: approved for written-spec review
+Status: reviewed for TDD and edge-case coverage
 Date: 2026-05-06
 Worktree: `/home/pierre/dev/gallery/.worktrees/search-bar-next-feature`
 Branch: `brainstorm/search-bar-next-feature`
@@ -75,6 +75,8 @@ Initial suggestions:
 - `country:` shows initial country suggestions.
 - `city:` waits for at least one character.
 
+Empty active `person:`, `tag:`, and `country:` tokens are draft-suggestable, not draft errors. Pressing Enter without selecting or completing a value still blocks as an `empty-value` issue. Empty `city:` is neutral while the cursor is in it, shows no live rows until one character is typed, and blocks as `empty-value` on Enter.
+
 Scalar validation stays quiet while typing. Invalid scalar tokens such as `rating:9`, `from:soon`, or `favorite:maybe` may turn red immediately, but detailed issue rows appear only after Enter blocks submission.
 
 ## Location Behavior
@@ -91,9 +93,9 @@ beach country:Germany city:ber
 
 shows German city matches such as `Berlin`.
 
-Without a country token, `city:par` suggests matching cities globally. City rows should include country as secondary text when the API response provides it, so the user can choose the right `Paris`.
+Without a country token, `city:par` suggests matching cities globally. If the implementation uses the existing `getSearchSuggestions({ $type: City })` path and it returns only city names, rows show the city name only. If an implementation path returns city/country pairs, rows may include country as secondary text.
 
-Selecting a city canonicalizes only the city token. It does not automatically add a `country:` token in this feature. If a city value is ambiguous at final submit time, Enter still blocks and asks the user to choose.
+Selecting a city canonicalizes only the city token. It does not automatically add a `country:` token in this feature. Enter keeps the current scalar location semantics: it canonicalizes exact city/country casing through suggestions where possible, but does not invent missing country values.
 
 ## Architecture
 
@@ -107,10 +109,19 @@ Extend the typed-search parser result with token span metadata:
 - start offset
 - end offset
 - syntactic issue, if any
+- quoted/unquoted value metadata sufficient to rewrite only the value safely
 
 The parser should remain pure and dependency-free. It should not read DOM selection state or fetch suggestions.
 
 The global search input should provide the manager with the current caret offset. The manager combines the parse result and caret offset to find the active token. A supported live token is active when the caret is inside or immediately after a `person`, `tag`, `country`, or `city` token.
+
+Caret edge rules:
+
+- If the browser reports no caret position, live suggestions stay `idle`.
+- If the user has a text range selected, use the selection start as the active caret for suggestions, and replace the selected token only after explicit row selection.
+- If the caret is inside a quoted value, suggestions use the value text without quotes.
+- If the caret is outside any token, live suggestions stay `idle`.
+- During IME composition, do not fire live requests until composition ends.
 
 ### Live Suggestion Utility
 
@@ -131,6 +142,13 @@ The utility should reuse the same data sources and matching semantics as final r
 - `country:` uses filter-suggestion countries.
 - `city:` uses city search suggestions, scoped by an existing `country:` token when present.
 
+Live choices should distinguish entity-backed and scalar-backed selections:
+
+- `person` choices carry a person id and display label.
+- `tag` choices carry a tag id and display label.
+- `country` choices carry the canonical country string.
+- `city` choices carry the canonical city string and optionally a country label for display only.
+
 The existing Enter resolver remains authoritative. Live suggestions can pass selected choices to the Enter resolver so it can avoid duplicate lookups where practical, but Enter must still validate the full input all-or-nothing before navigation.
 
 ### Manager State
@@ -146,6 +164,8 @@ The global search manager owns:
 - live suggestion rows
 - selected choices keyed by token identity
 
+Token identity should include at least key, raw text, start offset, and end offset. This prevents a resolved choice for one repeated token, such as the first `person:ann`, from leaking to another token with the same raw text.
+
 Status values:
 
 - `idle`: no supported active token.
@@ -156,6 +176,13 @@ Status values:
 - `timeout`: lookup exceeded the provider timeout.
 
 Stale responses must be ignored using request id and abort signal. Closing the palette aborts live suggestion requests.
+
+Selected-choice invalidation rules:
+
+- Editing a token's raw text clears that token's selected choice.
+- Moving the token to a different span clears the selected choice.
+- Removing a token clears its selected choice.
+- Reordering repeated tokens must not swap their resolved choices.
 
 ### UI
 
@@ -169,6 +196,8 @@ The same component should support all live keys with key-specific labels:
 - `City filter matches`
 
 Rows should be keyboard-navigable with the existing cmdk list semantics. Choosing a row canonicalizes the active token and updates selected-choice state. The UI should stay compact, with a small row cap, so validation does not push normal search results too far down.
+
+When a filter-match row is highlighted, Enter selects that row and rewrites the token. Enter submits the whole search only when the active item is the top search row or there is no filter-match row selected. This avoids accidentally navigating while the user is resolving a token.
 
 The normal provider payload remains the plain query text from the parser. For example, `beach city:par` still searches photos for `beach`.
 
@@ -191,6 +220,13 @@ When selecting a live suggestion:
 3. Manager keeps the caret after the rewritten token.
 4. Manager stores the selected choice for final resolution.
 5. Manager clears live rows or moves to the next active token if the caret lands in one.
+
+Canonical rewrite rules:
+
+- Quote values that contain whitespace.
+- Preserve the original filter key spelling only if it is a supported alias; otherwise write the normalized key.
+- Do not rewrite unrelated query text or other tokens.
+- Do not rewrite scalar tokens such as `from:` or `rating:` from the live suggestion path.
 
 When pressing Enter:
 
@@ -224,6 +260,8 @@ Write one design and separate implementation plans:
 5. **Polish and regression coverage**
    Cover keyboard navigation, mobile/dropdown parity, timeout/error states, stale response guards, final Enter behavior, and docs updates.
 
+Each implementation plan must be TDD-first. Every task should start by writing the smallest focused failing test for the behavior, running it and recording the expected failure, then adding only enough production code to pass. Do not batch production code ahead of tests for parser spans, live suggestion utility behavior, manager state, or UI interaction.
+
 ## Testing
 
 Use TDD at the same boundaries as the typed-filter feature:
@@ -233,6 +271,26 @@ Use TDD at the same boundaries as the typed-filter feature:
 - Manager tests for debounce, stale response guards, caret changes, canonical token rewrite, selected-choice clearing when a token changes, and final Enter integration.
 - Component tests for the filter-match section, row labels, loading/empty/error states, and keyboard activation.
 - Route-level tests confirming final submitted filters still serialize and hydrate into photos/spaces page filter state.
+- One focused Playwright smoke test for the full user-facing path after unit/component coverage is green: open the palette, type a live-supported token, select a suggestion, submit, and assert the destination page receives the serialized filter.
+
+Specific edge cases that must have coverage:
+
+- Empty active `person:`, `tag:`, and `country:` show initial suggestions without draft issue rows.
+- Empty active `city:` does not fetch until one character and blocks only on Enter.
+- Repeated tokens with the same raw text keep separate selected choices by span.
+- Editing a canonicalized token clears its resolved state.
+- Cursor movement between two supported tokens switches the live section without changing the input.
+- Caret outside a supported token clears the live section.
+- Quoted values with spaces canonicalize without double-quoting.
+- Unterminated quotes do not fire live requests and still block on Enter.
+- IME composition does not fire live requests mid-composition.
+- Request A resolving after request B does not overwrite B's rows.
+- Closing the palette aborts live requests and prevents late state writes.
+- `city:` with an existing `country:` token passes the canonical country to the city lookup.
+- Global `city:` without `country:` does not auto-add a country on selection.
+- Duplicate scalar live tokens such as `country:Germany country:France` remain commit-blocking.
+- Filter-match rows do not appear in the normal People/Tags navigation sections.
+- Selecting a live person/tag row applies a filter value and does not navigate to a person/tag page.
 
 Baseline verification for this brainstorming worktree:
 
