@@ -14558,7 +14558,7 @@
             "name": "limit",
             "required": false,
             "in": "query",
-            "description": "Maximum number of people to return (sorted by asset count)",
+            "description": "Maximum number of people to return (named sorted alphabetically, unnamed by asset count)",
             "schema": {
               "minimum": 1,
               "maximum": 100,
@@ -14737,7 +14737,7 @@
             "name": "limit",
             "required": false,
             "in": "query",
-            "description": "Maximum number of people to return (sorted by asset count)",
+            "description": "Maximum number of people to return (named sorted alphabetically, unnamed by asset count)",
             "schema": {
               "minimum": 1,
               "maximum": 100,
