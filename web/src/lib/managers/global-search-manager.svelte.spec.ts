@@ -1490,6 +1490,44 @@ describe('activate("command")', () => {
       expect(manager.activeTypedSearchToken).toMatchObject({ key: 'tag', raw: 'tag:family' });
     });
 
+    it('selectLiveTypedSearchChoice refreshes live selection draft state', () => {
+      const manager = new GlobalSearchManager();
+
+      manager.setQuery('beach person:ann');
+      manager.setInputCaret('beach person:ann'.length);
+      manager.liveTypedSearchStatus = {
+        status: 'ok',
+        key: 'person',
+        total: 1,
+        items: [
+          {
+            id: 'person:6:16:p1',
+            key: 'person',
+            label: 'Anna Maria',
+            value: 'Anna Maria',
+            tokenStart: 6,
+            tokenEnd: 16,
+          },
+        ],
+      };
+
+      manager.selectLiveTypedSearchChoice({
+        id: 'person:6:16:p1',
+        key: 'person',
+        label: 'Anna Maria',
+        value: 'Anna Maria',
+        tokenStart: 6,
+        tokenEnd: 16,
+      });
+
+      expect(manager.query).toBe('beach person:"Anna Maria"');
+      expect(manager.typedSearchDisplayTokens.map((token) => token.raw)).toContain('person:"Anna Maria"');
+      expect(manager.typedSearchDisplayTokens.map((token) => token.raw)).not.toContain('person:ann');
+      expect(manager.typedSearchPlainQuery).toBe('beach');
+      expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+      expect(manager.typedSearchCaret).toBe('beach person:"Anna Maria"'.length);
+    });
+
     it('clears live suggestion state on close', () => {
       const manager = new GlobalSearchManager();
 

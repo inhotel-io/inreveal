@@ -1349,7 +1349,7 @@ export class GlobalSearchManager {
       key: choice.key,
       value: choice.value,
     });
-    this.query = text;
+    this.setQuery(text);
     this.setInputCaret(caret);
     this.liveTypedSearchStatus = { status: 'idle' };
   }

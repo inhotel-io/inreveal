@@ -467,6 +467,32 @@ describe('global-search root', () => {
     expect(selectSpy).toHaveBeenCalled();
   });
 
+  it('renders live typed filter section before normal results in dropdown variant', () => {
+    const m = new GlobalSearchManager();
+    m.open('dropdown');
+    m.setQuery('beach person:ann');
+    m.liveTypedSearchStatus = {
+      status: 'ok',
+      key: 'person',
+      total: 1,
+      items: [
+        {
+          id: 'person:6:16:p1',
+          key: 'person',
+          label: 'Anna Maria',
+          value: 'Anna Maria',
+          tokenStart: 6,
+          tokenEnd: 16,
+        },
+      ],
+    };
+    render(GlobalSearch, { props: { manager: m, variant: 'dropdown' } });
+
+    const liveFilterHeading = screen.getByText(/cmdk_filter_match_person|person filter matches/i);
+    const topResultHeading = screen.getByText(/cmdk_top_result|top result/i);
+    expect(liveFilterHeading.compareDocumentPosition(topResultHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('combobox has maxlength="256"', () => {
     const m = new GlobalSearchManager();
     m.open();
