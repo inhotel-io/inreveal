@@ -46,7 +46,7 @@ export const chooseAutomaticTargetIdentity = (
       },
 ): { sourceIdentityId: string; targetIdentityId: string } => {
   if (input.bridge === 'manual-compatible') {
-    const [targetIdentityId, sourceIdentityId] = [input.firstIdentityId, input.secondIdentityId].sort();
+    const [targetIdentityId, sourceIdentityId] = [input.firstIdentityId, input.secondIdentityId].toSorted();
     return { sourceIdentityId, targetIdentityId };
   }
 

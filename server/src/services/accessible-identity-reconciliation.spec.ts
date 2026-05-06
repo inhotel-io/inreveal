@@ -6,7 +6,9 @@ import {
   type ReconciliationClaim,
 } from 'src/services/accessible-identity-reconciliation';
 
-const baseCandidate = (overrides: Partial<AutomaticReconciliationCandidate> = {}): AutomaticReconciliationCandidate => ({
+const baseCandidate = (
+  overrides: Partial<AutomaticReconciliationCandidate> = {},
+): AutomaticReconciliationCandidate => ({
   bridge: 'member-join',
   localIdentityId: 'local-identity',
   spaceIdentityId: 'space-identity',
