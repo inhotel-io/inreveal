@@ -16,12 +16,14 @@ import { getTypedSearchDisplayText, storeTypedSearchNames } from '$lib/utils/typ
 import {
   getActiveTypedSearchToken,
   parseTypedSearch,
+  rewriteTypedSearchToken,
   type TypedSearchDisplayToken,
   type TypedSearchIssue,
   type TypedSearchParseResult,
 } from '$lib/utils/typed-search/typed-search-parser';
 import {
   isLiveTypedSearchToken,
+  type LiveTypedSearchChoice,
   type LiveTypedSearchStatus,
   type LiveTypedSearchToken,
 } from '$lib/utils/typed-search/typed-search-live-suggestions';
@@ -1337,6 +1339,19 @@ export class GlobalSearchManager {
         ? { raw: token.raw, key: token.key, value: choice.label, status: 'resolved-entity' as const }
         : token,
     );
+  }
+
+  selectLiveTypedSearchChoice(choice: LiveTypedSearchChoice) {
+    if (!this.activeTypedSearchToken) {
+      return;
+    }
+    const { text, caret } = rewriteTypedSearchToken(this.query, this.activeTypedSearchToken, {
+      key: choice.key,
+      value: choice.value,
+    });
+    this.query = text;
+    this.setInputCaret(caret);
+    this.liveTypedSearchStatus = { status: 'idle' };
   }
 
   private getSearchProviderPayload(): string {

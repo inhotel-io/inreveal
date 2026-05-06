@@ -6,6 +6,7 @@
   import { clickOutside } from '$lib/actions/click-outside';
   import type { GlobalSearchManager, SearchMode } from '$lib/managers/global-search-manager.svelte';
   import GlobalSearchSection from './global-search-section.svelte';
+  import LiveTypedFilterSection from './live-typed-filter-section.svelte';
   import GlobalSearchNavigationSections from './global-search-navigation-sections.svelte';
   import GlobalSearchCommandsSection from './global-search-commands-section.svelte';
   import PhotoRow from './rows/photo-row.svelte';
@@ -448,7 +449,17 @@
           placeholder={$t('cmdk_placeholder')}
           maxlength={256}
           onfocus={openDropdown}
-          oninput={() => inputEditRevision++}
+          oninput={(event) => {
+            inputEditRevision++;
+            manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart);
+          }}
+          onselect={(event) => manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart)}
+          onkeyup={(event) => manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart)}
+          oncompositionstart={() => manager.setInputComposing(true)}
+          oncompositionend={(event) => {
+            manager.setInputComposing(false);
+            manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart);
+          }}
           class="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-500 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-300"
         />
         <kbd
@@ -526,6 +537,10 @@
                 </div>
               </Command.Group>
             {/if}
+            <LiveTypedFilterSection
+              status={manager.liveTypedSearchStatus}
+              onSelect={(choice) => manager.selectLiveTypedSearchChoice(choice)}
+            />
             {#if inputValue.trim() === ''}
               {#if recentEntries.length > 0}
                 <Command.Group>
@@ -797,7 +812,17 @@
             autofocus
             placeholder={$t('cmdk_placeholder')}
             maxlength={256}
-            oninput={() => inputEditRevision++}
+            oninput={(event) => {
+              inputEditRevision++;
+              manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart);
+            }}
+            onselect={(event) => manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart)}
+            onkeyup={(event) => manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart)}
+            oncompositionstart={() => manager.setInputComposing(true)}
+            oncompositionend={(event) => {
+              manager.setInputComposing(false);
+              manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart);
+            }}
             class="min-w-0 flex-1 bg-transparent px-4 py-3 text-sm focus:outline-none"
           />
           <IconButton
@@ -893,6 +918,10 @@
                   </div>
                 </Command.Group>
               {/if}
+              <LiveTypedFilterSection
+                status={manager.liveTypedSearchStatus}
+                onSelect={(choice) => manager.selectLiveTypedSearchChoice(choice)}
+              />
               {#if inputValue.trim() === ''}
                 {#if recentEntries.length > 0}
                   <Command.Group>

@@ -436,6 +436,33 @@ describe('global-search root', () => {
     });
   });
 
+  it('renders live typed filter section before normal results and selects rows before submit', async () => {
+    const m = new GlobalSearchManager();
+    const selectSpy = vi.spyOn(m, 'selectLiveTypedSearchChoice').mockImplementation(() => {});
+    m.open();
+    m.liveTypedSearchStatus = {
+      status: 'ok',
+      key: 'person',
+      total: 1,
+      items: [
+        {
+          id: 'person:6:16:p1',
+          key: 'person',
+          label: 'Anna Maria',
+          value: 'Anna Maria',
+          tokenStart: 6,
+          tokenEnd: 16,
+        },
+      ],
+    };
+    render(GlobalSearch, { props: { manager: m } });
+
+    expect(screen.getByText(/cmdk_filter_match_person|person filter matches/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: /Anna Maria/i }));
+
+    expect(selectSpy).toHaveBeenCalled();
+  });
+
   it('combobox has maxlength="256"', () => {
     const m = new GlobalSearchManager();
     m.open();
