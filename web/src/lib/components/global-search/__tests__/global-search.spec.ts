@@ -440,6 +440,7 @@ describe('global-search root', () => {
     const m = new GlobalSearchManager();
     const selectSpy = vi.spyOn(m, 'selectLiveTypedSearchChoice').mockImplementation(() => {});
     m.open();
+    m.setQuery('beach person:ann');
     m.liveTypedSearchStatus = {
       status: 'ok',
       key: 'person',
@@ -457,7 +458,10 @@ describe('global-search root', () => {
     };
     render(GlobalSearch, { props: { manager: m } });
 
-    expect(screen.getByText(/cmdk_filter_match_person|person filter matches/i)).toBeInTheDocument();
+    const liveFilterHeading = screen.getByText(/cmdk_filter_match_person|person filter matches/i);
+    const topResultHeading = screen.getByText(/cmdk_top_result|top result/i);
+    expect(liveFilterHeading.compareDocumentPosition(topResultHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
     await user.click(screen.getByRole('option', { name: /Anna Maria/i }));
 
     expect(selectSpy).toHaveBeenCalled();
