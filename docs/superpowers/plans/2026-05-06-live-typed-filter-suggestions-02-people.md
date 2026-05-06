@@ -147,6 +147,17 @@ it('returns empty when no people match', async () => {
     key: 'person',
   });
 });
+
+it('returns a quiet live error when person suggestions fail', async () => {
+  vi.mocked(searchPerson).mockRejectedValue(new Error('network down'));
+  const parsed = parseTypedSearch('person:ann', { mode: 'draft' });
+
+  await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
+    status: 'error',
+    key: 'person',
+    message: 'network down',
+  });
+});
 ```
 
 - [ ] **Step 2: Run utility tests and verify failure**
@@ -351,6 +362,7 @@ Add state:
 private liveTypedSearchTimer: ReturnType<typeof setTimeout> | null = null;
 private liveTypedSearchController: AbortController | null = null;
 private liveTypedSearchRequestId = 0;
+skipNextLiveTypedSearchForCaret = $state<number | null>(null);
 ```
 
 Add:
@@ -358,6 +370,11 @@ Add:
 ```ts
 private scheduleLiveTypedSearchSuggestions() {
   if (!this.activeTypedSearchToken || this.typedSearchComposing) {
+    this.liveTypedSearchStatus = { status: 'idle' };
+    return;
+  }
+  if (this.skipNextLiveTypedSearchForCaret === this.typedSearchCaret) {
+    this.skipNextLiveTypedSearchForCaret = null;
     this.liveTypedSearchStatus = { status: 'idle' };
     return;
   }
@@ -449,9 +466,19 @@ it('selecting a live person choice rewrites the active token and stores resolver
   });
 
   expect(manager.query).toBe('beach person:"Anna Maria" person:ann');
-  expect([...manager.selectedTypedSearchChoices.values()]).toContainEqual(
-    expect.objectContaining({ key: 'person', id: 'p1', label: 'Anna Maria' }),
+  expect(manager.selectedTypedSearchChoices.get('person:"Anna Maria"')).toEqual(
+    expect.objectContaining({
+      tokenRaw: 'person:"Anna Maria"',
+      key: 'person',
+      id: 'p1',
+      label: 'Anna Maria',
+      value: 'Anna Maria',
+    }),
   );
+  expect(manager.selectedTypedSearchChoices.get('person:6:25:person:"Anna Maria"')).toEqual(
+    expect.objectContaining({ key: 'person', id: 'p1' }),
+  );
+  expect(manager.selectedTypedSearchChoices.has('person:ann')).toBe(false);
 });
 ```
 
@@ -491,27 +518,33 @@ Expected: FAIL until selection stores resolver choices.
 
 - [ ] **Step 3: Store selected resolver choice**
 
-Update `selectLiveTypedSearchChoice()`:
+Update `selectLiveTypedSearchChoice()` so it stores the selected entity against the rewritten token, not the pre-rewrite draft token:
 
 ```ts
-if (choice.key === 'person' && choice.entityId && this.activeTypedSearchToken) {
-  const tokenKey = `${this.activeTypedSearchToken.key}:${this.activeTypedSearchToken.start}:${this.activeTypedSearchToken.end}:${this.activeTypedSearchToken.raw}`;
-  this.selectedTypedSearchChoices.set(tokenKey, {
-    tokenRaw: this.activeTypedSearchToken.raw,
+const activeToken = this.activeTypedSearchToken;
+const { text, caret } = rewriteTypedSearchToken(this.query, activeToken, {
+  key: choice.key,
+  value: choice.value,
+});
+this.query = text;
+this.skipNextLiveTypedSearchForCaret = caret;
+const parsedAfterRewrite = this.parseTypedSearchDraft(text);
+const rewrittenToken = getActiveTypedSearchToken(parsedAfterRewrite, caret);
+if (choice.key === 'person' && choice.entityId && rewrittenToken?.key === 'person') {
+  const selectedChoice: TypedSearchChoice = {
+    tokenRaw: rewrittenToken.raw,
     key: 'person',
     id: choice.entityId,
     label: choice.label,
-    value: this.activeTypedSearchToken.value,
-  });
+    value: rewrittenToken.value,
+  };
+  const tokenKey = `${rewrittenToken.key}:${rewrittenToken.start}:${rewrittenToken.end}:${rewrittenToken.raw}`;
+  this.selectedTypedSearchChoices.set(rewrittenToken.raw, selectedChoice);
+  this.selectedTypedSearchChoices.set(tokenKey, selectedChoice);
 }
 ```
 
-Task 1 of `docs/superpowers/plans/2026-05-06-live-typed-filter-suggestions-05-polish.md` updates `resolveTypedSearchFilters` selected-choice lookup to prefer span identity. For this plan, keep both span-keyed and raw-keyed entries to preserve current resolver compatibility:
-
-```ts
-this.selectedTypedSearchChoices.set(this.activeTypedSearchToken.raw, selectedChoice);
-this.selectedTypedSearchChoices.set(tokenKey, selectedChoice);
-```
+Task 1 of `docs/superpowers/plans/2026-05-06-live-typed-filter-suggestions-05-polish.md` updates `resolveTypedSearchFilters` selected-choice lookup to prefer span identity. The raw rewritten-token key remains temporarily for current resolver compatibility until that polish task lands.
 
 - [ ] **Step 4: Run focused tests**
 

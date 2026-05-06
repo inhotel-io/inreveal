@@ -142,8 +142,9 @@ it('does not leak a selected live choice between repeated equal raw tokens', () 
     entityId: 'person-1',
   });
 
-  expect(manager.selectedTypedSearchChoices.has('person:0:10:person:ann')).toBe(true);
-  expect(manager.selectedTypedSearchChoices.has('person:11:21:person:ann')).toBe(false);
+  expect(manager.query).toBe('person:"Ann Live" person:ann');
+  expect(manager.selectedTypedSearchChoices.has('person:0:17:person:"Ann Live"')).toBe(true);
+  expect(manager.selectedTypedSearchChoices.has('person:0:10:person:ann')).toBe(false);
 });
 ```
 
@@ -224,14 +225,21 @@ and:
 const selectedChoice = getSelectedChoice(context.selectedChoices, token);
 ```
 
-In `global-search-manager.svelte.ts`, use the helper when storing live choices:
+In `global-search-manager.svelte.ts`, use the helper when storing live choices after the token has been rewritten and reparsed:
 
 ```ts
-const spanKey = getTypedSearchTokenIdentity(activeToken);
-this.selectedTypedSearchChoices.set(spanKey, selectedChoice);
+const parsedAfterRewrite = this.parseTypedSearchDraft(text);
+const rewrittenToken = getActiveTypedSearchToken(parsedAfterRewrite, caret);
+if (isLiveTypedSearchToken(rewrittenToken)) {
+  const spanKey = getTypedSearchTokenIdentity(rewrittenToken);
+  const selectedChoice = this.selectedChoiceFromLiveChoice(choice, rewrittenToken);
+  if (selectedChoice) {
+    this.selectedTypedSearchChoices.set(spanKey, selectedChoice);
+  }
+}
 ```
 
-Keep the raw fallback entry only for manually chosen ambiguity rows created by the existing Enter resolver.
+Do not store raw-token fallback entries for live choices. Keep raw-token keys only for manually chosen ambiguity rows created by the existing Enter resolver.
 
 - [ ] **Step 4: Run identity tests**
 
@@ -268,7 +276,7 @@ Parser test:
 it('keeps invalid scalar tokens red in draft mode without suppressing their token issue', () => {
   const result = parseTypedSearch('rating:9 favorite:maybe', { mode: 'draft' });
 
-  expect(result.issues.map((issue) => issue.code)).toEqual(['invalid-rating', 'invalid-boolean']);
+  expect(result.issues.map((issue) => issue.code)).toEqual(['invalid-rating', 'invalid-favorite']);
   expect(result.displayTokens).toEqual([
     expect.objectContaining({ raw: 'rating:9', status: 'error' }),
     expect.objectContaining({ raw: 'favorite:maybe', status: 'error' }),
@@ -365,9 +373,10 @@ Add:
 
 ```ts
 private reconcileSelectedTypedSearchChoices(parsed: TypedSearchParseResult) {
-  const validKeys = new Set(parsed.resolutionTokens.map((token) => token.identity));
+  const validSpanKeys = new Set(parsed.resolutionTokens.map((token) => token.identity));
+  const validRawKeys = new Set(parsed.resolutionTokens.map((token) => token.raw));
   for (const key of this.selectedTypedSearchChoices.keys()) {
-    if (!validKeys.has(key)) {
+    if (!validSpanKeys.has(key) && !validRawKeys.has(key)) {
       this.selectedTypedSearchChoices.delete(key);
     }
   }
@@ -533,10 +542,12 @@ private clearLiveTypedSearchRequest() {
 
 Use `clearLiveTypedSearchRequest()` when the active token is missing, composition starts, draft state clears, and the palette closes.
 
-In the live request catch block, map timeout:
+Store the composite request signal in a local `signal` variable before calling the resolver, then map timeout from `signal.reason` in the live request catch block:
 
 ```ts
-if (error instanceof DOMException && error.name === 'TimeoutError') {
+const isTimeout =
+  signal.aborted && signal.reason instanceof DOMException && signal.reason.name === 'TimeoutError';
+if (isTimeout || (error instanceof DOMException && error.name === 'TimeoutError')) {
   if (requestId === this.liveTypedSearchRequestId) {
     this.liveTypedSearchStatus = { status: 'timeout', key };
   }
@@ -615,7 +626,10 @@ it('renders live filter matches before the top result and outside normal people 
 
   expect(liveSection.compareDocumentPosition(topResult) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getByRole('group', { name: /person filter matches/i })).toBeInTheDocument();
-  expect(screen.queryByRole('group', { name: /^people$/i })).not.toContainElement(screen.getByText('Ann Live'));
+  const peopleGroup = screen.queryByRole('group', { name: /^people$/i });
+  if (peopleGroup) {
+    expect(peopleGroup).not.toHaveTextContent('Ann Live');
+  }
 });
 
 it('uses Enter on a highlighted live filter row to rewrite the token instead of submitting search', async () => {
@@ -673,7 +687,7 @@ For each live row, set the value to an action-specific label so keyboard selecti
 <Command.Item value={`filter:${choice.id}:${choice.label}`} onSelect={() => onSelect(choice)} class="group">
 ```
 
-In `global-search.svelte`, keep `LiveTypedFilterSection` as the first list section after typed issue rows and before `data-cmdk-top-result-*` groups in both presentation modes.
+In `global-search.svelte`, keep `LiveTypedFilterSection` as the first list section after typed issue rows and before `data-cmdk-top-result-*` groups in both presentation modes. Add `data-testid="cmdk-top-result"` to the rendered top-result group for the active top-result variant so ordering tests can use a stable hook without depending on whether search, command, or navigation is promoted.
 
 - [ ] **Step 4: Run UI tests**
 
@@ -712,7 +726,7 @@ it('keeps duplicate scalar live tokens commit-blocking on Enter', async () => {
   await manager.activateSearch(manager.query);
 
   expect(manager.typedSearchIssues).toEqual([
-    expect.objectContaining({ code: 'duplicate-scalar', key: 'country' }),
+    expect.objectContaining({ code: 'duplicate-filter', key: 'country' }),
   ]);
 });
 
@@ -720,7 +734,7 @@ it('submits selected live scalar values through the existing all-or-nothing reso
   typedSearchMock.resolveTypedSearchFilters.mockResolvedValue({
     ok: true,
     queryText: 'beach',
-    filters: { personIds: [], tagIds: [], city: 'Paris', country: undefined },
+    filters: { ...createFilterState(), city: 'Paris' },
     personNames: new Map(),
     tagNames: new Map(),
   });

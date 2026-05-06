@@ -334,8 +334,8 @@ import { parseTypedSearch } from './typed-search-parser';
 import { resolveLiveTypedSearchSuggestions } from './typed-search-live-suggestions';
 
 describe('resolveLiveTypedSearchSuggestions foundation', () => {
-  it('returns idle before provider-specific live suggestion support is wired', async () => {
-    const parsed = parseTypedSearch('beach person:ann', { mode: 'draft' });
+  it('returns idle for unsupported typed tokens', async () => {
+    const parsed = parseTypedSearch('camera:nik', { mode: 'draft' });
 
     await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
       status: 'idle',
@@ -363,6 +363,8 @@ import type { TypedSearchParseResult, TypedSearchTokenSpan } from './typed-searc
 
 export type LiveTypedSearchKey = 'person' | 'tag' | 'country' | 'city';
 
+export type LiveTypedSearchToken = TypedSearchTokenSpan & { key: LiveTypedSearchKey };
+
 export type LiveTypedSearchChoice = {
   id: string;
   key: LiveTypedSearchKey;
@@ -388,6 +390,10 @@ export type LiveTypedSearchContext = {
   spaceId?: string;
   signal?: AbortSignal;
 };
+
+export function isLiveTypedSearchToken(token: TypedSearchTokenSpan | undefined): token is LiveTypedSearchToken {
+  return token?.key === 'person' || token?.key === 'tag' || token?.key === 'country' || token?.key === 'city';
+}
 
 export async function resolveLiveTypedSearchSuggestions(
   _context: LiveTypedSearchContext,
@@ -470,15 +476,18 @@ import {
   parseTypedSearch,
   type TypedSearchDisplayToken,
   type TypedSearchIssue,
-  type TypedSearchTokenSpan,
 } from '$lib/utils/typed-search/typed-search-parser';
-import type { LiveTypedSearchStatus } from '$lib/utils/typed-search/typed-search-live-suggestions';
+import {
+  isLiveTypedSearchToken,
+  type LiveTypedSearchStatus,
+  type LiveTypedSearchToken,
+} from '$lib/utils/typed-search/typed-search-live-suggestions';
 ```
 
 Add state:
 
 ```ts
-activeTypedSearchToken = $state<TypedSearchTokenSpan | undefined>();
+activeTypedSearchToken = $state<LiveTypedSearchToken | undefined>();
 liveTypedSearchStatus = $state<LiveTypedSearchStatus>({ status: 'idle' });
 typedSearchCaret = $state<number | null>(null);
 typedSearchComposing = $state(false);
@@ -507,10 +516,7 @@ private updateActiveTypedSearchToken() {
   }
   const parsed = parseTypedSearch(this.query, { mode: 'draft' });
   const token = getActiveTypedSearchToken(parsed, this.typedSearchCaret);
-  this.activeTypedSearchToken =
-    token?.key === 'person' || token?.key === 'tag' || token?.key === 'country' || token?.key === 'city'
-      ? token
-      : undefined;
+  this.activeTypedSearchToken = isLiveTypedSearchToken(token) ? token : undefined;
   if (!this.activeTypedSearchToken) {
     this.liveTypedSearchStatus = { status: 'idle' };
   }

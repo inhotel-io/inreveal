@@ -125,6 +125,17 @@ it('returns empty when no countries match', async () => {
     key: 'country',
   });
 });
+
+it('returns a quiet live error when country suggestions fail', async () => {
+  vi.mocked(getFilterSuggestions).mockRejectedValue(new Error('network down'));
+  const parsed = parseTypedSearch('country:ge', { mode: 'draft' });
+
+  await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
+    status: 'error',
+    key: 'country',
+    message: 'network down',
+  });
+});
 ```
 
 - [ ] **Step 2: Run country utility tests and verify failure**
@@ -274,6 +285,17 @@ it('returns empty when no cities match', async () => {
   await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
     status: 'empty',
     key: 'city',
+  });
+});
+
+it('returns a quiet live error when city suggestions fail', async () => {
+  vi.mocked(getSearchSuggestions).mockRejectedValue(new Error('network down'));
+  const parsed = parseTypedSearch('city:par', { mode: 'draft' });
+
+  await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
+    status: 'error',
+    key: 'city',
+    message: 'network down',
   });
 });
 ```
@@ -577,18 +599,24 @@ selectLiveTypedSearchChoice(choice: LiveTypedSearchChoice) {
     key: choice.key,
     value: choice.value,
   });
-  const selectedChoice = this.selectedChoiceFromLiveChoice(choice);
   this.query = text;
+  this.skipNextLiveTypedSearchForCaret = caret;
+  const parsedAfterRewrite = this.parseTypedSearchDraft(text);
+  const rewrittenToken = getActiveTypedSearchToken(parsedAfterRewrite, caret);
+  const selectedChoice = isLiveTypedSearchToken(rewrittenToken)
+    ? this.selectedChoiceFromLiveChoice(choice, rewrittenToken)
+    : undefined;
   if (selectedChoice) {
-    const spanKey = `${activeToken.key}:${activeToken.start}:${activeToken.end}:${activeToken.raw}`;
-    this.selectedTypedSearchChoices.set(activeToken.raw, selectedChoice);
+    const spanKey = `${rewrittenToken.key}:${rewrittenToken.start}:${rewrittenToken.end}:${rewrittenToken.raw}`;
+    this.selectedTypedSearchChoices.set(rewrittenToken.raw, selectedChoice);
     this.selectedTypedSearchChoices.set(spanKey, selectedChoice);
   }
-  this.parseTypedSearchDraft(text);
   this.setInputCaret(caret);
   this.liveTypedSearchStatus = { status: 'idle' };
 }
 ```
+
+Reuse the `skipNextLiveTypedSearchForCaret` guard added in the people plan so selecting a canonical scalar value does not immediately refetch suggestions for the rewritten token.
 
 - [ ] **Step 4: Run scalar selection tests**
 

@@ -282,6 +282,26 @@ it('debounces live tag filter suggestions for an active tag token', async () => 
   vi.useRealTimers();
 });
 
+it('debounces initial live tag suggestions for an empty tag token', async () => {
+  vi.useFakeTimers();
+  liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockResolvedValue({
+    status: 'empty',
+    key: 'tag',
+  });
+  const manager = new GlobalSearchManager();
+
+  manager.setQuery('tag:');
+  manager.setInputCaret('tag:'.length);
+
+  expect(manager.liveTypedSearchStatus).toEqual({ status: 'loading', key: 'tag' });
+  await vi.advanceTimersByTimeAsync(150);
+
+  expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledWith(
+    expect.objectContaining({ activeToken: expect.objectContaining({ key: 'tag', value: '' }) }),
+  );
+  vi.useRealTimers();
+});
+
 it('keeps unsupported camera tokens out of live suggestions', async () => {
   vi.useFakeTimers();
   const manager = new GlobalSearchManager();
@@ -367,9 +387,19 @@ it('selecting a live tag choice rewrites the active token and stores a resolver 
   });
 
   expect(manager.query).toBe('beach tag:"Family Travel"');
-  expect([...manager.selectedTypedSearchChoices.values()]).toContainEqual(
-    expect.objectContaining({ key: 'tag', id: 't1', label: 'Family Travel' }),
+  expect(manager.selectedTypedSearchChoices.get('tag:"Family Travel"')).toEqual(
+    expect.objectContaining({
+      tokenRaw: 'tag:"Family Travel"',
+      key: 'tag',
+      id: 't1',
+      label: 'Family Travel',
+      value: 'Family Travel',
+    }),
   );
+  expect(manager.selectedTypedSearchChoices.get('tag:6:25:tag:"Family Travel"')).toEqual(
+    expect.objectContaining({ key: 'tag', id: 't1' }),
+  );
+  expect(manager.selectedTypedSearchChoices.has('tag:tra')).toBe(false);
 });
 ```
 
@@ -412,30 +442,37 @@ Expected: FAIL until tag choices are stored for the final resolver.
 In `selectLiveTypedSearchChoice()`, add a shared conversion:
 
 ```ts
-private selectedChoiceFromLiveChoice(choice: LiveTypedSearchChoice): TypedSearchChoice | undefined {
-  if (!this.activeTypedSearchToken || !choice.entityId) {
+private selectedChoiceFromLiveChoice(
+  choice: LiveTypedSearchChoice,
+  rewrittenToken: LiveTypedSearchToken,
+): TypedSearchChoice | undefined {
+  if (!choice.entityId) {
     return undefined;
   }
   if (choice.key !== 'person' && choice.key !== 'tag') {
     return undefined;
   }
   return {
-    tokenRaw: this.activeTypedSearchToken.raw,
+    tokenRaw: rewrittenToken.raw,
     key: choice.key,
     id: choice.entityId,
     label: choice.label,
-    value: this.activeTypedSearchToken.value,
+    value: rewrittenToken.value,
   };
 }
 ```
 
-Use it after rewriting the token:
+Use it after rewriting the token and reparsing the rewritten text:
 
 ```ts
-const selectedChoice = this.selectedChoiceFromLiveChoice(choice);
-if (selectedChoice && this.activeTypedSearchToken) {
-  const spanKey = `${this.activeTypedSearchToken.key}:${this.activeTypedSearchToken.start}:${this.activeTypedSearchToken.end}:${this.activeTypedSearchToken.raw}`;
-  this.selectedTypedSearchChoices.set(this.activeTypedSearchToken.raw, selectedChoice);
+const parsedAfterRewrite = this.parseTypedSearchDraft(text);
+const rewrittenToken = getActiveTypedSearchToken(parsedAfterRewrite, caret);
+const selectedChoice = isLiveTypedSearchToken(rewrittenToken)
+  ? this.selectedChoiceFromLiveChoice(choice, rewrittenToken)
+  : undefined;
+if (selectedChoice && rewrittenToken) {
+  const spanKey = `${rewrittenToken.key}:${rewrittenToken.start}:${rewrittenToken.end}:${rewrittenToken.raw}`;
+  this.selectedTypedSearchChoices.set(rewrittenToken.raw, selectedChoice);
   this.selectedTypedSearchChoices.set(spanKey, selectedChoice);
 }
 ```
