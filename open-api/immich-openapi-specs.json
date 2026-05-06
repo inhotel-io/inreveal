@@ -22602,6 +22602,7 @@
           "SharedSpaceFaceMatch",
           "SharedSpaceFaceMatchAll",
           "SharedSpaceLibraryFaceSync",
+          "SharedSpaceIdentityReconciliation",
           "SharedSpacePersonDedup",
           "SharedSpacePersonMetadataBackfill",
           "SharedSpaceBulkAddAssets",
