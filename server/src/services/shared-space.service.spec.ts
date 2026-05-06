@@ -2672,6 +2672,29 @@ describe(SharedSpaceService.name, () => {
       });
     });
 
+    it('should skip member-scoped reconciliation when membership disappeared before the job runs', async () => {
+      mocks.sharedSpace.getById.mockResolvedValue(
+        factory.sharedSpace({ id: 'space-1', faceRecognitionEnabled: true }),
+      );
+      mocks.sharedSpace.getMember.mockResolvedValue(undefined);
+      mocks.sharedSpace.getSpacePersonsWithEmbeddings.mockResolvedValue([
+        {
+          id: 'space-person-1',
+          type: 'person',
+          identityId: 'space-identity',
+          isHidden: false,
+          embedding: '[1,2,3]',
+        },
+      ] as any);
+
+      await expect(
+        sut.handleSharedSpaceIdentityReconciliation({ spaceId: 'space-1', userId: 'removed-member' }),
+      ).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.search.searchFaces).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+    });
+
     it('should skip automatic merge when two local candidates match within threshold', async () => {
       setupStrictReconciliationFixture(mocks);
       mocks.search.searchFaces.mockResolvedValue([

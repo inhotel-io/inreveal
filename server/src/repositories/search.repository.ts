@@ -1590,7 +1590,7 @@ export class SearchRepository {
           WHEN primary_profiles."profileType" = 'space-person' THEN 'space-person:' || primary_profiles."profileId"::text
           ELSE 'person:' || primary_profiles."profileId"::text
         END AS id,
-        display_profiles.name,
+        COALESCE(NULLIF(display_profiles.name, ''), primary_profiles.name, '') AS name,
         primary_profiles."profileType",
         primary_profiles."profileId",
         primary_profiles."spaceId"
@@ -1600,8 +1600,8 @@ export class SearchRepository {
         AND display_profiles.display_rn = 1
       WHERE primary_profiles.primary_rn = 1
       ORDER BY
-        NULLIF(display_profiles.name, '') IS NULL,
-        lower(display_profiles.name),
+        NULLIF(COALESCE(NULLIF(display_profiles.name, ''), primary_profiles.name, ''), '') IS NULL,
+        lower(COALESCE(NULLIF(display_profiles.name, ''), primary_profiles.name, '')),
         primary_profiles."profileId"
     `.execute(db);
 

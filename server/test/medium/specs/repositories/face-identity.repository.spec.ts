@@ -127,6 +127,56 @@ describe(FaceIdentityRepository.name, () => {
     }
   });
 
+  it('treats two accessible space profiles on the same identity as one strict upload candidate', async () => {
+    const { ctx, sut } = setup();
+    const { user: member } = await ctx.newUser();
+    const { user: owner } = await ctx.newUser();
+    const embedding = newEmbedding();
+
+    try {
+      const first = await createAccessibleSpaceIdentity(ctx, sut, {
+        memberUserId: member.id,
+        ownerUserId: owner.id,
+        embedding,
+      });
+      const { space: secondSpace } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
+      await ctx.newSharedSpaceMember({ spaceId: secondSpace.id, userId: owner.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceMember({ spaceId: secondSpace.id, userId: member.id, role: SharedSpaceRole.Viewer });
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+      await ctx.newSharedSpaceAsset({ spaceId: secondSpace.id, assetId: asset.id, addedById: owner.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
+      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding }).execute();
+      await sut.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: first.identity.id,
+        source: 'shared-space-evidence',
+      });
+      const secondSpacePerson = await ctx.database
+        .insertInto('shared_space_person')
+        .values({
+          spaceId: secondSpace.id,
+          identityId: first.identity.id,
+          representativeFaceId: assetFace.id,
+          type: 'person',
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await linkSpaceFace(ctx, secondSpacePerson.id, assetFace.id);
+
+      await expect(
+        sut.findClosestAccessibleIdentityForFace({
+          userId: member.id,
+          embedding,
+          maxDistance: 0.5,
+          type: 'person',
+          excludeIdentityId: null,
+        }),
+      ).resolves.toEqual(expect.objectContaining({ identityId: first.identity.id }));
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', 'in', [member.id, owner.id]).execute();
+    }
+  });
+
   it('reports backfill work for legacy people, unlinked visible faces, and legacy space people', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
@@ -450,7 +500,11 @@ describe(FaceIdentityRepository.name, () => {
     const { user } = await ctx.newUser();
     const { space } = await ctx.newSharedSpace({ createdById: user.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
-    const { person } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person } = await ctx.newPerson({
+      ownerId: user.id,
+      name: '',
+      birthDate: new Date('1988-02-03T00:00:00.000Z'),
+    });
     const { asset } = await ctx.newAsset({ ownerId: user.id });
     const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
     const identity = await sut.ensurePersonIdentity(person.id);
@@ -479,6 +533,7 @@ describe(FaceIdentityRepository.name, () => {
         expect.objectContaining({
           id: person.id,
           name: 'Shared Name',
+          birthDate: '1988-02-03',
           primaryProfile: { type: 'user-person', id: person.id },
           filterId: `person:${person.id}`,
         }),

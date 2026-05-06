@@ -47,6 +47,8 @@ import {
   UserAvatarColor,
 } from 'src/enum';
 import {
+  buildAutomaticReconciliationClaim,
+  chooseAutomaticTargetIdentity,
   filterUnambiguousReconciliationClaims,
   type ReconciliationClaim,
 } from 'src/services/accessible-identity-reconciliation';
@@ -1388,12 +1390,34 @@ export class SharedSpaceService extends BaseService {
       return;
     }
 
-    return {
+    const { sourceIdentityId, targetIdentityId: selectedTargetIdentityId } = chooseAutomaticTargetIdentity({
       bridge: 'member-join',
-      spacePersonId: input.spacePerson.id,
-      targetIdentityId,
-      sourceIdentityId: candidates[0].identityId,
-    };
+      localIdentityId: candidates[0].identityId,
+      spaceIdentityId: targetIdentityId,
+    });
+    const claim = buildAutomaticReconciliationClaim({
+      bridge: 'member-join',
+      localIdentityId: candidates[0].identityId,
+      spaceIdentityId: targetIdentityId,
+      sourceIdentityId,
+      targetIdentityId: selectedTargetIdentityId,
+      sourceProfileKey: `user:${input.memberUserId}:${candidates[0].identityId}`,
+      targetProfileKey: `space-person:${input.spacePerson.id}`,
+      hasAccessBridge: true,
+      compatibleType: true,
+      hasEmbedding: true,
+      hiddenOrIgnored: false,
+      alreadySameIdentity: false,
+      sameOwnerConflict: false,
+      sameSpaceConflict: false,
+    });
+
+    return claim
+      ? {
+          ...claim,
+          spacePersonId: input.spacePerson.id,
+        }
+      : undefined;
   }
 
   private async applySharedSpaceIdentityReconciliationClaim(

@@ -823,8 +823,15 @@ SELECT
   primary_profiles."profileType",
   primary_profiles."profileId",
   primary_profiles."spaceId",
-  display_profiles.name,
-  display_profiles."birthDate",
+  COALESCE(
+    NULLIF(display_profiles.name, ''),
+    primary_profiles.name,
+    ''
+  ) AS name,
+  COALESCE(
+    display_profiles."birthDate",
+    primary_profiles."birthDate"
+  ) AS "birthDate",
   primary_profiles."thumbnailPath",
   primary_profiles."isHidden",
   primary_profiles."isFavorite",

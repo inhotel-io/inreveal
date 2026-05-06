@@ -997,6 +997,145 @@ describe('People identity RBAC projection', () => {
     );
   });
 
+  it('shows a late member the accessible space person without creating a local profile', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture();
+    const { ctx, personService, sharedSpaceService, space } = fixture;
+    const { user: lateMember } = await ctx.newUser();
+
+    await sharedSpaceService.addMember(authFor(fixture.owner), space.id, {
+      userId: lateMember.id,
+      role: SharedSpaceRole.Viewer,
+    });
+    await sharedSpaceService.handleSharedSpaceIdentityReconciliation({ spaceId: space.id, userId: lateMember.id });
+
+    const result = await personService.getAll(authFor(lateMember), {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const localRows = await ctx.database
+      .selectFrom('person')
+      .select('id')
+      .where('ownerId', '=', lateMember.id)
+      .execute();
+
+    expect(localRows).toEqual([]);
+    expect(result.people).toEqual([
+      expect.objectContaining({
+        primaryProfile: { type: 'space-person', id: fixture.spacePerson.id, spaceId: space.id },
+        numberOfAssets: 1,
+      }),
+    ]);
+  });
+
+  it('links a post-join private upload with no prior local profile without changing existing members', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture();
+    const { ctx, personService, sharedSpaceService, faceIdentityRepository, space } = fixture;
+    const { user: uploader } = await ctx.newUser();
+    const embeddingRow = await ctx.database
+      .selectFrom('face_search')
+      .select('embedding')
+      .where('faceId', '=', fixture.spacePerson.representativeFaceId as string)
+      .executeTakeFirstOrThrow();
+
+    await sharedSpaceService.handleSharedSpaceIdentityReconciliation({ spaceId: space.id, userId: fixture.member.id });
+    await sharedSpaceService.addMember(authFor(fixture.owner), space.id, {
+      userId: uploader.id,
+      role: SharedSpaceRole.Viewer,
+    });
+
+    const { asset } = await ctx.newAsset({ ownerId: uploader.id, visibility: AssetVisibility.Timeline });
+    const { result: uploadedFaceId } = await ctx.newAssetFace({ assetId: asset.id });
+    await ctx.database
+      .insertInto('face_search')
+      .values({ faceId: uploadedFaceId, embedding: embeddingRow.embedding })
+      .execute();
+
+    await personService.handleRecognizeFaces({ id: uploadedFaceId });
+
+    const uploadedPerson = await ctx.database
+      .selectFrom('asset_face')
+      .innerJoin('person', 'person.id', 'asset_face.personId')
+      .select(['person.id', 'person.identityId'])
+      .where('asset_face.id', '=', uploadedFaceId)
+      .executeTakeFirstOrThrow();
+    const uploaderPeople = await personService.getAll(authFor(uploader), {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const ownerPeople = await personService.getAll(authFor(fixture.owner), {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const memberPeople = await personService.getAll(authFor(fixture.member), {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const targetIdentity = await faceIdentityRepository.ensurePersonIdentity(fixture.ownerPerson.id);
+
+    expect(uploaderPeople.people).toHaveLength(1);
+    expect(uploaderPeople.people[0]).toEqual(
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: uploadedPerson.id },
+        numberOfAssets: 2,
+      }),
+    );
+    expect(ownerPeople.people).toEqual([
+      expect.objectContaining({ primaryProfile: { type: 'user-person', id: fixture.ownerPerson.id } }),
+    ]);
+    expect(memberPeople.people).toEqual([
+      expect.objectContaining({ primaryProfile: { type: 'user-person', id: fixture.memberPerson.id } }),
+    ]);
+    expect(uploadedPerson.identityId).toBe(targetIdentity.id);
+  });
+
+  it('keeps one visible person when a post-join upload is added to the space', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture();
+    const { ctx, personService, sharedSpaceService, space } = fixture;
+    const { user: uploader } = await ctx.newUser();
+    const embeddingRow = await ctx.database
+      .selectFrom('face_search')
+      .select('embedding')
+      .where('faceId', '=', fixture.spacePerson.representativeFaceId as string)
+      .executeTakeFirstOrThrow();
+
+    await sharedSpaceService.addMember(authFor(fixture.owner), space.id, {
+      userId: uploader.id,
+      role: SharedSpaceRole.Viewer,
+    });
+
+    const { asset } = await ctx.newAsset({ ownerId: uploader.id, visibility: AssetVisibility.Timeline });
+    const { result: uploadedFaceId } = await ctx.newAssetFace({ assetId: asset.id });
+    await ctx.database
+      .insertInto('face_search')
+      .values({ faceId: uploadedFaceId, embedding: embeddingRow.embedding })
+      .execute();
+
+    await personService.handleRecognizeFaces({ id: uploadedFaceId });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: uploader.id });
+    await sharedSpaceService.handleSharedSpaceFaceMatch({ spaceId: space.id, assetId: asset.id });
+    await sharedSpaceService.handleSharedSpaceIdentityReconciliation({ spaceId: space.id });
+
+    const uploaderPeople = await personService.getAll(authFor(uploader), {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const spacePeople = await sharedSpaceService.getSpacePeople(authFor(uploader), space.id);
+
+    expect(uploaderPeople.people).toHaveLength(1);
+    expect(spacePeople).toHaveLength(1);
+    expect(spacePeople[0]).toEqual(expect.objectContaining({ id: fixture.spacePerson.id }));
+  });
+
   it('late member join materializes missing space people before reconciling strict local identity', async () => {
     const { ctx, sut: personService, faceIdentityRepository } = setup();
     const { sut: sharedSpaceService, jobs: sharedJobs } = setupSharedSpace();
@@ -1263,6 +1402,36 @@ describe('People identity RBAC projection', () => {
     ]);
   });
 
+  it('does not merge or surface stale space profiles when membership is removed before reconciliation runs', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture();
+
+    await fixture.ctx.database
+      .deleteFrom('shared_space_member')
+      .where('spaceId', '=', fixture.space.id)
+      .where('userId', '=', fixture.member.id)
+      .execute();
+
+    await fixture.sharedSpaceService.handleSharedSpaceIdentityReconciliation({
+      spaceId: fixture.space.id,
+      userId: fixture.member.id,
+    });
+
+    const result = await fixture.personService.getAll(fixture.memberAuth, {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+
+    expect(result.people).toEqual([
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: fixture.memberPerson.id },
+        numberOfAssets: 1,
+      }),
+    ]);
+    expect(JSON.stringify(result)).not.toContain(fixture.spacePerson.id);
+  });
+
   it('restores identity grouping after the member rejoins the shared space', async () => {
     const fixture = await setupJoinAfterDuplicatesFixture();
 
@@ -1322,6 +1491,41 @@ describe('People identity RBAC projection', () => {
         numberOfAssets: 2,
       }),
     );
+  });
+
+  it('repairs missing space representative faces before global people hydration', async () => {
+    const fixture = await setupJoinAfterDuplicatesFixture();
+
+    await fixture.sharedSpaceService.handleSharedSpaceIdentityReconciliation({
+      spaceId: fixture.space.id,
+      userId: fixture.member.id,
+    });
+    await fixture.ctx.database
+      .updateTable('shared_space_person')
+      .set({ representativeFaceId: null, representativeFaceSource: 'auto' })
+      .where('id', '=', fixture.spacePerson.id)
+      .execute();
+    await fixture.sharedSpaceService.handleSharedSpacePersonDedup({ spaceId: fixture.space.id });
+
+    const repaired = await fixture.ctx.database
+      .selectFrom('shared_space_person')
+      .select(['representativeFaceId'])
+      .where('id', '=', fixture.spacePerson.id)
+      .executeTakeFirstOrThrow();
+    const result = await fixture.personService.getAll(fixture.memberAuth, {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+
+    expect(repaired.representativeFaceId).toBe(fixture.spacePerson.representativeFaceId);
+    expect(result.people).toEqual([
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: fixture.memberPerson.id },
+        numberOfAssets: 2,
+      }),
+    ]);
   });
 
   it('removes a removed shared-space asset from visible identity counts without splitting identities', async () => {
