@@ -6,12 +6,12 @@ import { authManager } from '$lib/managers/auth-manager.svelte';
 import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
 import { Route } from '$lib/route';
 import { addEntry, getEntries, makePlaceId, removeEntry, type RecentEntry } from '$lib/stores/cmdk-recent';
+import { getGlobalPersonHref } from '$lib/utils/global-person-route';
 import {
   buildSearchablePageUrl,
   getSearchablePageState,
   type SearchablePageSortOrder,
 } from '$lib/utils/searchable-page-search';
-import { getGlobalPersonHref } from '$lib/utils/global-person-route';
 import { getTypedSearchDisplayText, storeTypedSearchNames } from '$lib/utils/typed-search/typed-search-name-cache';
 import {
   parseTypedSearch,
