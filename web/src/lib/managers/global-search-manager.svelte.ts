@@ -14,10 +14,16 @@ import {
 } from '$lib/utils/searchable-page-search';
 import { getTypedSearchDisplayText, storeTypedSearchNames } from '$lib/utils/typed-search/typed-search-name-cache';
 import {
+  getActiveTypedSearchToken,
   parseTypedSearch,
   type TypedSearchDisplayToken,
   type TypedSearchIssue,
 } from '$lib/utils/typed-search/typed-search-parser';
+import {
+  isLiveTypedSearchToken,
+  type LiveTypedSearchStatus,
+  type LiveTypedSearchToken,
+} from '$lib/utils/typed-search/typed-search-live-suggestions';
 import { resolveTypedSearchFilters, type TypedSearchChoice } from '$lib/utils/typed-search/typed-search-resolver';
 import {
   getAlbumInfo,
@@ -252,6 +258,10 @@ export class GlobalSearchManager {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   selectedTypedSearchChoices = new Map<string, TypedSearchChoice>();
   typedSearchPlainQuery = $state('');
+  activeTypedSearchToken = $state<LiveTypedSearchToken | undefined>();
+  liveTypedSearchStatus = $state<LiveTypedSearchStatus>({ status: 'idle' });
+  typedSearchCaret = $state<number | null>(null);
+  typedSearchComposing = $state(false);
   sections = $state<Sections>({
     photos: idle,
     people: idle,
@@ -1250,7 +1260,7 @@ export class GlobalSearchManager {
   }
 
   parseTypedSearchDraft(text = this.query) {
-    const parsed = parseTypedSearch(text);
+    const parsed = parseTypedSearch(text, { mode: 'draft' });
     this.typedSearchDisplayTokens = parsed.displayTokens;
     this.typedSearchPlainQuery = parsed.queryText;
     this.typedSearchIssues = [];
@@ -1260,6 +1270,7 @@ export class GlobalSearchManager {
         this.selectedTypedSearchChoices.delete(key);
       }
     }
+    this.updateActiveTypedSearchToken();
     return parsed;
   }
 
@@ -1269,6 +1280,35 @@ export class GlobalSearchManager {
     this.typedSearchIssues = [];
     this.typedSearchChoices = [];
     this.selectedTypedSearchChoices.clear();
+    this.activeTypedSearchToken = undefined;
+    this.typedSearchCaret = null;
+    this.liveTypedSearchStatus = { status: 'idle' };
+  }
+
+  setInputCaret(caret: number | null) {
+    this.typedSearchCaret = caret;
+    this.updateActiveTypedSearchToken();
+  }
+
+  setInputComposing(isComposing: boolean) {
+    this.typedSearchComposing = isComposing;
+    if (!isComposing) {
+      this.updateActiveTypedSearchToken();
+    }
+  }
+
+  private updateActiveTypedSearchToken() {
+    if (this.typedSearchComposing) {
+      this.activeTypedSearchToken = undefined;
+      this.liveTypedSearchStatus = { status: 'idle' };
+      return;
+    }
+    const parsed = parseTypedSearch(this.query, { mode: 'draft' });
+    const token = getActiveTypedSearchToken(parsed, this.typedSearchCaret);
+    this.activeTypedSearchToken = isLiveTypedSearchToken(token) ? token : undefined;
+    if (!this.activeTypedSearchToken) {
+      this.liveTypedSearchStatus = { status: 'idle' };
+    }
   }
 
   selectTypedSearchChoice(choice: TypedSearchChoice) {

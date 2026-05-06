@@ -1478,6 +1478,30 @@ describe('activate("command")', () => {
       expect(manager.topSearchMatch).toEqual({ id: 'top-search', query: 'beach', rawQuery: 'beach camera:nikon' });
     });
 
+    it('tracks the active typed filter token from the input caret', () => {
+      const manager = new GlobalSearchManager();
+
+      manager.setQuery('beach person:ann tag:family');
+      manager.setInputCaret('beach person:ann'.length);
+
+      expect(manager.activeTypedSearchToken).toMatchObject({ key: 'person', raw: 'person:ann' });
+
+      manager.setInputCaret('beach person:ann tag:f'.length);
+      expect(manager.activeTypedSearchToken).toMatchObject({ key: 'tag', raw: 'tag:family' });
+    });
+
+    it('clears live suggestion state on close', () => {
+      const manager = new GlobalSearchManager();
+
+      manager.liveTypedSearchStatus = { status: 'loading', key: 'person' };
+      manager.setQuery('person:ann');
+      manager.setInputCaret(8);
+      manager.close();
+
+      expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+      expect(manager.activeTypedSearchToken).toBeUndefined();
+    });
+
     it('blocks parser issues before calling the resolver', async () => {
       const manager = new GlobalSearchManager();
 
