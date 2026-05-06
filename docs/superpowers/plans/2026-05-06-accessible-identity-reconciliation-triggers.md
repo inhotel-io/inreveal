@@ -199,7 +199,9 @@ import {
   type ReconciliationClaim,
 } from 'src/services/accessible-identity-reconciliation';
 
-const baseCandidate = (overrides: Partial<AutomaticReconciliationCandidate> = {}): AutomaticReconciliationCandidate => ({
+const baseCandidate = (
+  overrides: Partial<AutomaticReconciliationCandidate> = {},
+): AutomaticReconciliationCandidate => ({
   bridge: 'member-join',
   localIdentityId: 'local-identity',
   spaceIdentityId: 'space-identity',
@@ -374,17 +376,18 @@ export type AutomaticReconciliationCandidate = {
   sameSpaceConflict: boolean;
 };
 
-export const chooseAutomaticTargetIdentity = (input:
-  | {
-      bridge: Exclude<ReconciliationBridge, 'manual-compatible'>;
-      localIdentityId: string;
-      spaceIdentityId: string;
-    }
-  | {
-      bridge: 'manual-compatible';
-      firstIdentityId: string;
-      secondIdentityId: string;
-    },
+export const chooseAutomaticTargetIdentity = (
+  input:
+    | {
+        bridge: Exclude<ReconciliationBridge, 'manual-compatible'>;
+        localIdentityId: string;
+        spaceIdentityId: string;
+      }
+    | {
+        bridge: 'manual-compatible';
+        firstIdentityId: string;
+        secondIdentityId: string;
+      },
 ): { sourceIdentityId: string; targetIdentityId: string } => {
   if (input.bridge === 'manual-compatible') {
     const [targetIdentityId, sourceIdentityId] = [input.firstIdentityId, input.secondIdentityId].sort();
@@ -952,11 +955,7 @@ it('shows a late member the accessible space person without creating a local pro
     page: 1,
     size: 50,
   } as any);
-  const localRows = await ctx.database
-    .selectFrom('person')
-    .select('id')
-    .where('ownerId', '=', lateMember.id)
-    .execute();
+  const localRows = await ctx.database.selectFrom('person').select('id').where('ownerId', '=', lateMember.id).execute();
 
   expect(localRows).toEqual([]);
   expect(result.people).toEqual([
@@ -1744,10 +1743,7 @@ const makePerson = (overrides: Partial<PersonResponseDto> = {}): PersonResponseD
 describe('global person route helpers', () => {
   it('routes user-primary rows to identity-wide personal detail', () => {
     expect(
-      getGlobalPersonHref(
-        makePerson({ primaryProfile: { type: Type.UserPerson, id: 'person-1' } }),
-        '/people',
-      ),
+      getGlobalPersonHref(makePerson({ primaryProfile: { type: Type.UserPerson, id: 'person-1' } }), '/people'),
     ).toBe('/people/person-1?previousRoute=%2Fpeople');
   });
 
@@ -1794,14 +1790,10 @@ import { type PersonResponseDto } from '@immich/sdk';
 export const getGlobalPersonProfileId = (person: Pick<PersonResponseDto, 'id' | 'primaryProfile'>) =>
   person.primaryProfile?.id ?? person.id;
 
-export const getGlobalPersonHref = (
-  person: Pick<PersonResponseDto, 'id' | 'primaryProfile'>,
-  previousRoute?: string,
-) => Route.viewPerson({ id: getGlobalPersonProfileId(person) }, previousRoute ? { previousRoute } : undefined);
+export const getGlobalPersonHref = (person: Pick<PersonResponseDto, 'id' | 'primaryProfile'>, previousRoute?: string) =>
+  Route.viewPerson({ id: getGlobalPersonProfileId(person) }, previousRoute ? { previousRoute } : undefined);
 
-export const getGlobalPersonThumbnailUrl = (
-  person: Pick<PersonResponseDto, 'id' | 'primaryProfile' | 'updatedAt'>,
-) => {
+export const getGlobalPersonThumbnailUrl = (person: Pick<PersonResponseDto, 'id' | 'primaryProfile' | 'updatedAt'>) => {
   const profile = person.primaryProfile;
   if (profile?.type === 'space-person' && profile.spaceId) {
     return createUrl(`/shared-spaces/${profile.spaceId}/people/${profile.id}/thumbnail`, {

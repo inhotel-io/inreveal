@@ -242,39 +242,39 @@ Explicit space people pages remain space-scoped. They should show only assets in
 
 ## High-Value Scenario Matrix
 
-| ID | Setup | Trigger | Expected result |
-| --- | --- | --- | --- |
-| 1 | A has a personal profile, creates a space, adds an asset, B joins with no local profile. | B uploads a matching private photo after joining. | B sees one global person. B's owned photo is included. Space counts do not include B's private asset. |
-| 2 | A has a personal profile, creates a space, adds an asset, B joins with a matching local profile, C joins with no local profile. | C uploads a matching private photo after joining. | A, B, and C each see one global person. A and B keep their visible personal people. C gets consistent visibility after upload. |
-| 3 | A and B both have matching local profiles before the space exists. | A creates a space, adds an asset, then B joins after the space person exists. | B's local identity reconciles into the shared identity. B sees one global person. |
-| 4 | A and B both have matching local profiles before the space exists. | A invites B before space people materialize. | Materialization and reconciliation converge. B sees their local person immediately and one grouped identity after jobs drain. |
-| 5 | A and B are already in the space. B has no local profile. | B uploads a matching private photo and does not add it to the space. | B does not get a duplicate visible person. Space people/counts do not include B's private asset. |
-| 6 | A and B are already in the space. B has no local profile. | B uploads a matching photo and adds it to the space. | B sees one global person. The space person asset count increases. B's asset remains owned by B. |
-| 7 | C uploads a matching photo before joining, so C has a local profile. | A invites C to the existing space. | C's local identity reconciles into the accessible shared identity. A and B visibility is unchanged. |
-| 8 | C joins first with no local profile. | C uploads a matching photo after joining. | Post-upload reconciliation finds the accessible space identity. No visible duplicate remains after jobs drain. |
-| 9 | A and B are reconciled in a space. C has a local matching profile before joining. | C joins the space. | C sees one global person. A and B still see their personal people before and after C joins. The space still has one space person. |
-| 10 | Global explore row has only a space profile as primary profile. | Viewer opens the row from global explore. | Detail shows all globally accessible photos for the identity, not only assets from that one space. |
-| 11 | A and B are reconciled in a space. C has no local matching profile. | C joins the space and does not upload anything. | C sees the accessible space person in global people if the space contributes to C's timeline. No C-owned profile is created. A/B visibility and space people are unchanged. |
+| ID  | Setup                                                                                                                           | Trigger                                                                       | Expected result                                                                                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | A has a personal profile, creates a space, adds an asset, B joins with no local profile.                                        | B uploads a matching private photo after joining.                             | B sees one global person. B's owned photo is included. Space counts do not include B's private asset.                                                                       |
+| 2   | A has a personal profile, creates a space, adds an asset, B joins with a matching local profile, C joins with no local profile. | C uploads a matching private photo after joining.                             | A, B, and C each see one global person. A and B keep their visible personal people. C gets consistent visibility after upload.                                              |
+| 3   | A and B both have matching local profiles before the space exists.                                                              | A creates a space, adds an asset, then B joins after the space person exists. | B's local identity reconciles into the shared identity. B sees one global person.                                                                                           |
+| 4   | A and B both have matching local profiles before the space exists.                                                              | A invites B before space people materialize.                                  | Materialization and reconciliation converge. B sees their local person immediately and one grouped identity after jobs drain.                                               |
+| 5   | A and B are already in the space. B has no local profile.                                                                       | B uploads a matching private photo and does not add it to the space.          | B does not get a duplicate visible person. Space people/counts do not include B's private asset.                                                                            |
+| 6   | A and B are already in the space. B has no local profile.                                                                       | B uploads a matching photo and adds it to the space.                          | B sees one global person. The space person asset count increases. B's asset remains owned by B.                                                                             |
+| 7   | C uploads a matching photo before joining, so C has a local profile.                                                            | A invites C to the existing space.                                            | C's local identity reconciles into the accessible shared identity. A and B visibility is unchanged.                                                                         |
+| 8   | C joins first with no local profile.                                                                                            | C uploads a matching photo after joining.                                     | Post-upload reconciliation finds the accessible space identity. No visible duplicate remains after jobs drain.                                                              |
+| 9   | A and B are reconciled in a space. C has a local matching profile before joining.                                               | C joins the space.                                                            | C sees one global person. A and B still see their personal people before and after C joins. The space still has one space person.                                           |
+| 10  | Global explore row has only a space profile as primary profile.                                                                 | Viewer opens the row from global explore.                                     | Detail shows all globally accessible photos for the identity, not only assets from that one space.                                                                          |
+| 11  | A and B are reconciled in a space. C has no local matching profile.                                                             | C joins the space and does not upload anything.                               | C sees the accessible space person in global people if the space contributes to C's timeline. No C-owned profile is created. A/B visibility and space people are unchanged. |
 
 ## Ambiguous And Manual Cases
 
-| Case | Expected result |
-| --- | --- |
-| C joins a space with two accessible space people whose embeddings both match C's uploaded face inside the threshold. | No automatic merge. C keeps or gets a local profile. Manual merge is required. |
-| C has two local profiles that both strictly match one space person. | No automatic merge. Manual local cleanup or scoped identity repair is required. |
-| A space has one person with the same name but a non-strict embedding match. | No automatic merge. Name is display metadata only. |
-| Two spaces expose different identity ids that both match a new upload. | No automatic merge unless both space profiles already resolve to the same identity. |
-| The target merge would create two profiles for one owner or one space on the same identity. | No automatic merge. Same-scope merge or manual repair must happen first. |
+| Case                                                                                                                 | Expected result                                                                     |
+| -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| C joins a space with two accessible space people whose embeddings both match C's uploaded face inside the threshold. | No automatic merge. C keeps or gets a local profile. Manual merge is required.      |
+| C has two local profiles that both strictly match one space person.                                                  | No automatic merge. Manual local cleanup or scoped identity repair is required.     |
+| A space has one person with the same name but a non-strict embedding match.                                          | No automatic merge. Name is display metadata only.                                  |
+| Two spaces expose different identity ids that both match a new upload.                                               | No automatic merge unless both space profiles already resolve to the same identity. |
+| The target merge would create two profiles for one owner or one space on the same identity.                          | No automatic merge. Same-scope merge or manual repair must happen first.            |
 
 ## Leave And Rejoin Cases
 
-| Case | Expected result |
-| --- | --- |
-| B uploaded matching private photos while linked to A's space identity, then B leaves. | B still sees B's owned person/assets. A's space profile/assets disappear from B's accessible graph. |
-| B uploaded matching photos and added them to the space, then B leaves. | B keeps owned personal access. Other members may keep seeing retained space assets according to existing retention rules. B does not see the space profile after leaving. |
-| B leaves and later rejoins. | Reconciliation no-ops or repairs links. B returns to one visible global person without duplicates. |
-| B disables `showInTimeline` for the space. | The space stops influencing global people and personal-upload reconciliation. Explicit space pages remain available while B is still a member. |
-| B re-enables `showInTimeline`. | Global people grouping includes the space again after normal sync/backfill. |
+| Case                                                                                  | Expected result                                                                                                                                                           |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B uploaded matching private photos while linked to A's space identity, then B leaves. | B still sees B's owned person/assets. A's space profile/assets disappear from B's accessible graph.                                                                       |
+| B uploaded matching photos and added them to the space, then B leaves.                | B keeps owned personal access. Other members may keep seeing retained space assets according to existing retention rules. B does not see the space profile after leaving. |
+| B leaves and later rejoins.                                                           | Reconciliation no-ops or repairs links. B returns to one visible global person without duplicates.                                                                        |
+| B disables `showInTimeline` for the space.                                            | The space stops influencing global people and personal-upload reconciliation. Explicit space pages remain available while B is still a member.                            |
+| B re-enables `showInTimeline`.                                                        | Global people grouping includes the space again after normal sync/backfill.                                                                                               |
 
 ## Race And Ordering Cases
 
