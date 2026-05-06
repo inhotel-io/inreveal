@@ -87,6 +87,11 @@ export type TypedSearchParseResult = {
   tokens: TypedSearchTokenSpan[];
 };
 
+export type TypedSearchRewriteValue = {
+  key: TypedSearchFilterKey;
+  value: string;
+};
+
 type ParsedPiece = {
   raw: string;
   start: number;
@@ -240,6 +245,32 @@ export function parseTypedSearch(raw: string, options: TypedSearchParseOptions =
     issues,
     tokens,
   };
+}
+
+export function getActiveTypedSearchToken(
+  parsed: TypedSearchParseResult,
+  caret: number | null | undefined,
+): TypedSearchTokenSpan | undefined {
+  if (caret === null || caret === undefined) {
+    return undefined;
+  }
+  return parsed.tokens.find((token) => caret >= token.start && caret <= token.end);
+}
+
+export function rewriteTypedSearchToken(
+  raw: string,
+  token: TypedSearchTokenSpan,
+  next: TypedSearchRewriteValue,
+): { text: string; caret: number } {
+  const key = token.rawKey && normalizeFilterKey(token.rawKey) === next.key ? token.rawKey : next.key;
+  const value = quoteTypedSearchValue(next.value);
+  const replacement = `${key}:${value}`;
+  const text = `${raw.slice(0, token.start)}${replacement}${raw.slice(token.end)}`;
+  return { text, caret: token.start + replacement.length };
+}
+
+function quoteTypedSearchValue(value: string): string {
+  return /\s/.test(value) ? `"${value}"` : value;
 }
 
 function normalizeFilterKey(rawKey: string): TypedSearchFilterKey | undefined {

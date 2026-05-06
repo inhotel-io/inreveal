@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseTypedSearch } from './typed-search-parser';
+import { getActiveTypedSearchToken, parseTypedSearch, rewriteTypedSearchToken } from './typed-search-parser';
 
 describe('parseTypedSearch', () => {
   it('extracts plain query text and recognized filters', () => {
@@ -201,5 +201,33 @@ describe('parseTypedSearch', () => {
       { key: 'rating', normalizedValue: 4 },
     ]);
     expect(result.issues).toEqual([]);
+  });
+
+  it('finds the cursor active typed filter token', () => {
+    const result = parseTypedSearch('beach person:ann tag:family', { mode: 'draft' });
+
+    expect(getActiveTypedSearchToken(result, 12)).toMatchObject({ raw: 'person:ann', key: 'person' });
+    expect(getActiveTypedSearchToken(result, 22)).toMatchObject({ raw: 'tag:family', key: 'tag' });
+    expect(getActiveTypedSearchToken(result, 3)).toBeUndefined();
+  });
+
+  it('rewrites only the active token and quotes whitespace values', () => {
+    const parsed = parseTypedSearch('beach person:ann tag:family', { mode: 'draft' });
+    const token = getActiveTypedSearchToken(parsed, 12);
+
+    expect(token).toBeDefined();
+    expect(rewriteTypedSearchToken(parsed.raw, token!, { key: 'person', value: 'Anna Maria' })).toEqual({
+      text: 'beach person:"Anna Maria" tag:family',
+      caret: 'beach person:"Anna Maria"'.length,
+    });
+  });
+
+  it('normalizes unsupported aliases when rewriting', () => {
+    const parsed = parseTypedSearch('beach people:ann', { mode: 'draft' });
+    const token = getActiveTypedSearchToken(parsed, 12);
+
+    expect(rewriteTypedSearchToken(parsed.raw, token!, { key: 'person', value: 'Anna' }).text).toBe(
+      'beach people:Anna',
+    );
   });
 });
