@@ -114,8 +114,16 @@ The exact class name is flexible. The important part is that all operations use 
 4. Build identity merge claims with source identity, target identity, profile refs, evidence distance, and bridge type.
 5. Drop claims where one source maps to multiple targets or one target maps to multiple sources in the same pass.
 6. Preflight same-owner and same-space conflicts.
-7. Merge identities only after conflicts are clear.
-8. Queue metadata and representative-face backfill for affected identities.
+7. Choose a deterministic target identity.
+8. Merge identities only after conflicts are clear.
+9. Queue metadata and representative-face backfill for affected identities.
+
+Target selection must be stable:
+
+- Join reconciliation merges the joining member's local identity into the already accessible space identity.
+- Personal upload reconciliation merges the new or existing local identity into the single accessible shared identity when the access bridge is global people scope.
+- Explicit add-to-space reconciliation merges the owner-backed identity into the existing space identity when a matching space identity exists.
+- If both sides are local-only or neither side is clearly preferred, choose the identity with stronger evidence, then the stable id as a tie-breaker.
 
 Already-merged identities should no-op, but still allow missing scoped links or metadata backfill to be repaired.
 
@@ -246,6 +254,7 @@ Explicit space people pages remain space-scoped. They should show only assets in
 | 8 | C joins first with no local profile. | C uploads a matching photo after joining. | Post-upload reconciliation finds the accessible space identity. No visible duplicate remains after jobs drain. |
 | 9 | A and B are reconciled in a space. C has a local matching profile before joining. | C joins the space. | C sees one global person. A and B still see their personal people before and after C joins. The space still has one space person. |
 | 10 | Global explore row has only a space profile as primary profile. | Viewer opens the row from global explore. | Detail shows all globally accessible photos for the identity, not only assets from that one space. |
+| 11 | A and B are reconciled in a space. C has no local matching profile. | C joins the space and does not upload anything. | C sees the accessible space person in global people if the space contributes to C's timeline. No C-owned profile is created. A/B visibility and space people are unchanged. |
 
 ## Ambiguous And Manual Cases
 
@@ -287,18 +296,38 @@ Implementation must follow red-green-refactor:
 5. Run the nearest affected suite.
 6. Refactor only after green.
 
+The implementation plan must map every production change to at least one red test. For each test-first step, record the focused command, the expected red failure, the green run, and the nearest suite run. Do not add production reconciliation code for a behavior until the red failure has been observed.
+
 The first red tests should capture current broken behavior:
 
 - A/B have matching local profiles, A creates a space and invites B, then C with a matching local profile joins; A and B must still see their personal people and the space must still show one space person.
 - A/B are already reconciled in a space, C joins with no local profile, then C uploads a matching private photo; C must not get a duplicate and A/B visibility must be unchanged.
 - A global explore result backed only by a space profile must open identity-wide global detail, not a space-only detail page.
+- A global explore result backed by a space profile must expose a thumbnail URL that resolves for the viewer and uses an accessible face.
 - A member uploads a matching private photo after joining a space and having no prior local profile; no duplicate visible person remains after jobs drain.
+
+Required unit coverage for the central reconciliation policy:
+
+- No access bridge produces no merge claim.
+- Zero strict candidates produces no merge claim.
+- Exactly one strict compatible candidate produces one merge claim with the expected target identity.
+- Multiple strict candidates produce no merge claim.
+- Multiple scoped profiles that already resolve to the same identity count as one candidate.
+- Source-to-multiple-target and target-to-multiple-source claims are filtered out in the same pass.
+- Same-owner and same-space conflicts block automatic merge.
+- Hidden, ignored, deleted, or missing-profile candidates are skipped.
+- Type mismatches are skipped before merge preflight.
+- Missing embeddings or missing face links are skipped without throwing.
+- Already-merged identities no-op while still allowing backfill to be requested.
+- Target selection is deterministic for join, personal upload, explicit space add, and tie-breaker cases.
+- Merge-application failure after candidate selection does not fail the user-facing trigger and leaves state retryable.
 
 Required medium or integration coverage:
 
 - Post-join private upload with no prior local profile.
 - Post-join upload added to the space with no prior local profile.
 - Post-join private upload with an existing local duplicate.
+- Late member with no local profile and no upload sees the accessible space person without creating a local profile.
 - Late member with prior local profile while existing members remain visible.
 - Join before space-person materialization.
 - New space evidence while members already exist.
@@ -315,12 +344,16 @@ Required medium or integration coverage:
 - Timeline-disabled space does not influence global personal-upload reconciliation but remains eligible for explicit space actions.
 - Job reruns are idempotent.
 - Concurrent reconciliation jobs do not create duplicate profiles or user-visible failures.
+- Space disabled, member removed, asset removed, or face deleted while a reconciliation job is running causes a skip or retryable no-op, not stale visibility or a user-facing failure.
+- Representative-face repair keeps stale or missing representative faces from making space people disappear from global or explicit space people after jobs drain.
 
 Required API/query/web coverage where applicable:
 
 - Global people and explore return one row per accessible identity.
 - Global detail for an identity includes all currently accessible assets and excludes inaccessible assets.
 - Space-person detail remains space-scoped.
+- Global people, explore, filter, search, and album/map suggestions generate thumbnail URLs that resolve for the viewer and never use inaccessible faces.
+- A stale global row whose primary profile was a space person stops resolving for a viewer after they lose access, while the recomputed global row still resolves through owned assets if any remain.
 - Filter suggestions and search suggestions group by accessible identity and do not expose raw `face_identity.id`.
 - Cross-scope manual merge of personal profile plus space profile uses scoped identity repair and does not throw.
 - Manual ambiguity remains visible and mergeable by user-confirmed repair.
