@@ -2674,7 +2674,7 @@ describe(SharedSpaceService.name, () => {
 
     it('should skip member-scoped reconciliation when membership disappeared before the job runs', async () => {
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', faceRecognitionEnabled: true }));
-      mocks.sharedSpace.getMember.mockResolvedValue();
+      mocks.sharedSpace.getMember.mockResolvedValue(null as any);
       mocks.sharedSpace.getSpacePersonsWithEmbeddings.mockResolvedValue([
         {
           id: 'space-person-1',
