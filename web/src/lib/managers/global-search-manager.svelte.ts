@@ -18,6 +18,7 @@ import {
   parseTypedSearch,
   type TypedSearchDisplayToken,
   type TypedSearchIssue,
+  type TypedSearchParseResult,
 } from '$lib/utils/typed-search/typed-search-parser';
 import {
   isLiveTypedSearchToken,
@@ -1261,6 +1262,18 @@ export class GlobalSearchManager {
 
   parseTypedSearchDraft(text = this.query) {
     const parsed = parseTypedSearch(text, { mode: 'draft' });
+    this.applyTypedSearchParsedState(parsed);
+    this.updateActiveTypedSearchToken();
+    return parsed;
+  }
+
+  private parseTypedSearchCommit(text: string) {
+    const parsed = parseTypedSearch(text);
+    this.applyTypedSearchParsedState(parsed);
+    return parsed;
+  }
+
+  private applyTypedSearchParsedState(parsed: TypedSearchParseResult) {
     this.typedSearchDisplayTokens = parsed.displayTokens;
     this.typedSearchPlainQuery = parsed.queryText;
     this.typedSearchIssues = [];
@@ -1270,8 +1283,6 @@ export class GlobalSearchManager {
         this.selectedTypedSearchChoices.delete(key);
       }
     }
-    this.updateActiveTypedSearchToken();
-    return parsed;
   }
 
   clearTypedSearchDraft() {
@@ -1283,6 +1294,7 @@ export class GlobalSearchManager {
     this.activeTypedSearchToken = undefined;
     this.typedSearchCaret = null;
     this.liveTypedSearchStatus = { status: 'idle' };
+    this.typedSearchComposing = false;
   }
 
   setInputCaret(caret: number | null) {
@@ -1292,9 +1304,7 @@ export class GlobalSearchManager {
 
   setInputComposing(isComposing: boolean) {
     this.typedSearchComposing = isComposing;
-    if (!isComposing) {
-      this.updateActiveTypedSearchToken();
-    }
+    this.updateActiveTypedSearchToken();
   }
 
   private updateActiveTypedSearchToken() {
@@ -1305,8 +1315,15 @@ export class GlobalSearchManager {
     }
     const parsed = parseTypedSearch(this.query, { mode: 'draft' });
     const token = getActiveTypedSearchToken(parsed, this.typedSearchCaret);
-    this.activeTypedSearchToken = isLiveTypedSearchToken(token) ? token : undefined;
-    if (!this.activeTypedSearchToken) {
+    const previousToken = this.activeTypedSearchToken;
+    const nextToken = isLiveTypedSearchToken(token) ? token : undefined;
+    const tokenChanged =
+      previousToken?.key !== nextToken?.key ||
+      previousToken?.start !== nextToken?.start ||
+      previousToken?.end !== nextToken?.end ||
+      previousToken?.raw !== nextToken?.raw;
+    this.activeTypedSearchToken = nextToken;
+    if (!this.activeTypedSearchToken || tokenChanged) {
       this.liveTypedSearchStatus = { status: 'idle' };
     }
   }
@@ -1392,7 +1409,7 @@ export class GlobalSearchManager {
       return;
     }
 
-    const parsed = this.parseTypedSearchDraft(trimmed);
+    const parsed = this.parseTypedSearchCommit(trimmed);
     if (parsed.issues.length > 0) {
       this.typedSearchIssues = parsed.issues;
       this.typedSearchChoices = [];

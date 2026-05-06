@@ -1502,6 +1502,64 @@ describe('activate("command")', () => {
       expect(manager.activeTypedSearchToken).toBeUndefined();
     });
 
+    it('reports empty-value issues at typed search commit', async () => {
+      const manager = new GlobalSearchManager();
+      typedSearchMock.resolveTypedSearchFilters.mockResolvedValue({
+        ok: true,
+        queryText: '',
+        filters: createFilterState(),
+        personNames: new Map(),
+        tagNames: new Map(),
+      });
+
+      await manager.activateSearch('person:');
+
+      expect(typedSearchMock.resolveTypedSearchFilters).not.toHaveBeenCalled();
+      expect(goto).not.toHaveBeenCalled();
+      expect(manager.typedSearchIssues[0]).toMatchObject({ code: 'empty-value', raw: 'person:' });
+    });
+
+    it('clears live suggestion state immediately when IME composition starts', () => {
+      const manager = new GlobalSearchManager();
+
+      manager.setQuery('person:ann');
+      manager.setInputCaret('person:ann'.length);
+      manager.liveTypedSearchStatus = { status: 'loading', key: 'person' };
+
+      manager.setInputComposing(true);
+
+      expect(manager.activeTypedSearchToken).toBeUndefined();
+      expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+    });
+
+    it('clears composition state when clearing the typed search draft', () => {
+      const manager = new GlobalSearchManager();
+
+      manager.setQuery('person:ann');
+      manager.setInputCaret('person:ann'.length);
+      manager.setInputComposing(true);
+      manager.liveTypedSearchStatus = { status: 'loading', key: 'person' };
+
+      manager.clearTypedSearchDraft();
+
+      expect(manager.typedSearchComposing).toBe(false);
+      expect(manager.typedSearchCaret).toBeNull();
+      expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+    });
+
+    it('clears stale status when the active live token changes', () => {
+      const manager = new GlobalSearchManager();
+
+      manager.setQuery('beach person:ann tag:family');
+      manager.setInputCaret('beach person:ann'.length);
+      manager.liveTypedSearchStatus = { status: 'ok', key: 'person', total: 0, items: [] };
+
+      manager.setInputCaret('beach person:ann tag:f'.length);
+
+      expect(manager.activeTypedSearchToken).toMatchObject({ key: 'tag', raw: 'tag:family' });
+      expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+    });
+
     it('blocks parser issues before calling the resolver', async () => {
       const manager = new GlobalSearchManager();
 
