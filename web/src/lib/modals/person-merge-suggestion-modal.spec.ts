@@ -3,6 +3,7 @@ import { Type, type PersonResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
+import { afterEach } from 'vitest';
 import PersonMergeSuggestionModal from './PersonMergeSuggestionModal.svelte';
 
 vi.mock('../components/assets/thumbnail/image-thumbnail.svelte', async () => {
@@ -16,6 +17,13 @@ vi.mock('@immich/ui', async (importOriginal) => {
     ...original,
     toastManager: { primary: vi.fn() },
   };
+});
+
+// Drain bits-ui Modal's deferred body-scroll-lock cleanup before happy-dom tears
+// down `document`. Otherwise CI can report an unhandled `document is not defined`
+// after all assertions in this file have passed.
+afterEach(async () => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
 });
 
 function person(overrides: Partial<PersonResponseDto> = {}): PersonResponseDto {
