@@ -27,7 +27,14 @@ let defaultDatabase: Kysely<DB>;
 const setup = (db?: Kysely<DB>) => {
   const { ctx, sut } = newMediumService(PersonService, {
     database: db || defaultDatabase,
-    real: [AccessRepository, ConfigRepository, FaceIdentityRepository, PersonRepository],
+    real: [
+      AccessRepository,
+      ConfigRepository,
+      FaceIdentityRepository,
+      PersonRepository,
+      SearchRepository,
+      SharedSpaceRepository,
+    ],
     mock: [JobRepository, LoggingRepository, SystemMetadataRepository],
   });
   const metadata = ctx.getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository);
@@ -240,9 +247,13 @@ const createIdentityBackedFace = async (
   return { asset, faceId, identity, person };
 };
 
-const createLinkedLibraryIdentityFixture = async (input?: { city?: string; personName?: string }) => {
+const createLinkedLibraryIdentityFixture = async (input?: {
+  city?: string;
+  personName?: string;
+  memberInitiallyJoined?: boolean;
+}) => {
   const { ctx, sut: personService, faceIdentityRepository } = setup();
-  const { sut: sharedSpaceService } = setupSharedSpace();
+  const { sut: sharedSpaceService, jobs: sharedJobs } = setupSharedSpace();
   const { sut: searchService } = setupSearch();
   const { user: source } = await ctx.newUser();
   const { user: member } = await ctx.newUser();
@@ -250,7 +261,9 @@ const createLinkedLibraryIdentityFixture = async (input?: { city?: string; perso
   const { library } = await ctx.newLibrary({ ownerId: source.id });
   const { space } = await ctx.newSharedSpace({ createdById: source.id });
   await ctx.newSharedSpaceMember({ spaceId: space.id, userId: source.id, role: SharedSpaceRole.Owner });
-  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+  if (input?.memberInitiallyJoined ?? true) {
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+  }
   const face = await createIdentityBackedFace(ctx, faceIdentityRepository, {
     ownerId: source.id,
     libraryId: library.id,
@@ -271,6 +284,7 @@ const createLinkedLibraryIdentityFixture = async (input?: { city?: string; perso
     ctx,
     personService,
     sharedSpaceService,
+    sharedJobs,
     searchService,
     source,
     member,
@@ -279,6 +293,7 @@ const createLinkedLibraryIdentityFixture = async (input?: { city?: string; perso
     space,
     face,
     spacePerson,
+    faceIdentityRepository,
   };
 };
 
@@ -584,6 +599,117 @@ describe('People identity RBAC projection', () => {
     expect(filters.people).toEqual([]);
     expect(cities).toEqual([]);
     expect(JSON.stringify({ people, search, filters, cities })).not.toContain('Library Source');
+  });
+
+  it('links a post-join private upload to a linked-library space identity and preserves owned access after leave', async () => {
+    const fx = await createLinkedLibraryIdentityFixture({ personName: 'Library Source' });
+    const embeddingRow = await fx.ctx.database
+      .selectFrom('face_search')
+      .select('embedding')
+      .where('faceId', '=', fx.face.faceId)
+      .executeTakeFirstOrThrow();
+
+    const { asset } = await fx.ctx.newAsset({ ownerId: fx.member.id, visibility: AssetVisibility.Timeline });
+    const { result: uploadedFaceId } = await fx.ctx.newAssetFace({ assetId: asset.id });
+    await fx.ctx.database
+      .insertInto('face_search')
+      .values({ faceId: uploadedFaceId, embedding: embeddingRow.embedding })
+      .execute();
+
+    await fx.personService.handleRecognizeFaces({ id: uploadedFaceId });
+
+    const uploadedPerson = await fx.ctx.database
+      .selectFrom('asset_face')
+      .innerJoin('person', 'person.id', 'asset_face.personId')
+      .select(['person.id', 'person.identityId'])
+      .where('asset_face.id', '=', uploadedFaceId)
+      .executeTakeFirstOrThrow();
+    const withSpace = await fx.personService.getAll(authFor(fx.member), {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+
+    expect(withSpace.people).toEqual([
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: uploadedPerson.id },
+        numberOfAssets: 2,
+      }),
+    ]);
+
+    await fx.ctx.database
+      .deleteFrom('shared_space_member')
+      .where('spaceId', '=', fx.space.id)
+      .where('userId', '=', fx.member.id)
+      .execute();
+
+    const afterLeave = await fx.personService.getAll(authFor(fx.member), {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+
+    expect(afterLeave.people).toEqual([
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: uploadedPerson.id },
+        numberOfAssets: 1,
+      }),
+    ]);
+    expect(JSON.stringify(afterLeave)).not.toContain(fx.spacePerson.id);
+  });
+
+  it('reconciles a late member local person against linked-library space evidence', async () => {
+    const fx = await createLinkedLibraryIdentityFixture({ memberInitiallyJoined: false });
+    const embeddingRow = await fx.ctx.database
+      .selectFrom('face_search')
+      .select('embedding')
+      .where('faceId', '=', fx.face.faceId)
+      .executeTakeFirstOrThrow();
+
+    const { result: memberPerson } = await fx.ctx.newPerson({
+      ownerId: fx.member.id,
+      name: 'Member Private Name',
+    });
+    const { asset: memberAsset } = await fx.ctx.newAsset({
+      ownerId: fx.member.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    const { result: memberFace } = await fx.ctx.newAssetFace({ assetId: memberAsset.id, personId: memberPerson.id });
+    await fx.ctx.database
+      .insertInto('face_search')
+      .values({ faceId: memberFace, embedding: embeddingRow.embedding })
+      .execute();
+    const memberIdentity = await fx.faceIdentityRepository.ensurePersonIdentity(memberPerson.id);
+    await fx.faceIdentityRepository.linkFace({
+      assetFaceId: memberFace,
+      identityId: memberIdentity.id,
+      source: 'owner-person',
+    });
+
+    await fx.sharedSpaceService.addMember(authFor(fx.source), fx.space.id, {
+      userId: fx.member.id,
+      role: SharedSpaceRole.Viewer,
+    });
+    await fx.sharedSpaceService.handleSharedSpaceIdentityReconciliation({
+      spaceId: fx.space.id,
+      userId: fx.member.id,
+    });
+
+    const result = await fx.personService.getAll(authFor(fx.member), {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+
+    expect(result.people).toEqual([
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: memberPerson.id },
+        numberOfAssets: 2,
+      }),
+    ]);
   });
 
   it('does not expose raw face identity ids in people responses', async () => {
@@ -1326,7 +1452,7 @@ describe('People identity RBAC projection', () => {
     expect(serialized).not.toContain(fx.space2Alice.spacePerson.id);
   });
 
-  it('uses a named accessible space profile over a blank personal profile in global filter suggestions', async () => {
+  it('uses a named accessible space profile for display while keeping a viewer-owned filter token', async () => {
     const { ctx, sut } = setupSearch();
     const faceIdentityRepository = ctx.get(FaceIdentityRepository);
     const { user } = await ctx.newUser();
@@ -1343,7 +1469,7 @@ describe('People identity RBAC projection', () => {
       .values({
         spaceId: space.id,
         identityId: identity.id,
-        name: 'Pierre',
+        name: 'Shared Name',
         representativeFaceId: faceId,
         type: 'person',
       })
@@ -1359,9 +1485,9 @@ describe('People identity RBAC projection', () => {
 
       expect(result.people).toEqual([
         {
-          id: `space-person:${spacePerson.id}`,
-          name: 'Pierre',
-          primaryProfile: { type: 'space-person', id: spacePerson.id, spaceId: space.id },
+          id: `person:${person.id}`,
+          name: 'Shared Name',
+          primaryProfile: { type: 'user-person', id: person.id },
         },
       ]);
     } finally {

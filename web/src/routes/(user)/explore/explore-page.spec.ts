@@ -52,7 +52,10 @@ describe('Explore page', () => {
       }),
     ]);
 
-    expect(screen.getByRole('link', { name: 'Alice' })).toHaveAttribute('href', '/people/user-person-1');
+    expect(screen.getByRole('link', { name: 'Alice' })).toHaveAttribute(
+      'href',
+      '/people/user-person-1?previousRoute=%2Fexplore',
+    );
     expect(document.querySelector('img')).toHaveAttribute(
       'src',
       '/api/people/user-person-1/thumbnail?updatedAt=2026-01-02T00%3A00%3A00.000Z',

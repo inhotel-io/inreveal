@@ -46,6 +46,10 @@ import {
   SharedSpaceRole,
   UserAvatarColor,
 } from 'src/enum';
+import {
+  filterUnambiguousReconciliationClaims,
+  type ReconciliationClaim,
+} from 'src/services/accessible-identity-reconciliation';
 import { BaseService } from 'src/services/base.service';
 import { JobOf } from 'src/types';
 import { asBirthDateString, asDateString } from 'src/utils/date';
@@ -66,7 +70,7 @@ type SpacePersonMatchResult = {
   sourceIdentityId?: string | null;
 };
 
-type SharedSpaceIdentityReconciliationClaim = {
+type SharedSpaceIdentityReconciliationClaim = ReconciliationClaim & {
   spacePersonId: string;
   targetIdentityId: string;
   sourceIdentityId: string;
@@ -1329,27 +1333,12 @@ export class SharedSpaceService extends BaseService {
         }
       }
 
-      for (const claim of this.filterUnambiguousReconciliationClaims(claims)) {
+      for (const claim of filterUnambiguousReconciliationClaims(claims) as SharedSpaceIdentityReconciliationClaim[]) {
         await this.applySharedSpaceIdentityReconciliationClaim(claim);
       }
     }
 
     return JobStatus.Success;
-  }
-
-  private filterUnambiguousReconciliationClaims(
-    claims: SharedSpaceIdentityReconciliationClaim[],
-  ): SharedSpaceIdentityReconciliationClaim[] {
-    const sourceCounts = new Map<string, number>();
-    const targetCounts = new Map<string, number>();
-    for (const claim of claims) {
-      sourceCounts.set(claim.sourceIdentityId, (sourceCounts.get(claim.sourceIdentityId) ?? 0) + 1);
-      targetCounts.set(claim.targetIdentityId, (targetCounts.get(claim.targetIdentityId) ?? 0) + 1);
-    }
-
-    return claims.filter(
-      (claim) => sourceCounts.get(claim.sourceIdentityId) === 1 && targetCounts.get(claim.targetIdentityId) === 1,
-    );
   }
 
   private async findStrictSpacePersonLocalIdentityClaim(input: {
@@ -1400,6 +1389,7 @@ export class SharedSpaceService extends BaseService {
     }
 
     return {
+      bridge: 'member-join',
       spacePersonId: input.spacePerson.id,
       targetIdentityId,
       sourceIdentityId: candidates[0].identityId,

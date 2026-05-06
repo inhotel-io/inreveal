@@ -47,6 +47,10 @@ import { BoundingBox } from 'src/repositories/machine-learning.repository';
 import { UpdateFacesData } from 'src/repositories/person.repository';
 import { AssetFaceTable } from 'src/schema/tables/asset-face.table';
 import { FaceSearchTable } from 'src/schema/tables/face-search.table';
+import {
+  buildAutomaticReconciliationClaim,
+  chooseAutomaticTargetIdentity,
+} from 'src/services/accessible-identity-reconciliation';
 import { BaseService } from 'src/services/base.service';
 import { JobItem, JobOf } from 'src/types';
 import { getDimensions } from 'src/utils/asset.util';
@@ -870,9 +874,33 @@ export class PersonService extends BaseService {
       return;
     }
 
+    const target = chooseAutomaticTargetIdentity({
+      bridge: 'personal-upload',
+      localIdentityId: input.sourceIdentityId,
+      spaceIdentityId: match.identityId,
+    });
+    const claim = buildAutomaticReconciliationClaim({
+      bridge: 'personal-upload',
+      localIdentityId: input.sourceIdentityId,
+      spaceIdentityId: match.identityId,
+      sourceIdentityId: target.sourceIdentityId,
+      targetIdentityId: target.targetIdentityId,
+      distance: match.distance,
+      hasAccessBridge: true,
+      compatibleType: true,
+      hasEmbedding: true,
+      hiddenOrIgnored: false,
+      alreadySameIdentity: match.identityId === input.sourceIdentityId,
+      sameOwnerConflict: false,
+      sameSpaceConflict: false,
+    });
+    if (!claim) {
+      return;
+    }
+
     const result = await this.faceIdentityRepository.mergeIdentities({
-      targetIdentityId: match.identityId,
-      sourceIdentityIds: [input.sourceIdentityId],
+      targetIdentityId: claim.targetIdentityId,
+      sourceIdentityIds: [claim.sourceIdentityId],
       source: 'shared-space-evidence',
     });
 
@@ -882,7 +910,7 @@ export class PersonService extends BaseService {
       );
     }
 
-    await this.queueSpacePersonMetadataBackfill(match.identityId);
+    await this.queueSpacePersonMetadataBackfill(claim.targetIdentityId);
   }
 
   private findClosestAccessibleSharedIdentity(input: {

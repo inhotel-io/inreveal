@@ -445,7 +445,7 @@ describe(FaceIdentityRepository.name, () => {
     expect(links.map((link) => link.assetFaceId)).toEqual([visibleFace.id]);
   });
 
-  it('prefers a named accessible space profile over a blank personal profile', async () => {
+  it('uses a named accessible space profile for display while keeping a viewer-owned primary profile', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
     const { space } = await ctx.newSharedSpace({ createdById: user.id });
@@ -461,7 +461,7 @@ describe(FaceIdentityRepository.name, () => {
       .values({
         spaceId: space.id,
         identityId: identity.id,
-        name: 'Pierre',
+        name: 'Shared Name',
         representativeFaceId: assetFace.id,
         type: 'person',
       })
@@ -477,10 +477,10 @@ describe(FaceIdentityRepository.name, () => {
 
       expect(result.people).toEqual([
         expect.objectContaining({
-          id: spacePerson.id,
-          name: 'Pierre',
-          primaryProfile: { type: 'space-person', id: spacePerson.id, spaceId: space.id },
-          filterId: `space-person:${spacePerson.id}`,
+          id: person.id,
+          name: 'Shared Name',
+          primaryProfile: { type: 'user-person', id: person.id },
+          filterId: `person:${person.id}`,
         }),
       ]);
     } finally {

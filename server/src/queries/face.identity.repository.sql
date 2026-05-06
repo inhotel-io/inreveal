@@ -793,7 +793,20 @@ WITH
           lower(profiles.name),
           profiles."updatedAt" DESC,
           profiles."profileId"
-      ) AS rn
+      ) AS display_rn,
+      row_number() OVER (
+        PARTITION BY
+          profiles."identityId"
+        ORDER BY
+          CASE
+            WHEN profiles."profileType" = 'user-person' THEN 0
+            ELSE profiles."profileRank"
+          END,
+          NULLIF(profiles.name, '') IS NULL,
+          lower(profiles.name),
+          profiles."updatedAt" DESC,
+          profiles."profileId"
+      ) AS primary_rn
     FROM
       profiles
     WHERE
@@ -807,23 +820,25 @@ WITH
       )
   )
 SELECT
-  ranked_profiles."profileType",
-  ranked_profiles."profileId",
-  ranked_profiles."spaceId",
-  ranked_profiles.name,
-  ranked_profiles."birthDate",
-  ranked_profiles."thumbnailPath",
-  ranked_profiles."isHidden",
-  ranked_profiles."isFavorite",
-  ranked_profiles.color,
-  ranked_profiles."updatedAt",
-  ranked_profiles.type,
-  ranked_profiles.species,
+  primary_profiles."profileType",
+  primary_profiles."profileId",
+  primary_profiles."spaceId",
+  display_profiles.name,
+  display_profiles."birthDate",
+  primary_profiles."thumbnailPath",
+  primary_profiles."isHidden",
+  primary_profiles."isFavorite",
+  primary_profiles.color,
+  primary_profiles."updatedAt",
+  primary_profiles.type,
+  primary_profiles.species,
   asset_counts."numberOfAssets"
 FROM
   requested_identities
-  INNER JOIN ranked_profiles ON ranked_profiles."identityId" = requested_identities."identityId"
-  AND ranked_profiles.rn = 1
+  INNER JOIN ranked_profiles AS primary_profiles ON primary_profiles."identityId" = requested_identities."identityId"
+  AND primary_profiles.primary_rn = 1
+  INNER JOIN ranked_profiles AS display_profiles ON display_profiles."identityId" = requested_identities."identityId"
+  AND display_profiles.display_rn = 1
   LEFT JOIN asset_counts ON asset_counts."identityId" = requested_identities."identityId"
 ORDER BY
   requested_identities.ord

@@ -11,6 +11,7 @@ import {
   getSearchablePageState,
   type SearchablePageSortOrder,
 } from '$lib/utils/searchable-page-search';
+import { getGlobalPersonHref } from '$lib/utils/global-person-route';
 import { getTypedSearchDisplayText, storeTypedSearchNames } from '$lib/utils/typed-search/typed-search-name-cache';
 import {
   parseTypedSearch,
@@ -118,16 +119,8 @@ const PROVIDER_TIMEOUT_MS = 15_000;
 // cross-contaminate all five sections.
 const idle = Object.freeze({ status: 'idle' as const });
 
-function getPersonRoute(person: Pick<PersonResponseDto, 'id' | 'primaryProfile' | 'filterId'>): string {
-  if (person.primaryProfile?.type === 'space-person' && person.primaryProfile.spaceId) {
-    if (person.filterId) {
-      return Route.search({ personIds: [person.filterId], withSharedSpaces: true });
-    }
-
-    return Route.viewSpacePerson(person.primaryProfile.spaceId, person.primaryProfile.id);
-  }
-
-  return Route.viewPerson({ id: person.primaryProfile?.id ?? person.id });
+function getPersonRoute(person: Pick<PersonResponseDto, 'id' | 'primaryProfile'>): string {
+  return getGlobalPersonHref(person);
 }
 
 // Entity-section keys dispatched by runBatch per scope. Navigation is intentionally
