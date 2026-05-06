@@ -45,7 +45,9 @@
       {#if status.status === 'ok'}
         {#each status.items as choice (choice.id)}
           <Command.Item value={choice.id} onSelect={() => onSelect(choice)} class="group">
-            <div class="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+            <div
+              class="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-[80ms] ease-out group-data-[selected]:bg-primary/10"
+            >
               <span class="min-w-0 truncate">{choice.label}</span>
               <span class="shrink-0 text-xs font-medium text-primary">{$t('cmdk_filter_use_as_filter')}</span>
             </div>
@@ -58,6 +60,10 @@
       {:else if status.status === 'empty'}
         <div class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
           {$t('cmdk_filter_match_none', { values: { entity: pluralEntity(status.key) } })}
+        </div>
+      {:else if status.status === 'timeout'}
+        <div class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
+          {$t('cmdk_filter_match_timeout', { values: { entity } })}
         </div>
       {:else}
         <div class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">

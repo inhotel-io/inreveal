@@ -63,6 +63,33 @@ describe('LiveTypedFilterSection', () => {
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ label: 'Anna Maria' }));
   });
 
+  it('applies selected-state styling to live choice rows', () => {
+    render(LiveTypedFilterSectionHost, {
+      props: {
+        status: {
+          status: 'ok',
+          key: 'person',
+          total: 1,
+          items: [
+            {
+              id: 'person:0:10:p1',
+              key: 'person',
+              label: 'Anna Maria',
+              value: 'Anna Maria',
+              tokenStart: 6,
+              tokenEnd: 16,
+            },
+          ],
+        },
+        onSelect: vi.fn(),
+      },
+    });
+
+    const option = screen.getByRole('option', { name: /Anna Maria/i });
+    const row = option.firstElementChild as HTMLElement;
+    expect(`${option.className} ${row.className}`).toContain('group-data-[selected]:bg-primary/10');
+  });
+
   it('renders loading empty and error states', async () => {
     const { rerender } = render(LiveTypedFilterSectionHost, {
       props: { status: { status: 'loading', key: 'tag' }, onSelect: vi.fn() },
@@ -74,5 +101,15 @@ describe('LiveTypedFilterSection', () => {
 
     await rerender({ status: { status: 'error', key: 'tag', message: 'network down' }, onSelect: vi.fn() });
     expect(screen.getByText(/couldn't load tag matches/i)).toBeInTheDocument();
+  });
+
+  it('renders timeout state copy', async () => {
+    const { rerender } = render(LiveTypedFilterSectionHost, {
+      props: { status: { status: 'loading', key: 'city' }, onSelect: vi.fn() },
+    });
+
+    await rerender({ status: { status: 'timeout', key: 'city' }, onSelect: vi.fn() });
+
+    expect(screen.getByText(/city matches timed out/i)).toBeInTheDocument();
   });
 });
