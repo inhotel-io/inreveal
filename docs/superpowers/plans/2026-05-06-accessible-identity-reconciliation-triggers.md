@@ -40,7 +40,9 @@ In scope:
 - Global people/explore primary profile stability for users with owned assets.
 - Late member permutations with and without a local profile.
 - Post-join private upload and post-join upload added to the space.
+- Linked shared-space libraries as an equivalent source of space evidence for join, upload, and leave/access-loss behavior.
 - Ambiguity, conflict, hidden, type, race, and access-loss coverage.
+- Manual same-person repair for personal-profile plus space-profile merges, including RBAC and UI dispatch.
 - Global people/explore/global-search routing to identity-wide person detail.
 - SQL snapshot regeneration for changed `@GenerateSql` repository methods.
 
@@ -78,16 +80,32 @@ Modify:
   - Keep existing reconciliation tests green and add missing skip/target-selection tests around the service boundary.
 - `server/src/services/person.service.ts`
   - Route personal upload merge decisions through the central policy after source identity is known.
+  - Keep manual scoped repair for personal-profile plus space-profile merges behind accessibility and conflict checks.
 - `server/src/services/person.service.spec.ts`
   - Add focused upload tests for strict match, ambiguity, merge failure, and no duplicate after a newly created local profile.
+- `server/src/controllers/person.controller.spec.ts`
+  - Keep `/people/same-person` DTO coverage for personal and space profile references, and reject raw identity refs.
 - `server/src/repositories/face-identity.repository.ts`
   - Split display metadata ranking from global primary profile ranking so viewer-owned personal profiles stay primary even when a space profile has a better name.
+  - Keep scoped repair resolution limited to accessible, repairable profiles without same-owner or same-space conflicts.
 - `server/src/queries/face.identity.repository.sql`
   - Regenerated from `FaceIdentityRepository` query changes.
 - `server/test/medium/specs/repositories/face-identity.repository.spec.ts`
   - Add repository-level ambiguity and owned-primary query tests.
 - `server/test/medium/specs/services/people-identity-rbac.spec.ts`
-  - Add 3-user join/upload permutations, no-local/no-upload late join, post-join private upload, post-join add-to-space, stale global row, and representative-face repair coverage.
+  - Add 3-user join/upload permutations, no-local/no-upload late join, post-join private upload, post-join add-to-space, linked-library source evidence, stale global row, representative-face repair, and scoped repair RBAC coverage.
+- `web/src/lib/modals/PersonMergeSuggestionModal.svelte`
+  - Use scoped repair when a merge suggestion crosses personal and space profiles, while preserving legacy personal-only merge behavior.
+- `web/src/lib/modals/person-merge-suggestion-modal.spec.ts`
+  - Cover scoped repair dispatch and legacy personal merge dispatch.
+- `web/src/routes/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]/+page.svelte`
+  - Use scoped repair from global person detail when a selected merge candidate is space-scoped.
+- `web/src/routes/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]/person-detail-page.spec.ts`
+  - Cover personal target plus space candidate, including auto-swap.
+- `web/src/routes/(user)/spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/+page.svelte`
+  - Use scoped repair from space person detail when a selected merge candidate is personal-scoped, and keep same-space merge for same-space candidates.
+- `web/src/routes/(user)/spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/space-person-detail-page.spec.ts`
+  - Cover space target plus personal candidate and same-space merge dispatch.
 - `web/src/routes/(user)/explore/+page.svelte`
   - Use the shared global route/thumbnail helper.
 - `web/src/routes/(user)/explore/explore-page.spec.ts`
@@ -140,7 +158,7 @@ Expected: PASS. Existing reconciliation and upload coverage is green before new 
 Run:
 
 ```bash
-pnpm --dir server test:medium test/medium/specs/services/people-identity-rbac.spec.ts test/medium/specs/repositories/face-identity.repository.spec.ts -- --run -t "join-after-duplicates|late member join|new-space-evidence|timeline-disabled|multiple shared identities|access is removed|stale space person"
+pnpm --dir server test:medium test/medium/specs/services/people-identity-rbac.spec.ts test/medium/specs/repositories/face-identity.repository.spec.ts -- --run -t "join-after-duplicates|late member join|new-space-evidence|timeline-disabled|multiple shared identities|access is removed|stale space person|linked-library"
 ```
 
 Expected: PASS. Existing join/materialization/access contraction coverage is green before expanding it.
@@ -1170,7 +1188,264 @@ If `server/src/services/person.service.ts` did not change because tests were alr
 
 ---
 
-### Task 5: Add Ambiguity, Access-Loss, And Race Edge Coverage
+### Task 5: Cover Linked-Library Photo Sources
+
+**Files:**
+
+- Modify: `server/test/medium/specs/services/people-identity-rbac.spec.ts`
+- Modify: `server/src/repositories/face-identity.repository.ts`
+- Modify: `server/src/services/shared-space.service.ts`
+- Modify: `server/src/queries/face.identity.repository.sql`
+
+In this codebase, external library photo evidence enters shared spaces through linked libraries (`shared_space_library`). Treat that path as equivalent to direct shared-space assets for reconciliation, global people, counts, thumbnails, and access loss.
+
+- [ ] **Step 1: Extend the linked-library fixture for late-member tests**
+
+In `server/test/medium/specs/services/people-identity-rbac.spec.ts`, update `createLinkedLibraryIdentityFixture()` so it can create the linked-library space before the tested member joins:
+
+```ts
+const createLinkedLibraryIdentityFixture = async (input?: {
+  city?: string;
+  personName?: string;
+  memberInitiallyJoined?: boolean;
+}) => {
+  const { ctx, sut: personService, faceIdentityRepository } = setup();
+  const { sut: sharedSpaceService, jobs: sharedJobs } = setupSharedSpace();
+  const { sut: searchService } = setupSearch();
+  const { user: source } = await ctx.newUser();
+  const { user: member } = await ctx.newUser();
+  const { user: nonMember } = await ctx.newUser();
+  const { library } = await ctx.newLibrary({ ownerId: source.id });
+  const { space } = await ctx.newSharedSpace({ createdById: source.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: source.id, role: SharedSpaceRole.Owner });
+  if (input?.memberInitiallyJoined ?? true) {
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+  }
+  const face = await createIdentityBackedFace(ctx, faceIdentityRepository, {
+    ownerId: source.id,
+    libraryId: library.id,
+    personName: input?.personName ?? 'Library Source',
+  });
+  if (input?.city) {
+    await ctx.newExif({ assetId: face.asset.id, city: input.city, country: 'Switzerland' });
+  }
+  await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: source.id });
+  await sharedSpaceService.handleSharedSpaceLibraryFaceSync({ spaceId: space.id, libraryId: library.id });
+  const spacePerson = await ctx.database
+    .selectFrom('shared_space_person')
+    .selectAll()
+    .where('spaceId', '=', space.id)
+    .executeTakeFirstOrThrow();
+
+  return {
+    ctx,
+    personService,
+    sharedSpaceService,
+    sharedJobs,
+    searchService,
+    source,
+    member,
+    nonMember,
+    library,
+    space,
+    face,
+    spacePerson,
+    faceIdentityRepository,
+  };
+};
+```
+
+- [ ] **Step 2: Add RED linked-library post-join private upload test**
+
+In the same file, add:
+
+```ts
+it('links a post-join private upload to a linked-library space identity and preserves owned access after leave', async () => {
+  const fx = await createLinkedLibraryIdentityFixture({ personName: 'Library Source' });
+  const embeddingRow = await fx.ctx.database
+    .selectFrom('face_search')
+    .select('embedding')
+    .where('faceId', '=', fx.face.faceId)
+    .executeTakeFirstOrThrow();
+
+  const { asset } = await fx.ctx.newAsset({ ownerId: fx.member.id, visibility: AssetVisibility.Timeline });
+  const { result: uploadedFaceId } = await fx.ctx.newAssetFace({ assetId: asset.id });
+  await fx.ctx.database
+    .insertInto('face_search')
+    .values({ faceId: uploadedFaceId, embedding: embeddingRow.embedding })
+    .execute();
+
+  await fx.personService.handleRecognizeFaces({ id: uploadedFaceId });
+
+  const uploadedPerson = await fx.ctx.database
+    .selectFrom('asset_face')
+    .innerJoin('person', 'person.id', 'asset_face.personId')
+    .select(['person.id', 'person.identityId'])
+    .where('asset_face.id', '=', uploadedFaceId)
+    .executeTakeFirstOrThrow();
+  const withSpace = await fx.personService.getAll(authFor(fx.member), {
+    withHidden: false,
+    withSharedSpaces: true,
+    page: 1,
+    size: 50,
+  } as any);
+
+  expect(withSpace.people).toEqual([
+    expect.objectContaining({
+      primaryProfile: { type: 'user-person', id: uploadedPerson.id },
+      numberOfAssets: 2,
+    }),
+  ]);
+
+  await fx.ctx.database
+    .deleteFrom('shared_space_member')
+    .where('spaceId', '=', fx.space.id)
+    .where('userId', '=', fx.member.id)
+    .execute();
+
+  const afterLeave = await fx.personService.getAll(authFor(fx.member), {
+    withHidden: false,
+    withSharedSpaces: true,
+    page: 1,
+    size: 50,
+  } as any);
+
+  expect(afterLeave.people).toEqual([
+    expect.objectContaining({
+      primaryProfile: { type: 'user-person', id: uploadedPerson.id },
+      numberOfAssets: 1,
+    }),
+  ]);
+  expect(JSON.stringify(afterLeave)).not.toContain(fx.spacePerson.id);
+});
+```
+
+- [ ] **Step 3: Add RED linked-library late-member local reconciliation test**
+
+In the same file, add:
+
+```ts
+it('reconciles a late member local person against linked-library space evidence', async () => {
+  const fx = await createLinkedLibraryIdentityFixture({ memberInitiallyJoined: false });
+  const embeddingRow = await fx.ctx.database
+    .selectFrom('face_search')
+    .select('embedding')
+    .where('faceId', '=', fx.face.faceId)
+    .executeTakeFirstOrThrow();
+
+  const { result: memberPerson } = await fx.ctx.newPerson({ ownerId: fx.member.id, name: 'Member Private Name' });
+  const { asset: memberAsset } = await fx.ctx.newAsset({
+    ownerId: fx.member.id,
+    visibility: AssetVisibility.Timeline,
+  });
+  const { result: memberFace } = await fx.ctx.newAssetFace({ assetId: memberAsset.id, personId: memberPerson.id });
+  await fx.ctx.database
+    .insertInto('face_search')
+    .values({ faceId: memberFace, embedding: embeddingRow.embedding })
+    .execute();
+  const memberIdentity = await fx.faceIdentityRepository.ensurePersonIdentity(memberPerson.id);
+  await fx.faceIdentityRepository.linkFace({
+    assetFaceId: memberFace,
+    identityId: memberIdentity.id,
+    source: 'owner-person',
+  });
+
+  await fx.sharedSpaceService.addMember(authFor(fx.source), fx.space.id, {
+    userId: fx.member.id,
+    role: SharedSpaceRole.Viewer,
+  });
+  await fx.sharedSpaceService.handleSharedSpaceIdentityReconciliation({
+    spaceId: fx.space.id,
+    userId: fx.member.id,
+  });
+
+  const result = await fx.personService.getAll(authFor(fx.member), {
+    withHidden: false,
+    withSharedSpaces: true,
+    page: 1,
+    size: 50,
+  } as any);
+
+  expect(result.people).toEqual([
+    expect.objectContaining({
+      primaryProfile: { type: 'user-person', id: memberPerson.id },
+      numberOfAssets: 2,
+    }),
+  ]);
+});
+```
+
+- [ ] **Step 4: Run linked-library tests to observe RED/GREEN state**
+
+Run:
+
+```bash
+pnpm --dir server test:medium test/medium/specs/services/people-identity-rbac.spec.ts -- --run -t "linked-library space identity|linked-library space evidence|linked-library"
+```
+
+Expected: the new tests fail if linked-library evidence does not participate in the same reconciliation and accessible-people paths as direct space assets. If they pass, keep them as regression coverage and do not change production code in this task.
+
+- [ ] **Step 5: Implement concrete linked-library fixes if the tests fail**
+
+If the post-join private upload test fails, ensure `FaceIdentityRepository.findClosestAccessibleIdentityForFace()` treats linked-library assets as accessible evidence for timeline-enabled members by keeping this branch inside the asset access predicate:
+
+```sql
+OR EXISTS (
+  SELECT 1
+  FROM shared_space_library
+  INNER JOIN shared_space_member
+    ON shared_space_member."spaceId" = shared_space_library."spaceId"
+    AND shared_space_member."userId" = ${input.userId}
+    AND shared_space_member."showInTimeline" = true
+  WHERE shared_space_library."libraryId" = asset."libraryId"
+)
+```
+
+If global counts or primary profiles are wrong, keep the same linked-library access branch in `getAccessiblePeopleIdentityPage()`, `hydrateAccessiblePeople()`, and `getAccessiblePeopleCounts()`.
+
+If late-member reconciliation misses existing linked-library space people, ensure `handleSharedSpaceLibraryFaceSync()` keeps this queue when it creates or updates any space people:
+
+```ts
+if (affectedAny) {
+  await this.queueSpaceIdentityReconciliation({ spaceId: job.spaceId });
+}
+```
+
+- [ ] **Step 6: Run linked-library tests to verify GREEN**
+
+Run:
+
+```bash
+pnpm --dir server test:medium test/medium/specs/services/people-identity-rbac.spec.ts -- --run -t "linked-library space identity|linked-library space evidence|linked-library"
+```
+
+Expected: PASS.
+
+- [ ] **Step 7: Regenerate SQL snapshots if repository SQL changed**
+
+Run only when `server/src/repositories/face-identity.repository.ts` changed in this task:
+
+```bash
+pnpm --dir server build
+pnpm --dir server sync:sql
+```
+
+Expected: commands exit 0. Only intentional `server/src/queries/face.identity.repository.sql` changes remain.
+
+- [ ] **Step 8: Commit Task 5**
+
+Run:
+
+```bash
+git add server/test/medium/specs/services/people-identity-rbac.spec.ts server/src/repositories/face-identity.repository.ts server/src/services/shared-space.service.ts server/src/queries/face.identity.repository.sql
+git commit -m "test(server): cover linked library identity reconciliation"
+```
+
+If a listed production file did not change, omit it from `git add`.
+
+---
+
+### Task 6: Add Ambiguity, Access-Loss, And Race Edge Coverage
 
 **Files:**
 
@@ -1344,18 +1619,35 @@ it('repairs missing space representative faces before global people hydration', 
 });
 ```
 
-- [ ] **Step 5: Run focused tests to verify RED/GREEN state**
+- [ ] **Step 5: Add RED medium matrix coverage for remaining ambiguity and ordering cases**
+
+In `server/test/medium/specs/services/people-identity-rbac.spec.ts` and `server/test/medium/specs/repositories/face-identity.repository.spec.ts`, keep or add focused tests for the rest of the design matrix:
+
+- same-name non-strict embedding match does not auto-merge
+- two local candidates matching one space person does not auto-merge
+- same-owner personal conflict and same-space profile conflict skip automatic reconciliation
+- hidden, ignored, deleted, and incompatible-type candidates are skipped without throwing
+- member leave and rejoin preserves owned visibility and converges back to one visible global person
+- timeline-disabled space does not influence global personal-upload matching but explicit space actions still work
+- space disabled, member removed, asset removed, or face deleted while a job is queued yields a skip or retryable no-op without stale visibility
+- concurrent reconciliation jobs for the same identity pair no-op cleanly after one merge wins
+- search suggestions, filter suggestions, album/map-style person filters, and person search group by accessible identity and do not expose raw `face_identity.id`
+- stale global rows backed by inaccessible space profiles stop resolving for the viewer, while owned-profile rows still resolve
+
+Manual ambiguity remains repairable through the scoped same-person repair flow in Task 8, not through automatic reconciliation.
+
+- [ ] **Step 6: Run focused tests to verify RED/GREEN state**
 
 Run:
 
 ```bash
-pnpm --dir server test src/services/accessible-identity-reconciliation.spec.ts src/services/shared-space.service.spec.ts -- --run -t "multiple profiles|multiple-source|membership disappeared"
-pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts test/medium/specs/services/people-identity-rbac.spec.ts -- --run -t "same identity as one strict upload candidate|membership is removed before reconciliation|repairs missing space representative"
+pnpm --dir server test src/services/accessible-identity-reconciliation.spec.ts src/services/shared-space.service.spec.ts -- --run -t "multiple profiles|multiple-source|membership disappeared|no-op when a repeated reconciliation"
+pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts test/medium/specs/services/people-identity-rbac.spec.ts -- --run -t "same identity as one strict upload candidate|membership is removed before reconciliation|repairs missing space representative|concurrent reconciliation|same-name non-strict|two local candidates|same-owner conflict|same-space conflict|hidden candidate|type mismatch|leave and rejoin|asset removed|face deleted|search suggestions|filter suggestions|raw face identity|stale global row"
 ```
 
 Expected: Policy tests should pass after Task 1/2. Medium tests may fail if repository query behavior or repair handling is incomplete.
 
-- [ ] **Step 6: Implement smallest backend fixes if Step 5 fails**
+- [ ] **Step 7: Implement smallest backend fixes if Step 6 fails**
 
 If the same-identity multi-space candidate fails, update `findClosestAccessibleIdentityForFace()` so it groups by `identityId` before applying `LIMIT 2`, which it should already do. Keep the shape:
 
@@ -1382,18 +1674,18 @@ await this.sharedSpaceRepository.repairOrphanedRepresentativeFaces(job.spaceId);
 
 Do not create stale global rows for space people without backing `shared_space_person_face` rows.
 
-- [ ] **Step 7: Run focused tests to verify GREEN**
+- [ ] **Step 8: Run focused tests to verify GREEN**
 
 Run:
 
 ```bash
-pnpm --dir server test src/services/accessible-identity-reconciliation.spec.ts src/services/shared-space.service.spec.ts -- --run -t "accessible identity reconciliation policy|SharedSpaceIdentityReconciliation"
-pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts test/medium/specs/services/people-identity-rbac.spec.ts -- --run -t "same identity as one strict upload candidate|membership is removed before reconciliation|repairs missing space representative|multiple shared identities|timeline-disabled"
+pnpm --dir server test src/services/accessible-identity-reconciliation.spec.ts src/services/shared-space.service.spec.ts -- --run -t "accessible identity reconciliation policy|SharedSpaceIdentityReconciliation|no-op when a repeated reconciliation"
+pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts test/medium/specs/services/people-identity-rbac.spec.ts -- --run -t "same identity as one strict upload candidate|membership is removed before reconciliation|repairs missing space representative|multiple shared identities|timeline-disabled|concurrent reconciliation|same-name non-strict|two local candidates|same-owner conflict|same-space conflict|hidden candidate|type mismatch|leave and rejoin|asset removed|face deleted|search suggestions|filter suggestions|raw face identity|stale global row"
 ```
 
 Expected: PASS.
 
-- [ ] **Step 8: Regenerate SQL snapshots if repository SQL changed**
+- [ ] **Step 9: Regenerate SQL snapshots if repository SQL changed**
 
 Run only if `server/src/repositories/face-identity.repository.ts` changed in this task:
 
@@ -1404,7 +1696,7 @@ pnpm --dir server sync:sql
 
 Expected: commands exit 0. Only intentional query snapshots change.
 
-- [ ] **Step 9: Commit Task 5**
+- [ ] **Step 10: Commit Task 6**
 
 Run:
 
@@ -1417,7 +1709,7 @@ If a listed file did not change, omit it from `git add`.
 
 ---
 
-### Task 6: Route Global People Surfaces To Identity-Wide Detail
+### Task 7: Route Global People Surfaces To Identity-Wide Detail
 
 **Files:**
 
@@ -1626,7 +1918,7 @@ pnpm --dir web test src/lib/utils/global-person-route.spec.ts 'src/routes/(user)
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit Task 6**
+- [ ] **Step 9: Commit Task 7**
 
 Run:
 
@@ -1637,7 +1929,121 @@ git commit -m "fix(web): route global people to identity-wide detail"
 
 ---
 
-### Task 7: Final Focused Verification
+### Task 8: Preserve Manual Scoped Repair For Personal And Space Profiles
+
+**Files:**
+
+- Modify: `server/src/controllers/person.controller.spec.ts`
+- Modify: `server/src/services/person.service.ts`
+- Modify: `server/src/repositories/face-identity.repository.ts`
+- Modify: `server/test/medium/specs/services/people-identity-rbac.spec.ts`
+- Modify: `web/src/lib/modals/PersonMergeSuggestionModal.svelte`
+- Modify: `web/src/lib/modals/person-merge-suggestion-modal.spec.ts`
+- Modify: `web/src/routes/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]/+page.svelte`
+- Modify: `web/src/routes/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]/person-detail-page.spec.ts`
+- Modify: `web/src/routes/(user)/spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/+page.svelte`
+- Modify: `web/src/routes/(user)/spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/space-person-detail-page.spec.ts`
+
+- [ ] **Step 1: Add RED controller coverage for scoped repair DTOs**
+
+In `server/src/controllers/person.controller.spec.ts`, keep or add coverage that `/people/same-person`:
+
+- accepts a personal target with a space-person source including `spaceId`
+- delegates to `PersonService.mergeScopedPeople()`
+- rejects raw identity refs
+- rejects space-person refs without `spaceId`
+
+Run:
+
+```bash
+pnpm --dir server test src/controllers/person.controller.spec.ts -- --run -t "same-person|scoped personal and space people|raw identity|spaceId"
+```
+
+Expected: FAIL if the route or DTO validation is missing. If the tests already pass, keep them as regression coverage and continue.
+
+- [ ] **Step 2: Add RED medium coverage for manual personal/space repair**
+
+In `server/test/medium/specs/services/people-identity-rbac.spec.ts`, keep or add a `repair RBAC` section covering:
+
+- viewer role cannot repair a space person into a personal profile
+- owner and editor roles can repair a space person into their own accessible personal profile without throwing
+- user cannot repair another user's personal profile
+- admin status alone does not grant repair access to a space person
+- successful repair leaves scoped profiles in their original tables and only merges identity links
+
+Run:
+
+```bash
+pnpm --dir server test:medium test/medium/specs/services/people-identity-rbac.spec.ts -- --run -t "repair RBAC|can repair that Space Person|cannot repair|admin who is not a member"
+```
+
+Expected: FAIL if personal/space manual repair still throws or bypasses scoped-profile RBAC.
+
+- [ ] **Step 3: Add RED web coverage for scoped repair dispatch**
+
+Cover all user-facing manual merge entry points:
+
+- `web/src/lib/modals/person-merge-suggestion-modal.spec.ts`
+  - space-primary suggestion uses `mergeScopedPeople()`
+  - personal-only suggestion still uses `mergePerson()`
+- `web/src/routes/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]/person-detail-page.spec.ts`
+  - personal target plus space candidate uses `mergeScopedPeople()`
+  - auto-swap still keeps the page person as the repair target
+- `web/src/routes/(user)/spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/space-person-detail-page.spec.ts`
+  - space target plus personal candidate uses `mergeScopedPeople()`
+  - same-space space-person merge keeps using `mergeSpacePeople()`
+
+Run:
+
+```bash
+pnpm --dir web test src/lib/modals/person-merge-suggestion-modal.spec.ts 'src/routes/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]/person-detail-page.spec.ts' 'src/routes/(user)/spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/space-person-detail-page.spec.ts' -- --run -t "same-person repair|personal merge|space person merged with a personal candidate|same space|shared spaces enabled"
+```
+
+Expected: FAIL if any cross-scope merge path calls the legacy personal merge endpoint or the space-only merge endpoint.
+
+- [ ] **Step 4: Implement scoped repair fixes if the tests fail**
+
+Backend:
+
+- Keep `/people/same-person` accepting only scoped profile refs: `{ type: 'person', id }` and `{ type: 'space-person', id, spaceId }`.
+- In `PersonService.mergeScopedPeople()`, resolve all refs through `FaceIdentityRepository.resolveRepairRefs(actorUserId, dto)`.
+- Require every attached profile on the involved identities to be repairable by the actor.
+- Reject same-owner personal conflicts and same-space profile conflicts before `mergeIdentities()`.
+- Call `mergeIdentities({ source: 'manual' })` only after access and conflict checks pass.
+- Queue space-person metadata backfill after successful repair.
+
+Web:
+
+- In global person detail and merge suggestion modal, call `mergeScopedPeople()` whenever the target or any selected source is space-scoped.
+- In space person detail, call `mergeSpacePeople()` only when target and all sources are space-person refs from the current space; otherwise call `mergeScopedPeople()`.
+- Preserve legacy `mergePerson()` for personal-only global merges.
+
+- [ ] **Step 5: Run scoped repair tests to verify GREEN**
+
+Run:
+
+```bash
+pnpm --dir server test src/controllers/person.controller.spec.ts -- --run -t "same-person|scoped personal and space people|raw identity|spaceId"
+pnpm --dir server test:medium test/medium/specs/services/people-identity-rbac.spec.ts -- --run -t "repair RBAC|can repair that Space Person|cannot repair|admin who is not a member"
+pnpm --dir web test src/lib/modals/person-merge-suggestion-modal.spec.ts 'src/routes/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]/person-detail-page.spec.ts' 'src/routes/(user)/spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/space-person-detail-page.spec.ts' -- --run -t "same-person repair|personal merge|space person merged with a personal candidate|same space|shared spaces enabled"
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit Task 8**
+
+Run:
+
+```bash
+git add server/src/controllers/person.controller.spec.ts server/src/services/person.service.ts server/src/repositories/face-identity.repository.ts server/test/medium/specs/services/people-identity-rbac.spec.ts web/src/lib/modals/PersonMergeSuggestionModal.svelte web/src/lib/modals/person-merge-suggestion-modal.spec.ts 'web/src/routes/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]/+page.svelte' 'web/src/routes/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]/person-detail-page.spec.ts' 'web/src/routes/(user)/spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/+page.svelte' 'web/src/routes/(user)/spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/space-person-detail-page.spec.ts'
+git commit -m "fix(people): preserve scoped same-person repair"
+```
+
+If a listed file did not change, omit it from `git add`.
+
+---
+
+### Task 9: Final Focused Verification
 
 **Files:**
 
@@ -1648,7 +2054,7 @@ git commit -m "fix(web): route global people to identity-wide detail"
 Run:
 
 ```bash
-pnpm --dir server test src/services/accessible-identity-reconciliation.spec.ts src/services/shared-space.service.spec.ts src/services/person.service.spec.ts -- --run -t "accessible identity reconciliation policy|SharedSpaceIdentityReconciliation|post-join upload|accessible shared identity"
+pnpm --dir server test src/services/accessible-identity-reconciliation.spec.ts src/services/shared-space.service.spec.ts src/services/person.service.spec.ts src/controllers/person.controller.spec.ts -- --run -t "accessible identity reconciliation policy|SharedSpaceIdentityReconciliation|post-join upload|accessible shared identity|no-op when a repeated reconciliation|same-person"
 ```
 
 Expected: PASS.
@@ -1658,7 +2064,7 @@ Expected: PASS.
 Run:
 
 ```bash
-pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts test/medium/specs/services/people-identity-rbac.spec.ts -- --run -t "viewer-owned person as primary|viewer-owned primary profiles|without creating a local profile|post-join private upload|post-join upload is added to the space|membership is removed before reconciliation|repairs missing space representative|late member join|join-after-duplicates|new-space-evidence|timeline-disabled|multiple shared identities"
+pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts test/medium/specs/services/people-identity-rbac.spec.ts -- --run -t "viewer-owned person as primary|viewer-owned primary profiles|without creating a local profile|post-join private upload|post-join upload is added to the space|linked-library space identity|linked-library space evidence|membership is removed before reconciliation|repairs missing space representative|late member join|join-after-duplicates|new-space-evidence|timeline-disabled|multiple shared identities|concurrent reconciliation|repair RBAC|same-name non-strict|two local candidates|same-owner conflict|same-space conflict|hidden candidate|type mismatch|leave and rejoin|asset removed|face deleted|search suggestions|filter suggestions|raw face identity|stale global row"
 ```
 
 Expected: PASS.
@@ -1668,7 +2074,7 @@ Expected: PASS.
 Run:
 
 ```bash
-pnpm --dir web test src/lib/utils/global-person-route.spec.ts 'src/routes/(user)/people/people-page.spec.ts' 'src/routes/(user)/explore/explore-page.spec.ts' src/lib/managers/global-search-manager.svelte.spec.ts -- --run -t "global person route|space-primary|identity-wide|person route|shared-space thumbnail"
+pnpm --dir web test src/lib/utils/global-person-route.spec.ts 'src/routes/(user)/people/people-page.spec.ts' 'src/routes/(user)/explore/explore-page.spec.ts' src/lib/managers/global-search-manager.svelte.spec.ts src/lib/modals/person-merge-suggestion-modal.spec.ts 'src/routes/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]/person-detail-page.spec.ts' 'src/routes/(user)/spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/space-person-detail-page.spec.ts' -- --run -t "global person route|space-primary|identity-wide|person route|shared-space thumbnail|same-person repair|personal merge|space person merged with a personal candidate|same space"
 ```
 
 Expected: PASS.
@@ -1700,7 +2106,7 @@ Expected: only intentional source, test, docs, and generated SQL files are chang
 
 - [ ] **Step 6: Commit final verification note only if files changed**
 
-If Task 7 produced no file changes, do not commit. If SQL sync or formatting changed files, commit them:
+If Task 9 produced no file changes, do not commit. If SQL sync or formatting changed files, commit them:
 
 ```bash
 git add server/src/queries/face.identity.repository.sql
@@ -1713,12 +2119,17 @@ git commit -m "chore(server): sync accessible identity sql snapshots"
 
 - Strict reconciliation policy has unit coverage for no bridge, zero match, one match, multiple matches, same identity through multiple profiles, source/target fan-out, hidden/ignored, type mismatch, missing embedding, existing merge no-op, and deterministic target selection.
 - A/B/C late-member cases are covered with local profile, no local profile, private post-join upload, and post-join add-to-space.
+- Linked-library photo sources are covered for late-member reconciliation, post-join private upload, and leave/access-loss behavior.
+- Ambiguous, conflicting, hidden, deleted, incompatible-type, same-name-only, and multi-candidate cases skip automatic reconciliation.
+- Search/filter suggestion paths group by accessible identity and do not expose raw `face_identity.id`.
 - Existing members keep viewer-owned personal primary profiles after another member joins.
 - User-owned photos remain visible after leaving a space.
 - Space people remain visible in explicit space scope when backed by space assets.
 - Timeline-disabled spaces do not influence global personal-upload reconciliation.
+- Idempotent reruns and concurrent reconciliation jobs are verified by focused service and medium tests.
+- Manual same-person repair merges personal and space profiles without throwing, preserves scoped rows, and enforces scoped-profile RBAC.
 - Global people, explore, and global search route identity-grouped rows to `/people/:profileId`, not `/spaces/:spaceId/people/:personId`.
 - Explicit space people routes remain space-scoped.
 - Thumbnail URLs for global rows resolve through an accessible profile endpoint.
-- Focused server unit, server medium, and web tests listed in Task 7 pass.
+- Focused server unit, server medium, and web tests listed in Task 9 pass.
 - Local lint is not required; CI owns lint verification for this branch.
