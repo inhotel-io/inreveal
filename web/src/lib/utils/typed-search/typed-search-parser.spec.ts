@@ -74,9 +74,7 @@ describe('parseTypedSearch', () => {
   it('keeps unterminated quoted filters as draft issues', () => {
     const result = parseTypedSearch('person:"Anna Maria', { mode: 'draft' });
 
-    expect(result.issues).toEqual([
-      expect.objectContaining({ code: 'unterminated-quote', raw: 'person:"Anna Maria' }),
-    ]);
+    expect(result.issues).toEqual([expect.objectContaining({ code: 'unterminated-quote', raw: 'person:"Anna Maria' })]);
   });
 
   it('accepts plural people and tags aliases', () => {

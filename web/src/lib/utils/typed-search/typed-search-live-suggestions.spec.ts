@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { parseTypedSearch } from './typed-search-parser';
 import { resolveLiveTypedSearchSuggestions } from './typed-search-live-suggestions';
+import { parseTypedSearch } from './typed-search-parser';
 
 describe('resolveLiveTypedSearchSuggestions foundation', () => {
   it('returns idle for unsupported typed tokens', async () => {

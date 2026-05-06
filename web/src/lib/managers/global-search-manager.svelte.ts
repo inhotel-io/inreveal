@@ -12,6 +12,12 @@ import {
   getSearchablePageState,
   type SearchablePageSortOrder,
 } from '$lib/utils/searchable-page-search';
+import {
+  isLiveTypedSearchToken,
+  type LiveTypedSearchChoice,
+  type LiveTypedSearchStatus,
+  type LiveTypedSearchToken,
+} from '$lib/utils/typed-search/typed-search-live-suggestions';
 import { getTypedSearchDisplayText, storeTypedSearchNames } from '$lib/utils/typed-search/typed-search-name-cache';
 import {
   getActiveTypedSearchToken,
@@ -21,12 +27,6 @@ import {
   type TypedSearchIssue,
   type TypedSearchParseResult,
 } from '$lib/utils/typed-search/typed-search-parser';
-import {
-  isLiveTypedSearchToken,
-  type LiveTypedSearchChoice,
-  type LiveTypedSearchStatus,
-  type LiveTypedSearchToken,
-} from '$lib/utils/typed-search/typed-search-live-suggestions';
 import { resolveTypedSearchFilters, type TypedSearchChoice } from '$lib/utils/typed-search/typed-search-resolver';
 import {
   getAlbumInfo,
