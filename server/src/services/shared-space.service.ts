@@ -389,6 +389,13 @@ export class SharedSpaceService extends BaseService {
     });
 
     await this.queueSpacePersonMetadataBackfill();
+    const space = await this.sharedSpaceRepository.getById(spaceId);
+    if (space?.faceRecognitionEnabled) {
+      await this.jobRepository.queue({
+        name: JobName.SharedSpaceFaceMatchAll,
+        data: { spaceId },
+      });
+    }
     await this.queueSpaceIdentityReconciliation({ spaceId, userId: dto.userId });
 
     return this.mapMember(member);

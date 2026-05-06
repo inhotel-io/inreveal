@@ -57,7 +57,7 @@ const setupSharedSpace = (db?: Kysely<DB>) => {
   const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
   jobs.queue.mockResolvedValue();
   jobs.queueAll.mockResolvedValue();
-  return { ctx, sut, faceIdentityRepository: ctx.get(FaceIdentityRepository) };
+  return { ctx, sut, faceIdentityRepository: ctx.get(FaceIdentityRepository), jobs };
 };
 
 const setupSearch = (db?: Kysely<DB>) => {
@@ -869,6 +869,174 @@ describe('People identity RBAC projection', () => {
         numberOfAssets: 2,
       }),
     );
+  });
+
+  it('late member join materializes missing space people before reconciling strict local identity', async () => {
+    const { ctx, sut: personService, faceIdentityRepository } = setup();
+    const { sut: sharedSpaceService, jobs: sharedJobs } = setupSharedSpace();
+    const { user: owner } = await ctx.newUser();
+    const { user: existingMember } = await ctx.newUser();
+    const { user: lateMember } = await ctx.newUser();
+    const embedding = newEmbedding();
+
+    const { result: ownerPerson } = await ctx.newPerson({ ownerId: owner.id, name: 'Owner Shared Name' });
+    const { asset: spaceAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { result: ownerFace } = await ctx.newAssetFace({ assetId: spaceAsset.id, personId: ownerPerson.id });
+    await ctx.database.insertInto('face_search').values({ faceId: ownerFace, embedding }).execute();
+    const ownerIdentity = await faceIdentityRepository.ensurePersonIdentity(ownerPerson.id);
+    await faceIdentityRepository.linkFace({
+      assetFaceId: ownerFace,
+      identityId: ownerIdentity.id,
+      source: 'owner-person',
+    });
+
+    const { result: existingMemberPerson } = await ctx.newPerson({
+      ownerId: existingMember.id,
+      name: 'Existing Member Private Name',
+    });
+    const { asset: existingMemberAsset } = await ctx.newAsset({
+      ownerId: existingMember.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    const { result: existingMemberFace } = await ctx.newAssetFace({
+      assetId: existingMemberAsset.id,
+      personId: existingMemberPerson.id,
+    });
+    await ctx.database.insertInto('face_search').values({ faceId: existingMemberFace, embedding }).execute();
+    const existingMemberIdentity = await faceIdentityRepository.ensurePersonIdentity(existingMemberPerson.id);
+    await faceIdentityRepository.linkFace({
+      assetFaceId: existingMemberFace,
+      identityId: existingMemberIdentity.id,
+      source: 'owner-person',
+    });
+    await faceIdentityRepository.mergeIdentities({
+      targetIdentityId: ownerIdentity.id,
+      sourceIdentityIds: [existingMemberIdentity.id],
+      source: 'shared-space-evidence',
+    });
+
+    const { result: lateMemberPerson } = await ctx.newPerson({
+      ownerId: lateMember.id,
+      name: 'Late Member Private Name',
+    });
+    const { asset: lateMemberAsset } = await ctx.newAsset({
+      ownerId: lateMember.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    const { result: lateMemberFace } = await ctx.newAssetFace({
+      assetId: lateMemberAsset.id,
+      personId: lateMemberPerson.id,
+    });
+    await ctx.database.insertInto('face_search').values({ faceId: lateMemberFace, embedding }).execute();
+    const lateMemberIdentity = await faceIdentityRepository.ensurePersonIdentity(lateMemberPerson.id);
+    await faceIdentityRepository.linkFace({
+      assetFaceId: lateMemberFace,
+      identityId: lateMemberIdentity.id,
+      source: 'owner-person',
+    });
+
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: existingMember.id, role: SharedSpaceRole.Viewer });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: spaceAsset.id, addedById: owner.id });
+
+    await expect(sharedSpaceService.getSpacePeople(authFor(owner), space.id)).resolves.toEqual([]);
+
+    await sharedSpaceService.addMember(authFor(owner), space.id, {
+      userId: lateMember.id,
+      role: SharedSpaceRole.Viewer,
+    });
+
+    await expect(
+      personService.getAll(authFor(owner), {
+        withHidden: false,
+        withSharedSpaces: true,
+        page: 1,
+        size: 50,
+      } as any),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        people: [
+          expect.objectContaining({
+            primaryProfile: { type: 'user-person', id: ownerPerson.id },
+          }),
+        ],
+      }),
+    );
+    await expect(
+      personService.getAll(authFor(existingMember), {
+        withHidden: false,
+        withSharedSpaces: true,
+        page: 1,
+        size: 50,
+      } as any),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        people: [
+          expect.objectContaining({
+            primaryProfile: { type: 'user-person', id: existingMemberPerson.id },
+          }),
+        ],
+      }),
+    );
+
+    const queuedOnJoin = sharedJobs.queue.mock.calls.map(([job]) => job);
+    for (const job of queuedOnJoin) {
+      if (job.name === 'SharedSpaceFaceMatchAll') {
+        await sharedSpaceService.handleSharedSpaceFaceMatchAll(job.data);
+      }
+      if (job.name === 'SharedSpaceIdentityReconciliation') {
+        await sharedSpaceService.handleSharedSpaceIdentityReconciliation(job.data);
+      }
+    }
+
+    const spacePeople = await sharedSpaceService.getSpacePeople(authFor(owner), space.id);
+    expect(spacePeople).toEqual([expect.objectContaining({ name: 'Owner Shared Name' })]);
+
+    await expect(sharedSpaceService.getSpacePeople(authFor(existingMember), space.id)).resolves.toEqual([
+      expect.objectContaining({ id: spacePeople[0].id }),
+    ]);
+    await expect(sharedSpaceService.getSpacePeople(authFor(lateMember), space.id)).resolves.toEqual([
+      expect.objectContaining({ id: spacePeople[0].id }),
+    ]);
+
+    const ownerPeople = await personService.getAll(authFor(owner), {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const existingMemberPeople = await personService.getAll(authFor(existingMember), {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+    const lateMemberPeople = await personService.getAll(authFor(lateMember), {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+
+    expect(ownerPeople.people).toEqual([
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: ownerPerson.id },
+        numberOfAssets: 1,
+      }),
+    ]);
+    expect(existingMemberPeople.people).toEqual([
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: existingMemberPerson.id },
+        numberOfAssets: 2,
+      }),
+    ]);
+    expect(lateMemberPeople.people).toEqual([
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: lateMemberPerson.id },
+        numberOfAssets: 2,
+      }),
+    ]);
   });
 
   it('new-space-evidence reconciliation links an existing member local identity', async () => {

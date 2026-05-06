@@ -1445,6 +1445,10 @@ describe(SharedSpaceService.name, () => {
   });
 
   describe('addMember', () => {
+    beforeEach(() => {
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ faceRecognitionEnabled: false }));
+    });
+
     it('should add member with default viewer role', async () => {
       const auth = factory.auth();
       const spaceId = newUuid();
@@ -1560,6 +1564,55 @@ describe(SharedSpaceService.name, () => {
 
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: 'SharedSpaceIdentityReconciliation',
+        data: { spaceId, userId },
+      });
+    });
+
+    it('should queue space face materialization before identity reconciliation when face recognition is enabled', async () => {
+      const auth = factory.auth();
+      const spaceId = 'space-1';
+      const userId = 'new-user';
+
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(makeMemberResult({ spaceId, role: SharedSpaceRole.Owner }));
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(void 0);
+      mocks.sharedSpace.addMember.mockResolvedValue(factory.sharedSpaceMember({ spaceId, userId }));
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(makeMemberResult({ spaceId, userId }));
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.addMember(auth, spaceId, { userId });
+
+      const queuedJobs = mocks.job.queue.mock.calls.map(([job]) => job);
+      const faceMatchAllIndex = queuedJobs.findIndex((job) => job.name === JobName.SharedSpaceFaceMatchAll);
+      const reconciliationIndex = queuedJobs.findIndex((job) => job.name === JobName.SharedSpaceIdentityReconciliation);
+
+      expect(faceMatchAllIndex).toBeGreaterThanOrEqual(0);
+      expect(reconciliationIndex).toBeGreaterThanOrEqual(0);
+      expect(faceMatchAllIndex).toBeLessThan(reconciliationIndex);
+      expect(queuedJobs[faceMatchAllIndex]).toEqual({
+        name: JobName.SharedSpaceFaceMatchAll,
+        data: { spaceId },
+      });
+    });
+
+    it('should not queue space face materialization when face recognition is disabled', async () => {
+      const auth = factory.auth();
+      const spaceId = 'space-1';
+      const userId = 'new-user';
+
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(makeMemberResult({ spaceId, role: SharedSpaceRole.Owner }));
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(void 0);
+      mocks.sharedSpace.addMember.mockResolvedValue(factory.sharedSpaceMember({ spaceId, userId }));
+      mocks.sharedSpace.getMember.mockResolvedValueOnce(makeMemberResult({ spaceId, userId }));
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false }));
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.addMember(auth, spaceId, { userId });
+
+      const queuedJobs = mocks.job.queue.mock.calls.map(([job]) => job);
+      expect(queuedJobs.some((job) => job.name === JobName.SharedSpaceFaceMatchAll)).toBe(false);
+      expect(queuedJobs).toContainEqual({
+        name: JobName.SharedSpaceIdentityReconciliation,
         data: { spaceId, userId },
       });
     });
