@@ -45,6 +45,7 @@ const { mockPage } = vi.hoisted(() => ({
 }));
 vi.mock('$app/state', () => ({ page: mockPage }));
 
+import { goto } from '$app/navigation';
 import { commandContextManager } from '$lib/managers/command-context-manager.svelte';
 import { GlobalSearchManager, type Provider, type Sections } from '$lib/managers/global-search-manager.svelte';
 import ShortcutsModal from '$lib/modals/ShortcutsModal.svelte';
@@ -495,6 +496,11 @@ describe('global-search root', () => {
 
     expect(manager.query).toBe('beach person:"Anna Maria"');
     expect(activateSpy).not.toHaveBeenCalledWith('person', expect.anything());
+
+    vi.mocked(goto).mockClear();
+    await manager.activateSearch(manager.query);
+
+    expect(goto).toHaveBeenCalledWith('/photos?q=beach&people=p1');
   });
 
   it('renders live typed filter section before normal results in dropdown variant', () => {

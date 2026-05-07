@@ -48,6 +48,9 @@ export type TypedSearchResolutionToken = {
   key: TypedSearchResolutionKey;
   raw: string;
   value: string;
+  start: number;
+  end: number;
+  identity: string;
 };
 
 export type TypedSearchDisplayToken = {
@@ -130,6 +133,10 @@ const FILTER_KEY_ALIASES: Record<string, TypedSearchFilterKey> = {
   tags: 'tag',
 };
 
+export function getTypedSearchTokenIdentity(key: string, start: number, end: number, raw: string): string {
+  return `${key}:${start}:${end}:${raw}`;
+}
+
 export function parseTypedSearch(raw: string, options: TypedSearchParseOptions = {}): TypedSearchParseResult {
   const mode = options.mode ?? 'commit';
   const pieces = splitSearch(raw);
@@ -203,11 +210,15 @@ export function parseTypedSearch(raw: string, options: TypedSearchParseOptions =
     }
 
     if (RESOLUTION_KEYS.has(key as TypedSearchResolutionKey)) {
+      const resolutionKey = key as TypedSearchResolutionKey;
       resolutionTokens.push({
         kind: 'resolution',
-        key: key as TypedSearchResolutionKey,
+        key: resolutionKey,
         raw: piece.raw,
         value: piece.value,
+        start: piece.start,
+        end: piece.end,
+        identity: getTypedSearchTokenIdentity(resolutionKey, piece.start, piece.end, piece.raw),
       });
       displayTokens.push({ raw: piece.raw, key, value: piece.value, status: 'pending-entity' });
       continue;

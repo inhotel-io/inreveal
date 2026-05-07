@@ -22,6 +22,7 @@ import {
 import { getTypedSearchDisplayText, storeTypedSearchNames } from '$lib/utils/typed-search/typed-search-name-cache';
 import {
   getActiveTypedSearchToken,
+  getTypedSearchTokenIdentity,
   parseTypedSearch,
   rewriteTypedSearchToken,
   type TypedSearchDisplayToken,
@@ -1288,7 +1289,7 @@ export class GlobalSearchManager {
     this.typedSearchIssues = [];
     this.typedSearchChoices = [];
     for (const key of this.selectedTypedSearchChoices.keys()) {
-      if (!parsed.resolutionTokens.some((token) => token.raw === key)) {
+      if (!parsed.resolutionTokens.some((token) => token.raw === key || token.identity === key)) {
         this.selectedTypedSearchChoices.delete(key);
       }
     }
@@ -1465,15 +1466,21 @@ export class GlobalSearchManager {
     this.setInputCaret(caret);
     const parsedAfterRewrite = parseTypedSearch(text, { mode: 'draft' });
     const rewrittenToken = getActiveTypedSearchToken(parsedAfterRewrite, caret);
-    if (choice.key === 'person' && choice.entityId && rewrittenToken?.key === 'person') {
+    const selectedKey = choice.key === 'person' || choice.key === 'tag' ? choice.key : undefined;
+    if (selectedKey && choice.entityId && rewrittenToken?.key === selectedKey) {
       const selectedChoice: TypedSearchChoice = {
         tokenRaw: rewrittenToken.raw,
-        key: 'person',
+        key: selectedKey,
         id: choice.entityId,
         label: choice.label,
         value: rewrittenToken.value,
       };
-      const tokenKey = `${rewrittenToken.key}:${rewrittenToken.start}:${rewrittenToken.end}:${rewrittenToken.raw}`;
+      const tokenKey = getTypedSearchTokenIdentity(
+        selectedKey,
+        rewrittenToken.start,
+        rewrittenToken.end,
+        rewrittenToken.raw,
+      );
       this.selectedTypedSearchChoices.set(tokenKey, selectedChoice);
     }
     this.resetLiveTypedSearchSuggestions();

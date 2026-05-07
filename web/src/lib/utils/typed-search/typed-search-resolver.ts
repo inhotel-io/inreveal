@@ -90,7 +90,7 @@ async function resolveTypedSearchFiltersInternal(
 
   const countryToken = parsed.scalarTokens.find((token) => token.key === 'country');
   const cityToken = parsed.scalarTokens.find((token) => token.key === 'city');
-  const unresolvedTokens = parsed.resolutionTokens.filter((token) => !context.selectedChoices?.has(token.raw));
+  const unresolvedTokens = parsed.resolutionTokens.filter((token) => !getSelectedChoice(context, token));
   const needsSuggestions = unresolvedTokens.some(
     (token) => token.key === 'tag' || token.key === 'camera' || (token.key === 'person' && context.spaceId),
   );
@@ -132,7 +132,7 @@ async function resolveTypedSearchFiltersInternal(
   }
 
   for (const token of parsed.resolutionTokens) {
-    const selectedChoice = context.selectedChoices?.get(token.raw);
+    const selectedChoice = getSelectedChoice(context, token);
     if (selectedChoice) {
       applySelectedChoice(selectedChoice, filters, personNames, tagNames);
       continue;
@@ -166,6 +166,10 @@ async function resolveTypedSearchFiltersInternal(
 
 function suggestionScope(context: TypedSearchResolveContext) {
   return context.spaceId ? { spaceId: context.spaceId } : { withSharedSpaces: true };
+}
+
+function getSelectedChoice(context: TypedSearchResolveContext, token: TypedSearchResolutionToken) {
+  return context.selectedChoices?.get(token.identity) ?? context.selectedChoices?.get(token.raw);
 }
 
 function applyScalar(filters: FilterState, token: TypedSearchScalarToken, canonicalValue?: string) {

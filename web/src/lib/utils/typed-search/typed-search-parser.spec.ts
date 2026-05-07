@@ -6,7 +6,7 @@ describe('parseTypedSearch', () => {
     const result = parseTypedSearch('beach person:anna from:2025 to:2026 camera:nikon type:photo');
 
     expect(result.queryText).toBe('beach');
-    expect(result.resolutionTokens).toEqual([
+    expect(result.resolutionTokens).toMatchObject([
       { kind: 'resolution', key: 'person', raw: 'person:anna', value: 'anna' },
       { kind: 'resolution', key: 'camera', raw: 'camera:nikon', value: 'nikon' },
     ]);
@@ -22,7 +22,7 @@ describe('parseTypedSearch', () => {
     const result = parseTypedSearch('beach person:"Anna Maria" city:"New York"');
 
     expect(result.queryText).toBe('beach');
-    expect(result.resolutionTokens).toEqual([
+    expect(result.resolutionTokens).toMatchObject([
       { kind: 'resolution', key: 'person', raw: 'person:"Anna Maria"', value: 'Anna Maria' },
     ]);
     expect(result.scalarTokens).toMatchObject([
@@ -81,7 +81,7 @@ describe('parseTypedSearch', () => {
     const result = parseTypedSearch('people:anna tags:nature beach');
 
     expect(result.queryText).toBe('beach');
-    expect(result.resolutionTokens).toEqual([
+    expect(result.resolutionTokens).toMatchObject([
       { kind: 'resolution', key: 'person', raw: 'people:anna', value: 'anna' },
       { kind: 'resolution', key: 'tag', raw: 'tags:nature', value: 'nature' },
     ]);
@@ -173,6 +173,19 @@ describe('parseTypedSearch', () => {
         value: 'Paris',
         message: 'Filter "city" can only be used once',
       },
+    ]);
+  });
+
+  it('exposes span identity for repeated selected resolution tokens', () => {
+    const result = parseTypedSearch('person:ann person:ann', { mode: 'draft' });
+
+    expect(result.resolutionTokens.map((token) => token.identity)).toEqual([
+      'person:0:10:person:ann',
+      'person:11:21:person:ann',
+    ]);
+    expect(result.resolutionTokens).toMatchObject([
+      { start: 0, end: 10, raw: 'person:ann' },
+      { start: 11, end: 21, raw: 'person:ann' },
     ]);
   });
 

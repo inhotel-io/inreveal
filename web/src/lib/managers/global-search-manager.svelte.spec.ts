@@ -69,6 +69,7 @@ import { createFilterState, type FilterState } from '$lib/components/filter-pane
 import * as recentModule from '$lib/stores/cmdk-recent';
 import { addEntry, getEntries, __resetForTests as resetRecentStore } from '$lib/stores/cmdk-recent';
 import { getTypedSearchDisplayText, storeTypedSearchNames } from '$lib/utils/typed-search/typed-search-name-cache';
+import type { TypedSearchResolveContext } from '$lib/utils/typed-search/typed-search-resolver';
 import {
   AssetVisibility,
   getAlbumInfo,
@@ -1762,6 +1763,107 @@ describe('activate("command")', () => {
       );
       expect(manager.selectedTypedSearchChoices.has('person:ann')).toBe(false);
       expect(manager.selectedTypedSearchChoices.has('person:"Anna Maria"')).toBe(false);
+      expect([...manager.selectedTypedSearchChoices.keys()]).toEqual(['person:6:25:person:"Anna Maria"']);
+    });
+
+    it('keeps selected live person span identity after typed search draft refresh', () => {
+      const manager = new GlobalSearchManager();
+      manager.setQuery('beach person:ann');
+      manager.setInputCaret('beach person:ann'.length);
+
+      manager.selectLiveTypedSearchChoice({
+        id: 'person:6:16:p1',
+        key: 'person',
+        label: 'Anna Maria',
+        value: 'Anna Maria',
+        tokenStart: 6,
+        tokenEnd: 16,
+        entityId: 'p1',
+      });
+
+      manager.parseTypedSearchDraft(manager.query);
+
+      expect(manager.selectedTypedSearchChoices.get('person:6:25:person:"Anna Maria"')).toEqual(
+        expect.objectContaining({ key: 'person', id: 'p1', tokenRaw: 'person:"Anna Maria"' }),
+      );
+    });
+
+    it('selecting a live tag choice stores resolver choice by rewritten span identity', () => {
+      const manager = new GlobalSearchManager();
+      manager.setQuery('tag:fam');
+      manager.setInputCaret('tag:fam'.length);
+
+      manager.selectLiveTypedSearchChoice({
+        id: 'tag:0:7:t1',
+        key: 'tag',
+        label: 'Family 2025',
+        value: 'Family 2025',
+        tokenStart: 0,
+        tokenEnd: 7,
+        entityId: 't1',
+      });
+
+      expect(manager.query).toBe('tag:"Family 2025"');
+      expect(manager.selectedTypedSearchChoices.get('tag:0:17:tag:"Family 2025"')).toEqual(
+        expect.objectContaining({
+          tokenRaw: 'tag:"Family 2025"',
+          key: 'tag',
+          id: 't1',
+          label: 'Family 2025',
+          value: 'Family 2025',
+        }),
+      );
+      expect(manager.selectedTypedSearchChoices.has('tag:fam')).toBe(false);
+      expect(manager.selectedTypedSearchChoices.has('tag:"Family 2025"')).toBe(false);
+    });
+
+    it('activating after a live person span identity selection uses the selected filter choice', async () => {
+      const manager = new GlobalSearchManager();
+      manager.setQuery('beach person:ann');
+      manager.setInputCaret('beach person:ann'.length);
+      manager.selectLiveTypedSearchChoice({
+        id: 'person:6:16:p1',
+        key: 'person',
+        label: 'Anna Maria',
+        value: 'Anna Maria',
+        tokenStart: 6,
+        tokenEnd: 16,
+        entityId: 'p1',
+      });
+      typedSearchMock.resolveTypedSearchFilters.mockImplementation(
+        (_parsed: unknown, context: TypedSearchResolveContext) => {
+          const selectedChoice = context.selectedChoices?.get('person:6:25:person:"Anna Maria"');
+          if (!selectedChoice?.id) {
+            return {
+              ok: false as const,
+              queryText: 'beach',
+              issues: [
+                {
+                  code: 'no-match' as const,
+                  key: 'person',
+                  raw: 'person:"Anna Maria"',
+                  value: 'Anna Maria',
+                  message: 'No person found for "Anna Maria"',
+                },
+              ],
+              choices: [],
+            };
+          }
+          const filters = createFilterState();
+          filters.personIds.push(selectedChoice.id);
+          return {
+            ok: true as const,
+            queryText: 'beach',
+            filters,
+            personNames: new Map([[selectedChoice.id, selectedChoice.label]]),
+            tagNames: new Map(),
+          };
+        },
+      );
+
+      await manager.activateSearch(manager.query);
+
+      expect(goto).toHaveBeenCalledWith('/photos?q=beach&people=p1');
     });
 
     it('clears live suggestion state on close', () => {

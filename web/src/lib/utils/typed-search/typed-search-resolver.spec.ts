@@ -143,6 +143,28 @@ describe('resolveTypedSearchFilters', () => {
     }
   });
 
+  it('uses selected span identity for repeated selected live person choices', async () => {
+    const parsed = parseTypedSearch('person:ann person:ann', { mode: 'draft' });
+    const selectedChoices = new Map([
+      [
+        parsed.resolutionTokens[0].identity,
+        { tokenRaw: 'person:ann', key: 'person' as const, id: 'person-1', label: 'Ann Live', value: 'ann' },
+      ],
+    ]);
+    vi.mocked(searchPerson).mockResolvedValue([{ id: 'person-2', name: 'Ann Search' } as never]);
+
+    const result = await resolveTypedSearchFilters(parsed, { selectedChoices });
+
+    expect(searchPerson).toHaveBeenCalledOnce();
+    expect(searchPerson).toHaveBeenCalledWith({ name: 'ann', withHidden: false }, { signal: undefined });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.filters.personIds).toEqual(['person-1', 'person-2']);
+      expect(result.personNames.get('person-1')).toBe('Ann Live');
+      expect(result.personNames.get('person-2')).toBe('Ann Search');
+    }
+  });
+
   it('accumulates repeated people and tags in input order', async () => {
     vi.mocked(searchPerson)
       .mockResolvedValueOnce([{ id: 'person-1', name: 'Anna' } as never])
