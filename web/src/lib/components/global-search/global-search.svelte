@@ -147,6 +147,9 @@
   let lastAutoSelectedTopResultToken = $state<string | null>(null);
   let lastDismissedTopResultToken = $state<string | null>(null);
   const preferredTopResultId = $derived.by<string | null>(() => {
+    if (isLiveTypedFilterValueMode()) {
+      return null;
+    }
     if (manager.topCommandMatch) {
       return manager.topCommandMatch.id;
     }
@@ -156,6 +159,9 @@
     return manager.topSearchMatch?.id ?? null;
   });
   const preferredTopResultToken = $derived.by<string | null>(() => {
+    if (isLiveTypedFilterValueMode()) {
+      return null;
+    }
     const query = manager.query.trim();
     if (manager.topCommandMatch) {
       return `${inputEditRevision}:command:${manager.topCommandMatch.id}:${query}`;
@@ -169,6 +175,7 @@
     return null;
   });
   let previousActiveItemId = $state<string | null>(null);
+  let lastAutoSelectedLiveFilterToken = $state<string | null>(null);
   $effect(() => {
     const topResultId = preferredTopResultId;
     const topResultToken = preferredTopResultToken;
@@ -189,6 +196,30 @@
       lastAutoSelectedTopResultToken = topResultToken;
     }
     previousActiveItemId = manager.activeItemId;
+  });
+
+  $effect(() => {
+    if (!isLiveTypedFilterValueMode()) {
+      lastAutoSelectedLiveFilterToken = null;
+      return;
+    }
+
+    const liveFilterToken = getLiveTypedFilterSelectionToken();
+    if (liveFilterToken) {
+      if (lastAutoSelectedLiveFilterToken === liveFilterToken) {
+        return;
+      }
+      if (!hasActiveLiveTypedFilterItem()) {
+        setSelectedValue(getFirstLiveTypedFilterItemValue());
+      }
+      lastAutoSelectedLiveFilterToken = liveFilterToken;
+      return;
+    }
+
+    lastAutoSelectedLiveFilterToken = null;
+    if (manager.activeItemId === manager.topSearchMatch?.id || manager.activeItemId?.startsWith('filter:')) {
+      setSelectedValue(null);
+    }
   });
 
   // Render-time filter: drop unreachable navigate recents before they hit the DOM.
@@ -304,6 +335,13 @@
     manager.setInputCaret((event.currentTarget as HTMLInputElement).selectionStart);
   }
 
+  function syncInputCaretAfterKeyUp(event: KeyboardEvent) {
+    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && isLiveTypedFilterValueMode()) {
+      return;
+    }
+    syncInputCaret(event);
+  }
+
   function moveSelectionFromTopSearch(direction: 1 | -1) {
     const topSearchId = manager.topSearchMatch?.id;
     const currentValue = selectedValue || manager.activeItemId;
@@ -327,6 +365,72 @@
     return `filter:${choice.id}:${choice.label}`;
   }
 
+  function isLiveTypedFilterValueMode() {
+    const token = manager.activeTypedSearchToken;
+    const key = token?.key;
+    const status = manager.liveTypedSearchStatus.status;
+    if (status === 'idle') {
+      return false;
+    }
+
+    if (manager.liveTypedSearchStatus.status === 'ok') {
+      return manager.liveTypedSearchStatus.items.length > 0;
+    }
+
+    if (key !== 'person' && key !== 'tag' && key !== 'country' && key !== 'city') {
+      return false;
+    }
+
+    return token.value.trim() === '';
+  }
+
+  function getFirstLiveTypedFilterItemValue() {
+    const status = manager.liveTypedSearchStatus;
+    return status.status === 'ok' && status.items.length > 0 ? liveTypedFilterItemValue(status.items[0]) : null;
+  }
+
+  function getLiveTypedFilterSelectionToken() {
+    const token = manager.activeTypedSearchToken;
+    const status = manager.liveTypedSearchStatus;
+    if (status.status !== 'ok' || status.items.length === 0) {
+      return null;
+    }
+    if (!token) {
+      const first = status.items[0];
+      return `${first.tokenStart}:${first.tokenEnd}:${manager.query.slice(first.tokenStart, first.tokenEnd)}:${status.items
+        .map((item) => item.id)
+        .join('|')}`;
+    }
+    return `${token.start}:${token.end}:${token.raw}:${status.items.map((item) => item.id).join('|')}`;
+  }
+
+  function hasActiveLiveTypedFilterItem() {
+    const status = manager.liveTypedSearchStatus;
+    return (
+      status.status === 'ok' &&
+      manager.activeItemId !== null &&
+      status.items.some((choice) => liveTypedFilterItemValue(choice) === manager.activeItemId)
+    );
+  }
+
+  function moveLiveTypedFilterSelection(direction: 1 | -1) {
+    const status = manager.liveTypedSearchStatus;
+    if (status.status !== 'ok' || status.items.length === 0) {
+      return false;
+    }
+
+    const values = status.items.map(liveTypedFilterItemValue);
+    const currentIndex = values.indexOf(manager.activeItemId ?? '');
+    const nextIndex = currentIndex === -1 ? (direction === 1 ? 0 : values.length - 1) : currentIndex + direction;
+    const nextValue = values[nextIndex];
+    if (!nextValue) {
+      return false;
+    }
+
+    setSelectedValue(nextValue);
+    return true;
+  }
+
   function getActiveLiveTypedFilterChoice() {
     const status = manager.liveTypedSearchStatus;
     if (status.status !== 'ok' || !manager.activeItemId?.startsWith('filter:')) {
@@ -346,7 +450,18 @@
   }
 
   function onInputKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && selectActiveLiveTypedFilterChoice()) {
+    if (e.key === 'ArrowDown' && isLiveTypedFilterValueMode() && moveLiveTypedFilterSelection(1)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (e.key === 'ArrowUp' && isLiveTypedFilterValueMode() && moveLiveTypedFilterSelection(-1)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (e.key === 'Enter' && isLiveTypedFilterValueMode()) {
+      selectActiveLiveTypedFilterChoice();
       e.preventDefault();
       e.stopPropagation();
     }
@@ -418,10 +533,19 @@
       return;
     }
     if (e.key === 'Enter') {
-      if (selectActiveLiveTypedFilterChoice()) {
+      if (isLiveTypedFilterValueMode()) {
+        selectActiveLiveTypedFilterChoice();
         e.preventDefault();
         return;
       }
+    }
+    if (e.key === 'ArrowDown' && isLiveTypedFilterValueMode() && moveLiveTypedFilterSelection(1)) {
+      e.preventDefault();
+      return;
+    }
+    if (e.key === 'ArrowUp' && isLiveTypedFilterValueMode() && moveLiveTypedFilterSelection(-1)) {
+      e.preventDefault();
+      return;
     }
     if (
       e.key === 'Enter' &&
@@ -507,7 +631,7 @@
           }}
           onkeydown={onInputKeyDown}
           onselect={syncInputCaret}
-          onkeyup={syncInputCaret}
+          onkeyup={syncInputCaretAfterKeyUp}
           onpointerup={syncInputCaret}
           oncompositionstart={() => manager.setInputComposing(true)}
           oncompositionend={(event) => {
@@ -873,7 +997,7 @@
             }}
             onkeydown={onInputKeyDown}
             onselect={syncInputCaret}
-            onkeyup={syncInputCaret}
+            onkeyup={syncInputCaretAfterKeyUp}
             onpointerup={syncInputCaret}
             oncompositionstart={() => manager.setInputComposing(true)}
             oncompositionend={(event) => {
