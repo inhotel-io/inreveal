@@ -1867,33 +1867,34 @@ describe('activate("command")', () => {
       );
     });
 
-    it('selecting a live tag choice stores resolver choice by rewritten span identity', () => {
+    it('selecting a live tag choice rewrites the active token and stores resolver choice by rewritten span identity', () => {
       const manager = new GlobalSearchManager();
-      manager.setQuery('tag:fam');
-      manager.setInputCaret('tag:fam'.length);
+      manager.setQuery('beach tag:tra');
+      manager.setInputCaret('beach tag:tra'.length);
 
       manager.selectLiveTypedSearchChoice({
-        id: 'tag:0:7:t1',
+        id: 'tag:6:13:t1',
         key: 'tag',
-        label: 'Family 2025',
-        value: 'Family 2025',
-        tokenStart: 0,
-        tokenEnd: 7,
+        label: 'Family Travel',
+        value: 'Family Travel',
+        tokenStart: 6,
+        tokenEnd: 13,
         entityId: 't1',
       });
 
-      expect(manager.query).toBe('tag:"Family 2025"');
-      expect(manager.selectedTypedSearchChoices.get('tag:0:17:tag:"Family 2025"')).toEqual(
-        expect.objectContaining({
-          tokenRaw: 'tag:"Family 2025"',
+      expect(manager.query).toBe('beach tag:"Family Travel"');
+      expect(manager.selectedTypedSearchChoices.get('tag:6:25:tag:"Family Travel"')).toEqual(
+        {
           key: 'tag',
           id: 't1',
-          label: 'Family 2025',
-          value: 'Family 2025',
-        }),
+          label: 'Family Travel',
+          value: 'Family Travel',
+          tokenRaw: 'tag:"Family Travel"',
+        },
       );
-      expect(manager.selectedTypedSearchChoices.has('tag:fam')).toBe(false);
-      expect(manager.selectedTypedSearchChoices.has('tag:"Family 2025"')).toBe(false);
+      expect(manager.selectedTypedSearchChoices.has('tag:tra')).toBe(false);
+      expect(manager.selectedTypedSearchChoices.has('tag:"Family Travel"')).toBe(false);
+      expect([...manager.selectedTypedSearchChoices.keys()]).toEqual(['tag:6:25:tag:"Family Travel"']);
     });
 
     it('activating after a live person span identity selection uses the selected filter choice', async () => {

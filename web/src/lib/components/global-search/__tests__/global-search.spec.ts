@@ -504,6 +504,37 @@ describe('global-search root', () => {
     expect(goto).toHaveBeenCalledWith('/photos?q=beach&people=p1');
   });
 
+  it('selecting a live tag row applies the filter and does not navigate to tag', async () => {
+    const manager = new GlobalSearchManager();
+    const activateSpy = vi.spyOn(manager, 'activate');
+    manager.open();
+    manager.setQuery('beach tag:tra');
+    manager.setInputCaret('beach tag:tra'.length);
+    manager.liveTypedSearchStatus = {
+      status: 'ok',
+      key: 'tag',
+      total: 1,
+      items: [
+        {
+          id: 'tag:6:13:t1',
+          key: 'tag',
+          label: 'Travel',
+          value: 'Travel',
+          tokenStart: 6,
+          tokenEnd: 13,
+          entityId: 't1',
+        },
+      ],
+    };
+    render(GlobalSearch, { props: { manager } });
+
+    await user.click(screen.getByRole('option', { name: /Travel/i }));
+
+    expect(manager.query).toBe('beach tag:Travel');
+    expect(goto).not.toHaveBeenCalled();
+    expect(activateSpy).not.toHaveBeenCalledWith('tag', expect.anything());
+  });
+
   it('renders live typed filter section before normal results in dropdown variant', () => {
     const m = new GlobalSearchManager();
     m.open('dropdown');
