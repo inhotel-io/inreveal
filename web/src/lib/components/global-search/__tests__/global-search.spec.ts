@@ -497,13 +497,55 @@ describe('global-search root', () => {
     render(GlobalSearch, { props: { manager } });
 
     const liveSection = screen.getByTestId('live-typed-filter-section');
+    const liveFilterGroup = screen.getByRole('group', {
+      name: /cmdk_filter_match_person|person filter matches/i,
+    });
     const topResult = screen.getByTestId('cmdk-top-result');
     expect(liveSection.compareDocumentPosition(topResult) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(liveSection).toContainElement(liveFilterGroup);
     expect(within(liveSection).getByText(/cmdk_filter_match_person|person filter matches/i)).toBeInTheDocument();
 
     const peopleGroup = screen.getByRole('group', { name: /cmdk_people_heading|people/i });
     expect(within(peopleGroup).getByText(/Ann Normal/i)).toBeInTheDocument();
     expect(within(peopleGroup).queryByText(/Ann Live/i)).toBeNull();
+  });
+
+  it('keeps live tag filter rows out of normal tag results', () => {
+    const manager = new GlobalSearchManager();
+    manager.open();
+    manager.setQuery('tag:tra');
+    manager.liveTypedSearchStatus = {
+      status: 'ok',
+      key: 'tag',
+      total: 1,
+      items: [
+        {
+          id: 'tag:0:7:t1',
+          key: 'tag',
+          label: 'Travel Live',
+          value: 'Travel Live',
+          tokenStart: 0,
+          tokenEnd: 7,
+          entityId: 't1',
+        },
+      ],
+    };
+    manager.sections.tags = {
+      status: 'ok',
+      total: 1,
+      items: [{ id: 't2', name: 'Travel Normal' } as never],
+    };
+
+    render(GlobalSearch, { props: { manager } });
+
+    const tagFilterGroup = screen.getByRole('group', { name: /cmdk_filter_match_tag|tag filter matches/i });
+    expect(within(tagFilterGroup).getByText(/Travel Live/i)).toBeInTheDocument();
+
+    const tagsGroup = screen.queryByRole('group', { name: /cmdk_tags_heading|^tags$/i });
+    if (tagsGroup) {
+      expect(within(tagsGroup).getByText(/Travel Normal/i)).toBeInTheDocument();
+      expect(within(tagsGroup).queryByText(/Travel Live/i)).toBeNull();
+    }
   });
 
   it('Enter on a highlighted live filter row rewrites the filter without submitting search', async () => {
