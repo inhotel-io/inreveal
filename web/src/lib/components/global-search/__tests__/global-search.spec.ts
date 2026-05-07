@@ -642,6 +642,41 @@ describe('global-search root', () => {
     expect(activateSearchSpy).not.toHaveBeenCalled();
   });
 
+  it('auto-highlights the first live city row while picking an empty typed city value', async () => {
+    const manager = new GlobalSearchManager();
+    manager.open();
+    manager.setQuery('city:');
+    manager.setInputCaret('city:'.length);
+    manager.liveTypedSearchStatus = {
+      status: 'ok',
+      key: 'city',
+      total: 2,
+      items: [
+        {
+          id: 'city:0:5:Paris',
+          key: 'city',
+          label: 'Paris',
+          value: 'Paris',
+          tokenStart: 0,
+          tokenEnd: 5,
+        },
+        {
+          id: 'city:0:5:Berlin',
+          key: 'city',
+          label: 'Berlin',
+          value: 'Berlin',
+          tokenStart: 0,
+          tokenEnd: 5,
+        },
+      ],
+    };
+
+    render(GlobalSearch, { props: { manager } });
+
+    await vi.waitFor(() => expect(manager.activeItemId).toBe('filter:city:0:5:Paris:Paris'));
+    expect(screen.getByRole('option', { name: /Paris/i })).toBeInTheDocument();
+  });
+
   it('submits search on the next Enter after keyboard-selecting a live person filter value', async () => {
     const manager = new GlobalSearchManager();
     const activateSearchSpy = vi.spyOn(manager, 'activateSearch').mockImplementation(async () => {});

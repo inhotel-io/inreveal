@@ -1393,7 +1393,7 @@ export class GlobalSearchManager {
     }
     const key = this.activeTypedSearchToken.key;
     const supportsLiveSuggestions = key === 'person' || key === 'tag' || key === 'country' || key === 'city';
-    if (!supportsLiveSuggestions || (key === 'city' && this.activeTypedSearchToken.value.trim() === '')) {
+    if (!supportsLiveSuggestions) {
       this.resetLiveTypedSearchSuggestions();
       return;
     }

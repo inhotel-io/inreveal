@@ -356,13 +356,25 @@ describe('resolveLiveTypedSearchSuggestions foundation', () => {
     });
   });
 
-  it('does not fetch city suggestions for an empty city token', async () => {
+  it('loads city suggestions for an empty city token', async () => {
+    vi.mocked(getSearchSuggestions).mockResolvedValue(['Paris', 'Berlin'] as never);
     const parsed = parseTypedSearch('city:', { mode: 'draft' });
 
-    await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
-      status: 'idle',
+    const result = await resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] });
+
+    expect(getSearchSuggestions).toHaveBeenCalledWith(
+      expect.objectContaining({ $type: SearchSuggestionType.City, withSharedSpaces: true }),
+      expect.anything(),
+    );
+    expect(result).toEqual({
+      status: 'ok',
+      key: 'city',
+      total: 2,
+      items: [
+        expect.objectContaining({ key: 'city', label: 'Paris', value: 'Paris' }),
+        expect.objectContaining({ key: 'city', label: 'Berlin', value: 'Berlin' }),
+      ],
     });
-    expect(getSearchSuggestions).not.toHaveBeenCalled();
   });
 
   it('loads city suggestions for a non-empty city token without adding a country', async () => {

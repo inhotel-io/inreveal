@@ -1649,17 +1649,31 @@ describe('activate("command")', () => {
       }
     });
 
-    it('does not schedule live suggestions for an empty city token', async () => {
+    it('debounces initial live city suggestions for an empty city token', async () => {
       vi.useFakeTimers();
       try {
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockResolvedValue({
+          status: 'ok',
+          key: 'city',
+          total: 1,
+          items: [{ id: 'city:0:5:Paris', key: 'city', label: 'Paris', value: 'Paris', tokenStart: 0, tokenEnd: 5 }],
+        });
         const manager = new GlobalSearchManager();
 
         manager.setQuery('city:');
         manager.setInputCaret('city:'.length);
-        await vi.advanceTimersByTimeAsync(200);
 
-        expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
-        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).not.toHaveBeenCalled();
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'loading', key: 'city' });
+
+        await vi.advanceTimersByTimeAsync(150);
+
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledOnce();
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledWith(
+          expect.objectContaining({
+            activeToken: expect.objectContaining({ key: 'city', value: '' }),
+          }),
+        );
+        expect(manager.liveTypedSearchStatus).toMatchObject({ status: 'ok', key: 'city' });
       } finally {
         vi.useRealTimers();
       }

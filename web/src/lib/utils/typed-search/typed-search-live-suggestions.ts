@@ -303,10 +303,6 @@ async function resolveCityLiveSuggestions(
   token: TypedSearchTokenSpan,
 ): Promise<LiveTypedSearchStatus> {
   const value = token.value.trim();
-  if (!value) {
-    return { status: 'idle' };
-  }
-
   try {
     const country = await getCanonicalCountryForCity(context);
     const cities = await getSearchSuggestions(
@@ -320,7 +316,7 @@ async function resolveCityLiveSuggestions(
     const normalizedValue = value.toLowerCase();
     const matches = cities
       .filter((city): city is string => typeof city === 'string')
-      .filter((city) => city.toLowerCase().includes(normalizedValue))
+      .filter((city) => !normalizedValue || city.toLowerCase().includes(normalizedValue))
       .slice(0, LIVE_RESULT_LIMIT)
       .map((city) => stringChoice(token, 'city', city, country));
 
