@@ -1546,6 +1546,85 @@ describe('activate("command")', () => {
       }
     });
 
+    it('debounces live tag filter suggestions for an active tag token', async () => {
+      vi.useFakeTimers();
+      try {
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockResolvedValue({
+          status: 'ok',
+          key: 'tag',
+          total: 1,
+          items: [
+            {
+              id: 'tag:6:13:t1',
+              key: 'tag',
+              label: 'Travel',
+              value: 'Travel',
+              tokenStart: 6,
+              tokenEnd: 13,
+              entityId: 't1',
+            },
+          ],
+        });
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('beach tag:tra');
+        manager.setInputCaret('beach tag:tra'.length);
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'loading', key: 'tag' });
+
+        await vi.advanceTimersByTimeAsync(150);
+
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledOnce();
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledWith(
+          expect.objectContaining({
+            activeToken: expect.objectContaining({ key: 'tag', value: 'tra' }),
+          }),
+        );
+        expect(manager.liveTypedSearchStatus).toMatchObject({ status: 'ok', key: 'tag' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('debounces initial live tag suggestions for an empty tag token', async () => {
+      vi.useFakeTimers();
+      try {
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockResolvedValue({ status: 'empty', key: 'tag' });
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('tag:');
+        manager.setInputCaret('tag:'.length);
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'loading', key: 'tag' });
+
+        await vi.advanceTimersByTimeAsync(150);
+
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledOnce();
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledWith(
+          expect.objectContaining({
+            activeToken: expect.objectContaining({ key: 'tag', value: '' }),
+          }),
+        );
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'empty', key: 'tag' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps unsupported camera tokens out of live suggestions', async () => {
+      vi.useFakeTimers();
+      try {
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('camera:nik');
+        manager.setInputCaret('camera:nik'.length);
+        await vi.advanceTimersByTimeAsync(150);
+
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('ignores stale live person suggestion responses', async () => {
       vi.useFakeTimers();
       try {

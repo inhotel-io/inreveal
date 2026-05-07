@@ -1346,7 +1346,8 @@ export class GlobalSearchManager {
       return;
     }
     const key = this.activeTypedSearchToken.key;
-    if (key !== 'person') {
+    const supportsLiveSuggestions = key === 'person' || key === 'tag';
+    if (!supportsLiveSuggestions) {
       this.resetLiveTypedSearchSuggestions();
       return;
     }
