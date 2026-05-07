@@ -2179,6 +2179,34 @@ describe('activate("command")', () => {
       expect(manager.selectedTypedSearchChoices.size).toBe(0);
     });
 
+    it('submits selected live scalar values through the existing all-or-nothing resolver', async () => {
+      typedSearchMock.resolveTypedSearchFilters.mockResolvedValue({
+        ok: true,
+        queryText: 'beach',
+        filters: { ...createFilterState(), city: 'Paris' },
+        personNames: new Map(),
+        tagNames: new Map(),
+      });
+      const manager = new GlobalSearchManager();
+      manager.setQuery('beach city:par');
+      manager.setInputCaret('beach city:par'.length);
+      manager.selectLiveTypedSearchChoice({
+        id: 'city:6:14:Paris',
+        key: 'city',
+        label: 'Paris',
+        value: 'Paris',
+        tokenStart: 6,
+        tokenEnd: 14,
+      });
+
+      await manager.activateSearch(manager.query);
+
+      expect(typedSearchMock.resolveTypedSearchFilters).toHaveBeenCalledWith(
+        expect.objectContaining({ raw: 'beach city:Paris' }),
+        expect.anything(),
+      );
+    });
+
     it('activating after a live person span identity selection uses the selected filter choice', async () => {
       const manager = new GlobalSearchManager();
       manager.setQuery('beach person:ann');
@@ -2322,6 +2350,17 @@ describe('activate("command")', () => {
       expect(typedSearchMock.resolveTypedSearchFilters).not.toHaveBeenCalled();
       expect(goto).not.toHaveBeenCalled();
       expect(manager.typedSearchIssues[0]).toMatchObject({ code: 'unknown-key', raw: 'persn:anna' });
+    });
+
+    it('keeps duplicate scalar live tokens commit-blocking on Enter', async () => {
+      const manager = new GlobalSearchManager();
+      manager.setQuery('country:Germany country:France');
+
+      await manager.activateSearch(manager.query);
+
+      expect(manager.typedSearchIssues).toEqual([
+        expect.objectContaining({ code: 'duplicate-filter', key: 'country' }),
+      ]);
     });
 
     it('stores resolver names for the destination URL before navigating', async () => {

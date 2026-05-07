@@ -946,6 +946,18 @@ describe('global-search root', () => {
     expect(activateSearchSpy).toHaveBeenCalledWith('beach camera:nikon');
   });
 
+  it('pressing Enter on the top search row still submits the whole typed search', async () => {
+    const m = new GlobalSearchManager();
+    const activateSearchSpy = vi.spyOn(m, 'activateSearch').mockResolvedValue();
+    m.open();
+    m.setQuery('beach city:Paris');
+    render(GlobalSearch, { props: { manager: m } });
+
+    await user.keyboard('{Enter}');
+
+    expect(activateSearchSpy).toHaveBeenCalledWith('beach city:Paris');
+  });
+
   it('pressing Enter on a filter-only tags query commits search instead of navigating to Tags', async () => {
     const m = new GlobalSearchManager();
     const activateSpy = vi.spyOn(m, 'activate').mockImplementation(() => {});

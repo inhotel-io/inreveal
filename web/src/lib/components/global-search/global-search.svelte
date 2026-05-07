@@ -61,6 +61,13 @@
     }
     inputValue = manager.query;
   });
+  $effect(() => {
+    if (variant === 'modal' && manager.isOpen) {
+      queueMicrotask(() => {
+        document.querySelector<HTMLInputElement>('[role="combobox"]')?.focus();
+      });
+    }
+  });
   let selectedValue = $state<string>('');
 
   function setSelectedValue(value: string | null) {
@@ -415,7 +422,11 @@
         return;
       }
     }
-    if (e.key === 'Enter' && manager.topSearchMatch && manager.activeItemId === manager.topSearchMatch.id) {
+    if (
+      e.key === 'Enter' &&
+      manager.topSearchMatch &&
+      (manager.activeItemId === null || manager.activeItemId === manager.topSearchMatch.id)
+    ) {
       void manager.activateSearch(manager.topSearchMatch.rawQuery);
       e.preventDefault();
       return;
