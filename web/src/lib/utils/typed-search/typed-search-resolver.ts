@@ -91,7 +91,9 @@ async function resolveTypedSearchFiltersInternal(
   const countryToken = parsed.scalarTokens.find((token) => token.key === 'country');
   const cityToken = parsed.scalarTokens.find((token) => token.key === 'city');
   const rawTokenCounts = countResolutionTokenRawValues(parsed.resolutionTokens);
-  const unresolvedTokens = parsed.resolutionTokens.filter((token) => !getSelectedChoice(context, token, rawTokenCounts));
+  const unresolvedTokens = parsed.resolutionTokens.filter(
+    (token) => !getSelectedChoice(context, token, rawTokenCounts),
+  );
   const needsSuggestions = unresolvedTokens.some(
     (token) => token.key === 'tag' || token.key === 'camera' || (token.key === 'person' && context.spaceId),
   );

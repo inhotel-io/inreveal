@@ -1361,11 +1361,7 @@ export class GlobalSearchManager {
       this.liveTypedSearchController = controller;
       const pathParts = page.url.pathname.split('/').filter(Boolean);
       const spaceId = pathParts[0] === 'spaces' ? pathParts[1] : undefined;
-      const signal = AbortSignal.any([
-        this.closeSignal,
-        controller.signal,
-        AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
-      ]);
+      const signal = AbortSignal.any([this.closeSignal, controller.signal, AbortSignal.timeout(PROVIDER_TIMEOUT_MS)]);
 
       void Promise.resolve()
         .then(() =>
