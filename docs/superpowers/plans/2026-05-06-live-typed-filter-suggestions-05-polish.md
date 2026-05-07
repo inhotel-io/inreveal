@@ -545,8 +545,7 @@ Use `clearLiveTypedSearchRequest()` when the active token is missing, compositio
 Store the composite request signal in a local `signal` variable before calling the resolver, then map timeout from `signal.reason` in the live request catch block:
 
 ```ts
-const isTimeout =
-  signal.aborted && signal.reason instanceof DOMException && signal.reason.name === 'TimeoutError';
+const isTimeout = signal.aborted && signal.reason instanceof DOMException && signal.reason.name === 'TimeoutError';
 if (isTimeout || (error instanceof DOMException && error.name === 'TimeoutError')) {
   if (requestId === this.liveTypedSearchRequestId) {
     this.liveTypedSearchStatus = { status: 'timeout', key };
@@ -593,7 +592,17 @@ it('renders city secondary labels and timeout rows', () => {
         status: 'ok',
         key: 'city',
         total: 1,
-        items: [{ id: 'city:0:8:Berlin', key: 'city', label: 'Berlin', value: 'Berlin', tokenStart: 0, tokenEnd: 8, secondaryLabel: 'Germany' }],
+        items: [
+          {
+            id: 'city:0:8:Berlin',
+            key: 'city',
+            label: 'Berlin',
+            value: 'Berlin',
+            tokenStart: 0,
+            tokenEnd: 8,
+            secondaryLabel: 'Germany',
+          },
+        ],
       },
       onSelect: vi.fn(),
     },
@@ -617,7 +626,17 @@ it('renders live filter matches before the top result and outside normal people 
     status: 'ok',
     key: 'person',
     total: 1,
-    items: [{ id: 'person:0:10:p1', key: 'person', label: 'Ann Live', value: 'Ann Live', tokenStart: 0, tokenEnd: 10, entityId: 'p1' }],
+    items: [
+      {
+        id: 'person:0:10:p1',
+        key: 'person',
+        label: 'Ann Live',
+        value: 'Ann Live',
+        tokenStart: 0,
+        tokenEnd: 10,
+        entityId: 'p1',
+      },
+    ],
   };
   render(GlobalSearch, { props: { manager } });
 
@@ -643,7 +662,17 @@ it('uses Enter on a highlighted live filter row to rewrite the token instead of 
     status: 'ok',
     key: 'person',
     total: 1,
-    items: [{ id: 'person:0:10:p1', key: 'person', label: 'Ann Live', value: 'Ann Live', tokenStart: 0, tokenEnd: 10, entityId: 'p1' }],
+    items: [
+      {
+        id: 'person:0:10:p1',
+        key: 'person',
+        label: 'Ann Live',
+        value: 'Ann Live',
+        tokenStart: 0,
+        tokenEnd: 10,
+        entityId: 'p1',
+      },
+    ],
   };
   render(GlobalSearch, { props: { manager } });
 
@@ -725,9 +754,7 @@ it('keeps duplicate scalar live tokens commit-blocking on Enter', async () => {
 
   await manager.activateSearch(manager.query);
 
-  expect(manager.typedSearchIssues).toEqual([
-    expect.objectContaining({ code: 'duplicate-filter', key: 'country' }),
-  ]);
+  expect(manager.typedSearchIssues).toEqual([expect.objectContaining({ code: 'duplicate-filter', key: 'country' })]);
 });
 
 it('submits selected live scalar values through the existing all-or-nothing resolver', async () => {

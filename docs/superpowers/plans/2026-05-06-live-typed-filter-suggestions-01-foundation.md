@@ -118,9 +118,7 @@ it('keeps empty known filters quiet in draft mode but blocking in commit mode', 
 it('keeps unterminated quoted filters as draft issues', () => {
   const result = parseTypedSearch('person:"Anna Maria', { mode: 'draft' });
 
-  expect(result.issues).toEqual([
-    expect.objectContaining({ code: 'unterminated-quote', raw: 'person:"Anna Maria' }),
-  ]);
+  expect(result.issues).toEqual([expect.objectContaining({ code: 'unterminated-quote', raw: 'person:"Anna Maria' })]);
 });
 ```
 
@@ -573,7 +571,16 @@ describe('LiveTypedFilterSection', () => {
           status: 'ok',
           key: 'person',
           total: 1,
-          items: [{ id: 'person:0:10:p1', key: 'person', label: 'Anna Maria', value: 'Anna Maria', tokenStart: 6, tokenEnd: 16 }],
+          items: [
+            {
+              id: 'person:0:10:p1',
+              key: 'person',
+              label: 'Anna Maria',
+              value: 'Anna Maria',
+              tokenStart: 6,
+              tokenEnd: 16,
+            },
+          ],
         },
         onSelect,
       },
@@ -713,7 +720,9 @@ it('renders live typed filter section before normal results and selects rows bef
     status: 'ok',
     key: 'person',
     total: 1,
-    items: [{ id: 'person:6:16:p1', key: 'person', label: 'Anna Maria', value: 'Anna Maria', tokenStart: 6, tokenEnd: 16 }],
+    items: [
+      { id: 'person:6:16:p1', key: 'person', label: 'Anna Maria', value: 'Anna Maria', tokenStart: 6, tokenEnd: 16 },
+    ],
   };
   render(GlobalSearch, { props: { manager: m } });
 

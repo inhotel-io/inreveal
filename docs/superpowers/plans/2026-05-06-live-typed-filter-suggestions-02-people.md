@@ -191,7 +191,10 @@ function makeChoiceId(token: TypedSearchTokenSpan, entityId: string, key: LiveTy
   return `${key}:${token.start}:${token.end}:${entityId}`;
 }
 
-function personChoice(token: TypedSearchTokenSpan, person: { id: string; name?: string | null }): LiveTypedSearchChoice {
+function personChoice(
+  token: TypedSearchTokenSpan,
+  person: { id: string; name?: string | null },
+): LiveTypedSearchChoice {
   const label = person.name || person.id;
   return {
     id: makeChoiceId(token, person.id, 'person'),
@@ -238,12 +241,18 @@ async function resolvePersonLiveSuggestions(
       .filter((person) => !value || (person.name || person.id).toLowerCase().includes(value.toLowerCase()))
       .slice(0, LIVE_RESULT_LIMIT)
       .map((person) => personChoice(token, person));
-    return matches.length === 0 ? { status: 'empty', key: 'person' } : { status: 'ok', key: 'person', items: matches, total: matches.length };
+    return matches.length === 0
+      ? { status: 'empty', key: 'person' }
+      : { status: 'ok', key: 'person', items: matches, total: matches.length };
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
-    return { status: 'error', key: 'person', message: error instanceof Error ? error.message : 'Unable to load people' };
+    return {
+      status: 'error',
+      key: 'person',
+      message: error instanceof Error ? error.message : 'Unable to load people',
+    };
   }
 }
 ```
@@ -300,7 +309,17 @@ it('debounces live person filter suggestions for the active token', async () => 
     status: 'ok',
     key: 'person',
     total: 1,
-    items: [{ id: 'person:6:16:p1', key: 'person', label: 'Anna', value: 'Anna', tokenStart: 6, tokenEnd: 16, entityId: 'p1' }],
+    items: [
+      {
+        id: 'person:6:16:p1',
+        key: 'person',
+        label: 'Anna',
+        value: 'Anna',
+        tokenStart: 6,
+        tokenEnd: 16,
+        entityId: 'p1',
+      },
+    ],
   });
   const manager = new GlobalSearchManager();
 
@@ -330,7 +349,12 @@ it('ignores stale live person suggestion responses', async () => {
   manager.setInputCaret('person:zz'.length);
   await vi.advanceTimersByTimeAsync(150);
 
-  resolveFirst({ status: 'ok', key: 'person', total: 1, items: [{ id: 'stale', key: 'person', label: 'Anna', value: 'Anna', tokenStart: 0, tokenEnd: 10 }] });
+  resolveFirst({
+    status: 'ok',
+    key: 'person',
+    total: 1,
+    items: [{ id: 'stale', key: 'person', label: 'Anna', value: 'Anna', tokenStart: 0, tokenEnd: 10 }],
+  });
   await Promise.resolve();
 
   expect(manager.liveTypedSearchStatus).toEqual({ status: 'empty', key: 'person' });
@@ -353,7 +377,10 @@ Expected: FAIL because manager never calls the live utility.
 In manager imports:
 
 ```ts
-import { resolveLiveTypedSearchSuggestions, type LiveTypedSearchChoice } from '$lib/utils/typed-search/typed-search-live-suggestions';
+import {
+  resolveLiveTypedSearchSuggestions,
+  type LiveTypedSearchChoice,
+} from '$lib/utils/typed-search/typed-search-live-suggestions';
 ```
 
 Add state:
@@ -495,7 +522,17 @@ it('selecting a live person row applies the filter and does not navigate to pers
     status: 'ok',
     key: 'person',
     total: 1,
-    items: [{ id: 'person:6:16:p1', key: 'person', label: 'Anna Maria', value: 'Anna Maria', tokenStart: 6, tokenEnd: 16, entityId: 'p1' }],
+    items: [
+      {
+        id: 'person:6:16:p1',
+        key: 'person',
+        label: 'Anna Maria',
+        value: 'Anna Maria',
+        tokenStart: 6,
+        tokenEnd: 16,
+        entityId: 'p1',
+      },
+    ],
   };
   render(GlobalSearch, { props: { manager } });
 

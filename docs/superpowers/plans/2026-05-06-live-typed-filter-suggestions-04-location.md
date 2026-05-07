@@ -153,7 +153,12 @@ Expected: FAIL because `country:` still returns `idle`.
 In `typed-search-live-suggestions.ts`, add:
 
 ```ts
-function stringChoice(token: TypedSearchTokenSpan, key: 'country' | 'city', value: string, secondaryLabel?: string): LiveTypedSearchChoice {
+function stringChoice(
+  token: TypedSearchTokenSpan,
+  key: 'country' | 'city',
+  value: string,
+  secondaryLabel?: string,
+): LiveTypedSearchChoice {
   return {
     id: makeChoiceId(token, value, key),
     key,
@@ -184,7 +189,11 @@ async function resolveCountryLiveSuggestions(
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
-    return { status: 'error', key: 'country', message: error instanceof Error ? error.message : 'Unable to load countries' };
+    return {
+      status: 'error',
+      key: 'country',
+      message: error instanceof Error ? error.message : 'Unable to load countries',
+    };
   }
 }
 ```
@@ -332,7 +341,10 @@ async function getCanonicalCountryForCity(context: LiveTypedSearchContext): Prom
   }
   const value = String(countryToken.normalizedValue);
   const response = await getFilterSuggestions(liveSuggestionScope(context), { signal: context.signal });
-  return canonicalExactMatch(response.countries.filter((country): country is string => typeof country === 'string'), value);
+  return canonicalExactMatch(
+    response.countries.filter((country): country is string => typeof country === 'string'),
+    value,
+  );
 }
 
 async function resolveCityLiveSuggestions(
@@ -413,7 +425,9 @@ it('debounces live country filter suggestions for an active country token', asyn
     status: 'ok',
     key: 'country',
     total: 1,
-    items: [{ id: 'country:0:10:Germany', key: 'country', label: 'Germany', value: 'Germany', tokenStart: 0, tokenEnd: 10 }],
+    items: [
+      { id: 'country:0:10:Germany', key: 'country', label: 'Germany', value: 'Germany', tokenStart: 0, tokenEnd: 10 },
+    ],
   });
   const manager = new GlobalSearchManager();
 

@@ -265,7 +265,9 @@ it('debounces live tag filter suggestions for an active tag token', async () => 
     status: 'ok',
     key: 'tag',
     total: 1,
-    items: [{ id: 'tag:6:16:t1', key: 'tag', label: 'Travel', value: 'Travel', tokenStart: 6, tokenEnd: 16, entityId: 't1' }],
+    items: [
+      { id: 'tag:6:16:t1', key: 'tag', label: 'Travel', value: 'Travel', tokenStart: 6, tokenEnd: 16, entityId: 't1' },
+    ],
   });
   const manager = new GlobalSearchManager();
 
@@ -416,7 +418,9 @@ it('selecting a live tag row applies the filter without activating tag navigatio
     status: 'ok',
     key: 'tag',
     total: 1,
-    items: [{ id: 'tag:6:13:t1', key: 'tag', label: 'Travel', value: 'Travel', tokenStart: 6, tokenEnd: 13, entityId: 't1' }],
+    items: [
+      { id: 'tag:6:13:t1', key: 'tag', label: 'Travel', value: 'Travel', tokenStart: 6, tokenEnd: 13, entityId: 't1' },
+    ],
   };
 
   render(GlobalSearch, { props: { manager } });
