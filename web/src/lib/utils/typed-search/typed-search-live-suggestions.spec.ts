@@ -23,7 +23,15 @@ describe('resolveLiveTypedSearchSuggestions foundation', () => {
     });
   });
 
-  it('searches people by active person token value', async () => {
+  it.each(['tag:travel', 'country:ge', 'city:par'])('keeps unsupported live key %s idle', async (search) => {
+    const parsed = parseTypedSearch(search, { mode: 'draft' });
+
+    await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
+      status: 'idle',
+    });
+  });
+
+  it('searches people by active person token value with stable choice spans', async () => {
     vi.mocked(searchPerson).mockResolvedValue([
       { id: 'person-1', name: 'Anna Maria' },
       { id: 'person-2', name: 'Annika' },
@@ -41,7 +49,15 @@ describe('resolveLiveTypedSearchSuggestions foundation', () => {
       key: 'person',
       total: 2,
       items: [
-        expect.objectContaining({ key: 'person', label: 'Anna Maria', value: 'Anna Maria', entityId: 'person-1' }),
+        expect.objectContaining({
+          id: 'person:6:16:person-1',
+          key: 'person',
+          label: 'Anna Maria',
+          value: 'Anna Maria',
+          tokenStart: 6,
+          tokenEnd: 16,
+          entityId: 'person-1',
+        }),
         expect.objectContaining({ key: 'person', label: 'Annika', value: 'Annika', entityId: 'person-2' }),
       ],
     });
@@ -64,7 +80,10 @@ describe('resolveLiveTypedSearchSuggestions foundation', () => {
 
   it('uses space-scoped people suggestions when spaceId is present', async () => {
     vi.mocked(getFilterSuggestions).mockResolvedValue({
-      people: [{ id: 'space-person-1', name: 'Anna Space' }],
+      people: [
+        { id: 'space-person-1', name: 'Anna Space' },
+        { id: 'space-person-2', name: 'Beth Space' },
+      ],
       countries: [],
       cameraMakes: [],
       tags: [],
@@ -81,8 +100,9 @@ describe('resolveLiveTypedSearchSuggestions foundation', () => {
     });
 
     expect(getFilterSuggestions).toHaveBeenCalledWith({ spaceId: 'space-1' }, expect.anything());
-    expect(result).toMatchObject({ status: 'ok', key: 'person' });
+    expect(result).toMatchObject({ status: 'ok', key: 'person', total: 1 });
     if (result.status === 'ok') {
+      expect(result.items).toHaveLength(1);
       expect(result.items[0]).toMatchObject({ entityId: 'space-person-1', label: 'Anna Space' });
     }
   });
@@ -106,5 +126,13 @@ describe('resolveLiveTypedSearchSuggestions foundation', () => {
       key: 'person',
       message: 'network down',
     });
+  });
+
+  it('rethrows AbortError from person suggestions', async () => {
+    const abortError = new DOMException('The operation was aborted.', 'AbortError');
+    vi.mocked(searchPerson).mockRejectedValue(abortError);
+    const parsed = parseTypedSearch('person:ann', { mode: 'draft' });
+
+    await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).rejects.toBe(abortError);
   });
 });
