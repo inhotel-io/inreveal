@@ -161,7 +161,18 @@ test.describe('global search palette', () => {
 
     await expect(input).toHaveValue('person:"Live Filter Person"');
     await input.press('Enter');
-    await expect.poll(() => new URL(page.url()).searchParams.get('people')).toContain(person.id);
+    await expect
+      .poll(() => {
+        const url = new URL(page.url());
+        return {
+          pathname: url.pathname,
+          people: url.searchParams.get('people'),
+        };
+      })
+      .toEqual({
+        pathname: '/photos',
+        people: expect.stringContaining(person.id),
+      });
   });
 
   test('album activation navigates and populates RECENT', async ({ page }) => {
