@@ -83,11 +83,19 @@ async function resolvePersonLiveSuggestions(
 ): Promise<LiveTypedSearchStatus> {
   try {
     const value = token.value.trim();
-    const people = context.spaceId
-      ? (await getFilterSuggestions({ spaceId: context.spaceId }, { signal: context.signal })).people
-      : value
-        ? await searchPerson({ name: value, withHidden: false, withSharedSpaces: true }, { signal: context.signal })
-        : (await getAllPeople({ size: 10, withSharedSpaces: true }, { signal: context.signal })).people;
+    const people = await (async () => {
+      if (context.spaceId) {
+        const response = await getFilterSuggestions({ spaceId: context.spaceId }, { signal: context.signal });
+        return response.people;
+      }
+
+      if (value) {
+        return searchPerson({ name: value, withHidden: false, withSharedSpaces: true }, { signal: context.signal });
+      }
+
+      const response = await getAllPeople({ size: 10, withSharedSpaces: true }, { signal: context.signal });
+      return response.people;
+    })();
     const normalizedValue = value.toLowerCase();
     const matches = people
       .filter((person) => !normalizedValue || (person.name || person.id).toLowerCase().includes(normalizedValue))
