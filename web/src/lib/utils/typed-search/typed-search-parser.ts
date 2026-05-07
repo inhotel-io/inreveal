@@ -41,6 +41,9 @@ export type TypedSearchScalarToken = {
   raw: string;
   value: string;
   normalizedValue: string | number | boolean;
+  start: number;
+  end: number;
+  identity: TypedSearchTokenIdentity;
 };
 
 export type TypedSearchResolutionToken = {
@@ -50,7 +53,7 @@ export type TypedSearchResolutionToken = {
   value: string;
   start: number;
   end: number;
-  identity: string;
+  identity: TypedSearchTokenIdentity;
 };
 
 export type TypedSearchDisplayToken = {
@@ -62,6 +65,7 @@ export type TypedSearchDisplayToken = {
 };
 
 export type TypedSearchParseMode = 'commit' | 'draft';
+export type TypedSearchTokenIdentity = `${TypedSearchFilterKey}:${number}:${number}:${string}`;
 
 export type TypedSearchTokenSpan = {
   raw: string;
@@ -107,8 +111,10 @@ type ParsedPiece = {
   issue?: 'unterminated-quote' | 'escaped-quote';
 };
 
+type TypedSearchScalarTokenBase = Omit<TypedSearchScalarToken, 'start' | 'end' | 'identity'>;
+
 type ScalarResult =
-  | { token: TypedSearchScalarToken }
+  | { token: TypedSearchScalarTokenBase }
   | {
       issue: TypedSearchIssue;
     };
@@ -133,8 +139,30 @@ const FILTER_KEY_ALIASES: Record<string, TypedSearchFilterKey> = {
   tags: 'tag',
 };
 
-export function getTypedSearchTokenIdentity(key: string, start: number, end: number, raw: string): string {
-  return `${key}:${start}:${end}:${raw}`;
+type TypedSearchTokenIdentityParts = {
+  key: TypedSearchFilterKey;
+  start: number;
+  end: number;
+  raw: string;
+};
+
+export function getTypedSearchTokenIdentity(token: TypedSearchTokenIdentityParts): TypedSearchTokenIdentity;
+export function getTypedSearchTokenIdentity(
+  key: TypedSearchFilterKey,
+  start: number,
+  end: number,
+  raw: string,
+): TypedSearchTokenIdentity;
+export function getTypedSearchTokenIdentity(
+  tokenOrKey: TypedSearchTokenIdentityParts | TypedSearchFilterKey,
+  start?: number,
+  end?: number,
+  raw?: string,
+): TypedSearchTokenIdentity {
+  if (typeof tokenOrKey === 'object') {
+    return `${tokenOrKey.key}:${tokenOrKey.start}:${tokenOrKey.end}:${tokenOrKey.raw}`;
+  }
+  return `${tokenOrKey}:${start}:${end}:${raw}`;
 }
 
 export function parseTypedSearch(raw: string, options: TypedSearchParseOptions = {}): TypedSearchParseResult {
@@ -218,7 +246,12 @@ export function parseTypedSearch(raw: string, options: TypedSearchParseOptions =
         value: piece.value,
         start: piece.start,
         end: piece.end,
-        identity: getTypedSearchTokenIdentity(resolutionKey, piece.start, piece.end, piece.raw),
+        identity: getTypedSearchTokenIdentity({
+          key: resolutionKey,
+          start: piece.start,
+          end: piece.end,
+          raw: piece.raw,
+        }),
       });
       displayTokens.push({ raw: piece.raw, key, value: piece.value, status: 'pending-entity' });
       continue;
@@ -233,7 +266,17 @@ export function parseTypedSearch(raw: string, options: TypedSearchParseOptions =
       continue;
     }
 
-    scalarTokens.push(scalar.token);
+    scalarTokens.push({
+      ...scalar.token,
+      start: piece.start,
+      end: piece.end,
+      identity: getTypedSearchTokenIdentity({
+        key: scalar.token.key,
+        start: piece.start,
+        end: piece.end,
+        raw: piece.raw,
+      }),
+    });
     displayTokens.push({ raw: piece.raw, key, value: piece.value, status: 'recognized' });
   }
 

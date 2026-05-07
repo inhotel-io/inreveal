@@ -165,6 +165,36 @@ describe('resolveTypedSearchFilters', () => {
     }
   });
 
+  it('prefers selected span identity over raw fallback for repeated selected live person choices', async () => {
+    const parsed = parseTypedSearch('person:ann person:ann', { mode: 'draft' });
+    const selectedChoices = new Map([
+      [
+        parsed.resolutionTokens[0].identity,
+        { tokenRaw: 'person:ann', key: 'person' as const, id: 'person-1', label: 'Ann Live', value: 'ann' },
+      ],
+      [
+        'person:ann',
+        {
+          tokenRaw: 'person:ann',
+          key: 'person' as const,
+          id: 'wrong-raw-person',
+          label: 'Wrong Raw Person',
+          value: 'ann',
+        },
+      ],
+    ]);
+
+    const result = await resolveTypedSearchFilters(parsed, { selectedChoices });
+
+    expect(searchPerson).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.filters.personIds[0]).toBe('person-1');
+      expect(result.filters.personIds[0]).not.toBe('wrong-raw-person');
+      expect(result.personNames.get('person-1')).toBe('Ann Live');
+    }
+  });
+
   it('accumulates repeated people and tags in input order', async () => {
     vi.mocked(searchPerson)
       .mockResolvedValueOnce([{ id: 'person-1', name: 'Anna' } as never])

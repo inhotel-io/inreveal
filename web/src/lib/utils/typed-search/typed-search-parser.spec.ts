@@ -189,6 +189,19 @@ describe('parseTypedSearch', () => {
     ]);
   });
 
+  it('assigns span identities to scalar tokens too', () => {
+    const result = parseTypedSearch('country:Germany city:Berlin', { mode: 'draft' });
+
+    expect(result.scalarTokens.map((token) => token.identity)).toEqual([
+      'country:0:15:country:Germany',
+      'city:16:27:city:Berlin',
+    ]);
+    expect(result.scalarTokens.map((token) => ({ start: token.start, end: token.end }))).toEqual([
+      { start: 0, end: 15 },
+      { start: 16, end: 27 },
+    ]);
+  });
+
   it('rejects a date range where from is after to', () => {
     const result = parseTypedSearch('from:2026 to:2025');
 

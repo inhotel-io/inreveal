@@ -495,6 +495,7 @@ describe('global-search root', () => {
     await user.click(screen.getByRole('option', { name: /Anna Maria/i }));
 
     expect(manager.query).toBe('beach person:"Anna Maria"');
+    expect(goto).not.toHaveBeenCalled();
     expect(activateSpy).not.toHaveBeenCalledWith('person', expect.anything());
 
     vi.mocked(goto).mockClear();
