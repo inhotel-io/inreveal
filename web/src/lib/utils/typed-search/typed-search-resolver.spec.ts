@@ -56,6 +56,26 @@ describe('resolveTypedSearchFilters', () => {
     }
   });
 
+  it('resolves global person tokens to scoped filter ids from search results', async () => {
+    vi.mocked(searchPerson).mockResolvedValue([
+      {
+        id: 'identity-group-1',
+        filterId: 'person:person-1',
+        name: 'Anna',
+        primaryProfile: { type: 'user-person', id: 'person-1' },
+      } as never,
+    ]);
+
+    const result = await resolveTypedSearchFilters(parseTypedSearch('person:anna'), {});
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.filters.personIds).toEqual(['person:person-1']);
+      expect(result.filters.personIds).not.toContain('identity-group-1');
+      expect(result.personNames.get('person:person-1')).toBe('Anna');
+    }
+  });
+
   it('canonicalizes city filters with case-insensitive suggestions', async () => {
     vi.mocked(getSearchSuggestions).mockResolvedValue(['Munich']);
 

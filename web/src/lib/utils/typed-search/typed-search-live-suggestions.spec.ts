@@ -62,19 +62,60 @@ describe('resolveLiveTypedSearchSuggestions foundation', () => {
     });
   });
 
-  it('loads initial people suggestions for empty person token', async () => {
-    vi.mocked(getAllPeople).mockResolvedValue({
-      people: [{ id: 'person-1', name: 'Zoe' }],
-      total: 1,
-      hidden: 0,
-      hasNextPage: false,
+  it('loads initial named people suggestions for empty person token without UUID fallbacks', async () => {
+    vi.mocked(getFilterSuggestions).mockResolvedValue({
+      people: [
+        { id: 'person:person-1', name: 'Zoe' },
+        { id: '6bdf1ca5-a47d-4a3b-b3cc-ed81e9e98ce8', name: '' },
+      ],
+      countries: [],
+      cameraMakes: [],
+      tags: [],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: true,
     } as never);
     const parsed = parseTypedSearch('person:', { mode: 'draft' });
 
     const result = await resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] });
 
-    expect(getAllPeople).toHaveBeenCalledWith({ size: 10, withSharedSpaces: true }, expect.anything());
+    expect(getAllPeople).not.toHaveBeenCalled();
+    expect(getFilterSuggestions).toHaveBeenCalledWith({ withSharedSpaces: true }, expect.anything());
     expect(result).toMatchObject({ status: 'ok', key: 'person', total: 1 });
+    if (result.status === 'ok') {
+      expect(result.items).toEqual([
+        expect.objectContaining({
+          label: 'Zoe',
+          value: 'Zoe',
+          entityId: 'person:person-1',
+        }),
+      ]);
+      expect(result.items.map((item) => item.label)).not.toContain('6bdf1ca5-a47d-4a3b-b3cc-ed81e9e98ce8');
+    }
+  });
+
+  it('uses scoped person filter tokens for global searched people', async () => {
+    vi.mocked(searchPerson).mockResolvedValue([
+      {
+        id: 'identity-group-1',
+        filterId: 'person:person-1',
+        name: 'Anna',
+        primaryProfile: { type: 'user-person', id: 'person-1' },
+      },
+    ] as never);
+    const parsed = parseTypedSearch('person:ann', { mode: 'draft' });
+
+    const result = await resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] });
+
+    expect(result).toMatchObject({ status: 'ok', key: 'person', total: 1 });
+    if (result.status === 'ok') {
+      expect(result.items[0]).toMatchObject({
+        label: 'Anna',
+        value: 'Anna',
+        entityId: 'person:person-1',
+      });
+      expect(result.items[0].entityId).not.toBe('identity-group-1');
+    }
   });
 
   it('uses space-scoped people suggestions when spaceId is present', async () => {

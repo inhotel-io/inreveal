@@ -39,7 +39,9 @@ export type TypedSearchResolveResult =
 
 type PersonSuggestion = {
   id: string;
+  filterId?: string | null;
   name?: string | null;
+  primaryProfile?: { type?: string; id?: string; spaceId?: string };
 };
 
 type TagSuggestion = {
@@ -143,12 +145,12 @@ async function resolveTypedSearchFiltersInternal(
 
     if (token.key === 'person') {
       if (context.spaceId && suggestions) {
-        resolvePersonTokenFromSuggestions(token, suggestions.people, filters, personNames, issues, choices);
+        resolvePersonTokenFromSuggestions(token, suggestions.people, filters, personNames, issues, choices, 'space');
         continue;
       }
 
       const people = await searchPerson({ name: token.value, withHidden: false }, { signal: context.signal });
-      resolvePersonTokenFromSuggestions(token, people, filters, personNames, issues, choices);
+      resolvePersonTokenFromSuggestions(token, people, filters, personNames, issues, choices, 'global');
       continue;
     }
 
@@ -257,12 +259,17 @@ function resolvePersonTokenFromSuggestions(
   personNames: Map<string, string>,
   issues: TypedSearchIssue[],
   choices: TypedSearchChoice[],
+  scope: 'global' | 'space',
 ) {
-  const matches = people.filter((person) => matchesValue(person.name ?? person.id, token.value));
+  const matches = people
+    .filter((person) => getPersonLabel(person))
+    .filter((person) => matchesValue(getPersonLabel(person), token.value));
   if (matches.length === 1) {
     const match = matches[0];
-    filters.personIds.push(match.id);
-    personNames.set(match.id, match.name || match.id);
+    const id = getPersonFilterId(match, scope);
+    const label = getPersonLabel(match);
+    filters.personIds.push(id);
+    personNames.set(id, label);
     return;
   }
 
@@ -273,14 +280,41 @@ function resolvePersonTokenFromSuggestions(
 
   issues.push(ambiguousIssue(token, 'person'));
   choices.push(
-    ...matches.map((person) => ({
-      tokenRaw: token.raw,
-      key: 'person' as const,
-      id: person.id,
-      label: person.name || person.id,
-      value: token.value,
-    })),
+    ...matches.map((person) => {
+      const id = getPersonFilterId(person, scope);
+      return {
+        tokenRaw: token.raw,
+        key: 'person' as const,
+        id,
+        label: getPersonLabel(person),
+        value: token.value,
+      };
+    }),
   );
+}
+
+function getPersonLabel(person: Pick<PersonSuggestion, 'name'>) {
+  return person.name?.trim() ?? '';
+}
+
+function getPersonFilterId(person: PersonSuggestion, scope: 'global' | 'space') {
+  if (scope === 'space') {
+    return person.id;
+  }
+
+  if (person.filterId) {
+    return person.filterId;
+  }
+
+  if (person.primaryProfile?.type === 'space-person' && person.primaryProfile.id) {
+    return `space-person:${person.primaryProfile.id}`;
+  }
+
+  if (person.primaryProfile?.type === 'user-person' && person.primaryProfile.id) {
+    return `person:${person.primaryProfile.id}`;
+  }
+
+  return person.id;
 }
 
 function resolveTagToken(

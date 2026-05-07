@@ -1,10 +1,4 @@
-import {
-  getAllPeople,
-  getFilterSuggestions,
-  getSearchSuggestions,
-  searchPerson,
-  SearchSuggestionType,
-} from '@immich/sdk';
+import { getFilterSuggestions, getSearchSuggestions, searchPerson, SearchSuggestionType } from '@immich/sdk';
 import type { TypedSearchParseResult, TypedSearchTokenSpan } from './typed-search-parser';
 
 export type LiveTypedSearchKey = 'person' | 'tag' | 'country' | 'city';
@@ -59,19 +53,47 @@ function liveSuggestionScope(context: LiveTypedSearchContext) {
 
 function personChoice(
   token: TypedSearchTokenSpan,
-  person: { id: string; name?: string | null },
+  person: { id: string; filterId?: string | null; name?: string | null; primaryProfile?: ScopedPersonProfile },
+  scope: 'global' | 'space',
 ): LiveTypedSearchChoice {
-  const label = person.name || person.id;
+  const label = getPersonLabel(person);
+  const entityId = scope === 'global' ? getGlobalPersonFilterId(person) : person.id;
 
   return {
-    id: makeChoiceId(token, person.id, 'person'),
+    id: makeChoiceId(token, entityId, 'person'),
     key: 'person',
     label,
     value: label,
     tokenStart: token.start,
     tokenEnd: token.end,
-    entityId: person.id,
+    entityId,
   };
+}
+
+type ScopedPersonProfile = { type?: string; id?: string; spaceId?: string };
+
+function getPersonLabel(person: { name?: string | null }) {
+  return person.name?.trim() ?? '';
+}
+
+function getGlobalPersonFilterId(person: {
+  id: string;
+  filterId?: string | null;
+  primaryProfile?: ScopedPersonProfile;
+}) {
+  if (person.filterId) {
+    return person.filterId;
+  }
+
+  if (person.primaryProfile?.type === 'space-person' && person.primaryProfile.id) {
+    return `space-person:${person.primaryProfile.id}`;
+  }
+
+  if (person.primaryProfile?.type === 'user-person' && person.primaryProfile.id) {
+    return `person:${person.primaryProfile.id}`;
+  }
+
+  return person.id;
 }
 
 function tagLabel(tag: TagSuggestion) {
@@ -152,14 +174,16 @@ async function resolvePersonLiveSuggestions(
         return searchPerson({ name: value, withHidden: false, withSharedSpaces: true }, { signal: context.signal });
       }
 
-      const response = await getAllPeople({ size: 10, withSharedSpaces: true }, { signal: context.signal });
+      const response = await getFilterSuggestions({ withSharedSpaces: true }, { signal: context.signal });
       return response.people;
     })();
     const normalizedValue = value.toLowerCase();
+    const scope = context.spaceId ? 'space' : 'global';
     const matches = people
-      .filter((person) => !normalizedValue || (person.name || person.id).toLowerCase().includes(normalizedValue))
+      .filter((person) => getPersonLabel(person))
+      .filter((person) => !normalizedValue || getPersonLabel(person).toLowerCase().includes(normalizedValue))
       .slice(0, LIVE_RESULT_LIMIT)
-      .map((person) => personChoice(token, person));
+      .map((person) => personChoice(token, person, scope));
 
     return matches.length === 0
       ? { status: 'empty', key: 'person' }
