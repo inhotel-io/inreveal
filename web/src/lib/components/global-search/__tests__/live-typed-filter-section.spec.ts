@@ -1,9 +1,14 @@
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { Command } from 'bits-ui';
+import type { Snippet } from 'svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import LiveTypedFilterSection from '../live-typed-filter-section.svelte';
+
+type ComponentAnchor = Parameters<typeof Command.Root>[0];
+type RenderSnippet = ($$anchor: ComponentAnchor) => void;
+const snippet = (renderSnippet: RenderSnippet) => renderSnippet as unknown as Snippet;
 
 beforeAll(async () => {
   register('en-US', () => import('$i18n/en.json'));
@@ -11,11 +16,11 @@ beforeAll(async () => {
   await waitLocale('en-US');
 });
 
-function LiveTypedFilterSectionHost($$anchor: unknown, $$props: Record<string, unknown>) {
+function LiveTypedFilterSectionHost($$anchor: ComponentAnchor, $$props: Record<string, unknown>) {
   Command.Root($$anchor, {
-    children: ($$anchor: unknown) => {
+    children: snippet(($$anchor: ComponentAnchor) => {
       Command.List($$anchor, {
-        children: ($$anchor: unknown) => {
+        children: snippet(($$anchor: ComponentAnchor) => {
           LiveTypedFilterSection($$anchor, {
             get status() {
               return $$props.status;
@@ -24,11 +29,9 @@ function LiveTypedFilterSectionHost($$anchor: unknown, $$props: Record<string, u
               return $$props.onSelect;
             },
           });
-        },
-        $$slots: { default: true },
+        }),
       });
-    },
-    $$slots: { default: true },
+    }),
   });
 }
 
