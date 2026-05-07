@@ -1609,6 +1609,78 @@ describe('activate("command")', () => {
       }
     });
 
+    it('debounces live country filter suggestions for an active country token', async () => {
+      vi.useFakeTimers();
+      try {
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockResolvedValue({
+          status: 'ok',
+          key: 'country',
+          total: 1,
+          items: [
+            {
+              id: 'country:0:10:Germany',
+              key: 'country',
+              label: 'Germany',
+              value: 'Germany',
+              tokenStart: 0,
+              tokenEnd: 10,
+            },
+          ],
+        });
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('country:ge');
+        manager.setInputCaret('country:ge'.length);
+
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'loading', key: 'country' });
+        await vi.advanceTimersByTimeAsync(150);
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not schedule live suggestions for an empty city token', async () => {
+      vi.useFakeTimers();
+      try {
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('city:');
+        manager.setInputCaret('city:'.length);
+        await vi.advanceTimersByTimeAsync(200);
+
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('schedules live city suggestions when the city token has text', async () => {
+      vi.useFakeTimers();
+      try {
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockResolvedValue({
+          status: 'ok',
+          key: 'city',
+          total: 1,
+          items: [
+            { id: 'city:16:24:Berlin', key: 'city', label: 'Berlin', value: 'Berlin', tokenStart: 16, tokenEnd: 24 },
+          ],
+        });
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('country:germany city:ber');
+        manager.setInputCaret('country:germany city:ber'.length);
+        await vi.advanceTimersByTimeAsync(150);
+
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledWith(
+          expect.objectContaining({ activeToken: expect.objectContaining({ key: 'city', value: 'ber' }) }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('keeps unsupported camera tokens out of live suggestions', async () => {
       vi.useFakeTimers();
       try {

@@ -1346,8 +1346,8 @@ export class GlobalSearchManager {
       return;
     }
     const key = this.activeTypedSearchToken.key;
-    const supportsLiveSuggestions = key === 'person' || key === 'tag';
-    if (!supportsLiveSuggestions) {
+    const supportsLiveSuggestions = key === 'person' || key === 'tag' || key === 'country' || key === 'city';
+    if (!supportsLiveSuggestions || (key === 'city' && this.activeTypedSearchToken.value.trim() === '')) {
       this.resetLiveTypedSearchSuggestions();
       return;
     }
