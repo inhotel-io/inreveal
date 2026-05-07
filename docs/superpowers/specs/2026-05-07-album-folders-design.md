@@ -53,7 +53,7 @@ be organized, the folder model feels incomplete for users who collaborate heavil
 - No folder sharing in v1.
 - No inherited permissions from folder to album.
 - No folder public links in v1.
-- No cascade folder deletion in v1.
+- No recursive folder subtree deletion in v1.
 - No mobile folder browsing or management in v1.
 - No source filesystem folder integration.
 - No automatic migration that infers folders from album names or file paths.
@@ -143,6 +143,10 @@ Indexes and constraints:
   enforces this for both root folders and child folders; add an expression index
   when the local migration tooling can represent the root `null` semantics
   cleanly.
+- folder names are trimmed before validation and storage. Names must be
+  non-empty after trimming, no longer than 100 characters, and must not contain
+  `/` or ASCII control characters. Uniqueness compares the trimmed,
+  case-folded name while preserving the user's display casing.
 
 Add an `album_folder_album` table for private album placements:
 
@@ -179,20 +183,38 @@ Folders:
 - A folder belongs to exactly one user.
 - A folder parent must belong to the same user.
 - Folder depth must not exceed 5.
-- Moving a folder must reject cycles.
-- Deleting a folder succeeds only when it has no child folders and no album
-  placements.
+- Depth is calculated with root folders at depth 1. A folder can be created at
+  depth 5, but cannot be created or moved to depth 6.
+- Moving a folder must reject cycles, including moving a folder under itself or
+  under any descendant.
+- Moving a folder subtree must keep every descendant at depth 5 or lower.
+- Moving a folder to its current parent is allowed as a no-op unless the request
+  also renames it.
+- Deleting a folder succeeds only when it has no child folders and no active
+  accessible album placements. Stale inaccessible placements in the deleted
+  folder may be removed during delete so a folder that appears empty can be
+  deleted.
 - Deleting a user cascades their folders and placements.
 
 Placements:
 
 - A user can place an owned album or an album currently shared with them.
-- Placing an album validates `AlbumRead` access for the current user.
+- Placing an album validates normal authenticated `AlbumRead` access for the
+  current user. Anonymous shared-link access does not create private folder
+  organization rights.
+- The target folder must belong to the current user.
 - Moving an album from one folder to another upserts the user's placement row.
 - Moving an album to root deletes the user's placement row.
+- Moving an album into its current folder is an idempotent success.
 - A user cannot create or delete another user's placement.
+- Different users can place the same album in different folders because
+  placements are private per user.
 - A placement for a no-longer-accessible shared album must not make that album
-  visible. The row can remain until opportunistic cleanup.
+  visible. The row can remain until opportunistic cleanup, but folder delete can
+  remove stale placements in the deleted folder.
+- If two placement writes for the same user and album race, the unique
+  `(userId, albumId)` constraint keeps one row and the last successful upsert
+  wins.
 
 Album semantics:
 
@@ -201,6 +223,7 @@ Album semantics:
 - Album public links are unchanged.
 - Album thumbnails, counts, date ranges, downloads, timeline queries, and map
   markers are still computed from the album's direct assets only.
+- Deleting an album cascades any private placements for that album.
 
 ## API Design
 
@@ -257,11 +280,18 @@ Endpoint behavior:
 
 - `POST /album-folders` creates a folder under root or a same-user parent.
 - `PATCH /album-folders/:id` renames or moves a folder.
+- `PATCH /album-folders/:id` rejects an empty body because it cannot distinguish
+  an intentional no-op from a malformed request.
 - `DELETE /album-folders/:id` deletes an empty folder only.
 - `PUT /album-folders/:folderId/albums/:albumId` places or moves an accessible
   album into the target folder.
 - `DELETE /album-folders/albums/:albumId` removes the current user's placement
   for that album and returns it to root.
+- `PUT /album-folders/:folderId/albums/:albumId` is idempotent when the album is
+  already in that folder.
+- `DELETE /album-folders/albums/:albumId` is idempotent when the album is already
+  at root. It only deletes the current user's placement metadata and does not
+  require current album access.
 
 The current `GET /albums` response should remain backward compatible. It does
 not need to include folder data in v1 because the web can combine album data with
@@ -308,6 +338,19 @@ Organization controls:
 - Add bulk `Move to folder` for selected albums on the albums page.
 - Use one folder picker for context menu, album detail, and bulk move.
 - The folder picker includes root as `All albums`.
+- The move menu is the keyboard-accessible alternative to drag-and-drop.
+- Folder menus support create child folder, rename folder, move folder, and
+  delete folder.
+- Moving a folder uses a folder picker that excludes the folder itself and all of
+  its descendants.
+- V1 drag-and-drop moves albums only. Folder reparenting uses the folder menu so
+  the depth and cycle checks are explicit.
+- Dragging an album to its current folder or to root when already at root is a
+  no-op.
+- Dropping an album onto another album is disabled.
+- Bulk move uses the same single-album placement endpoint once per selected
+  album. Successful moves stay applied; the UI reports the number of failures if
+  any selected albums fail access or validation.
 
 All organization controls call the same placement endpoints. Drag-and-drop is
 only a faster UI path.
@@ -337,9 +380,11 @@ Server errors:
   names, invalid parents, inaccessible albums, and non-empty folder deletes.
 - Scope folder reads and writes by `userId`; missing and cross-user folders both
   return `BadRequestException('Album folder not found')`.
-- Album placement access uses the existing album access helper; inaccessible
-  albums must be rejected.
+- Creating or moving a placement uses the existing album access helper;
+  inaccessible albums must be rejected.
 - Deleting a missing placement is an idempotent no-op.
+- Deleting the current user's placement by `albumId` does not require current
+  album access because it only removes private metadata.
 
 Web errors:
 
@@ -350,52 +395,215 @@ Web errors:
 
 ## Testing
 
-Server unit tests:
+### TDD Requirement
+
+Implementation must follow red-green-refactor for every behavioral slice:
+
+- Write the smallest meaningful failing test before production code.
+- Run the relevant focused test command and confirm it fails for the expected
+  reason.
+- Implement the minimal production change required to pass.
+- Re-run the same focused test and confirm it passes.
+- Refactor only while tests are green, then re-run the affected tests.
+- Do not add production behavior without a prior failing test unless the change
+  is generated code, a mechanical type fix required by generated code, or a
+  migration artifact that is covered by a repository or integration test.
+
+Each implementation task should record the red and green commands in the working
+notes or PR description so reviewers can see the TDD trail.
+
+### Server Unit Tests
+
+Folder creation and validation:
 
 - create folder at root
+- create folder at root when `parentId` is omitted
+- create folder at root when `parentId` is `null`
 - create folder under folder
+- allow folder at exact depth 5
+- reject folder at depth 6
+- trim folder names before storage
+- reject blank or whitespace-only folder names
+- reject folder names longer than 100 characters
+- reject folder names containing `/`
+- reject folder names containing ASCII control characters
+- reject duplicate root folder names case-insensitively
+- reject duplicate child folder names case-insensitively under the same parent
+- allow same folder name under different parents
+- reject parent owned by another user
+
+Folder listing:
+
 - list folders and active placements
+- list root folders and child folders with correct `parentId`
+- return depth for each folder
+- do not return another user's folders
+
+Folder updates:
+
 - rename folder
 - move folder
-- reject parent owned by another user
-- reject cycles
-- reject depth over 5
-- reject duplicate sibling name
+- move folder to root
+- move folder to root with `parentId: null`
+- allow moving a folder to its current parent as a no-op
+- reject empty `PATCH`
+- reject rename to duplicate sibling name case-insensitively
+- reject moving folder under parent owned by another user
+- reject moving folder under itself
+- reject moving folder under descendant
+- reject moving subtree when any descendant would exceed depth 5
+- preserve descendants when moving a folder
+
+Folder deletion:
+
 - delete empty folder
 - reject deleting folder with child folders
-- reject deleting folder with album placements
+- reject deleting folder with active accessible album placements
+- delete folder that has only stale inaccessible placements
+- delete user cascades folders and placements
+
+Placement behavior:
+
 - place owned album
 - place shared-readable album
+- place album shared with viewer/read access
+- place album shared with editor/write access
+- reject album reachable only through anonymous shared-link access
 - reject inaccessible album placement
+- reject placement into folder owned by another user
+- allow two users to place the same shared album in different private folders
+- keep owner placement independent from shared-user placement
 - move album between folders
+- upsert move leaves exactly one placement row for the user and album
+- concurrent moves for the same user and album settle to one placement
+- placing an album in its current folder is idempotent
 - remove placement to root
+- removing placement for an album already at root is idempotent
+- removing a stale inaccessible placement succeeds without current album access
+- deleting an album cascades placements
+- deleting shared access hides the placement without granting access
+- restoring shared access can make an existing stale placement visible again if
+  it was not otherwise cleaned up
 - ensure stale placement for inaccessible shared album is not returned by
   `GET /album-folders`
 
-Repository/query tests where practical:
+### Controller And API Tests
+
+- `GET /album-folders` returns only current-user folders and currently
+  accessible placements
+- `POST /album-folders` validates name, parent ownership, duplicate siblings,
+  and max depth
+- `PATCH /album-folders/:id` validates ownership, name, cycles, descendants, and
+  max depth
+- `DELETE /album-folders/:id` validates ownership and non-empty rules
+- `PUT /album-folders/:folderId/albums/:albumId` validates folder ownership and
+  album access
+- `DELETE /album-folders/albums/:albumId` is scoped to the current user's
+  placement
+- cross-user folder reads and writes return the same "not found" error as a
+  missing folder
+- API responses are OpenAPI-compatible and include `depth`
+
+### Repository And Migration Tests
+
+Add repository or database-backed tests for:
 
 - depth calculation
 - descendants or ancestor lookup for cycle detection
 - placement filtering against accessible albums
-- non-empty folder checks
+- duplicate sibling detection with trimmed and case-folded names
+- non-empty folder checks for child folders, active placements, and stale
+  placements
+- unique single-placement constraint `(userId, albumId)`
+- future-compatible unique constraint `(userId, folderId, albumId)`
+- folder and placement cascade behavior for user delete, folder delete, and
+  album delete
+- concurrent duplicate folder creation under the same parent rejects one writer
+- `updatedAt` and `updateId` change on folder rename, folder move, placement
+  create, and placement move
+- migration creates indexes on `userId`, `parentId`, `folderId`, `albumId`, and
+  `updateId`
+- migration rollback drops the new tables, indexes, and constraints cleanly
 
-Web tests:
+### Web Component Tests
 
 - renders `Folders` section before `Albums`
-- renders folder cards separately from album cards
+- renders folder cards separately from album cards in grid view
+- renders folder rows separately from album rows in table/list view
+- visually separates folders from albums
 - root view includes albums without placements
+- root view includes accessible shared albums without placements
 - current folder view includes only albums placed in that folder
+- current folder view hides albums placed elsewhere
+- current folder view includes child folders
+- breadcrumbs render the current path and navigate to ancestors
+- sidebar tree renders nested folders up to depth 5
+- folders sort by name independently from album sort/group settings
+- album sort/group/view settings apply only to albums
+- current-folder search filters child folders and current-folder albums
+- search does not leak albums from other folders
+- owned/shared filters keep existing behavior inside folder views
 - move-to-folder picker includes root
-- context menu move calls placement endpoint
+- move-to-folder picker disables or excludes invalid folder targets when moving
+  folders
+- move controls are reachable without drag-and-drop
+- album card context menu move calls the placement endpoint
+- album detail move calls the placement endpoint
 - drag-and-drop move calls the same placement endpoint
-- bulk move calls the same placement endpoint
+- drag to current folder is a no-op
+- drop onto album is ignored
+- bulk move calls the single placement endpoint once per selected album
+- bulk move to root calls the delete-placement endpoint once per selected album
+- bulk move reports partial failures without reverting successful moves
 - moved album disappears from the old folder and appears in the new folder
+- failed drag leaves the album in its original UI location
+- folder create, rename, move, and delete menus call the folder endpoints
+- folder delete disabled or rejected when the folder has child folders or active
+  albums
+- toasts are shown for folder and placement failures
 
-Generated artifacts:
+### Web End-To-End Tests
+
+Add at least one browser-level happy path and one failure path using the repo's
+existing web E2E convention:
+
+- create nested folders to depth 5, move an album into a child folder, navigate
+  by breadcrumbs, then move it back to root
+- attempt to create or move past depth 5 and verify the user sees the failure
+  without corrupting the visible tree
+
+### Mobile And Sync Regression Tests
+
+- mobile album list behavior remains flat when folder data exists on the server
+- `SyncAlbumV1` does not gain folder fields in v1
+- existing album sync tests still pass with folder and placement rows present
+- generated mobile/client DTO changes are reviewed to confirm folder APIs are
+  additive and do not alter album DTO compatibility
+
+### Generated Artifacts
+
+Generated artifacts must be regenerated and checked:
 
 - regenerate OpenAPI specs
 - rebuild TypeScript SDK
 - update API mocks/factories as needed
+
+### Completion Gate
+
+The feature is not complete until these checks pass in the implementation PR:
+
+- focused server unit, controller/API, and repository/migration tests for album
+  folders
+- focused web component tests for folder-aware album browsing and organization
+- at least the two web E2E flows listed above
+- existing album service, album controller, album DTO, album page, album card,
+  album cover, and album selection regression tests
+- mobile/sync regression tests or a documented proof that no mobile/sync code path
+  changed
+- OpenAPI generation, TypeScript SDK build, and API mock/factory updates
+
+Any test from this spec that is intentionally deferred must be called out in the
+PR with the reason and follow-up issue.
 
 ## Rollout
 
