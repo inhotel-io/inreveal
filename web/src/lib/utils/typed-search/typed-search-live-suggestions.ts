@@ -5,6 +5,23 @@ export type LiveTypedSearchKey = 'person' | 'tag' | 'country' | 'city';
 
 export type LiveTypedSearchToken = TypedSearchTokenSpan & { key: LiveTypedSearchKey };
 
+export type ScopedPersonProfile = { type?: string; id?: string; spaceId?: string };
+
+export type LiveTypedSearchPersonPreview = {
+  id: string;
+  filterId?: string | null;
+  name?: string | null;
+  primaryProfile?: ScopedPersonProfile;
+  updatedAt?: string;
+  numberOfAssets?: number;
+};
+
+export type LiveTypedSearchTagPreview = { id: string; name?: string | null; value?: string | null };
+
+export type LiveTypedSearchPreview =
+  | { kind: 'person'; data: LiveTypedSearchPersonPreview }
+  | { kind: 'tag'; data: LiveTypedSearchTagPreview };
+
 export type LiveTypedSearchChoice = {
   id: string;
   key: LiveTypedSearchKey;
@@ -14,6 +31,7 @@ export type LiveTypedSearchChoice = {
   tokenEnd: number;
   entityId?: string;
   secondaryLabel?: string;
+  preview?: LiveTypedSearchPreview;
 };
 
 export type LiveTypedSearchStatus =
@@ -33,7 +51,7 @@ export type LiveTypedSearchContext = {
 
 const LIVE_RESULT_LIMIT = 5;
 
-type TagSuggestion = { id: string; name?: string | null; value?: string | null };
+type TagSuggestion = LiveTypedSearchTagPreview;
 
 export function isLiveTypedSearchToken(token: TypedSearchTokenSpan | undefined): token is LiveTypedSearchToken {
   return token?.key === 'person' || token?.key === 'tag' || token?.key === 'country' || token?.key === 'city';
@@ -47,13 +65,17 @@ function makeChoiceId(token: TypedSearchTokenSpan, entityId: string, key: LiveTy
   return `${key}:${token.start}:${token.end}:${entityId}`;
 }
 
+export function liveTypedSearchChoiceValue(choice: LiveTypedSearchChoice) {
+  return `filter:${choice.id}:${choice.label}`;
+}
+
 function liveSuggestionScope(context: LiveTypedSearchContext) {
   return context.spaceId ? { spaceId: context.spaceId } : { withSharedSpaces: true };
 }
 
 function personChoice(
   token: TypedSearchTokenSpan,
-  person: { id: string; filterId?: string | null; name?: string | null; primaryProfile?: ScopedPersonProfile },
+  person: LiveTypedSearchPersonPreview,
   scope: 'global' | 'space',
 ): LiveTypedSearchChoice {
   const label = getPersonLabel(person);
@@ -67,10 +89,9 @@ function personChoice(
     tokenStart: token.start,
     tokenEnd: token.end,
     entityId,
+    preview: { kind: 'person', data: { ...person, filterId: entityId } },
   };
 }
-
-type ScopedPersonProfile = { type?: string; id?: string; spaceId?: string };
 
 function getPersonLabel(person: { name?: string | null }) {
   return person.name?.trim() ?? '';
@@ -111,6 +132,7 @@ function tagChoice(token: TypedSearchTokenSpan, tag: TagSuggestion): LiveTypedSe
     tokenStart: token.start,
     tokenEnd: token.end,
     entityId: tag.id,
+    preview: { kind: 'tag', data: { ...tag, name: label } },
   };
 }
 

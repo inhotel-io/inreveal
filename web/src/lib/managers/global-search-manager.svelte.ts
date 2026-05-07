@@ -14,6 +14,7 @@ import {
 } from '$lib/utils/searchable-page-search';
 import {
   isLiveTypedSearchToken,
+  liveTypedSearchChoiceValue,
   resolveLiveTypedSearchSuggestions,
   type LiveTypedSearchChoice,
   type LiveTypedSearchStatus,
@@ -1091,6 +1092,10 @@ export class GlobalSearchManager {
         return this.activeItemFromRecent(entry);
       }
     }
+    const liveActiveItem = this.activeItemFromLiveTypedChoice(id);
+    if (liveActiveItem) {
+      return liveActiveItem;
+    }
     // Navigation item IDs are themselves prefixed `nav:...` so the split-on-first-colon
     // trick is inverted: the whole id is the cursor value, and the kind prefix is the
     // string BEFORE the first colon. For nav items, the "kind prefix" is literally `nav`.
@@ -1135,6 +1140,29 @@ export class GlobalSearchManager {
       kind: kind as 'photo' | 'person' | 'place' | 'tag' | 'album' | 'space',
       data: match,
     } as ActiveItem;
+  }
+
+  private activeItemFromLiveTypedChoice(id: string): ActiveItem | null {
+    const status = this.liveTypedSearchStatus;
+    if (!id.startsWith('filter:') || status.status !== 'ok') {
+      return null;
+    }
+
+    const choice = status.items.find((item) => liveTypedSearchChoiceValue(item) === id);
+    const preview = choice?.preview;
+    if (!preview) {
+      return null;
+    }
+
+    if (preview.kind === 'person') {
+      return { kind: 'person', data: preview.data };
+    }
+
+    if (preview.kind === 'tag') {
+      return { kind: 'tag', data: preview.data };
+    }
+
+    return null;
   }
 
   /**

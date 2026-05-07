@@ -4648,6 +4648,44 @@ describe('getActiveItem recent-entry preview lookup (cold open)', () => {
     }
   });
 
+  it('returns a person ActiveItem for the highlighted live person filter choice', () => {
+    const m = new GlobalSearchManager();
+    m.setQuery('person:');
+    m.liveTypedSearchStatus = {
+      status: 'ok',
+      key: 'person',
+      total: 1,
+      items: [
+        {
+          id: 'person:0:7:person:p1',
+          key: 'person',
+          label: 'Alice',
+          value: 'Alice',
+          tokenStart: 0,
+          tokenEnd: 7,
+          entityId: 'person:p1',
+          preview: {
+            kind: 'person',
+            data: {
+              id: 'p1',
+              filterId: 'person:p1',
+              name: 'Alice',
+              primaryProfile: { type: 'user-person', id: 'p1' },
+            },
+          },
+        } as never,
+      ],
+    };
+    m.activeItemId = 'filter:person:0:7:person:p1:Alice';
+
+    const active = m.getActiveItem();
+
+    expect(active?.kind).toBe('person');
+    if (active?.kind === 'person') {
+      expect(active.data).toMatchObject({ id: 'p1', filterId: 'person:p1', name: 'Alice' });
+    }
+  });
+
   it('synthesizes a place ActiveItem from a place recent', () => {
     addEntry({
       kind: 'place',

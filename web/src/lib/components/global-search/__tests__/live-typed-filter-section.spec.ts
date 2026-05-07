@@ -66,6 +66,42 @@ describe('LiveTypedFilterSection', () => {
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ label: 'Anna Maria' }));
   });
 
+  it('renders a person thumbnail for live person choices with preview data', () => {
+    const { container } = render(LiveTypedFilterSectionHost, {
+      props: {
+        status: {
+          status: 'ok',
+          key: 'person',
+          total: 1,
+          items: [
+            {
+              id: 'person:0:7:person:p1',
+              key: 'person',
+              label: 'Alice',
+              value: 'Alice',
+              tokenStart: 0,
+              tokenEnd: 7,
+              preview: {
+                kind: 'person',
+                data: {
+                  id: 'p1',
+                  filterId: 'person:p1',
+                  name: 'Alice',
+                  primaryProfile: { type: 'user-person', id: 'p1' },
+                },
+              },
+            } as never,
+          ],
+        },
+        onSelect: vi.fn(),
+      },
+    });
+
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute('src')).toMatch(/\/api\/people\/p1\/thumbnail/);
+  });
+
   it('applies selected-state styling to live choice rows', () => {
     render(LiveTypedFilterSectionHost, {
       props: {

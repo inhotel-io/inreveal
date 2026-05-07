@@ -30,7 +30,10 @@
   import { getSearchablePageState } from '$lib/utils/searchable-page-search';
   import { getTypedSearchDisplayText } from '$lib/utils/typed-search/typed-search-name-cache';
   import TypedSearchTokenRail from './typed-search-token-rail.svelte';
-  import type { LiveTypedSearchChoice } from '$lib/utils/typed-search/typed-search-live-suggestions';
+  import {
+    liveTypedSearchChoiceValue,
+    type LiveTypedSearchChoice,
+  } from '$lib/utils/typed-search/typed-search-live-suggestions';
 
   interface Props {
     manager: GlobalSearchManager;
@@ -362,7 +365,7 @@
   }
 
   function liveTypedFilterItemValue(choice: LiveTypedSearchChoice) {
-    return `filter:${choice.id}:${choice.label}`;
+    return liveTypedSearchChoiceValue(choice);
   }
 
   function isLiveTypedFilterValueMode() {

@@ -1,9 +1,13 @@
 <script lang="ts">
-  import type {
-    LiveTypedSearchChoice,
-    LiveTypedSearchKey,
-    LiveTypedSearchStatus,
+  import { createUrl, getPeopleThumbnailUrl } from '$lib/utils';
+  import {
+    liveTypedSearchChoiceValue,
+    type LiveTypedSearchChoice,
+    type LiveTypedSearchKey,
+    type LiveTypedSearchPersonPreview,
+    type LiveTypedSearchStatus,
   } from '$lib/utils/typed-search/typed-search-live-suggestions';
+  import type { PersonResponseDto } from '@immich/sdk';
   import { Command } from 'bits-ui';
   import { t, type Translations } from 'svelte-i18n';
 
@@ -32,6 +36,20 @@
     }
     return 'tags';
   }
+
+  function getPersonPreview(choice: LiveTypedSearchChoice): LiveTypedSearchPersonPreview | null {
+    return choice.preview?.kind === 'person' ? choice.preview.data : null;
+  }
+
+  function getPersonThumbUrl(person: LiveTypedSearchPersonPreview) {
+    if (person.primaryProfile?.type === 'space-person' && person.primaryProfile.spaceId) {
+      return createUrl(`/shared-spaces/${person.primaryProfile.spaceId}/people/${person.primaryProfile.id}/thumbnail`, {
+        updatedAt: person.updatedAt,
+      });
+    }
+
+    return getPeopleThumbnailUrl({ ...person, id: person.primaryProfile?.id ?? person.id } as PersonResponseDto);
+  }
 </script>
 
 {#if status.status !== 'idle'}
@@ -44,8 +62,9 @@
     <Command.GroupItems>
       {#if status.status === 'ok'}
         {#each status.items as choice (choice.id)}
+          {@const personPreview = getPersonPreview(choice)}
           <Command.Item
-            value={`filter:${choice.id}:${choice.label}`}
+            value={liveTypedSearchChoiceValue(choice)}
             onSelect={() => onSelect(choice)}
             onkeydown={(event) => {
               if (event.key === 'Enter') {
@@ -56,9 +75,17 @@
             class="group"
           >
             <div
-              class="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-[80ms] ease-out group-data-[selected]:bg-primary/10"
+              class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-[80ms] ease-out group-data-[selected]:bg-primary/10"
             >
-              <span class="min-w-0 truncate">
+              {#if personPreview}
+                <img
+                  src={getPersonThumbUrl(personPreview)}
+                  alt=""
+                  class="h-8 w-8 shrink-0 rounded-full object-cover"
+                  loading="lazy"
+                />
+              {/if}
+              <span class="min-w-0 flex-1 truncate">
                 <span>{choice.label}</span>
                 {#if choice.secondaryLabel}
                   <span class="ms-2 text-xs text-gray-500 dark:text-gray-400">{choice.secondaryLabel}</span>

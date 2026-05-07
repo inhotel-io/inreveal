@@ -1893,6 +1893,46 @@ describe('prefix scoping — scoped rendering', () => {
     expect(document.querySelector('[data-cmdk-preview-person]')).not.toBeNull();
   });
 
+  it('preview pane under person: with a live person filter choice highlighted renders PersonPreview', () => {
+    mediaState.minLg = true;
+    const manager = new GlobalSearchManager();
+    manager.open();
+    manager.setQuery('person:');
+    manager.setInputCaret('person:'.length);
+    manager.liveTypedSearchStatus = {
+      status: 'ok',
+      key: 'person',
+      total: 1,
+      items: [
+        {
+          id: 'person:0:7:person:p1',
+          key: 'person',
+          label: 'Alice',
+          value: 'Alice',
+          tokenStart: 0,
+          tokenEnd: 7,
+          entityId: 'person:p1',
+          preview: {
+            kind: 'person',
+            data: {
+              id: 'p1',
+              filterId: 'person:p1',
+              name: 'Alice',
+              primaryProfile: { type: 'user-person', id: 'p1' },
+            },
+          },
+        } as never,
+      ],
+    };
+    manager.setActiveItem('filter:person:0:7:person:p1:Alice');
+
+    render(GlobalSearch, { props: { manager } });
+
+    const preview = document.querySelector('[data-cmdk-preview-person]') as HTMLElement | null;
+    expect(preview).not.toBeNull();
+    expect(within(preview!).getByText('Alice')).toBeInTheDocument();
+  });
+
   it('preview pane under #xmas with tag highlighted renders TagPreview', () => {
     mediaState.minLg = true;
     const manager = makeWithScope('#xmas');
