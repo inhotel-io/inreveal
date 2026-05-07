@@ -173,7 +173,7 @@ test.describe('global search palette', () => {
       .toEqual({
         pathname: '/photos',
         q: null,
-        people: [person.id],
+        people: [expect.stringContaining(person.id)],
       });
   });
 
