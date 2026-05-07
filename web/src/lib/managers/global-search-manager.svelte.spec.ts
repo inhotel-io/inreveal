@@ -39,6 +39,26 @@ vi.mock('$lib/utils/typed-search/typed-search-resolver', () => ({
   resolveTypedSearchFilters: typedSearchMock.resolveTypedSearchFilters,
 }));
 
+const { liveTypedSearchMock } = vi.hoisted(() => ({
+  liveTypedSearchMock: {
+    resolveLiveTypedSearchSuggestions: vi.fn(),
+  },
+}));
+
+vi.mock('$lib/utils/typed-search/typed-search-live-suggestions', async () => ({
+  ...(await vi.importActual<typeof import('$lib/utils/typed-search/typed-search-live-suggestions')>(
+    '$lib/utils/typed-search/typed-search-live-suggestions',
+  )),
+  resolveLiveTypedSearchSuggestions: liveTypedSearchMock.resolveLiveTypedSearchSuggestions,
+}));
+
+const resetLiveTypedSearchMock = () => {
+  liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockReset();
+  liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockResolvedValue({ status: 'idle' });
+};
+
+resetLiveTypedSearchMock();
+
 vi.mock('$lib/utils/typed-search/typed-search-name-cache', () => ({
   getTypedSearchDisplayText: vi.fn(() => undefined),
   storeTypedSearchNames: vi.fn(),
@@ -94,6 +114,7 @@ afterEach(() => {
   mockPage.url = new URL('https://gallery.test/photos');
   vi.mocked(getTypedSearchDisplayText).mockReset();
   vi.mocked(getTypedSearchDisplayText).mockReturnValue(undefined);
+  resetLiveTypedSearchMock();
   commandContextManager.setAlbum(null);
   commandContextManager.setSpace(null);
   commandContextManager.setSelection(null);
@@ -1488,6 +1509,70 @@ describe('activate("command")', () => {
 
       manager.setInputCaret('beach person:ann tag:f'.length);
       expect(manager.activeTypedSearchToken).toMatchObject({ key: 'tag', raw: 'tag:family' });
+    });
+
+    it('debounces live person filter suggestions for the active token', async () => {
+      vi.useFakeTimers();
+      try {
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockResolvedValue({
+          status: 'ok',
+          key: 'person',
+          total: 1,
+          items: [
+            {
+              id: 'person:6:16:p1',
+              key: 'person',
+              label: 'Anna',
+              value: 'Anna',
+              tokenStart: 6,
+              tokenEnd: 16,
+              entityId: 'p1',
+            },
+          ],
+        });
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('beach person:ann');
+        manager.setInputCaret('beach person:ann'.length);
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'loading', key: 'person' });
+
+        await vi.advanceTimersByTimeAsync(150);
+
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledOnce();
+        expect(manager.liveTypedSearchStatus).toMatchObject({ status: 'ok', key: 'person' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('ignores stale live person suggestion responses', async () => {
+      vi.useFakeTimers();
+      try {
+        let resolveFirst!: (value: unknown) => void;
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions
+          .mockImplementationOnce(() => new Promise((resolve) => (resolveFirst = resolve)))
+          .mockResolvedValueOnce({ status: 'empty', key: 'person' });
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('person:ann');
+        manager.setInputCaret('person:ann'.length);
+        await vi.advanceTimersByTimeAsync(150);
+        manager.setQuery('person:zz');
+        manager.setInputCaret('person:zz'.length);
+        await vi.advanceTimersByTimeAsync(150);
+
+        resolveFirst({
+          status: 'ok',
+          key: 'person',
+          total: 1,
+          items: [{ id: 'stale', key: 'person', label: 'Anna', value: 'Anna', tokenStart: 0, tokenEnd: 10 }],
+        });
+        await Promise.resolve();
+
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'empty', key: 'person' });
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('selectLiveTypedSearchChoice refreshes live selection draft state', () => {

@@ -14,6 +14,7 @@ import {
 } from '$lib/utils/searchable-page-search';
 import {
   isLiveTypedSearchToken,
+  resolveLiveTypedSearchSuggestions,
   type LiveTypedSearchChoice,
   type LiveTypedSearchStatus,
   type LiveTypedSearchToken,
@@ -265,6 +266,7 @@ export class GlobalSearchManager {
   liveTypedSearchStatus = $state<LiveTypedSearchStatus>({ status: 'idle' });
   typedSearchCaret = $state<number | null>(null);
   typedSearchComposing = $state(false);
+  skipNextLiveTypedSearchForCaret = $state<number | null>(null);
   sections = $state<Sections>({
     photos: idle,
     people: idle,
@@ -332,6 +334,9 @@ export class GlobalSearchManager {
   protected debounceTimer: ReturnType<typeof setTimeout> | null = null;
   protected batchController: AbortController | null = null;
   protected photosController: AbortController | null = null;
+  private liveTypedSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  private liveTypedSearchController: AbortController | null = null;
+  private liveTypedSearchRequestId = 0;
   /**
    * Aborted on `close()`, replaced with a fresh controller on `open()`. Scoped to the
    * open-session lifetime — activation-dispatch and catalog fetches (later tasks) bind
@@ -1001,6 +1006,8 @@ export class GlobalSearchManager {
     this.batchController = null;
     this.photosController?.abort();
     this.photosController = null;
+    this.cancelLiveTypedSearchSuggestions();
+    this.liveTypedSearchRequestId++;
     this.sections = {
       photos: idle,
       people: idle,
@@ -1295,6 +1302,9 @@ export class GlobalSearchManager {
     this.selectedTypedSearchChoices.clear();
     this.activeTypedSearchToken = undefined;
     this.typedSearchCaret = null;
+    this.skipNextLiveTypedSearchForCaret = null;
+    this.cancelLiveTypedSearchSuggestions();
+    this.liveTypedSearchRequestId++;
     this.liveTypedSearchStatus = { status: 'idle' };
     this.typedSearchComposing = false;
   }
@@ -1309,10 +1319,100 @@ export class GlobalSearchManager {
     this.updateActiveTypedSearchToken();
   }
 
+  private cancelLiveTypedSearchSuggestions() {
+    if (this.liveTypedSearchTimer !== null) {
+      clearTimeout(this.liveTypedSearchTimer);
+      this.liveTypedSearchTimer = null;
+    }
+    this.liveTypedSearchController?.abort();
+    this.liveTypedSearchController = null;
+  }
+
+  private resetLiveTypedSearchSuggestions() {
+    this.cancelLiveTypedSearchSuggestions();
+    this.liveTypedSearchRequestId++;
+    this.liveTypedSearchStatus = { status: 'idle' };
+  }
+
+  private scheduleLiveTypedSearchSuggestions() {
+    if (!this.activeTypedSearchToken || this.typedSearchComposing) {
+      this.resetLiveTypedSearchSuggestions();
+      return;
+    }
+    if (this.skipNextLiveTypedSearchForCaret === this.typedSearchCaret) {
+      this.skipNextLiveTypedSearchForCaret = null;
+      this.resetLiveTypedSearchSuggestions();
+      return;
+    }
+    const key = this.activeTypedSearchToken.key;
+    if (key !== 'person') {
+      this.resetLiveTypedSearchSuggestions();
+      return;
+    }
+
+    this.cancelLiveTypedSearchSuggestions();
+    const requestId = ++this.liveTypedSearchRequestId;
+    const token = this.activeTypedSearchToken;
+    this.liveTypedSearchStatus = { status: 'loading', key };
+    this.liveTypedSearchTimer = setTimeout(() => {
+      this.liveTypedSearchTimer = null;
+      const controller = new AbortController();
+      this.liveTypedSearchController = controller;
+      const pathParts = page.url.pathname.split('/').filter(Boolean);
+      const spaceId = pathParts[0] === 'spaces' ? pathParts[1] : undefined;
+      const signal = AbortSignal.any([
+        this.closeSignal,
+        controller.signal,
+        AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      ]);
+
+      void Promise.resolve()
+        .then(() =>
+          resolveLiveTypedSearchSuggestions({
+            parsed: parseTypedSearch(this.query, { mode: 'draft' }),
+            activeToken: token,
+            spaceId,
+            signal,
+          }),
+        )
+        .then((status) => {
+          if (requestId === this.liveTypedSearchRequestId && !signal.aborted) {
+            this.liveTypedSearchStatus = status;
+            this.reconcileCursor();
+          }
+        })
+        .catch((error: unknown) => {
+          const isTimeout =
+            signal.aborted && signal.reason instanceof DOMException && signal.reason.name === 'TimeoutError';
+          if (isTimeout) {
+            if (requestId === this.liveTypedSearchRequestId) {
+              this.liveTypedSearchStatus = { status: 'timeout', key };
+            }
+            return;
+          }
+          if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
+            return;
+          }
+          if (requestId === this.liveTypedSearchRequestId) {
+            this.liveTypedSearchStatus = {
+              status: 'error',
+              key,
+              message: error instanceof Error ? error.message : 'unknown error',
+            };
+          }
+        })
+        .finally(() => {
+          if (this.liveTypedSearchController === controller) {
+            this.liveTypedSearchController = null;
+          }
+        });
+    }, 150);
+  }
+
   private updateActiveTypedSearchToken() {
     if (this.typedSearchComposing) {
       this.activeTypedSearchToken = undefined;
-      this.liveTypedSearchStatus = { status: 'idle' };
+      this.scheduleLiveTypedSearchSuggestions();
       return;
     }
     const parsed = parseTypedSearch(this.query, { mode: 'draft' });
@@ -1328,6 +1428,7 @@ export class GlobalSearchManager {
     if (!this.activeTypedSearchToken || tokenChanged) {
       this.liveTypedSearchStatus = { status: 'idle' };
     }
+    this.scheduleLiveTypedSearchSuggestions();
   }
 
   selectTypedSearchChoice(choice: TypedSearchChoice) {
