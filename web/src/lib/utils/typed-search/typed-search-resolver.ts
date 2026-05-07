@@ -90,7 +90,8 @@ async function resolveTypedSearchFiltersInternal(
 
   const countryToken = parsed.scalarTokens.find((token) => token.key === 'country');
   const cityToken = parsed.scalarTokens.find((token) => token.key === 'city');
-  const unresolvedTokens = parsed.resolutionTokens.filter((token) => !getSelectedChoice(context, token));
+  const rawTokenCounts = countResolutionTokenRawValues(parsed.resolutionTokens);
+  const unresolvedTokens = parsed.resolutionTokens.filter((token) => !getSelectedChoice(context, token, rawTokenCounts));
   const needsSuggestions = unresolvedTokens.some(
     (token) => token.key === 'tag' || token.key === 'camera' || (token.key === 'person' && context.spaceId),
   );
@@ -132,7 +133,7 @@ async function resolveTypedSearchFiltersInternal(
   }
 
   for (const token of parsed.resolutionTokens) {
-    const selectedChoice = getSelectedChoice(context, token);
+    const selectedChoice = getSelectedChoice(context, token, rawTokenCounts);
     if (selectedChoice) {
       applySelectedChoice(selectedChoice, filters, personNames, tagNames);
       continue;
@@ -168,8 +169,27 @@ function suggestionScope(context: TypedSearchResolveContext) {
   return context.spaceId ? { spaceId: context.spaceId } : { withSharedSpaces: true };
 }
 
-function getSelectedChoice(context: TypedSearchResolveContext, token: TypedSearchResolutionToken) {
-  return context.selectedChoices?.get(token.identity) ?? context.selectedChoices?.get(token.raw);
+function countResolutionTokenRawValues(tokens: TypedSearchResolutionToken[]) {
+  const counts = new Map<string, number>();
+  for (const token of tokens) {
+    counts.set(token.raw, (counts.get(token.raw) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function getSelectedChoice(
+  context: TypedSearchResolveContext,
+  token: TypedSearchResolutionToken,
+  rawTokenCounts: Map<string, number>,
+) {
+  const identityChoice = context.selectedChoices?.get(token.identity);
+  if (identityChoice) {
+    return identityChoice;
+  }
+  if (rawTokenCounts.get(token.raw) !== 1) {
+    return undefined;
+  }
+  return context.selectedChoices?.get(token.raw);
 }
 
 function applyScalar(filters: FilterState, token: TypedSearchScalarToken, canonicalValue?: string) {

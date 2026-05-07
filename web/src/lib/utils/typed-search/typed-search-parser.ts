@@ -154,15 +154,14 @@ export function getTypedSearchTokenIdentity(
   raw: string,
 ): TypedSearchTokenIdentity;
 export function getTypedSearchTokenIdentity(
-  tokenOrKey: TypedSearchTokenIdentityParts | TypedSearchFilterKey,
-  start?: number,
-  end?: number,
-  raw?: string,
+  ...args: [TypedSearchTokenIdentityParts] | [TypedSearchFilterKey, number, number, string]
 ): TypedSearchTokenIdentity {
-  if (typeof tokenOrKey === 'object') {
-    return `${tokenOrKey.key}:${tokenOrKey.start}:${tokenOrKey.end}:${tokenOrKey.raw}`;
+  if (args.length === 1) {
+    const [token] = args;
+    return `${token.key}:${token.start}:${token.end}:${token.raw}`;
   }
-  return `${tokenOrKey}:${start}:${end}:${raw}`;
+  const [key, start, end, raw] = args;
+  return `${key}:${start}:${end}:${raw}`;
 }
 
 export function parseTypedSearch(raw: string, options: TypedSearchParseOptions = {}): TypedSearchParseResult {
