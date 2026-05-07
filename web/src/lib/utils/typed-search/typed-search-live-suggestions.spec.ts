@@ -23,7 +23,7 @@ describe('resolveLiveTypedSearchSuggestions foundation', () => {
     });
   });
 
-  it.each(['country:ge', 'city:par'])('keeps unsupported live key %s idle', async (search) => {
+  it.each(['city:par'])('keeps unsupported live key %s idle', async (search) => {
     const parsed = parseTypedSearch(search, { mode: 'draft' });
 
     await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
@@ -236,6 +236,82 @@ describe('resolveLiveTypedSearchSuggestions foundation', () => {
     await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
       status: 'error',
       key: 'tag',
+      message: 'network down',
+    });
+  });
+
+  it('loads initial country suggestions for an empty country token', async () => {
+    vi.mocked(getFilterSuggestions).mockResolvedValue({
+      people: [],
+      countries: ['Germany', 'France', 'United States'],
+      cameraMakes: [],
+      tags: [],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    } as never);
+    const parsed = parseTypedSearch('country:', { mode: 'draft' });
+
+    const result = await resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] });
+
+    expect(getFilterSuggestions).toHaveBeenCalledWith({ withSharedSpaces: true }, expect.anything());
+    expect(result).toEqual({
+      status: 'ok',
+      key: 'country',
+      total: 3,
+      items: [
+        expect.objectContaining({ key: 'country', label: 'Germany', value: 'Germany' }),
+        expect.objectContaining({ key: 'country', label: 'France', value: 'France' }),
+        expect.objectContaining({ key: 'country', label: 'United States', value: 'United States' }),
+      ],
+    });
+  });
+
+  it('narrows country suggestions by the active country token value', async () => {
+    vi.mocked(getFilterSuggestions).mockResolvedValue({
+      people: [],
+      countries: ['Germany', 'Georgia', 'France'],
+      cameraMakes: [],
+      tags: [],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    } as never);
+    const parsed = parseTypedSearch('country:ge', { mode: 'draft' });
+
+    const result = await resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] });
+
+    expect(result).toMatchObject({ status: 'ok', key: 'country', total: 2 });
+    if (result.status === 'ok') {
+      expect(result.items.map((item) => item.value)).toEqual(['Germany', 'Georgia']);
+    }
+  });
+
+  it('returns empty when country suggestions have no matches', async () => {
+    vi.mocked(getFilterSuggestions).mockResolvedValue({
+      people: [],
+      countries: ['Germany'],
+      cameraMakes: [],
+      tags: [],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    } as never);
+    const parsed = parseTypedSearch('country:zzzz', { mode: 'draft' });
+
+    await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
+      status: 'empty',
+      key: 'country',
+    });
+  });
+
+  it('returns a quiet live error when country suggestions fail', async () => {
+    vi.mocked(getFilterSuggestions).mockRejectedValue(new Error('network down'));
+    const parsed = parseTypedSearch('country:ge', { mode: 'draft' });
+
+    await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
+      status: 'error',
+      key: 'country',
       message: 'network down',
     });
   });

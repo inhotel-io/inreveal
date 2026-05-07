@@ -86,6 +86,23 @@ function tagChoice(token: TypedSearchTokenSpan, tag: TagSuggestion): LiveTypedSe
   };
 }
 
+function stringChoice(
+  token: TypedSearchTokenSpan,
+  key: 'country' | 'city',
+  value: string,
+  secondaryLabel?: string,
+): LiveTypedSearchChoice {
+  return {
+    id: makeChoiceId(token, value, key),
+    key,
+    label: value,
+    value,
+    tokenStart: token.start,
+    tokenEnd: token.end,
+    secondaryLabel,
+  };
+}
+
 export async function resolveLiveTypedSearchSuggestions(
   context: LiveTypedSearchContext,
 ): Promise<LiveTypedSearchStatus> {
@@ -100,6 +117,10 @@ export async function resolveLiveTypedSearchSuggestions(
 
   if (token.key === 'tag') {
     return resolveTagLiveSuggestions(context, token);
+  }
+
+  if (token.key === 'country') {
+    return resolveCountryLiveSuggestions(context, token);
   }
 
   return { status: 'idle' };
@@ -170,6 +191,35 @@ async function resolveTagLiveSuggestions(
       status: 'error',
       key: 'tag',
       message: error instanceof Error ? error.message : 'Unable to load tags',
+    };
+  }
+}
+
+async function resolveCountryLiveSuggestions(
+  context: LiveTypedSearchContext,
+  token: TypedSearchTokenSpan,
+): Promise<LiveTypedSearchStatus> {
+  try {
+    const value = token.value.trim().toLowerCase();
+    const response = await getFilterSuggestions(liveSuggestionScope(context), { signal: context.signal });
+    const matches = response.countries
+      .filter((country): country is string => typeof country === 'string')
+      .filter((country) => !value || country.toLowerCase().includes(value))
+      .slice(0, LIVE_RESULT_LIMIT)
+      .map((country) => stringChoice(token, 'country', country));
+
+    return matches.length === 0
+      ? { status: 'empty', key: 'country' }
+      : { status: 'ok', key: 'country', items: matches, total: matches.length };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
+
+    return {
+      status: 'error',
+      key: 'country',
+      message: error instanceof Error ? error.message : 'Unable to load countries',
     };
   }
 }
