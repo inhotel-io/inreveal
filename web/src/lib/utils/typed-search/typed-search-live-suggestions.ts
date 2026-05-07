@@ -1,4 +1,10 @@
-import { getAllPeople, getFilterSuggestions, getSearchSuggestions, searchPerson, SearchSuggestionType } from '@immich/sdk';
+import {
+  getAllPeople,
+  getFilterSuggestions,
+  getSearchSuggestions,
+  searchPerson,
+  SearchSuggestionType,
+} from '@immich/sdk';
 import type { TypedSearchParseResult, TypedSearchTokenSpan } from './typed-search-parser';
 
 export type LiveTypedSearchKey = 'person' | 'tag' | 'country' | 'city';
