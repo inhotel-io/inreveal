@@ -1500,6 +1500,15 @@ describe('activate("command")', () => {
       expect(manager.topSearchMatch).toEqual({ id: 'top-search', query: 'beach', rawQuery: 'beach camera:nikon' });
     });
 
+    it('does not show detailed issue rows for invalid scalar tokens until Enter', () => {
+      const manager = new GlobalSearchManager();
+
+      manager.setQuery('rating:9');
+
+      expect(manager.typedSearchDisplayTokens[0]).toMatchObject({ raw: 'rating:9', status: 'error' });
+      expect(manager.typedSearchIssues).toEqual([]);
+    });
+
     it('tracks the active typed filter token from the input caret', () => {
       const manager = new GlobalSearchManager();
 
@@ -1945,6 +1954,25 @@ describe('activate("command")', () => {
       expect(manager.selectedTypedSearchChoices.has('person:0:10:person:ann')).toBe(false);
       expect(manager.selectedTypedSearchChoices.has('person:ann')).toBe(false);
       expect([...manager.selectedTypedSearchChoices.keys()]).toEqual(['person:0:17:person:"Ann Live"']);
+    });
+
+    it('clears a selected live choice when the token raw text changes', () => {
+      const manager = new GlobalSearchManager();
+      manager.setQuery('person:ann');
+      manager.setInputCaret('person:ann'.length);
+      manager.selectLiveTypedSearchChoice({
+        id: 'person:0:10:p1',
+        key: 'person',
+        label: 'Ann Live',
+        value: 'Ann Live',
+        tokenStart: 0,
+        tokenEnd: 10,
+        entityId: 'person-1',
+      });
+
+      manager.setQuery('person:anna');
+
+      expect([...manager.selectedTypedSearchChoices.keys()]).toEqual([]);
     });
 
     it('keeps selected live person span identity after typed search draft refresh', () => {

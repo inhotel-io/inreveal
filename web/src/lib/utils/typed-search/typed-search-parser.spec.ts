@@ -134,6 +134,16 @@ describe('parseTypedSearch', () => {
     ]);
   });
 
+  it('keeps invalid scalar tokens red in draft mode without suppressing their token issue', () => {
+    const result = parseTypedSearch('rating:9 favorite:maybe', { mode: 'draft' });
+
+    expect(result.issues.map((issue) => issue.code)).toEqual(['invalid-rating', 'invalid-favorite']);
+    expect(result.displayTokens).toEqual([
+      expect.objectContaining({ raw: 'rating:9', status: 'error' }),
+      expect.objectContaining({ raw: 'favorite:maybe', status: 'error' }),
+    ]);
+  });
+
   it('rejects empty values and unterminated quotes on commit parse', () => {
     const result = parseTypedSearch('person: city:"New York');
 
