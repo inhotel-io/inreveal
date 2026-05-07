@@ -1575,6 +1575,80 @@ describe('activate("command")', () => {
       }
     });
 
+    it('canonical token selection does not refetch live person suggestions', async () => {
+      vi.useFakeTimers();
+      try {
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockResolvedValue({
+          status: 'ok',
+          key: 'person',
+          total: 1,
+          items: [
+            {
+              id: 'person:6:16:p1',
+              key: 'person',
+              label: 'Anna Maria',
+              value: 'Anna Maria',
+              tokenStart: 6,
+              tokenEnd: 16,
+              entityId: 'p1',
+            },
+          ],
+        });
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('beach person:ann');
+        manager.setInputCaret('beach person:ann'.length);
+        await vi.advanceTimersByTimeAsync(150);
+        expect(manager.liveTypedSearchStatus).toMatchObject({ status: 'ok', key: 'person' });
+
+        manager.selectLiveTypedSearchChoice({
+          id: 'person:6:16:p1',
+          key: 'person',
+          label: 'Anna Maria',
+          value: 'Anna Maria',
+          tokenStart: 6,
+          tokenEnd: 16,
+          entityId: 'p1',
+        });
+
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockClear();
+
+        await vi.advanceTimersByTimeAsync(200);
+
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).not.toHaveBeenCalled();
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('sets live person timeout status from signal.reason after a late resolver status', async () => {
+      vi.useFakeTimers();
+      installFakeAbortTimeout();
+      try {
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockImplementation(({ signal }: { signal?: AbortSignal }) =>
+          new Promise((resolve) => {
+            signal?.addEventListener('abort', () => {
+              resolve({ status: 'error', key: 'person', message: 'timeout' });
+            });
+          }),
+        );
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('person:ann');
+        manager.setInputCaret('person:ann'.length);
+        await vi.advanceTimersByTimeAsync(150);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await Promise.resolve();
+
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'timeout', key: 'person' });
+      } finally {
+        restoreAbortTimeout();
+        vi.useRealTimers();
+      }
+    });
+
     it('selectLiveTypedSearchChoice refreshes live selection draft state', () => {
       const manager = new GlobalSearchManager();
 

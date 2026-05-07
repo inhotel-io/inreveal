@@ -1376,7 +1376,16 @@ export class GlobalSearchManager {
           }),
         )
         .then((status) => {
-          if (requestId === this.liveTypedSearchRequestId && !signal.aborted) {
+          if (requestId !== this.liveTypedSearchRequestId) {
+            return;
+          }
+          const isTimeout =
+            signal.aborted && signal.reason instanceof DOMException && signal.reason.name === 'TimeoutError';
+          if (isTimeout) {
+            this.liveTypedSearchStatus = { status: 'timeout', key };
+            return;
+          }
+          if (!signal.aborted) {
             this.liveTypedSearchStatus = status;
             this.reconcileCursor();
           }
@@ -1450,6 +1459,7 @@ export class GlobalSearchManager {
       key: choice.key,
       value: choice.value,
     });
+    this.skipNextLiveTypedSearchForCaret = caret;
     this.setQuery(text);
     this.setInputCaret(caret);
     this.liveTypedSearchStatus = { status: 'idle' };
