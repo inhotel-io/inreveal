@@ -2002,17 +2002,33 @@ describe('activate("command")', () => {
       expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
     });
 
-    it('clears stale status when the active live token changes', () => {
-      const manager = new GlobalSearchManager();
+    it('clears stale status when the active live token changes', async () => {
+      vi.useFakeTimers();
+      try {
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockResolvedValue({ status: 'empty', key: 'tag' });
+        const manager = new GlobalSearchManager();
 
-      manager.setQuery('beach person:ann tag:family');
-      manager.setInputCaret('beach person:ann'.length);
-      manager.liveTypedSearchStatus = { status: 'ok', key: 'person', total: 0, items: [] };
+        manager.setQuery('beach person:ann tag:family');
+        manager.setInputCaret('beach person:ann'.length);
+        manager.liveTypedSearchStatus = { status: 'ok', key: 'person', total: 0, items: [] };
 
-      manager.setInputCaret('beach person:ann tag:f'.length);
+        manager.setInputCaret('beach person:ann tag:f'.length);
 
-      expect(manager.activeTypedSearchToken).toMatchObject({ key: 'tag', raw: 'tag:family' });
-      expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+        expect(manager.activeTypedSearchToken).toMatchObject({ key: 'tag', raw: 'tag:family' });
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'loading', key: 'tag' });
+
+        await vi.advanceTimersByTimeAsync(150);
+
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledOnce();
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledWith(
+          expect.objectContaining({
+            activeToken: expect.objectContaining({ key: 'tag', value: 'family' }),
+          }),
+        );
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'empty', key: 'tag' });
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('blocks parser issues before calling the resolver', async () => {
