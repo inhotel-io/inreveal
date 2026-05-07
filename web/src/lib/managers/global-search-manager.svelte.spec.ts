@@ -1735,6 +1735,35 @@ describe('activate("command")', () => {
       expect(manager.typedSearchCaret).toBe('beach person:"Anna Maria"'.length);
     });
 
+    it('selecting a live person choice rewrites the active token and stores resolver choice by rewritten span identity', () => {
+      const manager = new GlobalSearchManager();
+      manager.setQuery('beach person:ann person:ann');
+      manager.setInputCaret('beach person:ann'.length);
+
+      manager.selectLiveTypedSearchChoice({
+        id: 'person:6:16:p1',
+        key: 'person',
+        label: 'Anna Maria',
+        value: 'Anna Maria',
+        tokenStart: 6,
+        tokenEnd: 16,
+        entityId: 'p1',
+      });
+
+      expect(manager.query).toBe('beach person:"Anna Maria" person:ann');
+      expect(manager.selectedTypedSearchChoices.get('person:6:25:person:"Anna Maria"')).toEqual(
+        expect.objectContaining({
+          tokenRaw: 'person:"Anna Maria"',
+          key: 'person',
+          id: 'p1',
+          label: 'Anna Maria',
+          value: 'Anna Maria',
+        }),
+      );
+      expect(manager.selectedTypedSearchChoices.has('person:ann')).toBe(false);
+      expect(manager.selectedTypedSearchChoices.has('person:"Anna Maria"')).toBe(false);
+    });
+
     it('clears live suggestion state on close', () => {
       const manager = new GlobalSearchManager();
 

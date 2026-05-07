@@ -467,6 +467,36 @@ describe('global-search root', () => {
     expect(selectSpy).toHaveBeenCalled();
   });
 
+  it('selecting a live person row applies the filter and does not navigate to person', async () => {
+    const manager = new GlobalSearchManager();
+    const activateSpy = vi.spyOn(manager, 'activate');
+    manager.open();
+    manager.setQuery('beach person:ann');
+    manager.setInputCaret('beach person:ann'.length);
+    manager.liveTypedSearchStatus = {
+      status: 'ok',
+      key: 'person',
+      total: 1,
+      items: [
+        {
+          id: 'person:6:16:p1',
+          key: 'person',
+          label: 'Anna Maria',
+          value: 'Anna Maria',
+          tokenStart: 6,
+          tokenEnd: 16,
+          entityId: 'p1',
+        },
+      ],
+    };
+    render(GlobalSearch, { props: { manager } });
+
+    await user.click(screen.getByRole('option', { name: /Anna Maria/i }));
+
+    expect(manager.query).toBe('beach person:"Anna Maria"');
+    expect(activateSpy).not.toHaveBeenCalledWith('person', expect.anything());
+  });
+
   it('renders live typed filter section before normal results in dropdown variant', () => {
     const m = new GlobalSearchManager();
     m.open('dropdown');

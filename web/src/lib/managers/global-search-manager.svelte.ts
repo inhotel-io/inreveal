@@ -1452,17 +1452,31 @@ export class GlobalSearchManager {
   }
 
   selectLiveTypedSearchChoice(choice: LiveTypedSearchChoice) {
-    if (!this.activeTypedSearchToken) {
+    const activeToken = this.activeTypedSearchToken;
+    if (!activeToken) {
       return;
     }
-    const { text, caret } = rewriteTypedSearchToken(this.query, this.activeTypedSearchToken, {
+    const { text, caret } = rewriteTypedSearchToken(this.query, activeToken, {
       key: choice.key,
       value: choice.value,
     });
     this.setQuery(text);
     this.skipNextLiveTypedSearchForCaret = caret;
     this.setInputCaret(caret);
-    this.liveTypedSearchStatus = { status: 'idle' };
+    const parsedAfterRewrite = parseTypedSearch(text, { mode: 'draft' });
+    const rewrittenToken = getActiveTypedSearchToken(parsedAfterRewrite, caret);
+    if (choice.key === 'person' && choice.entityId && rewrittenToken?.key === 'person') {
+      const selectedChoice: TypedSearchChoice = {
+        tokenRaw: rewrittenToken.raw,
+        key: 'person',
+        id: choice.entityId,
+        label: choice.label,
+        value: rewrittenToken.value,
+      };
+      const tokenKey = `${rewrittenToken.key}:${rewrittenToken.start}:${rewrittenToken.end}:${rewrittenToken.raw}`;
+      this.selectedTypedSearchChoices.set(tokenKey, selectedChoice);
+    }
+    this.resetLiveTypedSearchSuggestions();
   }
 
   private getSearchProviderPayload(): string {
