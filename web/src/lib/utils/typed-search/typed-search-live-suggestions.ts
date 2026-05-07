@@ -33,6 +33,8 @@ export type LiveTypedSearchContext = {
 
 const LIVE_RESULT_LIMIT = 5;
 
+type TagSuggestion = { id: string; name?: string | null; value?: string | null };
+
 export function isLiveTypedSearchToken(token: TypedSearchTokenSpan | undefined): token is LiveTypedSearchToken {
   return token?.key === 'person' || token?.key === 'tag' || token?.key === 'country' || token?.key === 'city';
 }
@@ -43,6 +45,10 @@ function isLiveKey(key: string | undefined): key is LiveTypedSearchKey {
 
 function makeChoiceId(token: TypedSearchTokenSpan, entityId: string, key: LiveTypedSearchKey) {
   return `${key}:${token.start}:${token.end}:${entityId}`;
+}
+
+function liveSuggestionScope(context: LiveTypedSearchContext) {
+  return context.spaceId ? { spaceId: context.spaceId } : { withSharedSpaces: true };
 }
 
 function personChoice(
@@ -62,6 +68,24 @@ function personChoice(
   };
 }
 
+function tagLabel(tag: TagSuggestion) {
+  return tag.value || tag.name || tag.id;
+}
+
+function tagChoice(token: TypedSearchTokenSpan, tag: TagSuggestion): LiveTypedSearchChoice {
+  const label = tagLabel(tag);
+
+  return {
+    id: makeChoiceId(token, tag.id, 'tag'),
+    key: 'tag',
+    label,
+    value: label,
+    tokenStart: token.start,
+    tokenEnd: token.end,
+    entityId: tag.id,
+  };
+}
+
 export async function resolveLiveTypedSearchSuggestions(
   context: LiveTypedSearchContext,
 ): Promise<LiveTypedSearchStatus> {
@@ -72,6 +96,10 @@ export async function resolveLiveTypedSearchSuggestions(
 
   if (token.key === 'person') {
     return resolvePersonLiveSuggestions(context, token);
+  }
+
+  if (token.key === 'tag') {
+    return resolveTagLiveSuggestions(context, token);
   }
 
   return { status: 'idle' };
@@ -114,6 +142,34 @@ async function resolvePersonLiveSuggestions(
       status: 'error',
       key: 'person',
       message: error instanceof Error ? error.message : 'Unable to load people',
+    };
+  }
+}
+
+async function resolveTagLiveSuggestions(
+  context: LiveTypedSearchContext,
+  token: TypedSearchTokenSpan,
+): Promise<LiveTypedSearchStatus> {
+  try {
+    const value = token.value.trim().toLowerCase();
+    const response = await getFilterSuggestions(liveSuggestionScope(context), { signal: context.signal });
+    const matches = response.tags
+      .filter((tag) => !value || tagLabel(tag).toLowerCase().includes(value))
+      .slice(0, LIVE_RESULT_LIMIT)
+      .map((tag) => tagChoice(token, tag));
+
+    return matches.length === 0
+      ? { status: 'empty', key: 'tag' }
+      : { status: 'ok', key: 'tag', items: matches, total: matches.length };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
+
+    return {
+      status: 'error',
+      key: 'tag',
+      message: error instanceof Error ? error.message : 'Unable to load tags',
     };
   }
 }

@@ -23,7 +23,7 @@ describe('resolveLiveTypedSearchSuggestions foundation', () => {
     });
   });
 
-  it.each(['tag:travel', 'country:ge', 'city:par'])('keeps unsupported live key %s idle', async (search) => {
+  it.each(['country:ge', 'city:par'])('keeps unsupported live key %s idle', async (search) => {
     const parsed = parseTypedSearch(search, { mode: 'draft' });
 
     await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
@@ -134,5 +134,109 @@ describe('resolveLiveTypedSearchSuggestions foundation', () => {
     const parsed = parseTypedSearch('person:ann', { mode: 'draft' });
 
     await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).rejects.toBe(abortError);
+  });
+
+  it('loads initial tag suggestions for an empty tag token', async () => {
+    vi.mocked(getFilterSuggestions).mockResolvedValue({
+      people: [],
+      countries: [],
+      cameraMakes: [],
+      tags: [
+        { id: 'tag-1', value: 'Travel' },
+        { id: 'tag-2', value: 'Family' },
+      ],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    } as never);
+    const parsed = parseTypedSearch('tag:', { mode: 'draft' });
+
+    const result = await resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] });
+
+    expect(getFilterSuggestions).toHaveBeenCalledWith({ withSharedSpaces: true }, expect.anything());
+    expect(result).toEqual({
+      status: 'ok',
+      key: 'tag',
+      total: 2,
+      items: [
+        expect.objectContaining({ key: 'tag', label: 'Travel', value: 'Travel', entityId: 'tag-1' }),
+        expect.objectContaining({ key: 'tag', label: 'Family', value: 'Family', entityId: 'tag-2' }),
+      ],
+    });
+  });
+
+  it('narrows tag suggestions by the active tag token value', async () => {
+    vi.mocked(getFilterSuggestions).mockResolvedValue({
+      people: [],
+      countries: [],
+      cameraMakes: [],
+      tags: [
+        { id: 'tag-1', value: 'Travel' },
+        { id: 'tag-2', value: 'Work' },
+        { id: 'tag-3', value: 'Family/Travel' },
+      ],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    } as never);
+    const parsed = parseTypedSearch('beach tag:trav', { mode: 'draft' });
+
+    const result = await resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] });
+
+    expect(result).toMatchObject({ status: 'ok', key: 'tag', total: 2 });
+    if (result.status === 'ok') {
+      expect(result.items.map((item) => item.label)).toEqual(['Travel', 'Family/Travel']);
+    }
+  });
+
+  it('uses space-scoped tag suggestions when spaceId is present', async () => {
+    vi.mocked(getFilterSuggestions).mockResolvedValue({
+      people: [],
+      countries: [],
+      cameraMakes: [],
+      tags: [{ id: 'space-tag-1', value: 'Shared Travel' }],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    } as never);
+    const parsed = parseTypedSearch('tag:travel', { mode: 'draft' });
+
+    const result = await resolveLiveTypedSearchSuggestions({
+      parsed,
+      activeToken: parsed.tokens[0],
+      spaceId: 'space-1',
+    });
+
+    expect(getFilterSuggestions).toHaveBeenCalledWith({ spaceId: 'space-1' }, expect.anything());
+    expect(result).toMatchObject({ status: 'ok', key: 'tag' });
+  });
+
+  it('returns empty when no tags match the active token', async () => {
+    vi.mocked(getFilterSuggestions).mockResolvedValue({
+      people: [],
+      countries: [],
+      cameraMakes: [],
+      tags: [{ id: 'tag-1', value: 'Travel' }],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    } as never);
+    const parsed = parseTypedSearch('tag:zzzz', { mode: 'draft' });
+
+    await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
+      status: 'empty',
+      key: 'tag',
+    });
+  });
+
+  it('returns a quiet live error when tag suggestions fail', async () => {
+    vi.mocked(getFilterSuggestions).mockRejectedValue(new Error('network down'));
+    const parsed = parseTypedSearch('tag:travel', { mode: 'draft' });
+
+    await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
+      status: 'error',
+      key: 'tag',
+      message: 'network down',
+    });
   });
 });
