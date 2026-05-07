@@ -1459,8 +1459,8 @@ export class GlobalSearchManager {
       key: choice.key,
       value: choice.value,
     });
-    this.skipNextLiveTypedSearchForCaret = caret;
     this.setQuery(text);
+    this.skipNextLiveTypedSearchForCaret = caret;
     this.setInputCaret(caret);
     this.liveTypedSearchStatus = { status: 'idle' };
   }

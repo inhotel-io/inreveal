@@ -1623,6 +1623,54 @@ describe('activate("command")', () => {
       }
     });
 
+    it('same-length canonical token selection does not refetch live person suggestions', async () => {
+      vi.useFakeTimers();
+      try {
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockResolvedValue({
+          status: 'ok',
+          key: 'person',
+          total: 1,
+          items: [
+            {
+              id: 'person:0:10:p1',
+              key: 'person',
+              label: 'Ann',
+              value: 'Ann',
+              tokenStart: 0,
+              tokenEnd: 10,
+              entityId: 'p1',
+            },
+          ],
+        });
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('person:ann');
+        manager.setInputCaret('person:ann'.length);
+        await vi.advanceTimersByTimeAsync(150);
+        expect(manager.liveTypedSearchStatus).toMatchObject({ status: 'ok', key: 'person' });
+
+        manager.selectLiveTypedSearchChoice({
+          id: 'person:0:10:p1',
+          key: 'person',
+          label: 'Ann',
+          value: 'Ann',
+          tokenStart: 0,
+          tokenEnd: 10,
+          entityId: 'p1',
+        });
+
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockClear();
+
+        await vi.advanceTimersByTimeAsync(200);
+
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).not.toHaveBeenCalled();
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('sets live person timeout status from signal.reason after a late resolver status', async () => {
       vi.useFakeTimers();
       installFakeAbortTimeout();
