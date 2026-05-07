@@ -541,11 +541,9 @@ describe('global-search root', () => {
     const tagFilterGroup = screen.getByRole('group', { name: /cmdk_filter_match_tag|tag filter matches/i });
     expect(within(tagFilterGroup).getByText(/Travel Live/i)).toBeInTheDocument();
 
-    const tagsGroup = screen.queryByRole('group', { name: /cmdk_tags_heading|^tags$/i });
-    if (tagsGroup) {
-      expect(within(tagsGroup).getByText(/Travel Normal/i)).toBeInTheDocument();
-      expect(within(tagsGroup).queryByText(/Travel Live/i)).toBeNull();
-    }
+    const tagsGroup = screen.getByRole('group', { name: /cmdk_tags_heading|^tags$/i });
+    expect(within(tagsGroup).getByText(/Travel Normal/i)).toBeInTheDocument();
+    expect(within(tagsGroup).queryByText(/Travel Live/i)).toBeNull();
   });
 
   it('Enter on a highlighted live filter row rewrites the filter without submitting search', async () => {
