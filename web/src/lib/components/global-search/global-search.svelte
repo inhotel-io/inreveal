@@ -30,6 +30,7 @@
   import { getSearchablePageState } from '$lib/utils/searchable-page-search';
   import { getTypedSearchDisplayText } from '$lib/utils/typed-search/typed-search-name-cache';
   import TypedSearchTokenRail from './typed-search-token-rail.svelte';
+  import type { LiveTypedSearchChoice } from '$lib/utils/typed-search/typed-search-live-suggestions';
 
   interface Props {
     manager: GlobalSearchManager;
@@ -314,6 +315,35 @@
     return true;
   }
 
+  function liveTypedFilterItemValue(choice: LiveTypedSearchChoice) {
+    return `filter:${choice.id}:${choice.label}`;
+  }
+
+  function getActiveLiveTypedFilterChoice() {
+    const status = manager.liveTypedSearchStatus;
+    if (status.status !== 'ok' || !manager.activeItemId?.startsWith('filter:')) {
+      return null;
+    }
+    return status.items.find((choice) => liveTypedFilterItemValue(choice) === manager.activeItemId) ?? null;
+  }
+
+  function selectActiveLiveTypedFilterChoice() {
+    const liveChoice = getActiveLiveTypedFilterChoice();
+    if (!liveChoice) {
+      return false;
+    }
+    manager.setInputCaret(liveChoice.tokenEnd);
+    manager.selectLiveTypedSearchChoice(liveChoice);
+    return true;
+  }
+
+  function onInputKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Enter' && selectActiveLiveTypedFilterChoice()) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }
+
   function isModalLauncherShortcut(e: KeyboardEvent) {
     return e.key.toLowerCase() === 'k' && (isApplePlatform ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey);
   }
@@ -378,6 +408,12 @@
       void manager.activateSearch('');
       e.preventDefault();
       return;
+    }
+    if (e.key === 'Enter') {
+      if (selectActiveLiveTypedFilterChoice()) {
+        e.preventDefault();
+        return;
+      }
     }
     if (e.key === 'Enter' && manager.topSearchMatch && manager.activeItemId === manager.topSearchMatch.id) {
       void manager.activateSearch(manager.topSearchMatch.rawQuery);
@@ -457,6 +493,7 @@
             inputEditRevision++;
             syncInputCaret(event);
           }}
+          onkeydown={onInputKeyDown}
           onselect={syncInputCaret}
           onkeyup={syncInputCaret}
           onpointerup={syncInputCaret}
@@ -584,7 +621,7 @@
               {/if}
             {:else if manager.scope === 'all'}
               {#if manager.topSearchMatch}
-                <Command.Group class="mb-2" data-cmdk-top-result-search>
+                <Command.Group class="mb-2" data-cmdk-top-result-search data-testid="cmdk-top-result">
                   <Command.GroupHeading
                     class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
                   >
@@ -607,7 +644,7 @@
                 </Command.Group>
               {/if}
               {#if manager.topCommandMatch}
-                <Command.Group class="mb-2" data-cmdk-top-result-commands>
+                <Command.Group class="mb-2" data-cmdk-top-result-commands data-testid="cmdk-top-result">
                   <Command.GroupHeading
                     class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
                   >
@@ -627,7 +664,7 @@
                   </Command.GroupItems>
                 </Command.Group>
               {:else if manager.topNavigationMatch}
-                <Command.Group class="mb-2" data-cmdk-top-result-navigation>
+                <Command.Group class="mb-2" data-cmdk-top-result-navigation data-testid="cmdk-top-result">
                   <Command.GroupHeading
                     class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
                   >
@@ -821,6 +858,7 @@
               inputEditRevision++;
               syncInputCaret(event);
             }}
+            onkeydown={onInputKeyDown}
             onselect={syncInputCaret}
             onkeyup={syncInputCaret}
             onpointerup={syncInputCaret}
@@ -988,7 +1026,7 @@
                 {/if}
               {:else if manager.scope === 'all'}
                 {#if manager.topSearchMatch}
-                  <Command.Group class="mb-4" data-cmdk-top-result-search>
+                  <Command.Group class="mb-4" data-cmdk-top-result-search data-testid="cmdk-top-result">
                     <Command.GroupHeading
                       class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
                     >
@@ -1011,7 +1049,7 @@
                   </Command.Group>
                 {/if}
                 {#if manager.topCommandMatch}
-                  <Command.Group class="mb-4" data-cmdk-top-result-commands>
+                  <Command.Group class="mb-4" data-cmdk-top-result-commands data-testid="cmdk-top-result">
                     <Command.GroupHeading
                       class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
                     >
@@ -1031,7 +1069,7 @@
                     </Command.GroupItems>
                   </Command.Group>
                 {:else if manager.topNavigationMatch}
-                  <Command.Group class="mb-4" data-cmdk-top-result-navigation>
+                  <Command.Group class="mb-4" data-cmdk-top-result-navigation data-testid="cmdk-top-result">
                     <Command.GroupHeading
                       class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
                     >

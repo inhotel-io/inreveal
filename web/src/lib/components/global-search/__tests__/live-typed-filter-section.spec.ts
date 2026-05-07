@@ -103,10 +103,29 @@ describe('LiveTypedFilterSection', () => {
     expect(screen.getByText(/couldn't load tag matches/i)).toBeInTheDocument();
   });
 
-  it('renders timeout state copy', async () => {
+  it('renders secondary labels and timeout state copy', async () => {
     const { rerender } = render(LiveTypedFilterSectionHost, {
-      props: { status: { status: 'loading', key: 'city' }, onSelect: vi.fn() },
+      props: {
+        status: {
+          status: 'ok',
+          key: 'city',
+          total: 1,
+          items: [
+            {
+              id: 'city:0:8:Berlin',
+              key: 'city',
+              label: 'Berlin',
+              value: 'Berlin',
+              secondaryLabel: 'Germany',
+              tokenStart: 0,
+              tokenEnd: 8,
+            },
+          ],
+        },
+        onSelect: vi.fn(),
+      },
     });
+    expect(screen.getByText('Germany')).toBeInTheDocument();
 
     await rerender({ status: { status: 'timeout', key: 'city' }, onSelect: vi.fn() });
 

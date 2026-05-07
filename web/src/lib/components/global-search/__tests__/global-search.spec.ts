@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -466,6 +466,97 @@ describe('global-search root', () => {
     await user.click(screen.getByRole('option', { name: /Anna Maria/i }));
 
     expect(selectSpy).toHaveBeenCalled();
+  });
+
+  it('renders filter matches before top result and keeps live rows out of normal people results', () => {
+    const manager = new GlobalSearchManager();
+    manager.open();
+    manager.setQuery('person:ann');
+    manager.liveTypedSearchStatus = {
+      status: 'ok',
+      key: 'person',
+      total: 1,
+      items: [
+        {
+          id: 'person:0:10:p1',
+          key: 'person',
+          label: 'Ann Live',
+          value: 'Ann Live',
+          tokenStart: 0,
+          tokenEnd: 10,
+          entityId: 'p1',
+        },
+      ],
+    };
+    manager.sections.people = {
+      status: 'ok',
+      total: 1,
+      items: [{ id: 'p2', name: 'Ann Normal' } as never],
+    };
+
+    render(GlobalSearch, { props: { manager } });
+
+    const liveSection = screen.getByTestId('live-typed-filter-section');
+    const topResult = screen.getByTestId('cmdk-top-result');
+    expect(liveSection.compareDocumentPosition(topResult) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(liveSection).getByText(/cmdk_filter_match_person|person filter matches/i)).toBeInTheDocument();
+
+    const peopleGroup = screen.getByRole('group', { name: /cmdk_people_heading|people/i });
+    expect(within(peopleGroup).getByText(/Ann Normal/i)).toBeInTheDocument();
+    expect(within(peopleGroup).queryByText(/Ann Live/i)).toBeNull();
+  });
+
+  it('Enter on a highlighted live filter row rewrites the filter without submitting search', async () => {
+    const manager = new GlobalSearchManager();
+    const activateSearchSpy = vi.spyOn(manager, 'activateSearch').mockImplementation(async () => {});
+    manager.open();
+    manager.setQuery('person:ann');
+    manager.setInputCaret('person:ann'.length);
+    manager.liveTypedSearchStatus = {
+      status: 'ok',
+      key: 'person',
+      total: 1,
+      items: [
+        {
+          id: 'person:0:10:p1',
+          key: 'person',
+          label: 'Ann Live',
+          value: 'Ann Live',
+          tokenStart: 0,
+          tokenEnd: 10,
+          entityId: 'p1',
+        },
+      ],
+    };
+
+    render(GlobalSearch, { props: { manager } });
+
+    const input = screen.getByRole('combobox') as HTMLInputElement;
+    Object.defineProperty(input, 'selectionStart', { configurable: true, get: () => 'person:ann'.length });
+    Object.defineProperty(input, 'selectionEnd', { configurable: true, get: () => 'person:ann'.length });
+    input.focus();
+    await user.keyboard('{ArrowDown}');
+    await vi.waitFor(() => expect(manager.activeItemId).toBe('filter:person:0:10:p1:Ann Live'));
+    manager.liveTypedSearchStatus = {
+      status: 'ok',
+      key: 'person',
+      total: 1,
+      items: [
+        {
+          id: 'person:0:10:p1',
+          key: 'person',
+          label: 'Ann Live',
+          value: 'Ann Live',
+          tokenStart: 0,
+          tokenEnd: 10,
+          entityId: 'p1',
+        },
+      ],
+    };
+    await fireEvent.keyDown(document.querySelector('[data-command-root]') as HTMLElement, { key: 'Enter' });
+
+    expect(manager.query).toBe('person:"Ann Live"');
+    expect(activateSearchSpy).not.toHaveBeenCalled();
   });
 
   it('selecting a live person row applies the filter and does not navigate to person', async () => {
