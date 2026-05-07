@@ -380,7 +380,7 @@
       return manager.liveTypedSearchStatus.items.length > 0;
     }
 
-    if (key !== 'person' && key !== 'tag' && key !== 'country' && key !== 'city') {
+    if (!token || (key !== 'person' && key !== 'tag' && key !== 'country' && key !== 'city')) {
       return false;
     }
 
@@ -422,7 +422,7 @@
       return false;
     }
 
-    const values = status.items.map(liveTypedFilterItemValue);
+    const values = status.items.map((choice) => liveTypedFilterItemValue(choice));
     const currentIndex = values.indexOf(manager.activeItemId ?? '');
     const nextIndex = currentIndex === -1 ? (direction === 1 ? 0 : values.length - 1) : currentIndex + direction;
     const nextValue = values[nextIndex];
@@ -535,12 +535,10 @@
       e.preventDefault();
       return;
     }
-    if (e.key === 'Enter') {
-      if (isLiveTypedFilterValueMode()) {
-        selectActiveLiveTypedFilterChoice();
-        e.preventDefault();
-        return;
-      }
+    if (e.key === 'Enter' && isLiveTypedFilterValueMode()) {
+      selectActiveLiveTypedFilterChoice();
+      e.preventDefault();
+      return;
     }
     if (e.key === 'ArrowDown' && isLiveTypedFilterValueMode() && moveLiveTypedFilterSelection(1)) {
       e.preventDefault();

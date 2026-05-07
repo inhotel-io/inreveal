@@ -159,7 +159,7 @@ test.describe('global search palette', () => {
     await expect(filterGroup).toBeVisible();
     await filterGroup.getByText('Live Filter Person').click();
 
-    await expect(input).toHaveValue('person:"Live Filter Person"');
+    await expect(input).toHaveValue('person:"Live Filter Person" ');
     await input.press('Enter');
     await expect
       .poll(() => {
