@@ -40,6 +40,7 @@
 
   const isApplePlatform = typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/.test(navigator.platform);
   const hotkeyLabel = isApplePlatform ? '⌘K' : 'Ctrl+K';
+  let modalInput = $state<HTMLInputElement | null>(null);
 
   // Two-way sync with manager.query: the user types into the Command.Input (writes to
   // inputValue), and the manager can also update its own query internally (e.g. when
@@ -64,7 +65,7 @@
   $effect(() => {
     if (variant === 'modal' && manager.isOpen) {
       queueMicrotask(() => {
-        document.querySelector<HTMLInputElement>('[role="combobox"]')?.focus();
+        modalInput?.focus();
       });
     }
   });
@@ -861,6 +862,7 @@
       >
         <div class="flex items-center border-b border-gray-200 dark:border-gray-700">
           <Command.Input
+            bind:ref={modalInput}
             bind:value={inputValue}
             autofocus
             placeholder={$t('cmdk_placeholder')}

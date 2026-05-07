@@ -935,6 +935,18 @@ describe('global-search root', () => {
     await vi.waitFor(() => expect(screen.getByRole('combobox')).toHaveValue(''));
   });
 
+  it('keeps modal presentation when modal focus runs with dropdown input mounted', async () => {
+    const m = new GlobalSearchManager();
+    render(GlobalSearch, { props: { manager: m, variant: 'dropdown' } });
+
+    m.open('modal');
+    render(GlobalSearch, { props: { manager: m, variant: 'modal' } });
+    await Promise.resolve();
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(m.presentation).toBe('modal');
+  });
+
   it('pressing Enter on typed filters commits the raw search text, not the plain preview label', async () => {
     const m = new GlobalSearchManager();
     const activateSearchSpy = vi.spyOn(m, 'activateSearch').mockImplementation(async () => {});
