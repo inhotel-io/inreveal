@@ -1444,8 +1444,7 @@ export class GlobalSearchManager {
     const parsed = parseTypedSearch(this.query, { mode: 'draft' });
     const token = getActiveTypedSearchToken(parsed, this.typedSearchCaret);
     const previousToken = this.activeTypedSearchToken;
-    const nextToken =
-      isLiveTypedSearchToken(token) && token.issue?.code !== 'unterminated-quote' ? token : undefined;
+    const nextToken = isLiveTypedSearchToken(token) && token.issue?.code !== 'unterminated-quote' ? token : undefined;
     const tokenChanged =
       previousToken?.key !== nextToken?.key ||
       previousToken?.start !== nextToken?.start ||
