@@ -1917,6 +1917,36 @@ describe('activate("command")', () => {
       expect([...manager.selectedTypedSearchChoices.keys()]).toEqual(['person:6:25:person:"Anna Maria"']);
     });
 
+    it('selecting first live person choice in repeated equal raw tokens stores only the rewritten span identity', () => {
+      const manager = new GlobalSearchManager();
+      manager.setQuery('person:ann person:ann');
+      manager.setInputCaret('person:ann'.length);
+
+      manager.selectLiveTypedSearchChoice({
+        id: 'person:0:10:p1',
+        key: 'person',
+        label: 'Ann Live',
+        value: 'Ann Live',
+        tokenStart: 0,
+        tokenEnd: 10,
+        entityId: 'person-1',
+      });
+
+      expect(manager.query).toBe('person:"Ann Live" person:ann');
+      expect(manager.selectedTypedSearchChoices.get('person:0:17:person:"Ann Live"')).toEqual(
+        expect.objectContaining({
+          tokenRaw: 'person:"Ann Live"',
+          key: 'person',
+          id: 'person-1',
+          label: 'Ann Live',
+          value: 'Ann Live',
+        }),
+      );
+      expect(manager.selectedTypedSearchChoices.has('person:0:10:person:ann')).toBe(false);
+      expect(manager.selectedTypedSearchChoices.has('person:ann')).toBe(false);
+      expect([...manager.selectedTypedSearchChoices.keys()]).toEqual(['person:0:17:person:"Ann Live"']);
+    });
+
     it('keeps selected live person span identity after typed search draft refresh', () => {
       const manager = new GlobalSearchManager();
       manager.setQuery('beach person:ann');
