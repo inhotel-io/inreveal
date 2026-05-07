@@ -1477,10 +1477,14 @@ export class GlobalSearchManager {
       key: choice.key,
       value: choice.value,
     });
-    this.setQuery(text);
-    this.skipNextLiveTypedSearchForCaret = caret;
-    this.setInputCaret(caret);
-    const parsedAfterRewrite = parseTypedSearch(text, { mode: 'draft' });
+    const needsSeparator = text[caret] === undefined || !/\s/.test(text[caret]);
+    const nextText = needsSeparator ? `${text.slice(0, caret)} ${text.slice(caret)}` : text;
+    const nextCaret = needsSeparator ? caret + 1 : caret;
+
+    this.setQuery(nextText);
+    this.skipNextLiveTypedSearchForCaret = nextCaret;
+    this.setInputCaret(nextCaret);
+    const parsedAfterRewrite = parseTypedSearch(nextText, { mode: 'draft' });
     const rewrittenToken = getActiveTypedSearchToken(parsedAfterRewrite, caret);
     const selectedChoice = selectedChoiceFromLiveChoice(choice, rewrittenToken);
     if (selectedChoice && rewrittenToken) {

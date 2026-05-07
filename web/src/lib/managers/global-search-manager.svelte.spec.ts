@@ -1950,12 +1950,13 @@ describe('activate("command")', () => {
       vi.useFakeTimers();
       installFakeAbortTimeout();
       try {
-        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockImplementation(({ signal }: { signal?: AbortSignal }) =>
-          new Promise((resolve) => {
-            signal?.addEventListener('abort', () => {
-              resolve({ status: 'error', key: 'person', message: 'timeout' });
-            });
-          }),
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockImplementation(
+          ({ signal }: { signal?: AbortSignal }) =>
+            new Promise((resolve) => {
+              signal?.addEventListener('abort', () => {
+                resolve({ status: 'error', key: 'person', message: 'timeout' });
+              });
+            }),
         );
         const manager = new GlobalSearchManager();
 
@@ -2002,12 +2003,13 @@ describe('activate("command")', () => {
         tokenEnd: 16,
       });
 
-      expect(manager.query).toBe('beach person:"Anna Maria"');
+      expect(manager.query).toBe('beach person:"Anna Maria" ');
       expect(manager.typedSearchDisplayTokens.map((token) => token.raw)).toContain('person:"Anna Maria"');
       expect(manager.typedSearchDisplayTokens.map((token) => token.raw)).not.toContain('person:ann');
       expect(manager.typedSearchPlainQuery).toBe('beach');
       expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
-      expect(manager.typedSearchCaret).toBe('beach person:"Anna Maria"'.length);
+      expect(manager.typedSearchCaret).toBe('beach person:"Anna Maria" '.length);
+      expect(manager.activeTypedSearchToken).toBeUndefined();
     });
 
     it('selecting a live person choice rewrites the active token and stores resolver choice by rewritten span identity', () => {
@@ -2126,16 +2128,14 @@ describe('activate("command")', () => {
         entityId: 't1',
       });
 
-      expect(manager.query).toBe('beach tag:"Family Travel"');
-      expect(manager.selectedTypedSearchChoices.get('tag:6:25:tag:"Family Travel"')).toEqual(
-        {
-          key: 'tag',
-          id: 't1',
-          label: 'Family Travel',
-          value: 'Family Travel',
-          tokenRaw: 'tag:"Family Travel"',
-        },
-      );
+      expect(manager.query).toBe('beach tag:"Family Travel" ');
+      expect(manager.selectedTypedSearchChoices.get('tag:6:25:tag:"Family Travel"')).toEqual({
+        key: 'tag',
+        id: 't1',
+        label: 'Family Travel',
+        value: 'Family Travel',
+        tokenRaw: 'tag:"Family Travel"',
+      });
       expect(manager.selectedTypedSearchChoices.has('tag:tra')).toBe(false);
       expect(manager.selectedTypedSearchChoices.has('tag:"Family Travel"')).toBe(false);
       expect([...manager.selectedTypedSearchChoices.keys()]).toEqual(['tag:6:25:tag:"Family Travel"']);
@@ -2174,7 +2174,7 @@ describe('activate("command")', () => {
         secondaryLabel: 'France',
       });
 
-      expect(manager.query).toBe('beach city:Paris');
+      expect(manager.query).toBe('beach city:Paris ');
       expect(manager.query).not.toContain('country:');
       expect(manager.selectedTypedSearchChoices.size).toBe(0);
     });
