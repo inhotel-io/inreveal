@@ -146,6 +146,24 @@ test.describe('global search palette', () => {
     await expect(spacesGroup.getByText(/hawaii (family|friends)/i).first()).toBeVisible();
   });
 
+  test('typed person filter suggestions can be selected and submitted', async ({ page }) => {
+    const person = await createSearchablePerson(admin.accessToken, 'Live Filter Person');
+
+    await page.getByTestId('cmdk-input-trigger').waitFor({ state: 'visible' });
+    await page.keyboard.press('Control+k');
+    const dialog = page.getByRole('dialog');
+    const input = dialog.getByRole('combobox');
+    await input.fill('person:Live');
+
+    const filterGroup = dialog.getByRole('group', { name: /person filter matches/i });
+    await expect(filterGroup).toBeVisible();
+    await filterGroup.getByText('Live Filter Person').click();
+
+    await expect(input).toHaveValue('person:"Live Filter Person"');
+    await input.press('Enter');
+    await expect.poll(() => new URL(page.url()).searchParams.get('people')).toContain(person.id);
+  });
+
   test('album activation navigates and populates RECENT', async ({ page }) => {
     // Use a query unique to this test so prior tests' Hawaii/Trunc8 albums
     // don't pollute the Albums section. Single seeded album → single Enter
