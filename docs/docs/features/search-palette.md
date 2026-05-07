@@ -207,7 +207,7 @@ When your query closely matches a single command or navigation entry, that entry
 
 Promotion is based on a fuzzy score against the title, description, and search keywords. Commands win tie-breaks against navigation entries, so unscoped verbs like `upload` or `album` surface their command first. A short query like `peo` will surface **People** as the top result; `users` will surface **Administration → User Management**.
 
-## Typed Filter Suggestions
+### Typed filter suggestions
 
 On searchable pages, typed filters can be mixed with free-text search:
 
