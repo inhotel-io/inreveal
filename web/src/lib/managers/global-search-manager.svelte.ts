@@ -28,6 +28,7 @@ import {
   type TypedSearchDisplayToken,
   type TypedSearchIssue,
   type TypedSearchParseResult,
+  type TypedSearchTokenSpan,
 } from '$lib/utils/typed-search/typed-search-parser';
 import { resolveTypedSearchFilters, type TypedSearchChoice } from '$lib/utils/typed-search/typed-search-resolver';
 import {
@@ -110,6 +111,23 @@ export type ActiveItem =
   | { kind: 'space'; data: SharedSpaceResponseDto }
   | { kind: 'nav'; data: NavigationItem }
   | { kind: 'command'; data: CommandItem };
+
+function selectedChoiceFromLiveChoice(
+  choice: LiveTypedSearchChoice,
+  rewrittenToken: TypedSearchTokenSpan | undefined,
+): TypedSearchChoice | undefined {
+  if ((choice.key !== 'person' && choice.key !== 'tag') || !choice.entityId || rewrittenToken?.key !== choice.key) {
+    return undefined;
+  }
+
+  return {
+    tokenRaw: rewrittenToken.raw,
+    key: choice.key,
+    id: choice.entityId,
+    label: choice.label,
+    value: rewrittenToken.value,
+  };
+}
 
 type TopSearchMatch = { id: 'top-search'; query: string; rawQuery: string };
 
@@ -1463,17 +1481,10 @@ export class GlobalSearchManager {
     this.setInputCaret(caret);
     const parsedAfterRewrite = parseTypedSearch(text, { mode: 'draft' });
     const rewrittenToken = getActiveTypedSearchToken(parsedAfterRewrite, caret);
-    const selectedKey = choice.key === 'person' || choice.key === 'tag' ? choice.key : undefined;
-    if (selectedKey && choice.entityId && rewrittenToken?.key === selectedKey) {
-      const selectedChoice: TypedSearchChoice = {
-        tokenRaw: rewrittenToken.raw,
-        key: selectedKey,
-        id: choice.entityId,
-        label: choice.label,
-        value: rewrittenToken.value,
-      };
+    const selectedChoice = selectedChoiceFromLiveChoice(choice, rewrittenToken);
+    if (selectedChoice && rewrittenToken) {
       const tokenKey = getTypedSearchTokenIdentity(
-        selectedKey,
+        selectedChoice.key,
         rewrittenToken.start,
         rewrittenToken.end,
         rewrittenToken.raw,

@@ -535,6 +535,34 @@ describe('global-search root', () => {
     expect(activateSpy).not.toHaveBeenCalledWith('tag', expect.anything());
   });
 
+  it('selecting a live city row from filter-match section rewrites the city token', async () => {
+    const manager = new GlobalSearchManager();
+    manager.open();
+    manager.setQuery('city:par');
+    manager.setInputCaret('city:par'.length);
+    manager.liveTypedSearchStatus = {
+      status: 'ok',
+      key: 'city',
+      total: 1,
+      items: [
+        {
+          id: 'city:0:8:Paris',
+          key: 'city',
+          label: 'Paris',
+          value: 'Paris',
+          secondaryLabel: 'France',
+          tokenStart: 0,
+          tokenEnd: 8,
+        },
+      ],
+    };
+    render(GlobalSearch, { props: { manager } });
+
+    await user.click(screen.getByRole('option', { name: /Paris/i }));
+
+    expect(manager.query).toBe('city:Paris');
+  });
+
   it('renders live typed filter section before normal results in dropdown variant', () => {
     const m = new GlobalSearchManager();
     m.open('dropdown');

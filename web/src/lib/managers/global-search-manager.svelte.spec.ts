@@ -1969,6 +1969,44 @@ describe('activate("command")', () => {
       expect([...manager.selectedTypedSearchChoices.keys()]).toEqual(['tag:6:25:tag:"Family Travel"']);
     });
 
+    it('selecting a live country choice rewrites only the active country token without storing resolver choice', () => {
+      const manager = new GlobalSearchManager();
+      manager.setQuery('beach country:ge city:ber');
+      manager.setInputCaret('beach country:ge'.length);
+
+      manager.selectLiveTypedSearchChoice({
+        id: 'country:6:16:Germany',
+        key: 'country',
+        label: 'Germany',
+        value: 'Germany',
+        tokenStart: 6,
+        tokenEnd: 16,
+      });
+
+      expect(manager.query).toBe('beach country:Germany city:ber');
+      expect(manager.selectedTypedSearchChoices.size).toBe(0);
+    });
+
+    it('selecting a live city choice rewrites the active city token without adding a country token', () => {
+      const manager = new GlobalSearchManager();
+      manager.setQuery('beach city:par');
+      manager.setInputCaret('beach city:par'.length);
+
+      manager.selectLiveTypedSearchChoice({
+        id: 'city:6:14:Paris',
+        key: 'city',
+        label: 'Paris',
+        value: 'Paris',
+        tokenStart: 6,
+        tokenEnd: 14,
+        secondaryLabel: 'France',
+      });
+
+      expect(manager.query).toBe('beach city:Paris');
+      expect(manager.query).not.toContain('country:');
+      expect(manager.selectedTypedSearchChoices.size).toBe(0);
+    });
+
     it('activating after a live person span identity selection uses the selected filter choice', async () => {
       const manager = new GlobalSearchManager();
       manager.setQuery('beach person:ann');
