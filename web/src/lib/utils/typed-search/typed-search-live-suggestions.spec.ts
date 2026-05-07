@@ -1,4 +1,4 @@
-import { getAllPeople, getFilterSuggestions, searchPerson } from '@immich/sdk';
+import { getAllPeople, getFilterSuggestions, getSearchSuggestions, searchPerson, SearchSuggestionType } from '@immich/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveLiveTypedSearchSuggestions } from './typed-search-live-suggestions';
 import { parseTypedSearch } from './typed-search-parser';
@@ -7,6 +7,7 @@ vi.mock('@immich/sdk', async () => ({
   ...(await vi.importActual<typeof import('@immich/sdk')>('@immich/sdk')),
   getAllPeople: vi.fn(),
   getFilterSuggestions: vi.fn(),
+  getSearchSuggestions: vi.fn(),
   searchPerson: vi.fn(),
 }));
 
@@ -17,14 +18,6 @@ describe('resolveLiveTypedSearchSuggestions foundation', () => {
 
   it('returns idle for unsupported typed tokens', async () => {
     const parsed = parseTypedSearch('camera:nik', { mode: 'draft' });
-
-    await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
-      status: 'idle',
-    });
-  });
-
-  it.each(['city:par'])('keeps unsupported live key %s idle', async (search) => {
-    const parsed = parseTypedSearch(search, { mode: 'draft' });
 
     await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
       status: 'idle',
@@ -312,6 +305,82 @@ describe('resolveLiveTypedSearchSuggestions foundation', () => {
     await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
       status: 'error',
       key: 'country',
+      message: 'network down',
+    });
+  });
+
+  it('does not fetch city suggestions for an empty city token', async () => {
+    const parsed = parseTypedSearch('city:', { mode: 'draft' });
+
+    await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
+      status: 'idle',
+    });
+    expect(getSearchSuggestions).not.toHaveBeenCalled();
+  });
+
+  it('loads city suggestions for a non-empty city token without adding a country', async () => {
+    vi.mocked(getSearchSuggestions).mockResolvedValue(['Paris', 'Parikia'] as never);
+    const parsed = parseTypedSearch('city:par', { mode: 'draft' });
+
+    const result = await resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] });
+
+    expect(getSearchSuggestions).toHaveBeenCalledWith(
+      expect.objectContaining({ $type: SearchSuggestionType.City, withSharedSpaces: true }),
+      expect.anything(),
+    );
+    expect(result).toEqual({
+      status: 'ok',
+      key: 'city',
+      total: 2,
+      items: [
+        expect.objectContaining({ key: 'city', label: 'Paris', value: 'Paris' }),
+        expect.objectContaining({ key: 'city', label: 'Parikia', value: 'Parikia' }),
+      ],
+    });
+  });
+
+  it('scopes city suggestions to an existing country token with canonical country casing', async () => {
+    vi.mocked(getFilterSuggestions).mockResolvedValue({
+      people: [],
+      countries: ['Germany'],
+      cameraMakes: [],
+      tags: [],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    } as never);
+    vi.mocked(getSearchSuggestions).mockResolvedValue(['Berlin'] as never);
+    const parsed = parseTypedSearch('country:germany city:ber', { mode: 'draft' });
+
+    const result = await resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[1] });
+
+    expect(getSearchSuggestions).toHaveBeenCalledWith(
+      expect.objectContaining({ $type: SearchSuggestionType.City, country: 'Germany', withSharedSpaces: true }),
+      expect.anything(),
+    );
+    expect(result).toMatchObject({ status: 'ok', key: 'city' });
+    if (result.status === 'ok') {
+      expect(result.items[0]).toMatchObject({ key: 'city', label: 'Berlin', value: 'Berlin' });
+    }
+  });
+
+  it('returns empty when no cities match', async () => {
+    vi.mocked(getSearchSuggestions).mockResolvedValue([] as never);
+    const parsed = parseTypedSearch('city:zzzz', { mode: 'draft' });
+
+    await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
+      status: 'empty',
+      key: 'city',
+    });
+  });
+
+  it('returns a quiet live error when city suggestions fail', async () => {
+    vi.mocked(getSearchSuggestions).mockRejectedValue(new Error('network down'));
+    const parsed = parseTypedSearch('city:par', { mode: 'draft' });
+
+    await expect(resolveLiveTypedSearchSuggestions({ parsed, activeToken: parsed.tokens[0] })).resolves.toEqual({
+      status: 'error',
+      key: 'city',
       message: 'network down',
     });
   });

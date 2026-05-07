@@ -1,4 +1,4 @@
-import { getAllPeople, getFilterSuggestions, searchPerson } from '@immich/sdk';
+import { getAllPeople, getFilterSuggestions, getSearchSuggestions, searchPerson, SearchSuggestionType } from '@immich/sdk';
 import type { TypedSearchParseResult, TypedSearchTokenSpan } from './typed-search-parser';
 
 export type LiveTypedSearchKey = 'person' | 'tag' | 'country' | 'city';
@@ -123,6 +123,10 @@ export async function resolveLiveTypedSearchSuggestions(
     return resolveCountryLiveSuggestions(context, token);
   }
 
+  if (token.key === 'city') {
+    return resolveCityLiveSuggestions(context, token);
+  }
+
   return { status: 'idle' };
 }
 
@@ -220,6 +224,66 @@ async function resolveCountryLiveSuggestions(
       status: 'error',
       key: 'country',
       message: error instanceof Error ? error.message : 'Unable to load countries',
+    };
+  }
+}
+
+function canonicalExactMatch(candidates: string[], value: string) {
+  return candidates.find((candidate) => candidate.toLowerCase() === value.toLowerCase()) ?? value;
+}
+
+async function getCanonicalCountryForCity(context: LiveTypedSearchContext) {
+  const countryToken = context.parsed.scalarTokens.find((token) => token.key === 'country');
+  if (!countryToken) {
+    return undefined;
+  }
+
+  const value = String(countryToken.normalizedValue);
+  const response = await getFilterSuggestions(liveSuggestionScope(context), { signal: context.signal });
+  return canonicalExactMatch(
+    response.countries.filter((country): country is string => typeof country === 'string'),
+    value,
+  );
+}
+
+async function resolveCityLiveSuggestions(
+  context: LiveTypedSearchContext,
+  token: TypedSearchTokenSpan,
+): Promise<LiveTypedSearchStatus> {
+  const value = token.value.trim();
+  if (!value) {
+    return { status: 'idle' };
+  }
+
+  try {
+    const country = await getCanonicalCountryForCity(context);
+    const cities = await getSearchSuggestions(
+      {
+        $type: SearchSuggestionType.City,
+        ...(country ? { country } : {}),
+        ...liveSuggestionScope(context),
+      },
+      { signal: context.signal },
+    );
+    const normalizedValue = value.toLowerCase();
+    const matches = cities
+      .filter((city): city is string => typeof city === 'string')
+      .filter((city) => city.toLowerCase().includes(normalizedValue))
+      .slice(0, LIVE_RESULT_LIMIT)
+      .map((city) => stringChoice(token, 'city', city, country));
+
+    return matches.length === 0
+      ? { status: 'empty', key: 'city' }
+      : { status: 'ok', key: 'city', items: matches, total: matches.length };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
+
+    return {
+      status: 'error',
+      key: 'city',
+      message: error instanceof Error ? error.message : 'Unable to load cities',
     };
   }
 }
