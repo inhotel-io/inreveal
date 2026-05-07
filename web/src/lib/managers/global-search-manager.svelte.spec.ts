@@ -1706,6 +1706,70 @@ describe('activate("command")', () => {
       }
     });
 
+    it('caret moves outside supported typed tokens clears active token and live section to idle', async () => {
+      vi.useFakeTimers();
+      try {
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockResolvedValue({ status: 'empty', key: 'person' });
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('beach person:ann camera:nikon');
+        manager.setInputCaret('beach person:ann'.length);
+        expect(manager.activeTypedSearchToken).toMatchObject({ key: 'person', raw: 'person:ann' });
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'loading', key: 'person' });
+
+        manager.setInputCaret('beach person:ann camera:nik'.length);
+        await vi.advanceTimersByTimeAsync(200);
+
+        expect(manager.activeTypedSearchToken).toBeUndefined();
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('IME composition suppresses live requests until composition ends', async () => {
+      vi.useFakeTimers();
+      try {
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockResolvedValue({ status: 'empty', key: 'person' });
+        const manager = new GlobalSearchManager();
+
+        manager.setInputComposing(true);
+        manager.setQuery('person:ann');
+        manager.setInputCaret('person:ann'.length);
+        await vi.advanceTimersByTimeAsync(200);
+
+        expect(manager.activeTypedSearchToken).toBeUndefined();
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).not.toHaveBeenCalled();
+
+        manager.setInputComposing(false);
+        await vi.advanceTimersByTimeAsync(150);
+
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledOnce();
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'empty', key: 'person' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not schedule live requests for an unterminated quoted person token', async () => {
+      vi.useFakeTimers();
+      try {
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('person:"Ann');
+        manager.setInputCaret('person:"Ann'.length);
+        await vi.advanceTimersByTimeAsync(200);
+
+        expect(manager.activeTypedSearchToken).toBeUndefined();
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('ignores stale live person suggestion responses', async () => {
       vi.useFakeTimers();
       try {
@@ -1731,6 +1795,56 @@ describe('activate("command")', () => {
         await Promise.resolve();
 
         expect(manager.liveTypedSearchStatus).toEqual({ status: 'empty', key: 'person' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('sets timeout status when live suggestion lookup times out', async () => {
+      vi.useFakeTimers();
+      try {
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockRejectedValue(
+          new DOMException('The operation timed out', 'TimeoutError'),
+        );
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('person:ann');
+        manager.setInputCaret('person:ann'.length);
+        await vi.advanceTimersByTimeAsync(150);
+        await Promise.resolve();
+
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'timeout', key: 'person' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('close aborts live requests and ignores late writes after close', async () => {
+      vi.useFakeTimers();
+      try {
+        let resolveLive!: (value: unknown) => void;
+        liveTypedSearchMock.resolveLiveTypedSearchSuggestions.mockImplementation(
+          () => new Promise((resolve) => (resolveLive = resolve)),
+        );
+        const manager = new GlobalSearchManager();
+
+        manager.setQuery('person:ann');
+        manager.setInputCaret('person:ann'.length);
+        await vi.advanceTimersByTimeAsync(150);
+        expect(liveTypedSearchMock.resolveLiveTypedSearchSuggestions).toHaveBeenCalledOnce();
+
+        manager.close();
+        resolveLive({
+          status: 'ok',
+          key: 'person',
+          total: 1,
+          items: [{ id: 'late', key: 'person', label: 'Anna', value: 'Anna', tokenStart: 0, tokenEnd: 10 }],
+        });
+        await Promise.resolve();
+
+        expect(manager.isOpen).toBe(false);
+        expect(manager.liveTypedSearchStatus).toEqual({ status: 'idle' });
+        expect(manager.activeTypedSearchToken).toBeUndefined();
       } finally {
         vi.useRealTimers();
       }

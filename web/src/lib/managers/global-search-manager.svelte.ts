@@ -1025,7 +1025,7 @@ export class GlobalSearchManager {
     this.batchController = null;
     this.photosController?.abort();
     this.photosController = null;
-    this.cancelLiveTypedSearchSuggestions();
+    this.clearLiveTypedSearchRequest();
     this.liveTypedSearchRequestId++;
     this.sections = {
       photos: idle,
@@ -1322,7 +1322,7 @@ export class GlobalSearchManager {
     this.activeTypedSearchToken = undefined;
     this.typedSearchCaret = null;
     this.skipNextLiveTypedSearchForCaret = null;
-    this.cancelLiveTypedSearchSuggestions();
+    this.clearLiveTypedSearchRequest();
     this.liveTypedSearchRequestId++;
     this.liveTypedSearchStatus = { status: 'idle' };
     this.typedSearchComposing = false;
@@ -1338,7 +1338,7 @@ export class GlobalSearchManager {
     this.updateActiveTypedSearchToken();
   }
 
-  private cancelLiveTypedSearchSuggestions() {
+  private clearLiveTypedSearchRequest() {
     if (this.liveTypedSearchTimer !== null) {
       clearTimeout(this.liveTypedSearchTimer);
       this.liveTypedSearchTimer = null;
@@ -1348,7 +1348,7 @@ export class GlobalSearchManager {
   }
 
   private resetLiveTypedSearchSuggestions() {
-    this.cancelLiveTypedSearchSuggestions();
+    this.clearLiveTypedSearchRequest();
     this.liveTypedSearchRequestId++;
     this.liveTypedSearchStatus = { status: 'idle' };
   }
@@ -1370,7 +1370,7 @@ export class GlobalSearchManager {
       return;
     }
 
-    this.cancelLiveTypedSearchSuggestions();
+    this.clearLiveTypedSearchRequest();
     const requestId = ++this.liveTypedSearchRequestId;
     const token = this.activeTypedSearchToken;
     this.liveTypedSearchStatus = { status: 'loading', key };
@@ -1408,7 +1408,8 @@ export class GlobalSearchManager {
         })
         .catch((error: unknown) => {
           const isTimeout =
-            signal.aborted && signal.reason instanceof DOMException && signal.reason.name === 'TimeoutError';
+            (signal.aborted && signal.reason instanceof DOMException && signal.reason.name === 'TimeoutError') ||
+            (error instanceof DOMException && error.name === 'TimeoutError');
           if (isTimeout) {
             if (requestId === this.liveTypedSearchRequestId) {
               this.liveTypedSearchStatus = { status: 'timeout', key };
@@ -1443,7 +1444,8 @@ export class GlobalSearchManager {
     const parsed = parseTypedSearch(this.query, { mode: 'draft' });
     const token = getActiveTypedSearchToken(parsed, this.typedSearchCaret);
     const previousToken = this.activeTypedSearchToken;
-    const nextToken = isLiveTypedSearchToken(token) ? token : undefined;
+    const nextToken =
+      isLiveTypedSearchToken(token) && token.issue?.code !== 'unterminated-quote' ? token : undefined;
     const tokenChanged =
       previousToken?.key !== nextToken?.key ||
       previousToken?.start !== nextToken?.start ||
