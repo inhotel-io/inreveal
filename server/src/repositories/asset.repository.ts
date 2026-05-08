@@ -83,6 +83,7 @@ interface LivePhotoSearchOptions {
 
 interface AssetBuilderOptions {
   isFavorite?: boolean;
+  isNotInAlbum?: boolean;
   isTrashed?: boolean;
   isDuplicate?: boolean;
   albumId?: string;
@@ -1021,6 +1022,11 @@ export class AssetRepository {
               .innerJoin('album_asset', 'asset.id', 'album_asset.assetId')
               .where('album_asset.albumId', '=', asUuid(options.albumId!)),
           )
+          .$if(!!options.isNotInAlbum && !options.albumId, (qb) =>
+            qb.where((eb) =>
+              eb.not(eb.exists((eb) => eb.selectFrom('album_asset').whereRef('album_asset.assetId', '=', 'asset.id'))),
+            ),
+          )
           .$if(!!options.spaceId, (qb) =>
             qb.where((eb) =>
               eb.or([
@@ -1162,6 +1168,11 @@ export class AssetRepository {
                   .whereRef('album_asset.assetId', '=', 'asset.id')
                   .where('album_asset.albumId', '=', asUuid(options.albumId!)),
               ),
+            ),
+          )
+          .$if(!!options.isNotInAlbum && !options.albumId, (qb) =>
+            qb.where((eb) =>
+              eb.not(eb.exists((eb) => eb.selectFrom('album_asset').whereRef('album_asset.assetId', '=', 'asset.id'))),
             ),
           )
           .$if(!!options.spaceId, (qb) =>
