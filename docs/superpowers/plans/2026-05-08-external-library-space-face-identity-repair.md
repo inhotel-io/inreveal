@@ -127,7 +127,13 @@ const createIdentityBackedFace = async (
   },
 ) => {
   const { result: person } = input.personId
-    ? { result: await ctx.database.selectFrom('person').selectAll().where('id', '=', input.personId).executeTakeFirstOrThrow() }
+    ? {
+        result: await ctx.database
+          .selectFrom('person')
+          .selectAll()
+          .where('id', '=', input.personId)
+          .executeTakeFirstOrThrow(),
+      }
     : await ctx.newPerson({ ownerId: input.ownerId, name: input.name ?? 'Person' });
   const identityId =
     input.identityId ??
@@ -310,7 +316,13 @@ const newLibraryIdentityFace = async (
   },
 ) => {
   const { person } = input.personId
-    ? { person: await ctx.database.selectFrom('person').selectAll().where('id', '=', input.personId).executeTakeFirstOrThrow() }
+    ? {
+        person: await ctx.database
+          .selectFrom('person')
+          .selectAll()
+          .where('id', '=', input.personId)
+          .executeTakeFirstOrThrow(),
+      }
     : await ctx.newPerson({ ownerId: input.ownerId, name: input.name ?? '' });
   const identity =
     input.identityId === undefined
@@ -520,7 +532,12 @@ describe('selected-space face assignment repair helpers', () => {
     const { space: otherSpace } = await ctx.newSharedSpace({ createdById: user.id });
     const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
     const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
-    const target = await sut.createPerson({ spaceId: space.id, identityId: null, name: '', representativeFaceId: null });
+    const target = await sut.createPerson({
+      spaceId: space.id,
+      identityId: null,
+      name: '',
+      representativeFaceId: null,
+    });
     const other = await sut.createPerson({
       spaceId: otherSpace.id,
       identityId: null,
@@ -738,7 +755,13 @@ const setup = (db?: Kysely<DB>) => {
   const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
   jobs.queue.mockResolvedValue();
   jobs.queueAll.mockResolvedValue();
-  return { ctx, sut, faceIdentityRepository: ctx.get(FaceIdentityRepository), sharedSpaceRepository: ctx.get(SharedSpaceRepository), jobs };
+  return {
+    ctx,
+    sut,
+    faceIdentityRepository: ctx.get(FaceIdentityRepository),
+    sharedSpaceRepository: ctx.get(SharedSpaceRepository),
+    jobs,
+  };
 };
 
 beforeAll(async () => {
@@ -757,7 +780,13 @@ const createIdentityFace = async (
   },
 ) => {
   const { result: person } = input.personId
-    ? { result: await ctx.database.selectFrom('person').selectAll().where('id', '=', input.personId).executeTakeFirstOrThrow() }
+    ? {
+        result: await ctx.database
+          .selectFrom('person')
+          .selectAll()
+          .where('id', '=', input.personId)
+          .executeTakeFirstOrThrow(),
+      }
     : await ctx.newPerson({ ownerId: input.ownerId, name: input.name ?? 'Alice' });
   const identity =
     input.identityId === undefined
@@ -812,13 +841,15 @@ describe('SharedSpaceService linked-library face identity repair', () => {
       .where('identityId', '=', first.identity.id)
       .execute();
     expect(people).toHaveLength(1);
-    await expect(sharedSpaceRepository.getPersonFaceAssignmentsForSpace(first.assetFace.id, space.id)).resolves.toEqual([
-      { personId: people[0].id, identityId: first.identity.id, type: 'person' },
-    ]);
-    await expect(sharedSpaceRepository.getPersonFaceAssignmentsForSpace(second.assetFace.id, space.id)).resolves.toEqual([
-      { personId: people[0].id, identityId: first.identity.id, type: 'person' },
-    ]);
-    await expect(sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 })).resolves.toMatchObject({
+    await expect(sharedSpaceRepository.getPersonFaceAssignmentsForSpace(first.assetFace.id, space.id)).resolves.toEqual(
+      [{ personId: people[0].id, identityId: first.identity.id, type: 'person' }],
+    );
+    await expect(
+      sharedSpaceRepository.getPersonFaceAssignmentsForSpace(second.assetFace.id, space.id),
+    ).resolves.toEqual([{ personId: people[0].id, identityId: first.identity.id, type: 'person' }]);
+    await expect(
+      sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 }),
+    ).resolves.toMatchObject({
       detectedFaceCount: 2,
       assignedVisibleFaceCount: 2,
       unassignedFaceCount: 0,
@@ -864,7 +895,9 @@ describe('SharedSpaceService linked-library face identity repair', () => {
       { personId: correctPerson.id, identityId: face.identity.id, type: 'person' },
     ]);
     await expect(sharedSpaceRepository.getPersonById(stalePerson.id)).resolves.toBeUndefined();
-    await expect(sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 })).resolves.toMatchObject({
+    await expect(
+      sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 }),
+    ).resolves.toMatchObject({
       detectedFaceCount: 1,
       assignedVisibleFaceCount: 1,
       unassignedFaceCount: 0,
@@ -907,7 +940,9 @@ describe('SharedSpaceService linked-library face identity repair', () => {
       { personId: correctPerson.id, identityId: face.identity.id, type: 'person' },
     ]);
     await expect(sharedSpaceRepository.getPersonById(stalePerson.id)).resolves.toBeUndefined();
-    await expect(sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 })).resolves.toMatchObject({
+    await expect(
+      sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 }),
+    ).resolves.toMatchObject({
       detectedFaceCount: 1,
       assignedVisibleFaceCount: 1,
       unassignedFaceCount: 0,
@@ -939,9 +974,13 @@ describe('SharedSpaceService linked-library face identity repair', () => {
 
     await expect(sut.handleSharedSpaceFaceMatchAll({ spaceId: space.id })).resolves.toBe(JobStatus.Success);
 
-    await expect(sharedSpaceRepository.getPersonFaceAssignmentsForSpace(face.assetFace.id, space.id)).resolves.toEqual([]);
+    await expect(sharedSpaceRepository.getPersonFaceAssignmentsForSpace(face.assetFace.id, space.id)).resolves.toEqual(
+      [],
+    );
     await expect(sharedSpaceRepository.getPersonById(petSpacePerson.id)).resolves.toBeUndefined();
-    await expect(sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { petsEnabled: true })).resolves.toMatchObject({
+    await expect(
+      sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { petsEnabled: true }),
+    ).resolves.toMatchObject({
       detectedFaceCount: 1,
       assignedVisibleFaceCount: 0,
       assignedHiddenFaceCount: 0,
@@ -965,7 +1004,6 @@ Expected: FAIL on stale linked-library sync, stale full-space rematch, and type-
 
 Do not commit after the red run. Task 4 commits this test file together with the minimal production repair code that makes it pass.
 
-
 ---
 
 ## Task 4: Repair Identity-Backed Face Assignments In The Matching Service
@@ -980,9 +1018,9 @@ Do not commit after the red run. Task 4 commits this test file together with the
 In `server/src/services/shared-space.service.spec.ts`, inside `beforeEach`, after `mocks.sharedSpace.isAssetInSpace.mockResolvedValue(true);`, add:
 
 ```ts
-    mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([]);
-    mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace.mockResolvedValue([]);
-    mocks.sharedSpace.deleteOrphanedPersonsByIds.mockResolvedValue(void 0);
+mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([]);
+mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace.mockResolvedValue([]);
+mocks.sharedSpace.deleteOrphanedPersonsByIds.mockResolvedValue(void 0);
 ```
 
 - [ ] **Step 2: Replace stale-row preservation test with repair tests**
@@ -990,155 +1028,152 @@ In `server/src/services/shared-space.service.spec.ts`, inside `beforeEach`, afte
 In `server/src/services/shared-space.service.spec.ts`, replace the test named `should not touch pre-existing stale rows (isPersonFaceAssigned short-circuit)` with:
 
 ```ts
-    it('should repair an identity-backed face assigned to a stale selected-space person', async () => {
-      const spaceId = newUuid();
-      const assetId = newUuid();
-      const faceId = newUuid();
-      const identityId = newUuid();
-      const stalePersonId = newUuid();
-      const correctPersonId = newUuid();
-      const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
+it('should repair an identity-backed face assigned to a stale selected-space person', async () => {
+  const spaceId = newUuid();
+  const assetId = newUuid();
+  const faceId = newUuid();
+  const identityId = newUuid();
+  const stalePersonId = newUuid();
+  const correctPersonId = newUuid();
+  const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
 
-      mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([
-        { id: faceId, assetId, personId: newUuid(), identityId, type: 'person', embedding: '[1,2,3]' },
-      ]);
-      mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([
-        { personId: stalePersonId, identityId: null, type: 'person' },
-      ]);
-      mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(
-        factory.sharedSpacePerson({ id: correctPersonId, spaceId, identityId, type: 'person' }),
-      );
-      mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace.mockResolvedValue([stalePersonId]);
-      mocks.sharedSpace.addPersonFaces.mockResolvedValue([{ personId: correctPersonId, assetFaceId: faceId }] as any);
-      mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
+  mocks.sharedSpace.getById.mockResolvedValue(space);
+  mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([
+    { id: faceId, assetId, personId: newUuid(), identityId, type: 'person', embedding: '[1,2,3]' },
+  ]);
+  mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([
+    { personId: stalePersonId, identityId: null, type: 'person' },
+  ]);
+  mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(
+    factory.sharedSpacePerson({ id: correctPersonId, spaceId, identityId, type: 'person' }),
+  );
+  mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace.mockResolvedValue([stalePersonId]);
+  mocks.sharedSpace.addPersonFaces.mockResolvedValue([{ personId: correctPersonId, assetFaceId: faceId }] as any);
+  mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
 
-      const result = await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
+  const result = await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
 
-      expect(result).toBe(JobStatus.Success);
-      expect(mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace).toHaveBeenCalledWith(spaceId, faceId);
-      expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith(
-        [{ personId: correctPersonId, assetFaceId: faceId }],
-        { skipRecount: true },
-      );
-      expect(mocks.sharedSpace.recountPersons).toHaveBeenCalledWith([stalePersonId, correctPersonId]);
-      expect(mocks.sharedSpace.deleteOrphanedPersonsByIds).toHaveBeenCalledWith(spaceId, [stalePersonId]);
-      expect(mocks.job.queue).toHaveBeenCalledWith({
-        name: JobName.SharedSpaceIdentityReconciliation,
-        data: { spaceId, spacePersonId: correctPersonId },
-      });
-    });
+  expect(result).toBe(JobStatus.Success);
+  expect(mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace).toHaveBeenCalledWith(spaceId, faceId);
+  expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith([{ personId: correctPersonId, assetFaceId: faceId }], {
+    skipRecount: true,
+  });
+  expect(mocks.sharedSpace.recountPersons).toHaveBeenCalledWith([stalePersonId, correctPersonId]);
+  expect(mocks.sharedSpace.deleteOrphanedPersonsByIds).toHaveBeenCalledWith(spaceId, [stalePersonId]);
+  expect(mocks.job.queue).toHaveBeenCalledWith({
+    name: JobName.SharedSpaceIdentityReconciliation,
+    data: { spaceId, spacePersonId: correctPersonId },
+  });
+});
 
-    it('should leave an already correct identity-backed face assignment unchanged', async () => {
-      const spaceId = newUuid();
-      const assetId = newUuid();
-      const faceId = newUuid();
-      const identityId = newUuid();
-      const spacePersonId = newUuid();
-      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
-      mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([
-        { id: faceId, assetId, personId: newUuid(), identityId, type: 'person', embedding: '[1,2,3]' },
-      ]);
-      mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([
-        { personId: spacePersonId, identityId, type: 'person' },
-      ]);
-      mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(
-        factory.sharedSpacePerson({ id: spacePersonId, spaceId, identityId, type: 'person' }),
-      );
-      mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
+it('should leave an already correct identity-backed face assignment unchanged', async () => {
+  const spaceId = newUuid();
+  const assetId = newUuid();
+  const faceId = newUuid();
+  const identityId = newUuid();
+  const spacePersonId = newUuid();
+  mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+  mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([
+    { id: faceId, assetId, personId: newUuid(), identityId, type: 'person', embedding: '[1,2,3]' },
+  ]);
+  mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([
+    { personId: spacePersonId, identityId, type: 'person' },
+  ]);
+  mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(
+    factory.sharedSpacePerson({ id: spacePersonId, spaceId, identityId, type: 'person' }),
+  );
+  mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
 
-      await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
+  await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
 
-      expect(mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace).not.toHaveBeenCalled();
-      expect(mocks.sharedSpace.addPersonFaces).not.toHaveBeenCalled();
-      expect(mocks.sharedSpace.recountPersons).not.toHaveBeenCalled();
-    });
+  expect(mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace).not.toHaveBeenCalled();
+  expect(mocks.sharedSpace.addPersonFaces).not.toHaveBeenCalled();
+  expect(mocks.sharedSpace.recountPersons).not.toHaveBeenCalled();
+});
 
-    it('should attach a missing selected-space link for an identity-backed face', async () => {
-      const spaceId = newUuid();
-      const assetId = newUuid();
-      const faceId = newUuid();
-      const identityId = newUuid();
-      const spacePersonId = newUuid();
-      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
-      mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([
-        { id: faceId, assetId, personId: newUuid(), identityId, type: 'person', embedding: '[1,2,3]' },
-      ]);
-      mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([]);
-      mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(
-        factory.sharedSpacePerson({ id: spacePersonId, spaceId, identityId, type: 'person' }),
-      );
-      mocks.sharedSpace.addPersonFaces.mockResolvedValue([{ personId: spacePersonId, assetFaceId: faceId }] as any);
-      mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
+it('should attach a missing selected-space link for an identity-backed face', async () => {
+  const spaceId = newUuid();
+  const assetId = newUuid();
+  const faceId = newUuid();
+  const identityId = newUuid();
+  const spacePersonId = newUuid();
+  mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+  mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([
+    { id: faceId, assetId, personId: newUuid(), identityId, type: 'person', embedding: '[1,2,3]' },
+  ]);
+  mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([]);
+  mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(
+    factory.sharedSpacePerson({ id: spacePersonId, spaceId, identityId, type: 'person' }),
+  );
+  mocks.sharedSpace.addPersonFaces.mockResolvedValue([{ personId: spacePersonId, assetFaceId: faceId }] as any);
+  mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
 
-      await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
+  await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
 
-      expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith(
-        [{ personId: spacePersonId, assetFaceId: faceId }],
-        { skipRecount: true },
-      );
-      expect(mocks.sharedSpace.recountPersons).toHaveBeenCalledWith([spacePersonId]);
-    });
+  expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith([{ personId: spacePersonId, assetFaceId: faceId }], {
+    skipRecount: true,
+  });
+  expect(mocks.sharedSpace.recountPersons).toHaveBeenCalledWith([spacePersonId]);
+});
 
-    it('should replace a wrong identity selected-space face assignment', async () => {
-      const spaceId = newUuid();
-      const assetId = newUuid();
-      const faceId = newUuid();
-      const correctIdentityId = newUuid();
-      const wrongIdentityId = newUuid();
-      const wrongPersonId = newUuid();
-      const correctPersonId = newUuid();
-      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
-      mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([
-        { id: faceId, assetId, personId: newUuid(), identityId: correctIdentityId, type: 'person', embedding: '[1,2,3]' },
-      ]);
-      mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([
-        { personId: wrongPersonId, identityId: wrongIdentityId, type: 'person' },
-      ]);
-      mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(
-        factory.sharedSpacePerson({ id: correctPersonId, spaceId, identityId: correctIdentityId, type: 'person' }),
-      );
-      mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace.mockResolvedValue([wrongPersonId]);
-      mocks.sharedSpace.addPersonFaces.mockResolvedValue([{ personId: correctPersonId, assetFaceId: faceId }] as any);
-      mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
+it('should replace a wrong identity selected-space face assignment', async () => {
+  const spaceId = newUuid();
+  const assetId = newUuid();
+  const faceId = newUuid();
+  const correctIdentityId = newUuid();
+  const wrongIdentityId = newUuid();
+  const wrongPersonId = newUuid();
+  const correctPersonId = newUuid();
+  mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+  mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([
+    { id: faceId, assetId, personId: newUuid(), identityId: correctIdentityId, type: 'person', embedding: '[1,2,3]' },
+  ]);
+  mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([
+    { personId: wrongPersonId, identityId: wrongIdentityId, type: 'person' },
+  ]);
+  mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(
+    factory.sharedSpacePerson({ id: correctPersonId, spaceId, identityId: correctIdentityId, type: 'person' }),
+  );
+  mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace.mockResolvedValue([wrongPersonId]);
+  mocks.sharedSpace.addPersonFaces.mockResolvedValue([{ personId: correctPersonId, assetFaceId: faceId }] as any);
+  mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
 
-      await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
+  await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
 
-      expect(mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace).toHaveBeenCalledWith(spaceId, faceId);
-      expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith(
-        [{ personId: correctPersonId, assetFaceId: faceId }],
-        { skipRecount: true },
-      );
-      expect(mocks.sharedSpace.recountPersons).toHaveBeenCalledWith([wrongPersonId, correctPersonId]);
-      expect(mocks.sharedSpace.deleteOrphanedPersonsByIds).toHaveBeenCalledWith(spaceId, [wrongPersonId]);
-    });
+  expect(mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace).toHaveBeenCalledWith(spaceId, faceId);
+  expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith([{ personId: correctPersonId, assetFaceId: faceId }], {
+    skipRecount: true,
+  });
+  expect(mocks.sharedSpace.recountPersons).toHaveBeenCalledWith([wrongPersonId, correctPersonId]);
+  expect(mocks.sharedSpace.deleteOrphanedPersonsByIds).toHaveBeenCalledWith(spaceId, [wrongPersonId]);
+});
 
-    it('should remove a type-incompatible identity assignment without attaching to the wrong type', async () => {
-      const spaceId = newUuid();
-      const assetId = newUuid();
-      const faceId = newUuid();
-      const identityId = newUuid();
-      const petSpacePersonId = newUuid();
-      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
-      mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([
-        { id: faceId, assetId, personId: newUuid(), identityId, type: 'person', embedding: '[1,2,3]' },
-      ]);
-      mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([
-        { personId: petSpacePersonId, identityId, type: 'pet' },
-      ]);
-      mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(
-        factory.sharedSpacePerson({ id: petSpacePersonId, spaceId, identityId, type: 'pet' }),
-      );
-      mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace.mockResolvedValue([petSpacePersonId]);
-      mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
+it('should remove a type-incompatible identity assignment without attaching to the wrong type', async () => {
+  const spaceId = newUuid();
+  const assetId = newUuid();
+  const faceId = newUuid();
+  const identityId = newUuid();
+  const petSpacePersonId = newUuid();
+  mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+  mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([
+    { id: faceId, assetId, personId: newUuid(), identityId, type: 'person', embedding: '[1,2,3]' },
+  ]);
+  mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([
+    { personId: petSpacePersonId, identityId, type: 'pet' },
+  ]);
+  mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(
+    factory.sharedSpacePerson({ id: petSpacePersonId, spaceId, identityId, type: 'pet' }),
+  );
+  mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace.mockResolvedValue([petSpacePersonId]);
+  mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
 
-      await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
+  await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
 
-      expect(mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace).toHaveBeenCalledWith(spaceId, faceId);
-      expect(mocks.sharedSpace.addPersonFaces).not.toHaveBeenCalled();
-      expect(mocks.sharedSpace.recountPersons).toHaveBeenCalledWith([petSpacePersonId]);
-      expect(mocks.sharedSpace.deleteOrphanedPersonsByIds).toHaveBeenCalledWith(spaceId, [petSpacePersonId]);
-    });
+  expect(mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace).toHaveBeenCalledWith(spaceId, faceId);
+  expect(mocks.sharedSpace.addPersonFaces).not.toHaveBeenCalled();
+  expect(mocks.sharedSpace.recountPersons).toHaveBeenCalledWith([petSpacePersonId]);
+  expect(mocks.sharedSpace.deleteOrphanedPersonsByIds).toHaveBeenCalledWith(spaceId, [petSpacePersonId]);
+});
 ```
 
 - [ ] **Step 3: Run service repair tests to verify red**
@@ -1322,8 +1357,8 @@ In `server/src/services/shared-space.service.ts`, replace the top of the human f
 Keep the existing inherited metadata block immediately after this insertion, then record the current target for recounting and reconciliation:
 
 ```ts
-      recountPersonIds.add(spacePerson.id);
-      affectedPersonIds.add(spacePerson.id);
+recountPersonIds.add(spacePerson.id);
+affectedPersonIds.add(spacePerson.id);
 ```
 
 - [ ] **Step 7: Update pet face matching to use the same selected-space assignment check**
@@ -1407,8 +1442,8 @@ In `server/src/services/shared-space.service.ts`, replace the start of the pet f
 Keep the existing `addPersonFaces` and metadata inheritance block after this replacement, then record the current target for recounting and reconciliation:
 
 ```ts
-      recountPersonIds.add(spacePerson.id);
-      affectedPersonIds.add(spacePerson.id);
+recountPersonIds.add(spacePerson.id);
+affectedPersonIds.add(spacePerson.id);
 ```
 
 - [ ] **Step 8: Delete stale orphans after recount**
@@ -1416,13 +1451,13 @@ Keep the existing `addPersonFaces` and metadata inheritance block after this rep
 In `processSpaceFaceMatch`, replace the final recount block with:
 
 ```ts
-    if (recountPersonIds.size > 0) {
-      await this.sharedSpaceRepository.recountPersons([...recountPersonIds]);
-    }
-    if (stalePersonIds.size > 0) {
-      await this.sharedSpaceRepository.deleteOrphanedPersonsByIds(spaceId, [...stalePersonIds]);
-    }
-    return [...affectedPersonIds];
+if (recountPersonIds.size > 0) {
+  await this.sharedSpaceRepository.recountPersons([...recountPersonIds]);
+}
+if (stalePersonIds.size > 0) {
+  await this.sharedSpaceRepository.deleteOrphanedPersonsByIds(spaceId, [...stalePersonIds]);
+}
+return [...affectedPersonIds];
 ```
 
 - [ ] **Step 9: Remove the now-duplicated identity create helper body**
@@ -1430,11 +1465,11 @@ In `processSpaceFaceMatch`, replace the final recount block with:
 In `findOrCreateSpacePersonForFace`, replace the body with a compatibility wrapper:
 
 ```ts
-    const spacePerson = await this.resolveIdentitySpacePersonForFace(input);
-    if (!spacePerson) {
-      throw new Error(`Identity ${input.identityId} in space ${input.spaceId} has incompatible type`);
-    }
-    return spacePerson;
+const spacePerson = await this.resolveIdentitySpacePersonForFace(input);
+if (!spacePerson) {
+  throw new Error(`Identity ${input.identityId} in space ${input.spaceId} has incompatible type`);
+}
+return spacePerson;
 ```
 
 This keeps any remaining callers type-safe while the new loop uses the non-throwing helper.
@@ -1626,55 +1661,59 @@ it('getPeopleFaceStatisticsBySpaceId keeps two spaces linking the same library i
 In `server/test/medium/specs/services/shared-space-face-identity-repair.spec.ts`, add this test to the existing `describe('SharedSpaceService linked-library face identity repair')` block:
 
 ```ts
-  it('relinking a library rebuilds identity-backed assignments through library sync', async () => {
-    const { ctx, sut, faceIdentityRepository, sharedSpaceRepository } = setup();
-    const { user } = await ctx.newUser();
-    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
-    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
-    const { library } = await ctx.newLibrary({ ownerId: user.id });
-    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
-    const face = await createIdentityFace(ctx, faceIdentityRepository, {
-      ownerId: user.id,
-      libraryId: library.id,
-      name: 'Alice',
-    });
-
-    await expect(sut.handleSharedSpaceLibraryFaceSync({ spaceId: space.id, libraryId: library.id })).resolves.toBe(
-      JobStatus.Success,
-    );
-    await ctx.database
-      .deleteFrom('shared_space_library')
-      .where('spaceId', '=', space.id)
-      .where('libraryId', '=', library.id)
-      .execute();
-    await sharedSpaceRepository.removePersonFacesByLibrary(space.id, library.id);
-    await sharedSpaceRepository.deleteOrphanedPersons(space.id);
-    await expect(sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 })).resolves.toMatchObject({
-      detectedFaceCount: 0,
-      assignedVisibleFaceCount: 0,
-      unassignedFaceCount: 0,
-    });
-
-    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
-    await expect(sut.handleSharedSpaceLibraryFaceSync({ spaceId: space.id, libraryId: library.id })).resolves.toBe(
-      JobStatus.Success,
-    );
-
-    const rebuiltPerson = await ctx.database
-      .selectFrom('shared_space_person')
-      .selectAll()
-      .where('spaceId', '=', space.id)
-      .where('identityId', '=', face.identity.id)
-      .executeTakeFirstOrThrow();
-    await expect(sharedSpaceRepository.getPersonFaceAssignmentsForSpace(face.assetFace.id, space.id)).resolves.toEqual([
-      { personId: rebuiltPerson.id, identityId: face.identity.id, type: 'person' },
-    ]);
-    await expect(sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 })).resolves.toMatchObject({
-      detectedFaceCount: 1,
-      assignedVisibleFaceCount: 1,
-      unassignedFaceCount: 0,
-    });
+it('relinking a library rebuilds identity-backed assignments through library sync', async () => {
+  const { ctx, sut, faceIdentityRepository, sharedSpaceRepository } = setup();
+  const { user } = await ctx.newUser();
+  const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+  const { library } = await ctx.newLibrary({ ownerId: user.id });
+  await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
+  const face = await createIdentityFace(ctx, faceIdentityRepository, {
+    ownerId: user.id,
+    libraryId: library.id,
+    name: 'Alice',
   });
+
+  await expect(sut.handleSharedSpaceLibraryFaceSync({ spaceId: space.id, libraryId: library.id })).resolves.toBe(
+    JobStatus.Success,
+  );
+  await ctx.database
+    .deleteFrom('shared_space_library')
+    .where('spaceId', '=', space.id)
+    .where('libraryId', '=', library.id)
+    .execute();
+  await sharedSpaceRepository.removePersonFacesByLibrary(space.id, library.id);
+  await sharedSpaceRepository.deleteOrphanedPersons(space.id);
+  await expect(
+    sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 }),
+  ).resolves.toMatchObject({
+    detectedFaceCount: 0,
+    assignedVisibleFaceCount: 0,
+    unassignedFaceCount: 0,
+  });
+
+  await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
+  await expect(sut.handleSharedSpaceLibraryFaceSync({ spaceId: space.id, libraryId: library.id })).resolves.toBe(
+    JobStatus.Success,
+  );
+
+  const rebuiltPerson = await ctx.database
+    .selectFrom('shared_space_person')
+    .selectAll()
+    .where('spaceId', '=', space.id)
+    .where('identityId', '=', face.identity.id)
+    .executeTakeFirstOrThrow();
+  await expect(sharedSpaceRepository.getPersonFaceAssignmentsForSpace(face.assetFace.id, space.id)).resolves.toEqual([
+    { personId: rebuiltPerson.id, identityId: face.identity.id, type: 'person' },
+  ]);
+  await expect(
+    sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 }),
+  ).resolves.toMatchObject({
+    detectedFaceCount: 1,
+    assignedVisibleFaceCount: 1,
+    unassignedFaceCount: 0,
+  });
+});
 ```
 
 - [ ] **Step 3: Add global cross-user access test**
