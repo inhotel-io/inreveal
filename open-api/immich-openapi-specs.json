@@ -22795,6 +22795,7 @@
           "StorageBackendMigrationSingle",
           "SharedSpaceFaceMatch",
           "SharedSpaceFaceMatchAll",
+          "SharedSpaceFaceMatchPage",
           "SharedSpaceLibraryFaceSync",
           "SharedSpaceIdentityReconciliation",
           "SharedSpacePersonDedup",
