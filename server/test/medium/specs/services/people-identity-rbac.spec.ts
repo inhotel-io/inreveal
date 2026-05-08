@@ -908,7 +908,11 @@ describe('People identity RBAC projection', () => {
       .values({ type: 'person' })
       .returningAll()
       .executeTakeFirstOrThrow();
-    await ctx.database.updateTable('person').set({ identityId: staleIdentity.id }).where('id', '=', person.id).execute();
+    await ctx.database
+      .updateTable('person')
+      .set({ identityId: staleIdentity.id })
+      .where('id', '=', person.id)
+      .execute();
 
     const spaces = [];
     for (let index = 0; index < 10; index++) {

@@ -1169,10 +1169,17 @@ describe(SharedSpaceRepository.name, () => {
         .returningAll()
         .execute();
       const { person } = await ctx.newPerson({ ownerId: user.id });
-      await ctx.database.updateTable('person').set({ identityId: staleIdentity.id }).where('id', '=', person.id).execute();
+      await ctx.database
+        .updateTable('person')
+        .set({ identityId: staleIdentity.id })
+        .where('id', '=', person.id)
+        .execute();
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id, isVisible: true });
-      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: newEmbedding() }).execute();
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: newEmbedding() })
+        .execute();
       await ctx.database
         .insertInto('face_identity_face')
         .values({ assetFaceId: assetFace.id, identityId: currentFaceIdentity.id, source: 'owner-person' })
