@@ -2004,10 +2004,6 @@ export class SharedSpaceService extends BaseService {
         continue;
       }
 
-      if (petFace.identityId === null) {
-        continue;
-      }
-
       let spacePerson: SpacePersonMatchResult | undefined;
       if (petFace.identityId) {
         spacePerson = await this.findOrCreateCompatibleSpacePersonForIdentity({

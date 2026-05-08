@@ -82,6 +82,29 @@ const createIdentityFace = async (
   return { person, identity, asset, assetFace };
 };
 
+const createLegacyPetFace = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  input: {
+    ownerId: string;
+    libraryId: string;
+    name?: string;
+  },
+) => {
+  const { result: person } = await ctx.newPerson({
+    ownerId: input.ownerId,
+    name: input.name ?? 'Fido',
+    type: 'pet',
+  });
+  const { asset } = await ctx.newAsset({
+    ownerId: input.ownerId,
+    libraryId: input.libraryId,
+    visibility: AssetVisibility.Timeline,
+  });
+  const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+
+  return { person, asset, assetFace };
+};
+
 describe('SharedSpaceService linked-library face identity repair', () => {
   it('library sync creates one identity-backed space person across multiple linked libraries', async () => {
     const { ctx, sut, faceIdentityRepository, sharedSpaceRepository, jobs } = setup();
@@ -279,6 +302,36 @@ describe('SharedSpaceService linked-library face identity repair', () => {
     ]);
     await expect(
       sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 }),
+    ).resolves.toMatchObject({
+      detectedFaceCount: 1,
+      assignedVisibleFaceCount: 1,
+      assignedHiddenFaceCount: 0,
+      unassignedFaceCount: 0,
+    });
+  });
+
+  it('library sync keeps no-identity pet faces on the legacy matching path', async () => {
+    const { ctx, sut, sharedSpaceRepository } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+    const { library } = await ctx.newLibrary({ ownerId: user.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
+    const face = await createLegacyPetFace(ctx, {
+      ownerId: user.id,
+      libraryId: library.id,
+      name: 'Fido',
+    });
+
+    await expect(sut.handleSharedSpaceLibraryFaceSync({ spaceId: space.id, libraryId: library.id })).resolves.toBe(
+      JobStatus.Success,
+    );
+
+    const assignments = await sharedSpaceRepository.getPersonFaceAssignmentsForSpace(face.assetFace.id, space.id);
+    expect(assignments).toHaveLength(1);
+    expect(assignments[0]).toMatchObject({ identityId: null, type: 'pet' });
+    await expect(
+      sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { petsEnabled: true }),
     ).resolves.toMatchObject({
       detectedFaceCount: 1,
       assignedVisibleFaceCount: 1,

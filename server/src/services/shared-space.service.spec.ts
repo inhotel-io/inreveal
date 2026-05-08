@@ -3680,7 +3680,9 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getById.mockResolvedValue(space);
       mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([]);
-      mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([{ id: petFaceId, assetId, personId: personalPersonId }]);
+      mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([
+        { id: petFaceId, assetId, personId: personalPersonId, identityId: null, type: 'pet' },
+      ]);
       mocks.sharedSpace.isPersonFaceAssigned.mockResolvedValue(false);
       mocks.sharedSpace.findSpacePersonByLinkedPersonId.mockResolvedValue(void 0);
       mocks.sharedSpace.createPerson.mockResolvedValue(newPerson);
