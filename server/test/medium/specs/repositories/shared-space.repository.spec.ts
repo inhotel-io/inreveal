@@ -2207,6 +2207,124 @@ describe(SharedSpaceRepository.name, () => {
     });
   });
 
+  describe('selected-space face assignment repair helpers', () => {
+    it('reads only assignments for the selected space and face', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { space: otherSpace } = await ctx.newSharedSpace({ createdById: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
+      const { assetFace: otherFace } = await ctx.newAssetFace({ assetId: asset.id });
+      const target = await sut.createPerson({
+        spaceId: space.id,
+        identityId: null,
+        name: '',
+        representativeFaceId: null,
+      });
+      const sameSpaceSecond = await sut.createPerson({
+        spaceId: space.id,
+        identityId: null,
+        name: '',
+        representativeFaceId: null,
+        type: 'pet',
+      });
+      const sameSpaceOtherFace = await sut.createPerson({
+        spaceId: space.id,
+        identityId: null,
+        name: '',
+        representativeFaceId: null,
+      });
+      const other = await sut.createPerson({
+        spaceId: otherSpace.id,
+        identityId: null,
+        name: '',
+        representativeFaceId: null,
+      });
+      await sut.addPersonFaces(
+        [
+          { personId: target.id, assetFaceId: assetFace.id },
+          { personId: sameSpaceSecond.id, assetFaceId: assetFace.id },
+          { personId: sameSpaceOtherFace.id, assetFaceId: otherFace.id },
+          { personId: other.id, assetFaceId: assetFace.id },
+        ],
+        { skipRecount: true },
+      );
+
+      const expected = [
+        { personId: target.id, identityId: null, type: 'person' },
+        { personId: sameSpaceSecond.id, identityId: null, type: 'pet' },
+      ].sort((left, right) => left.personId.localeCompare(right.personId));
+      await expect(sut.getPersonFaceAssignmentsForSpace(assetFace.id, space.id)).resolves.toEqual(expected);
+    });
+
+    it('removes only selected-space assignments for one face and returns affected people', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { space: otherSpace } = await ctx.newSharedSpace({ createdById: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
+      const { assetFace: otherFace } = await ctx.newAssetFace({ assetId: asset.id });
+      const selectedPerson = await sut.createPerson({ spaceId: space.id, name: '', representativeFaceId: null });
+      const sameSpaceOtherFacePerson = await sut.createPerson({
+        spaceId: space.id,
+        name: '',
+        representativeFaceId: null,
+      });
+      const otherSpacePerson = await sut.createPerson({ spaceId: otherSpace.id, name: '', representativeFaceId: null });
+      await sut.addPersonFaces(
+        [
+          { personId: selectedPerson.id, assetFaceId: assetFace.id },
+          { personId: sameSpaceOtherFacePerson.id, assetFaceId: otherFace.id },
+          { personId: otherSpacePerson.id, assetFaceId: assetFace.id },
+        ],
+        { skipRecount: true },
+      );
+
+      await expect(sut.removePersonFaceAssignmentsForSpaceFace(space.id, assetFace.id)).resolves.toEqual([
+        selectedPerson.id,
+      ]);
+      await expect(sut.getPersonFaceAssignmentsForSpace(assetFace.id, space.id)).resolves.toEqual([]);
+      await expect(sut.getPersonFaceAssignmentsForSpace(otherFace.id, space.id)).resolves.toEqual([
+        { personId: sameSpaceOtherFacePerson.id, identityId: null, type: 'person' },
+      ]);
+      await expect(sut.getPersonFaceAssignmentsForSpace(assetFace.id, otherSpace.id)).resolves.toEqual([
+        { personId: otherSpacePerson.id, identityId: null, type: 'person' },
+      ]);
+    });
+
+    it('deletes only orphaned people from the provided selected-space person ids', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { space: otherSpace } = await ctx.newSharedSpace({ createdById: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
+      const orphan = await sut.createPerson({ spaceId: space.id, name: '', representativeFaceId: null });
+      const nonOrphan = await sut.createPerson({ spaceId: space.id, name: '', representativeFaceId: null });
+      const otherSpaceOrphan = await sut.createPerson({ spaceId: otherSpace.id, name: '', representativeFaceId: null });
+      await sut.addPersonFaces([{ personId: nonOrphan.id, assetFaceId: assetFace.id }], { skipRecount: true });
+
+      await sut.deleteOrphanedPersonsByIds(space.id, [orphan.id, nonOrphan.id, otherSpaceOrphan.id]);
+
+      await expect(sut.getPersonById(orphan.id)).resolves.toBeUndefined();
+      await expect(sut.getPersonById(nonOrphan.id)).resolves.toBeDefined();
+      await expect(sut.getPersonById(otherSpaceOrphan.id)).resolves.toBeDefined();
+    });
+
+    it('does not delete people when deleting orphaned people with an empty id list', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const orphan = await sut.createPerson({ spaceId: space.id, name: '', representativeFaceId: null });
+
+      await sut.deleteOrphanedPersonsByIds(space.id, []);
+
+      await expect(sut.getPersonById(orphan.id)).resolves.toBeDefined();
+    });
+  });
+
   describe('getPeopleFaceStatisticsBySpaceId', () => {
     it('getPeopleFaceStatisticsBySpaceId counts one identity across multiple linked libraries once', async () => {
       const { ctx, sut } = setup();
