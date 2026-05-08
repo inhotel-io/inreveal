@@ -20,6 +20,7 @@ The personal instance investigation found a small version of this condition, and
 - Prove direct space assets and linked-library assets are de-duplicated by face/asset identity.
 - Cover both read-side aggregate invariants and mutation/job behavior that creates or repairs space-person links.
 - Reproduce the stale or wrong `shared_space_person_face` condition that makes Space People show globally assigned faces as unassigned.
+- Require red-first TDD checkpoints for every regression and repair behavior.
 - Keep tests targeted and deterministic; use medium repository tests for real SQL invariants and service specs for job orchestration.
 
 ## Non-Goals
@@ -38,6 +39,26 @@ Repository medium tests are the source of truth for database behavior. They shou
 Service tests should cover orchestration decisions that are awkward to prove through repository methods alone: `SharedSpaceLibraryFaceSync`, `SharedSpaceFaceMatchAll`, stale assignment handling, dedup/reconciliation queueing, and face-recognition-disabled skips.
 
 Avoid one giant end-to-end test. Prefer small scenarios where each test has one reason to fail.
+
+## TDD Execution
+
+Implementation must follow red-green-refactor for each behavior cluster.
+
+1. Add the smallest failing test for the behavior.
+2. Run the targeted spec and capture the expected failure.
+3. Implement only enough production code to satisfy that test.
+4. Rerun the same targeted spec and confirm it passes.
+5. Run the adjacent regression suite for the touched layer.
+6. Refactor only after the tests are green, then rerun the same targeted suite.
+
+Required red-first checkpoints:
+
+- **Counting fixtures:** add repository medium tests before changing aggregate SQL.
+- **Stale/missing repair:** add the failing stale-link, missing-link, and wrong-identity repair tests before changing matching or repair logic.
+- **Job-path integration:** add a real DB service invocation test before changing `SharedSpaceLibraryFaceSync` or `SharedSpaceFaceMatchAll`.
+- **Scope boundaries:** add archived, timeline opt-out, unlink/relink, and multi-space tests before changing scope filters or cleanup behavior.
+
+Do not batch several production fixes before seeing at least one targeted test fail for the bug it is meant to catch.
 
 ## Fixture Model
 
@@ -118,6 +139,24 @@ Add service tests around `SharedSpaceService`.
    - Library has no assets with faces: no people created, dedup may still be queued according to current behavior.
    - Space has face recognition disabled: sync is skipped.
 
+### B2. Real DB Job-Path Integration
+
+Add at least one medium integration test that invokes the real service path against real repository state. The job queue may remain mocked, but the DB reads and writes must be real.
+
+1. **Library face sync creates real space-person links across multiple linked libraries**
+   - Create `L1` and `L2`, both linked to one space.
+   - Create identity-backed faces in both libraries for the same identity.
+   - Invoke `handleSharedSpaceLibraryFaceSync` once for each linked library.
+   - Assert the database has one identity-correct `shared_space_person` for the identity in the selected space.
+   - Assert all relevant faces have exactly one selected-space `shared_space_person_face` row pointing to that space person.
+   - Assert detailed Space People stats classify those faces as assigned visible.
+
+2. **Full-space rematch repairs existing production drift**
+   - Seed a stale or missing assignment for an identity-backed linked-library face.
+   - Invoke `handleSharedSpaceFaceMatchAll` with real repositories.
+   - Assert the stale selected-space assignment is replaced by the identity-correct assignment.
+   - Assert affected space people are recounted and orphaned stale people are removed when they no longer own any faces.
+
 ### C. Stale Or Wrong Space-Person Links
 
 Add focused regression tests for the suspected count mismatch.
@@ -129,19 +168,42 @@ Add focused regression tests for the suspected count mismatch.
    - Link `F` to `P2` through `shared_space_person_face`.
    - Assert current space detailed stats classify `F` as unassigned while global classifies it assigned. This is the failing reproduction.
 
-2. **Repair path replaces the stale face link with the identity-correct space person**
-   - After the intended fix is implemented, rerun the matching or repair job.
+2. **Global identity assigned but space link is missing**
+   - Create face `F` with `face_identity_face.identityId = I1`.
+   - Create correct space person `P1` for `I1`, or allow the repair path to create it.
+   - Do not create a `shared_space_person_face` row for `F`.
+   - Assert current Space People stats classify `F` as unassigned while global classifies it assigned.
+   - Repair should add the selected-space `F -> I1` assignment.
+
+3. **Repair path replaces the stale face link with the identity-correct space person**
+   - For a single asset, invoke `SharedSpaceFaceMatch`.
+   - For existing production drift, invoke `SharedSpaceFaceMatchAll`.
    - Assert `F` is assigned to `P1` in the space.
    - Assert the stale `F -> P2` link for the selected space is removed.
    - Assert `F` is no longer counted as unassigned in Space People stats.
    - Assert stale/ineligible links do not inflate assigned visible counts.
 
-3. **Wrong identity link is corrected**
+4. **Wrong identity link is corrected**
    - Link `F` to a space person for identity `I2`.
    - `F` remains globally linked to `I1`.
    - Repair should delete the selected-space `F -> I2` assignment and add the selected-space `F -> I1` assignment.
 
+5. **Incompatible type is not repaired into the wrong space person**
+   - Create a human face `F` linked to a human identity `I1`.
+   - Create a stale selected-space assignment to a pet `shared_space_person`, or create a pet identity conflict.
+   - Repair must not attach the human face to a pet space person.
+   - If a compatible human `I1` space person can be resolved or created, repair assigns `F` to that person.
+   - If compatible identity resolution is impossible, repair leaves `F` unassigned in the space rather than assigning it to an incompatible pet person.
+   - Assert type-incompatible rows do not cause hidden assigned counts, visible assigned counts, or person counts to inflate.
+
 The mutation contract is delete-and-recreate for the selected face/space: stale `shared_space_person_face` rows for the face in that space are removed, then the identity-correct link is inserted. This keeps stats honest and avoids duplicate face membership inside one space.
+
+Repair triggers to cover:
+
+- `SharedSpaceLibraryFaceSync`: repairs drift for assets in a newly linked or newly synced linked library.
+- `SharedSpaceFaceMatch`: repairs drift for an individual asset when the asset is added, imported, or reprocessed.
+- `SharedSpaceFaceMatchAll`: repairs existing production drift for every asset currently in the selected space.
+- Manual/admin repair path: document the supported operator action for existing drift. That action must ultimately queue `SharedSpaceFaceMatchAll` for the affected space, whether through an existing manual job or a new explicit repair job.
 
 ### D. Scope Boundaries
 
@@ -218,6 +280,7 @@ For person counts, prefer explicit expectations:
 - If fixture setup becomes repetitive, add local helper functions inside the spec file first. Promote to `test/medium.factory.ts` only if multiple files need the same setup.
 - Keep generated embeddings deterministic with `newEmbedding()` or simple literal vectors used by existing tests.
 - Do not call real job queues in medium repository tests. Create rows directly or invoke repository methods.
+- For B2 integration tests, use real repositories and the real `SharedSpaceService` handler where possible, while mocking only external boundaries such as the job queue and ML clients.
 
 ## Repair Contract
 
@@ -229,6 +292,19 @@ When a face has an eligible identity but an existing selected-space assignment p
 4. Recount affected space people and delete orphaned stale space people when appropriate.
 
 The tests should assert the postcondition rather than every internal step: one selected-space assignment remains for the face, it points to the identity-correct space person, and detailed Space People stats classify the face as assigned.
+
+The repair path must respect identity type. A face linked to a human identity must not be assigned to a pet space person, and a pet identity must not be assigned to a human space person. If the only existing assignment is type-incompatible, it is stale for this repair contract.
+
+## Documentation
+
+Implementation should update documentation when behavior changes user/admin-visible repair semantics.
+
+Required documentation updates:
+
+- Add or update a developer note describing how global identity links and space-person face links interact for linked libraries.
+- Document the supported repair route for existing drift, including which job or admin action queues `SharedSpaceFaceMatchAll`.
+- If archived asset scope remains intentionally different between global People and selected Space People, document that difference in the people/face statistics design or developer notes.
+- If no public/admin-facing docs change is needed, the implementation PR should state that explicitly and point to the developer note or test coverage that captures the behavior.
 
 ## Success Criteria
 
