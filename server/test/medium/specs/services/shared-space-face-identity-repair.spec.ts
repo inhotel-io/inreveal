@@ -11,7 +11,7 @@ import { SystemMetadataRepository } from 'src/repositories/system-metadata.repos
 import { DB } from 'src/schema';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { newMediumService } from 'test/medium.factory';
-import { newEmbedding } from 'test/small.factory';
+import { factory, newEmbedding } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
 import { Mocked } from 'vitest';
 
@@ -119,12 +119,12 @@ describe('SharedSpaceService linked-library face identity repair', () => {
       .where('identityId', '=', first.identity.id)
       .execute();
     expect(people).toHaveLength(1);
-    await expect(sharedSpaceRepository.getPersonFaceAssignmentsForSpace(first.assetFace.id, space.id)).resolves.toEqual([
-      { personId: people[0].id, identityId: first.identity.id, type: 'person' },
-    ]);
-    await expect(sharedSpaceRepository.getPersonFaceAssignmentsForSpace(second.assetFace.id, space.id)).resolves.toEqual([
-      { personId: people[0].id, identityId: first.identity.id, type: 'person' },
-    ]);
+    await expect(sharedSpaceRepository.getPersonFaceAssignmentsForSpace(first.assetFace.id, space.id)).resolves.toEqual(
+      [{ personId: people[0].id, identityId: first.identity.id, type: 'person' }],
+    );
+    await expect(
+      sharedSpaceRepository.getPersonFaceAssignmentsForSpace(second.assetFace.id, space.id),
+    ).resolves.toEqual([{ personId: people[0].id, identityId: first.identity.id, type: 'person' }]);
     await expect(
       sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 }),
     ).resolves.toMatchObject({
@@ -223,6 +223,66 @@ describe('SharedSpaceService linked-library face identity repair', () => {
     ).resolves.toMatchObject({
       detectedFaceCount: 1,
       assignedVisibleFaceCount: 1,
+      unassignedFaceCount: 0,
+    });
+  });
+
+  it('relinking a library rebuilds identity-backed selected-space assignments', async () => {
+    const { ctx, sut, faceIdentityRepository, sharedSpaceRepository } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+    const { library } = await ctx.newLibrary({ ownerId: user.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
+    const face = await createIdentityFace(ctx, faceIdentityRepository, {
+      ownerId: user.id,
+      libraryId: library.id,
+      name: 'Alice',
+    });
+
+    await expect(sut.handleSharedSpaceLibraryFaceSync({ spaceId: space.id, libraryId: library.id })).resolves.toBe(
+      JobStatus.Success,
+    );
+    const originalPerson = await ctx.database
+      .selectFrom('shared_space_person')
+      .selectAll()
+      .where('spaceId', '=', space.id)
+      .where('identityId', '=', face.identity.id)
+      .executeTakeFirstOrThrow();
+    await expect(sharedSpaceRepository.getPersonFaceAssignmentsForSpace(face.assetFace.id, space.id)).resolves.toEqual([
+      { personId: originalPerson.id, identityId: face.identity.id, type: 'person' },
+    ]);
+
+    await sut.unlinkLibrary(factory.auth({ user: { id: user.id, isAdmin: true } }), space.id, library.id);
+
+    await expect(
+      sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 }),
+    ).resolves.toMatchObject({
+      detectedFaceCount: 0,
+      assignedVisibleFaceCount: 0,
+      unassignedFaceCount: 0,
+    });
+
+    await sharedSpaceRepository.addLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
+    await expect(sut.handleSharedSpaceLibraryFaceSync({ spaceId: space.id, libraryId: library.id })).resolves.toBe(
+      JobStatus.Success,
+    );
+
+    const rebuiltPerson = await ctx.database
+      .selectFrom('shared_space_person')
+      .selectAll()
+      .where('spaceId', '=', space.id)
+      .where('identityId', '=', face.identity.id)
+      .executeTakeFirstOrThrow();
+    await expect(sharedSpaceRepository.getPersonFaceAssignmentsForSpace(face.assetFace.id, space.id)).resolves.toEqual([
+      { personId: rebuiltPerson.id, identityId: face.identity.id, type: 'person' },
+    ]);
+    await expect(
+      sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 }),
+    ).resolves.toMatchObject({
+      detectedFaceCount: 1,
+      assignedVisibleFaceCount: 1,
+      assignedHiddenFaceCount: 0,
       unassignedFaceCount: 0,
     });
   });

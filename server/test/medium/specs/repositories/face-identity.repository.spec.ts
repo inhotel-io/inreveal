@@ -1182,6 +1182,76 @@ describe(FaceIdentityRepository.name, () => {
       }
     });
 
+    it('counts multiple linked-library owners for a member and excludes them for a stranger', async () => {
+      const { ctx, sut } = setup();
+      const { user: ownerA } = await ctx.newUser();
+      const { user: ownerB } = await ctx.newUser();
+      const { user: member } = await ctx.newUser();
+      const { user: stranger } = await ctx.newUser();
+      try {
+        const owners = [
+          { userId: ownerA.id, name: 'Owner A Person' },
+          { userId: ownerB.id, name: 'Owner B Person' },
+        ];
+
+        for (const owner of owners) {
+          const { space } = await ctx.newSharedSpace({ createdById: owner.userId, faceRecognitionEnabled: true });
+          await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.userId, role: SharedSpaceRole.Owner });
+          await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+          await setMemberTimeline(ctx, { spaceId: space.id, userId: member.id, showInTimeline: true });
+          const { library } = await ctx.newLibrary({ ownerId: owner.userId });
+          await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: owner.userId });
+          const face = await newLibraryIdentityFace(ctx, sut, {
+            ownerId: owner.userId,
+            libraryId: library.id,
+            name: owner.name,
+          });
+          const spacePerson = await ctx.database
+            .insertInto('shared_space_person')
+            .values({
+              spaceId: space.id,
+              identityId: face.identity.id,
+              name: owner.name,
+              representativeFaceId: face.assetFace.id,
+              type: 'person',
+            })
+            .returningAll()
+            .executeTakeFirstOrThrow();
+          await linkSpaceFace(ctx, spacePerson.id, face.assetFace.id);
+        }
+
+        await expect(sut.getAccessiblePeopleFaceStatistics(member.id, { minimumFaceCount: 1 })).resolves.toEqual({
+          detectedFaceCount: 2,
+          assignedVisibleFaceCount: 2,
+          namedVisiblePersonCount: 2,
+          assignedHiddenFaceCount: 0,
+          unassignedFaceCount: 0,
+        });
+        await expect(sut.getAccessiblePeopleStatistics(member.id, { minimumFaceCount: 1 })).resolves.toEqual({
+          total: 2,
+          hidden: 0,
+          detectedFaceCount: 2,
+        });
+        await expect(sut.getAccessiblePeopleFaceStatistics(stranger.id, { minimumFaceCount: 1 })).resolves.toEqual({
+          detectedFaceCount: 0,
+          assignedVisibleFaceCount: 0,
+          namedVisiblePersonCount: 0,
+          assignedHiddenFaceCount: 0,
+          unassignedFaceCount: 0,
+        });
+        await expect(sut.getAccessiblePeopleStatistics(stranger.id, { minimumFaceCount: 1 })).resolves.toEqual({
+          total: 0,
+          hidden: 0,
+          detectedFaceCount: 0,
+        });
+      } finally {
+        await ctx.database
+          .deleteFrom('user')
+          .where('id', 'in', [ownerA.id, ownerB.id, member.id, stranger.id])
+          .execute();
+      }
+    });
+
     it('does not classify linked-library identity faces as assigned without a published space person', async () => {
       const { ctx, sut } = setup();
       const { user: owner } = await ctx.newUser();
