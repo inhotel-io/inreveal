@@ -68,16 +68,15 @@ const createIdentityBackedFace = async (
           .executeTakeFirstOrThrow(),
       }
     : await ctx.newPerson({ ownerId: input.ownerId, name: input.name ?? 'Person' });
-  const identityId =
-    input.identityId ??
-    person.identityId ??
-    (
-      await ctx.database
-        .insertInto('face_identity')
-        .values({ type: 'person' })
-        .returning('id')
-        .executeTakeFirstOrThrow()
-    ).id;
+  let identityId = input.identityId ?? person.identityId;
+  if (!identityId) {
+    const identity = await ctx.database
+      .insertInto('face_identity')
+      .values({ type: 'person' })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    identityId = identity.id;
+  }
 
   if (!person.identityId) {
     await ctx.database.updateTable('person').set({ identityId }).where('id', '=', person.id).execute();
@@ -2254,7 +2253,7 @@ describe(SharedSpaceRepository.name, () => {
       const expected = [
         { personId: target.id, identityId: null, type: 'person' },
         { personId: sameSpaceSecond.id, identityId: null, type: 'pet' },
-      ].sort((left, right) => left.personId.localeCompare(right.personId));
+      ].toSorted((left, right) => left.personId.localeCompare(right.personId));
       await expect(sut.getPersonFaceAssignmentsForSpace(assetFace.id, space.id)).resolves.toEqual(expected);
     });
 
