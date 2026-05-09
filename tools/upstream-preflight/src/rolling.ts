@@ -96,6 +96,21 @@ export function readRollingState(
   return validateRollingState(parsed, statePath);
 }
 
+export function assertNoActiveRollingSync(
+  repoPath: string,
+  outputDir?: string,
+): void {
+  const statePath = rollingStatePath(repoPath, outputDir);
+  if (!fs.existsSync(statePath)) return;
+
+  const state = readRollingState(repoPath, outputDir);
+  if (state.activeForkSync) {
+    throw new Error(
+      "A fork sync is waiting for checks; run make upstream-sync-fork-main ROLLING_CONTINUE=1 before selecting the next upstream batch.",
+    );
+  }
+}
+
 export function writeRollingState(
   repoPath: string,
   state: RollingState,

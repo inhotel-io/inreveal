@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,6 +8,7 @@ import { createTempRepo } from "../test/fixtures";
 import { planBatches, writeBatchPlanReports } from "./batch";
 import { getGitPath } from "./git";
 import {
+  assertNoActiveRollingSync,
   readRollingState,
   renderRollingStatus,
   rollingStatePath,
@@ -106,6 +107,112 @@ describe("rolling state validation", () => {
     expect(fs.existsSync(written)).toBe(true);
     expect(read).toEqual(state);
     expect(repo.git("status", "--short")).toBe("");
+  });
+});
+
+describe("active rolling sync guard", () => {
+  it("allows upstream batch selection when no rolling state exists", () => {
+    const repo = createTempRepo();
+    repo.write("README.md", "base");
+    repo.commit("base commit");
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "rolling-plan-"));
+
+    expect(() =>
+      assertNoActiveRollingSync(repo.path, outputDir),
+    ).not.toThrow();
+  });
+
+  it("allows upstream batch selection when rolling state has no active fork sync", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+
+    writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
+
+    expect(() =>
+      assertNoActiveRollingSync(repo.path, outputDir),
+    ).not.toThrow();
+  });
+
+  it("blocks upstream batch selection while a fork sync waits for checks", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+    });
+
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, undefined, {
+        activeForkSync: {
+          status: "checks-failed",
+          from: plan.metadata.forkHead,
+          to: repo.git("rev-parse", "main"),
+          commits: [repo.git("rev-parse", "main")],
+          preSyncHead: plan.metadata.forkHead,
+        },
+      }),
+      outputDir,
+    );
+
+    expect(() => assertNoActiveRollingSync(repo.path, outputDir)).toThrow(
+      "A fork sync is waiting for checks",
+    );
+  });
+
+  it("blocks the next-batch CLI while a fork sync waits for checks", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+    });
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, undefined, {
+        activeForkSync: {
+          status: "checks-failed",
+          from: plan.metadata.forkHead,
+          to: repo.git("rev-parse", "main"),
+          commits: [repo.git("rev-parse", "main")],
+          preSyncHead: plan.metadata.forkHead,
+        },
+      }),
+      outputDir,
+    );
+    const manifestPath = path.join(outputDir, "manifest.json");
+    fs.writeFileSync(
+      manifestPath,
+      JSON.stringify({
+        metadata: {
+          upstream_remote: "upstream",
+          upstream_branch: "main",
+          fork_remote: "origin",
+          fork_branch: "main",
+          last_verified_fork_head: plan.metadata.forkHead,
+        },
+        checks: {},
+        features: {},
+      }),
+    );
+    const packageDir = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+    );
+
+    const result = spawnSync(
+      path.join(packageDir, "node_modules", ".bin", "tsx"),
+      [
+        path.join(packageDir, "src", "index.ts"),
+        "next-batch",
+        "--manifest",
+        manifestPath,
+        "--output-dir",
+        outputDir,
+      ],
+      {
+        cwd: repo.path,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("A fork sync is waiting for checks");
+    expect(result.stdout).not.toContain("Next upstream batch");
   });
 });
 

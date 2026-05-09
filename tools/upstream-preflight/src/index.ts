@@ -31,7 +31,7 @@ import {
   writeReadinessReports,
 } from "./ready";
 import { renderPreflightMarkdown } from "./report";
-import { runRollingStatusCommand } from "./rolling";
+import { assertNoActiveRollingSync, runRollingStatusCommand } from "./rolling";
 import { classifyCommit, detectDomain } from "./risk";
 import {
   collectExtensionHotspots,
@@ -347,12 +347,21 @@ program
   .option("--manifest <path>", "ownership manifest path", defaultManifestPath)
   .option("--output-dir <path>", "generated batch plan directory")
   .action((options: { manifest: string; outputDir?: string }) => {
+    const outputDir = options.outputDir
+      ? resolveCliPath(options.outputDir)
+      : undefined;
+    try {
+      assertNoActiveRollingSync(process.cwd(), outputDir);
+    } catch (error) {
+      console.error(errorMessage(error));
+      process.exitCode = 1;
+      return;
+    }
+
     const manifest = loadManifest(resolveCliPath(options.manifest));
     process.exitCode = runNextBatchCommand({
       repoPath: process.cwd(),
-      outputDir: options.outputDir
-        ? resolveCliPath(options.outputDir)
-        : undefined,
+      outputDir,
       checks: manifest.checks,
     });
   });
