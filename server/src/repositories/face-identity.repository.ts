@@ -556,6 +556,14 @@ export class FaceIdentityRepository {
           AND asset_face."personId" IS NOT NULL
           AND asset_face."deletedAt" IS NULL
           AND asset_face."isVisible" = true
+          AND NOT EXISTS (
+            SELECT 1
+            FROM shared_space_person_face
+            INNER JOIN shared_space_person
+              ON shared_space_person.id = shared_space_person_face."personId"
+            WHERE shared_space_person_face."assetFaceId" = asset_face.id
+              AND shared_space_person."spaceId" = shared_space_asset."spaceId"
+          )
 
         UNION
 
@@ -574,6 +582,14 @@ export class FaceIdentityRepository {
           AND asset_face."personId" IS NOT NULL
           AND asset_face."deletedAt" IS NULL
           AND asset_face."isVisible" = true
+          AND NOT EXISTS (
+            SELECT 1
+            FROM shared_space_person_face
+            INNER JOIN shared_space_person
+              ON shared_space_person.id = shared_space_person_face."personId"
+            WHERE shared_space_person_face."assetFaceId" = asset_face.id
+              AND shared_space_person."spaceId" = shared_space_library."spaceId"
+          )
       )
       SELECT DISTINCT "spaceId", "assetId"
       FROM face_spaces
