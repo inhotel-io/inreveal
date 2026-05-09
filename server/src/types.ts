@@ -246,6 +246,7 @@ export interface IFaceIdentityBackfillJob extends IBaseJob {
 export interface ISharedSpaceFaceMatchJob extends IBaseJob {
   spaceId: string;
   assetId: string;
+  source?: 'identity-backfill';
 }
 
 export interface ISharedSpaceFaceMatchAllJob extends IBaseJob {

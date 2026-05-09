@@ -537,4 +537,35 @@ describe(JobRepository.name, () => {
       expect(call[2]).not.toHaveProperty('removeOnFail', true);
     }
   });
+
+  it('uses distinct stable job ids for identity-backfill shared-space face matches', async () => {
+    const { sut, queue } = setup();
+    setHandlers(sut, [JobName.SharedSpaceFaceMatch]);
+
+    await sut.queueAll([
+      { name: JobName.SharedSpaceFaceMatch, data: { spaceId: 'space-1', assetId: 'asset-1' } },
+      {
+        name: JobName.SharedSpaceFaceMatch,
+        data: { spaceId: 'space-1', assetId: 'asset-1', source: 'identity-backfill' },
+      },
+    ]);
+
+    expect(queue.addBulk).not.toHaveBeenCalled();
+    expect(queue.add).toHaveBeenCalledWith(
+      JobName.SharedSpaceFaceMatch,
+      { spaceId: 'space-1', assetId: 'asset-1' },
+      {
+        jobId: 'shared-space-face-match/space-1/asset-1',
+        removeOnComplete: true,
+      },
+    );
+    expect(queue.add).toHaveBeenCalledWith(
+      JobName.SharedSpaceFaceMatch,
+      { spaceId: 'space-1', assetId: 'asset-1', source: 'identity-backfill' },
+      {
+        jobId: 'shared-space-face-match/identity-backfill/space-1/asset-1',
+        removeOnComplete: true,
+      },
+    );
+  });
 });

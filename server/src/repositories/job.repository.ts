@@ -321,8 +321,12 @@ export class JobRepository {
         return { jobId: `bulk-add-${item.data.spaceId}-${item.data.userId}` };
       }
       case JobName.SharedSpaceFaceMatch: {
+        const prefix =
+          item.data.source === 'identity-backfill'
+            ? 'shared-space-face-match/identity-backfill'
+            : 'shared-space-face-match';
         return {
-          jobId: `shared-space-face-match/${item.data.spaceId}/${item.data.assetId}`,
+          jobId: `${prefix}/${item.data.spaceId}/${item.data.assetId}`,
           removeOnComplete: true,
         };
       }
