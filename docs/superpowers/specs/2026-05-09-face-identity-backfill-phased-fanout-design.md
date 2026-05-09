@@ -50,6 +50,8 @@ The service keeps the current paged `FaceIdentityBackfill` job, but it only adva
 
 Once identity work is clean, the service asks the repository for exact shared-space projection targets and queues one targeted `SharedSpaceFaceMatch` per unique `(spaceId, assetId)`.
 
+The existing `hasBackfillWork()` method may remain as a compatibility wrapper for bootstrap callers, but it must be derived from the phase-aware summary. New orchestration logic must use the phase-aware summary directly so it cannot confuse identity work with projection work.
+
 ## Queue Flow
 
 `AppBootstrap` checks whether any backfill work exists. If work exists and no `FaceIdentityBackfill` is active, waiting, delayed, or paused on `QueueName.PeopleBackfill`, it queues one root `FaceIdentityBackfill` job.
@@ -68,6 +70,8 @@ Manual `FaceIdentityBackfill` starts also queue the same root job. Stable job id
 8. Merge exact projection targets with targets returned by the identity repair methods.
 9. Deduplicate and sort targets by `(spaceId, assetId)`.
 10. Queue targeted `SharedSpaceFaceMatch` jobs in bounded `queueAll` chunks.
+
+Targets collected from intermediate paginated identity pages are intentionally not queued between pages. The final projection scan is the durable source of truth for any missing or stale shared-space projection created by earlier pages. Tests must prove that no target is lost when affected faces are repaired on page one and fan-out is delayed until a later page finishes.
 
 Targeted identity-backfill face-match jobs use:
 
@@ -98,6 +102,16 @@ Additional invariants:
 - If a targeted job executes after the asset, space, library link, or face state changes, the existing `SharedSpaceFaceMatch` handler re-checks current state and skips or updates idempotently.
 - A full face recognition reset remains the authoritative full rebuild path and continues to clear shared-space person state before queueing full shared-space rebuild work.
 
+## Durability and Failure Recovery
+
+Database state is the source of truth. Queue work is derived from remaining identity/projection state and must be safe to regenerate.
+
+If `FaceIdentityBackfill` repairs identities and then fails before queueing targeted `SharedSpaceFaceMatch` jobs, no data is lost. The next bootstrap or manual `FaceIdentityBackfill` trigger reads the phase-aware summary again, sees projection work, and regenerates the missing targeted jobs.
+
+If a batched `queueAll` call partially succeeds and then fails, already queued targeted jobs are safe to run, and unqueued targets remain discoverable because their shared-space projections are still missing or stale. A later backfill run must dedupe already queued/completed work and queue only the remaining current targets.
+
+If the summary says `hasSharedSpaceProjectionWork` but target discovery returns no targets, that is a repository consistency bug. The implementation should log a warning and avoid falling back to `SharedSpaceFaceMatchAll`; tests must instead prove the summary and target discovery predicates stay aligned.
+
 ## Metadata Strategy
 
 Avoid global `SharedSpacePersonMetadataBackfill` from the identity-backfill finalization path when targeted face-match jobs are queued. A global metadata job can run on `QueueName.PeopleBackfill` before `SharedSpaceFaceMatch` jobs on `QueueName.FacialRecognition`, which can refresh metadata against stale projections.
@@ -106,10 +120,21 @@ Instead:
 
 - `SharedSpaceFaceMatch` continues to inherit metadata for touched space people while processing affected assets.
 - Dedup and reconciliation continue to queue scoped metadata backfills for affected identities.
-- Space-person identity repair should return affected targets, and if metadata-only repair is required, queue scoped metadata by identity rather than global metadata.
+- Space-person identity repair should return affected targets. If metadata-only repair is required, queue scoped metadata by identity only when no targeted face-match jobs are pending from the same backfill finalization.
 - Global `SharedSpacePersonMetadataBackfill` remains available for explicit manual/global metadata invalidation paths.
 
 This keeps identity backfill from starting broad metadata work before the targeted projection layer has caught up.
+
+## Consistency With Shared-Space Recognition Design
+
+This design builds on the shared-space recognition pipeline design from `2026-05-07-shared-space-recognition-pipeline-design.md`.
+
+The division of responsibility is:
+
+- Full force face recognition reset remains the only identity-related flow that queues `SharedSpaceFaceMatchAll`.
+- Identity backfill never queues `SharedSpaceFaceMatchAll`; it queues only targeted `SharedSpaceFaceMatch` jobs after identity data is stable.
+- Both flows continue to use `QueueName.FacialRecognition` for face-related shared-space matching, preserving the single-queue ordering guarantees from the earlier design.
+- `QueueName.PeopleBackfill` may trigger targeted face work, but it must not assume that metadata work on `PeopleBackfill` will run after `FacialRecognition` jobs.
 
 ## Trigger Matrix
 
@@ -121,6 +146,7 @@ The implementation must cover every place that can start or continue backfill wo
 - Manual `FaceIdentityBackfill`: queue root job only.
 - Manual retrigger while root is pending: BullMQ stable id dedupes to one executable root.
 - Manual retrigger while a cursor page is pending: root/cursor ids remain stable and no immediate fan-out occurs.
+- Queue service `FaceIdentityBackfill` start: queue root job only, with no direct projection fan-out.
 - Paged personal identity backfill with `nextCursor`: queue only next personal page.
 - Final personal identity page: continue to shared-space person phase.
 - Paged shared-space person identity backfill with `nextCursor`: queue only next shared-space person page.
@@ -137,6 +163,7 @@ Repository tests must prove each category independently:
 - Shared-space person attached to faces with mismatched identities is shared-space person identity work.
 - Missing shared-space person-face assignment for an eligible identity-linked face is projection work.
 - Stale shared-space person-face assignment with the wrong identity is projection work.
+- For each projection-work fixture, `hasSharedSpaceProjectionWork` and `getSharedSpaceFaceMatchBackfillTargets()` agree: projection work means at least one target, and no projection work means no target.
 - Already-correct projection is not returned as a target.
 - Direct shared-space asset membership returns the target.
 - Library-linked shared-space membership returns the target.
@@ -157,6 +184,7 @@ Service tests must prove queue behavior and race-safety:
 
 - Backfill does not call projection target discovery while a personal page has `nextCursor`.
 - Backfill does not call projection target discovery while a shared-space person page has `nextCursor`.
+- Backfill with affected targets on an early page and `nextCursor` does not queue those targets early; the final projection scan rediscovers them and queues them after identity work is clean.
 - Backfill requeues itself when the phase-aware summary reports remaining identity work after both pages complete.
 - Backfill does not queue `SharedSpaceFaceMatch`, `SharedSpaceFaceMatchAll`, or metadata when identity work remains.
 - Backfill queries projection targets only when identity work is clean and projection work remains.
@@ -169,6 +197,22 @@ Service tests must prove queue behavior and race-safety:
 - Identity-backfill targeted job ids do not collide with normal incremental `SharedSpaceFaceMatch` job ids.
 - `SharedSpaceFaceMatchAll` is never queued by identity backfill.
 - Force face recognition reset still queues `SharedSpaceFaceMatchAll` for enabled spaces.
+- Queue failure after identity repair does not require a full rebuild for recovery; a subsequent root backfill regenerates targeted projection work.
+- Scoped metadata is not queued from identity-backfill finalization when targeted face-match jobs are queued from that same finalization.
+- Explicit manual/global metadata backfill remains unchanged.
+
+## Medium Test Matrix
+
+Medium tests with a real database must prove:
+
+- A full paginated identity backfill repairs page-one faces, delays fan-out until the final page, then queues targeted jobs for the page-one assets via projection discovery.
+- Draining the targeted `SharedSpaceFaceMatch` jobs after identity backfill leaves `hasBackfillWork()` false.
+- The same photo in 10 enabled spaces queues and materializes exactly 10 space-scoped projections.
+- The same photo in 10 spaces with one disabled space queues and materializes exactly 9 projections.
+- A direct space asset plus a linked-library path for the same asset and space materializes once.
+- A stale assignment moved from identity A to identity B leaves no orphaned stale person-face assignment and recounts affected people.
+- Legacy imported metadata faces still backfill through targeted `SharedSpaceFaceMatch`, not `SharedSpaceFaceMatchAll`.
+- Full force recognition reset still follows the paged full-rebuild path from the shared-space recognition design.
 
 ## Race and Edge Cases
 
@@ -177,12 +221,15 @@ Tests must explicitly cover:
 - A full face recognition reset is already running and face identity backfill is retriggered. The backfill may queue or dedupe its root job, but it must not increase face recognition concurrency and must not queue full shared-space rebuilds.
 - A second face identity backfill trigger arrives while one is active or waiting. Only one root job should execute.
 - New identity work appears between the final page and the final work summary. The service must requeue identity backfill only.
+- New identity work appears with an id lower than the current cursor while a cursor page is running. The final work summary must catch it and requeue root backfill.
 - New projection work appears after identity work is clean. The service must queue targeted projection jobs only.
 - A target asset belongs to 10 spaces. The service must queue 10 jobs, not a full rebuild and not duplicate jobs per face.
 - A target asset has multiple faces in the same space. The service must queue one asset-level job for that space.
 - A target disappears before execution. The handler must skip safely using current-state checks.
 - A space disables face recognition before execution. The handler must skip safely.
+- A library link is removed before execution. The handler must skip safely using current-state checks.
 - A stale shared-space assignment is moved from one identity to another. Old and new affected persons are recounted and orphan cleanup runs.
+- `hasSharedSpaceProjectionWork` true with an empty target list is treated as a logged invariant violation, not as permission to queue a full rebuild.
 - Failed targeted jobs remain visible according to existing queue failure policy.
 
 ## TDD Requirements
