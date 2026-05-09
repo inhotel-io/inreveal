@@ -20,8 +20,12 @@
   - Owns stable job ids for root/cursor backfills and identity-backfill `SharedSpaceFaceMatch` jobs.
 - Modify: `server/src/types.ts`
   - Owns the optional `source: 'identity-backfill'` job data field.
+- Modify: `server/src/services/shared-space.service.ts`
+  - Owns current-state checks when stale targeted jobs execute after asset/space/library changes.
 - Modify: `server/src/services/person.service.spec.ts`
   - Unit coverage for bootstrap, phase gating, fan-out, batching, no metadata race, and full-reset preservation.
+- Modify: `server/src/services/shared-space.service.spec.ts`
+  - Unit coverage for stale targeted job execution after target removal or face-recognition disablement.
 - Modify: `server/src/repositories/job.repository.spec.ts`
   - Unit coverage for stable job ids and no normal-vs-backfill face-match collision.
 - Modify: `server/test/medium/specs/repositories/face-identity.repository.spec.ts`
@@ -44,7 +48,12 @@ git diff --name-only -- server/src/repositories/face-identity.repository.ts serv
 
 Expected in this worktree before cleanup: those server files may be listed as modified.
 
-If they are modified before implementation starts, save the prototype diff for reference and restore only those server files:
+If they are modified before implementation starts, first determine ownership:
+
+- If the diffs are the earlier prototype from this branch, save them as a reference patch and remove them from the execution worktree before writing the first red test.
+- If any hunk appears user-owned or unrelated to this backfill work, do not restore it. Create a fresh implementation worktree from `HEAD` and execute the plan there instead.
+
+For prototype-owned diffs only, use:
 
 ```bash
 git diff -- server/src/repositories/face-identity.repository.ts server/src/repositories/job.repository.spec.ts server/src/repositories/job.repository.ts server/src/services/person.service.spec.ts server/src/services/person.service.ts server/src/types.ts server/test/medium/specs/repositories/face-identity.repository.spec.ts server/test/medium/specs/services/metadata.service.spec.ts > /tmp/face-identity-backfill-prototype.diff
@@ -53,6 +62,16 @@ git status --short
 ```
 
 Expected after cleanup: only committed docs remain clean, and no server implementation files are modified. Keep `/tmp/face-identity-backfill-prototype.diff` as a reference only; do not apply it wholesale.
+
+For user-owned or ambiguous diffs, create a clean execution worktree:
+
+```bash
+git worktree add ../fix-shared-space-backfill-targeted-rematch-impl HEAD
+cd ../fix-shared-space-backfill-targeted-rematch-impl
+git status --short
+```
+
+Expected: clean status before the first red test.
 
 ## Task 1: Repository Phase Summary
 
@@ -160,11 +179,11 @@ export type FaceIdentityBackfillWork = {
 };
 ```
 
-Replace `hasBackfillWork()` with a wrapper and add `getBackfillWork()`:
+Replace `hasBackfillWork()` with a wrapper and add `getBackfillWork()`. The projection boolean must be derived from `getSharedSpaceFaceMatchBackfillTargets({ limit: 1 })` so it uses the exact same predicate as target discovery:
 
 ```ts
 async getBackfillWork(): Promise<FaceIdentityBackfillWork> {
-  const result = await sql<FaceIdentityBackfillWork>`
+  const result = await sql<Pick<FaceIdentityBackfillWork, 'hasPersonalIdentityWork' | 'hasSpacePersonIdentityWork'>>`
     SELECT
       (
         EXISTS (
@@ -198,70 +217,15 @@ async getBackfillWork(): Promise<FaceIdentityBackfillWork> {
           AND asset_face."deletedAt" IS NULL
           AND asset_face."isVisible" = true
           AND shared_space_person."identityId" IS DISTINCT FROM face_identity_face."identityId"
-      ) AS "hasSpacePersonIdentityWork",
-      EXISTS (
-        SELECT 1
-        FROM asset_face
-        INNER JOIN asset ON asset.id = asset_face."assetId"
-        INNER JOIN face_identity_face ON face_identity_face."assetFaceId" = asset_face.id
-        WHERE asset_face."personId" IS NOT NULL
-          AND asset_face."deletedAt" IS NULL
-          AND asset_face."isVisible" = true
-          AND asset."deletedAt" IS NULL
-          AND asset."isOffline" = false
-          AND asset.visibility IN (${AssetVisibility.Timeline}, ${AssetVisibility.Archive})
-          AND (
-            EXISTS (
-              SELECT 1
-              FROM shared_space_asset
-              INNER JOIN shared_space ON shared_space.id = shared_space_asset."spaceId"
-              WHERE shared_space_asset."assetId" = asset.id
-                AND shared_space."faceRecognitionEnabled" = true
-                AND NOT EXISTS (
-                  SELECT 1
-                  FROM shared_space_person_face
-                  INNER JOIN shared_space_person
-                    ON shared_space_person.id = shared_space_person_face."personId"
-                  WHERE shared_space_person_face."assetFaceId" = asset_face.id
-                    AND shared_space_person."spaceId" = shared_space.id
-                )
-            )
-            OR EXISTS (
-              SELECT 1
-              FROM shared_space_library
-              INNER JOIN shared_space ON shared_space.id = shared_space_library."spaceId"
-              WHERE shared_space_library."libraryId" = asset."libraryId"
-                AND shared_space."faceRecognitionEnabled" = true
-                AND NOT EXISTS (
-                  SELECT 1
-                  FROM shared_space_person_face
-                  INNER JOIN shared_space_person
-                    ON shared_space_person.id = shared_space_person_face."personId"
-                  WHERE shared_space_person_face."assetFaceId" = asset_face.id
-                    AND shared_space_person."spaceId" = shared_space.id
-                )
-            )
-            OR EXISTS (
-              SELECT 1
-              FROM shared_space_person_face
-              INNER JOIN shared_space_person
-                ON shared_space_person.id = shared_space_person_face."personId"
-              INNER JOIN shared_space ON shared_space.id = shared_space_person."spaceId"
-              WHERE shared_space_person_face."assetFaceId" = asset_face.id
-                AND shared_space."faceRecognitionEnabled" = true
-                AND shared_space_person."identityId" IS DISTINCT FROM face_identity_face."identityId"
-            )
-          )
-      ) AS "hasSharedSpaceProjectionWork"
+      ) AS "hasSpacePersonIdentityWork"
   `.execute(this.db);
+  const projectionTargets = await this.getSharedSpaceFaceMatchBackfillTargets({ limit: 1 });
 
-  return (
-    result.rows[0] ?? {
-      hasPersonalIdentityWork: false,
-      hasSpacePersonIdentityWork: false,
-      hasSharedSpaceProjectionWork: false,
-    }
-  );
+  return {
+    hasPersonalIdentityWork: result.rows[0]?.hasPersonalIdentityWork ?? false,
+    hasSpacePersonIdentityWork: result.rows[0]?.hasSpacePersonIdentityWork ?? false,
+    hasSharedSpaceProjectionWork: projectionTargets.length > 0,
+  };
 }
 
 async hasBackfillWork(): Promise<boolean> {
@@ -373,6 +337,55 @@ it('excludes disabled spaces and ineligible assets from projection targets', asy
     await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
   }
 });
+
+it('excludes deleted invisible unassigned and identity-less faces from projection targets', async () => {
+  const { ctx, sut } = setup();
+  const { user } = await ctx.newUser();
+  try {
+    const eligible = await newIdentityFace(ctx, sut, { ownerId: user.id });
+    const deletedFace = await newIdentityFace(ctx, sut, { ownerId: user.id });
+    const invisibleFace = await newIdentityFace(ctx, sut, { ownerId: user.id });
+    const unassignedFace = await newIdentityFace(ctx, sut, { ownerId: user.id });
+    const identityless = await newIdentityFace(ctx, sut, { ownerId: user.id });
+    await ctx.database
+      .updateTable('asset_face')
+      .set({ deletedAt: new Date() })
+      .where('id', '=', deletedFace.assetFace.id)
+      .execute();
+    await ctx.database
+      .updateTable('asset_face')
+      .set({ isVisible: false })
+      .where('id', '=', invisibleFace.assetFace.id)
+      .execute();
+    await ctx.database
+      .updateTable('asset_face')
+      .set({ personId: null })
+      .where('id', '=', unassignedFace.assetFace.id)
+      .execute();
+    await ctx.database.deleteFrom('face_identity_face').where('assetFaceId', '=', identityless.assetFace.id).execute();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+    for (const assetId of [
+      eligible.asset.id,
+      deletedFace.asset.id,
+      invisibleFace.asset.id,
+      unassignedFace.asset.id,
+      identityless.asset.id,
+    ]) {
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId, addedById: user.id });
+    }
+
+    await expect(sut.getSharedSpaceFaceMatchBackfillTargets()).resolves.toEqual([
+      { spaceId: space.id, assetId: eligible.asset.id },
+    ]);
+    await expect(sut.getBackfillWork()).resolves.toMatchObject({
+      hasPersonalIdentityWork: true,
+      hasSharedSpaceProjectionWork: true,
+    });
+  } finally {
+    await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+  }
+});
 ```
 
 Extend the local `newIdentityFace()` helper in this spec file so it accepts `libraryId`, `isOffline`, and `deletedAt`, then passes those values into `ctx.newAsset()`.
@@ -382,7 +395,7 @@ Extend the local `newIdentityFace()` helper in this spec file so it accepts `lib
 Run:
 
 ```bash
-corepack pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts -t "projection target|direct and linked-library|ineligible assets"
+corepack pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts -t "projection target|direct and linked-library|ineligible assets|identity-less faces"
 ```
 
 Expected: FAIL if target discovery and summary predicates disagree or helper inputs are unsupported.
@@ -456,7 +469,7 @@ const newIdentityFace = async (
 Run:
 
 ```bash
-corepack pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts -t "projection target|direct and linked-library|ineligible assets"
+corepack pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts -t "projection target|direct and linked-library|ineligible assets|identity-less faces"
 ```
 
 Expected: PASS.
@@ -742,6 +755,47 @@ it('queues exact deduped projection targets after identity work is clean', async
   );
 });
 
+it('rediscovers earlier-page targets after paginated identity backfill completes', async () => {
+  mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValueOnce({
+    processed: 1,
+    nextCursor: 'person-cursor',
+    affectedSpaceAssets: [{ spaceId: 'space-1', assetId: 'asset-1' }],
+  });
+
+  await expect(sut.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
+
+  expect(mocks.job.queueAll).not.toHaveBeenCalled();
+  expect((mocks.faceIdentity as any).getSharedSpaceFaceMatchBackfillTargets).not.toHaveBeenCalled();
+
+  mocks.job.queue.mockClear();
+  mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValueOnce({ processed: 1 });
+  mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValueOnce({ processed: 0, conflictCount: 0 });
+  (mocks.faceIdentity as any).getBackfillWork.mockResolvedValue({
+    hasPersonalIdentityWork: false,
+    hasSpacePersonIdentityWork: false,
+    hasSharedSpaceProjectionWork: true,
+  });
+  (mocks.faceIdentity as any).getSharedSpaceFaceMatchBackfillTargets.mockResolvedValue([
+    { spaceId: 'space-1', assetId: 'asset-1' },
+    { spaceId: 'space-1', assetId: 'asset-2' },
+  ]);
+
+  await expect(sut.handleFaceIdentityBackfill({ stage: 'person', cursor: 'person-cursor' })).resolves.toBe(
+    JobStatus.Success,
+  );
+
+  expect(mocks.job.queueAll).toHaveBeenCalledWith([
+    {
+      name: JobName.SharedSpaceFaceMatch,
+      data: { spaceId: 'space-1', assetId: 'asset-1', source: 'identity-backfill' },
+    },
+    {
+      name: JobName.SharedSpaceFaceMatch,
+      data: { spaceId: 'space-1', assetId: 'asset-2', source: 'identity-backfill' },
+    },
+  ]);
+});
+
 it('does not call queueAll for an empty targeted face-match list', async () => {
   mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 0 });
   mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({ processed: 0, conflictCount: 0 });
@@ -775,6 +829,81 @@ it('does not write an empty trailing batch for exactly one full chunk', async ()
   expect(mocks.job.queueAll).toHaveBeenCalledTimes(1);
   expect(mocks.job.queueAll.mock.calls[0][0]).toHaveLength(1000);
 });
+
+it('logs a projection invariant warning instead of falling back to a full rebuild when projection work has no targets', async () => {
+  const warn = vi.spyOn((sut as any).logger, 'warn').mockImplementation(() => undefined);
+  mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 0 });
+  mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({ processed: 0, conflictCount: 0 });
+  (mocks.faceIdentity as any).getBackfillWork.mockResolvedValue({
+    hasPersonalIdentityWork: false,
+    hasSpacePersonIdentityWork: false,
+    hasSharedSpaceProjectionWork: true,
+  });
+  (mocks.faceIdentity as any).getSharedSpaceFaceMatchBackfillTargets.mockResolvedValue([]);
+
+  await expect(sut.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
+
+  expect(warn).toHaveBeenCalledWith(
+    expect.stringContaining('projection backfill work was reported but no targets were found'),
+  );
+  expect(mocks.job.queueAll).not.toHaveBeenCalled();
+  expect(mocks.sharedSpace.getSpaceIdsWithFaceRecognitionEnabled).not.toHaveBeenCalled();
+});
+
+it('regenerates targeted projection work on a later run after a queue write failure', async () => {
+  const target = { spaceId: 'space-1', assetId: 'asset-1' };
+  mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 1 });
+  mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({ processed: 0, conflictCount: 0 });
+  (mocks.faceIdentity as any).getBackfillWork.mockResolvedValue({
+    hasPersonalIdentityWork: false,
+    hasSpacePersonIdentityWork: false,
+    hasSharedSpaceProjectionWork: true,
+  });
+  (mocks.faceIdentity as any).getSharedSpaceFaceMatchBackfillTargets.mockResolvedValue([target]);
+  mocks.job.queueAll.mockRejectedValueOnce(new Error('redis write failed'));
+
+  await expect(sut.handleFaceIdentityBackfill({ stage: 'person' })).rejects.toThrow('redis write failed');
+
+  mocks.job.queueAll.mockReset();
+  await expect(sut.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
+
+  expect(mocks.job.queueAll).toHaveBeenCalledWith([
+    {
+      name: JobName.SharedSpaceFaceMatch,
+      data: { ...target, source: 'identity-backfill' },
+    },
+  ]);
+});
+
+it('regenerates only remaining current targets after a later queue batch fails', async () => {
+  const targets = Array.from({ length: 1001 }, (_, index) => ({
+    spaceId: 'space-1',
+    assetId: `asset-${index.toString().padStart(4, '0')}`,
+  }));
+  const remainingTarget = targets.at(-1)!;
+  mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 1 });
+  mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({ processed: 0, conflictCount: 0 });
+  (mocks.faceIdentity as any).getBackfillWork.mockResolvedValue({
+    hasPersonalIdentityWork: false,
+    hasSpacePersonIdentityWork: false,
+    hasSharedSpaceProjectionWork: true,
+  });
+  (mocks.faceIdentity as any).getSharedSpaceFaceMatchBackfillTargets.mockResolvedValueOnce(targets);
+  mocks.job.queueAll.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('redis write failed'));
+
+  await expect(sut.handleFaceIdentityBackfill({ stage: 'person' })).rejects.toThrow('redis write failed');
+
+  mocks.job.queueAll.mockReset();
+  (mocks.faceIdentity as any).getSharedSpaceFaceMatchBackfillTargets.mockResolvedValueOnce([remainingTarget]);
+  await expect(sut.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
+
+  expect(mocks.job.queueAll).toHaveBeenCalledWith([
+    {
+      name: JobName.SharedSpaceFaceMatch,
+      data: { ...remainingTarget, source: 'identity-backfill' },
+    },
+  ]);
+});
 ```
 
 - [ ] **Step 2: Run focused service tests and verify RED**
@@ -782,14 +911,26 @@ it('does not write an empty trailing batch for exactly one full chunk', async ()
 Run:
 
 ```bash
-corepack pnpm --dir server test src/services/person.service.spec.ts -t "deduped projection targets|empty targeted|empty trailing"
+corepack pnpm --dir server test src/services/person.service.spec.ts -t "deduped projection targets|earlier-page targets|empty targeted|empty trailing|projection invariant|queue write failure|queue batch fails"
 ```
 
-Expected: FAIL until the batching helper skips empty arrays and uses identity-backfill source.
+Expected: FAIL until the batching helper skips empty arrays, uses identity-backfill source, logs the empty-target invariant, and leaves queue-failure recovery to regenerated DB-derived targets.
 
 - [ ] **Step 3: Implement deduped bounded queue writes**
 
-In `server/src/services/person.service.ts`, add or update:
+In `server/src/services/person.service.ts`, update the projection target discovery block so an inconsistent empty target list logs a warning without falling back to a full rebuild:
+
+```ts
+if (work.hasSharedSpaceProjectionWork) {
+  const projectionTargets = await this.faceIdentityRepository.getSharedSpaceFaceMatchBackfillTargets();
+  if (projectionTargets.length === 0) {
+    this.logger.warn('Face identity projection backfill work was reported but no targets were found');
+  }
+  affectedSpaceAssets.push(...projectionTargets);
+}
+```
+
+Then add or update the bounded queue helper:
 
 ```ts
 private async queueSharedSpaceFaceMatchTargets(targets: SharedSpaceFaceMatchTarget[]): Promise<void> {
@@ -836,7 +977,7 @@ import { JobItem } from 'src/types';
 Run:
 
 ```bash
-corepack pnpm --dir server test src/services/person.service.spec.ts -t "deduped projection targets|empty targeted|empty trailing"
+corepack pnpm --dir server test src/services/person.service.spec.ts -t "deduped projection targets|earlier-page targets|empty targeted|empty trailing|projection invariant|queue write failure|queue batch fails"
 ```
 
 Expected: PASS.
@@ -939,12 +1080,12 @@ git commit -m "fix: avoid identity backfill metadata race"
 - Modify: `server/test/medium/specs/repositories/face-identity.repository.spec.ts`
 - Modify: `server/test/medium/specs/services/metadata.service.spec.ts`
 
-- [ ] **Step 1: Write failing medium test for paginated no-loss fan-out**
+- [ ] **Step 1: Write failing medium test for end-to-end targeted fan-out**
 
-Add this service-level medium test to `server/test/medium/specs/services/metadata.service.spec.ts`, using the existing `setupFaceIdentityBackfillService()` helper. The test creates affected targets before final fan-out and proves the final projection scan rediscovers them.
+Add this service-level medium test to `server/test/medium/specs/services/metadata.service.spec.ts`, using the existing `setupFaceIdentityBackfillService()` helper. The unit tests above prove paginated no-loss behavior; this medium test proves the final DB-derived targets materialize through real shared-space matching.
 
 ```ts
-it('rediscovers page-one projection work after paginated identity backfill finishes', async () => {
+it('materializes DB-derived projection work after identity backfill finishes', async () => {
   const { ctx } = setupFaceImport();
   const { user } = await ctx.newUser();
   try {
@@ -959,6 +1100,7 @@ it('rediscovers page-one projection work after paginated identity backfill finis
     await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: firstAsset.id, addedById: user.id });
     await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: secondAsset.id, addedById: user.id });
     const { sut: backfillService, ctx: backfillCtx } = setupFaceIdentityBackfillService(ctx.database);
+    const { sut: sharedSpaceService, ctx: sharedSpaceCtx } = setupSharedSpaceService(ctx.database);
 
     await expect(backfillService.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
 
@@ -973,19 +1115,25 @@ it('rediscovers page-one projection work after paginated identity backfill finis
       ]),
     );
     expect(queuedJobs).toHaveLength(2);
+    for (const job of queuedJobs) {
+      await expect(sharedSpaceService.handleSharedSpaceFaceMatch(job.data)).resolves.toBe(JobStatus.Success);
+    }
+    await drainSharedSpaceFaceJobs(sharedSpaceService, sharedSpaceCtx);
+    await expect(backfillCtx.get(FaceIdentityRepository).hasBackfillWork()).resolves.toBe(false);
   } finally {
     await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
   }
 });
 ```
 
-- [ ] **Step 2: Write failing medium tests for same-photo multi-space materialization**
+- [ ] **Step 2: Write failing medium test for same-photo multi-space materialization**
 
-Add or extend the existing same-photo test:
+Add this service-level medium test to `server/test/medium/specs/services/metadata.service.spec.ts`:
 
 ```ts
 it('materializes one targeted projection per enabled space for the same photo in 10 spaces', async () => {
-  const { ctx, sut } = setup();
+  const { ctx } = setupFaceImport();
+  const sut = ctx.get(FaceIdentityRepository);
   const { user } = await ctx.newUser();
   try {
     const { person } = await ctx.newPerson({ ownerId: user.id });
@@ -1003,9 +1151,32 @@ it('materializes one targeted projection per enabled space for the same photo in
     await ctx.newSharedSpaceMember({ spaceId: disabledSpace.id, userId: user.id, role: SharedSpaceRole.Owner });
     await ctx.newSharedSpaceAsset({ spaceId: disabledSpace.id, assetId: asset.id, addedById: user.id });
 
-    await expect(sut.getSharedSpaceFaceMatchBackfillTargets()).resolves.toEqual(
-      enabledSpaceIds.sort().map((spaceId) => ({ spaceId, assetId: asset.id })),
+    const { sut: backfillService, ctx: backfillCtx } = setupFaceIdentityBackfillService(ctx.database);
+    const { sut: sharedSpaceService, ctx: sharedSpaceCtx } = setupSharedSpaceService(ctx.database);
+    await expect(backfillService.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
+    const queuedJobs = backfillCtx
+      .getMock<JobRepository, Mocked<JobRepository>>(JobRepository)
+      .queueAll.mock.calls.flatMap(([jobs]) => jobs)
+      .filter((job) => job.name === JobName.SharedSpaceFaceMatch);
+    expect(queuedJobs).toEqual(
+      enabledSpaceIds.sort().map((spaceId) => ({
+        name: JobName.SharedSpaceFaceMatch,
+        data: { spaceId, assetId: asset.id, source: 'identity-backfill' },
+      })),
     );
+    for (const job of queuedJobs) {
+      await expect(sharedSpaceService.handleSharedSpaceFaceMatch(job.data)).resolves.toBe(JobStatus.Success);
+    }
+    await drainSharedSpaceFaceJobs(sharedSpaceService, sharedSpaceCtx);
+    await expect(
+      ctx.database
+        .selectFrom('shared_space_person_face')
+        .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
+        .select((eb) => eb.fn.countAll().as('count'))
+        .where('shared_space_person_face.assetFaceId', '=', assetFace.id)
+        .where('shared_space_person.spaceId', 'in', enabledSpaceIds)
+        .executeTakeFirstOrThrow(),
+    ).resolves.toEqual({ count: '10' });
     await expect(
       ctx.database
         .selectFrom('face_identity_face')
@@ -1024,7 +1195,7 @@ it('materializes one targeted projection per enabled space for the same photo in
 Run:
 
 ```bash
-corepack pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts test/medium/specs/services/metadata.service.spec.ts -t "rediscovers page-one|same photo in 10 spaces|legacy imported metadata faces"
+corepack pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts test/medium/specs/services/metadata.service.spec.ts -t "DB-derived projection work|same photo in 10 spaces|legacy imported metadata faces"
 ```
 
 Expected: FAIL for missing service behavior or assertion mismatch before final implementation is complete.
@@ -1047,7 +1218,7 @@ Do not add `SharedSpaceFaceMatchAll` fallback in identity backfill.
 Run:
 
 ```bash
-corepack pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts test/medium/specs/services/metadata.service.spec.ts -t "rediscovers page-one|same photo in 10 spaces|legacy imported metadata faces"
+corepack pnpm --dir server test:medium test/medium/specs/repositories/face-identity.repository.spec.ts test/medium/specs/services/metadata.service.spec.ts -t "DB-derived projection work|same photo in 10 spaces|legacy imported metadata faces"
 ```
 
 Expected: PASS.
@@ -1059,7 +1230,67 @@ git add server/test/medium/specs/repositories/face-identity.repository.spec.ts s
 git commit -m "test: prove targeted identity backfill materialization"
 ```
 
-## Task 8: Full Reset Preservation and Race Guard
+## Task 8: Targeted Job Execution Skip Guards
+
+**Files:**
+- Modify: `server/src/services/shared-space.service.spec.ts`
+- Modify: `server/src/services/shared-space.service.ts` only if the skip behavior is not already implemented.
+
+- [ ] **Step 1: Write or verify targeted-job execution skip tests**
+
+Ensure `describe('handleSharedSpaceFaceMatch')` contains explicit tests for stale targeted jobs:
+
+```ts
+it('skips safely when a targeted asset is no longer in the space before execution', async () => {
+  const spaceId = newUuid();
+  const assetId = newUuid();
+  mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+  mocks.sharedSpace.isAssetInSpace.mockResolvedValue(false);
+
+  const result = await sut.handleSharedSpaceFaceMatch({ spaceId, assetId, source: 'identity-backfill' });
+
+  expect(result).toBe(JobStatus.Success);
+  expect(mocks.sharedSpace.getAssetFacesForMatching).not.toHaveBeenCalled();
+  expect(mocks.sharedSpace.addPersonFaces).not.toHaveBeenCalled();
+  expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.SharedSpacePersonDedup, data: { spaceId } });
+});
+
+it('skips safely when face recognition is disabled before targeted execution', async () => {
+  const space = factory.sharedSpace({ faceRecognitionEnabled: false });
+  mocks.sharedSpace.getById.mockResolvedValue(space);
+
+  const result = await sut.handleSharedSpaceFaceMatch({
+    spaceId: space.id,
+    assetId: 'asset-1',
+    source: 'identity-backfill',
+  });
+
+  expect(result).toBe(JobStatus.Skipped);
+  expect(mocks.sharedSpace.isAssetInSpace).not.toHaveBeenCalled();
+  expect(mocks.sharedSpace.addPersonFaces).not.toHaveBeenCalled();
+});
+```
+
+The first test covers direct asset removal and linked-library removal because both collapse to `isAssetInSpace(spaceId, assetId) === false` at execution time.
+
+- [ ] **Step 2: Run focused shared-space tests**
+
+Run:
+
+```bash
+corepack pnpm --dir server test src/services/shared-space.service.spec.ts -t "targeted asset is no longer|face recognition is disabled before targeted execution"
+```
+
+Expected: PASS if existing current-state checks already cover stale targeted jobs. If either test fails, fix only `handleSharedSpaceFaceMatch()` or `processSpaceFaceMatch()` so stale jobs skip without writing person-face rows.
+
+- [ ] **Step 3: Commit if tests or fixes were added**
+
+```bash
+git add server/src/services/shared-space.service.spec.ts server/src/services/shared-space.service.ts
+git commit -m "test: cover stale targeted shared-space face jobs"
+```
+
+## Task 9: Full Reset Preservation and Race Guard
 
 **Files:**
 - Modify: `server/src/services/person.service.spec.ts`
@@ -1175,7 +1406,7 @@ git add server/src/services/person.service.spec.ts server/src/services/person.se
 git commit -m "test: preserve full reset rebuild boundary"
 ```
 
-## Task 9: Final Verification
+## Task 10: Final Verification
 
 **Files:**
 - No new file edits unless verification exposes a bug.
@@ -1183,7 +1414,7 @@ git commit -m "test: preserve full reset rebuild boundary"
 - [ ] **Step 1: Run focused unit suite**
 
 ```bash
-corepack pnpm --dir server test src/services/person.service.spec.ts src/repositories/job.repository.spec.ts src/services/job.service.spec.ts
+corepack pnpm --dir server test src/services/person.service.spec.ts src/repositories/job.repository.spec.ts src/services/job.service.spec.ts src/services/shared-space.service.spec.ts
 ```
 
 Expected: PASS.
