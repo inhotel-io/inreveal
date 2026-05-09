@@ -1989,11 +1989,13 @@ export class FaceIdentityRepository {
       const faces = await this.db
         .selectFrom('asset_face')
         .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+        .leftJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
         .select('asset_face.id')
         .where('asset_face.personId', '=', person.id)
         .where('asset_face.deletedAt', 'is', null)
         .where('asset_face.isVisible', '=', true)
         .where('asset.deletedAt', 'is', null)
+        .where('face_identity_face.assetFaceId', 'is', null)
         .execute();
 
       const personAssetFaceIds = faces.map((face) => face.id);

@@ -917,6 +917,77 @@ describe(FaceIdentityRepository.name, () => {
     }
   });
 
+  it('does not persist personal-identity targets for already linked faces on the same backfill page', async () => {
+    const { ctx, sut } = setup(await getKyselyDB());
+    const { user } = await ctx.newUser();
+    try {
+      const alreadyLinked = await newIdentityFace(ctx, sut, { ownerId: user.id });
+      const { person: missingPerson } = await ctx.newPerson({ ownerId: user.id });
+      const { asset: missingAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: missingAssetFace } = await ctx.newAssetFace({
+        assetId: missingAsset.id,
+        personId: missingPerson.id,
+      });
+      const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: alreadyLinked.asset.id, addedById: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: missingAsset.id, addedById: user.id });
+
+      const result = await sut.backfillPersonalIdentities({ limit: 100 });
+      const pendingTargetRows = await sut.getPendingSharedSpaceFaceMatchBackfillTargets();
+      const pendingTargets = pendingTargetRows.map(({ spaceId, assetId }) => ({ spaceId, assetId }));
+
+      expect(result.affectedSpaceAssets).toEqual([{ spaceId: space.id, assetId: missingAsset.id }]);
+      expect(pendingTargets).toEqual([{ spaceId: space.id, assetId: missingAsset.id }]);
+      await expect(
+        ctx.database
+          .selectFrom('face_identity_face')
+          .select('identityId')
+          .where('assetFaceId', '=', missingAssetFace.id)
+          .executeTakeFirst(),
+      ).resolves.toEqual(expect.objectContaining({ identityId: expect.any(String) }));
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
+  });
+
+  it('persists personal-identity targets only for unlinked faces when one person has mixed linked faces', async () => {
+    const { ctx, sut } = setup(await getKyselyDB());
+    const { user } = await ctx.newUser();
+    try {
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const identity = await sut.ensurePersonIdentity(person.id);
+      const { asset: alreadyLinkedAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: alreadyLinkedFace } = await ctx.newAssetFace({
+        assetId: alreadyLinkedAsset.id,
+        personId: person.id,
+      });
+      await sut.linkFace({ assetFaceId: alreadyLinkedFace.id, identityId: identity.id, source: 'backfill' });
+      const { asset: missingAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: missingAssetFace } = await ctx.newAssetFace({ assetId: missingAsset.id, personId: person.id });
+      const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: alreadyLinkedAsset.id, addedById: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: missingAsset.id, addedById: user.id });
+
+      const result = await sut.backfillPersonalIdentities({ limit: 100 });
+      const pendingTargetRows = await sut.getPendingSharedSpaceFaceMatchBackfillTargets();
+      const pendingTargets = pendingTargetRows.map(({ spaceId, assetId }) => ({ spaceId, assetId }));
+
+      expect(result.affectedSpaceAssets).toEqual([{ spaceId: space.id, assetId: missingAsset.id }]);
+      expect(pendingTargets).toEqual([{ spaceId: space.id, assetId: missingAsset.id }]);
+      await expect(
+        ctx.database
+          .selectFrom('face_identity_face')
+          .select('identityId')
+          .where('assetFaceId', '=', missingAssetFace.id)
+          .executeTakeFirst(),
+      ).resolves.toEqual({ identityId: identity.id });
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
+  });
+
   it('persists one affected target per enabled space when the same photo lives in ten spaces', async () => {
     const { ctx, sut } = setup(await getKyselyDB());
     const { user } = await ctx.newUser();
@@ -958,13 +1029,14 @@ describe(FaceIdentityRepository.name, () => {
     try {
       const { person } = await ctx.newPerson({ ownerId: user.id });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
-      await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
       const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
       await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
       await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
 
       await sut.backfillPersonalIdentities({ limit: 100 });
       const snapshot = await sut.getPendingSharedSpaceFaceMatchBackfillTargets();
+      await ctx.database.deleteFrom('face_identity_face').where('assetFaceId', '=', assetFace.id).execute();
       await sut.backfillPersonalIdentities({ limit: 100 });
       const rewritten = await sut.getPendingSharedSpaceFaceMatchBackfillTargets();
 
