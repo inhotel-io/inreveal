@@ -7,8 +7,10 @@ import { planBatches, writeBatchPlanReports } from "./batch";
 import { getGitPath } from "./git";
 import {
   readRollingState,
+  renderRollingStatus,
   rollingStatePath,
   runRollingStartCommand,
+  runRollingStatusCommand,
   validateRollingState,
   writeRollingState,
 } from "./rolling";
@@ -355,6 +357,74 @@ describe("rolling start", () => {
     expect(exitCode).toBe(1);
     expect(errors.join("\n")).toContain(
       `HEAD ${head} does not match planned fork head ${plan.metadata.forkHead}`,
+    );
+  });
+});
+
+describe("rolling status", () => {
+  it("renders completed upstream batches and pending fork commits", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 2,
+    });
+    const branch = "rebase/upstream-2026-05";
+    repo.git("checkout", "-b", branch, plan.batches[0].tipSha);
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, branch, {
+        integratedForkHead: plan.metadata.forkHead,
+      }),
+      outputDir,
+    );
+
+    const output = renderRollingStatus({ repoPath: repo.path, outputDir });
+
+    expect(output).toContain(`Branch: ${branch}`);
+    expect(output).toContain(
+      `Upstream target: ${plan.metadata.upstreamRef} (${plan.metadata.upstreamHead.slice(0, 9)})`,
+    );
+    expect(output).toContain("Completed upstream batches: 01 / 01");
+    expect(output).toContain(
+      `Integrated fork head: ${plan.metadata.forkHead.slice(0, 9)}`,
+    );
+    expect(output).toContain(
+      `Current fork ref: ${repo.git("rev-parse", "main").slice(0, 9)}`,
+    );
+    expect(output).toContain("Fork commits pending: 2");
+    expect(output).toContain("Next action:");
+    expect(output).toContain("run make upstream-sync-fork-main");
+  });
+
+  it("writes status and returns success", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const output: string[] = [];
+    repo.git("checkout", "-b", "rebase/upstream-2026-05", plan.metadata.forkHead);
+    writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
+
+    const exitCode = runRollingStatusCommand({
+      repoPath: repo.path,
+      outputDir,
+      write: (message) => output.push(message),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(output.join("\n")).toContain("Rolling upstream rebase status");
+    expect(output.join("\n")).toContain("Completed upstream batches: 00 / 01");
+  });
+
+  it("returns failure and writes an error when rolling state is missing", () => {
+    const { repo, outputDir } = createRepoWithPlan();
+    const errors: string[] = [];
+
+    const exitCode = runRollingStatusCommand({
+      repoPath: repo.path,
+      outputDir,
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("Missing rolling state");
+    expect(errors.join("\n")).toContain(
+      "run make upstream-rolling-start first",
     );
   });
 });

@@ -1,11 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
-import { readPersistedBatchPlan, validatePersistedBatchPlan } from "./batch";
+import {
+  readPersistedBatchPlan,
+  selectNextBatch,
+  validatePersistedBatchPlan,
+} from "./batch";
 import {
   currentBranch,
   getGitPath,
   hasGitOperationInProgress,
   isCleanWorktree,
+  listCommits,
   revParse,
 } from "./git";
 
@@ -181,6 +186,51 @@ export function runRollingStartCommand(options: RollingCommandOptions): number {
   }
 }
 
+export function renderRollingStatus(
+  options: Pick<RollingCommandOptions, "repoPath" | "outputDir">,
+): string {
+  const state = readRollingState(options.repoPath, options.outputDir);
+  const plan = readPersistedBatchPlan(options.repoPath, options.outputDir);
+  validatePersistedBatchPlan(plan, options.repoPath);
+  const selection = selectNextBatch(plan, options.repoPath);
+  const completedBatchCount =
+    selection.status === "none" ? 0 : selection.completedBatchCount;
+  const pendingForkCommits = listCommits(
+    options.repoPath,
+    `${state.integratedForkHead}..${state.forkRef}`,
+  );
+  const currentForkHead = revParse(options.repoPath, state.forkRef);
+  const nextAction = state.activeForkSync
+    ? "run make upstream-sync-fork-main ROLLING_CONTINUE=1"
+    : pendingForkCommits.length > 0
+      ? "run make upstream-sync-fork-main"
+      : "run make upstream-next-batch";
+
+  return `Rolling upstream rebase status
+Branch: ${state.branch}
+Upstream target: ${state.upstreamRef} (${shortSha(state.upstreamTargetHead)})
+Completed upstream batches: ${String(completedBatchCount).padStart(2, "0")} / ${String(plan.batches.length).padStart(2, "0")}
+Integrated fork head: ${shortSha(state.integratedForkHead)}
+Current fork ref: ${shortSha(currentForkHead)}
+Fork commits pending: ${pendingForkCommits.length}
+Next action: ${nextAction}`;
+}
+
+export function runRollingStatusCommand(
+  options: RollingCommandOptions,
+): number {
+  const write = options.write ?? console.log;
+  const writeError = options.writeError ?? console.error;
+
+  try {
+    write(renderRollingStatus(options));
+    return 0;
+  } catch (error) {
+    writeError(errorMessage(error));
+    return 1;
+  }
+}
+
 export function validateRollingState(
   value: unknown,
   source: string,
@@ -339,6 +389,10 @@ function assertStringArray(value: unknown, source: string, key: string): void {
       `Invalid rolling state ${source}: ${key} must be an array of strings`,
     );
   }
+}
+
+function shortSha(sha: string): string {
+  return sha.slice(0, 9);
 }
 
 function errorMessage(error: unknown): string {
