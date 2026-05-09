@@ -85,6 +85,22 @@ describe("rolling state validation", () => {
         "state.json",
       ),
     ).toThrow("activeForkSync.preSyncHead must be a full 40-character SHA");
+    expect(() =>
+      validateRollingState(
+        {
+          ...validState(),
+          activeForkSync: {
+            status: "checks-failed",
+            from: sha("222222222"),
+            to: sha("333333333"),
+            commits: [],
+            preSyncHead: sha("444444444"),
+            lastCompletedBatch: "",
+          },
+        },
+        "state.json",
+      ),
+    ).toThrow("activeForkSync.lastCompletedBatch is required");
   });
 
   it("reads and writes rolling state under git metadata", () => {
@@ -1321,7 +1337,11 @@ describe("rolling fork sync", () => {
 
     expect(failedExitCode).toBe(1);
     expect(checkContexts).toEqual([{ phase: "fork-sync", batch: "01" }]);
-    expect(readRollingState(repo.path, outputDir).appendHistory).toEqual([]);
+    const failedState = readRollingState(repo.path, outputDir);
+    expect(failedState.activeForkSync?.lastCompletedBatch).toBe("01");
+    expect(failedState.appendHistory).toEqual([]);
+
+    repo.git("cherry-pick", plan.batches[1].tipSha);
 
     const continueExitCode = runRollingSyncForkMainCommand({
       repoPath: repo.path,

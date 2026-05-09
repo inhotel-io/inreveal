@@ -35,6 +35,7 @@ export type RollingState = {
     to: string;
     commits: string[];
     preSyncHead: string;
+    lastCompletedBatch?: string;
   };
   appendHistory?: Array<{
     at: string;
@@ -335,7 +336,7 @@ export function runRollingSyncForkMainCommand(
           `Cannot continue fork sync: current HEAD ${head} does not contain recorded fork sync target ${state.activeForkSync.to}. Restore or reapply the synced fork commits before continuing.`,
         );
       }
-      const lastCompletedBatch = lastCompletedBatchFromPersistedPlan(options);
+      const lastCompletedBatch = state.activeForkSync.lastCompletedBatch;
 
       return finishRollingForkSync(
         options,
@@ -395,6 +396,7 @@ export function runRollingSyncForkMainCommand(
       to,
       commits: pendingCommits,
       preSyncHead,
+      ...(lastCompletedBatch ? { lastCompletedBatch } : {}),
     };
     writeRollingState(
       options.repoPath,
@@ -529,6 +531,13 @@ function validateActiveForkSync(value: unknown, source: string): void {
     assertFullSha(value[key], source, `activeForkSync.${key}`);
   }
   assertShaArray(value.commits, source, "activeForkSync.commits");
+  if (value.lastCompletedBatch !== undefined) {
+    assertString(
+      value.lastCompletedBatch,
+      source,
+      "activeForkSync.lastCompletedBatch",
+    );
+  }
 }
 
 function validateAppendHistory(value: unknown, source: string): void {
