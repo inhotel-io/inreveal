@@ -229,9 +229,11 @@ export function renderRollingStatus(
   }
   const nextAction = state.activeForkSync
     ? "run make upstream-sync-fork-main ROLLING_CONTINUE=1"
-    : forkPendingStatus !== "0" && forkPendingStatus !== "unknown"
-      ? "run make upstream-sync-fork-main"
-      : "run make upstream-next-batch";
+    : forkPendingStatus === "unknown"
+      ? "inspect fork ref divergence before continuing"
+      : forkPendingStatus !== "0" && forkPendingStatus !== "unknown"
+        ? "run make upstream-sync-fork-main"
+        : "run make upstream-next-batch";
 
   return [
     "Rolling upstream rebase status",

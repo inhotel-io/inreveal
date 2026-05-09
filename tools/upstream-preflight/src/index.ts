@@ -31,6 +31,7 @@ import {
   writeReadinessReports,
 } from "./ready";
 import { renderPreflightMarkdown } from "./report";
+import { runRollingStatusCommand } from "./rolling";
 import { classifyCommit, detectDomain } from "./risk";
 import {
   collectExtensionHotspots,
@@ -353,6 +354,18 @@ program
         ? resolveCliPath(options.outputDir)
         : undefined,
       checks: manifest.checks,
+    });
+  });
+
+program
+  .command("rolling-status")
+  .option("--output-dir <path>", "rolling state and batch plan directory")
+  .action((options: { outputDir?: string }) => {
+    process.exitCode = runRollingStatusCommand({
+      repoPath: process.cwd(),
+      outputDir: options.outputDir
+        ? resolveCliPath(options.outputDir)
+        : undefined,
     });
   });
 

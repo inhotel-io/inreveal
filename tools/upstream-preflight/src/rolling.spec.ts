@@ -1,6 +1,8 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createTempRepo } from "../test/fixtures";
 import { planBatches, writeBatchPlanReports } from "./batch";
@@ -503,6 +505,10 @@ describe("rolling status", () => {
       `Integrated fork head: main @ ${plan.metadata.forkHead.slice(0, 9)}`,
     );
     expect(output).toContain(`Current main: ${rewrittenForkHead.slice(0, 9)}`);
+    expect(output).toContain(
+      "Next action: inspect fork ref divergence before continuing",
+    );
+    expect(output).not.toContain("Next action: run make upstream-next-batch");
   });
 
   it("prioritizes active fork sync continuation over pending fork commits", () => {
@@ -552,6 +558,40 @@ describe("rolling status", () => {
     expect(errors.join("\n")).toContain(
       "run make upstream-rolling-start first",
     );
+  });
+
+  it("exposes rolling status through the package CLI", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
+    const packageDir = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+    );
+
+    const output = execFileSync(
+      path.join(packageDir, "node_modules", ".bin", "tsx"),
+      [
+        path.join(packageDir, "src", "index.ts"),
+        "rolling-status",
+        "--output-dir",
+        outputDir,
+      ],
+      {
+        cwd: repo.path,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    expect(output).toContain("Rolling upstream rebase status");
+    expect(output).toContain("Completed upstream batches: 00 / 01");
+    expect(output).toContain("Next action: run make upstream-next-batch");
   });
 });
 

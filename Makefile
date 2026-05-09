@@ -74,6 +74,10 @@ upstream-batch-plan:
 upstream-next-batch:
 	$(UPSTREAM_PREFLIGHT) run next-batch
 
+.PHONY: upstream-rolling-status
+upstream-rolling-status:
+	$(UPSTREAM_PREFLIGHT) run rolling-status
+
 .PHONY: upstream-postrebase-audit
 upstream-postrebase-audit:
 	$(UPSTREAM_PREFLIGHT) run postrebase-audit $(if $(BATCH),-- --batch $(BATCH),)
