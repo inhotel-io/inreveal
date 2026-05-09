@@ -1886,10 +1886,7 @@ describe('People identity RBAC projection', () => {
     await faceIdentityRepository.backfillPersonalIdentities({ limit: 100 });
     await faceIdentityRepository.backfillSpacePersonIdentities({ limit: 100 });
     const pendingBackfillTargets = await faceIdentityRepository.getPendingSharedSpaceFaceMatchBackfillTargets();
-    expect(pendingBackfillTargets).toEqual(
-      expect.arrayContaining([expect.objectContaining({ spaceId: space.id, assetId: asset.id })]),
-    );
-    await faceIdentityRepository.deletePendingSharedSpaceFaceMatchBackfillTargets(pendingBackfillTargets);
+    expect(pendingBackfillTargets).toEqual([]);
     await expect(faceIdentityRepository.hasBackfillWork()).resolves.toBe(false);
 
     const auth = authFor(member);
@@ -2019,10 +2016,7 @@ describe('People identity RBAC projection', () => {
     await faceIdentityRepository.backfillPersonalIdentities({ limit: 100 });
     await faceIdentityRepository.backfillSpacePersonIdentities({ limit: 100 });
     const pendingBackfillTargets = await faceIdentityRepository.getPendingSharedSpaceFaceMatchBackfillTargets();
-    expect(pendingBackfillTargets).toEqual(
-      expect.arrayContaining([expect.objectContaining({ spaceId: space.id, assetId: asset.id })]),
-    );
-    await faceIdentityRepository.deletePendingSharedSpaceFaceMatchBackfillTargets(pendingBackfillTargets);
+    expect(pendingBackfillTargets).toEqual([]);
     await expect(faceIdentityRepository.hasBackfillWork()).resolves.toBe(false);
 
     const auth = authFor(member);
