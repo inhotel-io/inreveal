@@ -480,6 +480,46 @@ describe("rolling status", () => {
     expect(status).toContain("Completed upstream batches: 00 / 01");
   });
 
+  it("renders status with unknown completed batches when a persisted batch tip is unusable", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const output: string[] = [];
+    const prunedTip = sha("fffffffff");
+    writeBatchPlanReports(
+      {
+        ...plan,
+        batches: plan.batches.map((batch, index) =>
+          index === 0 ? { ...batch, tipSha: prunedTip } : batch,
+        ),
+      },
+      outputDir,
+    );
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
+
+    const exitCode = runRollingStatusCommand({
+      repoPath: repo.path,
+      outputDir,
+      write: (message) => output.push(message),
+    });
+
+    const status = output.join("\n");
+    expect(exitCode).toBe(0);
+    expect(status).toContain("Warning: git merge-base --is-ancestor failed");
+    expect(status).toContain(
+      `Warning: git merge-base --is-ancestor failed for ${prunedTip}..HEAD`,
+    );
+    expect(status).toContain("Completed upstream batches: unknown / 01");
+    expect(status).toContain(
+      "Next action: inspect or regenerate the persisted batch plan before continuing",
+    );
+    expect(status).not.toContain("Next action: run make upstream-next-batch");
+  });
+
   it("warns and reports unknown pending fork commits when the fork ref diverged", () => {
     const { repo, outputDir, plan } = createRepoWithPlan();
     repo.git(

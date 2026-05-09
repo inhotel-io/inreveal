@@ -206,9 +206,14 @@ export function renderRollingStatus(
     warnings.push(`Warning: ${errorMessage(error)}`);
   }
 
-  const selection = selectNextBatch(plan, options.repoPath);
-  const completedBatchCount =
-    selection.status === "none" ? 0 : selection.completedBatchCount;
+  let completedBatchCount: number | undefined;
+  try {
+    const selection = selectNextBatch(plan, options.repoPath);
+    completedBatchCount =
+      selection.status === "none" ? 0 : selection.completedBatchCount;
+  } catch (error) {
+    warnings.push(`Warning: ${errorMessage(error)}`);
+  }
   const currentForkHead = revParse(options.repoPath, state.forkRef);
   const forkPendingStatus = isAncestor(
     options.repoPath,
@@ -227,20 +232,26 @@ export function renderRollingStatus(
       `Warning: integrated fork head ${state.integratedForkHead} is not an ancestor of ${state.forkRef} (${currentForkHead}); pending fork commits cannot be counted.`,
     );
   }
+  const completedBatchStatus =
+    completedBatchCount === undefined
+      ? "unknown"
+      : String(completedBatchCount).padStart(2, "0");
   const nextAction = state.activeForkSync
     ? "run make upstream-sync-fork-main ROLLING_CONTINUE=1"
     : forkPendingStatus === "unknown"
       ? "inspect fork ref divergence before continuing"
       : forkPendingStatus !== "0" && forkPendingStatus !== "unknown"
         ? "run make upstream-sync-fork-main"
-        : "run make upstream-next-batch";
+        : completedBatchCount === undefined
+          ? "inspect or regenerate the persisted batch plan before continuing"
+          : "run make upstream-next-batch";
 
   return [
     "Rolling upstream rebase status",
     ...warnings,
     `Branch: ${state.branch}`,
     `Upstream target: ${state.upstreamRef} (${shortSha(state.upstreamTargetHead)})`,
-    `Completed upstream batches: ${String(completedBatchCount).padStart(2, "0")} / ${String(plan.batches.length).padStart(2, "0")}`,
+    `Completed upstream batches: ${completedBatchStatus} / ${String(plan.batches.length).padStart(2, "0")}`,
     `Integrated fork head: ${state.forkRef} @ ${shortSha(state.integratedForkHead)}`,
     `Current ${state.forkRef}: ${shortSha(currentForkHead)}`,
     `Fork commits pending: ${forkPendingStatus}`,
