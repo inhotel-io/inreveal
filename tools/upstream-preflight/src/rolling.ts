@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getGitPath } from "./git";
+import {
+  readPersistedBatchPlan,
+  validatePersistedBatchPlan,
+} from "./batch";
+import { currentBranch, getGitPath, isCleanWorktree, revParse } from "./git";
 
 const fullShaPattern = /^[0-9a-f]{40}$/;
 
@@ -36,6 +40,15 @@ export type RollingState = {
     commands: string[];
     ok: boolean;
   }>;
+};
+
+export type RollingCommandOptions = {
+  repoPath: string;
+  outputDir?: string;
+  resume?: boolean;
+  now?: () => string;
+  write?: (message: string) => void;
+  writeError?: (message: string) => void;
 };
 
 export function rollingStatePath(repoPath: string, outputDir?: string): string {
@@ -86,6 +99,61 @@ export function writeRollingState(
     `${JSON.stringify(validateRollingState(state, "rolling state"), null, 2)}\n`,
   );
   return statePath;
+}
+
+export function runRollingStartCommand(options: RollingCommandOptions): number {
+  const write = options.write ?? console.log;
+  const writeError = options.writeError ?? console.error;
+
+  try {
+    const branch = currentBranch(options.repoPath);
+    if (branch === "main") {
+      throw new Error("Refusing to start rolling rebase on main");
+    }
+    if (!isCleanWorktree(options.repoPath)) {
+      throw new Error(
+        "Worktree is dirty; commit or stash changes before starting rolling rebase.",
+      );
+    }
+
+    const statePath = rollingStatePath(options.repoPath, options.outputDir);
+    if (fs.existsSync(statePath) && !options.resume) {
+      throw new Error(
+        `Rolling state already exists at ${statePath}; pass --resume to reuse it.`,
+      );
+    }
+
+    const plan = readPersistedBatchPlan(options.repoPath, options.outputDir);
+    validatePersistedBatchPlan(plan, options.repoPath);
+
+    const head = revParse(options.repoPath, "HEAD");
+    if (head !== plan.metadata.forkHead && !options.resume) {
+      throw new Error(
+        `HEAD ${head} does not match planned fork head ${plan.metadata.forkHead}; pass --resume only after verifying branch state.`,
+      );
+    }
+
+    const state: RollingState = {
+      version: 1,
+      mode: "rolling-upstream-rebase",
+      branch,
+      upstreamRef: plan.metadata.upstreamRef,
+      upstreamTargetHead: plan.metadata.upstreamHead,
+      forkRef: plan.metadata.forkRef,
+      startedForkHead: plan.metadata.forkHead,
+      integratedForkHead: plan.metadata.forkHead,
+      startedAt: options.now?.() ?? new Date().toISOString(),
+      appendHistory: [],
+      checkHistory: [],
+    };
+
+    writeRollingState(options.repoPath, state, options.outputDir);
+    write(`Started rolling upstream rebase on ${branch}`);
+    return 0;
+  } catch (error) {
+    writeError(errorMessage(error));
+    return 1;
+  }
 }
 
 export function validateRollingState(

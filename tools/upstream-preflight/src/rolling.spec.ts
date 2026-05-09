@@ -1,14 +1,18 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createTempRepo } from "../test/fixtures";
+import { planBatches, writeBatchPlanReports } from "./batch";
 import {
   readRollingState,
   rollingStatePath,
+  runRollingStartCommand,
   validateRollingState,
   writeRollingState,
 } from "./rolling";
 import type { RollingState } from "./rolling";
+import type { BatchPlan, ClassifiedCommit, RiskLevel } from "./types";
 
 describe("rolling state validation", () => {
   it("accepts a valid v1 rolling state", () => {
@@ -100,6 +104,105 @@ describe("rolling state validation", () => {
   });
 });
 
+describe("rolling start", () => {
+  it("refuses to start on main with a clear error", () => {
+    const { repo, outputDir } = createRepoWithPlan();
+    const errors: string[] = [];
+
+    const exitCode = runRollingStartCommand({
+      repoPath: repo.path,
+      outputDir,
+      now: () => "2026-05-09T08:00:00.000Z",
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Refusing to start rolling rebase on main",
+    );
+  });
+
+  it("writes rolling state from the persisted batch plan on a non-main rebase branch", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const branch = "rebase/upstream-2026-05";
+    const output: string[] = [];
+    repo.git("checkout", "-b", branch);
+
+    const exitCode = runRollingStartCommand({
+      repoPath: repo.path,
+      outputDir,
+      now: () => "2026-05-09T08:00:00.000Z",
+      write: (message) => output.push(message),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(output.join("\n")).toContain(
+      `Started rolling upstream rebase on ${branch}`,
+    );
+    expect(readRollingState(repo.path, outputDir)).toEqual(
+      validStateFromPlan(plan, branch, {
+        startedAt: "2026-05-09T08:00:00.000Z",
+      }),
+    );
+  });
+
+  it("refuses to start with a dirty worktree", () => {
+    const { repo, outputDir } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.git("checkout", "-b", "rebase/upstream-2026-05");
+    repo.write("dirty.txt", "dirty");
+
+    const exitCode = runRollingStartCommand({
+      repoPath: repo.path,
+      outputDir,
+      now: () => "2026-05-09T08:00:00.000Z",
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("Worktree is dirty");
+  });
+
+  it("refuses to overwrite existing rolling state without resume", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.git("checkout", "-b", "rebase/upstream-2026-05");
+    writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
+
+    const exitCode = runRollingStartCommand({
+      repoPath: repo.path,
+      outputDir,
+      now: () => "2026-05-09T08:00:00.000Z",
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("Rolling state already exists");
+    expect(errors.join("\n")).toContain("pass --resume");
+  });
+
+  it("refuses to start when HEAD does not match the persisted fork head", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+    });
+    const errors: string[] = [];
+    repo.git("checkout", "-b", "rebase/upstream-2026-05");
+    const head = repo.git("rev-parse", "HEAD");
+
+    const exitCode = runRollingStartCommand({
+      repoPath: repo.path,
+      outputDir,
+      now: () => "2026-05-09T08:00:00.000Z",
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain(
+      `HEAD ${head} does not match planned fork head ${plan.metadata.forkHead}`,
+    );
+  });
+});
+
 function validState(overrides: Partial<RollingState> = {}): RollingState {
   return {
     version: 1,
@@ -114,6 +217,83 @@ function validState(overrides: Partial<RollingState> = {}): RollingState {
     appendHistory: [],
     checkHistory: [],
     ...overrides,
+  };
+}
+
+function validStateFromPlan(
+  plan: BatchPlan,
+  branch = "rebase/upstream-2026-05",
+  overrides: Partial<RollingState> = {},
+): RollingState {
+  return validState({
+    branch,
+    upstreamRef: plan.metadata.upstreamRef,
+    upstreamTargetHead: plan.metadata.upstreamHead,
+    forkRef: plan.metadata.forkRef,
+    startedForkHead: plan.metadata.forkHead,
+    integratedForkHead: plan.metadata.forkHead,
+    ...overrides,
+  });
+}
+
+function createRepoWithPlan(
+  options: { forkCommitsAfterStart?: number; upstreamCommits?: number } = {},
+) {
+  const repo = createTempRepo();
+  repo.write("README.md", "base");
+  const base = repo.commit("base commit");
+  repo.git("checkout", "-b", "upstream");
+
+  const upstreamCommits: ClassifiedCommit[] = [];
+  for (let index = 1; index <= (options.upstreamCommits ?? 1); index++) {
+    repo.write(`upstream-${index}.txt`, `upstream ${index}`);
+    const commitSha = repo.commit(`upstream commit ${index}`);
+    upstreamCommits.push(classifiedCommit(commitSha, "low"));
+  }
+
+  repo.git("checkout", "main");
+  repo.write("fork.txt", "fork");
+  const forkHead = repo.commit("fork commit (#1)");
+
+  const plan = planBatches(upstreamCommits, {
+    metadata: {
+      generatedAt: "2026-05-09T07:00:00.000Z",
+      mergeBase: base,
+      upstreamRef: "upstream",
+      upstreamHead: upstreamCommits.at(-1)?.sha ?? base,
+      forkRef: "main",
+      forkHead,
+      manifestForkBaseline: forkHead,
+      softCap: 1,
+    },
+    softCap: 1,
+  });
+
+  for (let index = 1; index <= (options.forkCommitsAfterStart ?? 0); index++) {
+    repo.write(`fork-after-${index}.txt`, `fork after ${index}`);
+    repo.commit(`feat: fork after start ${index} (#${index + 1})`);
+  }
+
+  const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "rolling-plan-"));
+  writeBatchPlanReports(plan, outputDir);
+  return { repo, outputDir, plan };
+}
+
+function classifiedCommit(
+  shaValue: string,
+  risk: RiskLevel,
+): ClassifiedCommit {
+  return {
+    sha: shaValue,
+    shortSha: shaValue.slice(0, 9),
+    subject: `${risk} commit`,
+    files: [`upstream/${shaValue.slice(0, 9)}.txt`],
+    domains: [],
+    overlapFiles: [],
+    features: [],
+    risk,
+    reasons: risk === "high" ? ["Matches risk pattern mobile-drift"] : [],
+    requiredChecks: risk === "high" ? ["mobile-drift-rebase-check"] : [],
   };
 }
 
