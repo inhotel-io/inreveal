@@ -340,6 +340,15 @@ export function runRollingSyncForkMainCommand(
     const lastCompletedBatch = lastCompletedBatchId(selection);
 
     (options.fetchFork ?? defaultFetchFork)(options.repoPath, state.forkRef);
+    const currentForkHead = revParse(options.repoPath, state.forkRef);
+    if (
+      !isAncestor(options.repoPath, state.integratedForkHead, state.forkRef)
+    ) {
+      throw new Error(
+        `Cannot sync fork commits: integrated fork head ${state.integratedForkHead} is not an ancestor of ${state.forkRef} (${currentForkHead}). Inspect fork ref divergence before continuing.`,
+      );
+    }
+
     const pendingCommits = listCommits(
       options.repoPath,
       `${state.integratedForkHead}..${state.forkRef}`,
@@ -592,7 +601,7 @@ function shortSha(sha: string): string {
 function defaultFetchFork(repoPath: string, forkRef: string): void {
   const [remote, ...branchParts] = forkRef.split("/");
   if (remote && branchParts.length > 0) {
-    runGit(repoPath, ["fetch", remote, branchParts.join("/")]);
+    runGit(repoPath, ["fetch", "--no-tags", remote, branchParts.join("/")]);
   }
 }
 

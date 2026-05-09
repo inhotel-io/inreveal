@@ -824,6 +824,51 @@ describe("rolling fork sync", () => {
     expect(output.join("\n")).toContain("Synced 2 fork commits");
   });
 
+  it("refuses to sync a rewritten fork ref without mutating rolling state", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+    });
+    const errors: string[] = [];
+    let checksRan = false;
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    const state = validStateFromPlan(plan);
+    writeRollingState(repo.path, state, outputDir);
+    const statePath = rollingStatePath(repo.path, outputDir);
+    const beforeState = fs.readFileSync(statePath, "utf8");
+    const beforeHead = repo.git("rev-parse", "HEAD");
+    repo.git("checkout", "main");
+    repo.git("reset", "--hard", plan.metadata.mergeBase);
+    repo.write("fork-rewritten.txt", "rewritten fork");
+    const rewrittenForkHead = repo.commit("rewrite fork main");
+    repo.git("checkout", "rebase/upstream-2026-05");
+
+    const exitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      fetchFork: () => undefined,
+      runChecks: () => {
+        checksRan = true;
+        return { ok: true, commands: ["pnpm check"] };
+      },
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain(
+      `integrated fork head ${plan.metadata.forkHead} is not an ancestor of main (${rewrittenForkHead})`,
+    );
+    expect(errors.join("\n")).toContain("Inspect fork ref divergence");
+    expect(repo.git("rev-parse", "HEAD")).toBe(beforeHead);
+    expect(checksRan).toBe(false);
+    expect(fs.readFileSync(statePath, "utf8")).toBe(beforeState);
+    expect(readRollingState(repo.path, outputDir)).toEqual(state);
+  });
+
   it("passes the last completed upstream batch to fork-sync checks and history", () => {
     const { repo, outputDir, plan } = createRepoWithPlan({
       forkCommitsAfterStart: 1,
