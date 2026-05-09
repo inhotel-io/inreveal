@@ -35,6 +35,17 @@ export type SpacePersonBackfillResult = BackfillResult & {
   conflictCount: number;
 };
 
+export type FaceIdentityBackfillWork = {
+  hasPersonalIdentityWork: boolean;
+  hasSpacePersonIdentityWork: boolean;
+  hasSharedSpaceProjectionWork: boolean;
+};
+
+export type SharedSpaceFaceMatchBackfillTarget = {
+  spaceId: string;
+  assetId: string;
+};
+
 export type MergeIdentitiesResult = {
   personalProfileConflictCount: number;
   spaceProfileConflictCount: number;
@@ -358,87 +369,134 @@ export class FaceIdentityRepository {
     });
   }
 
-  async hasBackfillWork(): Promise<boolean> {
-    const result = await sql<{ hasWork: boolean }>`
+  async getBackfillWork(): Promise<FaceIdentityBackfillWork> {
+    const result = await sql<Pick<FaceIdentityBackfillWork, 'hasPersonalIdentityWork' | 'hasSpacePersonIdentityWork'>>`
       SELECT
+        (
+          EXISTS (
+            SELECT 1
+            FROM person
+            WHERE person."identityId" IS NULL
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM asset_face
+            INNER JOIN asset ON asset.id = asset_face."assetId"
+            LEFT JOIN face_identity_face ON face_identity_face."assetFaceId" = asset_face.id
+            WHERE asset_face."personId" IS NOT NULL
+              AND asset_face."deletedAt" IS NULL
+              AND asset_face."isVisible" = true
+              AND asset."deletedAt" IS NULL
+              AND face_identity_face."assetFaceId" IS NULL
+          )
+        ) AS "hasPersonalIdentityWork",
         EXISTS (
-          SELECT 1
-          FROM person
-          WHERE person."identityId" IS NULL
-        )
-        OR EXISTS (
-          SELECT 1
-          FROM asset_face
-          INNER JOIN asset ON asset.id = asset_face."assetId"
-          LEFT JOIN face_identity_face ON face_identity_face."assetFaceId" = asset_face.id
-          WHERE asset_face."personId" IS NOT NULL
-            AND asset_face."deletedAt" IS NULL
-            AND asset_face."isVisible" = true
-            AND asset."deletedAt" IS NULL
-            AND face_identity_face."assetFaceId" IS NULL
-        )
-        OR EXISTS (
-          SELECT 1
-          FROM asset_face
-          INNER JOIN asset ON asset.id = asset_face."assetId"
-          INNER JOIN face_identity_face ON face_identity_face."assetFaceId" = asset_face.id
-          WHERE asset_face."personId" IS NOT NULL
-            AND asset_face."deletedAt" IS NULL
-            AND asset_face."isVisible" = true
-            AND asset."deletedAt" IS NULL
-            AND asset."isOffline" = false
-            AND asset.visibility IN (${AssetVisibility.Timeline}, ${AssetVisibility.Archive})
-            AND (
-              EXISTS (
-                SELECT 1
-                FROM shared_space_asset
-                INNER JOIN shared_space ON shared_space.id = shared_space_asset."spaceId"
-                WHERE shared_space_asset."assetId" = asset.id
-                  AND shared_space."faceRecognitionEnabled" = true
-                  AND NOT EXISTS (
-                    SELECT 1
-                    FROM shared_space_person_face
-                    INNER JOIN shared_space_person
-                      ON shared_space_person.id = shared_space_person_face."personId"
-                    WHERE shared_space_person_face."assetFaceId" = asset_face.id
-                      AND shared_space_person."spaceId" = shared_space.id
-                  )
-              )
-              OR EXISTS (
-                SELECT 1
-                FROM shared_space_library
-                INNER JOIN shared_space ON shared_space.id = shared_space_library."spaceId"
-                WHERE shared_space_library."libraryId" = asset."libraryId"
-                  AND shared_space."faceRecognitionEnabled" = true
-                  AND NOT EXISTS (
-                    SELECT 1
-                    FROM shared_space_person_face
-                    INNER JOIN shared_space_person
-                      ON shared_space_person.id = shared_space_person_face."personId"
-                    WHERE shared_space_person_face."assetFaceId" = asset_face.id
-                      AND shared_space_person."spaceId" = shared_space.id
-                  )
-              )
-            )
-        )
-        OR EXISTS (
-          SELECT 1
-          FROM shared_space_person
-          INNER JOIN shared_space ON shared_space.id = shared_space_person."spaceId"
-          INNER JOIN shared_space_person_face
-            ON shared_space_person_face."personId" = shared_space_person.id
-          INNER JOIN asset_face
-            ON asset_face.id = shared_space_person_face."assetFaceId"
-          INNER JOIN face_identity_face
-            ON face_identity_face."assetFaceId" = asset_face.id
-          WHERE shared_space."faceRecognitionEnabled" = true
-            AND asset_face."deletedAt" IS NULL
-            AND asset_face."isVisible" = true
-            AND shared_space_person."identityId" IS DISTINCT FROM face_identity_face."identityId"
-        ) AS "hasWork"
+            SELECT 1
+            FROM shared_space_person
+            INNER JOIN shared_space ON shared_space.id = shared_space_person."spaceId"
+            INNER JOIN shared_space_person_face
+              ON shared_space_person_face."personId" = shared_space_person.id
+            INNER JOIN asset_face
+              ON asset_face.id = shared_space_person_face."assetFaceId"
+            INNER JOIN face_identity_face
+              ON face_identity_face."assetFaceId" = asset_face.id
+            WHERE shared_space."faceRecognitionEnabled" = true
+              AND asset_face."deletedAt" IS NULL
+              AND asset_face."isVisible" = true
+              AND shared_space_person."identityId" IS DISTINCT FROM face_identity_face."identityId"
+        ) AS "hasSpacePersonIdentityWork"
+    `.execute(this.db);
+    const projectionTargets = await this.getSharedSpaceFaceMatchBackfillTargets({ limit: 1 });
+
+    return {
+      hasPersonalIdentityWork: result.rows[0]?.hasPersonalIdentityWork ?? false,
+      hasSpacePersonIdentityWork: result.rows[0]?.hasSpacePersonIdentityWork ?? false,
+      hasSharedSpaceProjectionWork: projectionTargets.length > 0,
+    };
+  }
+
+  async hasBackfillWork(): Promise<boolean> {
+    const work = await this.getBackfillWork();
+    return work.hasPersonalIdentityWork || work.hasSpacePersonIdentityWork || work.hasSharedSpaceProjectionWork;
+  }
+
+  async getSharedSpaceFaceMatchBackfillTargets(
+    input: { limit?: number } = {},
+  ): Promise<SharedSpaceFaceMatchBackfillTarget[]> {
+    const limit = input.limit === undefined ? sql`` : sql`LIMIT ${input.limit}`;
+    const result = await sql<SharedSpaceFaceMatchBackfillTarget>`
+      WITH face_spaces AS (
+        SELECT
+          shared_space_asset."spaceId",
+          asset.id AS "assetId",
+          asset_face.id AS "assetFaceId",
+          face_identity_face."identityId",
+          COALESCE(person.type, 'person') AS type
+        FROM shared_space_asset
+        INNER JOIN shared_space ON shared_space.id = shared_space_asset."spaceId"
+        INNER JOIN asset ON asset.id = shared_space_asset."assetId"
+        INNER JOIN asset_face ON asset_face."assetId" = asset.id
+        INNER JOIN face_identity_face ON face_identity_face."assetFaceId" = asset_face.id
+        LEFT JOIN person ON person.id = asset_face."personId"
+        WHERE shared_space."faceRecognitionEnabled" = true
+          AND asset."deletedAt" IS NULL
+          AND asset."isOffline" = false
+          AND asset.visibility IN (${sql.join(peopleAssetVisibilities)})
+          AND asset_face."personId" IS NOT NULL
+          AND asset_face."deletedAt" IS NULL
+          AND asset_face."isVisible" = true
+
+        UNION
+
+        SELECT
+          shared_space_library."spaceId",
+          asset.id AS "assetId",
+          asset_face.id AS "assetFaceId",
+          face_identity_face."identityId",
+          COALESCE(person.type, 'person') AS type
+        FROM shared_space_library
+        INNER JOIN shared_space ON shared_space.id = shared_space_library."spaceId"
+        INNER JOIN asset ON asset."libraryId" = shared_space_library."libraryId"
+        INNER JOIN asset_face ON asset_face."assetId" = asset.id
+        INNER JOIN face_identity_face ON face_identity_face."assetFaceId" = asset_face.id
+        LEFT JOIN person ON person.id = asset_face."personId"
+        WHERE shared_space."faceRecognitionEnabled" = true
+          AND asset."deletedAt" IS NULL
+          AND asset."isOffline" = false
+          AND asset.visibility IN (${sql.join(peopleAssetVisibilities)})
+          AND asset_face."personId" IS NOT NULL
+          AND asset_face."deletedAt" IS NULL
+          AND asset_face."isVisible" = true
+      ),
+      targets AS (
+        SELECT DISTINCT "spaceId", "assetId"
+        FROM face_spaces
+        WHERE (
+            SELECT COUNT(*)
+            FROM shared_space_person_face
+            INNER JOIN shared_space_person
+              ON shared_space_person.id = shared_space_person_face."personId"
+            WHERE shared_space_person_face."assetFaceId" = face_spaces."assetFaceId"
+              AND shared_space_person."spaceId" = face_spaces."spaceId"
+          ) != 1
+          OR NOT EXISTS (
+            SELECT 1
+            FROM shared_space_person_face
+            INNER JOIN shared_space_person
+              ON shared_space_person.id = shared_space_person_face."personId"
+            WHERE shared_space_person_face."assetFaceId" = face_spaces."assetFaceId"
+              AND shared_space_person."spaceId" = face_spaces."spaceId"
+              AND shared_space_person."identityId" IS NOT DISTINCT FROM face_spaces."identityId"
+              AND shared_space_person.type = face_spaces.type
+          )
+      )
+      SELECT "spaceId", "assetId"
+      FROM targets
+      ORDER BY "spaceId", "assetId"
+      ${limit}
     `.execute(this.db);
 
-    return result.rows[0]?.hasWork ?? false;
+    return result.rows;
   }
 
   @GenerateSql({
