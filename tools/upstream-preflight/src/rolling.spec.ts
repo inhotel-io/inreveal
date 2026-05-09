@@ -384,10 +384,10 @@ describe("rolling status", () => {
     );
     expect(output).toContain("Completed upstream batches: 01 / 01");
     expect(output).toContain(
-      `Integrated fork head: ${plan.metadata.forkHead.slice(0, 9)}`,
+      `Integrated fork head: main @ ${plan.metadata.forkHead.slice(0, 9)}`,
     );
     expect(output).toContain(
-      `Current fork ref: ${repo.git("rev-parse", "main").slice(0, 9)}`,
+      `Current main: ${repo.git("rev-parse", "main").slice(0, 9)}`,
     );
     expect(output).toContain("Fork commits pending: 2");
     expect(output).toContain("Next action:");
@@ -397,7 +397,12 @@ describe("rolling status", () => {
   it("writes status and returns success", () => {
     const { repo, outputDir, plan } = createRepoWithPlan();
     const output: string[] = [];
-    repo.git("checkout", "-b", "rebase/upstream-2026-05", plan.metadata.forkHead);
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
     writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
 
     const exitCode = runRollingStatusCommand({
@@ -409,6 +414,127 @@ describe("rolling status", () => {
     expect(exitCode).toBe(0);
     expect(output.join("\n")).toContain("Rolling upstream rebase status");
     expect(output.join("\n")).toContain("Completed upstream batches: 00 / 01");
+  });
+
+  it("refuses status from a branch that does not match rolling state without rewriting state", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    const state = validStateFromPlan(plan, "rebase/upstream-2026-05");
+    writeRollingState(repo.path, state, outputDir);
+    const statePath = rollingStatePath(repo.path, outputDir);
+    const before = fs.readFileSync(statePath, "utf8");
+    repo.git("checkout", "-b", "rebase/upstream-2026-06");
+
+    const exitCode = runRollingStatusCommand({
+      repoPath: repo.path,
+      outputDir,
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Cannot render rolling status on rebase/upstream-2026-06",
+    );
+    expect(errors.join("\n")).toContain(
+      "rolling state is for rebase/upstream-2026-05",
+    );
+    expect(fs.readFileSync(statePath, "utf8")).toBe(before);
+    expect(readRollingState(repo.path, outputDir)).toEqual(state);
+  });
+
+  it("renders status with a warning when the persisted plan is stale", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const output: string[] = [];
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
+    repo.git("checkout", "upstream");
+    repo.write("upstream-new.txt", "new upstream");
+    repo.commit("upstream moved");
+    repo.git("checkout", "rebase/upstream-2026-05");
+
+    const exitCode = runRollingStatusCommand({
+      repoPath: repo.path,
+      outputDir,
+      write: (message) => output.push(message),
+    });
+
+    const status = output.join("\n");
+    expect(exitCode).toBe(0);
+    expect(status).toContain("Warning: Persisted batch plan is stale");
+    expect(status).toContain(
+      `Upstream target: ${plan.metadata.upstreamRef} (${plan.metadata.upstreamHead.slice(0, 9)})`,
+    );
+    expect(status).toContain("Completed upstream batches: 00 / 01");
+  });
+
+  it("warns and reports unknown pending fork commits when the fork ref diverged", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
+    repo.git("checkout", "main");
+    repo.git("reset", "--hard", plan.metadata.mergeBase);
+    repo.write("fork-rewritten.txt", "rewritten fork");
+    const rewrittenForkHead = repo.commit("rewrite fork main");
+    repo.git("checkout", "rebase/upstream-2026-05");
+
+    const output = renderRollingStatus({ repoPath: repo.path, outputDir });
+
+    expect(output).toContain(
+      `Warning: integrated fork head ${plan.metadata.forkHead} is not an ancestor of main (${rewrittenForkHead})`,
+    );
+    expect(output).toContain("Fork commits pending: unknown");
+    expect(output).toContain(
+      `Integrated fork head: main @ ${plan.metadata.forkHead.slice(0, 9)}`,
+    );
+    expect(output).toContain(`Current main: ${rewrittenForkHead.slice(0, 9)}`);
+  });
+
+  it("prioritizes active fork sync continuation over pending fork commits", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+    });
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, undefined, {
+        activeForkSync: {
+          status: "checks-failed",
+          from: plan.metadata.forkHead,
+          to: repo.git("rev-parse", "main"),
+          commits: [repo.git("rev-parse", "main")],
+          preSyncHead: plan.metadata.forkHead,
+        },
+      }),
+      outputDir,
+    );
+
+    const output = renderRollingStatus({ repoPath: repo.path, outputDir });
+
+    expect(output).toContain("Fork commits pending: 1");
+    expect(output).toContain(
+      "Next action: run make upstream-sync-fork-main ROLLING_CONTINUE=1",
+    );
   });
 
   it("returns failure and writes an error when rolling state is missing", () => {

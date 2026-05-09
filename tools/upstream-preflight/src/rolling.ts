@@ -9,6 +9,7 @@ import {
   currentBranch,
   getGitPath,
   hasGitOperationInProgress,
+  isAncestor,
   isCleanWorktree,
   listCommits,
   revParse,
@@ -190,30 +191,59 @@ export function renderRollingStatus(
   options: Pick<RollingCommandOptions, "repoPath" | "outputDir">,
 ): string {
   const state = readRollingState(options.repoPath, options.outputDir);
+  const branch = currentBranch(options.repoPath);
+  if (branch !== state.branch) {
+    throw new Error(
+      `Cannot render rolling status on ${branch || "detached HEAD"}; rolling state is for ${state.branch}. Check out ${state.branch} before checking status.`,
+    );
+  }
+
   const plan = readPersistedBatchPlan(options.repoPath, options.outputDir);
-  validatePersistedBatchPlan(plan, options.repoPath);
+  const warnings: string[] = [];
+  try {
+    validatePersistedBatchPlan(plan, options.repoPath);
+  } catch (error) {
+    warnings.push(`Warning: ${errorMessage(error)}`);
+  }
+
   const selection = selectNextBatch(plan, options.repoPath);
   const completedBatchCount =
     selection.status === "none" ? 0 : selection.completedBatchCount;
-  const pendingForkCommits = listCommits(
-    options.repoPath,
-    `${state.integratedForkHead}..${state.forkRef}`,
-  );
   const currentForkHead = revParse(options.repoPath, state.forkRef);
+  const forkPendingStatus = isAncestor(
+    options.repoPath,
+    state.integratedForkHead,
+    state.forkRef,
+  )
+    ? String(
+        listCommits(
+          options.repoPath,
+          `${state.integratedForkHead}..${state.forkRef}`,
+        ).length,
+      )
+    : "unknown";
+  if (forkPendingStatus === "unknown") {
+    warnings.push(
+      `Warning: integrated fork head ${state.integratedForkHead} is not an ancestor of ${state.forkRef} (${currentForkHead}); pending fork commits cannot be counted.`,
+    );
+  }
   const nextAction = state.activeForkSync
     ? "run make upstream-sync-fork-main ROLLING_CONTINUE=1"
-    : pendingForkCommits.length > 0
+    : forkPendingStatus !== "0" && forkPendingStatus !== "unknown"
       ? "run make upstream-sync-fork-main"
       : "run make upstream-next-batch";
 
-  return `Rolling upstream rebase status
-Branch: ${state.branch}
-Upstream target: ${state.upstreamRef} (${shortSha(state.upstreamTargetHead)})
-Completed upstream batches: ${String(completedBatchCount).padStart(2, "0")} / ${String(plan.batches.length).padStart(2, "0")}
-Integrated fork head: ${shortSha(state.integratedForkHead)}
-Current fork ref: ${shortSha(currentForkHead)}
-Fork commits pending: ${pendingForkCommits.length}
-Next action: ${nextAction}`;
+  return [
+    "Rolling upstream rebase status",
+    ...warnings,
+    `Branch: ${state.branch}`,
+    `Upstream target: ${state.upstreamRef} (${shortSha(state.upstreamTargetHead)})`,
+    `Completed upstream batches: ${String(completedBatchCount).padStart(2, "0")} / ${String(plan.batches.length).padStart(2, "0")}`,
+    `Integrated fork head: ${state.forkRef} @ ${shortSha(state.integratedForkHead)}`,
+    `Current ${state.forkRef}: ${shortSha(currentForkHead)}`,
+    `Fork commits pending: ${forkPendingStatus}`,
+    `Next action: ${nextAction}`,
+  ].join("\n");
 }
 
 export function runRollingStatusCommand(
