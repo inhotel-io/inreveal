@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { createTempRepo } from "../test/fixtures";
 import {
+  cherryEquivalent,
   collectGitRange,
+  commitSubjects,
+  currentBranch,
   getGitPath,
   getMergeBase,
+  hasGitOperationInProgress,
   isAncestor,
+  isCleanWorktree,
   listChangedFiles,
+  listCommits,
   revParse,
 } from "./git";
 
@@ -91,5 +97,51 @@ describe("git range collection", () => {
     expect(() => listChangedFiles(repo.path, "missing-ref..HEAD")).toThrow(
       "git diff failed for missing-ref..HEAD:",
     );
+  });
+
+  it("reports branch, clean state, and in-progress git operations", () => {
+    const repo = createTempRepo();
+    repo.write("README.md", "base");
+    repo.commit("base commit");
+
+    expect(currentBranch(repo.path)).toBe("main");
+    expect(isCleanWorktree(repo.path)).toBe(true);
+    repo.write("dirty.txt", "dirty");
+    expect(isCleanWorktree(repo.path)).toBe(false);
+    expect(hasGitOperationInProgress(repo.path)).toBe(false);
+  });
+
+  it("lists commits and subjects in chronological order", () => {
+    const repo = createTempRepo();
+    repo.write("README.md", "base");
+    const base = repo.commit("base commit");
+    repo.write("one.txt", "one");
+    const one = repo.commit("feat: one (#1)");
+    repo.write("two.txt", "two");
+    const two = repo.commit("fix: two (#2)");
+
+    expect(
+      listCommits(repo.path, `${base}..HEAD`).map((commit) => commit.sha),
+    ).toEqual([one, two]);
+    expect(commitSubjects(repo.path, `${base}..HEAD`)).toEqual([
+      { sha: one, subject: "feat: one (#1)" },
+      { sha: two, subject: "fix: two (#2)" },
+    ]);
+  });
+
+  it("reports cherry-equivalent patches", () => {
+    const repo = createTempRepo();
+    repo.write("README.md", "base");
+    const base = repo.commit("base commit");
+    repo.git("checkout", "-b", "left");
+    repo.write("feature.txt", "same");
+    repo.commit("feat: same patch");
+    repo.git("checkout", "-b", "right", base);
+    repo.write("feature.txt", "same");
+    repo.commit("feat: rebased same patch");
+
+    const result = cherryEquivalent(repo.path, "left", "right");
+    expect(result.equivalent.length).toBe(1);
+    expect(result.missing).toEqual([]);
   });
 });
