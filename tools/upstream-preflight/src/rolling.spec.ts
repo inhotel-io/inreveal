@@ -246,6 +246,36 @@ describe("rolling start", () => {
     expect(resumedState.checkHistory).toEqual(state.checkHistory);
   });
 
+  it("refuses resume from a branch that does not match rolling state", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.git("checkout", "-b", "rebase/upstream-2026-05");
+    const state = validStateFromPlan(plan);
+    const statePath = rollingStatePath(repo.path, outputDir);
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, `${JSON.stringify(state)}\n`);
+    const before = fs.readFileSync(statePath, "utf8");
+    repo.git("checkout", "-b", "rebase/upstream-2026-06");
+
+    const exitCode = runRollingStartCommand({
+      repoPath: repo.path,
+      outputDir,
+      resume: true,
+      now: () => "2026-05-09T10:00:00.000Z",
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "Cannot resume rolling rebase on rebase/upstream-2026-06",
+    );
+    expect(errors.join("\n")).toContain(
+      "rolling state is for rebase/upstream-2026-05",
+    );
+    expect(fs.readFileSync(statePath, "utf8")).toBe(before);
+    expect(readRollingState(repo.path, outputDir)).toEqual(state);
+  });
+
   it("refuses resume when rolling state is missing instead of creating new state", () => {
     const { repo, outputDir } = createRepoWithPlan({
       forkCommitsAfterStart: 1,

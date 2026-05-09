@@ -126,6 +126,11 @@ export function runRollingStartCommand(options: RollingCommandOptions): number {
 
     if (options.resume) {
       const state = readRollingState(options.repoPath, options.outputDir);
+      if (branch !== state.branch) {
+        throw new Error(
+          `Cannot resume rolling rebase on ${branch}; rolling state is for ${state.branch}. Check out ${state.branch} before resuming.`,
+        );
+      }
       write(`Resumed rolling upstream rebase on ${state.branch}`);
       return 0;
     }
