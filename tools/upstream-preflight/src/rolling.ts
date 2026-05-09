@@ -6,6 +6,8 @@ import {
   validatePersistedBatchPlan,
 } from "./batch";
 import {
+  cherryEquivalent,
+  commitSubjects,
   currentBranch,
   getGitPath,
   hasGitOperationInProgress,
@@ -15,6 +17,7 @@ import {
   revParse,
   runGit,
 } from "./git";
+import type { BatchPlan } from "./types";
 
 const fullShaPattern = /^[0-9a-f]{40}$/;
 
@@ -68,6 +71,11 @@ export type RollingSyncOptions = RollingCommandOptions & {
   continue?: boolean;
   fetchFork?: (repoPath: string, forkRef: string) => void;
   runChecks?: (context: { phase: "fork-sync"; batch?: string }) => CheckResult;
+};
+
+export type RollingFinalCheckOptions = RollingCommandOptions & {
+  fetchFork?: (repoPath: string, forkRef: string) => void;
+  runChecks?: (context: { phase: "final" }) => CheckResult;
 };
 
 export function rollingStatePath(repoPath: string, outputDir?: string): string {
@@ -417,6 +425,78 @@ export function runRollingSyncForkMainCommand(
   }
 }
 
+export function runRollingFinalCheckCommand(
+  options: RollingFinalCheckOptions,
+): number {
+  const write = options.write ?? console.log;
+  const writeError = options.writeError ?? console.error;
+
+  try {
+    const state = readRollingState(options.repoPath, options.outputDir);
+    const branch = currentBranch(options.repoPath);
+    if (branch !== state.branch) {
+      throw new Error(
+        `Cannot run rolling final check on ${branch || "detached HEAD"}; rolling state is for ${state.branch}. Check out ${state.branch} before final accounting.`,
+      );
+    }
+
+    const errors: string[] = [];
+    (options.fetchFork ?? defaultFetchFork)(options.repoPath, state.forkRef);
+
+    if (!isAncestor(options.repoPath, state.upstreamTargetHead, "HEAD")) {
+      errors.push(
+        `HEAD does not include upstream target ${state.upstreamTargetHead}`,
+      );
+    }
+    if (state.activeForkSync) {
+      errors.push(
+        "A fork sync is still active; run make upstream-sync-fork-main ROLLING_CONTINUE=1 first.",
+      );
+    }
+
+    const currentForkHead = revParse(options.repoPath, state.forkRef);
+    if (currentForkHead !== state.integratedForkHead) {
+      errors.push(
+        `${state.forkRef} has commits not included in integratedForkHead ${state.integratedForkHead}; run make upstream-sync-fork-main before final accounting.`,
+      );
+    }
+
+    const plan = readPersistedBatchPlan(options.repoPath, options.outputDir);
+    errors.push(...findMissingSubjectMatches(options.repoPath, plan, state));
+    errors.push(...findPatchMismatches(options.repoPath, state));
+
+    const checks = (options.runChecks ?? defaultRunFinalChecks)({
+      phase: "final",
+    });
+    if (!checks.ok) {
+      errors.push(
+        `Final local checks failed.${checks.output ? `\n${checks.output}` : ""}`,
+      );
+    }
+
+    writeRollingState(
+      options.repoPath,
+      appendCheckHistory(
+        state,
+        "final",
+        checks,
+        options.now?.() ?? new Date().toISOString(),
+      ),
+      options.outputDir,
+    );
+
+    if (errors.length > 0) {
+      throw new Error(errors.join("\n"));
+    }
+
+    write("Rolling upstream rebase final check passed.");
+    return 0;
+  } catch (error) {
+    writeError(errorMessage(error));
+    return 1;
+  }
+}
+
 function finishRollingForkSync(
   options: RollingSyncOptions,
   state: RollingState,
@@ -429,15 +509,12 @@ function finishRollingForkSync(
     phase: "fork-sync",
     ...(lastCompletedBatch ? { batch: lastCompletedBatch } : {}),
   });
-  const checkHistory = [
-    ...(state.checkHistory ?? []),
-    {
-      at: checkedAt,
-      phase: "fork-sync" as const,
-      commands: checkResult.commands,
-      ok: checkResult.ok,
-    },
-  ];
+  const checkHistory = appendCheckHistory(
+    state,
+    "fork-sync",
+    checkResult,
+    checkedAt,
+  ).checkHistory;
 
   if (!checkResult.ok) {
     writeRollingState(
@@ -658,6 +735,105 @@ function defaultFetchFork(repoPath: string, forkRef: string): void {
 
 function defaultRunChecks(): CheckResult {
   return { ok: true, commands: [] };
+}
+
+function defaultRunFinalChecks(): CheckResult {
+  return { ok: true, commands: defaultFinalChecks() };
+}
+
+function defaultFinalChecks(): string[] {
+  return [
+    "make fork-ownership-coverage-check",
+    "make upstream-next-batch",
+    "make upstream-postrebase-audit",
+    "make ci-invariants-check",
+    "make fork-patches-check",
+    "pnpm --filter @gallery/upstream-preflight run test",
+    "pnpm --filter @gallery/upstream-preflight run check",
+    "pnpm --filter @gallery/upstream-preflight run format",
+  ];
+}
+
+function appendCheckHistory(
+  state: RollingState,
+  phase: "fork-sync" | "final",
+  checkResult: CheckResult,
+  checkedAt: string,
+): RollingState {
+  return {
+    ...state,
+    checkHistory: [
+      ...(state.checkHistory ?? []),
+      {
+        at: checkedAt,
+        phase,
+        commands: checkResult.commands,
+        ok: checkResult.ok,
+      },
+    ],
+  };
+}
+
+function findMissingSubjectMatches(
+  repoPath: string,
+  plan: BatchPlan,
+  state: RollingState,
+): string[] {
+  const forkSubjects = commitSubjects(
+    repoPath,
+    `${plan.metadata.mergeBase}..${state.forkRef}`,
+  );
+  const headSubjects = commitSubjects(
+    repoPath,
+    `${plan.metadata.mergeBase}..HEAD`,
+  ).map((item) => item.subject);
+
+  return forkSubjects
+    .filter((item) => !hasSubjectOrPrMatch(item.subject, headSubjects))
+    .map(
+      (item) => `Missing fork commit subject in rebase branch: ${item.subject}`,
+    );
+}
+
+function findPatchMismatches(repoPath: string, state: RollingState): string[] {
+  const result = cherryEquivalent(repoPath, "HEAD", state.forkRef);
+  if (result.missing.length === 0) return [];
+
+  const subjectsBySha = new Map(
+    commitSubjects(
+      repoPath,
+      `${state.upstreamTargetHead}..${state.forkRef}`,
+    ).map((item) => [item.sha, item.subject]),
+  );
+
+  return result.missing.map((sha) => {
+    const subject = subjectsBySha.get(sha) ?? sha;
+    return `Patch-equivalence mismatch for fork commit: ${subject}`;
+  });
+}
+
+function normalizeSubject(subject: string): string {
+  return subject.trim().replace(/\s+/g, " ");
+}
+
+function hasSubjectOrPrMatch(subject: string, candidates: string[]): boolean {
+  const normalizedSubject = normalizeSubject(subject);
+  const prs = extractPrNumbers(subject);
+  return candidates.some((candidate) => {
+    if (normalizeSubject(candidate) === normalizedSubject) {
+      return true;
+    }
+    if (prs.length === 0) {
+      return false;
+    }
+
+    const candidatePrs = new Set(extractPrNumbers(candidate));
+    return prs.some((pr) => candidatePrs.has(pr));
+  });
+}
+
+function extractPrNumbers(subject: string): string[] {
+  return Array.from(subject.matchAll(/\(#(\d+)\)/g), (match) => match[1]);
 }
 
 function activeForkSyncIsApplied(

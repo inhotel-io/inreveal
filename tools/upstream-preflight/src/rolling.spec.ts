@@ -12,6 +12,7 @@ import {
   readRollingState,
   renderRollingStatus,
   rollingStatePath,
+  runRollingFinalCheckCommand,
   runRollingStartCommand,
   runRollingStatusCommand,
   runRollingSyncForkMainCommand,
@@ -1373,6 +1374,286 @@ describe("rolling fork sync", () => {
         checks: ["pnpm check --batch 01"],
       },
     ]);
+  });
+});
+
+describe("rolling final check", () => {
+  it("blocks when the fork ref moved after the last fork sync", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.upstreamHead,
+    );
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, "rebase/upstream-2026-05"),
+      outputDir,
+    );
+    repo.git("checkout", "main");
+    repo.write("late.txt", "late");
+    repo.commit("feat: late fork (#3)");
+    repo.git("checkout", "rebase/upstream-2026-05");
+
+    const exitCode = runRollingFinalCheckCommand({
+      repoPath: repo.path,
+      outputDir,
+      fetchFork: () => undefined,
+      runChecks: () => ({ ok: true, commands: [] }),
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain(
+      `${plan.metadata.forkRef} has commits not included in integratedForkHead`,
+    );
+  });
+
+  it("blocks while active fork sync exists", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.upstreamHead,
+    );
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, "rebase/upstream-2026-05", {
+        activeForkSync: {
+          status: "checks-failed",
+          from: plan.metadata.forkHead,
+          to: plan.metadata.forkHead,
+          commits: [],
+          preSyncHead: plan.metadata.forkHead,
+        },
+      }),
+      outputDir,
+    );
+
+    const exitCode = runRollingFinalCheckCommand({
+      repoPath: repo.path,
+      outputDir,
+      fetchFork: () => undefined,
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("A fork sync is still active");
+  });
+
+  it("reports missing fork commit subject and PR matches", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.git("checkout", "main");
+    repo.write("pr-44.txt", "pr");
+    const newForkHead = repo.commit("feat: important fork work (#44)");
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.upstreamHead,
+    );
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, "rebase/upstream-2026-05", {
+        integratedForkHead: newForkHead,
+      }),
+      outputDir,
+    );
+
+    const exitCode = runRollingFinalCheckCommand({
+      repoPath: repo.path,
+      outputDir,
+      fetchFork: () => undefined,
+      runChecks: () => ({ ok: true, commands: [] }),
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("#44");
+  });
+
+  it("reports patch-equivalence mismatches even when subjects match", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.git("checkout", "main");
+    repo.write("same-subject.txt", "origin patch");
+    const newForkHead = repo.commit("feat: same subject (#55)");
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.upstreamHead,
+    );
+    repo.write("fork.txt", "fork");
+    repo.commit("fork commit (#1)");
+    repo.write("same-subject.txt", "conflict resolved differently");
+    repo.commit("feat: same subject (#55)");
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, "rebase/upstream-2026-05", {
+        integratedForkHead: newForkHead,
+      }),
+      outputDir,
+    );
+
+    const exitCode = runRollingFinalCheckCommand({
+      repoPath: repo.path,
+      outputDir,
+      fetchFork: () => undefined,
+      runChecks: () => ({ ok: true, commands: [] }),
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("Patch-equivalence mismatch");
+    expect(errors.join("\n")).toContain("#55");
+  });
+
+  it("accepts an equivalent fork commit when the PR number still matches after retitling", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const output: string[] = [];
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.upstreamHead,
+    );
+    repo.git("cherry-pick", plan.metadata.forkHead);
+    repo.git("commit", "--amend", "-m", "retitled fork work (#1)");
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, "rebase/upstream-2026-05"),
+      outputDir,
+    );
+
+    const exitCode = runRollingFinalCheckCommand({
+      repoPath: repo.path,
+      outputDir,
+      now: () => "2026-05-09T14:30:00.000Z",
+      fetchFork: () => undefined,
+      runChecks: () => ({ ok: true, commands: [] }),
+      write: (message) => output.push(message),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(output.join("\n")).toContain(
+      "Rolling upstream rebase final check passed",
+    );
+  });
+
+  it("passes when upstream target and current fork head are fully accounted for", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+    });
+    const output: string[] = [];
+    const forkHead = repo.git("rev-parse", "main");
+    const forkCommits = repo
+      .git("rev-list", "--reverse", `${plan.metadata.upstreamHead}..main`)
+      .split("\n")
+      .filter(Boolean);
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.upstreamHead,
+    );
+    repo.git("cherry-pick", ...forkCommits);
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, "rebase/upstream-2026-05", {
+        integratedForkHead: forkHead,
+      }),
+      outputDir,
+    );
+
+    const exitCode = runRollingFinalCheckCommand({
+      repoPath: repo.path,
+      outputDir,
+      now: () => "2026-05-09T15:00:00.000Z",
+      fetchFork: () => undefined,
+      runChecks: () => ({ ok: true, commands: ["pnpm check"] }),
+      write: (message) => output.push(message),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(output.join("\n")).toContain(
+      "Rolling upstream rebase final check passed",
+    );
+    expect(readRollingState(repo.path, outputDir).checkHistory).toContainEqual({
+      at: "2026-05-09T15:00:00.000Z",
+      phase: "final",
+      commands: ["pnpm check"],
+      ok: true,
+    });
+  });
+
+  it("reports when HEAD is missing the upstream target", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
+
+    const exitCode = runRollingFinalCheckCommand({
+      repoPath: repo.path,
+      outputDir,
+      fetchFork: () => undefined,
+      runChecks: () => ({ ok: true, commands: [] }),
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain(
+      `HEAD does not include upstream target ${plan.metadata.upstreamHead}`,
+    );
+  });
+
+  it("appends final check history when local checks fail", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.upstreamHead,
+    );
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, "rebase/upstream-2026-05"),
+      outputDir,
+    );
+
+    const exitCode = runRollingFinalCheckCommand({
+      repoPath: repo.path,
+      outputDir,
+      now: () => "2026-05-09T16:00:00.000Z",
+      fetchFork: () => undefined,
+      runChecks: () => ({
+        ok: false,
+        commands: ["pnpm check"],
+        output: "typecheck failed",
+      }),
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("Final local checks failed");
+    expect(errors.join("\n")).toContain("typecheck failed");
+    expect(readRollingState(repo.path, outputDir).checkHistory).toContainEqual({
+      at: "2026-05-09T16:00:00.000Z",
+      phase: "final",
+      commands: ["pnpm check"],
+      ok: false,
+    });
   });
 });
 
