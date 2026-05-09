@@ -114,7 +114,9 @@ export class PersonService extends BaseService {
       withHidden,
       closestFaceAssetId,
     });
-    const { total, hidden } = await this.personRepository.getNumberOfPeople(auth.user.id);
+    const { total, hidden } = await this.personRepository.getNumberOfPeople(auth.user.id, {
+      minimumFaceCount: machineLearning.facialRecognition.minFaces,
+    });
 
     return {
       people: items.map((person) => mapPerson(person)),
@@ -137,7 +139,9 @@ export class PersonService extends BaseService {
       });
     }
 
-    return this.personRepository.getPeopleOverviewStatistics(auth.user.id);
+    return this.personRepository.getPeopleOverviewStatistics(auth.user.id, {
+      minimumFaceCount: machineLearning.facialRecognition.minFaces,
+    });
   }
 
   async getPeopleFaceStatistics(auth: AuthDto, dto: PersonSearchDto): Promise<PeopleFaceStatisticsResponseDto> {

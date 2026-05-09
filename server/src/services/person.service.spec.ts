@@ -181,6 +181,7 @@ describe(PersonService.name, () => {
 
       expect((mocks.faceIdentity as any).getAccessiblePeople).not.toHaveBeenCalled();
       expect(mocks.person.getAllForUser).toHaveBeenCalled();
+      expect(mocks.person.getNumberOfPeople).toHaveBeenCalledWith(auth.user.id, { minimumFaceCount: 3 });
     });
 
     it('should get all hidden and visible people with thumbnails', async () => {
@@ -208,6 +209,7 @@ describe(PersonService.name, () => {
         minimumFaceCount: 3,
         withHidden: true,
       });
+      expect(mocks.person.getNumberOfPeople).toHaveBeenCalledWith(auth.user.id, { minimumFaceCount: 3 });
     });
 
     it('should get all visible people and favorites should be first in the array', async () => {
@@ -235,6 +237,7 @@ describe(PersonService.name, () => {
         minimumFaceCount: 3,
         withHidden: false,
       });
+      expect(mocks.person.getNumberOfPeople).toHaveBeenCalledWith(auth.user.id, { minimumFaceCount: 3 });
     });
   });
 
@@ -275,7 +278,9 @@ describe(PersonService.name, () => {
         detectedFaceCount: 5,
       });
 
-      expect((mocks.person as any).getPeopleOverviewStatistics).toHaveBeenCalledWith(auth.user.id);
+      expect((mocks.person as any).getPeopleOverviewStatistics).toHaveBeenCalledWith(auth.user.id, {
+        minimumFaceCount: 3,
+      });
       expect((mocks.faceIdentity as any).getAccessiblePeopleStatistics).not.toHaveBeenCalled();
     });
 
@@ -3644,6 +3649,7 @@ describe(PersonService.name, () => {
         auth.user.id,
         expect.objectContaining({ closestFaceAssetId: 'face-asset-id' }),
       );
+      expect(mocks.person.getNumberOfPeople).toHaveBeenCalledWith(auth.user.id, { minimumFaceCount: 3 });
     });
 
     it('should throw NotFoundException when closestPersonId is not found', async () => {
