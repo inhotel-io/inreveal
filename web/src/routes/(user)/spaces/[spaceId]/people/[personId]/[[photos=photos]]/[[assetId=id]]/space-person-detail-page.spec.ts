@@ -19,7 +19,14 @@ import type { Component } from 'svelte';
 import { load } from './+page';
 import SpacePersonDetailPage from './+page.svelte';
 
-const { gotoMock, invalidateAllMock, authenticateMock, formatMessage, mockAssetMultiSelectManager } = vi.hoisted(() => {
+const {
+  gotoMock,
+  invalidateAllMock,
+  authenticateMock,
+  featureFlagsMock,
+  formatMessage,
+  mockAssetMultiSelectManager,
+} = vi.hoisted(() => {
   const formatCount = (count: unknown, singular: string, plural: string) => {
     const value = Number(count);
     return `${value.toLocaleString('en-US')} ${value === 1 ? singular : plural}`;
@@ -41,6 +48,7 @@ const { gotoMock, invalidateAllMock, authenticateMock, formatMessage, mockAssetM
     gotoMock: vi.fn(),
     invalidateAllMock: vi.fn(),
     authenticateMock: vi.fn(),
+    featureFlagsMock: { value: { peopleStatistics: true } },
     formatMessage,
     mockAssetMultiSelectManager: {
       selectionActive: false,
@@ -55,6 +63,9 @@ const { gotoMock, invalidateAllMock, authenticateMock, formatMessage, mockAssetM
 
 vi.mock('$app/navigation', () => ({ goto: gotoMock, invalidateAll: invalidateAllMock }));
 vi.mock('$lib/utils/auth', () => ({ authenticate: authenticateMock }));
+vi.mock('$lib/managers/feature-flags-manager.svelte', () => ({
+  featureFlagsManager: featureFlagsMock,
+}));
 vi.mock('$lib/managers/asset-multi-select-manager.svelte', () => ({
   assetMultiSelectManager: mockAssetMultiSelectManager,
 }));
@@ -181,6 +192,7 @@ describe('Spaces person detail page', () => {
     authenticateMock.mockResolvedValue(undefined);
     mockAssetMultiSelectManager.selectionActive = false;
     mockAssetMultiSelectManager.assets = [];
+    featureFlagsMock.value.peopleStatistics = true;
   });
 
   it('loads person metadata without fetching a separate asset id grid', async () => {
@@ -264,6 +276,17 @@ describe('Spaces person detail page', () => {
     expect(screen.getByText('5 assets')).toBeInTheDocument();
     expect(screen.getByText('10 faces')).toBeInTheDocument();
     expect(screen.queryByText('999 assets')).not.toBeInTheDocument();
+  });
+
+  it('hides the face count line when the peopleStatistics feature flag is disabled', () => {
+    featureFlagsMock.value.peopleStatistics = false;
+    renderPage({
+      person: makePerson({ assetCount: 999, faceCount: 999 }),
+      statistics: { assets: 5, faces: 10 },
+    });
+
+    expect(screen.getByText('5 assets')).toBeInTheDocument();
+    expect(screen.queryByText('10 faces')).not.toBeInTheDocument();
   });
 
   it('updates the displayed space-scoped asset count after removing selected assets', async () => {

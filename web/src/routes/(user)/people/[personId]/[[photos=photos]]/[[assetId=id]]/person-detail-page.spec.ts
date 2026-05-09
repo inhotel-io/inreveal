@@ -11,8 +11,15 @@ import userEvent from '@testing-library/user-event';
 import type { Component } from 'svelte';
 import PersonDetailPage from './+page.svelte';
 
-const { afterNavigateMock, formatMessage, gotoMock, invalidateAllMock, mockAssetMultiSelectManager, mockPage } =
-  vi.hoisted(() => {
+const {
+  afterNavigateMock,
+  featureFlagsMock,
+  formatMessage,
+  gotoMock,
+  invalidateAllMock,
+  mockAssetMultiSelectManager,
+  mockPage,
+} = vi.hoisted(() => {
     const formatCount = (count: unknown, singular: string, plural: string) => {
       const value = Number(count);
       return `${value.toLocaleString('en-US')} ${value === 1 ? singular : plural}`;
@@ -32,6 +39,7 @@ const { afterNavigateMock, formatMessage, gotoMock, invalidateAllMock, mockAsset
 
     return {
       afterNavigateMock: vi.fn(),
+      featureFlagsMock: { value: { peopleStatistics: true } },
       formatMessage,
       gotoMock: vi.fn(),
       invalidateAllMock: vi.fn(),
@@ -50,6 +58,10 @@ const { afterNavigateMock, formatMessage, gotoMock, invalidateAllMock, mockAsset
       },
     };
   });
+
+vi.mock('$lib/managers/feature-flags-manager.svelte', () => ({
+  featureFlagsManager: featureFlagsMock,
+}));
 
 vi.mock('$app/navigation', () => ({
   afterNavigate: afterNavigateMock,
@@ -169,6 +181,7 @@ describe('Person detail page', () => {
     mockAssetMultiSelectManager.selectionActive = false;
     mockAssetMultiSelectManager.assets = [];
     sdkMock.getPerson.mockResolvedValue(makePerson());
+    featureFlagsMock.value.peopleStatistics = true;
   });
 
   it('uses same-person repair when merging a personal person with a space-primary candidate', async () => {
@@ -194,6 +207,17 @@ describe('Person detail page', () => {
 
     expect(screen.getByText('7 assets')).toBeInTheDocument();
     expect(screen.getByText('10 faces')).toBeInTheDocument();
+  });
+
+  it('hides the face count line when the peopleStatistics feature flag is disabled', () => {
+    featureFlagsMock.value.peopleStatistics = false;
+    renderPage({
+      person: makePerson({ name: 'Alice' }),
+      statistics: { assets: 7, faces: 10 },
+    });
+
+    expect(screen.getByText('7 assets')).toBeInTheDocument();
+    expect(screen.queryByText('10 faces')).not.toBeInTheDocument();
   });
 
   it('keeps the page person as the repair target when a space candidate is promoted by auto-swap', async () => {
