@@ -2056,11 +2056,9 @@ export class FaceIdentityRepository {
 
     for (const group of groups) {
       const groupAssetFaceIds = await this.getSpacePersonBackfillAssetFaceIdsForIdentity(person.id, group.identityId);
-      affectedSpaceAssets.push(
-        ...(await this.addPendingSharedSpaceFaceMatchBackfillTargetsForAssetFaces(groupAssetFaceIds)),
-      );
 
       let targetPersonId: string | undefined;
+      let didMutateSpacePerson = false;
 
       if (currentIdentityId === group.identityId) {
         targetPersonId = person.id;
@@ -2068,6 +2066,7 @@ export class FaceIdentityRepository {
         const existingPerson = await this.getSpacePersonByIdentity(person.spaceId, group.identityId, person.id);
         if (existingPerson) {
           targetPersonId = existingPerson.id;
+          didMutateSpacePerson = true;
         } else if (currentIdentityId) {
           const createdPerson = await this.db
             .insertInto('shared_space_person')
@@ -2080,6 +2079,7 @@ export class FaceIdentityRepository {
             .returning(['id'])
             .executeTakeFirstOrThrow();
           targetPersonId = createdPerson.id;
+          didMutateSpacePerson = true;
         } else {
           const update: { identityId: string; type: string; representativeFaceId?: string } = {
             identityId: group.identityId,
@@ -2091,6 +2091,7 @@ export class FaceIdentityRepository {
           await this.db.updateTable('shared_space_person').set(update).where('id', '=', person.id).execute();
           currentIdentityId = group.identityId;
           targetPersonId = person.id;
+          didMutateSpacePerson = true;
         }
       }
 
@@ -2101,6 +2102,11 @@ export class FaceIdentityRepository {
           toPersonId: targetPersonId,
           identityId: group.identityId,
         });
+      }
+      if (didMutateSpacePerson) {
+        affectedSpaceAssets.push(
+          ...(await this.addPendingSharedSpaceFaceMatchBackfillTargetsForAssetFaces(groupAssetFaceIds)),
+        );
       }
     }
 

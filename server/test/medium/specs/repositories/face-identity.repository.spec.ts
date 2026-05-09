@@ -2327,6 +2327,43 @@ describe(FaceIdentityRepository.name, () => {
     }
   });
 
+  it('does not persist rematch targets for already consistent shared-space people', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    try {
+      const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Consistent' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+      const identity = await sut.ensurePersonIdentity(person.id);
+      await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'backfill' });
+      const spacePerson = await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: space.id, identityId: identity.id, representativeFaceId: assetFace.id, type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await linkSpaceFace(ctx, spacePerson.id, assetFace.id);
+
+      const result = await sut.backfillSpacePersonIdentities({ limit: 100 });
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          conflictCount: 0,
+          affectedSpaceAssets: [],
+        }),
+      );
+      await expect(sut.getPendingSharedSpaceFaceMatchBackfillTargets()).resolves.toEqual([]);
+      await expect(sut.getBackfillWork()).resolves.toEqual({
+        hasPersonalIdentityWork: false,
+        hasSpacePersonIdentityWork: false,
+        hasSharedSpaceProjectionWork: false,
+      });
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
+  });
+
   it('infers shared-space person identity from a dominant linked identity with tiny noisy candidates', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
