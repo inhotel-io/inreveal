@@ -19,47 +19,41 @@ import type { Component } from 'svelte';
 import { load } from './+page';
 import SpacePersonDetailPage from './+page.svelte';
 
-const {
-  gotoMock,
-  invalidateAllMock,
-  authenticateMock,
-  featureFlagsMock,
-  formatMessage,
-  mockAssetMultiSelectManager,
-} = vi.hoisted(() => {
-  const formatCount = (count: unknown, singular: string, plural: string) => {
-    const value = Number(count);
-    return `${value.toLocaleString('en-US')} ${value === 1 ? singular : plural}`;
-  };
+const { gotoMock, invalidateAllMock, authenticateMock, featureFlagsMock, formatMessage, mockAssetMultiSelectManager } =
+  vi.hoisted(() => {
+    const formatCount = (count: unknown, singular: string, plural: string) => {
+      const value = Number(count);
+      return `${value.toLocaleString('en-US')} ${value === 1 ? singular : plural}`;
+    };
 
-  const formatMessage = (key: string, options?: { values?: Record<string, unknown> }) => {
-    if (key === 'assets_count') {
-      return formatCount(options?.values?.count, 'asset', 'assets');
-    }
+    const formatMessage = (key: string, options?: { values?: Record<string, unknown> }) => {
+      if (key === 'assets_count') {
+        return formatCount(options?.values?.count, 'asset', 'assets');
+      }
 
-    if (key === 'faces_count') {
-      return formatCount(options?.values?.count, 'face', 'faces');
-    }
+      if (key === 'faces_count') {
+        return formatCount(options?.values?.count, 'face', 'faces');
+      }
 
-    return key;
-  };
+      return key;
+    };
 
-  return {
-    gotoMock: vi.fn(),
-    invalidateAllMock: vi.fn(),
-    authenticateMock: vi.fn(),
-    featureFlagsMock: { value: { peopleStatistics: true } },
-    formatMessage,
-    mockAssetMultiSelectManager: {
-      selectionActive: false,
-      assets: [],
-      clear: vi.fn(),
-      isAllUserOwned: true,
-      isAllFavorite: false,
-      isAllArchived: false,
-    },
-  };
-});
+    return {
+      gotoMock: vi.fn(),
+      invalidateAllMock: vi.fn(),
+      authenticateMock: vi.fn(),
+      featureFlagsMock: { value: { peopleStatistics: true } },
+      formatMessage,
+      mockAssetMultiSelectManager: {
+        selectionActive: false,
+        assets: [],
+        clear: vi.fn(),
+        isAllUserOwned: true,
+        isAllFavorite: false,
+        isAllArchived: false,
+      },
+    };
+  });
 
 vi.mock('$app/navigation', () => ({ goto: gotoMock, invalidateAll: invalidateAllMock }));
 vi.mock('$lib/utils/auth', () => ({ authenticate: authenticateMock }));

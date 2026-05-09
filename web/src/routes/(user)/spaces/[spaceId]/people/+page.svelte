@@ -86,8 +86,7 @@
           faceSingular: $t('face'),
           facePlural: $t('faces'),
           includeFaceCount: peopleStatisticsEnabled,
-          showZeroPeople:
-            !!searchName.trim() || (peopleStatisticsEnabled && peopleStatistics.detectedFaceCount > 0),
+          showZeroPeople: !!searchName.trim() || (peopleStatisticsEnabled && peopleStatistics.detectedFaceCount > 0),
         })
       : undefined,
   );

@@ -20,44 +20,44 @@ const {
   mockAssetMultiSelectManager,
   mockPage,
 } = vi.hoisted(() => {
-    const formatCount = (count: unknown, singular: string, plural: string) => {
-      const value = Number(count);
-      return `${value.toLocaleString('en-US')} ${value === 1 ? singular : plural}`;
-    };
+  const formatCount = (count: unknown, singular: string, plural: string) => {
+    const value = Number(count);
+    return `${value.toLocaleString('en-US')} ${value === 1 ? singular : plural}`;
+  };
 
-    const formatMessage = (key: string, options?: { values?: Record<string, unknown> }) => {
-      if (key === 'assets_count') {
-        return formatCount(options?.values?.count, 'asset', 'assets');
-      }
+  const formatMessage = (key: string, options?: { values?: Record<string, unknown> }) => {
+    if (key === 'assets_count') {
+      return formatCount(options?.values?.count, 'asset', 'assets');
+    }
 
-      if (key === 'faces_count') {
-        return formatCount(options?.values?.count, 'face', 'faces');
-      }
+    if (key === 'faces_count') {
+      return formatCount(options?.values?.count, 'face', 'faces');
+    }
 
-      return key;
-    };
+    return key;
+  };
 
-    return {
-      afterNavigateMock: vi.fn(),
-      featureFlagsMock: { value: { peopleStatistics: true } },
-      formatMessage,
-      gotoMock: vi.fn(),
-      invalidateAllMock: vi.fn(),
-      mockAssetMultiSelectManager: {
-        selectionActive: false,
-        assets: [],
-        clear: vi.fn(),
-        isAllUserOwned: true,
-        isAllFavorite: false,
-        isAllArchived: false,
-      },
-      mockPage: {
-        url: new URL('https://gallery.test/people/person-1'),
-        route: { id: '/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]' },
-        params: { personId: 'person-1' },
-      },
-    };
-  });
+  return {
+    afterNavigateMock: vi.fn(),
+    featureFlagsMock: { value: { peopleStatistics: true } },
+    formatMessage,
+    gotoMock: vi.fn(),
+    invalidateAllMock: vi.fn(),
+    mockAssetMultiSelectManager: {
+      selectionActive: false,
+      assets: [],
+      clear: vi.fn(),
+      isAllUserOwned: true,
+      isAllFavorite: false,
+      isAllArchived: false,
+    },
+    mockPage: {
+      url: new URL('https://gallery.test/people/person-1'),
+      route: { id: '/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]' },
+      params: { personId: 'person-1' },
+    },
+  };
+});
 
 vi.mock('$lib/managers/feature-flags-manager.svelte', () => ({
   featureFlagsManager: featureFlagsMock,
