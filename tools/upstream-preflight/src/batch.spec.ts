@@ -318,6 +318,29 @@ describe("persisted batch plan validation", () => {
     );
   });
 
+  it.each([
+    ["missing", undefined],
+    ["malformed", ["mobile/drift_schemas/main/drift_schema_v23.json", 23]],
+  ])("rejects persisted commits with %s files", (_label, files) => {
+    const { repo, outputDir, plan } = createRepoWithPersistedPlan();
+    const persistedPlan = JSON.parse(JSON.stringify(plan)) as {
+      batches: Array<{ commits: Array<{ files?: unknown }> }>;
+    };
+    if (files === undefined) {
+      delete persistedPlan.batches[0].commits[0].files;
+    } else {
+      persistedPlan.batches[0].commits[0].files = files;
+    }
+    fs.writeFileSync(
+      path.join(outputDir, "batch-plan.json"),
+      JSON.stringify(persistedPlan),
+    );
+
+    expect(() => readPersistedBatchPlan(repo.path, outputDir)).toThrow(
+      "commits[0].files must be an array of strings",
+    );
+  });
+
   it("rejects batch tips that are not ancestors of the persisted upstream head", () => {
     const { repo, plan } = createRepoWithPersistedPlan();
     repo.git("checkout", "-b", "side", plan.metadata.mergeBase);
@@ -651,7 +674,7 @@ describe("batch-scoped audit CLI commands", () => {
     );
   });
 
-  it("postrebase-audit --batch reads persisted scope from plan-dir and writes reports to output-dir", () => {
+  it("postrebase-audit uses BATCH env fallback with persisted scope from plan-dir", () => {
     const { repo, outputDir: planDir, plan } = createRepoWithPersistedPlan();
     const reportDir = fs.mkdtempSync(
       path.join(os.tmpdir(), "gallery-postrebase-audit-"),
@@ -702,17 +725,19 @@ describe("batch-scoped audit CLI commands", () => {
       "export class SharedSpace {}\n",
     );
 
-    const result = runCli(repo.path, [
-      "postrebase-audit",
-      "--manifest",
-      "ownership.yml",
-      "--batch",
-      "02",
-      "--plan-dir",
-      planDir,
-      "--output-dir",
-      reportDir,
-    ]);
+    const result = runCli(
+      repo.path,
+      [
+        "postrebase-audit",
+        "--manifest",
+        "ownership.yml",
+        "--plan-dir",
+        planDir,
+        "--output-dir",
+        reportDir,
+      ],
+      { BATCH: "02" },
+    );
     const markdownPath = path.join(reportDir, "batch-02-postrebase-audit.md");
     const jsonPath = path.join(reportDir, "batch-02-postrebase-audit.json");
     const reportJson = JSON.parse(fs.readFileSync(jsonPath, "utf8")) as {
@@ -795,7 +820,7 @@ function persistBatchFiles(
   writeBatchPlanReports(plan, outputDir);
 }
 
-function runCli(repoPath: string, args: string[]) {
+function runCli(repoPath: string, args: string[], env: NodeJS.ProcessEnv = {}) {
   const result = spawnSync(
     "pnpm",
     [
@@ -809,7 +834,7 @@ function runCli(repoPath: string, args: string[]) {
     {
       cwd: repoPath,
       encoding: "utf8",
-      env: { ...process.env, INIT_CWD: repoPath },
+      env: { ...process.env, ...env, INIT_CWD: repoPath },
     },
   );
 

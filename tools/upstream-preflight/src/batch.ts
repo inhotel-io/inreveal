@@ -442,6 +442,7 @@ function validateBatchPlanShape(
       assertRecord(commit, commitLabel);
       assertString(commit.sha, `${commitLabel}.sha`);
       assertFullSha(commit.sha, `${commitLabel}.sha`);
+      assertStringArray(commit.files, `${commitLabel}.files`);
     }
   }
 }
