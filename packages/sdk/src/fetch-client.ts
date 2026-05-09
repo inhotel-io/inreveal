@@ -2164,6 +2164,8 @@ export type ServerFeaturesDto = {
     passwordLogin: boolean;
     /** Whether real-time transcoding is enabled */
     realtimeTranscoding: boolean;
+    /** Whether the people face statistics UI is enabled */
+    peopleStatistics: boolean;
     /** Whether reverse geocoding is enabled */
     reverseGeocoding: boolean;
     /** Whether search is enabled */
