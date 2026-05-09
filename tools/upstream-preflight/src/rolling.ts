@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -67,15 +68,22 @@ export type RollingCommandOptions = {
 
 export type CheckResult = { ok: boolean; commands: string[]; output?: string };
 
+export type ShellRunner = (
+  command: string,
+  cwd: string,
+) => { status: number; stdout: string; stderr: string };
+
 export type RollingSyncOptions = RollingCommandOptions & {
   continue?: boolean;
   fetchFork?: (repoPath: string, forkRef: string) => void;
   runChecks?: (context: { phase: 'fork-sync'; batch?: string }) => CheckResult;
+  shellRunner?: ShellRunner;
 };
 
 export type RollingFinalCheckOptions = RollingCommandOptions & {
   fetchFork?: (repoPath: string, forkRef: string) => void;
   runChecks?: (context: { phase: 'final' }) => CheckResult;
+  shellRunner?: ShellRunner;
 };
 
 export function rollingStatePath(repoPath: string, outputDir?: string): string {
@@ -465,9 +473,13 @@ export function runRollingFinalCheckCommand(
     errors.push(...findMissingSubjectMatches(options.repoPath, plan, state));
     errors.push(...findPatchMismatches(options.repoPath, state));
 
-    const checks = (options.runChecks ?? defaultRunFinalChecks)({
-      phase: 'final',
-    });
+    const checks = options.runChecks
+      ? options.runChecks({ phase: 'final' })
+      : runCommandList(
+          defaultFinalChecks(),
+          options.repoPath,
+          options.shellRunner,
+        );
     if (!checks.ok) {
       errors.push(
         `Final local checks failed.${checks.output ? `\n${checks.output}` : ''}`,
@@ -505,10 +517,16 @@ function finishRollingForkSync(
   write: (message: string) => void,
 ): number {
   const checkedAt = options.now?.() ?? new Date().toISOString();
-  const checkResult = (options.runChecks ?? defaultRunChecks)({
-    phase: 'fork-sync',
-    ...(lastCompletedBatch ? { batch: lastCompletedBatch } : {}),
-  });
+  const checkResult = options.runChecks
+    ? options.runChecks({
+        phase: 'fork-sync',
+        ...(lastCompletedBatch ? { batch: lastCompletedBatch } : {}),
+      })
+    : runCommandList(
+        defaultForkSyncChecks(lastCompletedBatch),
+        options.repoPath,
+        options.shellRunner,
+      );
   const checkHistory = appendCheckHistory(
     state,
     'fork-sync',
@@ -733,15 +751,16 @@ function defaultFetchFork(repoPath: string, forkRef: string): void {
   }
 }
 
-function defaultRunChecks(): CheckResult {
-  return { ok: true, commands: [] };
+export function defaultForkSyncChecks(batch?: string): string[] {
+  return [
+    'make fork-ownership-coverage-check',
+    'make ci-invariants-check',
+    'make fork-patches-check',
+    ...(batch ? [`make upstream-postrebase-audit BATCH=${batch}`] : []),
+  ];
 }
 
-function defaultRunFinalChecks(): CheckResult {
-  return { ok: true, commands: defaultFinalChecks() };
-}
-
-function defaultFinalChecks(): string[] {
+export function defaultFinalChecks(): string[] {
   return [
     'make fork-ownership-coverage-check',
     'make upstream-next-batch',
@@ -752,6 +771,45 @@ function defaultFinalChecks(): string[] {
     'pnpm --filter @gallery/upstream-preflight run check',
     'pnpm --filter @gallery/upstream-preflight run format',
   ];
+}
+
+function runCommandList(
+  commands: string[],
+  cwd: string,
+  runner: ShellRunner = defaultShellRunner,
+): CheckResult {
+  const output: string[] = [];
+  for (const command of commands) {
+    const result = runner(command, cwd);
+    output.push(result.stdout, result.stderr);
+    if (result.status !== 0) {
+      return {
+        ok: false,
+        commands,
+        output: output.filter(Boolean).join('\n'),
+      };
+    }
+  }
+
+  return { ok: true, commands, output: output.filter(Boolean).join('\n') };
+}
+
+function defaultShellRunner(
+  command: string,
+  cwd: string,
+): ReturnType<ShellRunner> {
+  const result = spawnSync(command, {
+    cwd,
+    shell: true,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  return {
+    status: result.status ?? 1,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 }
 
 function appendCheckHistory(

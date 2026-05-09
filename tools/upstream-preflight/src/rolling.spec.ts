@@ -9,6 +9,8 @@ import { planBatches, writeBatchPlanReports } from './batch';
 import { getGitPath } from './git';
 import {
   assertNoActiveRollingSync,
+  defaultFinalChecks,
+  defaultForkSyncChecks,
   readRollingState,
   renderRollingStatus,
   rollingStatePath,
@@ -757,6 +759,60 @@ describe('rolling status', () => {
 });
 
 describe('rolling fork sync', () => {
+  it('uses deterministic default fork-sync checks', () => {
+    expect(defaultForkSyncChecks()).toEqual([
+      'make fork-ownership-coverage-check',
+      'make ci-invariants-check',
+      'make fork-patches-check',
+    ]);
+    expect(defaultForkSyncChecks('01')).toEqual([
+      'make fork-ownership-coverage-check',
+      'make ci-invariants-check',
+      'make fork-patches-check',
+      'make upstream-postrebase-audit BATCH=01',
+    ]);
+  });
+
+  it('runs default fork-sync checks when no injected check runner is provided', () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+    });
+    const commands: string[] = [];
+    repo.git(
+      'checkout',
+      '-b',
+      'rebase/upstream-2026-05',
+      plan.metadata.upstreamHead,
+    );
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, 'rebase/upstream-2026-05', {
+        integratedForkHead: plan.metadata.forkHead,
+      }),
+      outputDir,
+    );
+
+    const exitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      fetchFork: () => undefined,
+      shellRunner: (command) => {
+        commands.push(command);
+        return { status: 0, stdout: `${command} ok`, stderr: '' };
+      },
+    });
+
+    expect(exitCode).toBe(0);
+    expect(commands).toEqual(defaultForkSyncChecks('01'));
+    expect(readRollingState(repo.path, outputDir).checkHistory).toContainEqual(
+      expect.objectContaining({
+        phase: 'fork-sync',
+        commands: defaultForkSyncChecks('01'),
+        ok: true,
+      }),
+    );
+  });
+
   it('no-ops when no fork commits are pending', () => {
     const { repo, outputDir, plan } = createRepoWithPlan();
     const output: string[] = [];
@@ -1029,6 +1085,7 @@ describe('rolling fork sync', () => {
       plan.metadata.forkHead,
     );
     repo.git('cherry-pick', ...pendingCommits);
+    const rebasedHead = repo.git('rev-parse', 'HEAD');
     writeRollingState(
       repo.path,
       validStateFromPlan(plan, undefined, {
@@ -1064,7 +1121,7 @@ describe('rolling fork sync', () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(repo.git('rev-parse', 'HEAD')).toBe(forkHead);
+    expect(repo.git('rev-parse', 'HEAD')).toBe(rebasedHead);
     expect(readRollingState(repo.path, outputDir)).toEqual(
       validStateFromPlan(plan, undefined, {
         integratedForkHead: forkHead,
@@ -1378,6 +1435,56 @@ describe('rolling fork sync', () => {
 });
 
 describe('rolling final check', () => {
+  it('uses deterministic default final checks', () => {
+    expect(defaultFinalChecks()).toEqual([
+      'make fork-ownership-coverage-check',
+      'make upstream-next-batch',
+      'make upstream-postrebase-audit',
+      'make ci-invariants-check',
+      'make fork-patches-check',
+      'pnpm --filter @gallery/upstream-preflight run test',
+      'pnpm --filter @gallery/upstream-preflight run check',
+      'pnpm --filter @gallery/upstream-preflight run format',
+    ]);
+  });
+
+  it('runs default final checks when no injected check runner is provided', () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const commands: string[] = [];
+    repo.git(
+      'checkout',
+      '-b',
+      'rebase/upstream-2026-05',
+      plan.metadata.upstreamHead,
+    );
+    repo.git('cherry-pick', plan.metadata.forkHead);
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, 'rebase/upstream-2026-05'),
+      outputDir,
+    );
+
+    const exitCode = runRollingFinalCheckCommand({
+      repoPath: repo.path,
+      outputDir,
+      fetchFork: () => undefined,
+      shellRunner: (command) => {
+        commands.push(command);
+        return { status: 0, stdout: `${command} ok`, stderr: '' };
+      },
+    });
+
+    expect(exitCode).toBe(0);
+    expect(commands).toEqual(defaultFinalChecks());
+    expect(readRollingState(repo.path, outputDir).checkHistory).toContainEqual(
+      expect.objectContaining({
+        phase: 'final',
+        commands: defaultFinalChecks(),
+        ok: true,
+      }),
+    );
+  });
+
   it('blocks when the fork ref moved after the last fork sync', () => {
     const { repo, outputDir, plan } = createRepoWithPlan();
     const errors: string[] = [];
