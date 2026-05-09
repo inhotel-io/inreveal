@@ -241,6 +241,7 @@ export interface INightlyJob extends IBaseJob {
 export interface IFaceIdentityBackfillJob extends IBaseJob {
   stage?: 'person' | 'space-person';
   cursor?: string;
+  continuationId?: string;
 }
 
 export interface ISharedSpaceFaceMatchJob extends IBaseJob {

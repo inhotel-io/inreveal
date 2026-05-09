@@ -29,6 +29,7 @@ export type LinkFaceInput = {
 export type BackfillResult = {
   processed: number;
   nextCursor?: string;
+  affectedSpaceAssets?: SharedSpaceFaceMatchBackfillTarget[];
 };
 
 export type SpacePersonBackfillResult = BackfillResult & {
@@ -44,6 +45,11 @@ export type FaceIdentityBackfillWork = {
 export type SharedSpaceFaceMatchBackfillTarget = {
   spaceId: string;
   assetId: string;
+};
+
+export type PendingSharedSpaceFaceMatchBackfillTarget = SharedSpaceFaceMatchBackfillTarget & {
+  updatedAt: Date;
+  updateId: string;
 };
 
 export type MergeIdentitiesResult = {
@@ -417,13 +423,25 @@ export class FaceIdentityRepository {
 
   async hasBackfillWork(): Promise<boolean> {
     const work = await this.getBackfillWork();
-    return work.hasPersonalIdentityWork || work.hasSpacePersonIdentityWork || work.hasSharedSpaceProjectionWork;
+    const pendingTargets = await this.getPendingSharedSpaceFaceMatchBackfillTargets({ limit: 1 });
+    return (
+      work.hasPersonalIdentityWork ||
+      work.hasSpacePersonIdentityWork ||
+      work.hasSharedSpaceProjectionWork ||
+      pendingTargets.length > 0
+    );
   }
 
   async getSharedSpaceFaceMatchBackfillTargets(
-    input: { limit?: number } = {},
+    input: { limit?: number; assetFaceIds?: string[] } = {},
   ): Promise<SharedSpaceFaceMatchBackfillTarget[]> {
+    if (input.assetFaceIds && input.assetFaceIds.length === 0) {
+      return [];
+    }
+
     const limit = input.limit === undefined ? sql`` : sql`LIMIT ${input.limit}`;
+    const assetFaceIds = input.assetFaceIds ? [...new Set(input.assetFaceIds)] : undefined;
+    const assetFaceFilter = assetFaceIds ? sql`AND asset_face.id IN (${sql.join(assetFaceIds)})` : sql``;
     const result = await sql<SharedSpaceFaceMatchBackfillTarget>`
       WITH face_spaces AS (
         SELECT
@@ -445,6 +463,7 @@ export class FaceIdentityRepository {
           AND asset_face."personId" IS NOT NULL
           AND asset_face."deletedAt" IS NULL
           AND asset_face."isVisible" = true
+          ${assetFaceFilter}
 
         UNION
 
@@ -467,6 +486,7 @@ export class FaceIdentityRepository {
           AND asset_face."personId" IS NOT NULL
           AND asset_face."deletedAt" IS NULL
           AND asset_face."isVisible" = true
+          ${assetFaceFilter}
       ),
       targets AS (
         SELECT DISTINCT "spaceId", "assetId"
@@ -497,6 +517,126 @@ export class FaceIdentityRepository {
     `.execute(this.db);
 
     return result.rows;
+  }
+
+  private dedupeSharedSpaceFaceMatchBackfillTargets(
+    targets: SharedSpaceFaceMatchBackfillTarget[],
+  ): SharedSpaceFaceMatchBackfillTarget[] {
+    return [
+      ...new Map(
+        targets
+          .toSorted((a, b) => a.spaceId.localeCompare(b.spaceId) || a.assetId.localeCompare(b.assetId))
+          .map((target) => [`${target.spaceId}:${target.assetId}`, target]),
+      ).values(),
+    ];
+  }
+
+  private async getSharedSpaceFaceMatchTargetsForAssetFaces(
+    assetFaceIds: string[],
+  ): Promise<SharedSpaceFaceMatchBackfillTarget[]> {
+    if (assetFaceIds.length === 0) {
+      return [];
+    }
+
+    const uniqueAssetFaceIds = [...new Set(assetFaceIds)];
+    const result = await sql<SharedSpaceFaceMatchBackfillTarget>`
+      WITH face_spaces AS (
+        SELECT
+          shared_space_asset."spaceId",
+          asset.id AS "assetId"
+        FROM shared_space_asset
+        INNER JOIN shared_space ON shared_space.id = shared_space_asset."spaceId"
+        INNER JOIN asset ON asset.id = shared_space_asset."assetId"
+        INNER JOIN asset_face ON asset_face."assetId" = asset.id
+        WHERE shared_space."faceRecognitionEnabled" = true
+          AND asset."deletedAt" IS NULL
+          AND asset."isOffline" = false
+          AND asset.visibility IN (${sql.join(peopleAssetVisibilities)})
+          AND asset_face.id IN (${sql.join(uniqueAssetFaceIds)})
+          AND asset_face."personId" IS NOT NULL
+          AND asset_face."deletedAt" IS NULL
+          AND asset_face."isVisible" = true
+
+        UNION
+
+        SELECT
+          shared_space_library."spaceId",
+          asset.id AS "assetId"
+        FROM shared_space_library
+        INNER JOIN shared_space ON shared_space.id = shared_space_library."spaceId"
+        INNER JOIN asset ON asset."libraryId" = shared_space_library."libraryId"
+        INNER JOIN asset_face ON asset_face."assetId" = asset.id
+        WHERE shared_space."faceRecognitionEnabled" = true
+          AND asset."deletedAt" IS NULL
+          AND asset."isOffline" = false
+          AND asset.visibility IN (${sql.join(peopleAssetVisibilities)})
+          AND asset_face.id IN (${sql.join(uniqueAssetFaceIds)})
+          AND asset_face."personId" IS NOT NULL
+          AND asset_face."deletedAt" IS NULL
+          AND asset_face."isVisible" = true
+      )
+      SELECT DISTINCT "spaceId", "assetId"
+      FROM face_spaces
+      ORDER BY "spaceId", "assetId"
+    `.execute(this.db);
+
+    return result.rows;
+  }
+
+  private async addPendingSharedSpaceFaceMatchBackfillTargets(
+    targets: SharedSpaceFaceMatchBackfillTarget[],
+  ): Promise<SharedSpaceFaceMatchBackfillTarget[]> {
+    const uniqueTargets = this.dedupeSharedSpaceFaceMatchBackfillTargets(targets);
+    if (uniqueTargets.length === 0) {
+      return [];
+    }
+
+    await this.db
+      .insertInto('shared_space_face_match_backfill_target')
+      .values(uniqueTargets)
+      .onConflict((oc) => oc.columns(['spaceId', 'assetId']).doUpdateSet({ updatedAt: sql`now()` }))
+      .execute();
+
+    return uniqueTargets;
+  }
+
+  private async addPendingSharedSpaceFaceMatchBackfillTargetsForAssetFaces(
+    assetFaceIds: string[],
+  ): Promise<SharedSpaceFaceMatchBackfillTarget[]> {
+    return this.addPendingSharedSpaceFaceMatchBackfillTargets(
+      await this.getSharedSpaceFaceMatchTargetsForAssetFaces(assetFaceIds),
+    );
+  }
+
+  async getPendingSharedSpaceFaceMatchBackfillTargets(
+    input: { limit?: number } = {},
+  ): Promise<PendingSharedSpaceFaceMatchBackfillTarget[]> {
+    return this.db
+      .selectFrom('shared_space_face_match_backfill_target')
+      .select(['spaceId', 'assetId', 'updatedAt', 'updateId'])
+      .orderBy('spaceId')
+      .orderBy('assetId')
+      .$if(input.limit !== undefined, (qb) => qb.limit(input.limit!))
+      .$castTo<PendingSharedSpaceFaceMatchBackfillTarget>()
+      .execute();
+  }
+
+  async deletePendingSharedSpaceFaceMatchBackfillTargets(
+    targets: PendingSharedSpaceFaceMatchBackfillTarget[],
+  ): Promise<void> {
+    if (targets.length === 0) {
+      return;
+    }
+
+    for (let index = 0; index < targets.length; index += 1000) {
+      const chunk = targets.slice(index, index + 1000);
+      await sql`
+        DELETE FROM "shared_space_face_match_backfill_target"
+        WHERE ("spaceId", "assetId", "updateId") IN (${sql.join(
+          chunk.map((target) => sql`(${target.spaceId}, ${target.assetId}, ${target.updateId})`),
+        )})
+      `.execute(this.db);
+    }
   }
 
   @GenerateSql({
@@ -1844,8 +1984,8 @@ export class FaceIdentityRepository {
       .execute();
 
     const page = people.slice(0, input.limit);
+    const linkedAssetFaceIds = new Set<string>();
     for (const person of page) {
-      const identity = await this.ensurePersonIdentity(person.id);
       const faces = await this.db
         .selectFrom('asset_face')
         .innerJoin('asset', 'asset.id', 'asset_face.assetId')
@@ -1856,6 +1996,13 @@ export class FaceIdentityRepository {
         .where('asset.deletedAt', 'is', null)
         .execute();
 
+      const personAssetFaceIds = faces.map((face) => face.id);
+      for (const face of faces) {
+        linkedAssetFaceIds.add(face.id);
+      }
+      await this.addPendingSharedSpaceFaceMatchBackfillTargetsForAssetFaces(personAssetFaceIds);
+
+      const identity = await this.ensurePersonIdentity(person.id);
       for (const face of faces) {
         await this.linkFace({ assetFaceId: face.id, identityId: identity.id, source: 'backfill' });
       }
@@ -1864,6 +2011,9 @@ export class FaceIdentityRepository {
     return {
       processed: page.length,
       nextCursor: people.length > input.limit ? page.at(-1)?.id : undefined,
+      affectedSpaceAssets: this.dedupeSharedSpaceFaceMatchBackfillTargets(
+        await this.getSharedSpaceFaceMatchTargetsForAssetFaces([...linkedAssetFaceIds]),
+      ),
     };
   }
 
@@ -1877,27 +2027,37 @@ export class FaceIdentityRepository {
       .execute();
 
     const page = people.slice(0, input.limit);
+    const affectedSpaceAssets: SharedSpaceFaceMatchBackfillTarget[] = [];
     for (const person of page) {
-      await this.repairSpacePersonIdentityAssignments(person);
+      affectedSpaceAssets.push(...(await this.repairSpacePersonIdentityAssignments(person)));
     }
 
     return {
       processed: page.length,
       conflictCount: 0,
       ...(people.length > input.limit ? { nextCursor: page.at(-1)?.id } : {}),
+      affectedSpaceAssets: this.dedupeSharedSpaceFaceMatchBackfillTargets(affectedSpaceAssets),
     };
   }
 
-  private async repairSpacePersonIdentityAssignments(person: SpacePersonBackfillRow): Promise<void> {
+  private async repairSpacePersonIdentityAssignments(
+    person: SpacePersonBackfillRow,
+  ): Promise<SharedSpaceFaceMatchBackfillTarget[]> {
     const groups = await this.getSpacePersonBackfillIdentityGroups(person.id);
     if (groups.length === 0) {
-      return;
+      return [];
     }
 
     let currentIdentityId = person.identityId;
     const affectedPersonIds = new Set<string>([person.id]);
+    const affectedSpaceAssets: SharedSpaceFaceMatchBackfillTarget[] = [];
 
     for (const group of groups) {
+      const groupAssetFaceIds = await this.getSpacePersonBackfillAssetFaceIdsForIdentity(person.id, group.identityId);
+      affectedSpaceAssets.push(
+        ...(await this.addPendingSharedSpaceFaceMatchBackfillTargetsForAssetFaces(groupAssetFaceIds)),
+      );
+
       let targetPersonId: string | undefined;
 
       if (currentIdentityId === group.identityId) {
@@ -1944,6 +2104,8 @@ export class FaceIdentityRepository {
 
     await this.recountSpacePersons([...affectedPersonIds]);
     await this.deleteOrphanedSpacePersons([...affectedPersonIds]);
+
+    return this.dedupeSharedSpaceFaceMatchBackfillTargets(affectedSpaceAssets);
   }
 
   private getSpacePersonBackfillIdentityGroups(personId: string): Promise<SpacePersonBackfillIdentityGroup[]> {
@@ -1964,6 +2126,21 @@ export class FaceIdentityRepository {
       .orderBy(sql`count(*)`, 'desc')
       .$castTo<SpacePersonBackfillIdentityGroup>()
       .execute();
+  }
+
+  private async getSpacePersonBackfillAssetFaceIdsForIdentity(personId: string, identityId: string): Promise<string[]> {
+    const rows = await this.db
+      .selectFrom('shared_space_person_face')
+      .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .innerJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
+      .select('asset_face.id')
+      .where('shared_space_person_face.personId', '=', personId)
+      .where('face_identity_face.identityId', '=', identityId)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .execute();
+
+    return rows.map((row) => row.id);
   }
 
   private getSpacePersonByIdentity(spaceId: string, identityId: string, excludePersonId?: string) {

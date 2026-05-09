@@ -179,6 +179,8 @@ describe(JobRepository.name, () => {
     await sut.queueAll([
       { name: JobName.FaceIdentityBackfill, data: {} },
       { name: JobName.FaceIdentityBackfill, data: {} },
+      { name: JobName.FaceIdentityBackfill, data: { continuationId: 'continuation-1' } },
+      { name: JobName.FaceIdentityBackfill, data: { continuationId: 'continuation-2' } },
       { name: JobName.FaceIdentityBackfill, data: { stage: 'person', cursor: 'person-cursor' } },
       { name: JobName.FaceIdentityBackfill, data: { stage: 'space-person', cursor: 'space-cursor' } },
       { name: JobName.SharedSpacePersonMetadataBackfill, data: {} },
@@ -215,6 +217,16 @@ describe(JobRepository.name, () => {
         jobId: 'face-identity-backfill/root',
         removeOnFail: true,
       },
+    );
+    expect(queue.add).toHaveBeenCalledWith(
+      JobName.FaceIdentityBackfill,
+      { continuationId: 'continuation-1' },
+      { jobId: 'face-identity-backfill/continuation/continuation-1', removeOnFail: true },
+    );
+    expect(queue.add).toHaveBeenCalledWith(
+      JobName.FaceIdentityBackfill,
+      { continuationId: 'continuation-2' },
+      { jobId: 'face-identity-backfill/continuation/continuation-2', removeOnFail: true },
     );
     expect(queue.add).toHaveBeenCalledWith(
       JobName.FaceIdentityBackfill,

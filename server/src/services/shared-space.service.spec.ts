@@ -3213,6 +3213,116 @@ describe(SharedSpaceService.name, () => {
       );
     });
 
+    it('should refresh inherited metadata for an exact identity-backfill assignment', async () => {
+      const spaceId = newUuid();
+      const assetId = newUuid();
+      const faceId = newUuid();
+      const identityId = newUuid();
+      const spacePersonId = newUuid();
+      const sourcePersonId = newUuid();
+      const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
+      const spacePerson = factory.sharedSpacePerson({ id: spacePersonId, spaceId, identityId, nameSource: 'none' });
+
+      mocks.sharedSpace.getById.mockResolvedValue(space);
+      mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([
+        { id: faceId, assetId, personId: newUuid(), identityId, type: 'person', embedding: '[1,2,3]' },
+      ]);
+      mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([
+        { personId: spacePersonId, identityId, type: 'person' },
+      ]);
+      mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(spacePerson);
+      mocks.sharedSpace.getPersonById.mockResolvedValue(spacePerson);
+      mocks.sharedSpace.updatePerson.mockResolvedValue(spacePerson);
+      mocks.sharedSpace.getMetadataInheritanceCandidates.mockResolvedValue([
+        {
+          personId: sourcePersonId,
+          sourceProfileType: 'user-person',
+          sourceProfileId: sourcePersonId,
+          userId: newUuid(),
+          role: SharedSpaceRole.Owner,
+          name: 'Inherited Alice',
+          birthDate: null,
+          type: 'person',
+          species: null,
+          updatedAt: newDate(),
+          supportingFaceCount: 1,
+          isAssetAdder: false,
+        },
+      ]);
+      mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
+
+      const result = await sut.handleSharedSpaceFaceMatch({ spaceId, assetId, source: 'identity-backfill' });
+
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.sharedSpace.addPersonFaces).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.updatePerson).toHaveBeenCalledWith(
+        spacePersonId,
+        expect.objectContaining({
+          name: 'Inherited Alice',
+          nameSource: 'inherited',
+          nameSourceProfileId: sourcePersonId,
+        }),
+      );
+    });
+
+    it('should refresh inherited metadata for an exact identity-backfill pet assignment', async () => {
+      const spaceId = newUuid();
+      const assetId = newUuid();
+      const faceId = newUuid();
+      const identityId = newUuid();
+      const spacePersonId = newUuid();
+      const sourcePersonId = newUuid();
+      const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
+      const spacePerson = factory.sharedSpacePerson({
+        id: spacePersonId,
+        spaceId,
+        identityId,
+        type: 'pet',
+        nameSource: 'none',
+      });
+
+      mocks.sharedSpace.getById.mockResolvedValue(space);
+      mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([]);
+      mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([
+        { id: faceId, assetId, personId: newUuid(), identityId, type: 'pet' },
+      ]);
+      mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([
+        { personId: spacePersonId, identityId, type: 'pet' },
+      ]);
+      mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(spacePerson);
+      mocks.sharedSpace.getPersonById.mockResolvedValue(spacePerson);
+      mocks.sharedSpace.updatePerson.mockResolvedValue(spacePerson);
+      mocks.sharedSpace.getMetadataInheritanceCandidates.mockResolvedValue([
+        {
+          personId: sourcePersonId,
+          sourceProfileType: 'user-person',
+          sourceProfileId: sourcePersonId,
+          userId: newUuid(),
+          role: SharedSpaceRole.Owner,
+          name: 'Inherited Rover',
+          birthDate: null,
+          type: 'pet',
+          species: 'dog',
+          updatedAt: newDate(),
+          supportingFaceCount: 1,
+          isAssetAdder: false,
+        },
+      ]);
+
+      const result = await sut.handleSharedSpaceFaceMatch({ spaceId, assetId, source: 'identity-backfill' });
+
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.sharedSpace.addPersonFaces).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.updatePerson).toHaveBeenCalledWith(
+        spacePersonId,
+        expect.objectContaining({
+          name: 'Inherited Rover',
+          nameSource: 'inherited',
+          nameSourceProfileId: sourcePersonId,
+        }),
+      );
+    });
+
     it('should skip matching when the asset is not in the target space', async () => {
       const spaceId = newUuid();
       const assetId = newUuid();
@@ -4000,7 +4110,7 @@ describe(SharedSpaceService.name, () => {
       expect(await sut.handleSharedSpaceFaceMatch({ spaceId, assetId: 'asset-early' })).toBe(JobStatus.Success);
       expect(await sut.handleSharedSpaceFaceMatchPage({ spaceId, batchSize: 2 })).toBe(JobStatus.Success);
 
-      expect(processSpy).toHaveBeenNthCalledWith(1, spaceId, 'asset-early');
+      expect(processSpy).toHaveBeenNthCalledWith(1, spaceId, 'asset-early', { refreshExactMetadata: false });
       expect(processSpy).toHaveBeenNthCalledWith(2, spaceId, 'asset-early');
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.SharedSpaceIdentityReconciliation,
