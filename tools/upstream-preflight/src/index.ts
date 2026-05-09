@@ -12,9 +12,9 @@ import {
 } from "./audits/post-rebase";
 import {
   planBatches,
+  readPersistedBatchAuditScope,
   renderBatchMarkdown,
   runNextBatchCommand,
-  selectBatchAuditScope,
   writeBatchPlanReports,
 } from "./batch";
 import {
@@ -360,17 +360,31 @@ program
   .command("mobile-drift-check")
   .option("--manifest <path>", "ownership manifest path", defaultManifestPath)
   .option("--batch <id>", "upstream batch id")
-  .action((options: { manifest: string; batch?: string }) => {
+  .option("--plan-dir <path>", "persisted batch plan directory")
+  .action((options: { manifest: string; batch?: string; planDir?: string }) => {
     const batch = options.batch ?? process.env.BATCH;
-    const context = buildPreflightContext(options.manifest);
-    const auditScope = selectBatchAuditScope({
-      batch,
-      batchPlan: context.batchPlan,
-      upstreamTouchedFiles: context.upstreamRange.files,
-    });
+    const auditInput = batch
+      ? {
+          manifest: loadManifest(resolveCliPath(options.manifest)),
+          auditScope: readPersistedBatchAuditScope(
+            process.cwd(),
+            options.planDir ? resolveCliPath(options.planDir) : undefined,
+            batch,
+          ),
+        }
+      : (() => {
+          const context = buildPreflightContext(options.manifest);
+          return {
+            manifest: context.manifest,
+            auditScope: {
+              batch: undefined,
+              upstreamTouchedFiles: context.upstreamRange.files,
+            },
+          };
+        })();
     const result = runMobileDriftAudit(
-      context.manifest,
-      auditScope.upstreamTouchedFiles,
+      auditInput.manifest,
+      auditInput.auditScope.upstreamTouchedFiles,
       repoRoot(),
     );
     console.log(`${result.ok ? "OK" : "ISSUE"}: ${result.title}`);
@@ -412,19 +426,38 @@ program
   .command("postrebase-audit")
   .option("--manifest <path>", "ownership manifest path", defaultManifestPath)
   .option("--batch <id>", "upstream batch id")
+  .option("--plan-dir <path>", "persisted batch plan directory")
   .option("--output-dir <path>", "post-rebase audit output directory")
   .action(
-    (options: { manifest: string; batch?: string; outputDir?: string }) => {
+    (options: {
+      manifest: string;
+      batch?: string;
+      planDir?: string;
+      outputDir?: string;
+    }) => {
       const batch = options.batch ?? process.env.BATCH;
-      const context = buildPreflightContext(options.manifest);
-      const auditScope = selectBatchAuditScope({
-        batch,
-        batchPlan: context.batchPlan,
-        upstreamTouchedFiles: context.upstreamRange.files,
-      });
+      const auditInput = batch
+        ? {
+            manifest: loadManifest(resolveCliPath(options.manifest)),
+            auditScope: readPersistedBatchAuditScope(
+              process.cwd(),
+              options.planDir ? resolveCliPath(options.planDir) : undefined,
+              batch,
+            ),
+          }
+        : (() => {
+            const context = buildPreflightContext(options.manifest);
+            return {
+              manifest: context.manifest,
+              auditScope: {
+                batch: undefined,
+                upstreamTouchedFiles: context.upstreamRange.files,
+              },
+            };
+          })();
       const results = runPostRebaseAudits(
-        context.manifest,
-        auditScope.upstreamTouchedFiles,
+        auditInput.manifest,
+        auditInput.auditScope.upstreamTouchedFiles,
         repoRoot(),
       );
       for (const result of results) {
@@ -440,9 +473,9 @@ program
             );
         const { markdownPath } = writePostRebaseAuditReport(outputDir, {
           date: new Date().toISOString().slice(0, 10),
-          batch: auditScope.batch,
+          batch: auditInput.auditScope.batch,
           results,
-          upstreamTouchedFiles: auditScope.upstreamTouchedFiles,
+          upstreamTouchedFiles: auditInput.auditScope.upstreamTouchedFiles,
         });
         console.log(`Wrote post-rebase audit report: ${markdownPath}`);
       }

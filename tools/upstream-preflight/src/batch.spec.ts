@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { createTempRepo } from "../test/fixtures";
 import {
   planBatches,
+  readPersistedBatchAuditScope,
   readPersistedBatchPlan,
   renderBatchMarkdown,
   renderNextBatchMarkdown,
@@ -335,6 +336,26 @@ describe("persisted batch plan validation", () => {
     expect(() => validatePersistedBatchPlan(plan, repo.path)).toThrow(
       `Persisted batch plan is stale: upstream is ${newUpstreamHead}, but batch-plan.json was generated for ${plan.metadata.upstreamHead}. Run make upstream-batch-plan.`,
     );
+  });
+
+  it("reads batch audit scope from the persisted plan after the upstream ref moved", () => {
+    const { repo, outputDir, plan } = createRepoWithPersistedPlan();
+    repo.git("checkout", "upstream");
+    repo.write("upstream/three.txt", "three");
+    repo.commit("upstream three");
+    repo.git("checkout", "main");
+
+    expect(() => validatePersistedBatchPlan(plan, repo.path)).toThrow(
+      "Persisted batch plan is stale",
+    );
+    expect(
+      readPersistedBatchAuditScope(repo.path, outputDir, "02"),
+    ).toEqual({
+      batch: "02",
+      upstreamTouchedFiles: plan.batches[1].commits.flatMap(
+        (commit) => commit.files,
+      ),
+    });
   });
 });
 

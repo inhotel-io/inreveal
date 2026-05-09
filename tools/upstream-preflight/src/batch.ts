@@ -224,6 +224,27 @@ export function readPersistedBatchPlan(
   return parsed;
 }
 
+export function readPersistedBatchAuditScope(
+  repoPath: string,
+  outputDir: string | undefined,
+  batch?: string,
+): BatchAuditScope {
+  const batchPlan = readPersistedBatchPlan(repoPath, outputDir);
+  const upstreamTouchedFiles = [
+    ...new Set(
+      batchPlan.batches.flatMap((planBatch) =>
+        planBatch.commits.flatMap((commit) => commit.files),
+      ),
+    ),
+  ].sort();
+
+  return selectBatchAuditScope({
+    batch,
+    batchPlan,
+    upstreamTouchedFiles,
+  });
+}
+
 export function validatePersistedBatchPlan(
   plan: BatchPlan,
   repoPath: string,
