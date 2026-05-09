@@ -39,10 +39,16 @@ export type RollingState = {
 };
 
 export function rollingStatePath(repoPath: string, outputDir?: string): string {
-  return path.join(
-    outputDir ?? getGitPath(repoPath, "upstream-preflight"),
-    "rolling-state.json",
-  );
+  if (outputDir !== undefined) {
+    return path.join(outputDir, "rolling-state.json");
+  }
+
+  const gitPath = getGitPath(repoPath, "upstream-preflight");
+  const stateDir = path.isAbsolute(gitPath)
+    ? gitPath
+    : path.resolve(repoPath, gitPath);
+
+  return path.join(stateDir, "rolling-state.json");
 }
 
 export function readRollingState(

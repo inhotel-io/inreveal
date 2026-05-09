@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createTempRepo } from "../test/fixtures";
 import {
@@ -27,6 +29,18 @@ describe("rolling state validation", () => {
     ).toThrow("upstreamTargetHead must be a full 40-character SHA");
     expect(() =>
       validateRollingState(
+        { ...validState(), branch: undefined },
+        "state.json",
+      ),
+    ).toThrow("branch is required");
+    expect(() =>
+      validateRollingState(
+        { ...validState(), startedForkHead: undefined },
+        "state.json",
+      ),
+    ).toThrow("startedForkHead must be a full 40-character SHA");
+    expect(() =>
+      validateRollingState(
         { ...validState(), startedAt: "not-a-date" },
         "state.json",
       ),
@@ -46,6 +60,20 @@ describe("rolling state validation", () => {
         "state.json",
       ),
     ).toThrow("activeForkSync.to must be a full 40-character SHA");
+    expect(() =>
+      validateRollingState(
+        {
+          ...validState(),
+          activeForkSync: {
+            status: "checks-failed",
+            from: sha("222222222"),
+            to: sha("333333333"),
+            commits: [],
+          },
+        },
+        "state.json",
+      ),
+    ).toThrow("activeForkSync.preSyncHead must be a full 40-character SHA");
   });
 
   it("reads and writes rolling state under git metadata", () => {
@@ -56,9 +84,17 @@ describe("rolling state validation", () => {
 
     const written = writeRollingState(repo.path, state);
     const read = readRollingState(repo.path);
+    const expectedPath = path.join(
+      repo.path,
+      ".git",
+      "upstream-preflight",
+      "rolling-state.json",
+    );
 
     expect(written).toBe(rollingStatePath(repo.path));
-    expect(written).toContain(".git/upstream-preflight/rolling-state.json");
+    expect(written).toBe(expectedPath);
+    expect(path.isAbsolute(written)).toBe(true);
+    expect(fs.existsSync(written)).toBe(true);
     expect(read).toEqual(state);
     expect(repo.git("status", "--short")).toBe("");
   });
