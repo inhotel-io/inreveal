@@ -824,6 +824,262 @@ describe("rolling fork sync", () => {
     expect(output.join("\n")).toContain("Synced 2 fork commits");
   });
 
+  it("leaves state unpromoted and recoverable when the first cherry-pick conflicts", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.write("fork.txt", "fork version\n");
+    const forkHead = repo.commit("feat: conflicting fork change (#2)");
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    repo.write("fork.txt", "rebase branch version\n");
+    const preSyncHead = repo.commit("prepare conflicting rebase branch");
+    const state = validStateFromPlan(plan);
+    writeRollingState(repo.path, state, outputDir);
+    const statePath = rollingStatePath(repo.path, outputDir);
+    const beforeState = fs.readFileSync(statePath, "utf8");
+
+    const exitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      fetchFork: () => undefined,
+      runChecks: () => {
+        throw new Error("checks must not run after cherry-pick conflict");
+      },
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("cherry-pick");
+    expect(repo.git("rev-parse", "HEAD")).toBe(preSyncHead);
+    expect(repo.git("status", "--short")).toContain("UU fork.txt");
+    expect(fs.readFileSync(statePath, "utf8")).toBe(beforeState);
+    expect(readRollingState(repo.path, outputDir)).toEqual(state);
+    repo.git("cherry-pick", "--abort");
+    expect(repo.git("rev-parse", "HEAD")).toBe(preSyncHead);
+    expect(repo.git("status", "--short")).toBe("");
+    expect(repo.git("rev-parse", "main")).toBe(forkHead);
+  });
+
+  it("keeps state unpromoted and recoverable when a later cherry-pick conflicts", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.write("fork-after-safe.txt", "safe\n");
+    const firstPendingCommit = repo.commit("feat: safe fork change (#2)");
+    repo.write("fork.txt", "fork version\n");
+    const forkHead = repo.commit("feat: conflicting fork change (#3)");
+    const pendingCommits = [firstPendingCommit, forkHead];
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    repo.write("fork.txt", "rebase branch version\n");
+    const preSyncHead = repo.commit("prepare conflicting rebase branch");
+    const state = validStateFromPlan(plan);
+    writeRollingState(repo.path, state, outputDir);
+
+    const exitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      fetchFork: () => undefined,
+      runChecks: () => {
+        throw new Error("checks must not run after cherry-pick conflict");
+      },
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("cherry-pick");
+    expect(repo.git("rev-parse", "HEAD")).toBe(preSyncHead);
+    expect(repo.git("status", "--short")).toBe("");
+    expect(readRollingState(repo.path, outputDir)).toEqual(state);
+    expect(
+      repo.git("rev-list", "--reverse", `${state.integratedForkHead}..main`),
+    ).toBe(pendingCommits.join("\n"));
+  });
+
+  it("records active fork sync and failed checks without promoting integrated fork head", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+    });
+    const errors: string[] = [];
+    const pendingCommits = repo
+      .git("rev-list", "--reverse", `${plan.metadata.forkHead}..main`)
+      .split("\n")
+      .filter(Boolean);
+    const forkHead = repo.git("rev-parse", "main");
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
+
+    const exitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      now: () => "2026-05-09T13:00:00.000Z",
+      fetchFork: () => undefined,
+      runChecks: () => ({
+        ok: false,
+        commands: ["pnpm check"],
+        output: "check failed",
+      }),
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("Fork sync checks failed");
+    expect(readRollingState(repo.path, outputDir)).toEqual(
+      validStateFromPlan(plan, undefined, {
+        activeForkSync: {
+          status: "checks-failed",
+          from: plan.metadata.forkHead,
+          to: forkHead,
+          commits: pendingCommits,
+          preSyncHead: plan.metadata.forkHead,
+        },
+        checkHistory: [
+          {
+            at: "2026-05-09T13:00:00.000Z",
+            phase: "fork-sync",
+            commands: ["pnpm check"],
+            ok: false,
+          },
+        ],
+      }),
+    );
+
+    const retryErrors: string[] = [];
+    const retryExitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      fetchFork: () => undefined,
+      writeError: (message) => retryErrors.push(message),
+    });
+
+    expect(retryExitCode).toBe(1);
+    expect(retryErrors.join("\n")).toContain(
+      "A fork sync is waiting for checks; rerun with continue",
+    );
+  });
+
+  it("requires an active fork sync when continue is requested", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
+
+    const exitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      continue: true,
+      fetchFork: () => {
+        throw new Error("continue must not fetch or cherry-pick");
+      },
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("No active fork sync to continue");
+  });
+
+  it("continues failed checks without cherry-picking and promotes after checks pass", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+    });
+    const output: string[] = [];
+    const pendingCommits = repo
+      .git("rev-list", "--reverse", `${plan.metadata.forkHead}..main`)
+      .split("\n")
+      .filter(Boolean);
+    const forkHead = repo.git("rev-parse", "main");
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    repo.git("cherry-pick", ...pendingCommits);
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, undefined, {
+        activeForkSync: {
+          status: "checks-failed",
+          from: plan.metadata.forkHead,
+          to: forkHead,
+          commits: pendingCommits,
+          preSyncHead: plan.metadata.forkHead,
+        },
+        checkHistory: [
+          {
+            at: "2026-05-09T13:00:00.000Z",
+            phase: "fork-sync",
+            commands: ["pnpm check"],
+            ok: false,
+          },
+        ],
+      }),
+      outputDir,
+    );
+
+    const exitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      continue: true,
+      now: () => "2026-05-09T14:00:00.000Z",
+      fetchFork: () => {
+        throw new Error("continue must not fetch or cherry-pick");
+      },
+      runChecks: () => ({ ok: true, commands: ["pnpm check"], output: "ok" }),
+      write: (message) => output.push(message),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(repo.git("rev-parse", "HEAD")).toBe(forkHead);
+    expect(readRollingState(repo.path, outputDir)).toEqual(
+      validStateFromPlan(plan, undefined, {
+        integratedForkHead: forkHead,
+        lastForkSyncAt: "2026-05-09T14:00:00.000Z",
+        appendHistory: [
+          {
+            at: "2026-05-09T14:00:00.000Z",
+            from: plan.metadata.forkHead,
+            to: forkHead,
+            commits: pendingCommits,
+            checks: ["pnpm check"],
+          },
+        ],
+        checkHistory: [
+          {
+            at: "2026-05-09T13:00:00.000Z",
+            phase: "fork-sync",
+            commands: ["pnpm check"],
+            ok: false,
+          },
+          {
+            at: "2026-05-09T14:00:00.000Z",
+            phase: "fork-sync",
+            commands: ["pnpm check"],
+            ok: true,
+          },
+        ],
+      }),
+    );
+    expect(output.join("\n")).toContain("Synced 1 fork commits");
+  });
+
   it("refuses to sync a rewritten fork ref without mutating rolling state", () => {
     const { repo, outputDir, plan } = createRepoWithPlan({
       forkCommitsAfterStart: 1,
