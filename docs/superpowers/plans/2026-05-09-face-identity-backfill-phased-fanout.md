@@ -76,6 +76,7 @@ Expected: clean status before the first red test.
 ## Task 1: Repository Phase Summary
 
 **Files:**
+
 - Modify: `server/test/medium/specs/repositories/face-identity.repository.spec.ts`
 - Modify: `server/src/repositories/face-identity.repository.ts`
 
@@ -254,6 +255,7 @@ git commit -m "feat: split face identity backfill work phases"
 ## Task 2: Projection Target Predicate Coverage
 
 **Files:**
+
 - Modify: `server/test/medium/specs/repositories/face-identity.repository.spec.ts`
 - Modify: `server/src/repositories/face-identity.repository.ts`
 
@@ -484,6 +486,7 @@ git commit -m "test: cover shared-space projection target predicates"
 ## Task 3: Job Data and Stable IDs
 
 **Files:**
+
 - Modify: `server/src/types.ts`
 - Modify: `server/src/repositories/job.repository.spec.ts`
 - Modify: `server/src/repositories/job.repository.ts`
@@ -572,6 +575,7 @@ git commit -m "feat: key identity-backfill face match jobs separately"
 ## Task 4: PersonService Phase Gating
 
 **Files:**
+
 - Modify: `server/src/services/person.service.spec.ts`
 - Modify: `server/src/services/person.service.ts`
 
@@ -709,6 +713,7 @@ git commit -m "feat: gate identity backfill projection fanout"
 ## Task 5: Targeted Fan-Out Deduping and Batching
 
 **Files:**
+
 - Modify: `server/src/services/person.service.spec.ts`
 - Modify: `server/src/services/person.service.ts`
 
@@ -992,6 +997,7 @@ git commit -m "feat: queue targeted identity backfill face matches"
 ## Task 6: Metadata Ordering and Manual Backfill Preservation
 
 **Files:**
+
 - Modify: `server/src/services/person.service.spec.ts`
 - Modify: `server/src/services/job.service.spec.ts`
 
@@ -1077,6 +1083,7 @@ git commit -m "fix: avoid identity backfill metadata race"
 ## Task 7: Medium End-to-End Backfill Proof
 
 **Files:**
+
 - Modify: `server/test/medium/specs/repositories/face-identity.repository.spec.ts`
 - Modify: `server/test/medium/specs/services/metadata.service.spec.ts`
 
@@ -1110,8 +1117,14 @@ it('materializes DB-derived projection work after identity backfill finishes', a
       .filter((job) => job.name === JobName.SharedSpaceFaceMatch);
     expect(queuedJobs).toEqual(
       expect.arrayContaining([
-        { name: JobName.SharedSpaceFaceMatch, data: { spaceId: space.id, assetId: firstAsset.id, source: 'identity-backfill' } },
-        { name: JobName.SharedSpaceFaceMatch, data: { spaceId: space.id, assetId: secondAsset.id, source: 'identity-backfill' } },
+        {
+          name: JobName.SharedSpaceFaceMatch,
+          data: { spaceId: space.id, assetId: firstAsset.id, source: 'identity-backfill' },
+        },
+        {
+          name: JobName.SharedSpaceFaceMatch,
+          data: { spaceId: space.id, assetId: secondAsset.id, source: 'identity-backfill' },
+        },
       ]),
     );
     expect(queuedJobs).toHaveLength(2);
@@ -1205,10 +1218,10 @@ Expected: FAIL for missing service behavior or assertion mismatch before final i
 Use the production code from Tasks 1-6. If the medium tests expose a mismatch, keep the fix inside:
 
 ```ts
-FaceIdentityRepository.getBackfillWork()
-FaceIdentityRepository.getSharedSpaceFaceMatchBackfillTargets()
-PersonService.handleFaceIdentityBackfill()
-PersonService.queueSharedSpaceFaceMatchTargets()
+FaceIdentityRepository.getBackfillWork();
+FaceIdentityRepository.getSharedSpaceFaceMatchBackfillTargets();
+PersonService.handleFaceIdentityBackfill();
+PersonService.queueSharedSpaceFaceMatchTargets();
 ```
 
 Do not add `SharedSpaceFaceMatchAll` fallback in identity backfill.
@@ -1233,6 +1246,7 @@ git commit -m "test: prove targeted identity backfill materialization"
 ## Task 8: Targeted Job Execution Skip Guards
 
 **Files:**
+
 - Modify: `server/src/services/shared-space.service.spec.ts`
 - Modify: `server/src/services/shared-space.service.ts` only if the skip behavior is not already implemented.
 
@@ -1293,6 +1307,7 @@ git commit -m "test: cover stale targeted shared-space face jobs"
 ## Task 9: Full Reset Preservation and Race Guard
 
 **Files:**
+
 - Modify: `server/src/services/person.service.spec.ts`
 
 - [ ] **Step 1: Verify the existing force-reset full rebuild test remains present**
@@ -1380,7 +1395,7 @@ await this.jobRepository.queueAll(
 In `handleFaceIdentityBackfill()`, do not call:
 
 ```ts
-this.sharedSpaceRepository.getSpaceIdsWithFaceRecognitionEnabled()
+this.sharedSpaceRepository.getSpaceIdsWithFaceRecognitionEnabled();
 ```
 
 and do not queue:
@@ -1409,6 +1424,7 @@ git commit -m "test: preserve full reset rebuild boundary"
 ## Task 10: Final Verification
 
 **Files:**
+
 - No new file edits unless verification exposes a bug.
 
 - [ ] **Step 1: Run focused unit suite**
