@@ -554,7 +554,10 @@ describe(FaceIdentityRepository.name, () => {
         .set({ personId: null })
         .where('id', '=', unassignedFace.assetFace.id)
         .execute();
-      await ctx.database.deleteFrom('face_identity_face').where('assetFaceId', '=', identityless.assetFace.id).execute();
+      await ctx.database
+        .deleteFrom('face_identity_face')
+        .where('assetFaceId', '=', identityless.assetFace.id)
+        .execute();
       const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
       await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
       for (const assetId of [

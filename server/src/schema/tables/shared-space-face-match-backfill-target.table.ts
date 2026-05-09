@@ -1,11 +1,4 @@
-import {
-  CreateDateColumn,
-  ForeignKeyColumn,
-  Generated,
-  Table,
-  Timestamp,
-  UpdateDateColumn,
-} from '@immich/sql-tools';
+import { CreateDateColumn, ForeignKeyColumn, Generated, Table, Timestamp, UpdateDateColumn } from '@immich/sql-tools';
 import { UpdatedAtTrigger, UpdateIdColumn } from 'src/decorators';
 import { AssetTable } from 'src/schema/tables/asset.table';
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
