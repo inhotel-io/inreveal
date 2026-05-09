@@ -1,10 +1,10 @@
-import fs from "node:fs";
-import path from "node:path";
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   readPersistedBatchPlan,
   selectNextBatch,
   validatePersistedBatchPlan,
-} from "./batch";
+} from './batch';
 import {
   cherryEquivalent,
   commitSubjects,
@@ -16,14 +16,14 @@ import {
   listCommits,
   revParse,
   runGit,
-} from "./git";
-import type { BatchPlan } from "./types";
+} from './git';
+import type { BatchPlan } from './types';
 
 const fullShaPattern = /^[0-9a-f]{40}$/;
 
 export type RollingState = {
   version: 1;
-  mode: "rolling-upstream-rebase";
+  mode: 'rolling-upstream-rebase';
   branch: string;
   upstreamRef: string;
   upstreamTargetHead: string;
@@ -33,7 +33,7 @@ export type RollingState = {
   startedAt: string;
   lastForkSyncAt?: string;
   activeForkSync?: {
-    status: "checks-failed";
+    status: 'checks-failed';
     from: string;
     to: string;
     commits: string[];
@@ -50,7 +50,7 @@ export type RollingState = {
   }>;
   checkHistory?: Array<{
     at: string;
-    phase: "fork-sync" | "final";
+    phase: 'fork-sync' | 'final';
     commands: string[];
     ok: boolean;
   }>;
@@ -70,25 +70,25 @@ export type CheckResult = { ok: boolean; commands: string[]; output?: string };
 export type RollingSyncOptions = RollingCommandOptions & {
   continue?: boolean;
   fetchFork?: (repoPath: string, forkRef: string) => void;
-  runChecks?: (context: { phase: "fork-sync"; batch?: string }) => CheckResult;
+  runChecks?: (context: { phase: 'fork-sync'; batch?: string }) => CheckResult;
 };
 
 export type RollingFinalCheckOptions = RollingCommandOptions & {
   fetchFork?: (repoPath: string, forkRef: string) => void;
-  runChecks?: (context: { phase: "final" }) => CheckResult;
+  runChecks?: (context: { phase: 'final' }) => CheckResult;
 };
 
 export function rollingStatePath(repoPath: string, outputDir?: string): string {
   if (outputDir !== undefined) {
-    return path.join(outputDir, "rolling-state.json");
+    return path.join(outputDir, 'rolling-state.json');
   }
 
-  const gitPath = getGitPath(repoPath, "upstream-preflight");
+  const gitPath = getGitPath(repoPath, 'upstream-preflight');
   const stateDir = path.isAbsolute(gitPath)
     ? gitPath
     : path.resolve(repoPath, gitPath);
 
-  return path.join(stateDir, "rolling-state.json");
+  return path.join(stateDir, 'rolling-state.json');
 }
 
 export function readRollingState(
@@ -104,7 +104,7 @@ export function readRollingState(
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(fs.readFileSync(statePath, "utf8"));
+    parsed = JSON.parse(fs.readFileSync(statePath, 'utf8'));
   } catch (error) {
     throw new Error(
       `Failed to parse rolling state ${statePath}: ${errorMessage(error)}`,
@@ -124,7 +124,7 @@ export function assertNoActiveRollingSync(
   const state = readRollingState(repoPath, outputDir);
   if (state.activeForkSync) {
     throw new Error(
-      "A fork sync is waiting for checks; run make upstream-sync-fork-main ROLLING_CONTINUE=1 before selecting the next upstream batch.",
+      'A fork sync is waiting for checks; run make upstream-sync-fork-main ROLLING_CONTINUE=1 before selecting the next upstream batch.',
     );
   }
 }
@@ -138,7 +138,7 @@ export function writeRollingState(
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   fs.writeFileSync(
     statePath,
-    `${JSON.stringify(validateRollingState(state, "rolling state"), null, 2)}\n`,
+    `${JSON.stringify(validateRollingState(state, 'rolling state'), null, 2)}\n`,
   );
   return statePath;
 }
@@ -151,15 +151,15 @@ export function runRollingStartCommand(options: RollingCommandOptions): number {
     const branch = currentBranch(options.repoPath);
     if (branch.length === 0) {
       throw new Error(
-        "Detached HEAD; check out a rebase branch before starting rolling rebase.",
+        'Detached HEAD; check out a rebase branch before starting rolling rebase.',
       );
     }
-    if (branch === "main") {
-      throw new Error("Refusing to start rolling rebase on main");
+    if (branch === 'main') {
+      throw new Error('Refusing to start rolling rebase on main');
     }
     if (hasGitOperationInProgress(options.repoPath)) {
       throw new Error(
-        "Git operation in progress; finish or abort it before starting or resuming rolling rebase.",
+        'Git operation in progress; finish or abort it before starting or resuming rolling rebase.',
       );
     }
 
@@ -176,7 +176,7 @@ export function runRollingStartCommand(options: RollingCommandOptions): number {
 
     if (!isCleanWorktree(options.repoPath)) {
       throw new Error(
-        "Worktree is dirty; commit or stash changes before starting rolling rebase.",
+        'Worktree is dirty; commit or stash changes before starting rolling rebase.',
       );
     }
 
@@ -190,7 +190,7 @@ export function runRollingStartCommand(options: RollingCommandOptions): number {
     const plan = readPersistedBatchPlan(options.repoPath, options.outputDir);
     validatePersistedBatchPlan(plan, options.repoPath);
 
-    const head = revParse(options.repoPath, "HEAD");
+    const head = revParse(options.repoPath, 'HEAD');
     if (head !== plan.metadata.forkHead) {
       throw new Error(
         `HEAD ${head} does not match planned fork head ${plan.metadata.forkHead}; pass --resume only after verifying branch state.`,
@@ -199,7 +199,7 @@ export function runRollingStartCommand(options: RollingCommandOptions): number {
 
     const state: RollingState = {
       version: 1,
-      mode: "rolling-upstream-rebase",
+      mode: 'rolling-upstream-rebase',
       branch,
       upstreamRef: plan.metadata.upstreamRef,
       upstreamTargetHead: plan.metadata.upstreamHead,
@@ -221,13 +221,13 @@ export function runRollingStartCommand(options: RollingCommandOptions): number {
 }
 
 export function renderRollingStatus(
-  options: Pick<RollingCommandOptions, "repoPath" | "outputDir">,
+  options: Pick<RollingCommandOptions, 'repoPath' | 'outputDir'>,
 ): string {
   const state = readRollingState(options.repoPath, options.outputDir);
   const branch = currentBranch(options.repoPath);
   if (branch !== state.branch) {
     throw new Error(
-      `Cannot render rolling status on ${branch || "detached HEAD"}; rolling state is for ${state.branch}. Check out ${state.branch} before checking status.`,
+      `Cannot render rolling status on ${branch || 'detached HEAD'}; rolling state is for ${state.branch}. Check out ${state.branch} before checking status.`,
     );
   }
 
@@ -243,7 +243,7 @@ export function renderRollingStatus(
   try {
     const selection = selectNextBatch(plan, options.repoPath);
     completedBatchCount =
-      selection.status === "none" ? 0 : selection.completedBatchCount;
+      selection.status === 'none' ? 0 : selection.completedBatchCount;
   } catch (error) {
     warnings.push(`Warning: ${errorMessage(error)}`);
   }
@@ -259,37 +259,37 @@ export function renderRollingStatus(
           `${state.integratedForkHead}..${state.forkRef}`,
         ).length,
       )
-    : "unknown";
-  if (forkPendingStatus === "unknown") {
+    : 'unknown';
+  if (forkPendingStatus === 'unknown') {
     warnings.push(
       `Warning: integrated fork head ${state.integratedForkHead} is not an ancestor of ${state.forkRef} (${currentForkHead}); pending fork commits cannot be counted.`,
     );
   }
   const completedBatchStatus =
     completedBatchCount === undefined
-      ? "unknown"
-      : String(completedBatchCount).padStart(2, "0");
+      ? 'unknown'
+      : String(completedBatchCount).padStart(2, '0');
   const nextAction = state.activeForkSync
-    ? "run make upstream-sync-fork-main ROLLING_CONTINUE=1"
-    : forkPendingStatus === "unknown"
-      ? "inspect fork ref divergence before continuing"
-      : forkPendingStatus !== "0" && forkPendingStatus !== "unknown"
-        ? "run make upstream-sync-fork-main"
+    ? 'run make upstream-sync-fork-main ROLLING_CONTINUE=1'
+    : forkPendingStatus === 'unknown'
+      ? 'inspect fork ref divergence before continuing'
+      : forkPendingStatus !== '0' && forkPendingStatus !== 'unknown'
+        ? 'run make upstream-sync-fork-main'
         : completedBatchCount === undefined
-          ? "inspect or regenerate the persisted batch plan before continuing"
-          : "run make upstream-next-batch";
+          ? 'inspect or regenerate the persisted batch plan before continuing'
+          : 'run make upstream-next-batch';
 
   return [
-    "Rolling upstream rebase status",
+    'Rolling upstream rebase status',
     ...warnings,
     `Branch: ${state.branch}`,
     `Upstream target: ${state.upstreamRef} (${shortSha(state.upstreamTargetHead)})`,
-    `Completed upstream batches: ${completedBatchStatus} / ${String(plan.batches.length).padStart(2, "0")}`,
+    `Completed upstream batches: ${completedBatchStatus} / ${String(plan.batches.length).padStart(2, '0')}`,
     `Integrated fork head: ${state.forkRef} @ ${shortSha(state.integratedForkHead)}`,
     `Current ${state.forkRef}: ${shortSha(currentForkHead)}`,
     `Fork commits pending: ${forkPendingStatus}`,
     `Next action: ${nextAction}`,
-  ].join("\n");
+  ].join('\n');
 }
 
 export function runRollingStatusCommand(
@@ -316,12 +316,12 @@ export function runRollingSyncForkMainCommand(
   try {
     if (hasGitOperationInProgress(options.repoPath)) {
       throw new Error(
-        "Git operation in progress; finish or abort it before syncing fork commits.",
+        'Git operation in progress; finish or abort it before syncing fork commits.',
       );
     }
     if (!isCleanWorktree(options.repoPath)) {
       throw new Error(
-        "Worktree is dirty; commit or stash changes before syncing fork commits.",
+        'Worktree is dirty; commit or stash changes before syncing fork commits.',
       );
     }
 
@@ -329,16 +329,16 @@ export function runRollingSyncForkMainCommand(
     const branch = currentBranch(options.repoPath);
     if (branch !== state.branch) {
       throw new Error(
-        `Cannot sync fork commits on ${branch || "detached HEAD"}; rolling state is for ${state.branch}. Check out ${state.branch} before syncing.`,
+        `Cannot sync fork commits on ${branch || 'detached HEAD'}; rolling state is for ${state.branch}. Check out ${state.branch} before syncing.`,
       );
     }
     if (options.continue) {
       if (!state.activeForkSync) {
         throw new Error(
-          "No active fork sync to continue; run make upstream-sync-fork-main without ROLLING_CONTINUE=1 to start a fork sync.",
+          'No active fork sync to continue; run make upstream-sync-fork-main without ROLLING_CONTINUE=1 to start a fork sync.',
         );
       }
-      const head = revParse(options.repoPath, "HEAD");
+      const head = revParse(options.repoPath, 'HEAD');
       if (!activeForkSyncIsApplied(options.repoPath, state.activeForkSync)) {
         throw new Error(
           `Cannot continue fork sync: current HEAD ${head} does not contain recorded fork sync target ${state.activeForkSync.to}. Restore or reapply the synced fork commits before continuing.`,
@@ -357,7 +357,7 @@ export function runRollingSyncForkMainCommand(
 
     if (state.activeForkSync) {
       throw new Error(
-        "A fork sync is waiting for checks; rerun with continue to finish it.",
+        'A fork sync is waiting for checks; rerun with continue to finish it.',
       );
     }
 
@@ -383,23 +383,23 @@ export function runRollingSyncForkMainCommand(
       return 0;
     }
 
-    const preSyncHead = revParse(options.repoPath, "HEAD");
+    const preSyncHead = revParse(options.repoPath, 'HEAD');
     let appliedCommitCount = 0;
     try {
       for (const commit of pendingCommits) {
-        runGit(options.repoPath, ["cherry-pick", "--ff", commit]);
+        runGit(options.repoPath, ['cherry-pick', '--ff', commit]);
         appliedCommitCount += 1;
       }
     } catch (error) {
       if (appliedCommitCount > 0) {
-        runGit(options.repoPath, ["reset", "--hard", preSyncHead]);
+        runGit(options.repoPath, ['reset', '--hard', preSyncHead]);
       }
       throw error;
     }
 
     const to = revParse(options.repoPath, state.forkRef);
     const activeForkSync = {
-      status: "checks-failed" as const,
+      status: 'checks-failed' as const,
       from: state.integratedForkHead,
       to,
       commits: pendingCommits,
@@ -436,21 +436,21 @@ export function runRollingFinalCheckCommand(
     const branch = currentBranch(options.repoPath);
     if (branch !== state.branch) {
       throw new Error(
-        `Cannot run rolling final check on ${branch || "detached HEAD"}; rolling state is for ${state.branch}. Check out ${state.branch} before final accounting.`,
+        `Cannot run rolling final check on ${branch || 'detached HEAD'}; rolling state is for ${state.branch}. Check out ${state.branch} before final accounting.`,
       );
     }
 
     const errors: string[] = [];
     (options.fetchFork ?? defaultFetchFork)(options.repoPath, state.forkRef);
 
-    if (!isAncestor(options.repoPath, state.upstreamTargetHead, "HEAD")) {
+    if (!isAncestor(options.repoPath, state.upstreamTargetHead, 'HEAD')) {
       errors.push(
         `HEAD does not include upstream target ${state.upstreamTargetHead}`,
       );
     }
     if (state.activeForkSync) {
       errors.push(
-        "A fork sync is still active; run make upstream-sync-fork-main ROLLING_CONTINUE=1 first.",
+        'A fork sync is still active; run make upstream-sync-fork-main ROLLING_CONTINUE=1 first.',
       );
     }
 
@@ -466,11 +466,11 @@ export function runRollingFinalCheckCommand(
     errors.push(...findPatchMismatches(options.repoPath, state));
 
     const checks = (options.runChecks ?? defaultRunFinalChecks)({
-      phase: "final",
+      phase: 'final',
     });
     if (!checks.ok) {
       errors.push(
-        `Final local checks failed.${checks.output ? `\n${checks.output}` : ""}`,
+        `Final local checks failed.${checks.output ? `\n${checks.output}` : ''}`,
       );
     }
 
@@ -478,7 +478,7 @@ export function runRollingFinalCheckCommand(
       options.repoPath,
       appendCheckHistory(
         state,
-        "final",
+        'final',
         checks,
         options.now?.() ?? new Date().toISOString(),
       ),
@@ -486,10 +486,10 @@ export function runRollingFinalCheckCommand(
     );
 
     if (errors.length > 0) {
-      throw new Error(errors.join("\n"));
+      throw new Error(errors.join('\n'));
     }
 
-    write("Rolling upstream rebase final check passed.");
+    write('Rolling upstream rebase final check passed.');
     return 0;
   } catch (error) {
     writeError(errorMessage(error));
@@ -500,18 +500,18 @@ export function runRollingFinalCheckCommand(
 function finishRollingForkSync(
   options: RollingSyncOptions,
   state: RollingState,
-  activeForkSync: NonNullable<RollingState["activeForkSync"]>,
+  activeForkSync: NonNullable<RollingState['activeForkSync']>,
   lastCompletedBatch: string | undefined,
   write: (message: string) => void,
 ): number {
   const checkedAt = options.now?.() ?? new Date().toISOString();
   const checkResult = (options.runChecks ?? defaultRunChecks)({
-    phase: "fork-sync",
+    phase: 'fork-sync',
     ...(lastCompletedBatch ? { batch: lastCompletedBatch } : {}),
   });
   const checkHistory = appendCheckHistory(
     state,
-    "fork-sync",
+    'fork-sync',
     checkResult,
     checkedAt,
   ).checkHistory;
@@ -523,7 +523,7 @@ function finishRollingForkSync(
       options.outputDir,
     );
     throw new Error(
-      `Fork sync checks failed. Rerun with continue after fixing issues.${checkResult.output ? `\n${checkResult.output}` : ""}`,
+      `Fork sync checks failed. Rerun with continue after fixing issues.${checkResult.output ? `\n${checkResult.output}` : ''}`,
     );
   }
 
@@ -563,26 +563,26 @@ export function validateRollingState(
   if (value.version !== 1) {
     throw new Error(`Invalid rolling state ${source}: version must be 1`);
   }
-  if (value.mode !== "rolling-upstream-rebase") {
+  if (value.mode !== 'rolling-upstream-rebase') {
     throw new Error(
       `Invalid rolling state ${source}: mode must be rolling-upstream-rebase`,
     );
   }
 
-  for (const key of ["branch", "upstreamRef", "forkRef", "startedAt"]) {
+  for (const key of ['branch', 'upstreamRef', 'forkRef', 'startedAt']) {
     assertString(value[key], source, key);
   }
   for (const key of [
-    "upstreamTargetHead",
-    "startedForkHead",
-    "integratedForkHead",
+    'upstreamTargetHead',
+    'startedForkHead',
+    'integratedForkHead',
   ]) {
     assertFullSha(value[key], source, key);
   }
-  assertIsoTimestamp(value.startedAt, source, "startedAt");
+  assertIsoTimestamp(value.startedAt, source, 'startedAt');
 
   if (value.lastForkSyncAt !== undefined) {
-    assertIsoTimestamp(value.lastForkSyncAt, source, "lastForkSyncAt");
+    assertIsoTimestamp(value.lastForkSyncAt, source, 'lastForkSyncAt');
   }
   if (value.activeForkSync !== undefined) {
     validateActiveForkSync(value.activeForkSync, source);
@@ -599,20 +599,20 @@ export function validateRollingState(
 
 function validateActiveForkSync(value: unknown, source: string): void {
   assertRecord(value, `${source}: activeForkSync`);
-  if (value.status !== "checks-failed") {
+  if (value.status !== 'checks-failed') {
     throw new Error(
       `Invalid rolling state ${source}: activeForkSync.status must be checks-failed`,
     );
   }
-  for (const key of ["from", "to", "preSyncHead"]) {
+  for (const key of ['from', 'to', 'preSyncHead']) {
     assertFullSha(value[key], source, `activeForkSync.${key}`);
   }
-  assertShaArray(value.commits, source, "activeForkSync.commits");
+  assertShaArray(value.commits, source, 'activeForkSync.commits');
   if (value.lastCompletedBatch !== undefined) {
     assertString(
       value.lastCompletedBatch,
       source,
-      "activeForkSync.lastCompletedBatch",
+      'activeForkSync.lastCompletedBatch',
     );
   }
 }
@@ -628,7 +628,7 @@ function validateAppendHistory(value: unknown, source: string): void {
     const prefix = `appendHistory[${index}]`;
     assertRecord(entry, `${source}: ${prefix}`);
     assertIsoTimestamp(entry.at, source, `${prefix}.at`);
-    for (const key of ["from", "to"]) {
+    for (const key of ['from', 'to']) {
       assertFullSha(entry[key], source, `${prefix}.${key}`);
     }
     assertShaArray(entry.commits, source, `${prefix}.commits`);
@@ -654,13 +654,13 @@ function validateCheckHistory(value: unknown, source: string): void {
     const prefix = `checkHistory[${index}]`;
     assertRecord(entry, `${source}: ${prefix}`);
     assertIsoTimestamp(entry.at, source, `${prefix}.at`);
-    if (entry.phase !== "fork-sync" && entry.phase !== "final") {
+    if (entry.phase !== 'fork-sync' && entry.phase !== 'final') {
       throw new Error(
         `Invalid rolling state ${source}: ${prefix}.phase must be fork-sync or final`,
       );
     }
     assertStringArray(entry.commands, source, `${prefix}.commands`);
-    if (typeof entry.ok !== "boolean") {
+    if (typeof entry.ok !== 'boolean') {
       throw new Error(
         `Invalid rolling state ${source}: ${prefix}.ok must be a boolean`,
       );
@@ -672,7 +672,7 @@ function assertRecord(
   value: unknown,
   source: string,
 ): asserts value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`Invalid rolling state ${source}: object is required`);
   }
 }
@@ -682,13 +682,13 @@ function assertString(
   source: string,
   key: string,
 ): asserts value is string {
-  if (typeof value !== "string" || value.length === 0) {
+  if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`Invalid rolling state ${source}: ${key} is required`);
   }
 }
 
 function assertFullSha(value: unknown, source: string, key: string): void {
-  if (typeof value !== "string" || !fullShaPattern.test(value)) {
+  if (typeof value !== 'string' || !fullShaPattern.test(value)) {
     throw new Error(
       `Invalid rolling state ${source}: ${key} must be a full 40-character SHA`,
     );
@@ -715,7 +715,7 @@ function assertShaArray(value: unknown, source: string, key: string): void {
 }
 
 function assertStringArray(value: unknown, source: string, key: string): void {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
     throw new Error(
       `Invalid rolling state ${source}: ${key} must be an array of strings`,
     );
@@ -727,9 +727,9 @@ function shortSha(sha: string): string {
 }
 
 function defaultFetchFork(repoPath: string, forkRef: string): void {
-  const [remote, ...branchParts] = forkRef.split("/");
+  const [remote, ...branchParts] = forkRef.split('/');
   if (remote && branchParts.length > 0) {
-    runGit(repoPath, ["fetch", "--no-tags", remote, branchParts.join("/")]);
+    runGit(repoPath, ['fetch', '--no-tags', remote, branchParts.join('/')]);
   }
 }
 
@@ -743,20 +743,20 @@ function defaultRunFinalChecks(): CheckResult {
 
 function defaultFinalChecks(): string[] {
   return [
-    "make fork-ownership-coverage-check",
-    "make upstream-next-batch",
-    "make upstream-postrebase-audit",
-    "make ci-invariants-check",
-    "make fork-patches-check",
-    "pnpm --filter @gallery/upstream-preflight run test",
-    "pnpm --filter @gallery/upstream-preflight run check",
-    "pnpm --filter @gallery/upstream-preflight run format",
+    'make fork-ownership-coverage-check',
+    'make upstream-next-batch',
+    'make upstream-postrebase-audit',
+    'make ci-invariants-check',
+    'make fork-patches-check',
+    'pnpm --filter @gallery/upstream-preflight run test',
+    'pnpm --filter @gallery/upstream-preflight run check',
+    'pnpm --filter @gallery/upstream-preflight run format',
   ];
 }
 
 function appendCheckHistory(
   state: RollingState,
-  phase: "fork-sync" | "final",
+  phase: 'fork-sync' | 'final',
   checkResult: CheckResult,
   checkedAt: string,
 ): RollingState {
@@ -796,7 +796,7 @@ function findMissingSubjectMatches(
 }
 
 function findPatchMismatches(repoPath: string, state: RollingState): string[] {
-  const result = cherryEquivalent(repoPath, "HEAD", state.forkRef);
+  const result = cherryEquivalent(repoPath, 'HEAD', state.forkRef);
   if (result.missing.length === 0) return [];
 
   const subjectsBySha = new Map(
@@ -813,7 +813,7 @@ function findPatchMismatches(repoPath: string, state: RollingState): string[] {
 }
 
 function normalizeSubject(subject: string): string {
-  return subject.trim().replace(/\s+/g, " ");
+  return subject.trim().replace(/\s+/g, ' ');
 }
 
 function hasSubjectOrPrMatch(subject: string, candidates: string[]): boolean {
@@ -838,23 +838,23 @@ function extractPrNumbers(subject: string): string[] {
 
 function activeForkSyncIsApplied(
   repoPath: string,
-  activeForkSync: NonNullable<RollingState["activeForkSync"]>,
+  activeForkSync: NonNullable<RollingState['activeForkSync']>,
 ): boolean {
-  if (isAncestor(repoPath, activeForkSync.to, "HEAD")) {
+  if (isAncestor(repoPath, activeForkSync.to, 'HEAD')) {
     return true;
   }
 
   const cherryOutput = runGit(repoPath, [
-    "cherry",
-    "HEAD",
+    'cherry',
+    'HEAD',
     activeForkSync.to,
     activeForkSync.from,
   ]);
   const equivalenceBySha = new Map(
     cherryOutput
-      .split("\n")
+      .split('\n')
       .filter(Boolean)
-      .map((line) => [line.slice(2), line.startsWith("- ")]),
+      .map((line) => [line.slice(2), line.startsWith('- ')]),
   );
 
   return activeForkSync.commits.every(
@@ -863,7 +863,7 @@ function activeForkSyncIsApplied(
 }
 
 function lastCompletedBatchFromPersistedPlan(
-  options: Pick<RollingSyncOptions, "repoPath" | "outputDir">,
+  options: Pick<RollingSyncOptions, 'repoPath' | 'outputDir'>,
 ): string | undefined {
   const plan = readPersistedBatchPlan(options.repoPath, options.outputDir);
   validatePersistedBatchPlan(plan, options.repoPath);
@@ -873,7 +873,7 @@ function lastCompletedBatchFromPersistedPlan(
 function lastCompletedBatchId(
   selection: ReturnType<typeof selectNextBatch>,
 ): string | undefined {
-  if (selection.status === "none" || selection.completedBatchCount === 0) {
+  if (selection.status === 'none' || selection.completedBatchCount === 0) {
     return undefined;
   }
 
