@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
 import type { GitCommit } from "./types";
 
 export type GitRange = {
@@ -47,7 +48,14 @@ export function hasGitOperationInProgress(cwd: string): boolean {
     "MERGE_HEAD",
     "CHERRY_PICK_HEAD",
     "REVERT_HEAD",
-  ].some((gitPath) => fs.existsSync(getGitPath(cwd, gitPath)));
+  ].some((gitPath) => {
+    const metadataPath = getGitPath(cwd, gitPath);
+    return fs.existsSync(
+      path.isAbsolute(metadataPath)
+        ? metadataPath
+        : path.resolve(cwd, metadataPath),
+    );
+  });
 }
 
 export function revParse(cwd: string, ref: string): string {

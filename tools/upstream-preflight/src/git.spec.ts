@@ -111,6 +111,21 @@ describe("git range collection", () => {
     expect(hasGitOperationInProgress(repo.path)).toBe(false);
   });
 
+  it("detects real in-progress git operations", () => {
+    const repo = createTempRepo();
+    repo.write("conflict.txt", "base\n");
+    repo.commit("base commit");
+    repo.git("checkout", "-b", "incoming");
+    repo.write("conflict.txt", "incoming\n");
+    repo.commit("incoming commit");
+    repo.git("checkout", "main");
+    repo.write("conflict.txt", "main\n");
+    repo.commit("main commit");
+
+    expect(() => repo.git("merge", "incoming")).toThrow();
+    expect(hasGitOperationInProgress(repo.path)).toBe(true);
+  });
+
   it("lists commits and subjects in chronological order", () => {
     const repo = createTempRepo();
     repo.write("README.md", "base");
@@ -138,10 +153,13 @@ describe("git range collection", () => {
     repo.commit("feat: same patch");
     repo.git("checkout", "-b", "right", base);
     repo.write("feature.txt", "same");
-    repo.commit("feat: rebased same patch");
+    const equivalent = repo.commit("feat: rebased same patch");
+    repo.write("right-only.txt", "right only");
+    const missing = repo.commit("feat: right-only patch");
 
     const result = cherryEquivalent(repo.path, "left", "right");
-    expect(result.equivalent.length).toBe(1);
-    expect(result.missing).toEqual([]);
+    expect(result.raw).toEqual([`- ${equivalent}`, `+ ${missing}`]);
+    expect(result.equivalent).toEqual([equivalent]);
+    expect(result.missing).toEqual([missing]);
   });
 });
