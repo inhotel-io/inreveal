@@ -31,7 +31,13 @@ import {
   writeReadinessReports,
 } from './ready';
 import { renderPreflightMarkdown } from './report';
-import { assertNoActiveRollingSync, runRollingStatusCommand } from './rolling';
+import {
+  assertNoActiveRollingSync,
+  runRollingFinalCheckCommand,
+  runRollingStartCommand,
+  runRollingStatusCommand,
+  runRollingSyncForkMainCommand,
+} from './rolling';
 import { classifyCommit, detectDomain } from './risk';
 import {
   collectExtensionHotspots,
@@ -367,10 +373,50 @@ program
   });
 
 program
+  .command('rolling-start')
+  .option('--output-dir <path>', 'rolling state and batch plan directory')
+  .option('--resume', 'resume an existing rolling state')
+  .action((options: { outputDir?: string; resume?: boolean }) => {
+    process.exitCode = runRollingStartCommand({
+      repoPath: process.cwd(),
+      outputDir: options.outputDir
+        ? resolveCliPath(options.outputDir)
+        : undefined,
+      resume: options.resume,
+    });
+  });
+
+program
   .command('rolling-status')
   .option('--output-dir <path>', 'rolling state and batch plan directory')
   .action((options: { outputDir?: string }) => {
     process.exitCode = runRollingStatusCommand({
+      repoPath: process.cwd(),
+      outputDir: options.outputDir
+        ? resolveCliPath(options.outputDir)
+        : undefined,
+    });
+  });
+
+program
+  .command('sync-fork-main')
+  .option('--output-dir <path>', 'rolling state and batch plan directory')
+  .option('--continue', 'continue a fork sync after checks failed')
+  .action((options: { outputDir?: string; continue?: boolean }) => {
+    process.exitCode = runRollingSyncForkMainCommand({
+      repoPath: process.cwd(),
+      outputDir: options.outputDir
+        ? resolveCliPath(options.outputDir)
+        : undefined,
+      continue: options.continue,
+    });
+  });
+
+program
+  .command('rolling-final-check')
+  .option('--output-dir <path>', 'rolling state and batch plan directory')
+  .action((options: { outputDir?: string }) => {
+    process.exitCode = runRollingFinalCheckCommand({
       repoPath: process.cwd(),
       outputDir: options.outputDir
         ? resolveCliPath(options.outputDir)
