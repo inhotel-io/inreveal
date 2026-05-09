@@ -1,6 +1,8 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createTempRepo } from "../test/fixtures";
 import {
@@ -21,8 +23,14 @@ import type {
   BatchPlanMetadata,
   CheckEntry,
   ClassifiedCommit,
+  Manifest,
   RiskLevel,
 } from "./types";
+
+const packageRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 
 function commit(
   shortSha: string,
@@ -348,9 +356,7 @@ describe("persisted batch plan validation", () => {
     expect(() => validatePersistedBatchPlan(plan, repo.path)).toThrow(
       "Persisted batch plan is stale",
     );
-    expect(
-      readPersistedBatchAuditScope(repo.path, outputDir, "02"),
-    ).toEqual({
+    expect(readPersistedBatchAuditScope(repo.path, outputDir, "02")).toEqual({
       batch: "02",
       upstreamTouchedFiles: plan.batches[1].commits.flatMap(
         (commit) => commit.files,
@@ -584,6 +590,158 @@ describe("selectBatchAuditScope", () => {
   });
 });
 
+describe("batch-scoped audit CLI commands", () => {
+  it("mobile-drift-check --batch reads persisted scope after refs move", () => {
+    const { repo, outputDir, plan } = createRepoWithPersistedPlan();
+    persistBatchFiles(plan, outputDir, "02", [
+      "mobile/drift_schemas/main/drift_schema_v23.json",
+    ]);
+    repo.git("checkout", "upstream");
+    repo.write("upstream/three.txt", "three");
+    repo.commit("upstream three");
+    repo.git("checkout", "main");
+    writeManifest(
+      repo.path,
+      manifestWithMissingRefs(repo.git("rev-parse", "HEAD"), {
+        features: {
+          "mobile-drift": {
+            title: "Mobile Drift",
+            risk: "high",
+            domains: ["mobile"],
+            mobile: {
+              drift_versions: {
+                owned: [23],
+                shipped: true,
+                owner: "gallery",
+              },
+            },
+          },
+        },
+      }),
+    );
+    repo.write(
+      "mobile/lib/infrastructure/repositories/db.repository.dart",
+      `
+        class GalleryDb {
+          int get schemaVersion => 23;
+          final migration = {
+            from22To23: (m, v23) async {},
+          };
+        }
+      `,
+    );
+    repo.write("mobile/drift_schemas/main/drift_schema_v22.json", "{}");
+    repo.write("mobile/drift_schemas/main/drift_schema_v23.json", "{}");
+
+    const result = runCli(repo.path, [
+      "mobile-drift-check",
+      "--manifest",
+      "ownership.yml",
+      "--batch",
+      "02",
+      "--plan-dir",
+      outputDir,
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).not.toContain("ambiguous argument");
+    expect(result.stdout).toContain("ISSUE: Mobile Drift Migration Check");
+    expect(result.stdout).toContain(
+      "Upstream touches shipped Gallery Drift version v23; keep Gallery v23 and renumber incoming upstream migrations to v24",
+    );
+  });
+
+  it("postrebase-audit --batch reads persisted scope from plan-dir and writes reports to output-dir", () => {
+    const { repo, outputDir: planDir, plan } = createRepoWithPersistedPlan();
+    const reportDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "gallery-postrebase-audit-"),
+    );
+    const selectedFiles = [
+      "open-api/typescript-sdk/index.ts",
+      "server/src/schema/migrations/1770000000000-Upstream.ts",
+    ];
+    persistBatchFiles(plan, planDir, "02", selectedFiles);
+    repo.git("checkout", "upstream");
+    repo.write("upstream/three.txt", "three");
+    repo.commit("upstream three");
+    repo.git("checkout", "main");
+    writeManifest(
+      repo.path,
+      manifestWithMissingRefs(repo.git("rev-parse", "HEAD"), {
+        features: {
+          "shared-spaces": {
+            title: "Shared Spaces",
+            risk: "high",
+            domains: ["server"],
+            owned_paths: ["server/src/services/shared-space.service.ts"],
+            expected_symbols: {
+              "server/src/schema/functions.ts": ["library_user"],
+            },
+            database: {
+              migration_globs: [
+                "server/src/schema/migrations-gallery/*SharedSpace*.ts",
+              ],
+              expected_migrations: [
+                "server/src/schema/migrations-gallery/1770000000000-SharedSpace.ts",
+              ],
+            },
+          },
+        },
+      }),
+    );
+    repo.write(
+      "server/src/services/shared-space.service.ts",
+      "export const sharedSpace = true;\n",
+    );
+    repo.write(
+      "server/src/schema/functions.ts",
+      "export const library_user = true;\n",
+    );
+    repo.write(
+      "server/src/schema/migrations-gallery/1770000000000-SharedSpace.ts",
+      "export class SharedSpace {}\n",
+    );
+
+    const result = runCli(repo.path, [
+      "postrebase-audit",
+      "--manifest",
+      "ownership.yml",
+      "--batch",
+      "02",
+      "--plan-dir",
+      planDir,
+      "--output-dir",
+      reportDir,
+    ]);
+    const markdownPath = path.join(reportDir, "batch-02-postrebase-audit.md");
+    const jsonPath = path.join(reportDir, "batch-02-postrebase-audit.json");
+    const reportJson = JSON.parse(fs.readFileSync(jsonPath, "utf8")) as {
+      upstreamTouchedFiles: string[];
+    };
+    const reportMarkdown = fs.readFileSync(markdownPath, "utf8");
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).not.toContain("ambiguous argument");
+    expect(result.stdout).toContain(
+      `Wrote post-rebase audit report: ${markdownPath}`,
+    );
+    expect(fs.existsSync(markdownPath)).toBe(true);
+    expect(fs.existsSync(jsonPath)).toBe(true);
+    expect(
+      fs.existsSync(path.join(planDir, "batch-02-postrebase-audit.md")),
+    ).toBe(false);
+    expect(
+      fs.existsSync(path.join(planDir, "batch-02-postrebase-audit.json")),
+    ).toBe(false);
+    expect(reportJson.upstreamTouchedFiles).toEqual(selectedFiles);
+    expect(reportMarkdown).toContain("- `open-api/typescript-sdk/index.ts`");
+    expect(reportMarkdown).toContain(
+      "- `server/src/schema/migrations/1770000000000-Upstream.ts`",
+    );
+    expect(reportMarkdown).not.toContain(plan.batches[0].commits[0].files[0]);
+  });
+});
+
 function createRepoWithPersistedPlan(
   options: { upstreamCommits?: number } = {},
 ) {
@@ -623,6 +781,68 @@ function createRepoWithPersistedPlan(
   writeBatchPlanReports(plan, outputDir);
 
   return { repo, commits: upstreamCommits, plan, outputDir };
+}
+
+function persistBatchFiles(
+  plan: BatchPlan,
+  outputDir: string,
+  batchId: string,
+  files: string[],
+) {
+  const batch = plan.batches.find((candidate) => candidate.id === batchId);
+  if (!batch) throw new Error(`Missing test batch ${batchId}`);
+  batch.commits[0].files = files;
+  writeBatchPlanReports(plan, outputDir);
+}
+
+function runCli(repoPath: string, args: string[]) {
+  const result = spawnSync(
+    "pnpm",
+    [
+      "--dir",
+      packageRoot,
+      "exec",
+      "tsx",
+      path.join(packageRoot, "src/index.ts"),
+      ...args,
+    ],
+    {
+      cwd: repoPath,
+      encoding: "utf8",
+      env: { ...process.env, INIT_CWD: repoPath },
+    },
+  );
+
+  if (result.error) throw result.error;
+  return result;
+}
+
+function writeManifest(repoPath: string, manifest: Manifest) {
+  fs.writeFileSync(
+    path.join(repoPath, "ownership.yml"),
+    manifestYaml(manifest),
+  );
+}
+
+function manifestWithMissingRefs(
+  lastVerifiedForkHead: string,
+  overrides: Pick<Manifest, "features">,
+): Manifest {
+  return {
+    version: 1,
+    metadata: {
+      upstream_remote: "missing-upstream",
+      upstream_branch: "main",
+      fork_remote: "missing-origin",
+      fork_branch: "main",
+      last_verified_fork_head: lastVerifiedForkHead,
+    },
+    features: overrides.features,
+  };
+}
+
+function manifestYaml(manifest: Manifest): string {
+  return `${JSON.stringify(manifest, null, 2)}\n`;
 }
 
 function classifiedCommit(shaValue: string, risk: RiskLevel): ClassifiedCommit {
