@@ -13,6 +13,7 @@ import {
   isCleanWorktree,
   listCommits,
   revParse,
+  runGit,
 } from "./git";
 
 const fullShaPattern = /^[0-9a-f]{40}$/;
@@ -58,6 +59,14 @@ export type RollingCommandOptions = {
   now?: () => string;
   write?: (message: string) => void;
   writeError?: (message: string) => void;
+};
+
+export type CheckResult = { ok: boolean; commands: string[]; output?: string };
+
+export type RollingSyncOptions = RollingCommandOptions & {
+  continue?: boolean;
+  fetchFork?: (repoPath: string, forkRef: string) => void;
+  runChecks?: (context: { phase: "fork-sync"; batch?: string }) => CheckResult;
 };
 
 export function rollingStatePath(repoPath: string, outputDir?: string): string {
@@ -289,6 +298,133 @@ export function runRollingStatusCommand(
   }
 }
 
+export function runRollingSyncForkMainCommand(
+  options: RollingSyncOptions,
+): number {
+  const write = options.write ?? console.log;
+  const writeError = options.writeError ?? console.error;
+
+  try {
+    if (options.continue) {
+      throw new Error(
+        "Continuing a failed fork sync is not yet implemented; retry without continue after cleaning up the repository.",
+      );
+    }
+    if (hasGitOperationInProgress(options.repoPath)) {
+      throw new Error(
+        "Git operation in progress; finish or abort it before syncing fork commits.",
+      );
+    }
+    if (!isCleanWorktree(options.repoPath)) {
+      throw new Error(
+        "Worktree is dirty; commit or stash changes before syncing fork commits.",
+      );
+    }
+
+    const state = readRollingState(options.repoPath, options.outputDir);
+    const branch = currentBranch(options.repoPath);
+    if (branch !== state.branch) {
+      throw new Error(
+        `Cannot sync fork commits on ${branch || "detached HEAD"}; rolling state is for ${state.branch}. Check out ${state.branch} before syncing.`,
+      );
+    }
+    if (state.activeForkSync) {
+      throw new Error(
+        "A fork sync is waiting for checks; rerun with continue to finish it.",
+      );
+    }
+
+    const plan = readPersistedBatchPlan(options.repoPath, options.outputDir);
+    validatePersistedBatchPlan(plan, options.repoPath);
+    const selection = selectNextBatch(plan, options.repoPath);
+    const lastCompletedBatch = lastCompletedBatchId(selection);
+
+    (options.fetchFork ?? defaultFetchFork)(options.repoPath, state.forkRef);
+    const pendingCommits = listCommits(
+      options.repoPath,
+      `${state.integratedForkHead}..${state.forkRef}`,
+    ).map((commit) => commit.sha);
+
+    if (pendingCommits.length === 0) {
+      write(`No fork commits pending from ${state.forkRef}`);
+      return 0;
+    }
+
+    const preSyncHead = revParse(options.repoPath, "HEAD");
+    for (const commit of pendingCommits) {
+      runGit(options.repoPath, ["cherry-pick", commit]);
+    }
+
+    const to = revParse(options.repoPath, state.forkRef);
+    const activeForkSync = {
+      status: "checks-failed" as const,
+      from: state.integratedForkHead,
+      to,
+      commits: pendingCommits,
+      preSyncHead,
+    };
+    writeRollingState(
+      options.repoPath,
+      { ...state, activeForkSync },
+      options.outputDir,
+    );
+
+    const checkedAt = options.now?.() ?? new Date().toISOString();
+    const checkResult = (options.runChecks ?? defaultRunChecks)({
+      phase: "fork-sync",
+      ...(lastCompletedBatch ? { batch: lastCompletedBatch } : {}),
+    });
+    const checkHistory = [
+      ...(state.checkHistory ?? []),
+      {
+        at: checkedAt,
+        phase: "fork-sync" as const,
+        commands: checkResult.commands,
+        ok: checkResult.ok,
+      },
+    ];
+
+    if (!checkResult.ok) {
+      writeRollingState(
+        options.repoPath,
+        { ...state, activeForkSync, checkHistory },
+        options.outputDir,
+      );
+      throw new Error(
+        `Fork sync checks failed. Rerun with continue after fixing issues.${checkResult.output ? `\n${checkResult.output}` : ""}`,
+      );
+    }
+
+    writeRollingState(
+      options.repoPath,
+      {
+        ...state,
+        integratedForkHead: activeForkSync.to,
+        activeForkSync: undefined,
+        lastForkSyncAt: checkedAt,
+        appendHistory: [
+          ...(state.appendHistory ?? []),
+          {
+            at: checkedAt,
+            from: activeForkSync.from,
+            to: activeForkSync.to,
+            commits: activeForkSync.commits,
+            ...(lastCompletedBatch ? { lastCompletedBatch } : {}),
+            checks: checkResult.commands,
+          },
+        ],
+        checkHistory,
+      },
+      options.outputDir,
+    );
+    write(`Synced ${pendingCommits.length} fork commits from ${state.forkRef}`);
+    return 0;
+  } catch (error) {
+    writeError(errorMessage(error));
+    return 1;
+  }
+}
+
 export function validateRollingState(
   value: unknown,
   source: string,
@@ -451,6 +587,27 @@ function assertStringArray(value: unknown, source: string, key: string): void {
 
 function shortSha(sha: string): string {
   return sha.slice(0, 9);
+}
+
+function defaultFetchFork(repoPath: string, forkRef: string): void {
+  const [remote, ...branchParts] = forkRef.split("/");
+  if (remote && branchParts.length > 0) {
+    runGit(repoPath, ["fetch", remote, branchParts.join("/")]);
+  }
+}
+
+function defaultRunChecks(): CheckResult {
+  return { ok: true, commands: [] };
+}
+
+function lastCompletedBatchId(
+  selection: ReturnType<typeof selectNextBatch>,
+): string | undefined {
+  if (selection.status === "none" || selection.completedBatchCount === 0) {
+    return undefined;
+  }
+
+  return selection.plan.batches[selection.completedBatchCount - 1]?.id;
 }
 
 function errorMessage(error: unknown): string {

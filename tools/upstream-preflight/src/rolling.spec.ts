@@ -14,6 +14,7 @@ import {
   rollingStatePath,
   runRollingStartCommand,
   runRollingStatusCommand,
+  runRollingSyncForkMainCommand,
   validateRollingState,
   writeRollingState,
 } from "./rolling";
@@ -117,9 +118,7 @@ describe("active rolling sync guard", () => {
     repo.commit("base commit");
     const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "rolling-plan-"));
 
-    expect(() =>
-      assertNoActiveRollingSync(repo.path, outputDir),
-    ).not.toThrow();
+    expect(() => assertNoActiveRollingSync(repo.path, outputDir)).not.toThrow();
   });
 
   it("allows upstream batch selection when rolling state has no active fork sync", () => {
@@ -127,9 +126,7 @@ describe("active rolling sync guard", () => {
 
     writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
 
-    expect(() =>
-      assertNoActiveRollingSync(repo.path, outputDir),
-    ).not.toThrow();
+    expect(() => assertNoActiveRollingSync(repo.path, outputDir)).not.toThrow();
   });
 
   it("blocks upstream batch selection while a fork sync waits for checks", () => {
@@ -739,6 +736,136 @@ describe("rolling status", () => {
     expect(output).toContain("Rolling upstream rebase status");
     expect(output).toContain("Completed upstream batches: 00 / 01");
     expect(output).toContain("Next action: run make upstream-next-batch");
+  });
+});
+
+describe("rolling fork sync", () => {
+  it("no-ops when no fork commits are pending", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const output: string[] = [];
+    const state = validStateFromPlan(plan);
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    writeRollingState(repo.path, state, outputDir);
+
+    const exitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      fetchFork: () => undefined,
+      write: (message) => output.push(message),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(output.join("\n")).toContain("No fork commits pending");
+    expect(readRollingState(repo.path, outputDir)).toEqual(state);
+  });
+
+  it("cherry-picks pending fork commits, runs checks, and records sync history", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 2,
+    });
+    const output: string[] = [];
+    const checkContexts: Array<{ phase: "fork-sync"; batch?: string }> = [];
+    const pendingCommits = repo
+      .git("rev-list", "--reverse", `${plan.metadata.forkHead}..main`)
+      .split("\n")
+      .filter(Boolean);
+    const forkHead = repo.git("rev-parse", "main");
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
+
+    const exitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      now: () => "2026-05-09T11:00:00.000Z",
+      fetchFork: () => undefined,
+      runChecks: (context) => {
+        checkContexts.push(context);
+        return { ok: true, commands: ["pnpm check"], output: "ok" };
+      },
+      write: (message) => output.push(message),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(repo.git("rev-parse", "HEAD")).toBe(forkHead);
+    expect(checkContexts).toEqual([{ phase: "fork-sync" }]);
+    expect(readRollingState(repo.path, outputDir)).toEqual(
+      validStateFromPlan(plan, undefined, {
+        integratedForkHead: forkHead,
+        lastForkSyncAt: "2026-05-09T11:00:00.000Z",
+        appendHistory: [
+          {
+            at: "2026-05-09T11:00:00.000Z",
+            from: plan.metadata.forkHead,
+            to: forkHead,
+            commits: pendingCommits,
+            checks: ["pnpm check"],
+          },
+        ],
+        checkHistory: [
+          {
+            at: "2026-05-09T11:00:00.000Z",
+            phase: "fork-sync",
+            commands: ["pnpm check"],
+            ok: true,
+          },
+        ],
+      }),
+    );
+    expect(output.join("\n")).toContain("Synced 2 fork commits");
+  });
+
+  it("passes the last completed upstream batch to fork-sync checks and history", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+      upstreamCommits: 2,
+    });
+    const checkContexts: Array<{ phase: "fork-sync"; batch?: string }> = [];
+    const pendingCommits = repo
+      .git("rev-list", "--reverse", `${plan.metadata.forkHead}..main`)
+      .split("\n")
+      .filter(Boolean);
+    const forkHead = repo.git("rev-parse", "main");
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.batches[0].tipSha,
+    );
+    writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
+
+    const exitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      now: () => "2026-05-09T12:00:00.000Z",
+      fetchFork: () => undefined,
+      runChecks: (context) => {
+        checkContexts.push(context);
+        return { ok: true, commands: ["pnpm check --batch 01"] };
+      },
+    });
+
+    expect(exitCode).toBe(0);
+    expect(checkContexts).toEqual([{ phase: "fork-sync", batch: "01" }]);
+    expect(readRollingState(repo.path, outputDir).appendHistory).toEqual([
+      {
+        at: "2026-05-09T12:00:00.000Z",
+        from: plan.metadata.forkHead,
+        to: forkHead,
+        commits: pendingCommits,
+        lastCompletedBatch: "01",
+        checks: ["pnpm check --batch 01"],
+      },
+    ]);
   });
 });
 
