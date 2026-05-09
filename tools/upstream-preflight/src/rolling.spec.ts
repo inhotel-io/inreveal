@@ -1080,6 +1080,122 @@ describe("rolling fork sync", () => {
     expect(output.join("\n")).toContain("Synced 1 fork commits");
   });
 
+  it("refuses continue after HEAD is reset before the active fork sync target", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+    });
+    const errors: string[] = [];
+    const pendingCommits = repo
+      .git("rev-list", "--reverse", `${plan.metadata.forkHead}..main`)
+      .split("\n")
+      .filter(Boolean);
+    const forkHead = repo.git("rev-parse", "main");
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    repo.git("cherry-pick", ...pendingCommits);
+    const state = validStateFromPlan(plan, undefined, {
+      activeForkSync: {
+        status: "checks-failed",
+        from: plan.metadata.forkHead,
+        to: forkHead,
+        commits: pendingCommits,
+        preSyncHead: plan.metadata.forkHead,
+      },
+      checkHistory: [
+        {
+          at: "2026-05-09T13:00:00.000Z",
+          phase: "fork-sync",
+          commands: ["pnpm check"],
+          ok: false,
+        },
+      ],
+    });
+    writeRollingState(repo.path, state, outputDir);
+    const statePath = rollingStatePath(repo.path, outputDir);
+    const beforeState = fs.readFileSync(statePath, "utf8");
+    repo.git("reset", "--hard", plan.metadata.forkHead);
+
+    const exitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      continue: true,
+      runChecks: () => {
+        throw new Error("checks must not run when HEAD lost sync commits");
+      },
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("Cannot continue fork sync");
+    expect(errors.join("\n")).toContain(
+      `current HEAD ${plan.metadata.forkHead} does not contain recorded fork sync target ${forkHead}`,
+    );
+    expect(fs.readFileSync(statePath, "utf8")).toBe(beforeState);
+    expect(readRollingState(repo.path, outputDir)).toEqual(state);
+  });
+
+  it("continues after a fix commit on top of the active fork sync target", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+    });
+    const output: string[] = [];
+    const pendingCommits = repo
+      .git("rev-list", "--reverse", `${plan.metadata.forkHead}..main`)
+      .split("\n")
+      .filter(Boolean);
+    const forkHead = repo.git("rev-parse", "main");
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.metadata.forkHead,
+    );
+    repo.git("cherry-pick", ...pendingCommits);
+    repo.write("fix.txt", "follow-up fix\n");
+    const fixHead = repo.commit("fix fork sync checks");
+    writeRollingState(
+      repo.path,
+      validStateFromPlan(plan, undefined, {
+        activeForkSync: {
+          status: "checks-failed",
+          from: plan.metadata.forkHead,
+          to: forkHead,
+          commits: pendingCommits,
+          preSyncHead: plan.metadata.forkHead,
+        },
+        checkHistory: [
+          {
+            at: "2026-05-09T13:00:00.000Z",
+            phase: "fork-sync",
+            commands: ["pnpm check"],
+            ok: false,
+          },
+        ],
+      }),
+      outputDir,
+    );
+
+    const exitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      continue: true,
+      now: () => "2026-05-09T14:00:00.000Z",
+      runChecks: () => ({ ok: true, commands: ["pnpm check"], output: "ok" }),
+      write: (message) => output.push(message),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(repo.git("rev-parse", "HEAD")).toBe(fixHead);
+    expect(readRollingState(repo.path, outputDir).integratedForkHead).toBe(
+      forkHead,
+    );
+    expect(output.join("\n")).toContain("Synced 1 fork commits");
+  });
+
   it("refuses to sync a rewritten fork ref without mutating rolling state", () => {
     const { repo, outputDir, plan } = createRepoWithPlan({
       forkCommitsAfterStart: 1,
@@ -1160,6 +1276,76 @@ describe("rolling fork sync", () => {
     expect(readRollingState(repo.path, outputDir).appendHistory).toEqual([
       {
         at: "2026-05-09T12:00:00.000Z",
+        from: plan.metadata.forkHead,
+        to: forkHead,
+        commits: pendingCommits,
+        lastCompletedBatch: "01",
+        checks: ["pnpm check --batch 01"],
+      },
+    ]);
+  });
+
+  it("preserves completed upstream batch context when continuing failed fork sync checks", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+      upstreamCommits: 2,
+    });
+    const checkContexts: Array<{ phase: "fork-sync"; batch?: string }> = [];
+    const pendingCommits = repo
+      .git("rev-list", "--reverse", `${plan.metadata.forkHead}..main`)
+      .split("\n")
+      .filter(Boolean);
+    const forkHead = repo.git("rev-parse", "main");
+    repo.git(
+      "checkout",
+      "-b",
+      "rebase/upstream-2026-05",
+      plan.batches[0].tipSha,
+    );
+    writeRollingState(repo.path, validStateFromPlan(plan), outputDir);
+
+    const failedExitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      now: () => "2026-05-09T12:00:00.000Z",
+      fetchFork: () => undefined,
+      runChecks: (context) => {
+        checkContexts.push(context);
+        return {
+          ok: false,
+          commands: ["pnpm check --batch 01"],
+          output: "failed",
+        };
+      },
+    });
+
+    expect(failedExitCode).toBe(1);
+    expect(checkContexts).toEqual([{ phase: "fork-sync", batch: "01" }]);
+    expect(readRollingState(repo.path, outputDir).appendHistory).toEqual([]);
+
+    const continueExitCode = runRollingSyncForkMainCommand({
+      repoPath: repo.path,
+      outputDir,
+      continue: true,
+      now: () => "2026-05-09T12:30:00.000Z",
+      runChecks: (context) => {
+        checkContexts.push(context);
+        return {
+          ok: true,
+          commands: ["pnpm check --batch 01"],
+          output: "ok",
+        };
+      },
+    });
+
+    expect(continueExitCode).toBe(0);
+    expect(checkContexts).toEqual([
+      { phase: "fork-sync", batch: "01" },
+      { phase: "fork-sync", batch: "01" },
+    ]);
+    expect(readRollingState(repo.path, outputDir).appendHistory).toEqual([
+      {
+        at: "2026-05-09T12:30:00.000Z",
         from: plan.metadata.forkHead,
         to: forkHead,
         commits: pendingCommits,

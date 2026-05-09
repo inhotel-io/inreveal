@@ -329,12 +329,19 @@ export function runRollingSyncForkMainCommand(
           "No active fork sync to continue; run make upstream-sync-fork-main without ROLLING_CONTINUE=1 to start a fork sync.",
         );
       }
+      const head = revParse(options.repoPath, "HEAD");
+      if (!activeForkSyncIsApplied(options.repoPath, state.activeForkSync)) {
+        throw new Error(
+          `Cannot continue fork sync: current HEAD ${head} does not contain recorded fork sync target ${state.activeForkSync.to}. Restore or reapply the synced fork commits before continuing.`,
+        );
+      }
+      const lastCompletedBatch = lastCompletedBatchFromPersistedPlan(options);
 
       return finishRollingForkSync(
         options,
         state,
         state.activeForkSync,
-        undefined,
+        lastCompletedBatch,
         write,
       );
     }
@@ -345,10 +352,7 @@ export function runRollingSyncForkMainCommand(
       );
     }
 
-    const plan = readPersistedBatchPlan(options.repoPath, options.outputDir);
-    validatePersistedBatchPlan(plan, options.repoPath);
-    const selection = selectNextBatch(plan, options.repoPath);
-    const lastCompletedBatch = lastCompletedBatchId(selection);
+    const lastCompletedBatch = lastCompletedBatchFromPersistedPlan(options);
 
     (options.fetchFork ?? defaultFetchFork)(options.repoPath, state.forkRef);
     const currentForkHead = revParse(options.repoPath, state.forkRef);
@@ -645,6 +649,40 @@ function defaultFetchFork(repoPath: string, forkRef: string): void {
 
 function defaultRunChecks(): CheckResult {
   return { ok: true, commands: [] };
+}
+
+function activeForkSyncIsApplied(
+  repoPath: string,
+  activeForkSync: NonNullable<RollingState["activeForkSync"]>,
+): boolean {
+  if (isAncestor(repoPath, activeForkSync.to, "HEAD")) {
+    return true;
+  }
+
+  const cherryOutput = runGit(repoPath, [
+    "cherry",
+    "HEAD",
+    activeForkSync.to,
+    activeForkSync.from,
+  ]);
+  const equivalenceBySha = new Map(
+    cherryOutput
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => [line.slice(2), line.startsWith("- ")]),
+  );
+
+  return activeForkSync.commits.every(
+    (commit) => equivalenceBySha.get(commit) === true,
+  );
+}
+
+function lastCompletedBatchFromPersistedPlan(
+  options: Pick<RollingSyncOptions, "repoPath" | "outputDir">,
+): string | undefined {
+  const plan = readPersistedBatchPlan(options.repoPath, options.outputDir);
+  validatePersistedBatchPlan(plan, options.repoPath);
+  return lastCompletedBatchId(selectNextBatch(plan, options.repoPath));
 }
 
 function lastCompletedBatchId(
