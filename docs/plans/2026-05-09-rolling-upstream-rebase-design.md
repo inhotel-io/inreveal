@@ -322,12 +322,12 @@ Responsibilities:
 Add Git helpers for:
 
 ```ts
-isCleanWorktree()
-hasGitOperationInProgress()
-currentBranch()
-listCommits(range)
-commitSubjects(range)
-cherryEquivalent(leftRange, rightRange)
+isCleanWorktree();
+hasGitOperationInProgress();
+currentBranch();
+listCommits(range);
+commitSubjects(range);
+cherryEquivalent(leftRange, rightRange);
 ```
 
 `cherryEquivalent` can wrap `git cherry` or equivalent patch-id logic.
@@ -460,13 +460,13 @@ Phase 2, only if needed:
 
 ## Risks And Mitigations
 
-| Risk | Mitigation |
-| --- | --- |
+| Risk                                                                                                             | Mitigation                                                                                                          |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Cherry-picking fork commits after upstream batches creates different conflicts than the final rebase would have. | Allow fork sync only at batch boundaries and rerun fork checks plus the last completed batch audit after each sync. |
-| PR/title matching misses squash commits or edited commit messages. | Combine cursor, title, and patch-equivalence checks, then print ambiguous rows for manual review. |
-| The branch grows stale against upstream. | Freeze the upstream target in v1 and require an explicit follow-up flow to extend it. |
-| Operators bypass the rolling commands. | Make final-check and push-rebase integration the force-push guardrails. |
-| State gets out of sync after a failed sync. | Record `activeForkSync` after successful cherry-picks and require continue mode before upstream work can proceed. |
+| PR/title matching misses squash commits or edited commit messages.                                               | Combine cursor, title, and patch-equivalence checks, then print ambiguous rows for manual review.                   |
+| The branch grows stale against upstream.                                                                         | Freeze the upstream target in v1 and require an explicit follow-up flow to extend it.                               |
+| Operators bypass the rolling commands.                                                                           | Make final-check and push-rebase integration the force-push guardrails.                                             |
+| State gets out of sync after a failed sync.                                                                      | Record `activeForkSync` after successful cherry-picks and require continue mode before upstream work can proceed.   |
 
 ## Open Questions
 

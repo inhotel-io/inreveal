@@ -22,6 +22,7 @@
 ## Task 1: Add Rolling State Validation Tests
 
 **Files:**
+
 - Create: `tools/upstream-preflight/src/rolling.spec.ts`
 - Create later: `tools/upstream-preflight/src/rolling.ts`
 
@@ -30,77 +31,73 @@
 Create `tools/upstream-preflight/src/rolling.spec.ts` with validation-only tests first:
 
 ```ts
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { describe, expect, it } from "vitest";
-import { createTempRepo } from "../test/fixtures";
-import {
-  readRollingState,
-  rollingStatePath,
-  validateRollingState,
-  writeRollingState,
-} from "./rolling";
-import type { RollingState } from "./rolling";
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { createTempRepo } from '../test/fixtures';
+import { readRollingState, rollingStatePath, validateRollingState, writeRollingState } from './rolling';
+import type { RollingState } from './rolling';
 
-describe("rolling state validation", () => {
-  it("accepts a valid v1 rolling state", () => {
-    expect(validateRollingState(validState(), "state.json")).toEqual(
-      validState(),
-    );
+describe('rolling state validation', () => {
+  it('accepts a valid v1 rolling state', () => {
+    expect(validateRollingState(validState(), 'state.json')).toEqual(validState());
   });
 
-  it("rejects invalid shape with actionable errors", () => {
-    expect(() => validateRollingState({ version: 2 }, "state.json")).toThrow(
-      "Invalid rolling state state.json: version must be 1",
+  it('rejects invalid shape with actionable errors', () => {
+    expect(() => validateRollingState({ version: 2 }, 'state.json')).toThrow(
+      'Invalid rolling state state.json: version must be 1',
+    );
+    expect(() => validateRollingState({ ...validState(), upstreamTargetHead: 'abc' }, 'state.json')).toThrow(
+      'upstreamTargetHead must be a full 40-character SHA',
+    );
+    expect(() => validateRollingState({ ...validState(), startedAt: 'not-a-date' }, 'state.json')).toThrow(
+      'startedAt must be an ISO timestamp',
     );
     expect(() =>
-      validateRollingState({ ...validState(), upstreamTargetHead: "abc" }, "state.json"),
-    ).toThrow("upstreamTargetHead must be a full 40-character SHA");
-    expect(() =>
-      validateRollingState({ ...validState(), startedAt: "not-a-date" }, "state.json"),
-    ).toThrow("startedAt must be an ISO timestamp");
-    expect(() =>
-      validateRollingState({
-        ...validState(),
-        activeForkSync: {
-          status: "checks-failed",
-          from: sha("222222222"),
-          to: "abc",
-          commits: [],
-          preSyncHead: sha("333333333"),
+      validateRollingState(
+        {
+          ...validState(),
+          activeForkSync: {
+            status: 'checks-failed',
+            from: sha('222222222'),
+            to: 'abc',
+            commits: [],
+            preSyncHead: sha('333333333'),
+          },
         },
-      }, "state.json"),
-    ).toThrow("activeForkSync.to must be a full 40-character SHA");
+        'state.json',
+      ),
+    ).toThrow('activeForkSync.to must be a full 40-character SHA');
   });
 
-  it("reads and writes rolling state under git metadata", () => {
+  it('reads and writes rolling state under git metadata', () => {
     const repo = createTempRepo();
-    repo.write("README.md", "base");
-    repo.commit("base commit");
+    repo.write('README.md', 'base');
+    repo.commit('base commit');
     const state = validState();
 
     const written = writeRollingState(repo.path, state);
     const read = readRollingState(repo.path);
 
     expect(written).toBe(rollingStatePath(repo.path));
-    expect(written).toContain(".git/upstream-preflight/rolling-state.json");
+    expect(written).toContain('.git/upstream-preflight/rolling-state.json');
     expect(read).toEqual(state);
-    expect(repo.git("status", "--short")).toBe("");
+    expect(repo.git('status', '--short')).toBe('');
   });
 });
 
 function validState(overrides: Partial<RollingState> = {}): RollingState {
   return {
     version: 1,
-    mode: "rolling-upstream-rebase",
-    branch: "rebase/upstream-2026-05",
-    upstreamRef: "upstream/main",
-    upstreamTargetHead: sha("111111111"),
-    forkRef: "origin/main",
-    startedForkHead: sha("222222222"),
-    integratedForkHead: sha("222222222"),
-    startedAt: "2026-05-09T07:30:00.000Z",
+    mode: 'rolling-upstream-rebase',
+    branch: 'rebase/upstream-2026-05',
+    upstreamRef: 'upstream/main',
+    upstreamTargetHead: sha('111111111'),
+    forkRef: 'origin/main',
+    startedForkHead: sha('222222222'),
+    integratedForkHead: sha('222222222'),
+    startedAt: '2026-05-09T07:30:00.000Z',
     appendHistory: [],
     checkHistory: [],
     ...overrides,
@@ -108,7 +105,7 @@ function validState(overrides: Partial<RollingState> = {}): RollingState {
 }
 
 function sha(prefix: string): string {
-  return `${prefix}${"0".repeat(40 - prefix.length)}`;
+  return `${prefix}${'0'.repeat(40 - prefix.length)}`;
 }
 ```
 
@@ -127,15 +124,15 @@ Expected: FAIL because `./rolling` does not exist.
 Create `tools/upstream-preflight/src/rolling.ts`:
 
 ```ts
-import fs from "node:fs";
-import path from "node:path";
-import { getGitPath } from "./git";
+import fs from 'node:fs';
+import path from 'node:path';
+import { getGitPath } from './git';
 
 const fullShaPattern = /^[0-9a-f]{40}$/i;
 
 export type RollingState = {
   version: 1;
-  mode: "rolling-upstream-rebase";
+  mode: 'rolling-upstream-rebase';
   branch: string;
   upstreamRef: string;
   upstreamTargetHead: string;
@@ -145,7 +142,7 @@ export type RollingState = {
   startedAt: string;
   lastForkSyncAt?: string;
   activeForkSync?: {
-    status: "checks-failed";
+    status: 'checks-failed';
     from: string;
     to: string;
     commits: string[];
@@ -161,103 +158,81 @@ export type RollingState = {
   }>;
   checkHistory?: Array<{
     at: string;
-    phase: "fork-sync" | "final";
+    phase: 'fork-sync' | 'final';
     commands: string[];
     ok: boolean;
   }>;
 };
 
 export function rollingStatePath(repoPath: string, outputDir?: string): string {
-  return path.join(
-    outputDir ?? getGitPath(repoPath, "upstream-preflight"),
-    "rolling-state.json",
-  );
+  return path.join(outputDir ?? getGitPath(repoPath, 'upstream-preflight'), 'rolling-state.json');
 }
 
-export function readRollingState(
-  repoPath: string,
-  outputDir?: string,
-): RollingState {
+export function readRollingState(repoPath: string, outputDir?: string): RollingState {
   const statePath = rollingStatePath(repoPath, outputDir);
   if (!fs.existsSync(statePath)) {
     throw new Error(`Missing rolling state ${statePath}; run make upstream-rolling-start first.`);
   }
 
-  return validateRollingState(
-    JSON.parse(fs.readFileSync(statePath, "utf8")),
-    statePath,
-  );
+  return validateRollingState(JSON.parse(fs.readFileSync(statePath, 'utf8')), statePath);
 }
 
-export function writeRollingState(
-  repoPath: string,
-  state: RollingState,
-  outputDir?: string,
-): string {
+export function writeRollingState(repoPath: string, state: RollingState, outputDir?: string): string {
   const statePath = rollingStatePath(repoPath, outputDir);
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
-  fs.writeFileSync(
-    statePath,
-    `${JSON.stringify(validateRollingState(state, "rolling state"), null, 2)}\n`,
-  );
+  fs.writeFileSync(statePath, `${JSON.stringify(validateRollingState(state, 'rolling state'), null, 2)}\n`);
   return statePath;
 }
 
-export function validateRollingState(
-  value: unknown,
-  source: string,
-): RollingState {
+export function validateRollingState(value: unknown, source: string): RollingState {
   assertRecord(value, source);
   if (value.version !== 1) throw new Error(`Invalid rolling state ${source}: version must be 1`);
-  if (value.mode !== "rolling-upstream-rebase") {
+  if (value.mode !== 'rolling-upstream-rebase') {
     throw new Error(`Invalid rolling state ${source}: mode must be rolling-upstream-rebase`);
   }
 
-  for (const key of ["branch", "upstreamRef", "forkRef", "startedAt"]) {
+  for (const key of ['branch', 'upstreamRef', 'forkRef', 'startedAt']) {
     assertString(value[key], source, key);
   }
-  for (const key of ["upstreamTargetHead", "startedForkHead", "integratedForkHead"]) {
+  for (const key of ['upstreamTargetHead', 'startedForkHead', 'integratedForkHead']) {
     assertFullSha(value[key], source, key);
   }
-  assertIsoTimestamp(value.startedAt, source, "startedAt");
+  assertIsoTimestamp(value.startedAt, source, 'startedAt');
   if (value.lastForkSyncAt !== undefined) {
-    assertIsoTimestamp(value.lastForkSyncAt, source, "lastForkSyncAt");
+    assertIsoTimestamp(value.lastForkSyncAt, source, 'lastForkSyncAt');
   }
   if (value.activeForkSync !== undefined) {
     const activeForkSync = value.activeForkSync;
     assertRecord(activeForkSync, `${source}: activeForkSync`);
-    if (activeForkSync.status !== "checks-failed") {
+    if (activeForkSync.status !== 'checks-failed') {
       throw new Error(`Invalid rolling state ${source}: activeForkSync.status must be checks-failed`);
     }
-    for (const key of ["from", "to", "preSyncHead"]) {
+    for (const key of ['from', 'to', 'preSyncHead']) {
       assertFullSha(activeForkSync[key], source, `activeForkSync.${key}`);
     }
-    assertStringArray(activeForkSync.commits, source, "activeForkSync.commits");
+    assertStringArray(activeForkSync.commits, source, 'activeForkSync.commits');
     for (const commit of activeForkSync.commits) {
-      assertFullSha(commit, source, "activeForkSync.commits[]");
+      assertFullSha(commit, source, 'activeForkSync.commits[]');
     }
   }
 
   return value as RollingState;
 }
 
-function assertRecord(
-  value: unknown,
-  source: string,
-): asserts value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+function assertRecord(value: unknown, source: string): asserts value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`Invalid rolling state ${source}: object is required`);
   }
 }
 
 function assertString(value: unknown, source: string, key: string): void {
-  if (typeof value !== "string" || value.length === 0) {
+  if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`Invalid rolling state ${source}: ${key} is required`);
   }
 }
 
 function assertFullSha(value: unknown, source: string, key: string): void {
-  if (typeof value !== "string" || !fullShaPattern.test(value)) {
+  if (typeof value !== 'string' || !fullShaPattern.test(value)) {
     throw new Error(`Invalid rolling state ${source}: ${key} must be a full 40-character SHA`);
   }
 }
@@ -270,7 +245,7 @@ function assertIsoTimestamp(value: unknown, source: string, key: string): void {
 }
 
 function assertStringArray(value: unknown, source: string, key: string): asserts value is string[] {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
     throw new Error(`Invalid rolling state ${source}: ${key} must be an array of strings`);
   }
 }
@@ -296,6 +271,7 @@ git commit -m "test: add rolling rebase state validation"
 ## Task 2: Add Git Helper Tests And Implementation
 
 **Files:**
+
 - Modify: `tools/upstream-preflight/src/git.spec.ts`
 - Modify: `tools/upstream-preflight/src/git.ts`
 
@@ -311,48 +287,48 @@ import {
   hasGitOperationInProgress,
   isCleanWorktree,
   listCommits,
-} from "./git";
+} from './git';
 
-it("reports branch, clean state, and in-progress git operations", () => {
+it('reports branch, clean state, and in-progress git operations', () => {
   const repo = createTempRepo();
-  repo.write("README.md", "base");
-  repo.commit("base commit");
+  repo.write('README.md', 'base');
+  repo.commit('base commit');
 
-  expect(currentBranch(repo.path)).toBe("main");
+  expect(currentBranch(repo.path)).toBe('main');
   expect(isCleanWorktree(repo.path)).toBe(true);
-  repo.write("dirty.txt", "dirty");
+  repo.write('dirty.txt', 'dirty');
   expect(isCleanWorktree(repo.path)).toBe(false);
   expect(hasGitOperationInProgress(repo.path)).toBe(false);
 });
 
-it("lists commits and subjects in chronological order", () => {
+it('lists commits and subjects in chronological order', () => {
   const repo = createTempRepo();
-  repo.write("README.md", "base");
-  const base = repo.commit("base commit");
-  repo.write("one.txt", "one");
-  const one = repo.commit("feat: one (#1)");
-  repo.write("two.txt", "two");
-  const two = repo.commit("fix: two (#2)");
+  repo.write('README.md', 'base');
+  const base = repo.commit('base commit');
+  repo.write('one.txt', 'one');
+  const one = repo.commit('feat: one (#1)');
+  repo.write('two.txt', 'two');
+  const two = repo.commit('fix: two (#2)');
 
   expect(listCommits(repo.path, `${base}..HEAD`).map((commit) => commit.sha)).toEqual([one, two]);
   expect(commitSubjects(repo.path, `${base}..HEAD`)).toEqual([
-    { sha: one, subject: "feat: one (#1)" },
-    { sha: two, subject: "fix: two (#2)" },
+    { sha: one, subject: 'feat: one (#1)' },
+    { sha: two, subject: 'fix: two (#2)' },
   ]);
 });
 
-it("reports cherry-equivalent patches", () => {
+it('reports cherry-equivalent patches', () => {
   const repo = createTempRepo();
-  repo.write("README.md", "base");
-  const base = repo.commit("base commit");
-  repo.git("checkout", "-b", "left");
-  repo.write("feature.txt", "same");
-  repo.commit("feat: same patch");
-  repo.git("checkout", "-b", "right", base);
-  repo.write("feature.txt", "same");
-  repo.commit("feat: rebased same patch");
+  repo.write('README.md', 'base');
+  const base = repo.commit('base commit');
+  repo.git('checkout', '-b', 'left');
+  repo.write('feature.txt', 'same');
+  repo.commit('feat: same patch');
+  repo.git('checkout', '-b', 'right', base);
+  repo.write('feature.txt', 'same');
+  repo.commit('feat: rebased same patch');
 
-  const result = cherryEquivalent(repo.path, "left", "right");
+  const result = cherryEquivalent(repo.path, 'left', 'right');
   expect(result.equivalent.length).toBe(1);
   expect(result.missing).toEqual([]);
 });
@@ -381,21 +357,17 @@ export type CherryEquivalentResult = {
 };
 
 export function currentBranch(cwd: string): string {
-  return runGit(cwd, ["branch", "--show-current"]);
+  return runGit(cwd, ['branch', '--show-current']);
 }
 
 export function isCleanWorktree(cwd: string): boolean {
-  return runGit(cwd, ["status", "--porcelain"]) === "";
+  return runGit(cwd, ['status', '--porcelain']) === '';
 }
 
 export function hasGitOperationInProgress(cwd: string): boolean {
-  return [
-    "rebase-merge",
-    "rebase-apply",
-    "MERGE_HEAD",
-    "CHERRY_PICK_HEAD",
-    "REVERT_HEAD",
-  ].some((gitPath) => fs.existsSync(getGitPath(cwd, gitPath)));
+  return ['rebase-merge', 'rebase-apply', 'MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD'].some((gitPath) =>
+    fs.existsSync(getGitPath(cwd, gitPath)),
+  );
 }
 
 export function listCommits(cwd: string, range: string): GitCommit[] {
@@ -406,24 +378,16 @@ export function commitSubjects(cwd: string, range: string): CommitSubject[] {
   return listCommits(cwd, range).map(({ sha, subject }) => ({ sha, subject }));
 }
 
-export function cherryEquivalent(
-  cwd: string,
-  upstream: string,
-  head: string,
-): CherryEquivalentResult {
-  const raw = runGit(cwd, ["cherry", upstream, head])
-    .split("\n")
+export function cherryEquivalent(cwd: string, upstream: string, head: string): CherryEquivalentResult {
+  const raw = runGit(cwd, ['cherry', upstream, head])
+    .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
 
   return {
     raw,
-    equivalent: raw
-      .filter((line) => line.startsWith("- "))
-      .map((line) => line.slice(2)),
-    missing: raw
-      .filter((line) => line.startsWith("+ "))
-      .map((line) => line.slice(2)),
+    equivalent: raw.filter((line) => line.startsWith('- ')).map((line) => line.slice(2)),
+    missing: raw.filter((line) => line.startsWith('+ ')).map((line) => line.slice(2)),
   };
 }
 ```
@@ -450,6 +414,7 @@ git commit -m "test: add rolling rebase git helpers"
 ## Task 3: Pin Batch-Scoped Audit Scope To Persisted Plans
 
 **Files:**
+
 - Modify: `tools/upstream-preflight/src/batch.spec.ts`
 - Modify: `tools/upstream-preflight/src/batch.ts`
 - Modify later: `tools/upstream-preflight/src/index.ts`
@@ -459,19 +424,19 @@ git commit -m "test: add rolling rebase git helpers"
 Add to `tools/upstream-preflight/src/batch.spec.ts`:
 
 ```ts
-import { readPersistedBatchAuditScope } from "./batch";
+import { readPersistedBatchAuditScope } from './batch';
 
-it("reads batch audit scope from the persisted plan after refs move", () => {
+it('reads batch audit scope from the persisted plan after refs move', () => {
   const { repo, outputDir, plan } = createRepoWithPersistedPlan({ upstreamCommits: 2 });
-  repo.git("checkout", "upstream");
-  repo.write("future.txt", "future");
-  repo.commit("future upstream");
-  repo.git("checkout", "main");
+  repo.git('checkout', 'upstream');
+  repo.write('future.txt', 'future');
+  repo.commit('future upstream');
+  repo.git('checkout', 'main');
 
-  const scope = readPersistedBatchAuditScope(repo.path, outputDir, "01");
+  const scope = readPersistedBatchAuditScope(repo.path, outputDir, '01');
 
   expect(scope).toEqual({
-    batch: "01",
+    batch: '01',
     upstreamTouchedFiles: plan.batches[0].commits.flatMap((commit) => commit.files),
   });
 });
@@ -542,11 +507,7 @@ Use this pattern:
 ```ts
 const manifest = loadManifest(resolveCliPath(options.manifest));
 const auditScope = batch
-  ? readPersistedBatchAuditScope(
-      process.cwd(),
-      options.planDir ? resolveCliPath(options.planDir) : undefined,
-      batch,
-    )
+  ? readPersistedBatchAuditScope(process.cwd(), options.planDir ? resolveCliPath(options.planDir) : undefined, batch)
   : undefined;
 ```
 
@@ -578,6 +539,7 @@ git commit -m "fix: pin batch audit scope to persisted plans"
 ## Task 4: Add Rolling Start Tests And Command
 
 **Files:**
+
 - Modify: `tools/upstream-preflight/src/rolling.spec.ts`
 - Modify: `tools/upstream-preflight/src/rolling.ts`
 
@@ -586,39 +548,39 @@ git commit -m "fix: pin batch audit scope to persisted plans"
 Add tests:
 
 ```ts
-import { planBatches, writeBatchPlanReports } from "./batch";
-import { runRollingStartCommand } from "./rolling";
+import { planBatches, writeBatchPlanReports } from './batch';
+import { runRollingStartCommand } from './rolling';
 
-describe("rolling start", () => {
-  it("refuses to start on main", () => {
+describe('rolling start', () => {
+  it('refuses to start on main', () => {
     const { repo, outputDir } = createRepoWithPlan();
     const errors: string[] = [];
 
     const exitCode = runRollingStartCommand({
       repoPath: repo.path,
       outputDir,
-      now: () => "2026-05-09T08:00:00.000Z",
+      now: () => '2026-05-09T08:00:00.000Z',
       writeError: (message) => errors.push(message),
     });
 
     expect(exitCode).toBe(1);
-    expect(errors.join("\n")).toContain("Refusing to start rolling rebase on main");
+    expect(errors.join('\n')).toContain('Refusing to start rolling rebase on main');
   });
 
-  it("writes rolling state from the persisted batch plan", () => {
+  it('writes rolling state from the persisted batch plan', () => {
     const { repo, outputDir, plan } = createRepoWithPlan();
-    repo.git("checkout", "-b", "rebase/upstream-2026-05");
+    repo.git('checkout', '-b', 'rebase/upstream-2026-05');
 
     const exitCode = runRollingStartCommand({
       repoPath: repo.path,
       outputDir,
-      now: () => "2026-05-09T08:00:00.000Z",
+      now: () => '2026-05-09T08:00:00.000Z',
     });
 
     expect(exitCode).toBe(0);
     expect(readRollingState(repo.path, outputDir)).toMatchObject({
       version: 1,
-      branch: "rebase/upstream-2026-05",
+      branch: 'rebase/upstream-2026-05',
       upstreamRef: plan.metadata.upstreamRef,
       upstreamTargetHead: plan.metadata.upstreamHead,
       forkRef: plan.metadata.forkRef,
@@ -636,7 +598,7 @@ copy a small `classifiedCommit()` helper from `batch.spec.ts`.
 ```ts
 function validStateFromPlan(
   plan: BatchPlan,
-  branch = "rebase/upstream-2026-05",
+  branch = 'rebase/upstream-2026-05',
   overrides: Partial<RollingState> = {},
 ): RollingState {
   return validState({
@@ -650,32 +612,30 @@ function validStateFromPlan(
   });
 }
 
-function createRepoWithPlan(
-  options: { forkCommitsAfterStart?: number; upstreamCommits?: number } = {},
-) {
+function createRepoWithPlan(options: { forkCommitsAfterStart?: number; upstreamCommits?: number } = {}) {
   const repo = createTempRepo();
-  repo.write("README.md", "base");
-  const base = repo.commit("base commit");
-  repo.git("checkout", "-b", "upstream");
+  repo.write('README.md', 'base');
+  const base = repo.commit('base commit');
+  repo.git('checkout', '-b', 'upstream');
 
   const upstreamCommits: ClassifiedCommit[] = [];
   for (let index = 1; index <= (options.upstreamCommits ?? 1); index++) {
     repo.write(`upstream-${index}.txt`, `upstream ${index}`);
     const commitSha = repo.commit(`upstream commit ${index}`);
-    upstreamCommits.push(classifiedCommit(commitSha, "low"));
+    upstreamCommits.push(classifiedCommit(commitSha, 'low'));
   }
 
-  repo.git("checkout", "main");
-  repo.write("fork.txt", "fork");
-  const forkHead = repo.commit("fork commit (#1)");
+  repo.git('checkout', 'main');
+  repo.write('fork.txt', 'fork');
+  const forkHead = repo.commit('fork commit (#1)');
 
   const plan = planBatches(upstreamCommits, {
     metadata: {
-      generatedAt: "2026-05-09T07:00:00.000Z",
+      generatedAt: '2026-05-09T07:00:00.000Z',
       mergeBase: base,
-      upstreamRef: "upstream",
+      upstreamRef: 'upstream',
       upstreamHead: upstreamCommits.at(-1)?.sha ?? base,
-      forkRef: "main",
+      forkRef: 'main',
       forkHead,
       manifestForkBaseline: forkHead,
       softCap: 1,
@@ -688,7 +648,7 @@ function createRepoWithPlan(
     repo.commit(`feat: fork after start ${index} (#${index + 1})`);
   }
 
-  const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "rolling-plan-"));
+  const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rolling-plan-'));
   writeBatchPlanReports(plan, outputDir);
   return { repo, outputDir, plan };
 }
@@ -709,8 +669,8 @@ Expected: FAIL because `runRollingStartCommand` does not exist.
 In `rolling.ts`, import:
 
 ```ts
-import { currentBranch, isCleanWorktree, revParse } from "./git";
-import { readPersistedBatchPlan, validatePersistedBatchPlan } from "./batch";
+import { currentBranch, isCleanWorktree, revParse } from './git';
+import { readPersistedBatchPlan, validatePersistedBatchPlan } from './batch';
 ```
 
 Add:
@@ -731,8 +691,9 @@ export function runRollingStartCommand(options: RollingCommandOptions): number {
 
   try {
     const branch = currentBranch(options.repoPath);
-    if (branch === "main") throw new Error("Refusing to start rolling rebase on main");
-    if (!isCleanWorktree(options.repoPath)) throw new Error("Worktree is dirty; commit or stash changes before starting rolling rebase.");
+    if (branch === 'main') throw new Error('Refusing to start rolling rebase on main');
+    if (!isCleanWorktree(options.repoPath))
+      throw new Error('Worktree is dirty; commit or stash changes before starting rolling rebase.');
 
     const statePath = rollingStatePath(options.repoPath, options.outputDir);
     if (fs.existsSync(statePath) && !options.resume) {
@@ -742,14 +703,16 @@ export function runRollingStartCommand(options: RollingCommandOptions): number {
     const plan = readPersistedBatchPlan(options.repoPath, options.outputDir);
     validatePersistedBatchPlan(plan, options.repoPath);
 
-    const head = revParse(options.repoPath, "HEAD");
+    const head = revParse(options.repoPath, 'HEAD');
     if (head !== plan.metadata.forkHead && !options.resume) {
-      throw new Error(`HEAD ${head} does not match planned fork head ${plan.metadata.forkHead}; pass --resume only after verifying branch state.`);
+      throw new Error(
+        `HEAD ${head} does not match planned fork head ${plan.metadata.forkHead}; pass --resume only after verifying branch state.`,
+      );
     }
 
     const state: RollingState = {
       version: 1,
-      mode: "rolling-upstream-rebase",
+      mode: 'rolling-upstream-rebase',
       branch,
       upstreamRef: plan.metadata.upstreamRef,
       upstreamTargetHead: plan.metadata.upstreamHead,
@@ -793,6 +756,7 @@ git commit -m "feat: start rolling upstream rebase state"
 ## Task 5: Add Rolling Status Tests And Command
 
 **Files:**
+
 - Modify: `tools/upstream-preflight/src/rolling.spec.ts`
 - Modify: `tools/upstream-preflight/src/rolling.ts`
 
@@ -801,25 +765,29 @@ git commit -m "feat: start rolling upstream rebase state"
 Add:
 
 ```ts
-import { renderRollingStatus, runRollingStatusCommand } from "./rolling";
+import { renderRollingStatus, runRollingStatusCommand } from './rolling';
 
-it("renders rolling status with completed batches and pending fork commits", () => {
+it('renders rolling status with completed batches and pending fork commits', () => {
   const { repo, outputDir, plan } = createRepoWithPlan({ forkCommitsAfterStart: 2 });
-  repo.git("checkout", "-b", "rebase/upstream-2026-05", plan.batches[0].tipSha);
-  writeRollingState(repo.path, validState({
-    branch: "rebase/upstream-2026-05",
-    upstreamRef: plan.metadata.upstreamRef,
-    upstreamTargetHead: plan.metadata.upstreamHead,
-    forkRef: plan.metadata.forkRef,
-    startedForkHead: plan.metadata.forkHead,
-    integratedForkHead: plan.metadata.forkHead,
-  }), outputDir);
+  repo.git('checkout', '-b', 'rebase/upstream-2026-05', plan.batches[0].tipSha);
+  writeRollingState(
+    repo.path,
+    validState({
+      branch: 'rebase/upstream-2026-05',
+      upstreamRef: plan.metadata.upstreamRef,
+      upstreamTargetHead: plan.metadata.upstreamHead,
+      forkRef: plan.metadata.forkRef,
+      startedForkHead: plan.metadata.forkHead,
+      integratedForkHead: plan.metadata.forkHead,
+    }),
+    outputDir,
+  );
 
   const output = renderRollingStatus({ repoPath: repo.path, outputDir });
 
-  expect(output).toContain("Completed upstream batches: 01 / 01");
-  expect(output).toContain("Fork commits pending: 2");
-  expect(output).toContain("Next action:");
+  expect(output).toContain('Completed upstream batches: 01 / 01');
+  expect(output).toContain('Fork commits pending: 2');
+  expect(output).toContain('Next action:');
 });
 ```
 
@@ -838,36 +806,33 @@ Expected: FAIL because status functions are missing.
 Use existing `selectNextBatch()` against the persisted plan, and `listCommits()` for pending fork commits.
 
 ```ts
-export function renderRollingStatus(options: Pick<RollingCommandOptions, "repoPath" | "outputDir">): string {
+export function renderRollingStatus(options: Pick<RollingCommandOptions, 'repoPath' | 'outputDir'>): string {
   const state = readRollingState(options.repoPath, options.outputDir);
   const plan = readPersistedBatchPlan(options.repoPath, options.outputDir);
   const selection = selectNextBatch(plan, options.repoPath);
   const completed =
-    selection.status === "next"
+    selection.status === 'next'
       ? selection.completedBatchCount
-      : selection.status === "complete"
+      : selection.status === 'complete'
         ? selection.completedBatchCount
         : 0;
-  const pendingForkCommits = listCommits(
-    options.repoPath,
-    `${state.integratedForkHead}..${state.forkRef}`,
-  );
+  const pendingForkCommits = listCommits(options.repoPath, `${state.integratedForkHead}..${state.forkRef}`);
 
   const nextAction = state.activeForkSync
-    ? "run make upstream-sync-fork-main ROLLING_CONTINUE=1"
+    ? 'run make upstream-sync-fork-main ROLLING_CONTINUE=1'
     : pendingForkCommits.length > 0
-      ? "run make upstream-sync-fork-main"
-      : "run make upstream-next-batch";
+      ? 'run make upstream-sync-fork-main'
+      : 'run make upstream-next-batch';
 
   return [
     `Branch: ${state.branch}`,
     `Upstream target: ${state.upstreamRef} @ ${state.upstreamTargetHead.slice(0, 9)}`,
-    `Completed upstream batches: ${String(completed).padStart(2, "0")} / ${String(plan.batches.length).padStart(2, "0")}`,
+    `Completed upstream batches: ${String(completed).padStart(2, '0')} / ${String(plan.batches.length).padStart(2, '0')}`,
     `Integrated fork head: ${state.forkRef} @ ${state.integratedForkHead.slice(0, 9)}`,
     `Current ${state.forkRef}: ${revParse(options.repoPath, state.forkRef).slice(0, 9)}`,
     `Fork commits pending: ${pendingForkCommits.length}`,
     `Next action: ${nextAction}`,
-  ].join("\n");
+  ].join('\n');
 }
 
 export function runRollingStatusCommand(options: RollingCommandOptions): number {
@@ -901,6 +866,7 @@ git commit -m "feat: report rolling upstream rebase status"
 ## Task 6: Block Upstream Batch Selection During Failed Fork Sync
 
 **Files:**
+
 - Modify: `tools/upstream-preflight/src/rolling.spec.ts`
 - Modify: `tools/upstream-preflight/src/rolling.ts`
 - Modify later: `tools/upstream-preflight/src/index.ts`
@@ -910,32 +876,34 @@ git commit -m "feat: report rolling upstream rebase status"
 Add:
 
 ```ts
-import { assertNoActiveRollingSync } from "./rolling";
+import { assertNoActiveRollingSync } from './rolling';
 
-it("allows upstream batch selection when no rolling state exists", () => {
+it('allows upstream batch selection when no rolling state exists', () => {
   const repo = createTempRepo();
-  repo.write("README.md", "base");
-  repo.commit("base commit");
+  repo.write('README.md', 'base');
+  repo.commit('base commit');
 
   expect(() => assertNoActiveRollingSync(repo.path)).not.toThrow();
 });
 
-it("blocks upstream batch selection while a failed fork sync is active", () => {
+it('blocks upstream batch selection while a failed fork sync is active', () => {
   const { repo, outputDir, plan } = createRepoWithPlan();
-  writeRollingState(repo.path, {
-    ...validStateFromPlan(plan, "rebase/upstream-2026-05"),
-    activeForkSync: {
-      status: "checks-failed",
-      from: plan.metadata.forkHead,
-      to: plan.metadata.forkHead,
-      commits: [],
-      preSyncHead: plan.metadata.forkHead,
+  writeRollingState(
+    repo.path,
+    {
+      ...validStateFromPlan(plan, 'rebase/upstream-2026-05'),
+      activeForkSync: {
+        status: 'checks-failed',
+        from: plan.metadata.forkHead,
+        to: plan.metadata.forkHead,
+        commits: [],
+        preSyncHead: plan.metadata.forkHead,
+      },
     },
-  }, outputDir);
-
-  expect(() => assertNoActiveRollingSync(repo.path, outputDir)).toThrow(
-    "A fork sync is waiting for checks",
+    outputDir,
   );
+
+  expect(() => assertNoActiveRollingSync(repo.path, outputDir)).toThrow('A fork sync is waiting for checks');
 });
 ```
 
@@ -954,17 +922,14 @@ Expected: FAIL because `assertNoActiveRollingSync` does not exist.
 Add to `tools/upstream-preflight/src/rolling.ts`:
 
 ```ts
-export function assertNoActiveRollingSync(
-  repoPath: string,
-  outputDir?: string,
-): void {
+export function assertNoActiveRollingSync(repoPath: string, outputDir?: string): void {
   const statePath = rollingStatePath(repoPath, outputDir);
   if (!fs.existsSync(statePath)) return;
 
   const state = readRollingState(repoPath, outputDir);
   if (state.activeForkSync) {
     throw new Error(
-      "A fork sync is waiting for checks; run make upstream-sync-fork-main ROLLING_CONTINUE=1 before selecting the next upstream batch.",
+      'A fork sync is waiting for checks; run make upstream-sync-fork-main ROLLING_CONTINUE=1 before selecting the next upstream batch.',
     );
   }
 }
@@ -985,7 +950,7 @@ Expected: PASS.
 Modify `tools/upstream-preflight/src/index.ts`:
 
 ```ts
-import { assertNoActiveRollingSync } from "./rolling";
+import { assertNoActiveRollingSync } from './rolling';
 ```
 
 In the `next-batch` command action, call the guard before
@@ -993,10 +958,7 @@ In the `next-batch` command action, call the guard before
 
 ```ts
 try {
-  assertNoActiveRollingSync(
-    process.cwd(),
-    options.outputDir ? resolveCliPath(options.outputDir) : undefined,
-  );
+  assertNoActiveRollingSync(process.cwd(), options.outputDir ? resolveCliPath(options.outputDir) : undefined);
 } catch (error) {
   console.error(errorMessage(error));
   process.exitCode = 1;
@@ -1028,6 +990,7 @@ git commit -m "feat: block upstream batches during failed fork sync"
 ## Task 7: Add Fork Sync Happy Path And No-Op Tests
 
 **Files:**
+
 - Modify: `tools/upstream-preflight/src/rolling.spec.ts`
 - Modify: `tools/upstream-preflight/src/rolling.ts`
 
@@ -1036,10 +999,10 @@ git commit -m "feat: block upstream batches during failed fork sync"
 Design `runRollingSyncForkMainCommand()` with injected command runners so tests do not have to run the full Make checks:
 
 ```ts
-it("prints no-op when no fork commits are pending", () => {
+it('prints no-op when no fork commits are pending', () => {
   const { repo, outputDir, plan } = createRepoWithPlan();
-  repo.git("checkout", "-b", "rebase/upstream-2026-05", plan.metadata.forkHead);
-  writeRollingState(repo.path, validStateFromPlan(plan, "rebase/upstream-2026-05"), outputDir);
+  repo.git('checkout', '-b', 'rebase/upstream-2026-05', plan.metadata.forkHead);
+  writeRollingState(repo.path, validStateFromPlan(plan, 'rebase/upstream-2026-05'), outputDir);
   const messages: string[] = [];
 
   const exitCode = runRollingSyncForkMainCommand({
@@ -1050,23 +1013,23 @@ it("prints no-op when no fork commits are pending", () => {
   });
 
   expect(exitCode).toBe(0);
-  expect(messages.join("\n")).toContain("No fork commits pending");
+  expect(messages.join('\n')).toContain('No fork commits pending');
 });
 
-it("cherry-picks pending fork commits and updates integratedForkHead after checks pass", () => {
+it('cherry-picks pending fork commits and updates integratedForkHead after checks pass', () => {
   const { repo, outputDir, plan } = createRepoWithPlan();
-  repo.git("checkout", "-b", "rebase/upstream-2026-05", plan.metadata.forkHead);
-  writeRollingState(repo.path, validStateFromPlan(plan, "rebase/upstream-2026-05"), outputDir);
-  repo.git("checkout", "main");
-  repo.write("fork-two.txt", "fork two");
-  const newForkHead = repo.commit("feat: fork two (#2)");
-  repo.git("checkout", "rebase/upstream-2026-05");
+  repo.git('checkout', '-b', 'rebase/upstream-2026-05', plan.metadata.forkHead);
+  writeRollingState(repo.path, validStateFromPlan(plan, 'rebase/upstream-2026-05'), outputDir);
+  repo.git('checkout', 'main');
+  repo.write('fork-two.txt', 'fork two');
+  const newForkHead = repo.commit('feat: fork two (#2)');
+  repo.git('checkout', 'rebase/upstream-2026-05');
 
   const exitCode = runRollingSyncForkMainCommand({
     repoPath: repo.path,
     outputDir,
-    runChecks: () => ({ ok: true, commands: ["make fork-ownership-coverage-check"] }),
-    now: () => "2026-05-09T09:00:00.000Z",
+    runChecks: () => ({ ok: true, commands: ['make fork-ownership-coverage-check'] }),
+    now: () => '2026-05-09T09:00:00.000Z',
   });
 
   expect(exitCode).toBe(0);
@@ -1080,15 +1043,15 @@ it("cherry-picks pending fork commits and updates integratedForkHead after check
   });
 });
 
-it("passes the last completed upstream batch to fork-sync checks", () => {
+it('passes the last completed upstream batch to fork-sync checks', () => {
   const { repo, outputDir, plan } = createRepoWithPlan();
-  repo.git("checkout", "-b", "rebase/upstream-2026-05", plan.batches[0].tipSha);
-  writeRollingState(repo.path, validStateFromPlan(plan, "rebase/upstream-2026-05"), outputDir);
-  repo.git("checkout", "main");
-  repo.write("fork-two.txt", "fork two");
-  repo.commit("feat: fork two (#2)");
-  repo.git("checkout", "rebase/upstream-2026-05");
-  const contexts: Array<{ phase: "fork-sync"; batch?: string }> = [];
+  repo.git('checkout', '-b', 'rebase/upstream-2026-05', plan.batches[0].tipSha);
+  writeRollingState(repo.path, validStateFromPlan(plan, 'rebase/upstream-2026-05'), outputDir);
+  repo.git('checkout', 'main');
+  repo.write('fork-two.txt', 'fork two');
+  repo.commit('feat: fork two (#2)');
+  repo.git('checkout', 'rebase/upstream-2026-05');
+  const contexts: Array<{ phase: 'fork-sync'; batch?: string }> = [];
 
   const exitCode = runRollingSyncForkMainCommand({
     repoPath: repo.path,
@@ -1100,9 +1063,9 @@ it("passes the last completed upstream batch to fork-sync checks", () => {
   });
 
   expect(exitCode).toBe(0);
-  expect(contexts).toEqual([{ phase: "fork-sync", batch: "01" }]);
+  expect(contexts).toEqual([{ phase: 'fork-sync', batch: '01' }]);
   expect(readRollingState(repo.path, outputDir).appendHistory?.at(-1)).toMatchObject({
-    lastCompletedBatch: "01",
+    lastCompletedBatch: '01',
   });
 });
 ```
@@ -1126,7 +1089,7 @@ export type CheckResult = { ok: boolean; commands: string[]; output?: string };
 export type RollingSyncOptions = RollingCommandOptions & {
   continue?: boolean;
   fetchFork?: (repoPath: string, forkRef: string) => void;
-  runChecks?: (context: { phase: "fork-sync"; batch?: string }) => CheckResult;
+  runChecks?: (context: { phase: 'fork-sync'; batch?: string }) => CheckResult;
 };
 ```
 
@@ -1143,7 +1106,7 @@ export function runRollingSyncForkMainCommand(options: RollingSyncOptions): numb
     assertCleanBoundary(options.repoPath);
 
     if (options.continue) return continueForkSync(options, state);
-    if (state.activeForkSync) throw new Error("A fork sync is waiting for checks; rerun with --continue.");
+    if (state.activeForkSync) throw new Error('A fork sync is waiting for checks; rerun with --continue.');
 
     (options.fetchFork ?? fetchForkRef)(options.repoPath, state.forkRef);
     const pending = listCommits(options.repoPath, `${state.integratedForkHead}..${state.forkRef}`);
@@ -1152,16 +1115,16 @@ export function runRollingSyncForkMainCommand(options: RollingSyncOptions): numb
       return 0;
     }
 
-    const preSyncHead = revParse(options.repoPath, "HEAD");
+    const preSyncHead = revParse(options.repoPath, 'HEAD');
     const lastCompletedBatch = lastCompletedBatchId(plan, options.repoPath);
     for (const commit of pending) {
-      runGit(options.repoPath, ["cherry-pick", commit.sha]);
+      runGit(options.repoPath, ['cherry-pick', commit.sha]);
     }
 
     const activeState: RollingState = {
       ...state,
       activeForkSync: {
-        status: "checks-failed",
+        status: 'checks-failed',
         from: state.integratedForkHead,
         to: revParse(options.repoPath, state.forkRef),
         commits: pending.map((commit) => commit.sha),
@@ -1185,8 +1148,9 @@ Initial `assertCleanBoundary()`:
 
 ```ts
 function assertCleanBoundary(repoPath: string): void {
-  if (!isCleanWorktree(repoPath)) throw new Error("Worktree is dirty; resolve it before syncing fork main.");
-  if (hasGitOperationInProgress(repoPath)) throw new Error("A git operation is in progress; resolve it before syncing fork main.");
+  if (!isCleanWorktree(repoPath)) throw new Error('Worktree is dirty; resolve it before syncing fork main.');
+  if (hasGitOperationInProgress(repoPath))
+    throw new Error('A git operation is in progress; resolve it before syncing fork main.');
 }
 ```
 
@@ -1194,9 +1158,9 @@ Add `fetchForkRef()`:
 
 ```ts
 function fetchForkRef(repoPath: string, forkRef: string): void {
-  const [remote, branch] = forkRef.split("/");
+  const [remote, branch] = forkRef.split('/');
   if (!remote || !branch) return;
-  runGit(repoPath, ["fetch", remote, branch, "--no-tags"]);
+  runGit(repoPath, ['fetch', remote, branch, '--no-tags']);
 }
 ```
 
@@ -1208,20 +1172,20 @@ function promoteForkSyncAfterChecks(
   state: RollingState,
   lastCompletedBatch?: string,
 ): number {
-  const checks = options.runChecks?.({ phase: "fork-sync", batch: lastCompletedBatch }) ?? {
+  const checks = options.runChecks?.({ phase: 'fork-sync', batch: lastCompletedBatch }) ?? {
     ok: true,
     commands: defaultForkSyncChecks(lastCompletedBatch),
   };
-  const checkedState = appendCheckHistory(state, "fork-sync", checks);
+  const checkedState = appendCheckHistory(state, 'fork-sync', checks);
 
   if (!checks.ok) {
     writeRollingState(options.repoPath, checkedState, options.outputDir);
-    (options.writeError ?? console.error)("Fork sync checks failed; fix issues and rerun with --continue.");
+    (options.writeError ?? console.error)('Fork sync checks failed; fix issues and rerun with --continue.');
     return 1;
   }
 
   const active = checkedState.activeForkSync;
-  if (!active) throw new Error("No active fork sync to promote.");
+  if (!active) throw new Error('No active fork sync to promote.');
   const promoted: RollingState = {
     ...checkedState,
     integratedForkHead: active.to,
@@ -1250,10 +1214,10 @@ Add `lastCompletedBatchId()`:
 ```ts
 function lastCompletedBatchId(plan: BatchPlan, repoPath: string): string | undefined {
   const selection = selectNextBatch(plan, repoPath);
-  if (selection.status === "next" && selection.completedBatchCount > 0) {
+  if (selection.status === 'next' && selection.completedBatchCount > 0) {
     return plan.batches[selection.completedBatchCount - 1]?.id;
   }
-  if (selection.status === "complete" && selection.completedBatchCount > 0) {
+  if (selection.status === 'complete' && selection.completedBatchCount > 0) {
     return plan.batches[selection.completedBatchCount - 1]?.id;
   }
   return undefined;
@@ -1266,9 +1230,9 @@ Add the initial unexported fork-sync check list helper used by the command. Task
 ```ts
 function defaultForkSyncChecks(batch?: string): string[] {
   return [
-    "make fork-ownership-coverage-check",
-    "make ci-invariants-check",
-    "make fork-patches-check",
+    'make fork-ownership-coverage-check',
+    'make ci-invariants-check',
+    'make fork-patches-check',
     ...(batch ? [`make upstream-postrebase-audit BATCH=${batch}`] : []),
   ];
 }
@@ -1294,6 +1258,7 @@ git commit -m "feat: sync fork commits into rolling rebase"
 ## Task 8: Add Fork Sync Failure And Continue Mode Tests
 
 **Files:**
+
 - Modify: `tools/upstream-preflight/src/rolling.spec.ts`
 - Modify: `tools/upstream-preflight/src/rolling.ts`
 
@@ -1302,16 +1267,16 @@ git commit -m "feat: sync fork commits into rolling rebase"
 Add:
 
 ```ts
-it("does not update integratedForkHead when cherry-pick conflicts", () => {
+it('does not update integratedForkHead when cherry-pick conflicts', () => {
   const { repo, outputDir, plan } = createRepoWithPlan();
-  repo.git("checkout", "-b", "rebase/upstream-2026-05", plan.metadata.forkHead);
-  repo.write("conflict.txt", "branch");
-  repo.commit("conflicting branch work");
-  writeRollingState(repo.path, validStateFromPlan(plan, "rebase/upstream-2026-05"), outputDir);
-  repo.git("checkout", "main");
-  repo.write("conflict.txt", "main");
-  repo.commit("feat: conflicting fork");
-  repo.git("checkout", "rebase/upstream-2026-05");
+  repo.git('checkout', '-b', 'rebase/upstream-2026-05', plan.metadata.forkHead);
+  repo.write('conflict.txt', 'branch');
+  repo.commit('conflicting branch work');
+  writeRollingState(repo.path, validStateFromPlan(plan, 'rebase/upstream-2026-05'), outputDir);
+  repo.git('checkout', 'main');
+  repo.write('conflict.txt', 'main');
+  repo.commit('feat: conflicting fork');
+  repo.git('checkout', 'rebase/upstream-2026-05');
 
   const exitCode = runRollingSyncForkMainCommand({
     repoPath: repo.path,
@@ -1323,19 +1288,19 @@ it("does not update integratedForkHead when cherry-pick conflicts", () => {
   expect(readRollingState(repo.path, outputDir).integratedForkHead).toBe(plan.metadata.forkHead);
 });
 
-it("records activeForkSync when checks fail and continue promotes after checks pass", () => {
+it('records activeForkSync when checks fail and continue promotes after checks pass', () => {
   const { repo, outputDir, plan } = createRepoWithPlan();
-  repo.git("checkout", "-b", "rebase/upstream-2026-05", plan.metadata.forkHead);
-  writeRollingState(repo.path, validStateFromPlan(plan, "rebase/upstream-2026-05"), outputDir);
-  repo.git("checkout", "main");
-  repo.write("fork-two.txt", "fork two");
-  const newForkHead = repo.commit("feat: fork two (#2)");
-  repo.git("checkout", "rebase/upstream-2026-05");
+  repo.git('checkout', '-b', 'rebase/upstream-2026-05', plan.metadata.forkHead);
+  writeRollingState(repo.path, validStateFromPlan(plan, 'rebase/upstream-2026-05'), outputDir);
+  repo.git('checkout', 'main');
+  repo.write('fork-two.txt', 'fork two');
+  const newForkHead = repo.commit('feat: fork two (#2)');
+  repo.git('checkout', 'rebase/upstream-2026-05');
 
   const failed = runRollingSyncForkMainCommand({
     repoPath: repo.path,
     outputDir,
-    runChecks: () => ({ ok: false, commands: ["make fork-ownership-coverage-check"] }),
+    runChecks: () => ({ ok: false, commands: ['make fork-ownership-coverage-check'] }),
   });
 
   expect(failed).toBe(1);
@@ -1348,7 +1313,7 @@ it("records activeForkSync when checks fail and continue promotes after checks p
     repoPath: repo.path,
     outputDir,
     continue: true,
-    runChecks: () => ({ ok: true, commands: ["make fork-ownership-coverage-check"] }),
+    runChecks: () => ({ ok: true, commands: ['make fork-ownership-coverage-check'] }),
   });
 
   expect(continued).toBe(0);
@@ -1381,19 +1346,12 @@ Adjust `runRollingSyncForkMainCommand()`:
 Add:
 
 ```ts
-function continueForkSync(
-  options: RollingSyncOptions,
-  state: RollingState,
-): number {
+function continueForkSync(options: RollingSyncOptions, state: RollingState): number {
   if (!state.activeForkSync) {
-    throw new Error("No failed fork sync is active; --continue is only valid after checks failed.");
+    throw new Error('No failed fork sync is active; --continue is only valid after checks failed.');
   }
   const plan = readPersistedBatchPlan(options.repoPath, options.outputDir);
-  return promoteForkSyncAfterChecks(
-    options,
-    state,
-    lastCompletedBatchId(plan, options.repoPath),
-  );
+  return promoteForkSyncAfterChecks(options, state, lastCompletedBatchId(plan, options.repoPath));
 }
 ```
 
@@ -1417,6 +1375,7 @@ git commit -m "feat: recover rolling fork sync after failed checks"
 ## Task 9: Add Final Accounting Tests And Command
 
 **Files:**
+
 - Modify: `tools/upstream-preflight/src/rolling.spec.ts`
 - Modify: `tools/upstream-preflight/src/rolling.ts`
 
@@ -1425,16 +1384,16 @@ git commit -m "feat: recover rolling fork sync after failed checks"
 Add:
 
 ```ts
-import { runRollingFinalCheckCommand } from "./rolling";
+import { runRollingFinalCheckCommand } from './rolling';
 
-it("final-check blocks when origin main moved after the last fork sync", () => {
+it('final-check blocks when origin main moved after the last fork sync', () => {
   const { repo, outputDir, plan } = createRepoWithPlan();
-  repo.git("checkout", "-b", "rebase/upstream-2026-05", plan.metadata.upstreamHead);
-  writeRollingState(repo.path, validStateFromPlan(plan, "rebase/upstream-2026-05"), outputDir);
-  repo.git("checkout", "main");
-  repo.write("late.txt", "late");
-  repo.commit("feat: late fork (#3)");
-  repo.git("checkout", "rebase/upstream-2026-05");
+  repo.git('checkout', '-b', 'rebase/upstream-2026-05', plan.metadata.upstreamHead);
+  writeRollingState(repo.path, validStateFromPlan(plan, 'rebase/upstream-2026-05'), outputDir);
+  repo.git('checkout', 'main');
+  repo.write('late.txt', 'late');
+  repo.commit('feat: late fork (#3)');
+  repo.git('checkout', 'rebase/upstream-2026-05');
   const errors: string[] = [];
 
   const exitCode = runRollingFinalCheckCommand({
@@ -1445,36 +1404,44 @@ it("final-check blocks when origin main moved after the last fork sync", () => {
   });
 
   expect(exitCode).toBe(1);
-  expect(errors.join("\n")).toContain(`${plan.metadata.forkRef} has commits not included in integratedForkHead`);
+  expect(errors.join('\n')).toContain(`${plan.metadata.forkRef} has commits not included in integratedForkHead`);
 });
 
-it("final-check blocks while active fork sync exists", () => {
+it('final-check blocks while active fork sync exists', () => {
   const { repo, outputDir, plan } = createRepoWithPlan();
-  repo.git("checkout", "-b", "rebase/upstream-2026-05", plan.metadata.upstreamHead);
-  writeRollingState(repo.path, {
-    ...validStateFromPlan(plan, "rebase/upstream-2026-05"),
-    activeForkSync: {
-      status: "checks-failed",
-      from: plan.metadata.forkHead,
-      to: plan.metadata.forkHead,
-      commits: [],
-      preSyncHead: plan.metadata.forkHead,
+  repo.git('checkout', '-b', 'rebase/upstream-2026-05', plan.metadata.upstreamHead);
+  writeRollingState(
+    repo.path,
+    {
+      ...validStateFromPlan(plan, 'rebase/upstream-2026-05'),
+      activeForkSync: {
+        status: 'checks-failed',
+        from: plan.metadata.forkHead,
+        to: plan.metadata.forkHead,
+        commits: [],
+        preSyncHead: plan.metadata.forkHead,
+      },
     },
-  }, outputDir);
+    outputDir,
+  );
 
   expect(runRollingFinalCheckCommand({ repoPath: repo.path, outputDir })).toBe(1);
 });
 
-it("final-check reports missing PR/title matches", () => {
+it('final-check reports missing PR/title matches', () => {
   const { repo, outputDir, plan } = createRepoWithPlan();
-  repo.git("checkout", "main");
-  repo.write("pr-44.txt", "pr");
-  const newForkHead = repo.commit("feat: important fork work (#44)");
-  repo.git("checkout", "-b", "rebase/upstream-2026-05", plan.metadata.upstreamHead);
-  writeRollingState(repo.path, {
-    ...validStateFromPlan(plan, "rebase/upstream-2026-05"),
-    integratedForkHead: newForkHead,
-  }, outputDir);
+  repo.git('checkout', 'main');
+  repo.write('pr-44.txt', 'pr');
+  const newForkHead = repo.commit('feat: important fork work (#44)');
+  repo.git('checkout', '-b', 'rebase/upstream-2026-05', plan.metadata.upstreamHead);
+  writeRollingState(
+    repo.path,
+    {
+      ...validStateFromPlan(plan, 'rebase/upstream-2026-05'),
+      integratedForkHead: newForkHead,
+    },
+    outputDir,
+  );
   const errors: string[] = [];
 
   const exitCode = runRollingFinalCheckCommand({
@@ -1485,21 +1452,25 @@ it("final-check reports missing PR/title matches", () => {
   });
 
   expect(exitCode).toBe(1);
-  expect(errors.join("\n")).toContain("#44");
+  expect(errors.join('\n')).toContain('#44');
 });
 
-it("final-check reports patch-equivalence mismatches even when subjects match", () => {
+it('final-check reports patch-equivalence mismatches even when subjects match', () => {
   const { repo, outputDir, plan } = createRepoWithPlan();
-  repo.git("checkout", "main");
-  repo.write("same-subject.txt", "origin patch");
-  const newForkHead = repo.commit("feat: same subject (#55)");
-  repo.git("checkout", "-b", "rebase/upstream-2026-05", plan.metadata.upstreamHead);
-  repo.write("same-subject.txt", "conflict resolved differently");
-  repo.commit("feat: same subject (#55)");
-  writeRollingState(repo.path, {
-    ...validStateFromPlan(plan, "rebase/upstream-2026-05"),
-    integratedForkHead: newForkHead,
-  }, outputDir);
+  repo.git('checkout', 'main');
+  repo.write('same-subject.txt', 'origin patch');
+  const newForkHead = repo.commit('feat: same subject (#55)');
+  repo.git('checkout', '-b', 'rebase/upstream-2026-05', plan.metadata.upstreamHead);
+  repo.write('same-subject.txt', 'conflict resolved differently');
+  repo.commit('feat: same subject (#55)');
+  writeRollingState(
+    repo.path,
+    {
+      ...validStateFromPlan(plan, 'rebase/upstream-2026-05'),
+      integratedForkHead: newForkHead,
+    },
+    outputDir,
+  );
   const errors: string[] = [];
 
   const exitCode = runRollingFinalCheckCommand({
@@ -1510,8 +1481,8 @@ it("final-check reports patch-equivalence mismatches even when subjects match", 
   });
 
   expect(exitCode).toBe(1);
-  expect(errors.join("\n")).toContain("Patch-equivalence mismatch");
-  expect(errors.join("\n")).toContain("#55");
+  expect(errors.join('\n')).toContain('Patch-equivalence mismatch');
+  expect(errors.join('\n')).toContain('#55');
 });
 ```
 
@@ -1532,7 +1503,7 @@ Add:
 ```ts
 export type RollingFinalCheckOptions = RollingCommandOptions & {
   fetchFork?: (repoPath: string, forkRef: string) => void;
-  runChecks?: (context: { phase: "final" }) => CheckResult;
+  runChecks?: (context: { phase: 'final' }) => CheckResult;
 };
 
 export function runRollingFinalCheckCommand(options: RollingFinalCheckOptions): number {
@@ -1545,11 +1516,11 @@ export function runRollingFinalCheckCommand(options: RollingFinalCheckOptions): 
     const errors: string[] = [];
     (options.fetchFork ?? fetchForkRef)(options.repoPath, state.forkRef);
 
-    if (!isAncestor(options.repoPath, state.upstreamTargetHead, "HEAD")) {
+    if (!isAncestor(options.repoPath, state.upstreamTargetHead, 'HEAD')) {
       errors.push(`HEAD does not include upstream target ${state.upstreamTargetHead}`);
     }
     if (state.activeForkSync) {
-      errors.push("A fork sync is still active; run make upstream-sync-fork-main ROLLING_CONTINUE=1 first.");
+      errors.push('A fork sync is still active; run make upstream-sync-fork-main ROLLING_CONTINUE=1 first.');
     }
     const currentForkHead = revParse(options.repoPath, state.forkRef);
     if (currentForkHead !== state.integratedForkHead) {
@@ -1559,18 +1530,18 @@ export function runRollingFinalCheckCommand(options: RollingFinalCheckOptions): 
     errors.push(...findMissingSubjectMatches(options.repoPath, plan, state));
     errors.push(...findPatchMismatches(options.repoPath, state));
 
-    const checks = options.runChecks?.({ phase: "final" }) ?? {
+    const checks = options.runChecks?.({ phase: 'final' }) ?? {
       ok: true,
       commands: defaultFinalChecks(),
     };
-    if (!checks.ok) errors.push("Final local checks failed.");
+    if (!checks.ok) errors.push('Final local checks failed.');
 
-    const checkedState = appendCheckHistory(state, "final", checks);
+    const checkedState = appendCheckHistory(state, 'final', checks);
     writeRollingState(options.repoPath, checkedState, options.outputDir);
 
-    if (errors.length > 0) throw new Error(errors.join("\n"));
+    if (errors.length > 0) throw new Error(errors.join('\n'));
 
-    write("Rolling upstream rebase final check passed.");
+    write('Rolling upstream rebase final check passed.');
     return 0;
   } catch (error) {
     writeError(errorMessage(error));
@@ -1582,11 +1553,7 @@ export function runRollingFinalCheckCommand(options: RollingFinalCheckOptions): 
 Implement `findMissingSubjectMatches()` simply first:
 
 ```ts
-function findMissingSubjectMatches(
-  repoPath: string,
-  plan: BatchPlan,
-  state: RollingState,
-): string[] {
+function findMissingSubjectMatches(repoPath: string, plan: BatchPlan, state: RollingState): string[] {
   const forkSubjects = commitSubjects(repoPath, `${plan.metadata.upstreamRef}..${state.forkRef}`);
   const headSubjects = new Set(
     commitSubjects(repoPath, `${plan.metadata.upstreamRef}..HEAD`).map((item) => normalizeSubject(item.subject)),
@@ -1603,13 +1570,11 @@ Add `findPatchMismatches()`:
 
 ```ts
 function findPatchMismatches(repoPath: string, state: RollingState): string[] {
-  const result = cherryEquivalent(repoPath, "HEAD", state.forkRef);
+  const result = cherryEquivalent(repoPath, 'HEAD', state.forkRef);
   if (result.missing.length === 0) return [];
 
   const subjectsBySha = new Map(
-    commitSubjects(repoPath, `${state.upstreamRef}..${state.forkRef}`).map(
-      (item) => [item.sha, item.subject],
-    ),
+    commitSubjects(repoPath, `${state.upstreamRef}..${state.forkRef}`).map((item) => [item.sha, item.subject]),
   );
 
   return result.missing.map((sha) => {
@@ -1627,14 +1592,14 @@ will add focused tests for this helper and export it:
 ```ts
 function defaultFinalChecks(): string[] {
   return [
-    "make fork-ownership-coverage-check",
-    "make upstream-next-batch",
-    "make upstream-postrebase-audit",
-    "make ci-invariants-check",
-    "make fork-patches-check",
-    "pnpm --filter @gallery/upstream-preflight run test",
-    "pnpm --filter @gallery/upstream-preflight run check",
-    "pnpm --filter @gallery/upstream-preflight run format",
+    'make fork-ownership-coverage-check',
+    'make upstream-next-batch',
+    'make upstream-postrebase-audit',
+    'make ci-invariants-check',
+    'make fork-patches-check',
+    'pnpm --filter @gallery/upstream-preflight run test',
+    'pnpm --filter @gallery/upstream-preflight run check',
+    'pnpm --filter @gallery/upstream-preflight run format',
   ];
 }
 ```
@@ -1659,6 +1624,7 @@ git commit -m "feat: verify rolling rebase final accounting"
 ## Task 10: Add CLI Commands And Package Scripts
 
 **Files:**
+
 - Create: `tools/upstream-preflight/src/cli-wiring.spec.ts`
 - Modify: `tools/upstream-preflight/src/index.ts`
 - Modify: `tools/upstream-preflight/package.json`
@@ -1669,38 +1635,35 @@ git commit -m "feat: verify rolling rebase final accounting"
 Create `tools/upstream-preflight/src/cli-wiring.spec.ts`:
 
 ```ts
-import fs from "node:fs";
-import path from "node:path";
-import { describe, expect, it } from "vitest";
+import fs from 'node:fs';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
 
-describe("rolling rebase CLI wiring", () => {
-  it("exposes rolling commands as package scripts", () => {
-    const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8")) as {
+describe('rolling rebase CLI wiring', () => {
+  it('exposes rolling commands as package scripts', () => {
+    const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8')) as {
       scripts: Record<string, string>;
     };
 
     expect(packageJson.scripts).toMatchObject({
-      "rolling-start": "tsx src/index.ts rolling-start",
-      "rolling-status": "tsx src/index.ts rolling-status",
-      "sync-fork-main": "tsx src/index.ts sync-fork-main",
-      "rolling-final-check": "tsx src/index.ts rolling-final-check",
+      'rolling-start': 'tsx src/index.ts rolling-start',
+      'rolling-status': 'tsx src/index.ts rolling-status',
+      'sync-fork-main': 'tsx src/index.ts sync-fork-main',
+      'rolling-final-check': 'tsx src/index.ts rolling-final-check',
     });
   });
 
-  it("exposes rolling commands as Make targets", () => {
-    const makefile = fs.readFileSync(
-      path.resolve(process.cwd(), "../../Makefile"),
-      "utf8",
-    );
+  it('exposes rolling commands as Make targets', () => {
+    const makefile = fs.readFileSync(path.resolve(process.cwd(), '../../Makefile'), 'utf8');
 
-    expect(makefile).toContain(".PHONY: upstream-rolling-start");
-    expect(makefile).toContain("$(UPSTREAM_PREFLIGHT) run rolling-start");
-    expect(makefile).toContain(".PHONY: upstream-rolling-status");
-    expect(makefile).toContain("$(UPSTREAM_PREFLIGHT) run rolling-status");
-    expect(makefile).toContain(".PHONY: upstream-sync-fork-main");
-    expect(makefile).toContain("$(UPSTREAM_PREFLIGHT) run sync-fork-main");
-    expect(makefile).toContain(".PHONY: upstream-rolling-final-check");
-    expect(makefile).toContain("$(UPSTREAM_PREFLIGHT) run rolling-final-check");
+    expect(makefile).toContain('.PHONY: upstream-rolling-start');
+    expect(makefile).toContain('$(UPSTREAM_PREFLIGHT) run rolling-start');
+    expect(makefile).toContain('.PHONY: upstream-rolling-status');
+    expect(makefile).toContain('$(UPSTREAM_PREFLIGHT) run rolling-status');
+    expect(makefile).toContain('.PHONY: upstream-sync-fork-main');
+    expect(makefile).toContain('$(UPSTREAM_PREFLIGHT) run sync-fork-main');
+    expect(makefile).toContain('.PHONY: upstream-rolling-final-check');
+    expect(makefile).toContain('$(UPSTREAM_PREFLIGHT) run rolling-final-check');
   });
 });
 ```
@@ -1734,16 +1697,16 @@ import {
   runRollingStartCommand,
   runRollingStatusCommand,
   runRollingSyncForkMainCommand,
-} from "./rolling";
+} from './rolling';
 ```
 
 Add commands:
 
 ```ts
 program
-  .command("rolling-start")
-  .option("--output-dir <path>", "rolling state and batch plan directory")
-  .option("--resume", "resume an existing rolling state")
+  .command('rolling-start')
+  .option('--output-dir <path>', 'rolling state and batch plan directory')
+  .option('--resume', 'resume an existing rolling state')
   .action((options: { outputDir?: string; resume?: boolean }) => {
     process.exitCode = runRollingStartCommand({
       repoPath: process.cwd(),
@@ -1753,8 +1716,8 @@ program
   });
 
 program
-  .command("rolling-status")
-  .option("--output-dir <path>", "rolling state and batch plan directory")
+  .command('rolling-status')
+  .option('--output-dir <path>', 'rolling state and batch plan directory')
   .action((options: { outputDir?: string }) => {
     process.exitCode = runRollingStatusCommand({
       repoPath: process.cwd(),
@@ -1763,9 +1726,9 @@ program
   });
 
 program
-  .command("sync-fork-main")
-  .option("--output-dir <path>", "rolling state and batch plan directory")
-  .option("--continue", "continue a fork sync after checks failed")
+  .command('sync-fork-main')
+  .option('--output-dir <path>', 'rolling state and batch plan directory')
+  .option('--continue', 'continue a fork sync after checks failed')
   .action((options: { outputDir?: string; continue?: boolean }) => {
     process.exitCode = runRollingSyncForkMainCommand({
       repoPath: process.cwd(),
@@ -1775,8 +1738,8 @@ program
   });
 
 program
-  .command("rolling-final-check")
-  .option("--output-dir <path>", "rolling state and batch plan directory")
+  .command('rolling-final-check')
+  .option('--output-dir <path>', 'rolling state and batch plan directory')
   .action((options: { outputDir?: string }) => {
     process.exitCode = runRollingFinalCheckCommand({
       repoPath: process.cwd(),
@@ -1828,6 +1791,7 @@ git commit -m "feat: expose rolling rebase commands"
 ## Task 11: Run Real Check Commands From Rolling Module
 
 **Files:**
+
 - Modify: `tools/upstream-preflight/src/rolling.spec.ts`
 - Modify: `tools/upstream-preflight/src/rolling.ts`
 
@@ -1836,20 +1800,18 @@ git commit -m "feat: expose rolling rebase commands"
 Add tests that default checks are surfaced when no injected runner is provided:
 
 ```ts
-it("uses deterministic default fork-sync checks", () => {
+it('uses deterministic default fork-sync checks', () => {
   expect(defaultForkSyncChecks()).toEqual([
-    "make fork-ownership-coverage-check",
-    "make ci-invariants-check",
-    "make fork-patches-check",
+    'make fork-ownership-coverage-check',
+    'make ci-invariants-check',
+    'make fork-patches-check',
   ]);
-  expect(defaultForkSyncChecks("01")).toContain(
-    "make upstream-postrebase-audit BATCH=01",
-  );
+  expect(defaultForkSyncChecks('01')).toContain('make upstream-postrebase-audit BATCH=01');
 });
 
-it("uses deterministic default final checks", () => {
-  expect(defaultFinalChecks()).toContain("make upstream-next-batch");
-  expect(defaultFinalChecks()).toContain("pnpm --filter @gallery/upstream-preflight run test");
+it('uses deterministic default final checks', () => {
+  expect(defaultFinalChecks()).toContain('make upstream-next-batch');
+  expect(defaultFinalChecks()).toContain('pnpm --filter @gallery/upstream-preflight run test');
 });
 ```
 
@@ -1872,23 +1834,23 @@ Change the existing unexported default check helpers to exported functions:
 ```ts
 export function defaultForkSyncChecks(batch?: string): string[] {
   return [
-    "make fork-ownership-coverage-check",
-    "make ci-invariants-check",
-    "make fork-patches-check",
+    'make fork-ownership-coverage-check',
+    'make ci-invariants-check',
+    'make fork-patches-check',
     ...(batch ? [`make upstream-postrebase-audit BATCH=${batch}`] : []),
   ];
 }
 
 export function defaultFinalChecks(): string[] {
   return [
-    "make fork-ownership-coverage-check",
-    "make upstream-next-batch",
-    "make upstream-postrebase-audit",
-    "make ci-invariants-check",
-    "make fork-patches-check",
-    "pnpm --filter @gallery/upstream-preflight run test",
-    "pnpm --filter @gallery/upstream-preflight run check",
-    "pnpm --filter @gallery/upstream-preflight run format",
+    'make fork-ownership-coverage-check',
+    'make upstream-next-batch',
+    'make upstream-postrebase-audit',
+    'make ci-invariants-check',
+    'make fork-patches-check',
+    'pnpm --filter @gallery/upstream-preflight run test',
+    'pnpm --filter @gallery/upstream-preflight run check',
+    'pnpm --filter @gallery/upstream-preflight run format',
   ];
 }
 ```
@@ -1896,10 +1858,7 @@ export function defaultFinalChecks(): string[] {
 Add a shell runner using `spawnSync`:
 
 ```ts
-type ShellRunner = (
-  command: string,
-  cwd: string,
-) => { status: number; stdout: string; stderr: string };
+type ShellRunner = (command: string, cwd: string) => { status: number; stdout: string; stderr: string };
 
 function runCommandList(commands: string[], cwd: string, runner: ShellRunner = defaultShellRunner): CheckResult {
   const output: string[] = [];
@@ -1907,18 +1866,18 @@ function runCommandList(commands: string[], cwd: string, runner: ShellRunner = d
     const result = runner(command, cwd);
     output.push(result.stdout, result.stderr);
     if (result.status !== 0) {
-      return { ok: false, commands, output: output.filter(Boolean).join("\n") };
+      return { ok: false, commands, output: output.filter(Boolean).join('\n') };
     }
   }
-  return { ok: true, commands, output: output.filter(Boolean).join("\n") };
+  return { ok: true, commands, output: output.filter(Boolean).join('\n') };
 }
 
 function defaultShellRunner(command: string, cwd: string) {
   const result = spawnSync(command, {
     cwd,
     shell: true,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
   return {
     status: result.status ?? 1,
@@ -1954,6 +1913,7 @@ git commit -m "feat: run rolling rebase verification checks"
 ## Task 12: Update Upstream Rebase Process Documentation
 
 **Files:**
+
 - Modify: `docs/docs/developer/upstream-rebase-process.md`
 
 **Step 1: Write the docs change**
@@ -2027,6 +1987,7 @@ git commit -m "docs: document rolling upstream rebase process"
 ## Task 13: Final Verification
 
 **Files:**
+
 - No new files unless checks require fixes.
 
 **Step 1: Run focused upstream-preflight checks**
