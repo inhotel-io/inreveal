@@ -196,14 +196,21 @@ export function writeBatchPlanReports(
   return { markdownPath, jsonPath };
 }
 
+export function persistedBatchPlanPath(
+  repoPath: string,
+  outputDir?: string,
+): string {
+  return path.join(
+    persistedBatchPlanDir(repoPath, outputDir),
+    "batch-plan.json",
+  );
+}
+
 export function readPersistedBatchPlan(
   repoPath: string,
   outputDir?: string,
 ): BatchPlan {
-  const jsonPath = path.join(
-    outputDir ?? getGitPath(repoPath, "upstream-preflight"),
-    "batch-plan.json",
-  );
+  const jsonPath = persistedBatchPlanPath(repoPath, outputDir);
 
   if (!fs.existsSync(jsonPath)) {
     throw new Error(
@@ -563,6 +570,15 @@ function checkCost(
 
 function normalizeBatchId(batch: string): string {
   return /^\d+$/.test(batch) ? batch.padStart(2, "0") : batch;
+}
+
+function persistedBatchPlanDir(repoPath: string, outputDir?: string): string {
+  if (outputDir !== undefined) {
+    return outputDir;
+  }
+
+  const gitPath = getGitPath(repoPath, "upstream-preflight");
+  return path.isAbsolute(gitPath) ? gitPath : path.resolve(repoPath, gitPath);
 }
 
 function shortSha(sha: string): string {

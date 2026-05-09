@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { createTempRepo } from "../test/fixtures";
 import {
   planBatches,
+  persistedBatchPlanPath,
   readPersistedBatchAuditScope,
   readPersistedBatchPlan,
   renderBatchMarkdown,
@@ -17,7 +18,6 @@ import {
   validatePersistedBatchPlan,
   writeBatchPlanReports,
 } from "./batch";
-import { getGitPath } from "./git";
 import type {
   BatchPlan,
   BatchPlanMetadata,
@@ -227,12 +227,14 @@ describe("batch plan reports", () => {
       metadata: metadata(),
       softCap: 10,
     });
-    const outputDir = getGitPath(repo.path, "upstream-preflight");
+    const outputDir = path.dirname(persistedBatchPlanPath(repo.path));
 
     const paths = writeBatchPlanReports(plan, outputDir);
 
-    expect(paths.markdownPath).toContain(".git/upstream-preflight");
-    expect(paths.jsonPath).toContain(".git/upstream-preflight");
+    expect(repo.path).not.toBe(process.cwd());
+    expect(paths.markdownPath).toBe(path.join(outputDir, "batch-plan.md"));
+    expect(paths.jsonPath).toBe(persistedBatchPlanPath(repo.path));
+    expect(readPersistedBatchPlan(repo.path)).toEqual(plan);
     expect(repo.git("status", "--short")).toBe("");
   });
 });

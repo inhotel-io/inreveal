@@ -1,10 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
+import { readPersistedBatchPlan, validatePersistedBatchPlan } from "./batch";
 import {
-  readPersistedBatchPlan,
-  validatePersistedBatchPlan,
-} from "./batch";
-import { currentBranch, getGitPath, isCleanWorktree, revParse } from "./git";
+  currentBranch,
+  getGitPath,
+  hasGitOperationInProgress,
+  isCleanWorktree,
+  revParse,
+} from "./git";
 
 const fullShaPattern = /^[0-9a-f]{40}$/;
 
@@ -107,9 +110,26 @@ export function runRollingStartCommand(options: RollingCommandOptions): number {
 
   try {
     const branch = currentBranch(options.repoPath);
+    if (branch.length === 0) {
+      throw new Error(
+        "Detached HEAD; check out a rebase branch before starting rolling rebase.",
+      );
+    }
     if (branch === "main") {
       throw new Error("Refusing to start rolling rebase on main");
     }
+    if (hasGitOperationInProgress(options.repoPath)) {
+      throw new Error(
+        "Git operation in progress; finish or abort it before starting or resuming rolling rebase.",
+      );
+    }
+
+    if (options.resume) {
+      const state = readRollingState(options.repoPath, options.outputDir);
+      write(`Resumed rolling upstream rebase on ${state.branch}`);
+      return 0;
+    }
+
     if (!isCleanWorktree(options.repoPath)) {
       throw new Error(
         "Worktree is dirty; commit or stash changes before starting rolling rebase.",
@@ -127,7 +147,7 @@ export function runRollingStartCommand(options: RollingCommandOptions): number {
     validatePersistedBatchPlan(plan, options.repoPath);
 
     const head = revParse(options.repoPath, "HEAD");
-    if (head !== plan.metadata.forkHead && !options.resume) {
+    if (head !== plan.metadata.forkHead) {
       throw new Error(
         `HEAD ${head} does not match planned fork head ${plan.metadata.forkHead}; pass --resume only after verifying branch state.`,
       );

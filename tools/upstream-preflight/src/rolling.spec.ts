@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createTempRepo } from "../test/fixtures";
 import { planBatches, writeBatchPlanReports } from "./batch";
+import { getGitPath } from "./git";
 import {
   readRollingState,
   rollingStatePath,
@@ -181,6 +182,131 @@ describe("rolling start", () => {
     expect(errors.join("\n")).toContain("pass --resume");
   });
 
+  it("resumes existing rolling state without rewriting it", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const output: string[] = [];
+    repo.git("checkout", "-b", "rebase/upstream-2026-05");
+    const state = validStateFromPlan(plan, undefined, {
+      integratedForkHead: sha("333333333"),
+      lastForkSyncAt: "2026-05-09T09:00:00.000Z",
+      activeForkSync: {
+        status: "checks-failed",
+        from: plan.metadata.forkHead,
+        to: sha("333333333"),
+        commits: [sha("444444444")],
+        preSyncHead: sha("555555555"),
+      },
+      appendHistory: [
+        {
+          at: "2026-05-09T09:05:00.000Z",
+          from: plan.metadata.forkHead,
+          to: sha("333333333"),
+          commits: [sha("444444444")],
+          lastCompletedBatch: "02",
+          checks: ["pnpm check"],
+        },
+      ],
+      checkHistory: [
+        {
+          at: "2026-05-09T09:10:00.000Z",
+          phase: "fork-sync",
+          commands: ["pnpm check"],
+          ok: false,
+        },
+        {
+          at: "2026-05-09T09:15:00.000Z",
+          phase: "final",
+          commands: ["pnpm test"],
+          ok: true,
+        },
+      ],
+    });
+    const statePath = rollingStatePath(repo.path, outputDir);
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, `${JSON.stringify(state)}\n`);
+    const before = fs.readFileSync(statePath, "utf8");
+
+    const exitCode = runRollingStartCommand({
+      repoPath: repo.path,
+      outputDir,
+      resume: true,
+      now: () => "2026-05-09T10:00:00.000Z",
+      write: (message) => output.push(message),
+    });
+    const resumedState = readRollingState(repo.path, outputDir);
+
+    expect(exitCode).toBe(0);
+    expect(output.join("\n")).toContain(
+      "Resumed rolling upstream rebase on rebase/upstream-2026-05",
+    );
+    expect(fs.readFileSync(statePath, "utf8")).toBe(before);
+    expect(resumedState.integratedForkHead).toBe(state.integratedForkHead);
+    expect(resumedState.activeForkSync).toEqual(state.activeForkSync);
+    expect(resumedState.appendHistory).toEqual(state.appendHistory);
+    expect(resumedState.checkHistory).toEqual(state.checkHistory);
+  });
+
+  it("refuses resume when rolling state is missing instead of creating new state", () => {
+    const { repo, outputDir } = createRepoWithPlan({
+      forkCommitsAfterStart: 1,
+    });
+    const errors: string[] = [];
+    repo.git("checkout", "-b", "rebase/upstream-2026-05");
+    const statePath = rollingStatePath(repo.path, outputDir);
+
+    const exitCode = runRollingStartCommand({
+      repoPath: repo.path,
+      outputDir,
+      resume: true,
+      now: () => "2026-05-09T08:00:00.000Z",
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("Missing rolling state");
+    expect(errors.join("\n")).toContain(
+      "run make upstream-rolling-start first",
+    );
+    expect(fs.existsSync(statePath)).toBe(false);
+  });
+
+  it("refuses to start or resume while a git operation is in progress", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.git("checkout", "-b", "rebase/upstream-2026-05");
+    const state = validStateFromPlan(plan);
+    writeRollingState(repo.path, state, outputDir);
+    writeGitControlFile(repo.path, "MERGE_HEAD", `${plan.metadata.forkHead}\n`);
+
+    const exitCode = runRollingStartCommand({
+      repoPath: repo.path,
+      outputDir,
+      resume: true,
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("Git operation in progress");
+    expect(readRollingState(repo.path, outputDir)).toEqual(state);
+  });
+
+  it("refuses to start from a detached HEAD with a clear error", () => {
+    const { repo, outputDir, plan } = createRepoWithPlan();
+    const errors: string[] = [];
+    repo.git("checkout", "--detach", plan.metadata.forkHead);
+
+    const exitCode = runRollingStartCommand({
+      repoPath: repo.path,
+      outputDir,
+      now: () => "2026-05-09T08:00:00.000Z",
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("Detached HEAD");
+    expect(errors.join("\n")).toContain("rebase branch");
+  });
+
   it("refuses to start when HEAD does not match the persisted fork head", () => {
     const { repo, outputDir, plan } = createRepoWithPlan({
       forkCommitsAfterStart: 1,
@@ -279,10 +405,7 @@ function createRepoWithPlan(
   return { repo, outputDir, plan };
 }
 
-function classifiedCommit(
-  shaValue: string,
-  risk: RiskLevel,
-): ClassifiedCommit {
+function classifiedCommit(shaValue: string, risk: RiskLevel): ClassifiedCommit {
   return {
     sha: shaValue,
     shortSha: shaValue.slice(0, 9),
@@ -295,6 +418,19 @@ function classifiedCommit(
     reasons: risk === "high" ? ["Matches risk pattern mobile-drift"] : [],
     requiredChecks: risk === "high" ? ["mobile-drift-rebase-check"] : [],
   };
+}
+
+function writeGitControlFile(
+  repoPath: string,
+  gitPath: string,
+  content: string,
+) {
+  const metadataPath = getGitPath(repoPath, gitPath);
+  const fullPath = path.isAbsolute(metadataPath)
+    ? metadataPath
+    : path.resolve(repoPath, metadataPath);
+  fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+  fs.writeFileSync(fullPath, content);
 }
 
 function sha(prefix: string): string {
