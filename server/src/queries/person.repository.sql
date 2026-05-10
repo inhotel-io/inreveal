@@ -310,8 +310,8 @@ from
 where
   "person"."ownerId" = $1
   and (
-    f_unaccent ("person"."name") ilike '%' || f_unaccent ($2) || '%'
-    or f_unaccent ("person"."name") %> f_unaccent ($3)
+    f_unaccent ("person"."name") ILIKE '%' || f_unaccent ($2) || '%'
+    OR f_unaccent ("person"."name") %> f_unaccent ($3)
   )
 order by
   f_unaccent ("person"."name") <->>> f_unaccent ($4)
