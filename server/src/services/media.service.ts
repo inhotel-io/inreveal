@@ -444,7 +444,12 @@ export class MediaService extends BaseService {
     const outputPath = join(outputDir, 'frame.jpeg');
 
     try {
-      await this.mediaRepository.extractFrame(originalPath, outputPath, 0, await this.getHeifColorStreamIndex(originalPath));
+      await this.mediaRepository.extractFrame(
+        originalPath,
+        outputPath,
+        0,
+        await this.getHeifColorStreamIndex(originalPath),
+      );
       return {
         path: outputPath,
         cleanup: () => rm(outputDir, { force: true, recursive: true }),

@@ -947,14 +947,31 @@ describe(MediaService.name, () => {
         ...probeStub.noAudioStreams,
         videoStreams: [
           { ...probeStub.videoStream2160p.videoStreams[0], index: 60, pixelFormat: 'gray', width: 2016, height: 1512 },
-          { ...probeStub.videoStream2160p.videoStreams[0], index: 61, pixelFormat: 'yuv420p10le', width: 1024, height: 768 },
-          { ...probeStub.videoStream2160p.videoStreams[0], index: 62, pixelFormat: 'yuvj420p', width: 416, height: 312 },
+          {
+            ...probeStub.videoStream2160p.videoStreams[0],
+            index: 61,
+            pixelFormat: 'yuv420p10le',
+            width: 1024,
+            height: 768,
+          },
+          {
+            ...probeStub.videoStream2160p.videoStreams[0],
+            index: 62,
+            pixelFormat: 'yuvj420p',
+            width: 416,
+            height: 312,
+          },
         ],
       });
 
       await sut.handleGenerateThumbnails({ id: asset.id });
 
-      expect(mocks.media.extractFrame).toHaveBeenCalledWith(asset.originalPath, expect.stringContaining('.jpeg'), 0, 61);
+      expect(mocks.media.extractFrame).toHaveBeenCalledWith(
+        asset.originalPath,
+        expect.stringContaining('.jpeg'),
+        0,
+        61,
+      );
       expect(mocks.media.decodeImage).toHaveBeenCalledOnce();
       expect(mocks.media.decodeImage).toHaveBeenCalledWith(expect.stringContaining('.jpeg'), {
         colorspace: Colorspace.Srgb,
@@ -2013,7 +2030,13 @@ describe(MediaService.name, () => {
         ...probeStub.noAudioStreams,
         videoStreams: [
           { ...probeStub.videoStream2160p.videoStreams[0], index: 60, pixelFormat: 'gray', width: 2016, height: 1512 },
-          { ...probeStub.videoStream2160p.videoStreams[0], index: 61, pixelFormat: 'yuv420p10le', width: 1024, height: 768 },
+          {
+            ...probeStub.videoStream2160p.videoStreams[0],
+            index: 61,
+            pixelFormat: 'yuv420p10le',
+            width: 1024,
+            height: 768,
+          },
         ],
       });
       mocks.media.generateThumbnail.mockResolvedValue();
