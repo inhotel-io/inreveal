@@ -581,6 +581,8 @@ class ApiClient {
           return QueueJobResponseDto.fromJson(value);
         case 'QueueJobStatus':
           return QueueJobStatusTypeTransformer().decode(value);
+        case 'QueueJobTypeCountsDto':
+          return QueueJobTypeCountsDto.fromJson(value);
         case 'QueueName':
           return QueueNameTypeTransformer().decode(value);
         case 'QueueResponseDto':
