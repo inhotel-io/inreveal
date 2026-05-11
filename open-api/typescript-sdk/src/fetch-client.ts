@@ -1721,9 +1721,22 @@ export type PluginTriggerResponseDto = {
     contextType: PluginContextType;
     "type": PluginTriggerType;
 };
+export type QueueJobTypeCountsDto = {
+    /** Number of sampled active jobs with this name */
+    active: number;
+    /** Number of sampled delayed jobs with this name */
+    delayed: number;
+    name: JobName;
+    /** Number of sampled paused jobs with this name */
+    paused: number;
+    /** Number of sampled waiting jobs with this name */
+    waiting: number;
+};
 export type QueueResponseDto = {
     /** Whether the queue is paused */
     isPaused: boolean;
+    /** Sampled job type counts for display purposes */
+    jobTypes?: QueueJobTypeCountsDto[];
     name: QueueName;
     statistics: QueueStatisticsDto;
 };
@@ -8827,14 +8840,6 @@ export enum PluginTriggerType {
     AssetCreate = "AssetCreate",
     PersonRecognized = "PersonRecognized"
 }
-export enum QueueJobStatus {
-    Active = "active",
-    Failed = "failed",
-    Completed = "completed",
-    Delayed = "delayed",
-    Waiting = "waiting",
-    Paused = "paused"
-}
 export enum JobName {
     AssetDelete = "AssetDelete",
     AssetDeleteCheck = "AssetDeleteCheck",
@@ -8906,6 +8911,14 @@ export enum JobName {
     SharedSpaceBulkAddAssets = "SharedSpaceBulkAddAssets",
     AssetClassifyQueueAll = "AssetClassifyQueueAll",
     AssetClassify = "AssetClassify"
+}
+export enum QueueJobStatus {
+    Active = "active",
+    Failed = "failed",
+    Completed = "completed",
+    Delayed = "delayed",
+    Waiting = "waiting",
+    Paused = "paused"
 }
 export enum SearchSuggestionType {
     Country = "country",
