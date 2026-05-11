@@ -464,7 +464,7 @@ export class MediaService extends BaseService {
     const { videoStreams } = await this.mediaRepository.probe(originalPath);
     const [stream] = videoStreams
       .filter(({ pixelFormat }) => !pixelFormat.startsWith('gray'))
-      .sort((a, b) => b.width * b.height - a.width * a.height);
+      .toSorted((a, b) => b.width * b.height - a.width * a.height);
 
     return stream?.index;
   }
