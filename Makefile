@@ -209,7 +209,7 @@ install-all:
 build-all: $(foreach M,$(filter-out e2e docs .github,$(MODULES)),build-$M) ;
 
 check-all:
-	pnpm -r --filter '!documentation' run "/^(check|check\:svelte|check\:typescript)$/"
+	pnpm -r --filter '!documentation' run "/^(check|check\:svelte|check\:typescript)$$/"
 lint-all:
 	pnpm -r --filter '!documentation' run lint:fix
 format-all:
