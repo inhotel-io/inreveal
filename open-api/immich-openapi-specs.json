@@ -12152,16 +12152,6 @@
         "operationId": "getServerLicense",
         "parameters": [],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LicenseResponseDto"
-                }
-              }
-            },
-            "description": ""
-          },
           "404": {
             "description": ""
           }
