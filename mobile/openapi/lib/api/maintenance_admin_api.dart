@@ -21,7 +21,7 @@ class MaintenanceAdminApi {
   /// Collect integrity checks and other heuristics about local data.
   ///
   /// Note: This method returns the HTTP [Response].
-  Future<Response> detectPriorInstallWithHttpInfo({ Future<void>? abortTrigger, }) async {
+  Future<Response> detectPriorInstallWithHttpInfo() async {
     // ignore: prefer_const_declarations
     final apiPath = r'/admin/maintenance/detect-install';
 
@@ -43,15 +43,14 @@ class MaintenanceAdminApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
-      abortTrigger: abortTrigger,
     );
   }
 
   /// Detect existing install
   ///
   /// Collect integrity checks and other heuristics about local data.
-  Future<MaintenanceDetectInstallResponseDto?> detectPriorInstall({ Future<void>? abortTrigger, }) async {
-    final response = await detectPriorInstallWithHttpInfo(abortTrigger: abortTrigger,);
+  Future<MaintenanceDetectInstallResponseDto?> detectPriorInstall() async {
+    final response = await detectPriorInstallWithHttpInfo();
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -70,7 +69,7 @@ class MaintenanceAdminApi {
   /// Fetch information about the currently running maintenance action.
   ///
   /// Note: This method returns the HTTP [Response].
-  Future<Response> getMaintenanceStatusWithHttpInfo({ Future<void>? abortTrigger, }) async {
+  Future<Response> getMaintenanceStatusWithHttpInfo() async {
     // ignore: prefer_const_declarations
     final apiPath = r'/admin/maintenance/status';
 
@@ -92,15 +91,14 @@ class MaintenanceAdminApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
-      abortTrigger: abortTrigger,
     );
   }
 
   /// Get maintenance mode status
   ///
   /// Fetch information about the currently running maintenance action.
-  Future<MaintenanceStatusResponseDto?> getMaintenanceStatus({ Future<void>? abortTrigger, }) async {
-    final response = await getMaintenanceStatusWithHttpInfo(abortTrigger: abortTrigger,);
+  Future<MaintenanceStatusResponseDto?> getMaintenanceStatus() async {
+    final response = await getMaintenanceStatusWithHttpInfo();
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -123,7 +121,7 @@ class MaintenanceAdminApi {
   /// Parameters:
   ///
   /// * [MaintenanceLoginDto] maintenanceLoginDto (required):
-  Future<Response> maintenanceLoginWithHttpInfo(MaintenanceLoginDto maintenanceLoginDto, { Future<void>? abortTrigger, }) async {
+  Future<Response> maintenanceLoginWithHttpInfo(MaintenanceLoginDto maintenanceLoginDto,) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/admin/maintenance/login';
 
@@ -145,7 +143,6 @@ class MaintenanceAdminApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
-      abortTrigger: abortTrigger,
     );
   }
 
@@ -156,8 +153,8 @@ class MaintenanceAdminApi {
   /// Parameters:
   ///
   /// * [MaintenanceLoginDto] maintenanceLoginDto (required):
-  Future<MaintenanceAuthDto?> maintenanceLogin(MaintenanceLoginDto maintenanceLoginDto, { Future<void>? abortTrigger, }) async {
-    final response = await maintenanceLoginWithHttpInfo(maintenanceLoginDto, abortTrigger: abortTrigger,);
+  Future<MaintenanceAuthDto?> maintenanceLogin(MaintenanceLoginDto maintenanceLoginDto,) async {
+    final response = await maintenanceLoginWithHttpInfo(maintenanceLoginDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -180,7 +177,7 @@ class MaintenanceAdminApi {
   /// Parameters:
   ///
   /// * [SetMaintenanceModeDto] setMaintenanceModeDto (required):
-  Future<Response> setMaintenanceModeWithHttpInfo(SetMaintenanceModeDto setMaintenanceModeDto, { Future<void>? abortTrigger, }) async {
+  Future<Response> setMaintenanceModeWithHttpInfo(SetMaintenanceModeDto setMaintenanceModeDto,) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/admin/maintenance';
 
@@ -202,7 +199,6 @@ class MaintenanceAdminApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
-      abortTrigger: abortTrigger,
     );
   }
 
@@ -213,10 +209,18 @@ class MaintenanceAdminApi {
   /// Parameters:
   ///
   /// * [SetMaintenanceModeDto] setMaintenanceModeDto (required):
-  Future<void> setMaintenanceMode(SetMaintenanceModeDto setMaintenanceModeDto, { Future<void>? abortTrigger, }) async {
-    final response = await setMaintenanceModeWithHttpInfo(setMaintenanceModeDto, abortTrigger: abortTrigger,);
+  Future<bool?> setMaintenanceMode(SetMaintenanceModeDto setMaintenanceModeDto,) async {
+    final response = await setMaintenanceModeWithHttpInfo(setMaintenanceModeDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'bool',) as bool;
+    
+    }
+    return null;
   }
 }
