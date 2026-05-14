@@ -13,6 +13,7 @@ import {
   UserAvatarColor,
   UserStatus,
 } from 'src/enum';
+import { AgentMessageTable } from 'src/schema/tables/agent-message.table';
 import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
 import { AgentSessionTable } from 'src/schema/tables/agent-session.table';
 import { AlbumTable } from 'src/schema/tables/album.table';
@@ -85,6 +86,7 @@ export type ApiKey = {
 };
 
 export type AgentProviderCredential = Selectable<AgentProviderCredentialTable>;
+export type AgentMessage = Selectable<AgentMessageTable>;
 export type AgentSession = Selectable<AgentSessionTable>;
 
 export type Tag = {
@@ -503,6 +505,7 @@ export const columns = {
     'updatedAt',
     'updateId',
   ],
+  agentMessage: ['id', 'sessionId', 'role', 'content', 'providerMessageId', 'toolCallId', 'createdAt'],
   agentSession: [
     'id',
     'userId',
