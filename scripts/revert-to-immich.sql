@@ -355,6 +355,7 @@ DELETE FROM "kysely_migrations"
    '1778700000000-AddSharedSpaceFaceMatchBackfillTarget',
    '1777000000000-AgentProviderCredential',
    '1777100000000-AgentSession',
+   '1778778147082-AddAgentSessionProviderCredentialIndex',
 
    -- Post-v2.7.5 upstream migrations pulled in by rebase. Paired with the
    -- schema rollbacks in step 7 above.
