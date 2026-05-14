@@ -1,7 +1,7 @@
 <script lang="ts">
   import UserPageLayout from '$lib/components/layouts/user-page-layout.svelte';
   import type { PageData } from './$types';
-  import AgentRunnerStatusPanel from './agent-runner-status-panel.svelte';
+  import AgentSessionPageContent from './agent-session-page-content.svelte';
 
   interface Props {
     data: PageData;
@@ -11,5 +11,5 @@
 </script>
 
 <UserPageLayout title={data.meta.title}>
-  <AgentRunnerStatusPanel status={data.runnerStatus} />
+  <AgentSessionPageContent runnerStatus={data.runnerStatus} credentials={data.credentials} />
 </UserPageLayout>

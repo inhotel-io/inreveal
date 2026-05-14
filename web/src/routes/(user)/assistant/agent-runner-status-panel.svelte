@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button, Icon, Text } from '@immich/ui';
+  import { Icon, Text } from '@immich/ui';
   import { mdiAlertCircleOutline, mdiCheckCircleOutline, mdiRobotOutline } from '@mdi/js';
   import type { AgentRunnerStatusDto } from '@immich/sdk';
   import { t } from 'svelte-i18n';
@@ -61,9 +61,5 @@
         </div>
       </div>
     </div>
-  </div>
-
-  <div class="flex flex-col gap-2 sm:flex-row">
-    <Button type="button" disabled>{$t('assistant_start_session')}</Button>
   </div>
 </section>
