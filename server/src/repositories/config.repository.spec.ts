@@ -15,6 +15,8 @@ const resetEnv = () => {
     'IMMICH_WORKERS_EXCLUDE',
     'IMMICH_TRUSTED_PROXIES',
     'IMMICH_API_METRICS_PORT',
+    'IMMICH_AGENT_RUNNER_URL',
+    'IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS',
     'IMMICH_MEDIA_LOCATION',
     'IMMICH_MICROSERVICES_METRICS_PORT',
     'IMMICH_TELEMETRY_INCLUDE',
@@ -121,6 +123,47 @@ describe('getEnv', () => {
     it('should throw an error for invalid value', () => {
       process.env.IMMICH_ALLOW_SETUP = 'invalid';
       expect(() => getEnv()).toThrowError('[IMMICH_ALLOW_SETUP] Invalid option: expected one of');
+    });
+  });
+
+  describe('agent runner', () => {
+    it('should default runner config to disabled with a two second timeout', () => {
+      const { agent } = getEnv();
+
+      expect(agent).toMatchObject({
+        runnerUrl: undefined,
+        runnerHealthTimeoutMs: 2000,
+      });
+    });
+
+    it('should parse runner URL and health timeout', () => {
+      process.env.IMMICH_AGENT_RUNNER_URL = 'http://agent-runner:4477';
+      process.env.IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS = '5000';
+
+      const { agent } = getEnv();
+
+      expect(agent).toMatchObject({
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 5000,
+      });
+    });
+
+    it('should reject invalid runner URLs', () => {
+      process.env.IMMICH_AGENT_RUNNER_URL = 'not-a-url';
+
+      expect(() => getEnv()).toThrowError('[IMMICH_AGENT_RUNNER_URL] Invalid URL');
+    });
+
+    it('should reject non-http runner URLs', () => {
+      process.env.IMMICH_AGENT_RUNNER_URL = 'ftp://agent-runner.local';
+
+      expect(() => getEnv()).toThrowError('[IMMICH_AGENT_RUNNER_URL] Runner URL must use http or https');
+    });
+
+    it('should reject non-positive runner health timeouts', () => {
+      process.env.IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS = '0';
+
+      expect(() => getEnv()).toThrowError('[IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS] Too small');
     });
   });
 
