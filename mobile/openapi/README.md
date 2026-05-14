@@ -89,6 +89,10 @@ Class | Method | HTTP request | Description
 *AgentCredentialsApi* | [**getAgentProviderCredentials**](doc//AgentCredentialsApi.md#getagentprovidercredentials) | **GET** /agent/provider-credentials | List agent provider credentials
 *AgentCredentialsApi* | [**updateAgentProviderCredential**](doc//AgentCredentialsApi.md#updateagentprovidercredential) | **PUT** /agent/provider-credentials/{id} | Update an agent provider credential
 *AgentRunnerApi* | [**getAgentRunnerStatus**](doc//AgentRunnerApi.md#getagentrunnerstatus) | **GET** /agent/runner/status | Get agent runner status
+*AgentSessionsApi* | [**cancelAgentSession**](doc//AgentSessionsApi.md#cancelagentsession) | **POST** /agent/sessions/{id}/cancel | Cancel an agent session
+*AgentSessionsApi* | [**createAgentSession**](doc//AgentSessionsApi.md#createagentsession) | **POST** /agent/sessions | Create an agent session
+*AgentSessionsApi* | [**getAgentSession**](doc//AgentSessionsApi.md#getagentsession) | **GET** /agent/sessions/{id} | Retrieve an agent session
+*AgentSessionsApi* | [**getAgentSessions**](doc//AgentSessionsApi.md#getagentsessions) | **GET** /agent/sessions | List agent sessions
 *AlbumsApi* | [**addAssetsToAlbum**](doc//AlbumsApi.md#addassetstoalbum) | **PUT** /albums/{id}/assets | Add assets to an album
 *AlbumsApi* | [**addAssetsToAlbums**](doc//AlbumsApi.md#addassetstoalbums) | **PUT** /albums/assets | Add assets to albums
 *AlbumsApi* | [**addUsersToAlbum**](doc//AlbumsApi.md#adduserstoalbum) | **PUT** /albums/{id}/users | Share album with users
@@ -391,12 +395,26 @@ Class | Method | HTTP request | Description
  - [ActivityStatisticsResponseDto](doc//ActivityStatisticsResponseDto.md)
  - [AddUsersDto](doc//AddUsersDto.md)
  - [AdminOnboardingUpdateDto](doc//AdminOnboardingUpdateDto.md)
+ - [AgentApprovalMode](doc//AgentApprovalMode.md)
+ - [AgentCredentialSnapshot](doc//AgentCredentialSnapshot.md)
+ - [AgentModelSnapshot](doc//AgentModelSnapshot.md)
+ - [AgentPermissionPlan](doc//AgentPermissionPlan.md)
+ - [AgentPermissionPlanAssetScope](doc//AgentPermissionPlanAssetScope.md)
+ - [AgentPermissionPlanLimits](doc//AgentPermissionPlanLimits.md)
+ - [AgentPermissionPlanProviderExposure](doc//AgentPermissionPlanProviderExposure.md)
+ - [AgentPermissionPlanRead](doc//AgentPermissionPlanRead.md)
+ - [AgentPermissionPlanWriteScope](doc//AgentPermissionPlanWriteScope.md)
+ - [AgentPermissionPreset](doc//AgentPermissionPreset.md)
  - [AgentProviderCredentialCreateDto](doc//AgentProviderCredentialCreateDto.md)
  - [AgentProviderCredentialResponseDto](doc//AgentProviderCredentialResponseDto.md)
  - [AgentProviderCredentialUpdateDto](doc//AgentProviderCredentialUpdateDto.md)
+ - [AgentProviderType](doc//AgentProviderType.md)
  - [AgentRunnerCapabilitiesDto](doc//AgentRunnerCapabilitiesDto.md)
  - [AgentRunnerStatusDto](doc//AgentRunnerStatusDto.md)
  - [AgentRunnerStatusReason](doc//AgentRunnerStatusReason.md)
+ - [AgentSessionCreateDto](doc//AgentSessionCreateDto.md)
+ - [AgentSessionResponseDto](doc//AgentSessionResponseDto.md)
+ - [AgentSessionStatus](doc//AgentSessionStatus.md)
  - [AlbumNameDto](doc//AlbumNameDto.md)
  - [AlbumResponseDto](doc//AlbumResponseDto.md)
  - [AlbumStatisticsResponseDto](doc//AlbumStatisticsResponseDto.md)
