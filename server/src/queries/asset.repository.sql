@@ -319,6 +319,72 @@ from
 where
   "asset"."id" = any ($1::uuid[])
 
+-- AssetRepository.getAgentLockedIds
+select
+  "asset"."id"
+from
+  "asset"
+where
+  "asset"."id" in ($1)
+  and "asset"."visibility" = $2
+
+-- AssetRepository.getAgentMetadataByIds
+select
+  "asset"."id",
+  "asset"."ownerId",
+  "asset"."type",
+  "asset"."originalFileName",
+  "asset"."localDateTime",
+  "asset"."fileCreatedAt",
+  "asset"."fileModifiedAt",
+  "asset"."isFavorite",
+  "asset"."visibility",
+  (
+    select
+      coalesce(json_agg(agg), '[]')
+    from
+      (
+        select
+          "tag"."id",
+          "tag"."value",
+          "tag"."createdAt",
+          "tag"."updatedAt",
+          "tag"."color",
+          "tag"."parentId"
+        from
+          "tag"
+          inner join "tag_asset" on "tag"."id" = "tag_asset"."tagId"
+        where
+          "asset"."id" = "tag_asset"."assetId"
+      ) as agg
+  ) as "tags",
+  (
+    select
+      to_json(obj)
+    from
+      (
+        select
+          "asset_exif"."dateTimeOriginal",
+          "asset_exif"."city",
+          "asset_exif"."state",
+          "asset_exif"."country",
+          "asset_exif"."make",
+          "asset_exif"."model",
+          "asset_exif"."lensModel",
+          "asset_exif"."latitude",
+          "asset_exif"."longitude",
+          "asset_exif"."rating"
+        from
+          "asset_exif"
+        where
+          "asset_exif"."assetId" = "asset"."id"
+      ) as obj
+  ) as "exifInfo"
+from
+  "asset"
+where
+  "asset"."id" = any ($1::uuid[])
+
 -- AssetRepository.deleteAll
 delete from "asset"
 where
