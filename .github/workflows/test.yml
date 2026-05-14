@@ -162,10 +162,11 @@ jobs:
       - name: Setup Mise
         uses: immich-app/devtools/actions/use-mise@cf6e190bacde3d7bda59372a786b36ac7d01536a # use-mise-action-v2.0.1
         with:
-          github_token: ${{ steps.token.outputs.token }}
+          github_token: ${{ github.token }}
 
       - name: Run setup @immich/sdk
         run: mise run //:sdk:install && mise run //:sdk:build
+        working-directory: .
 
       - name: Run pnpm install
         run: pnpm install --frozen-lockfile
