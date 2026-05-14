@@ -595,10 +595,9 @@ describe(MetadataService.name, () => {
 
       await sut.handleMetadataExtraction({ id: asset.id });
 
-      expect(mocks.asset.upsertExif).toHaveBeenCalledWith(
-        expect.objectContaining({ tags: ['Archive', 'Flat'] }),
-        { lockedPropertiesBehavior: 'skip' },
-      );
+      expect(mocks.asset.upsertExif).toHaveBeenCalledWith(expect.objectContaining({ tags: ['Archive', 'Flat'] }), {
+        lockedPropertiesBehavior: 'skip',
+      });
     });
 
     it('should deduplicate merged Keywords and HierarchicalSubject', async () => {
@@ -608,10 +607,9 @@ describe(MetadataService.name, () => {
 
       await sut.handleMetadataExtraction({ id: asset.id });
 
-      expect(mocks.asset.upsertExif).toHaveBeenCalledWith(
-        expect.objectContaining({ tags: ['Archive', 'Flat'] }),
-        { lockedPropertiesBehavior: 'skip' },
-      );
+      expect(mocks.asset.upsertExif).toHaveBeenCalledWith(expect.objectContaining({ tags: ['Archive', 'Flat'] }), {
+        lockedPropertiesBehavior: 'skip',
+      });
     });
 
     it('should use only Keywords when HierarchicalSubject is absent', async () => {
