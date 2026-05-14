@@ -18,8 +18,8 @@ import { AccessRepository } from 'src/repositories/access.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
-import { AgentAssetMetadata } from 'src/types/agent-tool.types';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
+import { AgentAssetMetadata } from 'src/types/agent-tool.types';
 
 type ReadAssetMetadataResponse =
   | { status: 'approval-required'; toolCall: AgentToolCallResponseDto }
@@ -97,7 +97,9 @@ export class AgentToolService {
       return { status: 'denied', reason: sessionLimitReason, toolCall: this.mapToolCall(result.toolCall) };
     }
 
-    await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.WaitingForToolApproval });
+    await this.sessionRepository.update(auth.user.id, session.id, {
+      status: AgentSessionStatus.WaitingForToolApproval,
+    });
 
     return { status: 'approval-required', toolCall: this.mapToolCall(result.toolCall) };
   }
@@ -333,7 +335,11 @@ export class AgentToolService {
     const allowLockedAssets = plan.assetScope.locked && auth.session?.hasElevatedPermission === true;
 
     if (plan.assetScope.owned) {
-      const ownerIds = await this.accessRepository.asset.checkOwnerAccess(auth.user.id, requestedIds, allowLockedAssets);
+      const ownerIds = await this.accessRepository.asset.checkOwnerAccess(
+        auth.user.id,
+        requestedIds,
+        allowLockedAssets,
+      );
       for (const id of ownerIds) {
         readableIds.add(id);
       }
@@ -368,7 +374,10 @@ export class AgentToolService {
     });
   }
 
-  private baseToolCall(session: AgentSession, assetIds: string[]): Omit<
+  private baseToolCall(
+    session: AgentSession,
+    assetIds: string[],
+  ): Omit<
     AgentToolCallCreate,
     'status' | 'approvalDecision' | 'responseSummary' | 'redactedResponseMetadata' | 'completedAt' | 'error'
   > {
