@@ -12,11 +12,15 @@ const MAX_INITIAL_CONTEXT_BYTES = 16_384;
 const model = z.string().trim().min(1).max(160);
 const models = z.array(model);
 const jsonByteLength = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8');
+const AgentApprovalModeSchema = z.enum(AgentApprovalMode).meta({ id: 'AgentApprovalMode' });
+const AgentPermissionPresetSchema = z.enum(AgentPermissionPreset).meta({ id: 'AgentPermissionPreset' });
+const AgentProviderTypeSchema = z.enum(AgentProviderType).meta({ id: 'AgentProviderType' });
+const AgentSessionStatusSchema = z.enum(AgentSessionStatus).meta({ id: 'AgentSessionStatus' });
 
 const AgentCredentialSnapshotSchema = z
   .object({
     id: z.uuidv4(),
-    providerType: z.enum(AgentProviderType),
+    providerType: AgentProviderTypeSchema,
     label: z.string().trim().min(1).max(120),
     baseUrl: z.url().nullable(),
     models,
@@ -146,8 +150,8 @@ const AgentSessionCreateSchema = z
   .object({
     providerCredentialId: z.uuidv4(),
     model,
-    permissionPreset: z.enum(AgentPermissionPreset),
-    approvalMode: z.enum(AgentApprovalMode),
+    permissionPreset: AgentPermissionPresetSchema,
+    approvalMode: AgentApprovalModeSchema,
     permissionPlan: AgentPermissionPlanSchema.optional(),
     runnerEndpoint: z.url().nullable().optional(),
     initialContext: InitialContextSchema.optional(),
@@ -174,13 +178,13 @@ const AgentSessionCreateSchema = z
 const AgentSessionResponseSchema = z
   .object({
     id: z.uuidv4(),
-    status: z.enum(AgentSessionStatus),
+    status: AgentSessionStatusSchema,
     providerCredentialId: z.uuidv4().nullable(),
     credentialSnapshot: AgentCredentialSnapshotSchema,
     modelSnapshot: AgentModelSnapshotSchema,
-    permissionPreset: z.enum(AgentPermissionPreset),
+    permissionPreset: AgentPermissionPresetSchema,
     permissionPlanSnapshot: AgentPermissionPlanSchema,
-    approvalMode: z.enum(AgentApprovalMode),
+    approvalMode: AgentApprovalModeSchema,
     runnerEndpoint: z.url().nullable(),
     runnerSessionId: z.string().nullable(),
     runnerCapabilitiesSnapshot: RunnerCapabilitiesSnapshotSchema,
