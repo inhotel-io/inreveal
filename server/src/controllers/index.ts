@@ -1,4 +1,5 @@
 import { ActivityController } from 'src/controllers/activity.controller';
+import { AgentProviderCredentialController } from 'src/controllers/agent-provider-credential.controller';
 import { AlbumController } from 'src/controllers/album.controller';
 import { ApiKeyController } from 'src/controllers/api-key.controller';
 import { AppController } from 'src/controllers/app.controller';
@@ -49,6 +50,7 @@ import { WorkflowController } from 'src/controllers/workflow.controller';
 export const controllers = [
   ApiKeyController,
   ActivityController,
+  AgentProviderCredentialController,
   AlbumController,
   AppController,
   AssetController,
