@@ -203,6 +203,7 @@ POST /agent/sessions/:id/cancel
 - Create: `server/src/types/agent-session.types.ts`
 - Create: `server/src/dtos/agent-session.dto.ts`
 - Modify: `server/src/enum.ts`
+- Modify: `server/src/constants.ts`
 
 - [ ] **Step 1: Add enums and permissions**
 
@@ -248,6 +249,12 @@ Add this API tag next to `AgentCredentials`.
 
 ```ts
   AgentSessions = 'Agent sessions',
+```
+
+Add matching endpoint tag text in `server/src/constants.ts`; this is required because `endpointTags` is an exhaustive `Record<ApiTag, string>`.
+
+```ts
+  [ApiTag.AgentSessions]: 'AI agent session management',
 ```
 
 - [ ] **Step 2: Create shared snapshot types**
@@ -530,7 +537,7 @@ Expected: PASS. These contract files are self-contained; any syntax, enum, or Zo
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/src/enum.ts server/src/types/agent-session.types.ts server/src/dtos/agent-session.dto.ts
+git add server/src/enum.ts server/src/constants.ts server/src/types/agent-session.types.ts server/src/dtos/agent-session.dto.ts docs/superpowers/plans/2026-05-14-pi-agent-session-shell.md
 git commit -m "feat: add agent session contracts"
 ```
 
@@ -1753,7 +1760,6 @@ git commit -m "feat: add agent session service"
 - Create: `server/src/controllers/agent-session.controller.ts`
 - Create: `server/src/controllers/agent-session.controller.spec.ts`
 - Modify: `server/src/controllers/index.ts`
-- Modify: `server/src/constants.ts`
 - Generated: `open-api/immich-openapi-specs.json`
 - Generated: `open-api/typescript-sdk/src/fetch-client.ts`
 - Generated: `open-api/typescript-sdk/build/fetch-client.js`
@@ -2163,12 +2169,6 @@ Add the controller.
 
 ```ts
   AgentSessionController,
-```
-
-Modify `server/src/constants.ts`.
-
-```ts
-  [ApiTag.AgentSessions]: 'AI agent session management',
 ```
 
 - [ ] **Step 5: Run controller test to verify it passes**
