@@ -19,6 +19,8 @@ export const newAssetRepositoryMock = (): Mocked<RepositoryInterface<AssetReposi
     getByIds: vitest.fn().mockResolvedValue([]),
     getByIdsWithAllRelationsButStacks: vitest.fn().mockResolvedValue([]),
     getOwnedManifestAssets: vitest.fn().mockResolvedValue([]),
+    getAgentLockedIds: vitest.fn().mockResolvedValue(new Set()),
+    getAgentMetadataByIds: vitest.fn().mockResolvedValue([]),
     getById: vitest.fn(),
     getByChecksum: vitest.fn(),
     getByChecksums: vitest.fn(),
