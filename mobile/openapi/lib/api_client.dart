@@ -198,6 +198,12 @@ class ApiClient {
           return AgentProviderCredentialResponseDto.fromJson(value);
         case 'AgentProviderCredentialUpdateDto':
           return AgentProviderCredentialUpdateDto.fromJson(value);
+        case 'AgentRunnerCapabilitiesDto':
+          return AgentRunnerCapabilitiesDto.fromJson(value);
+        case 'AgentRunnerStatusDto':
+          return AgentRunnerStatusDto.fromJson(value);
+        case 'AgentRunnerStatusReason':
+          return AgentRunnerStatusReasonTypeTransformer().decode(value);
         case 'AlbumNameDto':
           return AlbumNameDto.fromJson(value);
         case 'AlbumResponseDto':

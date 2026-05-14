@@ -61,12 +61,37 @@ vi.mock('@immich/ui', async () => {
 describe('UserSidebar', () => {
   beforeEach(() => {
     mocks.authManager.preferences.memories.enabled = true;
+    mocks.featureFlagsManager.value.map = false;
+    mocks.featureFlagsManager.value.search = false;
   });
 
   it('shows a memories link under Library when memories are enabled', () => {
     render(UserSidebar);
 
     expect(screen.getByRole('link', { name: /^memories$/i })).toHaveAttribute('href', '/memories');
+  });
+
+  it('shows an assistant link', () => {
+    render(UserSidebar);
+
+    expect(screen.getByRole('link', { name: /^assistant$/i })).toHaveAttribute('href', '/assistant');
+  });
+
+  it('shows the assistant link after explore and before map', () => {
+    mocks.featureFlagsManager.value.search = true;
+    mocks.featureFlagsManager.value.map = true;
+
+    render(UserSidebar);
+
+    expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(
+      expect.arrayContaining(['/explore', '/assistant', '/map']),
+    );
+    expect(
+      screen
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('href'))
+        .slice(2, 5),
+    ).toEqual(['/explore', '/assistant', '/map']);
   });
 
   it('hides the memories link when memories are disabled', () => {
