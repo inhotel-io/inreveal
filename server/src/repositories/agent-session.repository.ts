@@ -15,6 +15,14 @@ type AgentSessionUpdate = Pick<
 
 @Injectable()
 export class AgentSessionRepository {
+  private static readonly cancellableStatuses = [
+    AgentSessionStatus.Created,
+    AgentSessionStatus.Running,
+    AgentSessionStatus.WaitingForToolApproval,
+    AgentSessionStatus.WaitingForPlanReview,
+    AgentSessionStatus.Interrupted,
+  ];
+
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
   create(dto: Insertable<AgentSessionTable>) {
@@ -53,26 +61,15 @@ export class AgentSessionRepository {
   }
 
   @GenerateSql({
-    params: [
-      DummyValue.UUID,
-      DummyValue.UUID,
-      [
-        AgentSessionStatus.Created,
-        AgentSessionStatus.Running,
-        AgentSessionStatus.WaitingForToolApproval,
-        AgentSessionStatus.WaitingForPlanReview,
-        AgentSessionStatus.Interrupted,
-      ],
-      DummyValue.DATE,
-    ],
+    params: [DummyValue.UUID, DummyValue.UUID, DummyValue.DATE],
   })
-  cancel(userId: string, id: string, cancellableStatuses: AgentSessionStatus[], endedAt: Date) {
+  cancel(userId: string, id: string, endedAt: Date) {
     return this.db
       .updateTable('agent_session')
       .set({ status: AgentSessionStatus.Cancelled, endedAt })
       .where('userId', '=', userId)
       .where('id', '=', asUuid(id))
-      .where('status', 'in', cancellableStatuses)
+      .where('status', 'in', AgentSessionRepository.cancellableStatuses)
       .returning(columns.agentSession)
       .executeTakeFirst();
   }
