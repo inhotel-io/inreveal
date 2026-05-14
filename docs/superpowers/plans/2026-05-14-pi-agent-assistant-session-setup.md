@@ -326,9 +326,9 @@ Cover:
 and does not include:
 
 ```ts
-permissionPlan
-runnerEndpoint
-initialContext
+permissionPlan;
+runnerEndpoint;
+initialContext;
 ```
 
 - trims the model before submitting the payload;
