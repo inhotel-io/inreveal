@@ -9,6 +9,9 @@ const envData: EnvData = {
   logFormat: LogFormat.Console,
 
   buildMetadata: {},
+
+  agent: {},
+
   bull: {
     config: {
       connection: {},
