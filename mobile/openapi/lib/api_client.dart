@@ -193,6 +193,12 @@ class ApiClient {
           return AddUsersDto.fromJson(value);
         case 'AdminOnboardingUpdateDto':
           return AdminOnboardingUpdateDto.fromJson(value);
+        case 'AgentProviderCredentialCreateDto':
+          return AgentProviderCredentialCreateDto.fromJson(value);
+        case 'AgentProviderCredentialResponseDto':
+          return AgentProviderCredentialResponseDto.fromJson(value);
+        case 'AgentProviderCredentialUpdateDto':
+          return AgentProviderCredentialUpdateDto.fromJson(value);
         case 'AlbumNameDto':
           return AlbumNameDto.fromJson(value);
         case 'AlbumResponseDto':
