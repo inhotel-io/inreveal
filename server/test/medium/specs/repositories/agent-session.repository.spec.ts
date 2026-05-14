@@ -281,13 +281,6 @@ describe(AgentSessionRepository.name, () => {
   it('conditionally cancels only when current status is cancellable', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
-    const cancellableStatuses = [
-      AgentSessionStatus.Created,
-      AgentSessionStatus.Running,
-      AgentSessionStatus.WaitingForToolApproval,
-      AgentSessionStatus.WaitingForPlanReview,
-      AgentSessionStatus.Interrupted,
-    ];
     const activeEndedAt = new Date('2026-05-14T14:00:00Z');
     const terminalEndedAt = new Date('2026-05-14T15:00:00Z');
 
@@ -321,14 +314,14 @@ describe(AgentSessionRepository.name, () => {
       initialContextSnapshot,
     });
 
-    await expect(sut.cancel(user.id, terminalSession.id, cancellableStatuses, activeEndedAt)).resolves.toBeUndefined();
+    await expect(sut.cancel(user.id, terminalSession.id, activeEndedAt)).resolves.toBeUndefined();
     await expect(sut.getById(user.id, terminalSession.id)).resolves.toMatchObject({
       id: terminalSession.id,
       status: AgentSessionStatus.Completed,
       endedAt: terminalEndedAt,
     });
 
-    const cancelled = await sut.cancel(user.id, activeSession.id, cancellableStatuses, activeEndedAt);
+    const cancelled = await sut.cancel(user.id, activeSession.id, activeEndedAt);
 
     expect(cancelled).toMatchObject({
       id: activeSession.id,

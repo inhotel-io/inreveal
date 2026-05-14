@@ -406,47 +406,47 @@ describe(AgentSessionService.name, () => {
 
     const result = await sut.cancel(auth, session.id);
 
-    expect(repository.cancel).toHaveBeenCalledWith(
-      auth.user.id,
-      session.id,
-      [
-        AgentSessionStatus.Created,
-        AgentSessionStatus.Running,
-        AgentSessionStatus.WaitingForToolApproval,
-        AgentSessionStatus.WaitingForPlanReview,
-        AgentSessionStatus.Interrupted,
-      ],
-      expect.any(Date),
-    );
+    expect(repository.cancel).toHaveBeenCalledWith(auth.user.id, session.id, expect.any(Date));
     expect(repository.update).not.toHaveBeenCalled();
     expect(result.status).toBe(AgentSessionStatus.Cancelled);
     expect(result.endedAt).toEqual(now);
   });
 
-  it('rejects cancelling when the conditional update loses a status race', async () => {
+  it('returns cancelled session when a concurrent duplicate cancel wins the update race', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Running });
+    const cancelled = makeSession({ ...session, status: AgentSessionStatus.Cancelled, endedAt: now });
 
-    repository.getById.mockResolvedValue(session);
+    repository.getById.mockResolvedValueOnce(session).mockResolvedValueOnce(cancelled);
     repository.cancel.mockResolvedValue(void 0);
 
-    await expect(sut.cancel(auth, session.id)).rejects.toThrow(
-      'Agent session cannot be cancelled in its current state',
-    );
-    expect(repository.cancel).toHaveBeenCalledWith(
-      auth.user.id,
-      session.id,
-      [
-        AgentSessionStatus.Created,
-        AgentSessionStatus.Running,
-        AgentSessionStatus.WaitingForToolApproval,
-        AgentSessionStatus.WaitingForPlanReview,
-        AgentSessionStatus.Interrupted,
-      ],
-      expect.any(Date),
-    );
+    const result = await sut.cancel(auth, session.id);
+
+    expect(repository.cancel).toHaveBeenCalledWith(auth.user.id, session.id, expect.any(Date));
+    expect(repository.getById).toHaveBeenCalledTimes(2);
     expect(repository.update).not.toHaveBeenCalled();
+    expect(result.status).toBe(AgentSessionStatus.Cancelled);
+    expect(result.endedAt).toEqual(now);
   });
+
+  it.each([AgentSessionStatus.Applying, AgentSessionStatus.Completed, AgentSessionStatus.Failed])(
+    'rejects cancelling when the conditional update loses a race to %s',
+    async (status) => {
+      const auth = AuthFactory.create();
+      const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Running });
+      const terminalSession = makeSession({ ...session, status });
+
+      repository.getById.mockResolvedValueOnce(session).mockResolvedValueOnce(terminalSession);
+      repository.cancel.mockResolvedValue(void 0);
+
+      await expect(sut.cancel(auth, session.id)).rejects.toThrow(
+        'Agent session cannot be cancelled in its current state',
+      );
+      expect(repository.cancel).toHaveBeenCalledWith(auth.user.id, session.id, expect.any(Date));
+      expect(repository.getById).toHaveBeenCalledTimes(2);
+      expect(repository.update).not.toHaveBeenCalled();
+    },
+  );
 
   it('returns already-cancelled session without updating again', async () => {
     const auth = AuthFactory.create();
