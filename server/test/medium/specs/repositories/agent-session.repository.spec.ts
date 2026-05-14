@@ -49,7 +49,7 @@ const permissionPlanSnapshot = {
   },
   limits: {
     maxAssetsPerToolCall: 100,
-    maxAssetsPerSession: 1_000,
+    maxAssetsPerSession: 1000,
     maxPreviewsPerToolCall: 50,
     maxOriginalsPerToolCall: 0,
     expiresInMinutes: 60,

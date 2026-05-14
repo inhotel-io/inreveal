@@ -1,10 +1,5 @@
 import { createZodDto } from 'nestjs-zod';
-import {
-  AgentApprovalMode,
-  AgentPermissionPreset,
-  AgentProviderType,
-  AgentSessionStatus,
-} from 'src/enum';
+import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType, AgentSessionStatus } from 'src/enum';
 import { isoDatetimeToDate } from 'src/validation';
 import z from 'zod';
 
@@ -63,7 +58,7 @@ const AgentPermissionPlanSchema = z
       maxAssetsPerToolCall: z.number().int().min(1).max(10_000),
       maxAssetsPerSession: z.number().int().min(1).max(100_000),
       maxPreviewsPerToolCall: z.number().int().min(0).max(10_000),
-      maxOriginalsPerToolCall: z.number().int().min(0).max(1_000),
+      maxOriginalsPerToolCall: z.number().int().min(0).max(1000),
       expiresInMinutes: z.number().int().min(1).max(10_080).nullable(),
     }),
   })
