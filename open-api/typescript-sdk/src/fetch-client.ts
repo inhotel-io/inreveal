@@ -475,7 +475,7 @@ export type AgentCredentialSnapshot = {
     id: string;
     label: string;
     models: string[];
-    providerType: ProviderType;
+    providerType: AgentProviderType;
 };
 export type AgentInitialContext = {
     [key: string]: any;
@@ -519,7 +519,7 @@ export type AgentRunnerCapabilitiesSnapshot = {
     [key: string]: any;
 } | null;
 export type AgentSessionResponseDto = {
-    approvalMode: ApprovalMode;
+    approvalMode: AgentApprovalMode;
     createdAt: string;
     credentialSnapshot: AgentCredentialSnapshot;
     endedAt: string | null;
@@ -527,20 +527,20 @@ export type AgentSessionResponseDto = {
     initialContextSnapshot: AgentInitialContext;
     modelSnapshot: AgentModelSnapshot;
     permissionPlanSnapshot: AgentPermissionPlan;
-    permissionPreset: PermissionPreset;
+    permissionPreset: AgentPermissionPreset;
     providerCredentialId: string | null;
     runnerCapabilitiesSnapshot: AgentRunnerCapabilitiesSnapshot;
     runnerEndpoint: string | null;
     runnerSessionId: string | null;
-    status: Status;
+    status: AgentSessionStatus;
     updatedAt: string;
 };
 export type AgentSessionCreateDto = {
-    approvalMode: ApprovalMode;
+    approvalMode: AgentApprovalMode;
     initialContext?: AgentInitialContext;
     model: string;
     permissionPlan?: AgentPermissionPlan;
-    permissionPreset: PermissionPreset;
+    permissionPreset: AgentPermissionPreset;
     providerCredentialId: string;
     runnerEndpoint?: string | null;
 };
@@ -4520,7 +4520,7 @@ export function cancelAgentSession({ id }: {
     id: string;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
+        status: 200;
         data: AgentSessionResponseDto;
     }>(`/agent/sessions/${encodeURIComponent(id)}/cancel`, {
         ...opts,
@@ -8697,19 +8697,24 @@ export enum ProviderType {
     Anthropic = "anthropic",
     OpenaiCompatible = "openai-compatible"
 }
-export enum ApprovalMode {
+export enum AgentApprovalMode {
     Strict = "strict",
     AskOnEscalation = "ask-on-escalation",
     PlanOnly = "plan-only",
     DangerouslySkipPermissions = "dangerously-skip-permissions"
 }
-export enum PermissionPreset {
+export enum AgentProviderType {
+    Openai = "openai",
+    Anthropic = "anthropic",
+    OpenaiCompatible = "openai-compatible"
+}
+export enum AgentPermissionPreset {
     Careful = "careful",
     VisualOrganizer = "visual-organizer",
     LocalPowerUser = "local-power-user",
     Custom = "custom"
 }
-export enum Status {
+export enum AgentSessionStatus {
     Created = "created",
     Running = "running",
     WaitingForToolApproval = "waiting_for_tool_approval",
