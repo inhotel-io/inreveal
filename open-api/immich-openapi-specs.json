@@ -8533,8 +8533,9 @@
             "description": "Page number for pagination",
             "schema": {
               "minimum": 1,
+              "maximum": 9007199254740991,
               "default": 1,
-              "type": "number"
+              "type": "integer"
             }
           },
           {
@@ -8546,7 +8547,7 @@
               "minimum": 1,
               "maximum": 1000,
               "default": 500,
-              "type": "number"
+              "type": "integer"
             }
           },
           {
@@ -8692,8 +8693,9 @@
             "description": "Page number for pagination",
             "schema": {
               "minimum": 1,
+              "maximum": 9007199254740991,
               "default": 1,
-              "type": "number"
+              "type": "integer"
             }
           },
           {
@@ -8705,7 +8707,7 @@
               "minimum": 1,
               "maximum": 1000,
               "default": 500,
-              "type": "number"
+              "type": "integer"
             }
           },
           {
@@ -28265,7 +28267,7 @@
             "maximum": 5,
             "minimum": -1,
             "nullable": true,
-            "type": "number",
+            "type": "integer",
             "x-immich-history": [
               {
                 "version": "v1",
