@@ -442,6 +442,33 @@ export type AssetStatsResponseDto = {
     /** Number of videos */
     videos: number;
 };
+export type AgentProviderCredentialResponseDto = {
+    baseUrl: string | null;
+    createdAt: string;
+    defaultModel: string | null;
+    id: string;
+    label: string;
+    lastUsedAt: string | null;
+    models: string[];
+    providerType: ProviderType;
+    updatedAt: string;
+};
+export type AgentProviderCredentialCreateDto = {
+    baseUrl?: string;
+    defaultModel?: string;
+    label: string;
+    models?: string[];
+    providerType: ProviderType;
+    secret: string;
+};
+export type AgentProviderCredentialUpdateDto = {
+    baseUrl?: string | null;
+    defaultModel?: string | null;
+    label?: string;
+    models?: string[];
+    providerType?: ProviderType;
+    secret?: string;
+};
 export type AlbumUserResponseDto = {
     role: AlbumUserRole;
     user: UserResponseDto;
@@ -4305,6 +4332,72 @@ export function getUserStatisticsAdmin({ id, isFavorite, isTrashed, visibility }
     }))}`, {
         ...opts
     }));
+}
+/**
+ * List agent provider credentials
+ */
+export function getAgentProviderCredentials(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AgentProviderCredentialResponseDto[];
+    }>("/agent/provider-credentials", {
+        ...opts
+    }));
+}
+/**
+ * Create an agent provider credential
+ */
+export function createAgentProviderCredential({ agentProviderCredentialCreateDto }: {
+    agentProviderCredentialCreateDto: AgentProviderCredentialCreateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentProviderCredentialResponseDto;
+    }>("/agent/provider-credentials", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentProviderCredentialCreateDto
+    })));
+}
+/**
+ * Delete an agent provider credential
+ */
+export function deleteAgentProviderCredential({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/agent/provider-credentials/${encodeURIComponent(id)}`, {
+        ...opts,
+        method: "DELETE"
+    }));
+}
+/**
+ * Retrieve an agent provider credential
+ */
+export function getAgentProviderCredential({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AgentProviderCredentialResponseDto;
+    }>(`/agent/provider-credentials/${encodeURIComponent(id)}`, {
+        ...opts
+    }));
+}
+/**
+ * Update an agent provider credential
+ */
+export function updateAgentProviderCredential({ id, agentProviderCredentialUpdateDto }: {
+    id: string;
+    agentProviderCredentialUpdateDto: AgentProviderCredentialUpdateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AgentProviderCredentialResponseDto;
+    }>(`/agent/provider-credentials/${encodeURIComponent(id)}`, oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: agentProviderCredentialUpdateDto
+    })));
 }
 /**
  * List all albums
@@ -8471,6 +8564,11 @@ export enum AssetVisibility {
     Hidden = "hidden",
     Locked = "locked"
 }
+export enum ProviderType {
+    Openai = "openai",
+    Anthropic = "anthropic",
+    OpenaiCompatible = "openai-compatible"
+}
 export enum AlbumUserRole {
     Editor = "editor",
     Viewer = "viewer"
@@ -8493,6 +8591,10 @@ export enum Permission {
     ApiKeyRead = "apiKey.read",
     ApiKeyUpdate = "apiKey.update",
     ApiKeyDelete = "apiKey.delete",
+    AgentCredentialCreate = "agentCredential.create",
+    AgentCredentialRead = "agentCredential.read",
+    AgentCredentialUpdate = "agentCredential.update",
+    AgentCredentialDelete = "agentCredential.delete",
     AssetRead = "asset.read",
     AssetUpdate = "asset.update",
     AssetDelete = "asset.delete",
