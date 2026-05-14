@@ -30,10 +30,13 @@ type AgentToolCallCreate = Parameters<AgentToolCallRepository['create']>[0];
 
 @Injectable()
 export class AgentToolService {
+  private static readonly strictModeReason = 'Only strict approval mode is supported for metadata tools in this slice';
+
   private static readonly activeStatuses = [
     AgentSessionStatus.Created,
     AgentSessionStatus.Running,
     AgentSessionStatus.WaitingForToolApproval,
+    AgentSessionStatus.WaitingForPlanReview,
     AgentSessionStatus.Interrupted,
   ];
 
@@ -140,7 +143,7 @@ export class AgentToolService {
     if (toolCall.status === AgentToolCallStatus.Denied) {
       return {
         status: 'denied',
-        reason: toolCall.error ?? 'Agent tool call was denied',
+        reason: toolCall.error ?? 'Tool call was denied',
         toolCall: this.mapToolCall(toolCall),
       };
     }
@@ -241,7 +244,7 @@ export class AgentToolService {
     const plan = session.permissionPlanSnapshot;
 
     if (session.approvalMode !== AgentApprovalMode.Strict) {
-      return 'Agent session approval mode is not strict';
+      return AgentToolService.strictModeReason;
     }
 
     if (!plan.read.metadata) {

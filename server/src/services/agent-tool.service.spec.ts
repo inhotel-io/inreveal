@@ -245,6 +245,26 @@ describe(AgentToolService.name, () => {
     });
   });
 
+  it('accepts metadata reads while the session is waiting for plan review', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds });
+
+    expect(result.status).toBe('approval-required');
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: session.id,
+        status: AgentToolCallStatus.PendingApproval,
+        redactedRequestMetadata: { assetIds },
+      }),
+    );
+  });
+
   it('creates a denied audit row when read.metadata is disabled', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid()];
@@ -316,6 +336,43 @@ describe(AgentToolService.name, () => {
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
     });
     expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
+  });
+
+  it('creates a denied audit row when approval mode is not strict', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const denied = makeToolCall({
+      sessionId: session.id,
+      status: AgentToolCallStatus.Denied,
+      approvalDecision: AgentToolApprovalDecision.Denied,
+      error: 'Only strict approval mode is supported for metadata tools in this slice',
+      completedAt,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.create.mockResolvedValue(denied);
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Only strict approval mode is supported for metadata tools in this slice',
+      toolCall: expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        error: 'Only strict approval mode is supported for metadata tools in this slice',
+      }),
+    });
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        redactedRequestMetadata: { assetIds },
+        completedAt: expect.any(Date),
+        error: 'Only strict approval mode is supported for metadata tools in this slice',
+      }),
+    );
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
   });
 
   it('denies inaccessible assets before pending approval', async () => {
@@ -537,6 +594,46 @@ describe(AgentToolService.name, () => {
     expect(toolCallRepository.transition).not.toHaveBeenCalled();
   });
 
+  it('returns denied without transition or asset read when executing an already-denied tool call', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const denied = makeToolCall({
+      sessionId: session.id,
+      status: AgentToolCallStatus.Denied,
+      approvalDecision: AgentToolApprovalDecision.Denied,
+      error: null,
+      completedAt,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(denied);
+
+    const result = await sut.readAssetMetadata(auth, session.id, { toolCallId: denied.id });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Tool call was denied',
+      toolCall: expect.objectContaining({ id: denied.id, status: AgentToolCallStatus.Denied }),
+    });
+    expect(toolCallRepository.transition).not.toHaveBeenCalled();
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+  });
+
+  it('throws without transition or asset read when executing a non-approved and non-denied tool call', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const pending = makeToolCall({ sessionId: session.id, status: AgentToolCallStatus.PendingApproval });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(pending);
+
+    await expect(sut.readAssetMetadata(auth, session.id, { toolCallId: pending.id })).rejects.toThrow(
+      'Agent tool call has not been approved',
+    );
+    expect(toolCallRepository.transition).not.toHaveBeenCalled();
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+  });
+
   it('executes approved metadata reads by claiming, revalidating, reading, completing audit, and returning ordered assets', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid(), newUuid()];
@@ -672,6 +769,73 @@ describe(AgentToolService.name, () => {
     expect(result.reason).toBe('Requested asset count exceeds per-session limit');
     expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+  });
+
+  it.each([
+    {
+      name: 'read.metadata disabled',
+      sessionOverrides: {
+        permissionPlanSnapshot: makePlan({ read: { metadata: false, previews: false, originals: false } }),
+      },
+      reason: 'Agent permission policy does not allow metadata reads',
+    },
+    {
+      name: 'providerExposure.metadata disabled',
+      sessionOverrides: {
+        permissionPlanSnapshot: makePlan({
+          providerExposure: {
+            metadata: false,
+            previews: false,
+            originals: false,
+            allowOriginalsForExternalProviders: false,
+          },
+        }),
+      },
+      reason: 'Agent provider exposure policy does not allow metadata reads',
+    },
+    {
+      name: 'approval mode is no longer strict',
+      sessionOverrides: { approvalMode: AgentApprovalMode.PlanOnly },
+      reason: 'Only strict approval mode is supported for metadata tools in this slice',
+    },
+  ])('records denied and restores session when approval-time policy drifts: $name', async ({ sessionOverrides, reason }) => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({ userId: auth.user.id, ...sessionOverrides });
+    const approved = makeToolCall({
+      sessionId: session.id,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      redactedRequestMetadata: { assetIds },
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(approved);
+    toolCallRepository.transition.mockResolvedValueOnce(makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }));
+
+    const result = await sut.readAssetMetadata(auth, session.id, { toolCallId: approved.id });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason,
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied, error: reason }),
+    });
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      1,
+      session.id,
+      approved.id,
+      AgentToolCallStatus.Approved,
+      { status: AgentToolCallStatus.Executing, error: null },
+    );
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      2,
+      session.id,
+      approved.id,
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({ status: AgentToolCallStatus.Denied, error: reason }),
+    );
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
   });
 
   it('records failed and restores session when an asset disappears after revalidation', async () => {
