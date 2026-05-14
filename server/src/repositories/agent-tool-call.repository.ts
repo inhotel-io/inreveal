@@ -8,6 +8,7 @@ import { DB } from 'src/schema';
 import { AgentToolCallTable } from 'src/schema/tables/agent-tool-call.table';
 import { asUuid } from 'src/utils/database';
 
+type AgentToolCallCreate = Insertable<AgentToolCallTable>;
 type AgentToolCallUpdate = Pick<
   Updateable<AgentToolCallTable>,
   'status' | 'approvalDecision' | 'responseSummary' | 'redactedResponseMetadata' | 'completedAt' | 'error'
@@ -15,10 +16,48 @@ type AgentToolCallUpdate = Pick<
 
 @Injectable()
 export class AgentToolCallRepository {
+  private static readonly countedStatuses = [
+    AgentToolCallStatus.PendingApproval,
+    AgentToolCallStatus.Approved,
+    AgentToolCallStatus.Executing,
+    AgentToolCallStatus.Completed,
+  ];
+
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
   create(dto: Insertable<AgentToolCallTable>) {
     return this.db.insertInto('agent_tool_call').values(dto).returning(columns.agentToolCall).executeTakeFirstOrThrow();
+  }
+
+  async createPendingReadAssetMetadataWithSessionLimit(
+    pendingDto: AgentToolCallCreate,
+    deniedDto: AgentToolCallCreate,
+    maxAssetsPerSession: number,
+  ) {
+    return this.db.transaction().execute(async (trx) => {
+      await trx
+        .selectFrom('agent_session')
+        .select('id')
+        .where('id', '=', asUuid(pendingDto.sessionId))
+        .forUpdate()
+        .executeTakeFirstOrThrow();
+
+      const result = await trx
+        .selectFrom('agent_tool_call')
+        .select((eb) => sql<number>`coalesce(sum(${eb.ref('assetCount')}), 0)::int`.as('assetCount'))
+        .where('sessionId', '=', asUuid(pendingDto.sessionId))
+        .where('status', 'in', AgentToolCallRepository.countedStatuses)
+        .executeTakeFirstOrThrow();
+
+      const dto = result.assetCount + Number(pendingDto.assetCount) > maxAssetsPerSession ? deniedDto : pendingDto;
+      const toolCall = await trx
+        .insertInto('agent_tool_call')
+        .values(dto)
+        .returning(columns.agentToolCall)
+        .executeTakeFirstOrThrow();
+
+      return dto === deniedDto ? ({ status: 'limit-exceeded', toolCall } as const) : ({ status: 'created', toolCall } as const);
+    });
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
@@ -51,12 +90,7 @@ export class AgentToolCallRepository {
       .selectFrom('agent_tool_call')
       .select((eb) => sql<number>`coalesce(sum(${eb.ref('assetCount')}), 0)::int`.as('assetCount'))
       .where('sessionId', '=', asUuid(sessionId))
-      .where('status', 'in', [
-        AgentToolCallStatus.PendingApproval,
-        AgentToolCallStatus.Approved,
-        AgentToolCallStatus.Executing,
-        AgentToolCallStatus.Completed,
-      ])
+      .where('status', 'in', AgentToolCallRepository.countedStatuses)
       .$if(Boolean(excludedToolCallId), (qb) => qb.where('id', '!=', asUuid(excludedToolCallId!)))
       .executeTakeFirstOrThrow();
 

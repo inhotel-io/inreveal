@@ -59,14 +59,16 @@ export class AgentToolService {
     }
 
     const assetIds = dto.assetIds ?? [];
-    const denialReason = await this.validateReadRequest(auth, session, assetIds);
+    const denialReason = await this.validateReadRequest(auth, session, assetIds, undefined, {
+      validateSessionLimit: false,
+    });
 
     if (denialReason) {
       const toolCall = await this.createDeniedAudit(session, assetIds, denialReason);
       return { status: 'denied', reason: denialReason, toolCall: this.mapToolCall(toolCall) };
     }
 
-    const toolCall = await this.toolCallRepository.create({
+    const pendingDto: AgentToolCallCreate = {
       ...this.baseToolCall(session, assetIds),
       status: AgentToolCallStatus.PendingApproval,
       approvalDecision: null,
@@ -74,11 +76,30 @@ export class AgentToolService {
       redactedResponseMetadata: null,
       completedAt: null,
       error: null,
-    });
+    };
+    const sessionLimitReason = this.getSessionLimitReason(session.permissionPlanSnapshot.limits.maxAssetsPerSession);
+    const deniedDto: AgentToolCallCreate = {
+      ...this.baseToolCall(session, assetIds),
+      status: AgentToolCallStatus.Denied,
+      approvalDecision: AgentToolApprovalDecision.Denied,
+      responseSummary: null,
+      redactedResponseMetadata: null,
+      completedAt: new Date(),
+      error: sessionLimitReason,
+    };
+    const result = await this.toolCallRepository.createPendingReadAssetMetadataWithSessionLimit(
+      pendingDto,
+      deniedDto,
+      session.permissionPlanSnapshot.limits.maxAssetsPerSession,
+    );
+
+    if (result.status === 'limit-exceeded') {
+      return { status: 'denied', reason: sessionLimitReason, toolCall: this.mapToolCall(result.toolCall) };
+    }
 
     await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.WaitingForToolApproval });
 
-    return { status: 'approval-required', toolCall: this.mapToolCall(toolCall) };
+    return { status: 'approval-required', toolCall: this.mapToolCall(result.toolCall) };
   }
 
   async approveToolCall(
@@ -185,7 +206,9 @@ export class AgentToolService {
       }
 
       const unorderedAssets = await this.assetRepository.getAgentMetadataByIds(assetIds);
-      const assetsById = new Map(unorderedAssets.map((asset) => [asset.id, this.mapAssetMetadata(asset)]));
+      const assetsById = new Map(
+        unorderedAssets.map((asset) => [asset.id, this.mapAssetMetadata(asset as AgentAssetMetadata)]),
+      );
       const assets = assetIds.flatMap((id) => {
         const asset = assetsById.get(id);
         return asset ? [asset] : [];
@@ -254,11 +277,16 @@ export class AgentToolService {
     return `Returned metadata for ${assetCount} ${assetCount === 1 ? 'asset' : 'assets'}`;
   }
 
+  private getSessionLimitReason(maxAssetsPerSession: number): string {
+    return `Session policy allows at most ${maxAssetsPerSession} assets per session`;
+  }
+
   private async validateReadRequest(
     auth: AuthDto,
     session: AgentSession,
     assetIds: string[],
     excludedToolCallId?: string,
+    options?: { validateSessionLimit: boolean },
   ): Promise<string | null> {
     const plan = session.permissionPlanSnapshot;
 
@@ -278,11 +306,13 @@ export class AgentToolService {
       return 'Requested asset count exceeds per-tool limit';
     }
 
-    const countedAssetCount = excludedToolCallId
-      ? await this.toolCallRepository.getCountedAssetCountBySession(session.id, excludedToolCallId)
-      : await this.toolCallRepository.getCountedAssetCountBySession(session.id);
-    if (countedAssetCount + assetIds.length > plan.limits.maxAssetsPerSession) {
-      return 'Requested asset count exceeds per-session limit';
+    if (options?.validateSessionLimit ?? true) {
+      const countedAssetCount = excludedToolCallId
+        ? await this.toolCallRepository.getCountedAssetCountBySession(session.id, excludedToolCallId)
+        : await this.toolCallRepository.getCountedAssetCountBySession(session.id);
+      if (countedAssetCount + assetIds.length > plan.limits.maxAssetsPerSession) {
+        return this.getSessionLimitReason(plan.limits.maxAssetsPerSession);
+      }
     }
 
     const readableIds = await this.getReadableAssetIds(auth, plan, assetIds);
