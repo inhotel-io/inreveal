@@ -350,7 +350,7 @@ describe(AgentSessionService.name, () => {
 
     expect(repository.getByUserId).toHaveBeenCalledWith(auth.user.id);
     expect(credentialService.getById).not.toHaveBeenCalled();
-    expect(result).toEqual(sessions.map(({ userId, updateId, ...session }) => session));
+    expect(result).toEqual(sessions.map(({ userId: _userId, updateId: _updateId, ...session }) => session));
   });
 
   it('gets owned session preserving stored snapshots without consulting current credential metadata', async () => {
