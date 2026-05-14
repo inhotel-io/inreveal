@@ -923,12 +923,16 @@ describe(AssetRepository.name, () => {
           city: 'Lisbon',
           state: 'Lisbon',
           country: 'Portugal',
+          description: 'private caption',
+          fileSizeInByte: 123_456,
           make: 'Canon',
           model: 'R5',
           lensModel: 'RF 24-70',
           latitude: 38.7223,
           longitude: -9.1393,
           rating: 5,
+          tags: ['private'],
+          lockedProperties: ['description'],
         }),
         ctx.newTagAsset({ tagIds: [tag.id], assetIds: [asset.id] }),
         ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: 'preview/IMG_0001.jpg' }),
@@ -964,6 +968,12 @@ describe(AssetRepository.name, () => {
       expect(result[0]).not.toHaveProperty('checksum');
       expect(result[0]).not.toHaveProperty('files');
       expect(result[0]).not.toHaveProperty('faces');
+      expect(result[0].exifInfo).not.toHaveProperty('description');
+      expect(result[0].exifInfo).not.toHaveProperty('fileSizeInByte');
+      expect(result[0].exifInfo).not.toHaveProperty('tags');
+      expect(result[0].exifInfo).not.toHaveProperty('lockedProperties');
+      expect(result[0].exifInfo).not.toHaveProperty('updatedAt');
+      expect(result[0].exifInfo).not.toHaveProperty('updateId');
     });
   });
 
@@ -973,7 +983,10 @@ describe(AssetRepository.name, () => {
       const { user } = await ctx.newUser();
       const { asset: locked } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
       const { asset: timeline } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
-      const { asset: nonRequestedLocked } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      const { asset: nonRequestedLocked } = await ctx.newAsset({
+        ownerId: user.id,
+        visibility: AssetVisibility.Locked,
+      });
 
       const result = await sut.getAgentLockedIds(new Set([locked.id, timeline.id]));
 
