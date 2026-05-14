@@ -21,13 +21,13 @@ import {
   user_metadata_audit,
 } from 'src/schema/functions';
 import { ActivityTable } from 'src/schema/tables/activity.table';
+import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
 import { AlbumAssetAuditTable } from 'src/schema/tables/album-asset-audit.table';
 import { AlbumAssetTable } from 'src/schema/tables/album-asset.table';
 import { AlbumAuditTable } from 'src/schema/tables/album-audit.table';
 import { AlbumUserAuditTable } from 'src/schema/tables/album-user-audit.table';
 import { AlbumUserTable } from 'src/schema/tables/album-user.table';
 import { AlbumTable } from 'src/schema/tables/album.table';
-import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
 import { ApiKeyTable } from 'src/schema/tables/api-key.table';
 import { AssetAuditTable } from 'src/schema/tables/asset-audit.table';
 import { AssetDuplicateChecksumTable } from 'src/schema/tables/asset-duplicate-checksum.table';
