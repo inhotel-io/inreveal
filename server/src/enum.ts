@@ -95,6 +95,13 @@ export enum AgentPermissionPreset {
   Custom = 'custom',
 }
 
+export enum AgentMessageRole {
+  User = 'user',
+  Assistant = 'assistant',
+  System = 'system',
+  Tool = 'tool',
+}
+
 export enum AgentSessionStatus {
   Created = 'created',
   Running = 'running',
