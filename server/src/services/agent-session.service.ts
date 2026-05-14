@@ -13,14 +13,6 @@ import {
 
 @Injectable()
 export class AgentSessionService {
-  private static readonly cancellableStatuses = [
-    AgentSessionStatus.Created,
-    AgentSessionStatus.Running,
-    AgentSessionStatus.WaitingForToolApproval,
-    AgentSessionStatus.WaitingForPlanReview,
-    AgentSessionStatus.Interrupted,
-  ];
-
   static readonly permissionPresets: AgentPermissionPresetMap = {
     [AgentPermissionPreset.Careful]: {
       read: { metadata: true, previews: false, originals: false },
@@ -146,9 +138,14 @@ export class AgentSessionService {
       throw new BadRequestException('Agent session cannot be cancelled in its current state');
     }
 
-    const updated = await this.repository.cancel(auth.user.id, id, AgentSessionService.cancellableStatuses, new Date());
+    const updated = await this.repository.cancel(auth.user.id, id, new Date());
 
     if (!updated) {
+      const current = await this.repository.getById(auth.user.id, id);
+      if (current?.status === AgentSessionStatus.Cancelled) {
+        return this.map(current);
+      }
+
       throw new BadRequestException('Agent session cannot be cancelled in its current state');
     }
 
