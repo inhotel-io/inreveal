@@ -21,10 +21,7 @@ export class AgentSessionController {
       'Create a personal AI agent session with immutable credential, model, permission plan, and approval mode snapshots.',
     history: new HistoryBuilder().added('v2.7.5').alpha('v2.7.5'),
   })
-  createAgentSession(
-    @Auth() auth: AuthDto,
-    @Body() dto: AgentSessionCreateDto,
-  ): Promise<AgentSessionResponseDto> {
+  createAgentSession(@Auth() auth: AuthDto, @Body() dto: AgentSessionCreateDto): Promise<AgentSessionResponseDto> {
     return this.service.create(auth, dto);
   }
 
