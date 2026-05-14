@@ -24,16 +24,10 @@ class AgentToolDataClass {
   String toJson() => value;
 
   static const metadata = AgentToolDataClass._(r'metadata');
-  static const previews = AgentToolDataClass._(r'previews');
-  static const originals = AgentToolDataClass._(r'originals');
-  static const plan = AgentToolDataClass._(r'plan');
 
   /// List of all possible values in this [enum][AgentToolDataClass].
   static const values = <AgentToolDataClass>[
     metadata,
-    previews,
-    originals,
-    plan,
   ];
 
   static AgentToolDataClass? fromJson(dynamic value) => AgentToolDataClassTypeTransformer().decode(value);
@@ -73,9 +67,6 @@ class AgentToolDataClassTypeTransformer {
     if (data != null) {
       switch (data) {
         case r'metadata': return AgentToolDataClass.metadata;
-        case r'previews': return AgentToolDataClass.previews;
-        case r'originals': return AgentToolDataClass.originals;
-        case r'plan': return AgentToolDataClass.plan;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
