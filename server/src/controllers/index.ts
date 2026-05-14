@@ -1,4 +1,5 @@
 import { ActivityController } from 'src/controllers/activity.controller';
+import { AgentMessageController } from 'src/controllers/agent-message.controller';
 import { AgentProviderCredentialController } from 'src/controllers/agent-provider-credential.controller';
 import { AgentRunnerController } from 'src/controllers/agent-runner.controller';
 import { AgentSessionController } from 'src/controllers/agent-session.controller';
@@ -52,6 +53,7 @@ import { WorkflowController } from 'src/controllers/workflow.controller';
 export const controllers = [
   ApiKeyController,
   ActivityController,
+  AgentMessageController,
   AgentProviderCredentialController,
   AgentRunnerController,
   AgentSessionController,
