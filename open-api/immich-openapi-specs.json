@@ -2593,6 +2593,131 @@
         "x-immich-state": "Alpha"
       }
     },
+    "/agent/sessions/{id}/messages": {
+      "get": {
+        "description": "Retrieve persisted chat messages for an AI agent session owned by the current user.",
+        "operationId": "getAgentSessionMessages",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentMessageResponseDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List agent session messages",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentSession.read",
+        "x-immich-state": "Alpha"
+      },
+      "post": {
+        "description": "Append a user-authored message to an AI agent session owned by the current user.",
+        "operationId": "appendAgentSessionMessage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentMessageCreateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentMessageResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Append an agent session message",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentSession.update",
+        "x-immich-state": "Alpha"
+      }
+    },
     "/albums": {
       "get": {
         "description": "Retrieve a list of albums available to the authenticated user.",
@@ -22223,6 +22348,211 @@
         "additionalProperties": {},
         "type": "object"
       },
+      "AgentMessageAssetBlock": {
+        "properties": {
+          "assetId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AgentMessageAssetBlockType"
+          }
+        },
+        "required": [
+          "assetId",
+          "type"
+        ],
+        "type": "object"
+      },
+      "AgentMessageAssetBlockType": {
+        "enum": [
+          "asset"
+        ],
+        "type": "string"
+      },
+      "AgentMessageBlock": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentMessageTextBlock"
+          },
+          {
+            "$ref": "#/components/schemas/AgentMessageToolCallBlock"
+          },
+          {
+            "$ref": "#/components/schemas/AgentMessageAssetBlock"
+          },
+          {
+            "$ref": "#/components/schemas/AgentMessagePlanBlock"
+          }
+        ]
+      },
+      "AgentMessageContent": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/AgentMessageBlock"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "type": "object"
+      },
+      "AgentMessageCreateDto": {
+        "properties": {
+          "content": {
+            "$ref": "#/components/schemas/AgentUserMessageContent"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "type": "object"
+      },
+      "AgentMessagePlanBlock": {
+        "properties": {
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "planId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AgentMessagePlanBlockType"
+          }
+        },
+        "required": [
+          "planId",
+          "type"
+        ],
+        "type": "object"
+      },
+      "AgentMessagePlanBlockType": {
+        "enum": [
+          "plan"
+        ],
+        "type": "string"
+      },
+      "AgentMessageResponseDto": {
+        "properties": {
+          "content": {
+            "$ref": "#/components/schemas/AgentMessageContent"
+          },
+          "createdAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "providerMessageId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/AgentMessageRole"
+          },
+          "sessionId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "toolCallId": {
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "createdAt",
+          "id",
+          "providerMessageId",
+          "role",
+          "sessionId",
+          "toolCallId"
+        ],
+        "type": "object"
+      },
+      "AgentMessageRole": {
+        "enum": [
+          "user",
+          "assistant",
+          "system",
+          "tool"
+        ],
+        "type": "string"
+      },
+      "AgentMessageTextBlock": {
+        "properties": {
+          "text": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AgentMessageTextBlockType"
+          }
+        },
+        "required": [
+          "text",
+          "type"
+        ],
+        "type": "object"
+      },
+      "AgentMessageTextBlockType": {
+        "enum": [
+          "text"
+        ],
+        "type": "string"
+      },
+      "AgentMessageToolCallBlock": {
+        "properties": {
+          "summary": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "toolCallId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AgentMessageToolCallBlockType"
+          }
+        },
+        "required": [
+          "toolCallId",
+          "type"
+        ],
+        "type": "object"
+      },
+      "AgentMessageToolCallBlockType": {
+        "enum": [
+          "tool-call"
+        ],
+        "type": "string"
+      },
       "AgentModelSnapshot": {
         "properties": {
           "model": {
@@ -22775,6 +23105,22 @@
           "failed"
         ],
         "type": "string"
+      },
+      "AgentUserMessageContent": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/AgentMessageTextBlock"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "type": "object"
       },
       "AlbumNameDto": {
         "properties": {
