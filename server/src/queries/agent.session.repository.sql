@@ -24,7 +24,8 @@ from
 where
   "userId" = $1
 order by
-  "createdAt" desc
+  "createdAt" desc,
+  "id" desc
 
 -- AgentSessionRepository.getById
 select
