@@ -55,8 +55,20 @@ String parameterToString(dynamic value) {
   if (value is DateTime) {
     return value.toUtc().toIso8601String();
   }
+  if (value is AgentApprovalMode) {
+    return AgentApprovalModeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentPermissionPreset) {
+    return AgentPermissionPresetTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentProviderType) {
+    return AgentProviderTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentRunnerStatusReason) {
     return AgentRunnerStatusReasonTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentSessionStatus) {
+    return AgentSessionStatusTypeTransformer().encode(value).toString();
   }
   if (value is AlbumUserRole) {
     return AlbumUserRoleTypeTransformer().encode(value).toString();
