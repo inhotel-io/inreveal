@@ -13,7 +13,7 @@ part of openapi.api;
 class ApiClient {
   ApiClient({this.basePath = '/api', this.authentication,});
 
-  String basePath;
+  final String basePath;
   final Authentication? authentication;
 
   var _client = Client();
@@ -44,9 +44,8 @@ class ApiClient {
     Object? body,
     Map<String, String> headerParams,
     Map<String, String> formParams,
-    String? contentType, {
-    Future<void>? abortTrigger,
-  }) async {
+    String? contentType,
+  ) async {
     await authentication?.applyToParams(queryParams, headerParams);
 
     headerParams.addAll(_defaultHeaderMap);
@@ -64,7 +63,7 @@ class ApiClient {
         body is MultipartFile && (contentType == null ||
         !contentType.toLowerCase().startsWith('multipart/form-data'))
       ) {
-        final request = AbortableStreamedRequest(method, uri, abortTrigger: abortTrigger);
+        final request = StreamedRequest(method, uri);
         request.headers.addAll(headerParams);
         request.contentLength = body.length;
         body.finalize().listen(
@@ -79,7 +78,7 @@ class ApiClient {
       }
 
       if (body is MultipartRequest) {
-        final request = AbortableMultipartRequest(method, uri, abortTrigger: abortTrigger);
+        final request = MultipartRequest(method, uri);
         request.fields.addAll(body.fields);
         request.files.addAll(body.files);
         request.headers.addAll(body.headers);
@@ -93,19 +92,14 @@ class ApiClient {
         : await serializeAsync(body);
       final nullableHeaderParams = headerParams.isEmpty ? null : headerParams;
 
-      final request = AbortableRequest(method, uri, abortTrigger: abortTrigger);
-      if (nullableHeaderParams != null) {
-        request.headers.addAll(nullableHeaderParams);
+      switch(method) {
+        case 'POST': return await _client.post(uri, headers: nullableHeaderParams, body: msgBody,);
+        case 'PUT': return await _client.put(uri, headers: nullableHeaderParams, body: msgBody,);
+        case 'DELETE': return await _client.delete(uri, headers: nullableHeaderParams, body: msgBody,);
+        case 'PATCH': return await _client.patch(uri, headers: nullableHeaderParams, body: msgBody,);
+        case 'HEAD': return await _client.head(uri, headers: nullableHeaderParams,);
+        case 'GET': return await _client.get(uri, headers: nullableHeaderParams,);
       }
-      if (msgBody is String) {
-        request.body = msgBody;
-      } else if (msgBody is List<int>) {
-        request.bodyBytes = msgBody;
-      } else if (msgBody is Map<String, String>) {
-        request.bodyFields = msgBody;
-      }
-      final response = await _client.send(request);
-      return Response.fromStream(response);
     } on SocketException catch (error, trace) {
       throw ApiException.withInner(
         HttpStatus.badRequest,
@@ -142,6 +136,11 @@ class ApiClient {
         trace,
       );
     }
+
+    throw ApiException(
+      HttpStatus.badRequest,
+      'Invalid HTTP operation: $method $path',
+    );
   }
 
   Future<dynamic> deserializeAsync(String value, String targetType, {bool growable = false,}) =>
@@ -193,52 +192,10 @@ class ApiClient {
           return AddUsersDto.fromJson(value);
         case 'AdminOnboardingUpdateDto':
           return AdminOnboardingUpdateDto.fromJson(value);
-        case 'AgentAlbumAddAssetsOperationType':
-          return AgentAlbumAddAssetsOperationTypeTypeTransformer().decode(value);
-        case 'AgentAlbumCreateOperationType':
-          return AgentAlbumCreateOperationTypeTypeTransformer().decode(value);
-        case 'AgentAlbumDetail':
-          return AgentAlbumDetail.fromJson(value);
-        case 'AgentAlbumRemoveAssetsOperationType':
-          return AgentAlbumRemoveAssetsOperationTypeTypeTransformer().decode(value);
-        case 'AgentAlbumSetCoverOperationType':
-          return AgentAlbumSetCoverOperationTypeTypeTransformer().decode(value);
-        case 'AgentAlbumSummary':
-          return AgentAlbumSummary.fromJson(value);
-        case 'AgentAlbumUpdateDetailsOperationType':
-          return AgentAlbumUpdateDetailsOperationTypeTypeTransformer().decode(value);
         case 'AgentApprovalMode':
           return AgentApprovalModeTypeTransformer().decode(value);
-        case 'AgentAssetAddTagOperationType':
-          return AgentAssetAddTagOperationTypeTypeTransformer().decode(value);
-        case 'AgentAssetMediaReference':
-          return AgentAssetMediaReference.fromJson(value);
-        case 'AgentAssetMetadata':
-          return AgentAssetMetadata.fromJson(value);
-        case 'AgentAssetMetadataExif':
-          return AgentAssetMetadataExif.fromJson(value);
-        case 'AgentAssetMetadataTag':
-          return AgentAssetMetadataTag.fromJson(value);
-        case 'AgentAssetRemoveTagOperationType':
-          return AgentAssetRemoveTagOperationTypeTypeTransformer().decode(value);
-        case 'AgentAssetRotateOperationType':
-          return AgentAssetRotateOperationTypeTypeTransformer().decode(value);
-        case 'AgentAssetSetArchiveOperationType':
-          return AgentAssetSetArchiveOperationTypeTypeTransformer().decode(value);
-        case 'AgentAssetSetFavoriteOperationType':
-          return AgentAssetSetFavoriteOperationTypeTypeTransformer().decode(value);
         case 'AgentCredentialSnapshot':
           return AgentCredentialSnapshot.fromJson(value);
-        case 'AgentListAlbumsToolApprovalRequiredResponse':
-          return AgentListAlbumsToolApprovalRequiredResponse.fromJson(value);
-        case 'AgentListAlbumsToolDeniedResponse':
-          return AgentListAlbumsToolDeniedResponse.fromJson(value);
-        case 'AgentListAlbumsToolRequestDto':
-          return AgentListAlbumsToolRequestDto.fromJson(value);
-        case 'AgentListAlbumsToolResponseDto':
-          return AgentListAlbumsToolResponseDto.fromJson(value);
-        case 'AgentListAlbumsToolSuccessResponse':
-          return AgentListAlbumsToolSuccessResponse.fromJson(value);
         case 'AgentMessageAssetBlock':
           return AgentMessageAssetBlock.fromJson(value);
         case 'AgentMessageAssetBlockType':
@@ -267,50 +224,6 @@ class ApiClient {
           return AgentMessageToolCallBlockTypeTypeTransformer().decode(value);
         case 'AgentModelSnapshot':
           return AgentModelSnapshot.fromJson(value);
-        case 'AgentOperationApplyStatus':
-          return AgentOperationApplyStatusTypeTransformer().decode(value);
-        case 'AgentOperationExistingAlbumTargetKind':
-          return AgentOperationExistingAlbumTargetKindTypeTransformer().decode(value);
-        case 'AgentOperationExistingSpaceTargetKind':
-          return AgentOperationExistingSpaceTargetKindTypeTransformer().decode(value);
-        case 'AgentOperationItemKind':
-          return AgentOperationItemKindTypeTransformer().decode(value);
-        case 'AgentOperationItemSelection':
-          return AgentOperationItemSelection.fromJson(value);
-        case 'AgentOperationItemSelectionOneOf':
-          return AgentOperationItemSelectionOneOf.fromJson(value);
-        case 'AgentOperationItemSelectionOneOf1':
-          return AgentOperationItemSelectionOneOf1.fromJson(value);
-        case 'AgentOperationItemSelectionOneOf2':
-          return AgentOperationItemSelectionOneOf2.fromJson(value);
-        case 'AgentOperationItemSelectionOneOf3':
-          return AgentOperationItemSelectionOneOf3.fromJson(value);
-        case 'AgentOperationNewAlbumTargetKind':
-          return AgentOperationNewAlbumTargetKindTypeTransformer().decode(value);
-        case 'AgentOperationNewSpaceTargetKind':
-          return AgentOperationNewSpaceTargetKindTypeTransformer().decode(value);
-        case 'AgentOperationPlanApplyRequestDto':
-          return AgentOperationPlanApplyRequestDto.fromJson(value);
-        case 'AgentOperationPlanApplyResponseDto':
-          return AgentOperationPlanApplyResponseDto.fromJson(value);
-        case 'AgentOperationPlanResponseDto':
-          return AgentOperationPlanResponseDto.fromJson(value);
-        case 'AgentOperationPlanStatus':
-          return AgentOperationPlanStatusTypeTransformer().decode(value);
-        case 'AgentOperationPlanSummaryRequestDto':
-          return AgentOperationPlanSummaryRequestDto.fromJson(value);
-        case 'AgentOperationPlanToolResponseDto':
-          return AgentOperationPlanToolResponseDto.fromJson(value);
-        case 'AgentOperationResponseDto':
-          return AgentOperationResponseDto.fromJson(value);
-        case 'AgentOperationRiskLevel':
-          return AgentOperationRiskLevelTypeTransformer().decode(value);
-        case 'AgentOperationStatus':
-          return AgentOperationStatusTypeTransformer().decode(value);
-        case 'AgentOperationTargetKind':
-          return AgentOperationTargetKindTypeTransformer().decode(value);
-        case 'AgentOperationType':
-          return AgentOperationTypeTypeTransformer().decode(value);
         case 'AgentPermissionPlan':
           return AgentPermissionPlan.fromJson(value);
         case 'AgentPermissionPlanAssetScope':
@@ -325,56 +238,6 @@ class ApiClient {
           return AgentPermissionPlanWriteScope.fromJson(value);
         case 'AgentPermissionPreset':
           return AgentPermissionPresetTypeTransformer().decode(value);
-        case 'AgentProposeAlbumOperationsDto':
-          return AgentProposeAlbumOperationsDto.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInner':
-          return AgentProposeAlbumOperationsDtoOperationsInner.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf1':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf1.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf10':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf10.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf10Payload':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf10Payload.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf11':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf11.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf11Payload':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf11Payload.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf12':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf12.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf12Payload':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf12Payload.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf13':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf13.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf2':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf2.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf3.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf4':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf4.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf5':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf5.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf5Payload':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf5Payload.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf6':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf6.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf7':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf7.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf8':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf8.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf9':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf9.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload.fromJson(value);
         case 'AgentProviderCredentialCreateDto':
           return AgentProviderCredentialCreateDto.fromJson(value);
         case 'AgentProviderCredentialResponseDto':
@@ -383,86 +246,20 @@ class ApiClient {
           return AgentProviderCredentialUpdateDto.fromJson(value);
         case 'AgentProviderType':
           return AgentProviderTypeTypeTransformer().decode(value);
-        case 'AgentReadAlbumToolApprovalRequiredResponse':
-          return AgentReadAlbumToolApprovalRequiredResponse.fromJson(value);
-        case 'AgentReadAlbumToolDeniedResponse':
-          return AgentReadAlbumToolDeniedResponse.fromJson(value);
-        case 'AgentReadAlbumToolRequestDto':
-          return AgentReadAlbumToolRequestDto.fromJson(value);
-        case 'AgentReadAlbumToolResponseDto':
-          return AgentReadAlbumToolResponseDto.fromJson(value);
-        case 'AgentReadAlbumToolSuccessResponse':
-          return AgentReadAlbumToolSuccessResponse.fromJson(value);
-        case 'AgentReadAssetMetadataToolApprovalRequiredResponse':
-          return AgentReadAssetMetadataToolApprovalRequiredResponse.fromJson(value);
-        case 'AgentReadAssetMetadataToolDeniedResponse':
-          return AgentReadAssetMetadataToolDeniedResponse.fromJson(value);
         case 'AgentReadAssetMetadataToolRequestDto':
           return AgentReadAssetMetadataToolRequestDto.fromJson(value);
-        case 'AgentReadAssetMetadataToolResponseDto':
-          return AgentReadAssetMetadataToolResponseDto.fromJson(value);
-        case 'AgentReadAssetMetadataToolSuccessResponse':
-          return AgentReadAssetMetadataToolSuccessResponse.fromJson(value);
-        case 'AgentReadAssetOriginalsToolApprovalRequiredResponse':
-          return AgentReadAssetOriginalsToolApprovalRequiredResponse.fromJson(value);
-        case 'AgentReadAssetOriginalsToolDeniedResponse':
-          return AgentReadAssetOriginalsToolDeniedResponse.fromJson(value);
-        case 'AgentReadAssetOriginalsToolRequestDto':
-          return AgentReadAssetOriginalsToolRequestDto.fromJson(value);
-        case 'AgentReadAssetOriginalsToolResponseDto':
-          return AgentReadAssetOriginalsToolResponseDto.fromJson(value);
-        case 'AgentReadAssetOriginalsToolSuccessResponse':
-          return AgentReadAssetOriginalsToolSuccessResponse.fromJson(value);
-        case 'AgentReadAssetPreviewsToolApprovalRequiredResponse':
-          return AgentReadAssetPreviewsToolApprovalRequiredResponse.fromJson(value);
-        case 'AgentReadAssetPreviewsToolDeniedResponse':
-          return AgentReadAssetPreviewsToolDeniedResponse.fromJson(value);
-        case 'AgentReadAssetPreviewsToolRequestDto':
-          return AgentReadAssetPreviewsToolRequestDto.fromJson(value);
-        case 'AgentReadAssetPreviewsToolResponseDto':
-          return AgentReadAssetPreviewsToolResponseDto.fromJson(value);
-        case 'AgentReadAssetPreviewsToolSuccessResponse':
-          return AgentReadAssetPreviewsToolSuccessResponse.fromJson(value);
-        case 'AgentReviseAlbumOperationsDto':
-          return AgentReviseAlbumOperationsDto.fromJson(value);
         case 'AgentRunnerCapabilitiesDto':
           return AgentRunnerCapabilitiesDto.fromJson(value);
         case 'AgentRunnerStatusDto':
           return AgentRunnerStatusDto.fromJson(value);
         case 'AgentRunnerStatusReason':
           return AgentRunnerStatusReasonTypeTransformer().decode(value);
-        case 'AgentSearchAssetsFilters':
-          return AgentSearchAssetsFilters.fromJson(value);
-        case 'AgentSearchAssetsToolApprovalRequiredResponse':
-          return AgentSearchAssetsToolApprovalRequiredResponse.fromJson(value);
-        case 'AgentSearchAssetsToolDeniedResponse':
-          return AgentSearchAssetsToolDeniedResponse.fromJson(value);
-        case 'AgentSearchAssetsToolRequestDto':
-          return AgentSearchAssetsToolRequestDto.fromJson(value);
-        case 'AgentSearchAssetsToolResponseDto':
-          return AgentSearchAssetsToolResponseDto.fromJson(value);
-        case 'AgentSearchAssetsToolSuccessResponse':
-          return AgentSearchAssetsToolSuccessResponse.fromJson(value);
-        case 'AgentSessionActivityEventCounts':
-          return AgentSessionActivityEventCounts.fromJson(value);
-        case 'AgentSessionActivityEventResponseDto':
-          return AgentSessionActivityEventResponseDto.fromJson(value);
-        case 'AgentSessionActivityEventSource':
-          return AgentSessionActivityEventSourceTypeTransformer().decode(value);
-        case 'AgentSessionActivityEventStatus':
-          return AgentSessionActivityEventStatusTypeTransformer().decode(value);
         case 'AgentSessionCreateDto':
           return AgentSessionCreateDto.fromJson(value);
         case 'AgentSessionResponseDto':
           return AgentSessionResponseDto.fromJson(value);
         case 'AgentSessionStatus':
           return AgentSessionStatusTypeTransformer().decode(value);
-        case 'AgentSessionUpdateDto':
-          return AgentSessionUpdateDto.fromJson(value);
-        case 'AgentSpaceCreateOperationType':
-          return AgentSpaceCreateOperationTypeTypeTransformer().decode(value);
-        case 'AgentSpaceUpdateDetailsOperationType':
-          return AgentSpaceUpdateDetailsOperationTypeTypeTransformer().decode(value);
         case 'AgentToolApprovalDecision':
           return AgentToolApprovalDecisionTypeTransformer().decode(value);
         case 'AgentToolApprovalDto':
@@ -543,6 +340,8 @@ class ApiClient {
           return AssetFaceUpdateDto.fromJson(value);
         case 'AssetFaceUpdateItem':
           return AssetFaceUpdateItem.fromJson(value);
+        case 'AssetFaceWithoutPersonResponseDto':
+          return AssetFaceWithoutPersonResponseDto.fromJson(value);
         case 'AssetIdErrorReason':
           return AssetIdErrorReasonTypeTransformer().decode(value);
         case 'AssetIdsDto':
@@ -579,8 +378,6 @@ class ApiClient {
           return AssetOcrResponseDto.fromJson(value);
         case 'AssetOrder':
           return AssetOrderTypeTransformer().decode(value);
-        case 'AssetOrderBy':
-          return AssetOrderByTypeTransformer().decode(value);
         case 'AssetRejectReason':
           return AssetRejectReasonTypeTransformer().decode(value);
         case 'AssetResponseDto':
@@ -611,12 +408,6 @@ class ApiClient {
           return CLIPConfig.fromJson(value);
         case 'CQMode':
           return CQModeTypeTransformer().decode(value);
-        case 'CalendarHeatmapResponseDto':
-          return CalendarHeatmapResponseDto.fromJson(value);
-        case 'CalendarHeatmapResponseDtoSeriesInner':
-          return CalendarHeatmapResponseDtoSeriesInner.fromJson(value);
-        case 'CalendarHeatmapType':
-          return CalendarHeatmapTypeTypeTransformer().decode(value);
         case 'CastResponse':
           return CastResponse.fromJson(value);
         case 'CastUpdate':
@@ -675,22 +466,6 @@ class ApiClient {
           return ExifResponseDto.fromJson(value);
         case 'FaceDto':
           return FaceDto.fromJson(value);
-        case 'FaceRepairRequestDto':
-          return FaceRepairRequestDto.fromJson(value);
-        case 'FaceRepairResponseDto':
-          return FaceRepairResponseDto.fromJson(value);
-        case 'FaceRepairResponseDtoExecuted':
-          return FaceRepairResponseDtoExecuted.fromJson(value);
-        case 'FaceRepairResponseDtoReport':
-          return FaceRepairResponseDtoReport.fromJson(value);
-        case 'FaceRepairResponseDtoReportPersonsInner':
-          return FaceRepairResponseDtoReportPersonsInner.fromJson(value);
-        case 'FaceRepairResponseDtoReportPersonsInnerSuspectedOwnersInner':
-          return FaceRepairResponseDtoReportPersonsInnerSuspectedOwnersInner.fromJson(value);
-        case 'FaceRepairResponseDtoReportTotals':
-          return FaceRepairResponseDtoReportTotals.fromJson(value);
-        case 'FaceRepairResponseDtoReportTotalsReviewOnlyByReason':
-          return FaceRepairResponseDtoReportTotalsReviewOnlyByReason.fromJson(value);
         case 'FacialRecognitionConfig':
           return FacialRecognitionConfig.fromJson(value);
         case 'FilterSuggestionsPersonDto':
@@ -837,6 +612,8 @@ class ApiClient {
           return PersonStatisticsResponseDto.fromJson(value);
         case 'PersonUpdateDto':
           return PersonUpdateDto.fromJson(value);
+        case 'PersonWithFacesResponseDto':
+          return PersonWithFacesResponseDto.fromJson(value);
         case 'PetDetectionConfig':
           return PetDetectionConfig.fromJson(value);
         case 'PinCodeChangeDto':
@@ -847,14 +624,26 @@ class ApiClient {
           return PinCodeSetupDto.fromJson(value);
         case 'PlacesResponseDto':
           return PlacesResponseDto.fromJson(value);
-        case 'PluginMethodResponseDto':
-          return PluginMethodResponseDto.fromJson(value);
+        case 'PluginActionResponseDto':
+          return PluginActionResponseDto.fromJson(value);
+        case 'PluginContextType':
+          return PluginContextTypeTypeTransformer().decode(value);
+        case 'PluginFilterResponseDto':
+          return PluginFilterResponseDto.fromJson(value);
+        case 'PluginJsonSchema':
+          return PluginJsonSchema.fromJson(value);
+        case 'PluginJsonSchemaProperty':
+          return PluginJsonSchemaProperty.fromJson(value);
+        case 'PluginJsonSchemaPropertyAdditionalProperties':
+          return PluginJsonSchemaPropertyAdditionalProperties.fromJson(value);
+        case 'PluginJsonSchemaType':
+          return PluginJsonSchemaTypeTypeTransformer().decode(value);
         case 'PluginResponseDto':
           return PluginResponseDto.fromJson(value);
-        case 'PluginTemplateResponseDto':
-          return PluginTemplateResponseDto.fromJson(value);
-        case 'PluginTemplateStepResponseDto':
-          return PluginTemplateStepResponseDto.fromJson(value);
+        case 'PluginTriggerResponseDto':
+          return PluginTriggerResponseDto.fromJson(value);
+        case 'PluginTriggerType':
+          return PluginTriggerTypeTypeTransformer().decode(value);
         case 'PurchaseResponse':
           return PurchaseResponse.fromJson(value);
         case 'PurchaseUpdate':
@@ -895,12 +684,6 @@ class ApiClient {
           return ReactionLevelTypeTransformer().decode(value);
         case 'ReactionType':
           return ReactionTypeTypeTransformer().decode(value);
-        case 'ReleaseChannel':
-          return ReleaseChannelTypeTransformer().decode(value);
-        case 'ReleaseEventV1':
-          return ReleaseEventV1.fromJson(value);
-        case 'ReleaseType':
-          return ReleaseTypeTypeTransformer().decode(value);
         case 'RepresentativeFaceUpdateDto':
           return RepresentativeFaceUpdateDto.fromJson(value);
         case 'ReverseGeocodingStateResponseDto':
@@ -1065,8 +848,6 @@ class ApiClient {
           return SyncAlbumUserV1.fromJson(value);
         case 'SyncAlbumV1':
           return SyncAlbumV1.fromJson(value);
-        case 'SyncAlbumV2':
-          return SyncAlbumV2.fromJson(value);
         case 'SyncAssetDeleteV1':
           return SyncAssetDeleteV1.fromJson(value);
         case 'SyncAssetEditDeleteV1':
@@ -1085,14 +866,8 @@ class ApiClient {
           return SyncAssetMetadataDeleteV1.fromJson(value);
         case 'SyncAssetMetadataV1':
           return SyncAssetMetadataV1.fromJson(value);
-        case 'SyncAssetOcrDeleteV1':
-          return SyncAssetOcrDeleteV1.fromJson(value);
-        case 'SyncAssetOcrV1':
-          return SyncAssetOcrV1.fromJson(value);
         case 'SyncAssetV1':
           return SyncAssetV1.fromJson(value);
-        case 'SyncAssetV2':
-          return SyncAssetV2.fromJson(value);
         case 'SyncAuthUserV1':
           return SyncAuthUserV1.fromJson(value);
         case 'SyncEntityType':
@@ -1161,8 +936,6 @@ class ApiClient {
           return SystemConfigDto.fromJson(value);
         case 'SystemConfigFFmpegDto':
           return SystemConfigFFmpegDto.fromJson(value);
-        case 'SystemConfigFFmpegRealtimeDto':
-          return SystemConfigFFmpegRealtimeDto.fromJson(value);
         case 'SystemConfigFacesDto':
           return SystemConfigFacesDto.fromJson(value);
         case 'SystemConfigGeneratedFullsizeImageDto':
@@ -1247,10 +1020,6 @@ class ApiClient {
           return TestEmailResponseDto.fromJson(value);
         case 'TimeBucketAssetResponseDto':
           return TimeBucketAssetResponseDto.fromJson(value);
-        case 'TimeBucketCoverResponseDto':
-          return TimeBucketCoverResponseDto.fromJson(value);
-        case 'TimeBucketSize':
-          return TimeBucketSizeTypeTransformer().decode(value);
         case 'TimeBucketsResponseDto':
           return TimeBucketsResponseDto.fromJson(value);
         case 'ToneMapping':
@@ -1321,22 +1090,18 @@ class ApiClient {
           return VideoCodecTypeTransformer().decode(value);
         case 'VideoContainer':
           return VideoContainerTypeTransformer().decode(value);
+        case 'WorkflowActionItemDto':
+          return WorkflowActionItemDto.fromJson(value);
+        case 'WorkflowActionResponseDto':
+          return WorkflowActionResponseDto.fromJson(value);
         case 'WorkflowCreateDto':
           return WorkflowCreateDto.fromJson(value);
+        case 'WorkflowFilterItemDto':
+          return WorkflowFilterItemDto.fromJson(value);
+        case 'WorkflowFilterResponseDto':
+          return WorkflowFilterResponseDto.fromJson(value);
         case 'WorkflowResponseDto':
           return WorkflowResponseDto.fromJson(value);
-        case 'WorkflowShareResponseDto':
-          return WorkflowShareResponseDto.fromJson(value);
-        case 'WorkflowShareStepDto':
-          return WorkflowShareStepDto.fromJson(value);
-        case 'WorkflowStepDto':
-          return WorkflowStepDto.fromJson(value);
-        case 'WorkflowTrigger':
-          return WorkflowTriggerTypeTransformer().decode(value);
-        case 'WorkflowTriggerResponseDto':
-          return WorkflowTriggerResponseDto.fromJson(value);
-        case 'WorkflowType':
-          return WorkflowTypeTypeTransformer().decode(value);
         case 'WorkflowUpdateDto':
           return WorkflowUpdateDto.fromJson(value);
         default:
