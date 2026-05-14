@@ -51,3 +51,31 @@ from
 where
   "userId" = $1
   and "id" = $2::uuid
+
+-- AgentSessionRepository.cancel
+update "agent_session"
+set
+  "status" = $1,
+  "endedAt" = $2
+where
+  "userId" = $3
+  and "id" = $4::uuid
+  and "status" in ($5, $6, $7, $8, $9)
+returning
+  "id",
+  "userId",
+  "providerCredentialId",
+  "credentialSnapshot",
+  "modelSnapshot",
+  "permissionPreset",
+  "permissionPlanSnapshot",
+  "approvalMode",
+  "runnerEndpoint",
+  "runnerSessionId",
+  "runnerCapabilitiesSnapshot",
+  "status",
+  "initialContextSnapshot",
+  "createdAt",
+  "updatedAt",
+  "endedAt",
+  "updateId"

@@ -3,6 +3,7 @@ import { Insertable, Kysely, Updateable } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { columns } from 'src/database';
 import { DummyValue, GenerateSql } from 'src/decorators';
+import { AgentSessionStatus } from 'src/enum';
 import { DB } from 'src/schema';
 import { AgentSessionTable } from 'src/schema/tables/agent-session.table';
 import { asUuid } from 'src/utils/database';
@@ -49,5 +50,30 @@ export class AgentSessionRepository {
       .where('id', '=', asUuid(id))
       .returning(columns.agentSession)
       .executeTakeFirstOrThrow();
+  }
+
+  @GenerateSql({
+    params: [
+      DummyValue.UUID,
+      DummyValue.UUID,
+      [
+        AgentSessionStatus.Created,
+        AgentSessionStatus.Running,
+        AgentSessionStatus.WaitingForToolApproval,
+        AgentSessionStatus.WaitingForPlanReview,
+        AgentSessionStatus.Interrupted,
+      ],
+      DummyValue.DATE,
+    ],
+  })
+  cancel(userId: string, id: string, cancellableStatuses: AgentSessionStatus[], endedAt: Date) {
+    return this.db
+      .updateTable('agent_session')
+      .set({ status: AgentSessionStatus.Cancelled, endedAt })
+      .where('userId', '=', userId)
+      .where('id', '=', asUuid(id))
+      .where('status', 'in', cancellableStatuses)
+      .returning(columns.agentSession)
+      .executeTakeFirst();
   }
 }
