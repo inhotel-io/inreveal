@@ -138,6 +138,9 @@ DROP TABLE IF EXISTS "classification_category" CASCADE;
 DROP TABLE IF EXISTS "storage_migration_log" CASCADE;
 DROP TABLE IF EXISTS "asset_duplicate_checksum" CASCADE;
 
+-- Agent provider credentials
+DROP TABLE IF EXISTS "agent_provider_credential" CASCADE;
+
 -- -----------------------------------------------------------------------------
 -- 3. Drop Gallery-only functions.
 --
@@ -234,7 +237,8 @@ DELETE FROM "migration_overrides"
    'trigger_shared_space_member_updatedAt',
    'trigger_shared_space_person_updatedAt',
    'trigger_shared_space_updatedAt',
-   'trigger_user_group_updatedAt'
+   'trigger_user_group_updatedAt',
+   'trigger_agent_provider_credential_updatedAt'
  );
 
 -- -----------------------------------------------------------------------------
@@ -347,6 +351,7 @@ DELETE FROM "kysely_migrations"
    '1778500000000-AddSpacePersonRepresentativeFaceSource',
    '1778600000000-SortSpacePeopleByNameIndex',
    '1778700000000-AddSharedSpaceFaceMatchBackfillTarget',
+   '1777000000000-AgentProviderCredential',
 
    -- Post-v2.7.5 upstream migrations pulled in by rebase. Paired with the
    -- schema rollbacks in step 7 above.
@@ -384,7 +389,8 @@ BEGIN
       OR "name" LIKE '%AddAssetDuplicateChecksum%'
       OR "name" LIKE '%AddFaceIdentities%'
       OR "name" LIKE '%AddSpacePersonRepresentativeFaceSource%'
-      OR "name" LIKE '%SortSpacePeopleByNameIndex%';
+      OR "name" LIKE '%SortSpacePeopleByNameIndex%'
+      OR "name" LIKE '%AgentProviderCredential%';
   IF fork_rows_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery row(s) still present in kysely_migrations after cleanup — aborting.', fork_rows_left;
   END IF;
@@ -402,7 +408,8 @@ BEGIN
        'face_identity_face', 'face_identity',
        'shared_space', 'user_group_member', 'user_group',
        'classification_prompt_embedding', 'classification_category',
-       'storage_migration_log', 'asset_duplicate_checksum'
+       'storage_migration_log', 'asset_duplicate_checksum',
+       'agent_provider_credential'
      );
   IF fork_tables_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery table(s) still present after cleanup — aborting.', fork_tables_left;
