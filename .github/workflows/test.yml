@@ -171,6 +171,7 @@ jobs:
 
       - name: Setup @immich/sdk
         run: pnpm --filter @immich/sdk install --frozen-lockfile && pnpm --filter @immich/sdk build
+        working-directory: .
 
       - name: Install deps
         run: pnpm install --frozen-lockfile
