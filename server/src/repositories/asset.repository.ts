@@ -16,7 +16,7 @@ import { jsonArrayFrom } from 'kysely/helpers/postgres';
 import { isEmpty, isUndefined, omitBy } from 'lodash';
 import { InjectKysely } from 'nestjs-kysely';
 import { lockableProperties, LockableProperty, Stack } from 'src/database';
-import { Chunked, ChunkedArray, DummyValue, GenerateSql } from 'src/decorators';
+import { Chunked, ChunkedArray, ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
   AssetFileType,
@@ -831,6 +831,45 @@ export class AssetRepository {
       .selectFrom('asset')
       .selectAll('asset')
       .select(withFacesAndPeople)
+      .select(withTags)
+      .$call(withExif)
+      .where('asset.id', '=', anyUuid(ids))
+      .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID_SET] })
+  @ChunkedSet()
+  async getAgentLockedIds(ids: Set<string>): Promise<Set<string>> {
+    if (ids.size === 0) {
+      return new Set();
+    }
+
+    const results = await this.db
+      .selectFrom('asset')
+      .select('asset.id')
+      .where('asset.id', 'in', [...ids])
+      .where('asset.visibility', '=', AssetVisibility.Locked)
+      .execute();
+
+    return new Set(results.map(({ id }) => id));
+  }
+
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  @ChunkedArray()
+  getAgentMetadataByIds(ids: string[]) {
+    return this.db
+      .selectFrom('asset')
+      .select([
+        'asset.id',
+        'asset.ownerId',
+        'asset.type',
+        'asset.originalFileName',
+        'asset.localDateTime',
+        'asset.fileCreatedAt',
+        'asset.fileModifiedAt',
+        'asset.isFavorite',
+        'asset.visibility',
+      ])
       .select(withTags)
       .$call(withExif)
       .where('asset.id', '=', anyUuid(ids))
