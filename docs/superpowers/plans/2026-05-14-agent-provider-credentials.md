@@ -495,7 +495,7 @@ Add the table to `ImmichDatabase.tables`:
 Add the DB interface entry:
 
 ```ts
-  agent_provider_credential: AgentProviderCredentialTable;
+agent_provider_credential: AgentProviderCredentialTable;
 ```
 
 - [ ] **Step 4: Add database type and selected columns**
@@ -561,7 +561,9 @@ export async function up(db: Kysely<any>): Promise<void> {
   `.execute(db);
 
   await sql`CREATE INDEX "IDX_agent_provider_credential_userId" ON "agent_provider_credential" ("userId")`.execute(db);
-  await sql`CREATE INDEX "IDX_agent_provider_credential_updateId" ON "agent_provider_credential" ("updateId")`.execute(db);
+  await sql`CREATE INDEX "IDX_agent_provider_credential_updateId" ON "agent_provider_credential" ("updateId")`.execute(
+    db,
+  );
   await sql`
     CREATE OR REPLACE TRIGGER "agent_provider_credential_updatedAt"
     BEFORE UPDATE ON "agent_provider_credential"
@@ -819,7 +821,10 @@ import { AgentProviderType } from 'src/enum';
 import { isoDatetimeToDate } from 'src/validation';
 import z from 'zod';
 
-const AgentProviderTypeSchema = z.enum(AgentProviderType).describe('Agent provider type').meta({ id: 'AgentProviderType' });
+const AgentProviderTypeSchema = z
+  .enum(AgentProviderType)
+  .describe('Agent provider type')
+  .meta({ id: 'AgentProviderType' });
 const AgentCredentialLabelSchema = z.string().trim().min(1).max(120);
 const AgentCredentialSecretSchema = z.string().min(1);
 const AgentCredentialModelsSchema = z.array(z.string().trim().min(1));
@@ -850,7 +855,9 @@ const AgentProviderCredentialUpdateSchema = z
     providerType: AgentProviderTypeSchema.optional(),
     label: AgentCredentialLabelSchema.optional().describe('User-facing credential label'),
     secret: AgentCredentialSecretSchema.optional().describe('Replacement provider API key or token'),
-    baseUrl: AgentCredentialBaseUrlSchema.nullable().optional().describe('Provider base URL for OpenAI-compatible providers'),
+    baseUrl: AgentCredentialBaseUrlSchema.nullable()
+      .optional()
+      .describe('Provider base URL for OpenAI-compatible providers'),
     models: z.array(z.string().trim().min(1)).optional().describe('Known model IDs for this credential'),
     defaultModel: z.string().trim().min(1).nullable().optional().describe('Default model ID for this credential'),
   })
@@ -1094,9 +1101,7 @@ describe(AgentProviderCredentialService.name, () => {
     const auth = AuthFactory.create();
     repository.getById.mockResolvedValue(undefined);
 
-    await expect(sut.delete(auth, '00000000-0000-4000-8000-000000000001')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(sut.delete(auth, '00000000-0000-4000-8000-000000000001')).rejects.toBeInstanceOf(BadRequestException);
 
     expect(repository.delete).not.toHaveBeenCalled();
   });
@@ -1371,13 +1376,15 @@ describe(AgentProviderCredentialController.name, () => {
       ctx.authenticate.mockResolvedValue(auth);
       service.create.mockResolvedValue(response);
 
-      const { status, body } = await request(ctx.getHttpServer()).post('/agent/provider-credentials').send({
-        providerType: AgentProviderType.OpenAI,
-        label: 'OpenAI personal',
-        secret: 'sk-secret',
-        models: ['gpt-5.1'],
-        defaultModel: 'gpt-5.1',
-      });
+      const { status, body } = await request(ctx.getHttpServer())
+        .post('/agent/provider-credentials')
+        .send({
+          providerType: AgentProviderType.OpenAI,
+          label: 'OpenAI personal',
+          secret: 'sk-secret',
+          models: ['gpt-5.1'],
+          defaultModel: 'gpt-5.1',
+        });
 
       expect(status).toBe(201);
       expect(service.create).toHaveBeenCalledWith(auth, {
@@ -1412,7 +1419,9 @@ describe(AgentProviderCredentialController.name, () => {
       });
 
       expect(status).toBe(400);
-      expect(body).toEqual(factory.responses.badRequest(['[secret] Invalid input: expected string, received undefined']));
+      expect(body).toEqual(
+        factory.responses.badRequest(['[secret] Invalid input: expected string, received undefined']),
+      );
     });
 
     it('requires a non-empty label', async () => {
