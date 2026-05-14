@@ -58,6 +58,21 @@ String parameterToString(dynamic value) {
   if (value is AgentApprovalMode) {
     return AgentApprovalModeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentMessageAssetBlockType) {
+    return AgentMessageAssetBlockTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentMessagePlanBlockType) {
+    return AgentMessagePlanBlockTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentMessageRole) {
+    return AgentMessageRoleTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentMessageTextBlockType) {
+    return AgentMessageTextBlockTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentMessageToolCallBlockType) {
+    return AgentMessageToolCallBlockTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentPermissionPreset) {
     return AgentPermissionPresetTypeTransformer().encode(value).toString();
   }
