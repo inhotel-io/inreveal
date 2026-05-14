@@ -318,6 +318,22 @@ describe(AgentSessionPageContent.name, () => {
     expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: createdSession.id });
   });
 
+  it('keeps the previous created-session summary when a later create attempt fails', async () => {
+    sdkMock.createAgentSession.mockResolvedValueOnce(createdSession).mockRejectedValueOnce(new Error('failed'));
+    render(AgentSessionPageContent, { props: { runnerStatus: healthyRunner, credentials } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    const summary = await screen.findByRole('region', { name: 'Created session' });
+    expect(within(summary).getByText('OpenAI personal')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to start assistant session');
+    expect(screen.getByRole('region', { name: 'Created session' })).toBeInTheDocument();
+    expect(sdkMock.createAgentSession).toHaveBeenCalledTimes(2);
+  });
+
   it('renders setup disabled when the runner is unavailable', () => {
     render(AgentSessionPageContent, { props: { runnerStatus: unavailableRunner, credentials } });
 
