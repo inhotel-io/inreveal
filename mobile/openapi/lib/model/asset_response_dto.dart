@@ -465,3 +465,4 @@ class AssetResponseDto {
     'width',
   };
 }
+
