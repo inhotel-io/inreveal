@@ -506,6 +506,23 @@ describe(AgentSessionService.name, () => {
     expect(agentRunnerService.createSession).not.toHaveBeenCalled();
   });
 
+  it('rejects non-custom session with permissionPlan before credential lookup/repo create', async () => {
+    const auth = AuthFactory.create();
+
+    await expect(
+      sut.create(
+        auth,
+        makeCreateDto({
+          permissionPreset: AgentPermissionPreset.Careful,
+          permissionPlan: localPowerUserPermissionPlan,
+        }),
+      ),
+    ).rejects.toThrow('permissionPlan is only accepted when permissionPreset is custom');
+
+    expect(credentialService.getById).not.toHaveBeenCalled();
+    expect(repository.create).not.toHaveBeenCalled();
+  });
+
   it('defaults runnerEndpoint to null, runnerCapabilitiesSnapshot to null, initialContextSnapshot to {}', async () => {
     const auth = AuthFactory.create();
     const credential = makeCredential();
