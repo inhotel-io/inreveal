@@ -1,5 +1,6 @@
 import { ActivityService } from 'src/services/activity.service';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
+import { AgentSessionService } from 'src/services/agent-session.service';
 import { AlbumService } from 'src/services/album.service';
 import { ApiKeyService } from 'src/services/api-key.service';
 import { ApiService } from 'src/services/api.service';
@@ -58,6 +59,7 @@ export const services = [
   ApiKeyService,
   ActivityService,
   AgentProviderCredentialService,
+  AgentSessionService,
   AlbumService,
   ApiService,
   AppMetricsService,
