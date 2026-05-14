@@ -37,6 +37,7 @@ class Permission {
   static const agentCredentialPeriodRead = Permission._(r'agentCredential.read');
   static const agentCredentialPeriodUpdate = Permission._(r'agentCredential.update');
   static const agentCredentialPeriodDelete = Permission._(r'agentCredential.delete');
+  static const agentRunnerPeriodRead = Permission._(r'agentRunner.read');
   static const assetPeriodRead = Permission._(r'asset.read');
   static const assetPeriodUpdate = Permission._(r'asset.update');
   static const assetPeriodDelete = Permission._(r'asset.delete');
@@ -215,6 +216,7 @@ class Permission {
     agentCredentialPeriodRead,
     agentCredentialPeriodUpdate,
     agentCredentialPeriodDelete,
+    agentRunnerPeriodRead,
     assetPeriodRead,
     assetPeriodUpdate,
     assetPeriodDelete,
@@ -428,6 +430,7 @@ class PermissionTypeTransformer {
         case r'agentCredential.read': return Permission.agentCredentialPeriodRead;
         case r'agentCredential.update': return Permission.agentCredentialPeriodUpdate;
         case r'agentCredential.delete': return Permission.agentCredentialPeriodDelete;
+        case r'agentRunner.read': return Permission.agentRunnerPeriodRead;
         case r'asset.read': return Permission.assetPeriodRead;
         case r'asset.update': return Permission.assetPeriodUpdate;
         case r'asset.delete': return Permission.assetPeriodDelete;
