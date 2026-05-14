@@ -683,6 +683,29 @@ export type AgentUserMessageContent = {
 export type AgentMessageCreateDto = {
     content: AgentUserMessageContent;
 };
+export type AgentToolCallResponseDto = {
+    albumCount: number;
+    approvalDecision: (AgentToolApprovalDecision) | null;
+    assetCount: number;
+    completedAt: string | null;
+    dataClass: AgentToolDataClass;
+    error: string | null;
+    id: string;
+    requestSummary: string;
+    responseSummary: string | null;
+    sessionId: string;
+    startedAt: string;
+    status: AgentToolCallStatus;
+    toolName: AgentToolName;
+};
+export type AgentToolApprovalDto = {
+    decision: AgentToolApprovalDecision;
+    reason?: string;
+};
+export type AgentReadAssetMetadataToolRequestDto = {
+    assetIds?: string[];
+    toolCallId?: string;
+};
 export type AlbumUserResponseDto = {
     role: AlbumUserRole;
     user: UserResponseDto;
@@ -4882,6 +4905,52 @@ export function appendAgentSessionMessage({ id, agentMessageCreateDto }: {
         ...opts,
         method: "POST",
         body: agentMessageCreateDto
+    })));
+}
+/**
+ * List agent tool calls
+ */
+export function getToolCalls({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AgentToolCallResponseDto[];
+    }>(`/agent/sessions/${encodeURIComponent(id)}/tool-calls`, {
+        ...opts
+    }));
+}
+/**
+ * Approve or deny an agent tool call
+ */
+export function approveToolCall({ id, toolCallId, agentToolApprovalDto }: {
+    id: string;
+    toolCallId: string;
+    agentToolApprovalDto: AgentToolApprovalDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentToolCallResponseDto;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/tool-calls/${encodeURIComponent(toolCallId)}/approval`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentToolApprovalDto
+    })));
+}
+/**
+ * Execute the internal readAssetMetadata agent tool
+ */
+export function readAssetMetadata({ id, agentReadAssetMetadataToolRequestDto }: {
+    id: string;
+    agentReadAssetMetadataToolRequestDto: AgentReadAssetMetadataToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: object;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/read-asset-metadata`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentReadAssetMetadataToolRequestDto
     })));
 }
 /**
@@ -9391,6 +9460,24 @@ export enum AgentMessageRole {
     Assistant = "assistant",
     System = "system",
     Tool = "tool"
+}
+export enum AgentToolApprovalDecision {
+    Approved = "approved",
+    Denied = "denied"
+}
+export enum AgentToolDataClass {
+    Metadata = "metadata"
+}
+export enum AgentToolCallStatus {
+    PendingApproval = "pending_approval",
+    Approved = "approved",
+    Executing = "executing",
+    Denied = "denied",
+    Completed = "completed",
+    Failed = "failed"
+}
+export enum AgentToolName {
+    ReadAssetMetadata = "readAssetMetadata"
 }
 export enum AlbumUserRole {
     Editor = "editor",
