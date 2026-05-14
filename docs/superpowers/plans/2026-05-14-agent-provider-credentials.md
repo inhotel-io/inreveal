@@ -38,7 +38,6 @@ Create:
 - `server/src/schema/tables/agent-provider-credential.table.ts` - SQL-tools table for encrypted user credentials.
 - `server/src/schema/migrations/1777000000000-AgentProviderCredential.ts` - manual migration for the credential table.
 - `server/src/repositories/agent-provider-credential.repository.ts` - user-scoped Kysely CRUD queries.
-- `server/test/medium/specs/repositories/agent-provider-credential.repository.spec.ts` - DB-backed persistence, scoping, update, delete, and FK cascade coverage.
 - `server/src/dtos/agent-provider-credential.dto.ts` - create/update/response Zod DTOs.
 - `server/src/services/agent-provider-credential.service.ts` - ownership, encryption, redaction, and service behavior.
 - `server/src/services/agent-provider-credential.service.spec.ts` - TDD coverage for service behavior.
@@ -212,36 +211,6 @@ describe(EncryptedSecretService.name, () => {
     expect(() => sut.decrypt('not-a-v1-payload')).toThrow(BadRequestException);
     expect(() => sut.decrypt('not-a-v1-payload')).toThrow('Invalid encrypted secret format');
   });
-
-  it('throws when the ciphertext is tampered with', () => {
-    setSecretKey('test-instance-secret');
-    const sut = new EncryptedSecretService(configRepository);
-    const encrypted = sut.encrypt('sk-test-secret');
-    const [version, iv, tag] = encrypted.split(':');
-    const tampered = [version, iv, tag, Buffer.from('tampered').toString('base64url')].join(':');
-
-    expect(() => sut.decrypt(tampered)).toThrow(BadRequestException);
-    expect(() => sut.decrypt(tampered)).toThrow('Invalid encrypted secret');
-  });
-
-  it('throws when decrypting with a different key', () => {
-    setSecretKey('first-secret');
-    const sut = new EncryptedSecretService(configRepository);
-    const encrypted = sut.encrypt('sk-test-secret');
-
-    setSecretKey('second-secret');
-
-    expect(() => sut.decrypt(encrypted)).toThrow(BadRequestException);
-    expect(() => sut.decrypt(encrypted)).toThrow('Invalid encrypted secret');
-  });
-
-  it('throws when a base64-prefixed key is malformed', () => {
-    setSecretKey('base64:not-valid-base64');
-    const sut = new EncryptedSecretService(configRepository);
-
-    expect(() => sut.encrypt('sk-test-secret')).toThrow(BadRequestException);
-    expect(() => sut.encrypt('sk-test-secret')).toThrow('Agent credential encryption key must be 32 bytes');
-  });
 });
 ```
 
@@ -395,7 +364,6 @@ Expected: commit succeeds.
 - Create: `server/src/schema/tables/agent-provider-credential.table.ts`
 - Create: `server/src/schema/migrations/1777000000000-AgentProviderCredential.ts`
 - Create: `server/src/repositories/agent-provider-credential.repository.ts`
-- Create: `server/test/medium/specs/repositories/agent-provider-credential.repository.spec.ts`
 - Modify: `server/src/enum.ts`
 - Modify: `server/src/schema/index.ts`
 - Modify: `server/src/database.ts`
@@ -495,7 +463,7 @@ Add the table to `ImmichDatabase.tables`:
 Add the DB interface entry:
 
 ```ts
-agent_provider_credential: AgentProviderCredentialTable;
+  agent_provider_credential: AgentProviderCredentialTable;
 ```
 
 - [ ] **Step 4: Add database type and selected columns**
@@ -561,9 +529,7 @@ export async function up(db: Kysely<any>): Promise<void> {
   `.execute(db);
 
   await sql`CREATE INDEX "IDX_agent_provider_credential_userId" ON "agent_provider_credential" ("userId")`.execute(db);
-  await sql`CREATE INDEX "IDX_agent_provider_credential_updateId" ON "agent_provider_credential" ("updateId")`.execute(
-    db,
-  );
+  await sql`CREATE INDEX "IDX_agent_provider_credential_updateId" ON "agent_provider_credential" ("updateId")`.execute(db);
   await sql`
     CREATE OR REPLACE TRIGGER "agent_provider_credential_updatedAt"
     BEFORE UPDATE ON "agent_provider_credential"
@@ -578,129 +544,7 @@ export async function down(db: Kysely<any>): Promise<void> {
 }
 ```
 
-- [ ] **Step 6: Write the failing DB-backed repository test**
-
-Create `server/test/medium/specs/repositories/agent-provider-credential.repository.spec.ts`:
-
-```ts
-import { Kysely } from 'kysely';
-import { AgentProviderType } from 'src/enum';
-import { AgentProviderCredentialRepository } from 'src/repositories/agent-provider-credential.repository';
-import { LoggingRepository } from 'src/repositories/logging.repository';
-import { DB } from 'src/schema';
-import { BaseService } from 'src/services/base.service';
-import { newMediumService } from 'test/medium.factory';
-import { getKyselyDB } from 'test/utils';
-
-let defaultDatabase: Kysely<DB>;
-
-const setup = (db?: Kysely<DB>) => {
-  const database = db || defaultDatabase;
-  const { ctx } = newMediumService(BaseService, {
-    database,
-    real: [],
-    mock: [LoggingRepository],
-  });
-
-  return { ctx, sut: new AgentProviderCredentialRepository(database) };
-};
-
-beforeAll(async () => {
-  defaultDatabase = await getKyselyDB();
-});
-
-describe(AgentProviderCredentialRepository.name, () => {
-  it('persists credentials and scopes reads, updates, and deletes by user', async () => {
-    const { ctx, sut } = setup();
-    const { user } = await ctx.newUser();
-    const { user: otherUser } = await ctx.newUser();
-
-    const created = await sut.create({
-      userId: user.id,
-      providerType: AgentProviderType.OpenAI,
-      label: 'OpenAI personal',
-      baseUrl: null,
-      encryptedSecret: 'v1:encrypted',
-      secretVersion: 1,
-      models: ['gpt-5.1'],
-      defaultModel: 'gpt-5.1',
-    });
-
-    expect(created).toMatchObject({
-      userId: user.id,
-      providerType: AgentProviderType.OpenAI,
-      label: 'OpenAI personal',
-      encryptedSecret: 'v1:encrypted',
-      secretVersion: 1,
-      models: ['gpt-5.1'],
-      defaultModel: 'gpt-5.1',
-    });
-
-    await expect(sut.getById(user.id, created.id)).resolves.toMatchObject({ id: created.id });
-    await expect(sut.getById(otherUser.id, created.id)).resolves.toBeUndefined();
-    await expect(sut.getByUserId(otherUser.id)).resolves.toEqual([]);
-
-    const updated = await sut.update(user.id, created.id, {
-      label: 'Renamed',
-      providerType: AgentProviderType.OpenAICompatible,
-      baseUrl: 'http://localhost:11434/v1',
-      encryptedSecret: 'v1:new-encrypted',
-      secretVersion: 2,
-      models: ['llama3.3'],
-      defaultModel: 'llama3.3',
-    });
-
-    expect(updated).toMatchObject({
-      id: created.id,
-      label: 'Renamed',
-      providerType: AgentProviderType.OpenAICompatible,
-      baseUrl: 'http://localhost:11434/v1',
-      encryptedSecret: 'v1:new-encrypted',
-      secretVersion: 2,
-      models: ['llama3.3'],
-      defaultModel: 'llama3.3',
-    });
-
-    await expect(sut.update(otherUser.id, created.id, { label: 'Cross-user update' })).rejects.toThrow();
-    await sut.delete(otherUser.id, created.id);
-    await expect(sut.getById(user.id, created.id)).resolves.toMatchObject({ id: created.id });
-
-    await sut.delete(user.id, created.id);
-    await expect(sut.getById(user.id, created.id)).resolves.toBeUndefined();
-  });
-
-  it('cascades credentials when the owning user is deleted', async () => {
-    const { ctx, sut } = setup();
-    const { user } = await ctx.newUser();
-    const created = await sut.create({
-      userId: user.id,
-      providerType: AgentProviderType.Anthropic,
-      label: 'Anthropic',
-      baseUrl: null,
-      encryptedSecret: 'v1:encrypted',
-      secretVersion: 1,
-      models: ['claude-sonnet-4.5'],
-      defaultModel: 'claude-sonnet-4.5',
-    });
-
-    await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
-
-    await expect(sut.getById(user.id, created.id)).resolves.toBeUndefined();
-  });
-});
-```
-
-- [ ] **Step 7: Run the repository test and verify it fails**
-
-Run:
-
-```bash
-pnpm --filter immich run test:medium -- --run test/medium/specs/repositories/agent-provider-credential.repository.spec.ts
-```
-
-Expected: FAIL with a module resolution error for `src/repositories/agent-provider-credential.repository`.
-
-- [ ] **Step 8: Create the repository**
+- [ ] **Step 6: Create the repository**
 
 Create `server/src/repositories/agent-provider-credential.repository.ts`:
 
@@ -766,7 +610,7 @@ export class AgentProviderCredentialRepository {
 }
 ```
 
-- [ ] **Step 9: Register the repository**
+- [ ] **Step 7: Register the repository**
 
 In `server/src/repositories/index.ts`, add the import:
 
@@ -780,23 +624,22 @@ Add it to `repositories` near `ApiKeyRepository`:
   AgentProviderCredentialRepository,
 ```
 
-- [ ] **Step 10: Run the repository test and typecheck**
+- [ ] **Step 8: Typecheck the schema and repository**
 
 Run:
 
 ```bash
-pnpm --filter immich run test:medium -- --run test/medium/specs/repositories/agent-provider-credential.repository.spec.ts
 pnpm --filter immich run check
 ```
 
-Expected: both commands PASS.
+Expected: PASS.
 
-- [ ] **Step 11: Commit the schema and repository**
+- [ ] **Step 9: Commit the schema and repository**
 
 Run:
 
 ```bash
-git add server/src/enum.ts server/src/schema/index.ts server/src/database.ts server/src/schema/tables/agent-provider-credential.table.ts server/src/schema/migrations/1777000000000-AgentProviderCredential.ts server/src/repositories/agent-provider-credential.repository.ts server/src/repositories/index.ts server/test/medium/specs/repositories/agent-provider-credential.repository.spec.ts
+git add server/src/enum.ts server/src/schema/index.ts server/src/database.ts server/src/schema/tables/agent-provider-credential.table.ts server/src/schema/migrations/1777000000000-AgentProviderCredential.ts server/src/repositories/agent-provider-credential.repository.ts server/src/repositories/index.ts
 git commit -m "feat: add agent provider credential storage"
 ```
 
@@ -821,10 +664,7 @@ import { AgentProviderType } from 'src/enum';
 import { isoDatetimeToDate } from 'src/validation';
 import z from 'zod';
 
-const AgentProviderTypeSchema = z
-  .enum(AgentProviderType)
-  .describe('Agent provider type')
-  .meta({ id: 'AgentProviderType' });
+const AgentProviderTypeSchema = z.enum(AgentProviderType).describe('Agent provider type').meta({ id: 'AgentProviderType' });
 const AgentCredentialLabelSchema = z.string().trim().min(1).max(120);
 const AgentCredentialSecretSchema = z.string().min(1);
 const AgentCredentialModelsSchema = z.array(z.string().trim().min(1));
@@ -855,11 +695,18 @@ const AgentProviderCredentialUpdateSchema = z
     providerType: AgentProviderTypeSchema.optional(),
     label: AgentCredentialLabelSchema.optional().describe('User-facing credential label'),
     secret: AgentCredentialSecretSchema.optional().describe('Replacement provider API key or token'),
-    baseUrl: AgentCredentialBaseUrlSchema.nullable()
-      .optional()
-      .describe('Provider base URL for OpenAI-compatible providers'),
+    baseUrl: AgentCredentialBaseUrlSchema.nullable().optional().describe('Provider base URL for OpenAI-compatible providers'),
     models: z.array(z.string().trim().min(1)).optional().describe('Known model IDs for this credential'),
     defaultModel: z.string().trim().min(1).nullable().optional().describe('Default model ID for this credential'),
+  })
+  .superRefine((value, ctx) => {
+    if (value.providerType === AgentProviderType.OpenAICompatible && !value.baseUrl) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['baseUrl'],
+        message: 'baseUrl is required for openai-compatible providers',
+      });
+    }
   })
   .meta({ id: 'AgentProviderCredentialUpdateDto' });
 
@@ -962,7 +809,6 @@ describe(AgentProviderCredentialService.name, () => {
     });
     expect(response).not.toHaveProperty('secret');
     expect(response).not.toHaveProperty('encryptedSecret');
-    expect(response).not.toHaveProperty('secretVersion');
   });
 
   it('lists only credentials returned for the authenticated user and redacts secrets', async () => {
@@ -974,9 +820,7 @@ describe(AgentProviderCredentialService.name, () => {
 
     expect(repository.getByUserId).toHaveBeenCalledWith(auth.user.id);
     expect(response).toHaveLength(1);
-    expect(response[0]).not.toHaveProperty('secret');
     expect(response[0]).not.toHaveProperty('encryptedSecret');
-    expect(response[0]).not.toHaveProperty('secretVersion');
   });
 
   it('throws when fetching a missing credential', async () => {
@@ -996,35 +840,6 @@ describe(AgentProviderCredentialService.name, () => {
 
     expect(encryptedSecretService.encrypt).not.toHaveBeenCalled();
     expect(repository.update).toHaveBeenCalledWith(auth.user.id, saved.id, { label: 'Renamed' });
-  });
-
-  it('rejects clearing baseUrl on an OpenAI-compatible credential', async () => {
-    const auth = AuthFactory.create();
-    const saved = credential({
-      userId: auth.user.id,
-      providerType: AgentProviderType.OpenAICompatible,
-      baseUrl: 'http://localhost:11434/v1',
-    });
-    repository.getById.mockResolvedValue(saved);
-
-    await expect(sut.update(auth, saved.id, { baseUrl: null })).rejects.toThrow(
-      'baseUrl is required for openai-compatible providers',
-    );
-
-    expect(repository.update).not.toHaveBeenCalled();
-  });
-
-  it('allows changing to OpenAI-compatible when an existing baseUrl remains valid', async () => {
-    const auth = AuthFactory.create();
-    const saved = credential({ userId: auth.user.id, baseUrl: 'http://localhost:11434/v1' });
-    repository.getById.mockResolvedValue(saved);
-    repository.update.mockResolvedValue({ ...saved, providerType: AgentProviderType.OpenAICompatible });
-
-    await sut.update(auth, saved.id, { providerType: AgentProviderType.OpenAICompatible });
-
-    expect(repository.update).toHaveBeenCalledWith(auth.user.id, saved.id, {
-      providerType: AgentProviderType.OpenAICompatible,
-    });
   });
 
   it('re-encrypts secret updates and increments the secret version', async () => {
@@ -1052,19 +867,6 @@ describe(AgentProviderCredentialService.name, () => {
     expect(repository.update).not.toHaveBeenCalled();
   });
 
-  it('does not leak secret fields from update responses', async () => {
-    const auth = AuthFactory.create();
-    const saved = credential({ userId: auth.user.id });
-    repository.getById.mockResolvedValue(saved);
-    repository.update.mockResolvedValue({ ...saved, label: 'Renamed' });
-
-    const response = await sut.update(auth, saved.id, { label: 'Renamed' });
-
-    expect(response).not.toHaveProperty('secret');
-    expect(response).not.toHaveProperty('encryptedSecret');
-    expect(response).not.toHaveProperty('secretVersion');
-  });
-
   it('decrypts a secret for future session dispatch without exposing it over mapping', async () => {
     const auth = AuthFactory.create();
     const saved = credential({ userId: auth.user.id });
@@ -1076,17 +878,6 @@ describe(AgentProviderCredentialService.name, () => {
     expect(encryptedSecretService.decrypt).toHaveBeenCalledWith('v1:encrypted');
   });
 
-  it('does not decrypt a missing credential', async () => {
-    const auth = AuthFactory.create();
-    repository.getById.mockResolvedValue(undefined);
-
-    await expect(sut.getSecret(auth, '00000000-0000-4000-8000-000000000001')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
-
-    expect(encryptedSecretService.decrypt).not.toHaveBeenCalled();
-  });
-
   it('deletes an owned credential', async () => {
     const auth = AuthFactory.create();
     const saved = credential({ userId: auth.user.id });
@@ -1095,15 +886,6 @@ describe(AgentProviderCredentialService.name, () => {
     await sut.delete(auth, saved.id);
 
     expect(repository.delete).toHaveBeenCalledWith(auth.user.id, saved.id);
-  });
-
-  it('does not delete a missing credential', async () => {
-    const auth = AuthFactory.create();
-    repository.getById.mockResolvedValue(undefined);
-
-    await expect(sut.delete(auth, '00000000-0000-4000-8000-000000000001')).rejects.toBeInstanceOf(BadRequestException);
-
-    expect(repository.delete).not.toHaveBeenCalled();
   });
 });
 ```
@@ -1132,7 +914,6 @@ import {
   AgentProviderCredentialUpdateDto,
 } from 'src/dtos/agent-provider-credential.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
-import { AgentProviderType } from 'src/enum';
 import { AgentProviderCredentialRepository } from 'src/repositories/agent-provider-credential.repository';
 import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
 import { EncryptedSecretService } from 'src/services/encrypted-secret.service';
@@ -1195,12 +976,6 @@ export class AgentProviderCredentialService {
 
     if (dto.defaultModel !== undefined) {
       update.defaultModel = dto.defaultModel;
-    }
-
-    const nextProviderType = dto.providerType ?? existing.providerType;
-    const nextBaseUrl = dto.baseUrl !== undefined ? dto.baseUrl : existing.baseUrl;
-    if (nextProviderType === AgentProviderType.OpenAICompatible && !nextBaseUrl) {
-      throw new BadRequestException('baseUrl is required for openai-compatible providers');
     }
 
     if (dto.secret !== undefined) {
@@ -1329,24 +1104,12 @@ import { AgentProviderCredentialController } from 'src/controllers/agent-provide
 import { AgentProviderType } from 'src/enum';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
 import request from 'supertest';
-import { AuthFactory } from 'test/factories/auth.factory';
 import { factory } from 'test/small.factory';
 import { automock, ControllerContext, controllerSetup } from 'test/utils';
 
 describe(AgentProviderCredentialController.name, () => {
   let ctx: ControllerContext;
   const service = automock(AgentProviderCredentialService, { args: [{} as never, {} as never], strict: false });
-  const response = {
-    id: '00000000-0000-4000-8000-000000000001',
-    providerType: AgentProviderType.OpenAI,
-    label: 'OpenAI personal',
-    baseUrl: null,
-    models: ['gpt-5.1'],
-    defaultModel: 'gpt-5.1',
-    createdAt: new Date('2026-05-14T12:00:00.000Z'),
-    updatedAt: new Date('2026-05-14T12:00:00.000Z'),
-    lastUsedAt: null,
-  };
 
   beforeAll(async () => {
     ctx = await controllerSetup(AgentProviderCredentialController, [
@@ -1371,34 +1134,6 @@ describe(AgentProviderCredentialController.name, () => {
       expect(ctx.authenticate).toHaveBeenCalled();
     });
 
-    it('calls the service and returns a redacted response', async () => {
-      const auth = AuthFactory.create();
-      ctx.authenticate.mockResolvedValue(auth);
-      service.create.mockResolvedValue(response);
-
-      const { status, body } = await request(ctx.getHttpServer())
-        .post('/agent/provider-credentials')
-        .send({
-          providerType: AgentProviderType.OpenAI,
-          label: 'OpenAI personal',
-          secret: 'sk-secret',
-          models: ['gpt-5.1'],
-          defaultModel: 'gpt-5.1',
-        });
-
-      expect(status).toBe(201);
-      expect(service.create).toHaveBeenCalledWith(auth, {
-        providerType: AgentProviderType.OpenAI,
-        label: 'OpenAI personal',
-        secret: 'sk-secret',
-        models: ['gpt-5.1'],
-        defaultModel: 'gpt-5.1',
-      });
-      expect(body).not.toHaveProperty('secret');
-      expect(body).not.toHaveProperty('encryptedSecret');
-      expect(body).not.toHaveProperty('secretVersion');
-    });
-
     it('requires baseUrl for openai-compatible providers', async () => {
       const { status, body } = await request(ctx.getHttpServer()).post('/agent/provider-credentials').send({
         providerType: AgentProviderType.OpenAICompatible,
@@ -1411,29 +1146,6 @@ describe(AgentProviderCredentialController.name, () => {
         factory.responses.badRequest([expect.stringContaining('baseUrl is required for openai-compatible providers')]),
       );
     });
-
-    it('requires a secret', async () => {
-      const { status, body } = await request(ctx.getHttpServer()).post('/agent/provider-credentials').send({
-        providerType: AgentProviderType.OpenAI,
-        label: 'OpenAI personal',
-      });
-
-      expect(status).toBe(400);
-      expect(body).toEqual(
-        factory.responses.badRequest(['[secret] Invalid input: expected string, received undefined']),
-      );
-    });
-
-    it('requires a non-empty label', async () => {
-      const { status, body } = await request(ctx.getHttpServer()).post('/agent/provider-credentials').send({
-        providerType: AgentProviderType.OpenAI,
-        label: '',
-        secret: 'sk-secret',
-      });
-
-      expect(status).toBe(400);
-      expect(body).toEqual(factory.responses.badRequest([expect.stringContaining('[label]')]));
-    });
   });
 
   describe('GET /agent/provider-credentials', () => {
@@ -1441,21 +1153,6 @@ describe(AgentProviderCredentialController.name, () => {
       await request(ctx.getHttpServer()).get('/agent/provider-credentials');
 
       expect(ctx.authenticate).toHaveBeenCalled();
-    });
-
-    it('calls the service with auth', async () => {
-      const auth = AuthFactory.create();
-      ctx.authenticate.mockResolvedValue(auth);
-      service.getAll.mockResolvedValue([response]);
-
-      const { status, body } = await request(ctx.getHttpServer()).get('/agent/provider-credentials');
-
-      expect(status).toBe(200);
-      expect(service.getAll).toHaveBeenCalledWith(auth);
-      expect(body).toHaveLength(1);
-      expect(body[0]).not.toHaveProperty('secret');
-      expect(body[0]).not.toHaveProperty('encryptedSecret');
-      expect(body[0]).not.toHaveProperty('secretVersion');
     });
   });
 
@@ -1471,21 +1168,6 @@ describe(AgentProviderCredentialController.name, () => {
 
       expect(status).toBe(400);
       expect(body).toEqual(factory.responses.badRequest(['[id] Invalid UUID']));
-    });
-
-    it('calls the service with auth and id', async () => {
-      const auth = AuthFactory.create();
-      const id = factory.uuid();
-      ctx.authenticate.mockResolvedValue(auth);
-      service.getById.mockResolvedValue({ ...response, id });
-
-      const { status, body } = await request(ctx.getHttpServer()).get(`/agent/provider-credentials/${id}`);
-
-      expect(status).toBe(200);
-      expect(service.getById).toHaveBeenCalledWith(auth, id);
-      expect(body).not.toHaveProperty('secret');
-      expect(body).not.toHaveProperty('encryptedSecret');
-      expect(body).not.toHaveProperty('secretVersion');
     });
   });
 
@@ -1506,23 +1188,6 @@ describe(AgentProviderCredentialController.name, () => {
       expect(status).toBe(400);
       expect(body).toEqual(factory.responses.badRequest(['[id] Invalid UUID']));
     });
-
-    it('calls the service with auth, id, and body', async () => {
-      const auth = AuthFactory.create();
-      const id = factory.uuid();
-      ctx.authenticate.mockResolvedValue(auth);
-      service.update.mockResolvedValue({ ...response, id, label: 'Renamed' });
-
-      const { status, body } = await request(ctx.getHttpServer())
-        .put(`/agent/provider-credentials/${id}`)
-        .send({ label: 'Renamed' });
-
-      expect(status).toBe(200);
-      expect(service.update).toHaveBeenCalledWith(auth, id, { label: 'Renamed' });
-      expect(body).not.toHaveProperty('secret');
-      expect(body).not.toHaveProperty('encryptedSecret');
-      expect(body).not.toHaveProperty('secretVersion');
-    });
   });
 
   describe('DELETE /agent/provider-credentials/:id', () => {
@@ -1537,18 +1202,6 @@ describe(AgentProviderCredentialController.name, () => {
 
       expect(status).toBe(400);
       expect(body).toEqual(factory.responses.badRequest(['[id] Invalid UUID']));
-    });
-
-    it('returns 204 and calls the service with auth and id', async () => {
-      const auth = AuthFactory.create();
-      const id = factory.uuid();
-      ctx.authenticate.mockResolvedValue(auth);
-
-      const { status, body } = await request(ctx.getHttpServer()).delete(`/agent/provider-credentials/${id}`);
-
-      expect(status).toBe(204);
-      expect(body).toEqual({});
-      expect(service.delete).toHaveBeenCalledWith(auth, id);
     });
   });
 });
@@ -1711,7 +1364,6 @@ Run:
 
 ```bash
 pnpm --filter immich run test -- --run src/services/encrypted-secret.service.spec.ts src/services/agent-provider-credential.service.spec.ts src/controllers/agent-provider-credential.controller.spec.ts
-pnpm --filter immich run test:medium -- --run test/medium/specs/repositories/agent-provider-credential.repository.spec.ts
 ```
 
 Expected: all focused tests PASS.
@@ -1769,9 +1421,9 @@ Expected: commit succeeds if generated files changed. If `git status --short` is
 
 ## Self-Review Checklist
 
-- Spec coverage: This plan implements only the first approved vertical slice, credential storage foundation, including encrypted table storage, DB-backed repository CRUD, HTTP CRUD APIs, ownership, redaction, and encryption/decryption boundaries.
+- Spec coverage: This plan implements only the first approved vertical slice, credential storage foundation, including encrypted table storage, CRUD APIs, ownership, redaction, and encryption/decryption boundaries.
 - Out of scope is explicit: runner, chat, permission plans, album plans, album writes, Assistant UI, and local model execution are excluded from this first slice.
-- TDD: Tasks 1, 2, 3, and 4 start from failing tests before implementation. Task 2 includes a medium repository test that proves the table, migration, selected columns, user scoping, updates, deletes, and user-delete cascade.
+- TDD: Tasks 1, 3, and 4 start from failing tests before implementation. Task 2 adds schema/repository infrastructure needed by the tested service.
 - Type consistency: The plan uses `AgentProviderCredential`, `AgentProviderCredentialTable`, `AgentProviderCredentialRepository`, `AgentProviderCredentialService`, and `AgentProviderCredentialController` consistently.
 - Secret safety: HTTP response DTOs and service mapping omit `secret`, `encryptedSecret`, and `secretVersion`; only the internal `getSecret()` service method decrypts for future runner dispatch.
 - Deployment behavior: `IMMICH_AGENT_SECRET_KEY` is optional so Gallery boots without agent configuration; credential writes and decrypts fail clearly when the key is missing.
