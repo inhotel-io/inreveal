@@ -26,6 +26,7 @@ import {
   user_metadata_audit,
 } from 'src/schema/functions';
 import { ActivityTable } from 'src/schema/tables/activity.table';
+import { AgentMessageTable } from 'src/schema/tables/agent-message.table';
 import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
 import { AgentSessionTable } from 'src/schema/tables/agent-session.table';
 import { AlbumAssetAuditTable } from 'src/schema/tables/album-asset-audit.table';
@@ -125,6 +126,7 @@ export class ImmichDatabase {
     AlbumTable,
     AgentProviderCredentialTable,
     AgentSessionTable,
+    AgentMessageTable,
     ApiKeyTable,
     AssetAuditTable,
     AssetDuplicateChecksumTable,
@@ -244,6 +246,7 @@ export interface DB {
   album_user_audit: AlbumUserAuditTable;
 
   agent_provider_credential: AgentProviderCredentialTable;
+  agent_message: AgentMessageTable;
   agent_session: AgentSessionTable;
 
   api_key: ApiKeyTable;
