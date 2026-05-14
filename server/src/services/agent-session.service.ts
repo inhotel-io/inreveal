@@ -13,6 +13,14 @@ import {
 
 @Injectable()
 export class AgentSessionService {
+  private static readonly cancellableStatuses = [
+    AgentSessionStatus.Created,
+    AgentSessionStatus.Running,
+    AgentSessionStatus.WaitingForToolApproval,
+    AgentSessionStatus.WaitingForPlanReview,
+    AgentSessionStatus.Interrupted,
+  ];
+
   static readonly permissionPresets: AgentPermissionPresetMap = {
     [AgentPermissionPreset.Careful]: {
       read: { metadata: true, previews: false, originals: false },
@@ -94,10 +102,10 @@ export class AgentSessionService {
 
     const session = await this.repository.create({
       userId: auth.user.id,
-      providerCredentialId: dto.providerCredentialId,
+      providerCredentialId: credential.id,
       credentialSnapshot,
       modelSnapshot: {
-        providerCredentialId: dto.providerCredentialId,
+        providerCredentialId: credential.id,
         model: dto.model,
       },
       permissionPreset: dto.permissionPreset,
@@ -138,10 +146,11 @@ export class AgentSessionService {
       throw new BadRequestException('Agent session cannot be cancelled in its current state');
     }
 
-    const updated = await this.repository.update(auth.user.id, id, {
-      status: AgentSessionStatus.Cancelled,
-      endedAt: new Date(),
-    });
+    const updated = await this.repository.cancel(auth.user.id, id, AgentSessionService.cancellableStatuses, new Date());
+
+    if (!updated) {
+      throw new BadRequestException('Agent session cannot be cancelled in its current state');
+    }
 
     return this.map(updated);
   }
@@ -152,14 +161,14 @@ export class AgentSessionService {
         throw new BadRequestException('permissionPlan is required when permissionPreset is custom');
       }
 
-      return dto.permissionPlan;
+      return structuredClone(dto.permissionPlan);
     }
 
     if (dto.permissionPlan) {
       throw new BadRequestException('permissionPlan is only accepted when permissionPreset is custom');
     }
 
-    return AgentSessionService.permissionPresets[dto.permissionPreset];
+    return structuredClone(AgentSessionService.permissionPresets[dto.permissionPreset]);
   }
 
   private async getOwned(auth: AuthDto, id: string) {
