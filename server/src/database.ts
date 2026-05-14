@@ -16,6 +16,7 @@ import {
 import { AgentMessageTable } from 'src/schema/tables/agent-message.table';
 import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
 import { AgentSessionTable } from 'src/schema/tables/agent-session.table';
+import { AgentToolCallTable } from 'src/schema/tables/agent-tool-call.table';
 import { AlbumTable } from 'src/schema/tables/album.table';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
 import { AssetTable } from 'src/schema/tables/asset.table';
@@ -88,6 +89,7 @@ export type ApiKey = {
 export type AgentProviderCredential = Selectable<AgentProviderCredentialTable>;
 export type AgentMessage = Selectable<AgentMessageTable>;
 export type AgentSession = Selectable<AgentSessionTable>;
+export type AgentToolCall = Selectable<AgentToolCallTable>;
 
 export type Tag = {
   id: string;
@@ -506,6 +508,24 @@ export const columns = {
     'updateId',
   ],
   agentMessage: ['id', 'sessionId', 'role', 'content', 'providerMessageId', 'toolCallId', 'createdAt'],
+  agentToolCall: [
+    'id',
+    'sessionId',
+    'toolName',
+    'status',
+    'approvalDecision',
+    'requestSummary',
+    'responseSummary',
+    'redactedRequestMetadata',
+    'redactedResponseMetadata',
+    'dataClass',
+    'assetCount',
+    'albumCount',
+    'providerSnapshot',
+    'startedAt',
+    'completedAt',
+    'error',
+  ],
   agentSession: [
     'id',
     'userId',

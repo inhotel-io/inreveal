@@ -101,6 +101,28 @@ export enum AgentMessageRole {
   Tool = 'tool',
 }
 
+export enum AgentToolName {
+  ReadAssetMetadata = 'readAssetMetadata',
+}
+
+export enum AgentToolCallStatus {
+  PendingApproval = 'pending_approval',
+  Approved = 'approved',
+  Executing = 'executing',
+  Denied = 'denied',
+  Completed = 'completed',
+  Failed = 'failed',
+}
+
+export enum AgentToolApprovalDecision {
+  Approved = 'approved',
+  Denied = 'denied',
+}
+
+export enum AgentToolDataClass {
+  Metadata = 'metadata',
+}
+
 export enum AgentSessionStatus {
   Created = 'created',
   Running = 'running',
