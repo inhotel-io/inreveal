@@ -192,18 +192,46 @@ class ApiClient {
           return AddUsersDto.fromJson(value);
         case 'AdminOnboardingUpdateDto':
           return AdminOnboardingUpdateDto.fromJson(value);
+        case 'AgentApprovalMode':
+          return AgentApprovalModeTypeTransformer().decode(value);
+        case 'AgentCredentialSnapshot':
+          return AgentCredentialSnapshot.fromJson(value);
+        case 'AgentModelSnapshot':
+          return AgentModelSnapshot.fromJson(value);
+        case 'AgentPermissionPlan':
+          return AgentPermissionPlan.fromJson(value);
+        case 'AgentPermissionPlanAssetScope':
+          return AgentPermissionPlanAssetScope.fromJson(value);
+        case 'AgentPermissionPlanLimits':
+          return AgentPermissionPlanLimits.fromJson(value);
+        case 'AgentPermissionPlanProviderExposure':
+          return AgentPermissionPlanProviderExposure.fromJson(value);
+        case 'AgentPermissionPlanRead':
+          return AgentPermissionPlanRead.fromJson(value);
+        case 'AgentPermissionPlanWriteScope':
+          return AgentPermissionPlanWriteScope.fromJson(value);
+        case 'AgentPermissionPreset':
+          return AgentPermissionPresetTypeTransformer().decode(value);
         case 'AgentProviderCredentialCreateDto':
           return AgentProviderCredentialCreateDto.fromJson(value);
         case 'AgentProviderCredentialResponseDto':
           return AgentProviderCredentialResponseDto.fromJson(value);
         case 'AgentProviderCredentialUpdateDto':
           return AgentProviderCredentialUpdateDto.fromJson(value);
+        case 'AgentProviderType':
+          return AgentProviderTypeTypeTransformer().decode(value);
         case 'AgentRunnerCapabilitiesDto':
           return AgentRunnerCapabilitiesDto.fromJson(value);
         case 'AgentRunnerStatusDto':
           return AgentRunnerStatusDto.fromJson(value);
         case 'AgentRunnerStatusReason':
           return AgentRunnerStatusReasonTypeTransformer().decode(value);
+        case 'AgentSessionCreateDto':
+          return AgentSessionCreateDto.fromJson(value);
+        case 'AgentSessionResponseDto':
+          return AgentSessionResponseDto.fromJson(value);
+        case 'AgentSessionStatus':
+          return AgentSessionStatusTypeTransformer().decode(value);
         case 'AlbumNameDto':
           return AlbumNameDto.fromJson(value);
         case 'AlbumResponseDto':
