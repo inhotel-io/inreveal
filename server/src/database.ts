@@ -13,8 +13,8 @@ import {
   UserAvatarColor,
   UserStatus,
 } from 'src/enum';
-import { AlbumTable } from 'src/schema/tables/album.table';
 import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
+import { AlbumTable } from 'src/schema/tables/album.table';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
 import { AssetTable } from 'src/schema/tables/asset.table';
 import { PluginTable } from 'src/schema/tables/plugin.table';
@@ -84,7 +84,6 @@ export type ApiKey = {
 };
 
 export type AgentProviderCredential = Selectable<AgentProviderCredentialTable>;
-
 
 export type Tag = {
   id: string;
