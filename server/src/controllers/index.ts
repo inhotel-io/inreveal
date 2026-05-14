@@ -3,6 +3,7 @@ import { AgentMessageController } from 'src/controllers/agent-message.controller
 import { AgentProviderCredentialController } from 'src/controllers/agent-provider-credential.controller';
 import { AgentRunnerController } from 'src/controllers/agent-runner.controller';
 import { AgentSessionController } from 'src/controllers/agent-session.controller';
+import { AgentToolController } from 'src/controllers/agent-tool.controller';
 import { AlbumController } from 'src/controllers/album.controller';
 import { ApiKeyController } from 'src/controllers/api-key.controller';
 import { AppController } from 'src/controllers/app.controller';
@@ -57,6 +58,7 @@ export const controllers = [
   AgentProviderCredentialController,
   AgentRunnerController,
   AgentSessionController,
+  AgentToolController,
   AlbumController,
   AppController,
   AssetController,
