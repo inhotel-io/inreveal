@@ -155,6 +155,10 @@ export class AgentSessionService {
       return dto.permissionPlan;
     }
 
+    if (dto.permissionPlan) {
+      throw new BadRequestException('permissionPlan is only accepted when permissionPreset is custom');
+    }
+
     return AgentSessionService.permissionPresets[dto.permissionPreset];
   }
 
