@@ -12,14 +12,14 @@ const AgentMessageRoleSchema = z.enum(AgentMessageRole).meta({ id: 'AgentMessage
 
 const AgentMessageTextBlockSchema = z
   .object({
-    type: z.literal('text'),
+    type: z.literal('text').meta({ id: 'AgentMessageTextBlockType' }),
     text,
   })
   .meta({ id: 'AgentMessageTextBlock' });
 
 const AgentMessageToolCallBlockSchema = z
   .object({
-    type: z.literal('tool-call'),
+    type: z.literal('tool-call').meta({ id: 'AgentMessageToolCallBlockType' }),
     toolCallId: z.uuidv4(),
     summary: label,
   })
@@ -27,7 +27,7 @@ const AgentMessageToolCallBlockSchema = z
 
 const AgentMessageAssetBlockSchema = z
   .object({
-    type: z.literal('asset'),
+    type: z.literal('asset').meta({ id: 'AgentMessageAssetBlockType' }),
     assetId: z.uuidv4(),
     label,
   })
@@ -35,7 +35,7 @@ const AgentMessageAssetBlockSchema = z
 
 const AgentMessagePlanBlockSchema = z
   .object({
-    type: z.literal('plan'),
+    type: z.literal('plan').meta({ id: 'AgentMessagePlanBlockType' }),
     planId: z.uuidv4(),
     label,
   })
