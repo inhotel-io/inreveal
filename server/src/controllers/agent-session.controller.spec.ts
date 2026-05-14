@@ -1,12 +1,6 @@
 import { AgentSessionController } from 'src/controllers/agent-session.controller';
 import { AgentSessionCreateDto, AgentSessionResponseDto } from 'src/dtos/agent-session.dto';
-import {
-  AgentApprovalMode,
-  AgentPermissionPreset,
-  AgentProviderType,
-  AgentSessionStatus,
-  Permission,
-} from 'src/enum';
+import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType, AgentSessionStatus, Permission } from 'src/enum';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import type { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import request from 'supertest';
@@ -206,7 +200,9 @@ describe(AgentSessionController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.badRequest(['[permissionPlan] permissionPlan is only accepted when permissionPreset is custom']),
+        factory.responses.badRequest([
+          '[permissionPlan] permissionPlan is only accepted when permissionPreset is custom',
+        ]),
       );
     });
 
