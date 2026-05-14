@@ -24,7 +24,7 @@ export class AgentProviderCredentialController {
     description: 'Create an encrypted AI agent provider credential for the current user.',
     history: new HistoryBuilder().added('v2.7.5').alpha('v2.7.5'),
   })
-  async create(
+  async createAgentProviderCredential(
     @Auth() auth: AuthDto,
     @Body() dto: AgentProviderCredentialCreateDto,
   ): Promise<AgentProviderCredentialResponseDto> {
@@ -38,7 +38,7 @@ export class AgentProviderCredentialController {
     description: 'Retrieve all AI agent provider credentials owned by the current user.',
     history: new HistoryBuilder().added('v2.7.5').alpha('v2.7.5'),
   })
-  async getAll(@Auth() auth: AuthDto): Promise<AgentProviderCredentialResponseDto[]> {
+  async getAgentProviderCredentials(@Auth() auth: AuthDto): Promise<AgentProviderCredentialResponseDto[]> {
     const credentials = await this.service.getAll(auth);
     return credentials.map((credential) => this.map(credential));
   }
@@ -50,7 +50,10 @@ export class AgentProviderCredentialController {
     description: 'Retrieve an AI agent provider credential by ID. The current user must own this credential.',
     history: new HistoryBuilder().added('v2.7.5').alpha('v2.7.5'),
   })
-  async getById(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto): Promise<AgentProviderCredentialResponseDto> {
+  async getAgentProviderCredential(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+  ): Promise<AgentProviderCredentialResponseDto> {
     return this.map(await this.service.getById(auth, id));
   }
 
@@ -61,7 +64,7 @@ export class AgentProviderCredentialController {
     description: 'Update an AI agent provider credential by ID. The current user must own this credential.',
     history: new HistoryBuilder().added('v2.7.5').alpha('v2.7.5'),
   })
-  async update(
+  async updateAgentProviderCredential(
     @Auth() auth: AuthDto,
     @Param() { id }: UUIDParamDto,
     @Body() dto: AgentProviderCredentialUpdateDto,
@@ -77,7 +80,7 @@ export class AgentProviderCredentialController {
     description: 'Delete an AI agent provider credential by ID. The current user must own this credential.',
     history: new HistoryBuilder().added('v2.7.5').alpha('v2.7.5'),
   })
-  delete(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto): Promise<void> {
+  deleteAgentProviderCredential(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto): Promise<void> {
     return this.service.delete(auth, id);
   }
 
