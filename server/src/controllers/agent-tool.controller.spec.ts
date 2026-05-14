@@ -19,7 +19,10 @@ import { automock, ControllerContext, controllerSetup } from 'test/utils';
 
 describe(AgentToolController.name, () => {
   let ctx: ControllerContext;
-  const service = automock(AgentToolService, { args: [{} as never, {} as never, {} as never, {} as never], strict: false });
+  const service = automock(AgentToolService, {
+    args: [{} as never, {} as never, {} as never, {} as never],
+    strict: false,
+  });
   const auth = AuthFactory.create();
   const sessionId = factory.uuid();
   const toolCallId = factory.uuid();
