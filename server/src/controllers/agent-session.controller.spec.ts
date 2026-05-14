@@ -325,7 +325,7 @@ describe(AgentSessionController.name, () => {
 
       const { status, body: result } = await request(ctx.getHttpServer()).post(`/agent/sessions/${id}/cancel`);
 
-      expect(status).toBe(201);
+      expect(status).toBe(200);
       expect(service.cancel).toHaveBeenCalledWith(auth, id);
       expectSerializedResponse(result, {
         status: AgentSessionStatus.Cancelled,
