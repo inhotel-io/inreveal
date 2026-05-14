@@ -2330,17 +2330,20 @@
         "x-immich-state": "Alpha"
       }
     },
-    "/agent/runner/status": {
+    "/agent/sessions": {
       "get": {
-        "description": "Retrieve AI agent runner configuration, health, and capability status.",
-        "operationId": "getAgentRunnerStatus",
+        "description": "Retrieve all AI agent sessions owned by the current user.",
+        "operationId": "getAgentSessions",
         "parameters": [],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AgentRunnerStatusDto"
+                  "items": {
+                    "$ref": "#/components/schemas/AgentSessionResponseDto"
+                  },
+                  "type": "array"
                 }
               }
             },
@@ -2358,9 +2361,9 @@
             "api_key": []
           }
         ],
-        "summary": "Get agent runner status",
+        "summary": "List agent sessions",
         "tags": [
-          "Agent runner"
+          "Agent sessions"
         ],
         "x-immich-history": [
           {
@@ -2372,7 +2375,175 @@
             "state": "Alpha"
           }
         ],
-        "x-immich-permission": "agentRunner.read",
+        "x-immich-permission": "agentSession.read",
+        "x-immich-state": "Alpha"
+      },
+      "post": {
+        "description": "Create a personal AI agent session with immutable credential, model, permission plan, and approval mode snapshots.",
+        "operationId": "createAgentSession",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentSessionCreateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSessionResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Create an agent session",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentSession.create",
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/agent/sessions/{id}": {
+      "get": {
+        "description": "Retrieve an AI agent session by ID. The current user must own this session.",
+        "operationId": "getAgentSession",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSessionResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Retrieve an agent session",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentSession.read",
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/agent/sessions/{id}/cancel": {
+      "post": {
+        "description": "Cancel an active AI agent session owned by the current user.",
+        "operationId": "cancelAgentSession",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSessionResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Cancel an agent session",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentSession.update",
         "x-immich-state": "Alpha"
       }
     },
@@ -21634,8 +21805,8 @@
       "description": "AI agent provider credential management"
     },
     {
-      "name": "Agent runner",
-      "description": "AI agent runner health and capability status"
+      "name": "Agent sessions",
+      "description": "AI agent session management"
     },
     {
       "name": "API keys",
@@ -21944,6 +22115,213 @@
         ],
         "type": "object"
       },
+      "AgentCredentialSnapshot": {
+        "properties": {
+          "baseUrl": {
+            "format": "uri",
+            "nullable": true,
+            "type": "string"
+          },
+          "defaultModel": {
+            "maxLength": 160,
+            "minLength": 1,
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "providerType": {
+            "enum": [
+              "openai",
+              "anthropic",
+              "openai-compatible"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "baseUrl",
+          "defaultModel",
+          "id",
+          "label",
+          "models",
+          "providerType"
+        ],
+        "type": "object"
+      },
+      "AgentInitialContext": {
+        "additionalProperties": {},
+        "type": "object"
+      },
+      "AgentModelSnapshot": {
+        "properties": {
+          "model": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "providerCredentialId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "providerCredentialId"
+        ],
+        "type": "object"
+      },
+      "AgentPermissionPlan": {
+        "properties": {
+          "assetScope": {
+            "properties": {
+              "locked": {
+                "type": "boolean"
+              },
+              "owned": {
+                "type": "boolean"
+              },
+              "sharedSpaces": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "owned",
+              "sharedSpaces",
+              "locked"
+            ],
+            "type": "object"
+          },
+          "limits": {
+            "properties": {
+              "expiresInMinutes": {
+                "maximum": 10080,
+                "minimum": 1,
+                "nullable": true,
+                "type": "integer"
+              },
+              "maxAssetsPerSession": {
+                "maximum": 100000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "maxAssetsPerToolCall": {
+                "maximum": 10000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "maxOriginalsPerToolCall": {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "maxPreviewsPerToolCall": {
+                "maximum": 10000,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "maxAssetsPerToolCall",
+              "maxAssetsPerSession",
+              "maxPreviewsPerToolCall",
+              "maxOriginalsPerToolCall",
+              "expiresInMinutes"
+            ],
+            "type": "object"
+          },
+          "providerExposure": {
+            "properties": {
+              "allowOriginalsForExternalProviders": {
+                "type": "boolean"
+              },
+              "metadata": {
+                "type": "boolean"
+              },
+              "originals": {
+                "type": "boolean"
+              },
+              "previews": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "metadata",
+              "previews",
+              "originals",
+              "allowOriginalsForExternalProviders"
+            ],
+            "type": "object"
+          },
+          "read": {
+            "properties": {
+              "metadata": {
+                "type": "boolean"
+              },
+              "originals": {
+                "type": "boolean"
+              },
+              "previews": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "metadata",
+              "previews",
+              "originals"
+            ],
+            "type": "object"
+          },
+          "writeScope": {
+            "properties": {
+              "addAssets": {
+                "type": "boolean"
+              },
+              "createAlbum": {
+                "type": "boolean"
+              },
+              "setCover": {
+                "type": "boolean"
+              },
+              "updateDetails": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "createAlbum",
+              "addAssets",
+              "updateDetails",
+              "setCover"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "assetScope",
+          "limits",
+          "providerExposure",
+          "read",
+          "writeScope"
+        ],
+        "type": "object"
+      },
       "AgentProviderCredentialCreateDto": {
         "properties": {
           "baseUrl": {
@@ -22095,95 +22473,168 @@
         },
         "type": "object"
       },
-      "AgentRunnerCapabilitiesDto": {
+      "AgentRunnerCapabilitiesSnapshot": {
+        "additionalProperties": {},
+        "nullable": true,
+        "type": "object"
+      },
+      "AgentSessionCreateDto": {
         "properties": {
-          "models": {
-            "description": "Model IDs reported by the runner",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "protocolVersion": {
-            "description": "Runner protocol version",
-            "nullable": true,
+          "approvalMode": {
+            "enum": [
+              "strict",
+              "ask-on-escalation",
+              "plan-only",
+              "dangerously-skip-permissions"
+            ],
             "type": "string"
           },
-          "streaming": {
-            "description": "Whether the runner can stream events",
-            "type": "boolean"
+          "initialContext": {
+            "$ref": "#/components/schemas/AgentInitialContext"
           },
-          "tools": {
-            "description": "Tool names reported by the runner",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+          "model": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "permissionPlan": {
+            "$ref": "#/components/schemas/AgentPermissionPlan"
+          },
+          "permissionPreset": {
+            "enum": [
+              "careful",
+              "visual-organizer",
+              "local-power-user",
+              "custom"
+            ],
+            "type": "string"
+          },
+          "providerCredentialId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "runnerEndpoint": {
+            "format": "uri",
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
-          "models",
-          "protocolVersion",
-          "streaming",
-          "tools"
+          "approvalMode",
+          "model",
+          "permissionPreset",
+          "providerCredentialId"
         ],
         "type": "object"
       },
-      "AgentRunnerStatusDto": {
+      "AgentSessionResponseDto": {
         "properties": {
-          "capabilities": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/AgentRunnerCapabilitiesDto"
-              }
+          "approvalMode": {
+            "enum": [
+              "strict",
+              "ask-on-escalation",
+              "plan-only",
+              "dangerously-skip-permissions"
             ],
-            "description": "Normalized runner capabilities",
-            "nullable": true
+            "type": "string"
           },
-          "checkedAt": {
-            "description": "When this status was checked",
+          "createdAt": {
             "example": "2024-01-01T00:00:00.000Z",
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
             "type": "string"
           },
-          "configured": {
-            "description": "Whether a runner endpoint is configured",
-            "type": "boolean"
+          "credentialSnapshot": {
+            "$ref": "#/components/schemas/AgentCredentialSnapshot"
           },
-          "healthy": {
-            "description": "Whether the configured runner is reachable and healthy",
-            "type": "boolean"
-          },
-          "reason": {
-            "$ref": "#/components/schemas/AgentRunnerStatusReason"
-          },
-          "version": {
-            "description": "Runner version when reported",
+          "endedAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
             "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "initialContextSnapshot": {
+            "$ref": "#/components/schemas/AgentInitialContext"
+          },
+          "modelSnapshot": {
+            "$ref": "#/components/schemas/AgentModelSnapshot"
+          },
+          "permissionPlanSnapshot": {
+            "$ref": "#/components/schemas/AgentPermissionPlan"
+          },
+          "permissionPreset": {
+            "enum": [
+              "careful",
+              "visual-organizer",
+              "local-power-user",
+              "custom"
+            ],
+            "type": "string"
+          },
+          "providerCredentialId": {
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "runnerCapabilitiesSnapshot": {
+            "$ref": "#/components/schemas/AgentRunnerCapabilitiesSnapshot"
+          },
+          "runnerEndpoint": {
+            "format": "uri",
+            "nullable": true,
+            "type": "string"
+          },
+          "runnerSessionId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "created",
+              "running",
+              "waiting_for_tool_approval",
+              "waiting_for_plan_review",
+              "applying",
+              "completed",
+              "cancelled",
+              "interrupted",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "updatedAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
             "type": "string"
           }
         },
         "required": [
-          "capabilities",
-          "checkedAt",
-          "configured",
-          "healthy",
-          "reason",
-          "version"
+          "approvalMode",
+          "createdAt",
+          "credentialSnapshot",
+          "endedAt",
+          "id",
+          "initialContextSnapshot",
+          "modelSnapshot",
+          "permissionPlanSnapshot",
+          "permissionPreset",
+          "providerCredentialId",
+          "runnerCapabilitiesSnapshot",
+          "runnerEndpoint",
+          "runnerSessionId",
+          "status",
+          "updatedAt"
         ],
         "type": "object"
-      },
-      "AgentRunnerStatusReason": {
-        "description": "Agent runner availability reason",
-        "enum": [
-          "not-configured",
-          "healthy",
-          "unhealthy",
-          "timeout",
-          "invalid-response"
-        ],
-        "type": "string"
       },
       "AlbumNameDto": {
         "properties": {
@@ -26985,7 +27436,9 @@
           "agentCredential.read",
           "agentCredential.update",
           "agentCredential.delete",
-          "agentRunner.read",
+          "agentSession.create",
+          "agentSession.read",
+          "agentSession.update",
           "asset.read",
           "asset.update",
           "asset.delete",
