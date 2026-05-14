@@ -7,6 +7,11 @@ import { DB } from 'src/schema';
 import { AgentSessionTable } from 'src/schema/tables/agent-session.table';
 import { asUuid } from 'src/utils/database';
 
+type AgentSessionUpdate = Pick<
+  Updateable<AgentSessionTable>,
+  'status' | 'endedAt' | 'runnerEndpoint' | 'runnerSessionId' | 'runnerCapabilitiesSnapshot'
+>;
+
 @Injectable()
 export class AgentSessionRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
@@ -22,6 +27,7 @@ export class AgentSessionRepository {
       .select(columns.agentSession)
       .where('userId', '=', userId)
       .orderBy('createdAt', 'desc')
+      .orderBy('id', 'desc')
       .execute();
   }
 
@@ -35,7 +41,7 @@ export class AgentSessionRepository {
       .executeTakeFirst();
   }
 
-  update(userId: string, id: string, dto: Updateable<AgentSessionTable>) {
+  update(userId: string, id: string, dto: AgentSessionUpdate) {
     return this.db
       .updateTable('agent_session')
       .set(dto)
