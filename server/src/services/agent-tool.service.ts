@@ -100,6 +100,7 @@ export class AgentToolService {
             status: AgentToolCallStatus.Approved,
             approvalDecision: AgentToolApprovalDecision.Approved,
             responseSummary: 'Tool call approved by user',
+            redactedResponseMetadata: null,
             completedAt: null,
             error: null,
           }
@@ -107,6 +108,7 @@ export class AgentToolService {
             status: AgentToolCallStatus.Denied,
             approvalDecision: AgentToolApprovalDecision.Denied,
             responseSummary: null,
+            redactedResponseMetadata: null,
             completedAt: new Date(),
             error: dto.reason ?? 'Denied by user',
           };
@@ -204,7 +206,8 @@ export class AgentToolService {
 
       const completed = await this.transitionExecuting(auth, session, toolCall.id, {
         status: AgentToolCallStatus.Completed,
-        responseSummary: `Returned metadata for ${assetIds.length} asset(s)`,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: this.getReturnedMetadataSummary(assetIds.length),
         redactedResponseMetadata: { assetIds },
         completedAt: new Date(),
         error: null,
@@ -245,6 +248,10 @@ export class AgentToolService {
     }
 
     return transitioned;
+  }
+
+  private getReturnedMetadataSummary(assetCount: number): string {
+    return `Returned metadata for ${assetCount} ${assetCount === 1 ? 'asset' : 'assets'}`;
   }
 
   private async validateReadRequest(
