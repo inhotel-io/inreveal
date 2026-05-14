@@ -72,4 +72,13 @@ describe('/assistant load', () => {
     expect(sdkMock.getAgentRunnerStatus).not.toHaveBeenCalled();
     expect(sdkMock.getAgentProviderCredentials).not.toHaveBeenCalled();
   });
+
+  it('does not swallow agent API failures', async () => {
+    const error = new Error('runner status failed');
+    sdkMock.getAgentRunnerStatus.mockRejectedValue(error);
+
+    await expect(load({ url: new URL('https://gallery.test/assistant') } as never)).rejects.toBe(error);
+
+    expect(sdkMock.getAgentProviderCredentials).toHaveBeenCalledWith();
+  });
 });
