@@ -193,3 +193,5 @@ const AgentSessionResponseSchema = z
 
 export class AgentSessionCreateDto extends createZodDto(AgentSessionCreateSchema) {}
 export class AgentSessionResponseDto extends createZodDto(AgentSessionResponseSchema) {}
+
+export { AgentPermissionPlanSchema };
