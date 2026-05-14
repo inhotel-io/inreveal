@@ -18,8 +18,8 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { AgentToolService } from 'src/services/agent-tool.service';
-import { AgentAssetMetadata } from 'src/types/agent-tool.types';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
+import { AgentAssetMetadata } from 'src/types/agent-tool.types';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { newAccessRepositoryMock } from 'test/repositories/access.repository.mock';
 import { newAssetRepositoryMock } from 'test/repositories/asset.repository.mock';
@@ -571,10 +571,18 @@ describe(AgentToolService.name, () => {
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
 
     await sut.readAssetMetadata(elevatedAuth, session.id, { assetIds });
-    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenLastCalledWith(elevatedAuth.user.id, new Set(assetIds), true);
+    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenLastCalledWith(
+      elevatedAuth.user.id,
+      new Set(assetIds),
+      true,
+    );
 
     await sut.readAssetMetadata(plainAuth, session.id, { assetIds });
-    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenLastCalledWith(elevatedAuth.user.id, new Set(assetIds), false);
+    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenLastCalledWith(
+      elevatedAuth.user.id,
+      new Set(assetIds),
+      false,
+    );
   });
 
   it('lists historical tool calls after completed session', async () => {
@@ -645,7 +653,9 @@ describe(AgentToolService.name, () => {
         error: caseData.error,
       },
     );
-    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.Running,
+    });
   });
 
   it('rejects non-pending approval without transition', async () => {
@@ -727,14 +737,20 @@ describe(AgentToolService.name, () => {
 
     const result = await sut.readAssetMetadata(auth, session.id, { toolCallId: approved.id });
 
-    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(1, session.id, approved.id, AgentToolCallStatus.Approved, {
-      status: AgentToolCallStatus.Executing,
-      approvalDecision: AgentToolApprovalDecision.Approved,
-      responseSummary: 'Tool call execution started',
-      redactedResponseMetadata: null,
-      completedAt: null,
-      error: null,
-    });
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      1,
+      session.id,
+      approved.id,
+      AgentToolCallStatus.Approved,
+      {
+        status: AgentToolCallStatus.Executing,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: 'Tool call execution started',
+        redactedResponseMetadata: null,
+        completedAt: null,
+        error: null,
+      },
+    );
     expect(toolCallRepository.getCountedAssetCountBySession).toHaveBeenCalledWith(session.id, approved.id);
     expect(assetRepository.getAgentMetadataByIds).toHaveBeenCalledWith(assetIds);
     expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
@@ -751,7 +767,9 @@ describe(AgentToolService.name, () => {
         error: null,
       },
     );
-    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.Running,
+    });
     expect(result).toEqual({
       status: 'success',
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
@@ -799,7 +817,9 @@ describe(AgentToolService.name, () => {
 
     sessionRepository.getById.mockResolvedValue(session);
     toolCallRepository.getByIdForSession.mockResolvedValue(approved);
-    toolCallRepository.transition.mockResolvedValueOnce(makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }));
+    toolCallRepository.transition.mockResolvedValueOnce(
+      makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }),
+    );
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
 
     const result = await sut.readAssetMetadata(auth, session.id, { toolCallId: approved.id });
@@ -822,7 +842,9 @@ describe(AgentToolService.name, () => {
         error: 'One or more assets are not accessible',
       },
     );
-    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.Running,
+    });
   });
 
   it('records denied and restores session when per-session limit drifts after approval', async () => {
@@ -842,7 +864,9 @@ describe(AgentToolService.name, () => {
 
     sessionRepository.getById.mockResolvedValue(session);
     toolCallRepository.getByIdForSession.mockResolvedValue(approved);
-    toolCallRepository.transition.mockResolvedValueOnce(makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }));
+    toolCallRepository.transition.mockResolvedValueOnce(
+      makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }),
+    );
     toolCallRepository.getCountedAssetCountBySession.mockResolvedValue(1);
 
     const result = await sut.readAssetMetadata(auth, session.id, { toolCallId: approved.id });
@@ -854,7 +878,9 @@ describe(AgentToolService.name, () => {
     });
     expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
     expect(toolCallRepository.getCountedAssetCountBySession).toHaveBeenCalledWith(session.id, approved.id);
-    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.Running,
+    });
   });
 
   it.each([
@@ -884,59 +910,66 @@ describe(AgentToolService.name, () => {
       sessionOverrides: { approvalMode: AgentApprovalMode.PlanOnly },
       reason: 'Only strict approval mode is supported for metadata tools in this slice',
     },
-  ])('records denied and restores session when approval-time policy drifts: $name', async ({ sessionOverrides, reason }) => {
-    const auth = AuthFactory.create();
-    const assetIds = [newUuid()];
-    const session = makeSession({ userId: auth.user.id, ...sessionOverrides });
-    const approved = makeToolCall({
-      sessionId: session.id,
-      status: AgentToolCallStatus.Approved,
-      approvalDecision: AgentToolApprovalDecision.Approved,
-      redactedRequestMetadata: { assetIds },
-    });
-
-    sessionRepository.getById.mockResolvedValue(session);
-    toolCallRepository.getByIdForSession.mockResolvedValue(approved);
-    toolCallRepository.transition.mockResolvedValueOnce(makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }));
-
-    const result = await sut.readAssetMetadata(auth, session.id, { toolCallId: approved.id });
-
-    expect(result).toEqual({
-      status: 'denied',
-      reason,
-      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied, error: reason }),
-    });
-    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
-      1,
-      session.id,
-      approved.id,
-      AgentToolCallStatus.Approved,
-      {
-        status: AgentToolCallStatus.Executing,
+  ])(
+    'records denied and restores session when approval-time policy drifts: $name',
+    async ({ sessionOverrides, reason }) => {
+      const auth = AuthFactory.create();
+      const assetIds = [newUuid()];
+      const session = makeSession({ userId: auth.user.id, ...sessionOverrides });
+      const approved = makeToolCall({
+        sessionId: session.id,
+        status: AgentToolCallStatus.Approved,
         approvalDecision: AgentToolApprovalDecision.Approved,
-        responseSummary: 'Tool call execution started',
-        redactedResponseMetadata: null,
-        completedAt: null,
-        error: null,
-      },
-    );
-    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
-      2,
-      session.id,
-      approved.id,
-      AgentToolCallStatus.Executing,
-      {
-        status: AgentToolCallStatus.Denied,
-        approvalDecision: AgentToolApprovalDecision.Denied,
-        responseSummary: null,
-        redactedResponseMetadata: null,
-        completedAt: expect.any(Date),
-        error: reason,
-      },
-    );
-    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
-    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
-  });
+        redactedRequestMetadata: { assetIds },
+      });
+
+      sessionRepository.getById.mockResolvedValue(session);
+      toolCallRepository.getByIdForSession.mockResolvedValue(approved);
+      toolCallRepository.transition.mockResolvedValueOnce(
+        makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }),
+      );
+
+      const result = await sut.readAssetMetadata(auth, session.id, { toolCallId: approved.id });
+
+      expect(result).toEqual({
+        status: 'denied',
+        reason,
+        toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied, error: reason }),
+      });
+      expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+        1,
+        session.id,
+        approved.id,
+        AgentToolCallStatus.Approved,
+        {
+          status: AgentToolCallStatus.Executing,
+          approvalDecision: AgentToolApprovalDecision.Approved,
+          responseSummary: 'Tool call execution started',
+          redactedResponseMetadata: null,
+          completedAt: null,
+          error: null,
+        },
+      );
+      expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+        2,
+        session.id,
+        approved.id,
+        AgentToolCallStatus.Executing,
+        {
+          status: AgentToolCallStatus.Denied,
+          approvalDecision: AgentToolApprovalDecision.Denied,
+          responseSummary: null,
+          redactedResponseMetadata: null,
+          completedAt: expect.any(Date),
+          error: reason,
+        },
+      );
+      expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+        status: AgentSessionStatus.Running,
+      });
+      expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+    },
+  );
 
   it('records failed and restores session when an asset disappears after revalidation', async () => {
     const auth = AuthFactory.create();
@@ -952,7 +985,9 @@ describe(AgentToolService.name, () => {
 
     sessionRepository.getById.mockResolvedValue(session);
     toolCallRepository.getByIdForSession.mockResolvedValue(approved);
-    toolCallRepository.transition.mockResolvedValueOnce(makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }));
+    toolCallRepository.transition.mockResolvedValueOnce(
+      makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }),
+    );
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
     assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetIds[0])] as never);
 
@@ -976,7 +1011,9 @@ describe(AgentToolService.name, () => {
         error: 'One or more assets were not found during metadata read',
       },
     );
-    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.Running,
+    });
   });
 
   it('records failed and restores session when metadata repository throws', async () => {
@@ -992,7 +1029,9 @@ describe(AgentToolService.name, () => {
 
     sessionRepository.getById.mockResolvedValue(session);
     toolCallRepository.getByIdForSession.mockResolvedValue(approved);
-    toolCallRepository.transition.mockResolvedValueOnce(makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }));
+    toolCallRepository.transition.mockResolvedValueOnce(
+      makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }),
+    );
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
     assetRepository.getAgentMetadataByIds.mockRejectedValue(new Error('database unavailable'));
 
@@ -1016,7 +1055,9 @@ describe(AgentToolService.name, () => {
         error: 'Metadata read failed',
       },
     );
-    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.Running,
+    });
   });
 
   it('throws BadRequestException when the session is missing', async () => {

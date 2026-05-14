@@ -56,7 +56,9 @@ export class AgentToolCallRepository {
         .returning(columns.agentToolCall)
         .executeTakeFirstOrThrow();
 
-      return dto === deniedDto ? ({ status: 'limit-exceeded', toolCall } as const) : ({ status: 'created', toolCall } as const);
+      return dto === deniedDto
+        ? ({ status: 'limit-exceeded', toolCall } as const)
+        : ({ status: 'created', toolCall } as const);
     });
   }
 
