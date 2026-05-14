@@ -136,6 +136,11 @@ export enum Permission {
   ApiKeyUpdate = 'apiKey.update',
   ApiKeyDelete = 'apiKey.delete',
 
+  AgentCredentialCreate = 'agentCredential.create',
+  AgentCredentialRead = 'agentCredential.read',
+  AgentCredentialUpdate = 'agentCredential.update',
+  AgentCredentialDelete = 'agentCredential.delete',
+
   // ASSET_CREATE = 'asset.create',
   AssetRead = 'asset.read',
   AssetUpdate = 'asset.update',
@@ -1088,6 +1093,7 @@ export enum CronJob {
 export enum ApiTag {
   Activities = 'Activities',
   Albums = 'Albums',
+  AgentCredentials = 'Agent credentials',
   ApiKeys = 'API keys',
   Authentication = 'Authentication',
   AuthenticationAdmin = 'Authentication (admin)',
