@@ -1,6 +1,7 @@
 import { AccessRepository } from 'src/repositories/access.repository';
 import { ActivityRepository } from 'src/repositories/activity.repository';
 import { AgentProviderCredentialRepository } from 'src/repositories/agent-provider-credential.repository';
+import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AlbumUserRepository } from 'src/repositories/album-user.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { ApiKeyRepository } from 'src/repositories/api-key.repository';
@@ -63,6 +64,7 @@ export const repositories = [
   AlbumRepository,
   AlbumUserRepository,
   AgentProviderCredentialRepository,
+  AgentSessionRepository,
   ApiKeyRepository,
   AppMetricsRepository,
   AppRepository,
