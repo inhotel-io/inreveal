@@ -1,6 +1,7 @@
 import { ActivityService } from 'src/services/activity.service';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
+import { AgentSessionService } from 'src/services/agent-session.service';
 import { AlbumService } from 'src/services/album.service';
 import { ApiKeyService } from 'src/services/api-key.service';
 import { ApiService } from 'src/services/api.service';
@@ -60,6 +61,7 @@ export const services = [
   ActivityService,
   AgentProviderCredentialService,
   AgentRunnerService,
+  AgentSessionService,
   AlbumService,
   ApiService,
   AppMetricsService,
