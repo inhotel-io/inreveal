@@ -662,6 +662,10 @@ describe(AgentToolService.name, () => {
 
     expect(toolCallRepository.transition).toHaveBeenNthCalledWith(1, session.id, approved.id, AgentToolCallStatus.Approved, {
       status: AgentToolCallStatus.Executing,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      responseSummary: 'Tool call execution started',
+      redactedResponseMetadata: null,
+      completedAt: null,
       error: null,
     });
     expect(toolCallRepository.getCountedAssetCountBySession).toHaveBeenCalledWith(session.id, approved.id);
@@ -738,7 +742,14 @@ describe(AgentToolService.name, () => {
       session.id,
       approved.id,
       AgentToolCallStatus.Executing,
-      expect.objectContaining({ status: AgentToolCallStatus.Denied, error: 'One or more assets are not accessible' }),
+      {
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        responseSummary: null,
+        redactedResponseMetadata: null,
+        completedAt: expect.any(Date),
+        error: 'One or more assets are not accessible',
+      },
     );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
   });
@@ -825,14 +836,28 @@ describe(AgentToolService.name, () => {
       session.id,
       approved.id,
       AgentToolCallStatus.Approved,
-      { status: AgentToolCallStatus.Executing, error: null },
+      {
+        status: AgentToolCallStatus.Executing,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: 'Tool call execution started',
+        redactedResponseMetadata: null,
+        completedAt: null,
+        error: null,
+      },
     );
     expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
       2,
       session.id,
       approved.id,
       AgentToolCallStatus.Executing,
-      expect.objectContaining({ status: AgentToolCallStatus.Denied, error: reason }),
+      {
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        responseSummary: null,
+        redactedResponseMetadata: null,
+        completedAt: expect.any(Date),
+        error: reason,
+      },
     );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
     expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
@@ -867,10 +892,14 @@ describe(AgentToolService.name, () => {
       session.id,
       approved.id,
       AgentToolCallStatus.Executing,
-      expect.objectContaining({
+      {
         status: AgentToolCallStatus.Failed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: null,
+        redactedResponseMetadata: { assetIds: [assetIds[0]] },
+        completedAt: expect.any(Date),
         error: 'One or more assets were not found during metadata read',
-      }),
+      },
     );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
   });
@@ -903,7 +932,14 @@ describe(AgentToolService.name, () => {
       session.id,
       approved.id,
       AgentToolCallStatus.Executing,
-      expect.objectContaining({ status: AgentToolCallStatus.Failed, error: 'Metadata read failed' }),
+      {
+        status: AgentToolCallStatus.Failed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: null,
+        redactedResponseMetadata: null,
+        completedAt: expect.any(Date),
+        error: 'Metadata read failed',
+      },
     );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
   });
