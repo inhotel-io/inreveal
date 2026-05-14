@@ -152,7 +152,7 @@ describe(AgentMessageService.name, () => {
     const auth = AuthFactory.create();
     const sessionId = newUuid();
 
-    sessionRepository.getById.mockResolvedValue(undefined);
+    sessionRepository.getById.mockResolvedValue(void 0);
 
     await expect(
       sut.appendUserMessage(auth, sessionId, { content: { blocks: [{ type: 'text', text: 'Hello' }] } }),
@@ -182,7 +182,7 @@ describe(AgentMessageService.name, () => {
     const auth = AuthFactory.create();
     const sessionId = newUuid();
 
-    sessionRepository.getById.mockResolvedValue(undefined);
+    sessionRepository.getById.mockResolvedValue(void 0);
 
     await expect(sut.getMessages(auth, sessionId)).rejects.toThrow('Agent session not found');
     expect(messageRepository.getBySessionId).not.toHaveBeenCalled();
