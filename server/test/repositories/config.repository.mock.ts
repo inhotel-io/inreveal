@@ -10,7 +10,9 @@ export const envData: EnvData = {
 
   buildMetadata: {},
 
-  agent: {},
+  agent: {
+    runnerHealthTimeoutMs: 2000,
+  },
 
   bull: {
     config: {
