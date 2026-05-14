@@ -60,6 +60,7 @@ export const EnvSchema = z
     IMMICH_S3_SERVE_MODE: z.enum(['redirect', 'proxy']).optional(),
     IMMICH_MICROSERVICES_METRICS_PORT: z.coerce.number().int().optional(),
     IMMICH_ALLOW_EXTERNAL_PLUGINS: stringBool.optional(),
+    IMMICH_AGENT_SECRET_KEY: z.string().optional(),
     IMMICH_PLUGINS_INSTALL_FOLDER: absolutePath,
     IMMICH_PORT: z.coerce.number().int().optional(),
     IMMICH_REPOSITORY: z.string().optional(),
