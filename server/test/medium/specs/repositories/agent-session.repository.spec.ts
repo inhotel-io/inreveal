@@ -278,6 +278,65 @@ describe(AgentSessionRepository.name, () => {
     });
   });
 
+  it('conditionally cancels only when current status is cancellable', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const cancellableStatuses = [
+      AgentSessionStatus.Created,
+      AgentSessionStatus.Running,
+      AgentSessionStatus.WaitingForToolApproval,
+      AgentSessionStatus.WaitingForPlanReview,
+      AgentSessionStatus.Interrupted,
+    ];
+    const activeEndedAt = new Date('2026-05-14T14:00:00Z');
+    const terminalEndedAt = new Date('2026-05-14T15:00:00Z');
+
+    const activeSession = await sut.create({
+      userId: user.id,
+      providerCredentialId: null,
+      credentialSnapshot,
+      modelSnapshot,
+      permissionPreset: AgentPermissionPreset.Careful,
+      permissionPlanSnapshot,
+      approvalMode: AgentApprovalMode.Strict,
+      runnerEndpoint: null,
+      runnerSessionId: null,
+      runnerCapabilitiesSnapshot: null,
+      status: AgentSessionStatus.Running,
+      initialContextSnapshot,
+    });
+    const terminalSession = await sut.create({
+      userId: user.id,
+      providerCredentialId: null,
+      credentialSnapshot,
+      modelSnapshot,
+      permissionPreset: AgentPermissionPreset.Careful,
+      permissionPlanSnapshot,
+      approvalMode: AgentApprovalMode.Strict,
+      runnerEndpoint: null,
+      runnerSessionId: null,
+      runnerCapabilitiesSnapshot: null,
+      status: AgentSessionStatus.Completed,
+      endedAt: terminalEndedAt,
+      initialContextSnapshot,
+    });
+
+    await expect(sut.cancel(user.id, terminalSession.id, cancellableStatuses, activeEndedAt)).resolves.toBeUndefined();
+    await expect(sut.getById(user.id, terminalSession.id)).resolves.toMatchObject({
+      id: terminalSession.id,
+      status: AgentSessionStatus.Completed,
+      endedAt: terminalEndedAt,
+    });
+
+    const cancelled = await sut.cancel(user.id, activeSession.id, cancellableStatuses, activeEndedAt);
+
+    expect(cancelled).toMatchObject({
+      id: activeSession.id,
+      status: AgentSessionStatus.Cancelled,
+      endedAt: activeEndedAt,
+    });
+  });
+
   it('cascades sessions when the owning user is deleted', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
