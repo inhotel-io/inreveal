@@ -13,6 +13,9 @@ enum DatabaseSslMode {
 
 const DatabaseSslModeSchema = z.enum(DatabaseSslMode).describe('Database SSL mode').meta({ id: 'DatabaseSslMode' });
 const absolutePath = z.string().regex(/^\//, 'Must be an absolute path').optional();
+const httpUrl = z.url().refine((value) => /^https?:\/\//i.test(value), {
+  message: 'Runner URL must use http or https',
+});
 /**
  * Treat certain strings as booleans and coerce them to boolean
  * Ideal for environment variables that are strings but should be treated as booleans
@@ -61,6 +64,8 @@ export const EnvSchema = z
     IMMICH_MICROSERVICES_METRICS_PORT: z.coerce.number().int().optional(),
     IMMICH_ALLOW_EXTERNAL_PLUGINS: stringBool.optional(),
     IMMICH_AGENT_SECRET_KEY: z.string().optional(),
+    IMMICH_AGENT_RUNNER_URL: httpUrl.optional(),
+    IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
     IMMICH_PLUGINS_INSTALL_FOLDER: absolutePath,
     IMMICH_PORT: z.coerce.number().int().optional(),
     IMMICH_REPOSITORY: z.string().optional(),
