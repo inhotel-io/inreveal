@@ -2507,7 +2507,7 @@
           }
         ],
         "responses": {
-          "201": {
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
@@ -22115,6 +22115,15 @@
         ],
         "type": "object"
       },
+      "AgentApprovalMode": {
+        "enum": [
+          "strict",
+          "ask-on-escalation",
+          "plan-only",
+          "dangerously-skip-permissions"
+        ],
+        "type": "string"
+      },
       "AgentCredentialSnapshot": {
         "properties": {
           "baseUrl": {
@@ -22147,12 +22156,7 @@
             "type": "array"
           },
           "providerType": {
-            "enum": [
-              "openai",
-              "anthropic",
-              "openai-compatible"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AgentProviderType"
           }
         },
         "required": [
@@ -22322,6 +22326,15 @@
         ],
         "type": "object"
       },
+      "AgentPermissionPreset": {
+        "enum": [
+          "careful",
+          "visual-organizer",
+          "local-power-user",
+          "custom"
+        ],
+        "type": "string"
+      },
       "AgentProviderCredentialCreateDto": {
         "properties": {
           "baseUrl": {
@@ -22473,6 +22486,14 @@
         },
         "type": "object"
       },
+      "AgentProviderType": {
+        "enum": [
+          "openai",
+          "anthropic",
+          "openai-compatible"
+        ],
+        "type": "string"
+      },
       "AgentRunnerCapabilitiesSnapshot": {
         "additionalProperties": {},
         "nullable": true,
@@ -22481,13 +22502,7 @@
       "AgentSessionCreateDto": {
         "properties": {
           "approvalMode": {
-            "enum": [
-              "strict",
-              "ask-on-escalation",
-              "plan-only",
-              "dangerously-skip-permissions"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AgentApprovalMode"
           },
           "initialContext": {
             "$ref": "#/components/schemas/AgentInitialContext"
@@ -22501,13 +22516,7 @@
             "$ref": "#/components/schemas/AgentPermissionPlan"
           },
           "permissionPreset": {
-            "enum": [
-              "careful",
-              "visual-organizer",
-              "local-power-user",
-              "custom"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AgentPermissionPreset"
           },
           "providerCredentialId": {
             "format": "uuid",
@@ -22531,13 +22540,7 @@
       "AgentSessionResponseDto": {
         "properties": {
           "approvalMode": {
-            "enum": [
-              "strict",
-              "ask-on-escalation",
-              "plan-only",
-              "dangerously-skip-permissions"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AgentApprovalMode"
           },
           "createdAt": {
             "example": "2024-01-01T00:00:00.000Z",
@@ -22570,13 +22573,7 @@
             "$ref": "#/components/schemas/AgentPermissionPlan"
           },
           "permissionPreset": {
-            "enum": [
-              "careful",
-              "visual-organizer",
-              "local-power-user",
-              "custom"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AgentPermissionPreset"
           },
           "providerCredentialId": {
             "format": "uuid",
@@ -22597,18 +22594,7 @@
             "type": "string"
           },
           "status": {
-            "enum": [
-              "created",
-              "running",
-              "waiting_for_tool_approval",
-              "waiting_for_plan_review",
-              "applying",
-              "completed",
-              "cancelled",
-              "interrupted",
-              "failed"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AgentSessionStatus"
           },
           "updatedAt": {
             "example": "2024-01-01T00:00:00.000Z",
@@ -22635,6 +22621,20 @@
           "updatedAt"
         ],
         "type": "object"
+      },
+      "AgentSessionStatus": {
+        "enum": [
+          "created",
+          "running",
+          "waiting_for_tool_approval",
+          "waiting_for_plan_review",
+          "applying",
+          "completed",
+          "cancelled",
+          "interrupted",
+          "failed"
+        ],
+        "type": "string"
       },
       "AlbumNameDto": {
         "properties": {
