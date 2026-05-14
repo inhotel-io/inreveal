@@ -30,9 +30,11 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   await sql`CREATE INDEX "agent_tool_call_sessionId_startedAt_id_idx" ON "agent_tool_call" ("sessionId", "startedAt", "id")`.execute(
     db,
   );
+  await sql`CREATE INDEX "agent_tool_call_sessionId_idx" ON "agent_tool_call" ("sessionId")`.execute(db);
 }
 
 export async function down(db: Kysely<unknown>): Promise<void> {
+  await sql`DROP INDEX "agent_tool_call_sessionId_idx"`.execute(db);
   await sql`DROP INDEX "agent_tool_call_sessionId_startedAt_id_idx"`.execute(db);
   await sql`DROP INDEX "agent_tool_call_sessionId_status_idx"`.execute(db);
   await sql`DROP TABLE "agent_tool_call"`.execute(db);
