@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build vertical slice 4 for the Pi agent by exposing runner configuration/health status and a dedicated Assistant page that remains disabled until the runner is configured and healthy.
+**Goal:** Build vertical slice 4 for the Pi agent by exposing runner configuration/health status and a dedicated Assistant page. The page reports whether the runner is configured and healthy, but all session-starting controls remain disabled for this slice because session creation is out of scope.
 
 **Architecture:** Gallery server remains the authority for agent availability. This slice adds an authenticated, read-only runner status endpoint that derives configuration from environment variables and probes the runner health endpoint when configured. The web app adds a first Assistant page that displays the current availability state and disables session-starting controls; it does not create sessions, send messages, call Pi, or mutate albums.
 
@@ -147,7 +147,10 @@ Modify:
 - `server/src/enum.ts` - add `AgentRunnerRead` permission and `AgentRunner` API tag.
 - `server/src/constants.ts` - add API tag text.
 - `web/src/lib/route.ts` - add `Route.assistant()`.
+- `web/src/lib/route.spec.ts` - add route helper coverage.
 - `web/src/lib/components/shared-components/side-bar/user-sidebar.svelte` - add Assistant nav item.
+- `web/src/lib/components/shared-components/side-bar/user-sidebar.spec.ts` - add sidebar nav coverage.
+- `i18n/en.json` - add Assistant UI strings.
 - Generated OpenAPI, TypeScript SDK, and mobile OpenAPI files from `make open-api`.
 
 ## API Contract
@@ -404,6 +407,20 @@ describe(AgentRunnerRepository.name, () => {
     });
   });
 
+  it('preserves runner URL path prefixes when appending the health endpoint', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'ok' }),
+    });
+
+    await sut.getStatus({ url: 'https://gateway.local/pi-runner/', timeoutMs: 2500 });
+
+    expect(mockFetch).toHaveBeenCalledWith(new URL('https://gateway.local/pi-runner/health'), {
+      headers: { Accept: 'application/json' },
+      signal: expect.any(AbortSignal),
+    });
+  });
+
   it('returns unhealthy for non-2xx responses', async () => {
     mockFetch.mockResolvedValue({ ok: false, status: 503 });
 
@@ -530,11 +547,17 @@ const unavailable = (
   capabilities: null,
 });
 
+const getRunnerHealthUrl = (url: string) => {
+  const healthUrl = new URL(url);
+  healthUrl.pathname = `${healthUrl.pathname.replace(/\/$/, '')}/health`;
+  return healthUrl;
+};
+
 @Injectable()
 export class AgentRunnerRepository {
   async getStatus({ url, timeoutMs }: AgentRunnerProbeConfig): Promise<AgentRunnerProbeResult> {
     try {
-      const response = await fetch(new URL('/health', url), {
+      const response = await fetch(getRunnerHealthUrl(url), {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -719,6 +742,50 @@ describe(AgentRunnerService.name, () => {
     await sut.getStatus();
 
     expect(agentRunnerRepository.getStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('deduplicates concurrent configured runner status probes', async () => {
+    configRepository.getEnv.mockReturnValue({
+      agent: { runnerUrl: 'http://agent-runner:4477', runnerHealthTimeoutMs: 3000 },
+    } as never);
+
+    let resolveProbe: (value: Awaited<ReturnType<AgentRunnerRepository['getStatus']>>) => void;
+    agentRunnerRepository.getStatus.mockReturnValue(
+      new Promise((resolve) => {
+        resolveProbe = resolve;
+      }),
+    );
+
+    const first = sut.getStatus();
+    const second = sut.getStatus();
+
+    expect(agentRunnerRepository.getStatus).toHaveBeenCalledTimes(1);
+
+    resolveProbe!({
+      healthy: true,
+      reason: 'healthy',
+      version: null,
+      capabilities: { protocolVersion: null, streaming: false, tools: [], models: [] },
+    });
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      {
+        configured: true,
+        healthy: true,
+        reason: 'healthy',
+        version: null,
+        capabilities: { protocolVersion: null, streaming: false, tools: [], models: [] },
+        checkedAt: new Date('2026-05-14T10:00:00.000Z'),
+      },
+      {
+        configured: true,
+        healthy: true,
+        reason: 'healthy',
+        version: null,
+        capabilities: { protocolVersion: null, streaming: false, tools: [], models: [] },
+        checkedAt: new Date('2026-05-14T10:00:00.000Z'),
+      },
+    ]);
   });
 
   it('refreshes cached status after the cache window', async () => {
@@ -1100,7 +1167,10 @@ git commit -m "chore: update agent runner api artifacts"
 **Files:**
 
 - Modify: `web/src/lib/route.ts`
+- Modify: `web/src/lib/route.spec.ts`
 - Modify: `web/src/lib/components/shared-components/side-bar/user-sidebar.svelte`
+- Modify: `web/src/lib/components/shared-components/side-bar/user-sidebar.spec.ts`
+- Modify: `i18n/en.json`
 - Create: `web/src/routes/(user)/assistant/+page.ts`
 - Create: `web/src/routes/(user)/assistant/+page.svelte`
 - Create: `web/src/routes/(user)/assistant/agent-runner-status-panel.svelte`
@@ -1112,48 +1182,42 @@ git commit -m "chore: update agent runner api artifacts"
 Create `web/src/routes/(user)/assistant/page-load.spec.ts`:
 
 ```ts
-import { authenticate } from '$lib/utils/auth';
-import { getAgentRunnerStatus } from '@immich/sdk';
+const { authenticate, getFormatter } = vi.hoisted(() => ({
+  authenticate: vi.fn(),
+  getFormatter: vi.fn(),
+}));
+
+vi.mock('$lib/utils/auth', () => ({ authenticate }));
+vi.mock('$lib/utils/i18n', () => ({ getFormatter }));
+
+import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import { load } from './+page';
 
-vi.mock('$lib/utils/auth', () => ({
-  authenticate: vi.fn(),
-}));
-
-vi.mock('@immich/sdk', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@immich/sdk')>()),
-  getAgentRunnerStatus: vi.fn(),
-}));
+const runnerStatus = {
+  configured: false,
+  healthy: false,
+  reason: 'not-configured' as const,
+  version: null,
+  capabilities: null,
+  checkedAt: '2026-05-14T00:00:00.000Z',
+};
 
 describe('/assistant load', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(getAgentRunnerStatus).mockResolvedValue({
-      configured: false,
-      healthy: false,
-      reason: 'not-configured',
-      version: null,
-      capabilities: null,
-      checkedAt: '2026-05-14T00:00:00.000Z',
-    });
+    vi.resetAllMocks();
+    getFormatter.mockResolvedValue((key: string) => key);
+    sdkMock.getAgentRunnerStatus.mockResolvedValue(runnerStatus);
   });
 
-  it('authenticates the user and returns runner status', async () => {
+  it('authenticates the user and returns translated metadata with runner status', async () => {
     const url = new URL('http://localhost/assistant');
 
     await expect(load({ url } as never)).resolves.toEqual({
-      meta: { title: 'Assistant' },
-      runnerStatus: {
-        configured: false,
-        healthy: false,
-        reason: 'not-configured',
-        version: null,
-        capabilities: null,
-        checkedAt: '2026-05-14T00:00:00.000Z',
-      },
+      meta: { title: 'assistant' },
+      runnerStatus,
     });
     expect(authenticate).toHaveBeenCalledWith(url);
-    expect(getAgentRunnerStatus).toHaveBeenCalledWith();
+    expect(sdkMock.getAgentRunnerStatus).toHaveBeenCalledWith();
   });
 });
 ```
@@ -1165,6 +1229,24 @@ Create `web/src/routes/(user)/assistant/agent-runner-status-panel.spec.ts`:
 ```ts
 import { render, screen } from '@testing-library/svelte';
 import AgentRunnerStatusPanel from './agent-runner-status-panel.svelte';
+
+vi.mock('svelte-i18n', async () => {
+  const { readable } = await import('svelte/store');
+  const messages: Record<string, string> = {
+    assistant: 'Assistant',
+    assistant_runner_not_configured: 'Runner not configured',
+    assistant_runner_unavailable: 'Runner unavailable',
+    assistant_runner_healthy: 'Runner healthy',
+    assistant_start_session: 'Start session',
+    assistant_protocol: 'Protocol {protocol}',
+  };
+
+  return {
+    t: readable((key: string, options?: { values?: Record<string, string> }) =>
+      (messages[key] ?? key).replace('{protocol}', options?.values?.protocol ?? ''),
+    ),
+  };
+});
 
 describe(AgentRunnerStatusPanel.name, () => {
   it('shows disabled state when the runner is not configured', () => {
@@ -1239,7 +1321,41 @@ pnpm --filter immich-web test -- --run 'src/routes/(user)/assistant/page-load.sp
 
 Expected: FAIL because the route and panel do not exist.
 
-- [ ] **Step 4: Add route helper**
+- [ ] **Step 4: Add failing route helper coverage**
+
+In `web/src/lib/route.spec.ts`, add:
+
+```ts
+describe(Route.assistant.name, () => {
+  it('should link to the assistant page', () => {
+    expect(Route.assistant()).toBe('/assistant');
+  });
+});
+```
+
+- [ ] **Step 5: Add failing sidebar coverage**
+
+In `web/src/lib/components/shared-components/side-bar/user-sidebar.spec.ts`, add:
+
+```ts
+it('shows an assistant link', () => {
+  render(UserSidebar);
+
+  expect(screen.getByRole('link', { name: /^assistant$/i })).toHaveAttribute('href', '/assistant');
+});
+```
+
+- [ ] **Step 6: Run route and sidebar tests and verify they fail**
+
+Run:
+
+```bash
+pnpm --filter immich-web test -- --run src/lib/route.spec.ts src/lib/components/shared-components/side-bar/user-sidebar.spec.ts
+```
+
+Expected: FAIL because `Route.assistant()` and the Assistant sidebar item do not exist.
+
+- [ ] **Step 7: Add route helper**
 
 In `web/src/lib/route.ts`, add near the user routes:
 
@@ -1248,7 +1364,27 @@ In `web/src/lib/route.ts`, add near the user routes:
 assistant: () => '/assistant',
 ```
 
-- [ ] **Step 5: Add Assistant sidebar item**
+- [ ] **Step 8: Add i18n strings**
+
+In `i18n/en.json`, add these keys in sorted order:
+
+```json
+"assistant": "Assistant",
+"assistant_configured": "Configured",
+"assistant_healthy": "Healthy",
+"assistant_no": "no",
+"assistant_protocol": "Protocol {protocol}",
+"assistant_runner": "Runner {version}",
+"assistant_runner_healthy": "Runner healthy",
+"assistant_runner_not_configured": "Runner not configured",
+"assistant_runner_unavailable": "Runner unavailable",
+"assistant_start_session": "Start session",
+"assistant_streaming": "Streaming",
+"assistant_subtitle": "Album organization assistant",
+"assistant_yes": "yes",
+```
+
+- [ ] **Step 9: Add Assistant sidebar item**
 
 In `web/src/lib/components/shared-components/side-bar/user-sidebar.svelte`, add icon imports:
 
@@ -1260,31 +1396,33 @@ mdiRobotOutline,
 Add the nav item after Explore and before Map:
 
 ```svelte
-<NavbarItem title="Assistant" href={Route.assistant()} icon={mdiRobotOutline} activeIcon={mdiRobot} />
+<NavbarItem title={$t('assistant')} href={Route.assistant()} icon={mdiRobotOutline} activeIcon={mdiRobot} />
 ```
 
-- [ ] **Step 6: Implement page load**
+- [ ] **Step 10: Implement page load**
 
 Create `web/src/routes/(user)/assistant/+page.ts`:
 
 ```ts
 import { authenticate } from '$lib/utils/auth';
+import { getFormatter } from '$lib/utils/i18n';
 import { getAgentRunnerStatus } from '@immich/sdk';
 import type { PageLoad } from './$types';
 
 export const load = (async ({ url }) => {
   await authenticate(url);
+  const $t = await getFormatter();
 
   return {
     meta: {
-      title: 'Assistant',
+      title: $t('assistant'),
     },
     runnerStatus: await getAgentRunnerStatus(),
   };
 }) satisfies PageLoad;
 ```
 
-- [ ] **Step 7: Implement status panel**
+- [ ] **Step 11: Implement status panel**
 
 Create `web/src/routes/(user)/assistant/agent-runner-status-panel.svelte`:
 
@@ -1293,6 +1431,7 @@ Create `web/src/routes/(user)/assistant/agent-runner-status-panel.svelte`:
   import { Icon, Text } from '@immich/ui';
   import { mdiAlertCircleOutline, mdiCheckCircleOutline, mdiRobotOutline } from '@mdi/js';
   import type { AgentRunnerStatusDto } from '@immich/sdk';
+  import { t } from 'svelte-i18n';
 
   interface Props {
     status: AgentRunnerStatusDto;
@@ -1300,14 +1439,14 @@ Create `web/src/routes/(user)/assistant/agent-runner-status-panel.svelte`:
 
   let { status }: Props = $props();
 
-  const reasonText = $derived.by(() => {
+  const reasonKey = $derived.by(() => {
     if (!status.configured) {
-      return 'Runner not configured';
+      return 'assistant_runner_not_configured';
     }
     if (!status.healthy) {
-      return 'Runner unavailable';
+      return 'assistant_runner_unavailable';
     }
-    return 'Runner healthy';
+    return 'assistant_runner_healthy';
   });
 
   const icon = $derived(status.healthy ? mdiCheckCircleOutline : mdiAlertCircleOutline);
@@ -1322,8 +1461,8 @@ Create `web/src/routes/(user)/assistant/agent-runner-status-panel.svelte`:
   <div class="flex items-center gap-3">
     <Icon icon={mdiRobotOutline} class="text-primary" size="32" />
     <div>
-      <h1 id="assistant-title" class="text-2xl font-semibold">Assistant</h1>
-      <Text size="small" color="muted">Album organization assistant</Text>
+      <h1 id="assistant-title" class="text-2xl font-semibold">{$t('assistant')}</h1>
+      <Text size="small" color="muted">{$t('assistant_subtitle')}</Text>
     </div>
   </div>
 
@@ -1331,16 +1470,18 @@ Create `web/src/routes/(user)/assistant/agent-runner-status-panel.svelte`:
     <div class="flex items-start gap-4">
       <Icon icon={icon} class={iconClass} size="28" />
       <div class="min-w-0 flex-1">
-        <div data-testid="assistant-status-reason" class="text-lg font-medium">{reasonText}</div>
+        <div data-testid="assistant-status-reason" class="text-lg font-medium">{$t(reasonKey)}</div>
         <div class="mt-2 grid gap-2 text-sm text-gray-600 dark:text-gray-300">
-          <div>Configured: {status.configured ? 'yes' : 'no'}</div>
-          <div>Healthy: {status.healthy ? 'yes' : 'no'}</div>
+          <div>{$t('assistant_configured')}: {$t(status.configured ? 'assistant_yes' : 'assistant_no')}</div>
+          <div>{$t('assistant_healthy')}: {$t(status.healthy ? 'assistant_yes' : 'assistant_no')}</div>
           {#if status.version}
-            <div>Runner {status.version}</div>
+            <div>{$t('assistant_runner', { values: { version: status.version } })}</div>
           {/if}
           {#if status.capabilities}
-            <div>Protocol {protocol}</div>
-            <div>Streaming: {status.capabilities.streaming ? 'yes' : 'no'}</div>
+            <div>{$t('assistant_protocol', { values: { protocol } })}</div>
+            <div>
+              {$t('assistant_streaming')}: {$t(status.capabilities.streaming ? 'assistant_yes' : 'assistant_no')}
+            </div>
           {/if}
         </div>
       </div>
@@ -1353,13 +1494,13 @@ Create `web/src/routes/(user)/assistant/agent-runner-status-panel.svelte`:
       disabled
       class="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 font-medium text-white opacity-50"
     >
-      Start session
+      {$t('assistant_start_session')}
     </button>
   </div>
 </section>
 ```
 
-- [ ] **Step 8: Implement page shell**
+- [ ] **Step 12: Implement page shell**
 
 Create `web/src/routes/(user)/assistant/+page.svelte`:
 
@@ -1381,20 +1522,20 @@ Create `web/src/routes/(user)/assistant/+page.svelte`:
 </UserPageLayout>
 ```
 
-- [ ] **Step 9: Run web tests**
+- [ ] **Step 13: Run web tests**
 
 Run:
 
 ```bash
-pnpm --filter immich-web test -- --run 'src/routes/(user)/assistant/page-load.spec.ts' 'src/routes/(user)/assistant/agent-runner-status-panel.spec.ts'
+pnpm --filter immich-web test -- --run 'src/routes/(user)/assistant/page-load.spec.ts' 'src/routes/(user)/assistant/agent-runner-status-panel.spec.ts' src/lib/route.spec.ts src/lib/components/shared-components/side-bar/user-sidebar.spec.ts
 ```
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 14: Commit**
 
 ```bash
-git add web/src/lib/route.ts web/src/lib/components/shared-components/side-bar/user-sidebar.svelte 'web/src/routes/(user)/assistant'
+git add i18n/en.json web/src/lib/route.ts web/src/lib/route.spec.ts web/src/lib/components/shared-components/side-bar/user-sidebar.svelte web/src/lib/components/shared-components/side-bar/user-sidebar.spec.ts 'web/src/routes/(user)/assistant'
 git commit -m "feat: add disabled assistant page"
 ```
 
@@ -1419,7 +1560,7 @@ Expected: PASS.
 Run:
 
 ```bash
-pnpm --filter immich-web test -- --run 'src/routes/(user)/assistant/page-load.spec.ts' 'src/routes/(user)/assistant/agent-runner-status-panel.spec.ts'
+pnpm --filter immich-web test -- --run 'src/routes/(user)/assistant/page-load.spec.ts' 'src/routes/(user)/assistant/agent-runner-status-panel.spec.ts' src/lib/route.spec.ts src/lib/components/shared-components/side-bar/user-sidebar.spec.ts
 ```
 
 Expected: PASS.
@@ -1461,6 +1602,7 @@ Review the final diff and verify:
 - No code imports or references `agent_message`.
 - The Assistant page has no create-session action wired.
 - The disabled button is always disabled in this slice.
+- Assistant route, sidebar entry, page title, and panel strings use the existing route/i18n conventions.
 - Generated OpenAPI/mobile/TypeScript SDK files include the endpoint.
 
 - [ ] **Step 6: Commit any verification fixes**
@@ -1480,7 +1622,7 @@ Before opening or updating a PR, run:
 
 ```bash
 pnpm --filter immich run test -- --run src/repositories/config.repository.spec.ts src/repositories/agent-runner.repository.spec.ts src/services/agent-runner.service.spec.ts src/controllers/agent-runner.controller.spec.ts
-pnpm --filter immich-web test -- --run 'src/routes/(user)/assistant/page-load.spec.ts' 'src/routes/(user)/assistant/agent-runner-status-panel.spec.ts'
+pnpm --filter immich-web test -- --run 'src/routes/(user)/assistant/page-load.spec.ts' 'src/routes/(user)/assistant/agent-runner-status-panel.spec.ts' src/lib/route.spec.ts src/lib/components/shared-components/side-bar/user-sidebar.spec.ts
 pnpm --filter immich run check
 pnpm --filter immich-web run check:typescript
 pnpm --filter immich-web run check:svelte
