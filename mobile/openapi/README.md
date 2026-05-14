@@ -88,6 +88,7 @@ Class | Method | HTTP request | Description
 *AgentCredentialsApi* | [**getAgentProviderCredential**](doc//AgentCredentialsApi.md#getagentprovidercredential) | **GET** /agent/provider-credentials/{id} | Retrieve an agent provider credential
 *AgentCredentialsApi* | [**getAgentProviderCredentials**](doc//AgentCredentialsApi.md#getagentprovidercredentials) | **GET** /agent/provider-credentials | List agent provider credentials
 *AgentCredentialsApi* | [**updateAgentProviderCredential**](doc//AgentCredentialsApi.md#updateagentprovidercredential) | **PUT** /agent/provider-credentials/{id} | Update an agent provider credential
+*AgentRunnerApi* | [**getAgentRunnerStatus**](doc//AgentRunnerApi.md#getagentrunnerstatus) | **GET** /agent/runner/status | Get agent runner status
 *AlbumsApi* | [**addAssetsToAlbum**](doc//AlbumsApi.md#addassetstoalbum) | **PUT** /albums/{id}/assets | Add assets to an album
 *AlbumsApi* | [**addAssetsToAlbums**](doc//AlbumsApi.md#addassetstoalbums) | **PUT** /albums/assets | Add assets to albums
 *AlbumsApi* | [**addUsersToAlbum**](doc//AlbumsApi.md#adduserstoalbum) | **PUT** /albums/{id}/users | Share album with users
@@ -418,6 +419,9 @@ Class | Method | HTTP request | Description
  - [AgentProviderCredentialCreateDto](doc//AgentProviderCredentialCreateDto.md)
  - [AgentProviderCredentialResponseDto](doc//AgentProviderCredentialResponseDto.md)
  - [AgentProviderCredentialUpdateDto](doc//AgentProviderCredentialUpdateDto.md)
+ - [AgentRunnerCapabilitiesDto](doc//AgentRunnerCapabilitiesDto.md)
+ - [AgentRunnerStatusDto](doc//AgentRunnerStatusDto.md)
+ - [AgentRunnerStatusReason](doc//AgentRunnerStatusReason.md)
  - [AlbumNameDto](doc//AlbumNameDto.md)
  - [AlbumResponseDto](doc//AlbumResponseDto.md)
  - [AlbumStatisticsResponseDto](doc//AlbumStatisticsResponseDto.md)

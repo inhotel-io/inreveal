@@ -160,6 +160,7 @@ export enum Permission {
   AgentCredentialRead = 'agentCredential.read',
   AgentCredentialUpdate = 'agentCredential.update',
   AgentCredentialDelete = 'agentCredential.delete',
+  AgentRunnerRead = 'agentRunner.read',
 
   // ASSET_CREATE = 'asset.create',
   AssetRead = 'asset.read',
@@ -1272,6 +1273,7 @@ export enum ApiTag {
   Activities = 'Activities',
   Albums = 'Albums',
   AgentCredentials = 'Agent credentials',
+  AgentRunner = 'Agent runner',
   ApiKeys = 'API keys',
   Authentication = 'Authentication',
   AuthenticationAdmin = 'Authentication (admin)',
