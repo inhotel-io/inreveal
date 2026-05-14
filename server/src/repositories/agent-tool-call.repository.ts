@@ -10,12 +10,7 @@ import { asUuid } from 'src/utils/database';
 
 type AgentToolCallUpdate = Pick<
   Updateable<AgentToolCallTable>,
-  | 'status'
-  | 'approvalDecision'
-  | 'responseSummary'
-  | 'redactedResponseMetadata'
-  | 'completedAt'
-  | 'error'
+  'status' | 'approvalDecision' | 'responseSummary' | 'redactedResponseMetadata' | 'completedAt' | 'error'
 >;
 
 @Injectable()
@@ -47,7 +42,10 @@ export class AgentToolCallRepository {
       .executeTakeFirst();
   }
 
-  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  @GenerateSql(
+    { name: 'including all', params: [DummyValue.UUID] },
+    { name: 'excluding tool call', params: [DummyValue.UUID, DummyValue.UUID] },
+  )
   async getCountedAssetCountBySession(sessionId: string, excludedToolCallId?: string): Promise<number> {
     const result = await this.db
       .selectFrom('agent_tool_call')
