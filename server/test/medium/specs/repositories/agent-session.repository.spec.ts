@@ -81,6 +81,55 @@ const setup = (db?: Kysely<DB>) => {
   };
 };
 
+const assertUpdateType = (sut: AgentSessionRepository) => {
+  void sut.update('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', {
+    status: AgentSessionStatus.Completed,
+    endedAt: new Date('2026-05-14T13:00:00Z'),
+    runnerEndpoint: 'http://localhost:3001',
+    runnerSessionId: 'runner-session-2',
+    runnerCapabilitiesSnapshot: { protocol: 'pi-agent-v1', finished: true },
+  });
+
+  void sut.update('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', {
+    // @ts-expect-error ownership must be immutable
+    userId: '00000000-0000-4000-8000-000000000003',
+  });
+  void sut.update('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', {
+    // @ts-expect-error provider linkage must be immutable
+    providerCredentialId: '00000000-0000-4000-8000-000000000004',
+  });
+  void sut.update('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', {
+    // @ts-expect-error credential snapshot must be immutable
+    credentialSnapshot,
+  });
+  void sut.update('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', {
+    // @ts-expect-error model snapshot must be immutable
+    modelSnapshot,
+  });
+  void sut.update('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', {
+    // @ts-expect-error permission preset must be immutable
+    permissionPreset: AgentPermissionPreset.Custom,
+  });
+  void sut.update('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', {
+    // @ts-expect-error permission plan snapshot must be immutable
+    permissionPlanSnapshot,
+  });
+  void sut.update('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', {
+    // @ts-expect-error approval mode must be immutable
+    approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
+  });
+  void sut.update('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', {
+    // @ts-expect-error initial context snapshot must be immutable
+    initialContextSnapshot,
+  });
+  void sut.update('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', {
+    // @ts-expect-error created timestamp must be immutable
+    createdAt: new Date('2026-05-14T13:00:00Z'),
+  });
+};
+
+void assertUpdateType;
+
 beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
