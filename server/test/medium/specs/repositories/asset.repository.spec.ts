@@ -905,6 +905,84 @@ describe(AssetRepository.name, () => {
     });
   });
 
+  describe('getAgentMetadataByIds', () => {
+    it('returns only the redacted metadata shape for requested assets', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({
+        ownerId: user.id,
+        originalFileName: 'IMG_0001.jpg',
+        originalPath: '/uploads/user/original/IMG_0001.jpg',
+        isFavorite: true,
+        visibility: AssetVisibility.Timeline,
+      });
+      const tag = await ctx.get(TagRepository).upsertValue({ userId: user.id, value: 'Portugal' });
+      await Promise.all([
+        ctx.newExif({
+          assetId: asset.id,
+          city: 'Lisbon',
+          state: 'Lisbon',
+          country: 'Portugal',
+          make: 'Canon',
+          model: 'R5',
+          lensModel: 'RF 24-70',
+          latitude: 38.7223,
+          longitude: -9.1393,
+          rating: 5,
+        }),
+        ctx.newTagAsset({ tagIds: [tag.id], assetIds: [asset.id] }),
+        ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: 'preview/IMG_0001.jpg' }),
+      ]);
+
+      const result = await sut.getAgentMetadataByIds([asset.id]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        id: asset.id,
+        ownerId: user.id,
+        type: asset.type,
+        originalFileName: 'IMG_0001.jpg',
+        localDateTime: asset.localDateTime,
+        fileCreatedAt: asset.fileCreatedAt,
+        fileModifiedAt: asset.fileModifiedAt,
+        isFavorite: true,
+        visibility: AssetVisibility.Timeline,
+        exifInfo: expect.objectContaining({
+          city: 'Lisbon',
+          state: 'Lisbon',
+          country: 'Portugal',
+          make: 'Canon',
+          model: 'R5',
+          lensModel: 'RF 24-70',
+          latitude: 38.7223,
+          longitude: -9.1393,
+          rating: 5,
+        }),
+        tags: [expect.objectContaining({ id: tag.id, value: 'Portugal' })],
+      });
+      expect(result[0]).not.toHaveProperty('originalPath');
+      expect(result[0]).not.toHaveProperty('checksum');
+      expect(result[0]).not.toHaveProperty('files');
+      expect(result[0]).not.toHaveProperty('faces');
+    });
+  });
+
+  describe('getAgentLockedIds', () => {
+    it('returns only requested locked asset ids', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: locked } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      const { asset: timeline } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { asset: nonRequestedLocked } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+
+      const result = await sut.getAgentLockedIds(new Set([locked.id, timeline.id]));
+
+      expect(result).toEqual(new Set([locked.id]));
+      expect(result).not.toContain(timeline.id);
+      expect(result).not.toContain(nonRequestedLocked.id);
+    });
+  });
+
   describe('upsertExif', () => {
     it('should append to locked columns', async () => {
       const { ctx, sut } = setup();

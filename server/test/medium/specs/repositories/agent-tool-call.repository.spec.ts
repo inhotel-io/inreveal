@@ -1,0 +1,240 @@
+import { Insertable, Kysely } from 'kysely';
+import {
+  AgentApprovalMode,
+  AgentPermissionPreset,
+  AgentProviderType,
+  AgentToolApprovalDecision,
+  AgentToolCallStatus,
+  AgentToolDataClass,
+  AgentToolName,
+} from 'src/enum';
+import { AgentProviderCredentialRepository } from 'src/repositories/agent-provider-credential.repository';
+import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
+import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
+import { LoggingRepository } from 'src/repositories/logging.repository';
+import { DB } from 'src/schema';
+import { AgentToolCallTable } from 'src/schema/tables/agent-tool-call.table';
+import { BaseService } from 'src/services/base.service';
+import { newMediumService } from 'test/medium.factory';
+import { factory } from 'test/small.factory';
+import { getKyselyDB } from 'test/utils';
+
+let defaultDatabase: Kysely<DB>;
+
+const permissionPlanSnapshot = {
+  read: { metadata: true, previews: false, originals: false },
+  providerExposure: {
+    metadata: true,
+    previews: false,
+    originals: false,
+    allowOriginalsForExternalProviders: false,
+  },
+  assetScope: { owned: true, sharedSpaces: false, locked: false },
+  writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+  limits: {
+    maxAssetsPerToolCall: 100,
+    maxAssetsPerSession: 1000,
+    maxPreviewsPerToolCall: 0,
+    maxOriginalsPerToolCall: 0,
+    expiresInMinutes: 60,
+  },
+};
+
+const providerSnapshot = {
+  providerCredentialId: null,
+  providerType: AgentProviderType.OpenAI,
+  label: 'OpenAI personal',
+  baseUrl: null,
+  model: 'gpt-5.1',
+};
+
+const setup = (db?: Kysely<DB>) => {
+  const database = db || defaultDatabase;
+  const { ctx } = newMediumService(BaseService, {
+    database,
+    real: [],
+    mock: [LoggingRepository],
+  });
+
+  return {
+    ctx,
+    credentialRepository: new AgentProviderCredentialRepository(database),
+    sessionRepository: new AgentSessionRepository(database),
+    sut: new AgentToolCallRepository(database),
+  };
+};
+
+const createSession = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  credentialRepository: AgentProviderCredentialRepository,
+  sessionRepository: AgentSessionRepository,
+) => {
+  const { user } = await ctx.newUser();
+  const credential = await credentialRepository.create({
+    userId: user.id,
+    providerType: AgentProviderType.OpenAI,
+    label: 'OpenAI personal',
+    baseUrl: null,
+    encryptedSecret: 'v1:encrypted',
+    models: ['gpt-5.1'],
+    defaultModel: 'gpt-5.1',
+  });
+
+  const session = await sessionRepository.create({
+    userId: user.id,
+    providerCredentialId: credential.id,
+    credentialSnapshot: {
+      id: credential.id,
+      providerType: AgentProviderType.OpenAI,
+      label: 'OpenAI personal',
+      baseUrl: null,
+      models: ['gpt-5.1'],
+      defaultModel: 'gpt-5.1',
+    },
+    modelSnapshot: { providerCredentialId: credential.id, model: 'gpt-5.1' },
+    permissionPreset: AgentPermissionPreset.Careful,
+    permissionPlanSnapshot,
+    approvalMode: AgentApprovalMode.Strict,
+    runnerEndpoint: null,
+    runnerSessionId: null,
+    runnerCapabilitiesSnapshot: null,
+    initialContextSnapshot: {},
+  });
+
+  return { user, session };
+};
+
+const createToolCall = (
+  sut: AgentToolCallRepository,
+  sessionId: string,
+  overrides: Partial<Insertable<AgentToolCallTable>> = {},
+) =>
+  sut.create({
+    sessionId,
+    toolName: AgentToolName.ReadAssetMetadata,
+    status: AgentToolCallStatus.PendingApproval,
+    approvalDecision: null,
+    requestSummary: 'Read selected metadata.',
+    responseSummary: null,
+    redactedRequestMetadata: { assetIds: [factory.uuid()] },
+    redactedResponseMetadata: null,
+    dataClass: AgentToolDataClass.Metadata,
+    assetCount: 1,
+    albumCount: 0,
+    providerSnapshot,
+    ...overrides,
+  });
+
+beforeAll(async () => {
+  defaultDatabase = await getKyselyDB();
+});
+
+describe(AgentToolCallRepository.name, () => {
+  it('creates, lists, gets, and transitions tool calls for a session', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const older = await createToolCall(sut, session.id, { startedAt: new Date('2026-05-14T12:00:00.000Z') });
+    const newer = await createToolCall(sut, session.id, { startedAt: new Date('2026-05-14T12:00:01.000Z') });
+
+    await expect(sut.getBySessionId(session.id)).resolves.toMatchObject([{ id: newer.id }, { id: older.id }]);
+    await expect(sut.getByIdForSession(session.id, older.id)).resolves.toMatchObject({
+      id: older.id,
+      sessionId: session.id,
+      toolName: AgentToolName.ReadAssetMetadata,
+      status: AgentToolCallStatus.PendingApproval,
+      approvalDecision: null,
+      requestSummary: 'Read selected metadata.',
+      responseSummary: null,
+      redactedRequestMetadata: older.redactedRequestMetadata,
+      redactedResponseMetadata: null,
+      dataClass: AgentToolDataClass.Metadata,
+      assetCount: 1,
+      albumCount: 0,
+      providerSnapshot,
+      completedAt: null,
+      error: null,
+    });
+
+    const completedAt = new Date('2026-05-14T12:00:02.000Z');
+    const transitioned = await sut.transition(session.id, older.id, AgentToolCallStatus.PendingApproval, {
+      status: AgentToolCallStatus.Completed,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      responseSummary: 'Returned one asset.',
+      redactedResponseMetadata: { assetIds: older.redactedRequestMetadata.assetIds },
+      completedAt,
+      error: null,
+    });
+
+    expect(transitioned).toMatchObject({
+      id: older.id,
+      status: AgentToolCallStatus.Completed,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      responseSummary: 'Returned one asset.',
+      redactedResponseMetadata: { assetIds: older.redactedRequestMetadata.assetIds },
+      completedAt,
+      error: null,
+    });
+  });
+
+  it('transitions only when the expected status matches and returns undefined for stale status', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const toolCall = await createToolCall(sut, session.id, { status: AgentToolCallStatus.Approved });
+
+    await expect(
+      sut.transition(session.id, toolCall.id, AgentToolCallStatus.PendingApproval, {
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        responseSummary: null,
+        redactedResponseMetadata: null,
+        completedAt: new Date('2026-05-14T12:00:00.000Z'),
+        error: null,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(sut.getByIdForSession(session.id, toolCall.id)).resolves.toMatchObject({
+      id: toolCall.id,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: null,
+      completedAt: null,
+    });
+  });
+
+  it('counts only active and completed asset counts for a session and can exclude the current tool call', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const { session: otherSession } = await createSession(ctx, credentialRepository, sessionRepository);
+    const current = await createToolCall(sut, session.id, {
+      status: AgentToolCallStatus.PendingApproval,
+      assetCount: 2,
+    });
+    await createToolCall(sut, session.id, { status: AgentToolCallStatus.Approved, assetCount: 3 });
+    await createToolCall(sut, session.id, { status: AgentToolCallStatus.Executing, assetCount: 5 });
+    await createToolCall(sut, session.id, { status: AgentToolCallStatus.Completed, assetCount: 7 });
+    await createToolCall(sut, session.id, { status: AgentToolCallStatus.Denied, assetCount: 11 });
+    await createToolCall(sut, session.id, { status: AgentToolCallStatus.Failed, assetCount: 13 });
+    await createToolCall(sut, otherSession.id, { status: AgentToolCallStatus.Completed, assetCount: 17 });
+
+    await expect(sut.getCountedAssetCountBySession(session.id)).resolves.toBe(17);
+    await expect(sut.getCountedAssetCountBySession(session.id, current.id)).resolves.toBe(15);
+  });
+
+  it('does not allow cross-session access through getByIdForSession', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const { session: otherSession } = await createSession(ctx, credentialRepository, sessionRepository);
+    const toolCall = await createToolCall(sut, session.id);
+
+    await expect(sut.getByIdForSession(otherSession.id, toolCall.id)).resolves.toBeUndefined();
+  });
+
+  it('cascades deletes when the owning session is deleted', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const toolCall = await createToolCall(sut, session.id);
+
+    await defaultDatabase.deleteFrom('agent_session').where('id', '=', session.id).execute();
+
+    await expect(sut.getByIdForSession(session.id, toolCall.id)).resolves.toBeUndefined();
+    await expect(sut.getBySessionId(session.id)).resolves.toEqual([]);
+  });
+});
