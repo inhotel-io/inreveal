@@ -469,6 +469,81 @@ export type AgentProviderCredentialUpdateDto = {
     providerType?: ProviderType;
     secret?: string;
 };
+export type AgentCredentialSnapshot = {
+    baseUrl: string | null;
+    defaultModel: string | null;
+    id: string;
+    label: string;
+    models: string[];
+    providerType: ProviderType;
+};
+export type AgentInitialContext = {
+    [key: string]: any;
+};
+export type AgentModelSnapshot = {
+    model: string;
+    providerCredentialId: string;
+};
+export type AgentPermissionPlan = {
+    assetScope: {
+        locked: boolean;
+        owned: boolean;
+        sharedSpaces: boolean;
+    };
+    limits: {
+        expiresInMinutes: number | null;
+        maxAssetsPerSession: number;
+        maxAssetsPerToolCall: number;
+        maxOriginalsPerToolCall: number;
+        maxPreviewsPerToolCall: number;
+    };
+    providerExposure: {
+        allowOriginalsForExternalProviders: boolean;
+        metadata: boolean;
+        originals: boolean;
+        previews: boolean;
+    };
+    read: {
+        metadata: boolean;
+        originals: boolean;
+        previews: boolean;
+    };
+    writeScope: {
+        addAssets: boolean;
+        createAlbum: boolean;
+        setCover: boolean;
+        updateDetails: boolean;
+    };
+};
+export type AgentRunnerCapabilitiesSnapshot = {
+    [key: string]: any;
+} | null;
+export type AgentSessionResponseDto = {
+    approvalMode: ApprovalMode;
+    createdAt: string;
+    credentialSnapshot: AgentCredentialSnapshot;
+    endedAt: string | null;
+    id: string;
+    initialContextSnapshot: AgentInitialContext;
+    modelSnapshot: AgentModelSnapshot;
+    permissionPlanSnapshot: AgentPermissionPlan;
+    permissionPreset: PermissionPreset;
+    providerCredentialId: string | null;
+    runnerCapabilitiesSnapshot: AgentRunnerCapabilitiesSnapshot;
+    runnerEndpoint: string | null;
+    runnerSessionId: string | null;
+    status: Status;
+    updatedAt: string;
+};
+export type AgentSessionCreateDto = {
+    approvalMode: ApprovalMode;
+    initialContext?: AgentInitialContext;
+    model: string;
+    permissionPlan?: AgentPermissionPlan;
+    permissionPreset: PermissionPreset;
+    providerCredentialId: string;
+    runnerEndpoint?: string | null;
+};
 export type AlbumUserResponseDto = {
     role: AlbumUserRole;
     user: UserResponseDto;
@@ -4398,6 +4473,59 @@ export function updateAgentProviderCredential({ id, agentProviderCredentialUpdat
         method: "PUT",
         body: agentProviderCredentialUpdateDto
     })));
+}
+/**
+ * List agent sessions
+ */
+export function getAgentSessions(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AgentSessionResponseDto[];
+    }>("/agent/sessions", {
+        ...opts
+    }));
+}
+/**
+ * Create an agent session
+ */
+export function createAgentSession({ agentSessionCreateDto }: {
+    agentSessionCreateDto: AgentSessionCreateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentSessionResponseDto;
+    }>("/agent/sessions", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentSessionCreateDto
+    })));
+}
+/**
+ * Retrieve an agent session
+ */
+export function getAgentSession({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AgentSessionResponseDto;
+    }>(`/agent/sessions/${encodeURIComponent(id)}`, {
+        ...opts
+    }));
+}
+/**
+ * Cancel an agent session
+ */
+export function cancelAgentSession({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentSessionResponseDto;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/cancel`, {
+        ...opts,
+        method: "POST"
+    }));
 }
 /**
  * List all albums
@@ -8569,6 +8697,29 @@ export enum ProviderType {
     Anthropic = "anthropic",
     OpenaiCompatible = "openai-compatible"
 }
+export enum ApprovalMode {
+    Strict = "strict",
+    AskOnEscalation = "ask-on-escalation",
+    PlanOnly = "plan-only",
+    DangerouslySkipPermissions = "dangerously-skip-permissions"
+}
+export enum PermissionPreset {
+    Careful = "careful",
+    VisualOrganizer = "visual-organizer",
+    LocalPowerUser = "local-power-user",
+    Custom = "custom"
+}
+export enum Status {
+    Created = "created",
+    Running = "running",
+    WaitingForToolApproval = "waiting_for_tool_approval",
+    WaitingForPlanReview = "waiting_for_plan_review",
+    Applying = "applying",
+    Completed = "completed",
+    Cancelled = "cancelled",
+    Interrupted = "interrupted",
+    Failed = "failed"
+}
 export enum AlbumUserRole {
     Editor = "editor",
     Viewer = "viewer"
@@ -8595,6 +8746,9 @@ export enum Permission {
     AgentCredentialRead = "agentCredential.read",
     AgentCredentialUpdate = "agentCredential.update",
     AgentCredentialDelete = "agentCredential.delete",
+    AgentSessionCreate = "agentSession.create",
+    AgentSessionRead = "agentSession.read",
+    AgentSessionUpdate = "agentSession.update",
     AssetRead = "asset.read",
     AssetUpdate = "asset.update",
     AssetDelete = "asset.delete",
