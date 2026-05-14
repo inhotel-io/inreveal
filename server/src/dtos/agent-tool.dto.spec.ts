@@ -157,37 +157,6 @@ describe('Agent tool DTOs', () => {
   });
 
   describe(AgentReadAssetMetadataToolResponseDto.name, () => {
-    const makeSuccessResponse = () => ({
-      status: 'success' as const,
-      toolCall: makeToolCall(),
-      assets: [
-        {
-          id: factory.uuid(),
-          ownerId: factory.uuid(),
-          type: AssetType.Image,
-          originalFileName: 'IMG_0001.jpg',
-          localDateTime: new Date('2026-05-14T12:00:00.000Z'),
-          fileCreatedAt: new Date('2026-05-14T11:00:00.000Z'),
-          fileModifiedAt: new Date('2026-05-14T11:30:00.000Z'),
-          isFavorite: true,
-          visibility: AssetVisibility.Timeline,
-          exifInfo: {
-            dateTimeOriginal: new Date('2026-05-14T10:00:00.000Z'),
-            city: 'Berlin',
-            state: 'Berlin',
-            country: 'Germany',
-            make: 'Fujifilm',
-            model: 'X100V',
-            lensModel: '23mm',
-            latitude: 52.52,
-            longitude: 13.405,
-            rating: 5,
-          },
-          tags: [{ id: factory.uuid(), value: 'travel', color: '#00ff00' }],
-        },
-      ],
-    });
-
     it('serializes approval-required responses with embedded tool calls only', () => {
       const result = AgentReadAssetMetadataToolResponseDto.schema.safeEncode({
         status: 'approval-required',
@@ -268,4 +237,35 @@ const makeToolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentT
   completedAt: new Date('2026-05-14T12:01:00.000Z'),
   error: null,
   ...overrides,
+});
+
+const makeSuccessResponse = () => ({
+  status: 'success' as const,
+  toolCall: makeToolCall(),
+  assets: [
+    {
+      id: factory.uuid(),
+      ownerId: factory.uuid(),
+      type: AssetType.Image,
+      originalFileName: 'IMG_0001.jpg',
+      localDateTime: new Date('2026-05-14T12:00:00.000Z'),
+      fileCreatedAt: new Date('2026-05-14T11:00:00.000Z'),
+      fileModifiedAt: new Date('2026-05-14T11:30:00.000Z'),
+      isFavorite: true,
+      visibility: AssetVisibility.Timeline,
+      exifInfo: {
+        dateTimeOriginal: new Date('2026-05-14T10:00:00.000Z'),
+        city: 'Berlin',
+        state: 'Berlin',
+        country: 'Germany',
+        make: 'Fujifilm',
+        model: 'X100V',
+        lensModel: '23mm',
+        latitude: 52.52,
+        longitude: 13.405,
+        rating: 5,
+      },
+      tags: [{ id: factory.uuid(), value: 'travel', color: '#00ff00' }],
+    },
+  ],
 });
