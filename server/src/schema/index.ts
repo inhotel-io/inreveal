@@ -29,6 +29,7 @@ import { ActivityTable } from 'src/schema/tables/activity.table';
 import { AgentMessageTable } from 'src/schema/tables/agent-message.table';
 import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
 import { AgentSessionTable } from 'src/schema/tables/agent-session.table';
+import { AgentToolCallTable } from 'src/schema/tables/agent-tool-call.table';
 import { AlbumAssetAuditTable } from 'src/schema/tables/album-asset-audit.table';
 import { AlbumAssetTable } from 'src/schema/tables/album-asset.table';
 import { AlbumAuditTable } from 'src/schema/tables/album-audit.table';
@@ -128,6 +129,7 @@ export class ImmichDatabase {
     AgentProviderCredentialTable,
     AgentSessionTable,
     AgentMessageTable,
+    AgentToolCallTable,
     ApiKeyTable,
     AssetAuditTable,
     AssetDuplicateChecksumTable,
@@ -249,6 +251,7 @@ export interface DB {
 
   agent_provider_credential: AgentProviderCredentialTable;
   agent_message: AgentMessageTable;
+  agent_tool_call: AgentToolCallTable;
   agent_session: AgentSessionTable;
 
   api_key: ApiKeyTable;
