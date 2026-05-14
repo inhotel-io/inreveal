@@ -326,12 +326,7 @@ Create `server/src/dtos/agent-session.dto.ts`.
 
 ```ts
 import { createZodDto } from 'nestjs-zod';
-import {
-  AgentApprovalMode,
-  AgentPermissionPreset,
-  AgentProviderType,
-  AgentSessionStatus,
-} from 'src/enum';
+import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType, AgentSessionStatus } from 'src/enum';
 import { isoDatetimeToDate } from 'src/validation';
 import z from 'zod';
 
@@ -559,12 +554,7 @@ Create `server/test/medium/specs/repositories/agent-session.repository.spec.ts`.
 
 ```ts
 import { Kysely } from 'kysely';
-import {
-  AgentApprovalMode,
-  AgentPermissionPreset,
-  AgentProviderType,
-  AgentSessionStatus,
-} from 'src/enum';
+import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType, AgentSessionStatus } from 'src/enum';
 import { AgentProviderCredentialRepository } from 'src/repositories/agent-provider-credential.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -987,7 +977,7 @@ Add `AgentSessionTable` to the SQL-tools table list.
 Add the DB mapping.
 
 ```ts
-  agent_session: AgentSessionTable;
+agent_session: AgentSessionTable;
 ```
 
 Modify `server/src/database.ts`.
@@ -1134,12 +1124,7 @@ Create `server/src/services/agent-session.service.spec.ts`.
 ```ts
 import { BadRequestException } from '@nestjs/common';
 import { AgentSession } from 'src/database';
-import {
-  AgentApprovalMode,
-  AgentPermissionPreset,
-  AgentProviderType,
-  AgentSessionStatus,
-} from 'src/enum';
+import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType, AgentSessionStatus } from 'src/enum';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
@@ -1503,7 +1488,9 @@ describe(AgentSessionService.name, () => {
 
       repository.getById.mockResolvedValue(session);
 
-      await expect(sut.cancel(auth, session.id)).rejects.toThrow('Agent session cannot be cancelled in its current state');
+      await expect(sut.cancel(auth, session.id)).rejects.toThrow(
+        'Agent session cannot be cancelled in its current state',
+      );
       expect(repository.update).not.toHaveBeenCalled();
     },
   );
@@ -1772,13 +1759,7 @@ Create `server/src/controllers/agent-session.controller.spec.ts`.
 
 ```ts
 import { AgentSessionController } from 'src/controllers/agent-session.controller';
-import {
-  AgentApprovalMode,
-  AgentPermissionPreset,
-  AgentProviderType,
-  AgentSessionStatus,
-  Permission,
-} from 'src/enum';
+import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType, AgentSessionStatus, Permission } from 'src/enum';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import request from 'supertest';
 import { AuthFactory } from 'test/factories/auth.factory';
@@ -1875,20 +1856,24 @@ describe(AgentSessionController.name, () => {
     });
 
     it('should require a valid provider credential id', async () => {
-      const { status, body: result } = await request(ctx.getHttpServer()).post('/agent/sessions').send({
-        ...body,
-        providerCredentialId: 'not-a-uuid',
-      });
+      const { status, body: result } = await request(ctx.getHttpServer())
+        .post('/agent/sessions')
+        .send({
+          ...body,
+          providerCredentialId: 'not-a-uuid',
+        });
 
       expect(status).toBe(400);
       expect(result).toEqual(factory.responses.badRequest(['[providerCredentialId] Invalid UUID']));
     });
 
     it('should require permissionPlan for custom sessions', async () => {
-      const { status, body: result } = await request(ctx.getHttpServer()).post('/agent/sessions').send({
-        ...body,
-        permissionPreset: AgentPermissionPreset.Custom,
-      });
+      const { status, body: result } = await request(ctx.getHttpServer())
+        .post('/agent/sessions')
+        .send({
+          ...body,
+          permissionPreset: AgentPermissionPreset.Custom,
+        });
 
       expect(status).toBe(400);
       expect(result).toEqual(
@@ -1918,10 +1903,12 @@ describe(AgentSessionController.name, () => {
     });
 
     it('should reject permissionPlan for preset sessions', async () => {
-      const { status, body: result } = await request(ctx.getHttpServer()).post('/agent/sessions').send({
-        ...body,
-        permissionPlan,
-      });
+      const { status, body: result } = await request(ctx.getHttpServer())
+        .post('/agent/sessions')
+        .send({
+          ...body,
+          permissionPlan,
+        });
 
       expect(status).toBe(400);
       expect(result).toEqual(
@@ -1932,10 +1919,12 @@ describe(AgentSessionController.name, () => {
     });
 
     it('should reject invalid approval mode values', async () => {
-      const { status, body: result } = await request(ctx.getHttpServer()).post('/agent/sessions').send({
-        ...body,
-        approvalMode: 'always',
-      });
+      const { status, body: result } = await request(ctx.getHttpServer())
+        .post('/agent/sessions')
+        .send({
+          ...body,
+          approvalMode: 'always',
+        });
 
       expect(status).toBe(400);
       expect(result).toEqual(factory.responses.badRequest([expect.stringContaining('[approvalMode] Invalid option')]));
@@ -1990,7 +1979,9 @@ describe(AgentSessionController.name, () => {
         });
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest([expect.stringContaining('initialContext must be 16 KiB or less')]));
+      expect(result).toEqual(
+        factory.responses.badRequest([expect.stringContaining('initialContext must be 16 KiB or less')]),
+      );
     });
   });
 
