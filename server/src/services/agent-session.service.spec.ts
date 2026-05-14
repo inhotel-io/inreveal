@@ -402,16 +402,50 @@ describe(AgentSessionService.name, () => {
     const cancelled = makeSession({ ...session, status: AgentSessionStatus.Cancelled, endedAt: now });
 
     repository.getById.mockResolvedValue(session);
-    repository.update.mockResolvedValue(cancelled);
+    repository.cancel.mockResolvedValue(cancelled);
 
     const result = await sut.cancel(auth, session.id);
 
-    expect(repository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
-      status: AgentSessionStatus.Cancelled,
-      endedAt: expect.any(Date),
-    });
+    expect(repository.cancel).toHaveBeenCalledWith(
+      auth.user.id,
+      session.id,
+      [
+        AgentSessionStatus.Created,
+        AgentSessionStatus.Running,
+        AgentSessionStatus.WaitingForToolApproval,
+        AgentSessionStatus.WaitingForPlanReview,
+        AgentSessionStatus.Interrupted,
+      ],
+      expect.any(Date),
+    );
+    expect(repository.update).not.toHaveBeenCalled();
     expect(result.status).toBe(AgentSessionStatus.Cancelled);
     expect(result.endedAt).toEqual(now);
+  });
+
+  it('rejects cancelling when the conditional update loses a status race', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Running });
+
+    repository.getById.mockResolvedValue(session);
+    repository.cancel.mockResolvedValue(void 0);
+
+    await expect(sut.cancel(auth, session.id)).rejects.toThrow(
+      'Agent session cannot be cancelled in its current state',
+    );
+    expect(repository.cancel).toHaveBeenCalledWith(
+      auth.user.id,
+      session.id,
+      [
+        AgentSessionStatus.Created,
+        AgentSessionStatus.Running,
+        AgentSessionStatus.WaitingForToolApproval,
+        AgentSessionStatus.WaitingForPlanReview,
+        AgentSessionStatus.Interrupted,
+      ],
+      expect.any(Date),
+    );
+    expect(repository.update).not.toHaveBeenCalled();
   });
 
   it('returns already-cancelled session without updating again', async () => {
@@ -422,6 +456,7 @@ describe(AgentSessionService.name, () => {
 
     const result = await sut.cancel(auth, session.id);
 
+    expect(repository.cancel).not.toHaveBeenCalled();
     expect(repository.update).not.toHaveBeenCalled();
     expect(result.status).toBe(AgentSessionStatus.Cancelled);
     expect(result.endedAt).toEqual(now);
@@ -438,6 +473,7 @@ describe(AgentSessionService.name, () => {
       await expect(sut.cancel(auth, session.id)).rejects.toThrow(
         'Agent session cannot be cancelled in its current state',
       );
+      expect(repository.cancel).not.toHaveBeenCalled();
       expect(repository.update).not.toHaveBeenCalled();
     },
   );
