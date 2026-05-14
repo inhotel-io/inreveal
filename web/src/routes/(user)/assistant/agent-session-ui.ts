@@ -4,17 +4,24 @@ import {
   AgentSessionStatus,
   type AgentProviderCredentialResponseDto,
 } from '@immich/sdk';
+import type { Translations } from 'svelte-i18n';
 
 export const permissionPresetOptions = [
-  { value: AgentPermissionPreset.Careful, labelKey: 'assistant_permission_preset_careful' },
-  { value: AgentPermissionPreset.VisualOrganizer, labelKey: 'assistant_permission_preset_visual_organizer' },
-  { value: AgentPermissionPreset.LocalPowerUser, labelKey: 'assistant_permission_preset_local_power_user' },
+  { value: AgentPermissionPreset.Careful, labelKey: 'assistant_permission_preset_careful' as Translations },
+  {
+    value: AgentPermissionPreset.VisualOrganizer,
+    labelKey: 'assistant_permission_preset_visual_organizer' as Translations,
+  },
+  {
+    value: AgentPermissionPreset.LocalPowerUser,
+    labelKey: 'assistant_permission_preset_local_power_user' as Translations,
+  },
 ] as const;
 
 export const approvalModeOptions = [
-  { value: AgentApprovalMode.Strict, labelKey: 'assistant_approval_mode_strict' },
-  { value: AgentApprovalMode.AskOnEscalation, labelKey: 'assistant_approval_mode_ask_on_escalation' },
-  { value: AgentApprovalMode.PlanOnly, labelKey: 'assistant_approval_mode_plan_only' },
+  { value: AgentApprovalMode.Strict, labelKey: 'assistant_approval_mode_strict' as Translations },
+  { value: AgentApprovalMode.AskOnEscalation, labelKey: 'assistant_approval_mode_ask_on_escalation' as Translations },
+  { value: AgentApprovalMode.PlanOnly, labelKey: 'assistant_approval_mode_plan_only' as Translations },
 ] as const;
 
 export const supportedPermissionPresets = [
@@ -40,7 +47,8 @@ const approvalModeLabelKeys = Object.fromEntries(
   approvalModeOptions.map((option) => [option.value, option.labelKey]),
 ) as Record<(typeof supportedApprovalModes)[number], string>;
 
-export const getSessionStatusLabelKey = (status: AgentSessionStatus) => `assistant_session_status_${status}`;
+export const getSessionStatusLabelKey = (status: AgentSessionStatus) =>
+  `assistant_session_status_${status}` as Translations;
 
 export const getInitialCredentialId = (credentials: AgentProviderCredentialResponseDto[]) => credentials[0]?.id ?? '';
 
@@ -59,7 +67,7 @@ export const getDefaultModel = (credential: AgentProviderCredentialResponseDto |
 };
 
 export const getPermissionPresetLabelKey = (preset: AgentPermissionPreset) =>
-  permissionPresetLabelKeys[preset as (typeof supportedPermissionPresets)[number]] ?? preset;
+  (permissionPresetLabelKeys[preset as (typeof supportedPermissionPresets)[number]] ?? preset) as Translations;
 
 export const getApprovalModeLabelKey = (mode: AgentApprovalMode) =>
-  approvalModeLabelKeys[mode as (typeof supportedApprovalModes)[number]] ?? mode;
+  (approvalModeLabelKeys[mode as (typeof supportedApprovalModes)[number]] ?? mode) as Translations;
