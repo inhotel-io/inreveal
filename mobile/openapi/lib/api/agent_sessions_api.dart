@@ -77,6 +77,72 @@ class AgentSessionsApi {
     return null;
   }
 
+  /// Approve or deny an agent tool call
+  ///
+  /// Record an explicit user approval decision for a pending internal agent tool call.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [String] toolCallId (required):
+  ///
+  /// * [AgentToolApprovalDto] agentToolApprovalDto (required):
+  Future<Response> approveToolCallWithHttpInfo(String id, String toolCallId, AgentToolApprovalDto agentToolApprovalDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/{id}/tool-calls/{toolCallId}/approval'
+      .replaceAll('{id}', id)
+      .replaceAll('{toolCallId}', toolCallId);
+
+    // ignore: prefer_final_locals
+    Object? postBody = agentToolApprovalDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Approve or deny an agent tool call
+  ///
+  /// Record an explicit user approval decision for a pending internal agent tool call.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [String] toolCallId (required):
+  ///
+  /// * [AgentToolApprovalDto] agentToolApprovalDto (required):
+  Future<AgentToolCallResponseDto?> approveToolCall(String id, String toolCallId, AgentToolApprovalDto agentToolApprovalDto,) async {
+    final response = await approveToolCallWithHttpInfo(id, toolCallId, agentToolApprovalDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentToolCallResponseDto',) as AgentToolCallResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Cancel an agent session
   ///
   /// Cancel an active AI agent session owned by the current user.
@@ -354,6 +420,127 @@ class AgentSessionsApi {
         .cast<AgentSessionResponseDto>()
         .toList(growable: false);
 
+    }
+    return null;
+  }
+
+  /// List agent tool calls
+  ///
+  /// List audited internal tool calls for an AI agent session owned by the current user.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  Future<Response> getToolCallsWithHttpInfo(String id,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/{id}/tool-calls'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// List agent tool calls
+  ///
+  /// List audited internal tool calls for an AI agent session owned by the current user.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  Future<List<AgentToolCallResponseDto>?> getToolCalls(String id,) async {
+    final response = await getToolCallsWithHttpInfo(id,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      final responseBody = await _decodeBodyBytes(response);
+      return (await apiClient.deserializeAsync(responseBody, 'List<AgentToolCallResponseDto>') as List)
+        .cast<AgentToolCallResponseDto>()
+        .toList(growable: false);
+
+    }
+    return null;
+  }
+
+  /// Execute the internal readAssetMetadata agent tool
+  ///
+  /// Internal route for requesting or resuming a strict-approved metadata read tool call for an AI agent session.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentReadAssetMetadataToolRequestDto] agentReadAssetMetadataToolRequestDto (required):
+  Future<Response> readAssetMetadataWithHttpInfo(String id, AgentReadAssetMetadataToolRequestDto agentReadAssetMetadataToolRequestDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/{id}/tools/read-asset-metadata'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = agentReadAssetMetadataToolRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Execute the internal readAssetMetadata agent tool
+  ///
+  /// Internal route for requesting or resuming a strict-approved metadata read tool call for an AI agent session.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentReadAssetMetadataToolRequestDto] agentReadAssetMetadataToolRequestDto (required):
+  Future<Object?> readAssetMetadata(String id, AgentReadAssetMetadataToolRequestDto agentReadAssetMetadataToolRequestDto,) async {
+    final response = await readAssetMetadataWithHttpInfo(id, agentReadAssetMetadataToolRequestDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+    
     }
     return null;
   }
