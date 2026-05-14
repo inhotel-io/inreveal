@@ -36,7 +36,7 @@ describe(AgentRunnerStatusPanel.name, () => {
     });
 
     expect(screen.getByTestId('assistant-status-reason')).toHaveTextContent('Runner not configured');
-    expect(screen.getByRole('button', { name: 'Start session' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Start session' })).not.toBeInTheDocument();
   });
 
   it('shows disabled state when the configured runner is unhealthy', () => {
@@ -54,10 +54,10 @@ describe(AgentRunnerStatusPanel.name, () => {
     });
 
     expect(screen.getByTestId('assistant-status-reason')).toHaveTextContent('Runner unavailable');
-    expect(screen.getByRole('button', { name: 'Start session' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Start session' })).not.toBeInTheDocument();
   });
 
-  it('shows healthy runner capabilities while keeping session start disabled for this slice', () => {
+  it('shows healthy runner capabilities without rendering a session start action', () => {
     render(AgentRunnerStatusPanel, {
       props: {
         status: {
@@ -78,7 +78,7 @@ describe(AgentRunnerStatusPanel.name, () => {
 
     expect(screen.getByTestId('assistant-status-reason')).toHaveTextContent('Runner healthy');
     expect(screen.getByText('Protocol 2026-05-14')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Start session' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Start session' })).not.toBeInTheDocument();
   });
 
   it('uses a translated fallback when healthy capabilities omit protocol version', () => {
