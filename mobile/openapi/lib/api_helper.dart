@@ -85,6 +85,18 @@ String parameterToString(dynamic value) {
   if (value is AgentSessionStatus) {
     return AgentSessionStatusTypeTransformer().encode(value).toString();
   }
+  if (value is AgentToolApprovalDecision) {
+    return AgentToolApprovalDecisionTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentToolCallStatus) {
+    return AgentToolCallStatusTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentToolDataClass) {
+    return AgentToolDataClassTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentToolName) {
+    return AgentToolNameTypeTransformer().encode(value).toString();
+  }
   if (value is AlbumUserRole) {
     return AlbumUserRoleTypeTransformer().encode(value).toString();
   }

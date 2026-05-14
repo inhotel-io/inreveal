@@ -246,6 +246,8 @@ class ApiClient {
           return AgentProviderCredentialUpdateDto.fromJson(value);
         case 'AgentProviderType':
           return AgentProviderTypeTypeTransformer().decode(value);
+        case 'AgentReadAssetMetadataToolRequestDto':
+          return AgentReadAssetMetadataToolRequestDto.fromJson(value);
         case 'AgentRunnerCapabilitiesDto':
           return AgentRunnerCapabilitiesDto.fromJson(value);
         case 'AgentRunnerStatusDto':
@@ -258,6 +260,18 @@ class ApiClient {
           return AgentSessionResponseDto.fromJson(value);
         case 'AgentSessionStatus':
           return AgentSessionStatusTypeTransformer().decode(value);
+        case 'AgentToolApprovalDecision':
+          return AgentToolApprovalDecisionTypeTransformer().decode(value);
+        case 'AgentToolApprovalDto':
+          return AgentToolApprovalDto.fromJson(value);
+        case 'AgentToolCallResponseDto':
+          return AgentToolCallResponseDto.fromJson(value);
+        case 'AgentToolCallStatus':
+          return AgentToolCallStatusTypeTransformer().decode(value);
+        case 'AgentToolDataClass':
+          return AgentToolDataClassTypeTransformer().decode(value);
+        case 'AgentToolName':
+          return AgentToolNameTypeTransformer().decode(value);
         case 'AgentUserMessageContent':
           return AgentUserMessageContent.fromJson(value);
         case 'AlbumNameDto':
