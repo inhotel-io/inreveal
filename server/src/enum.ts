@@ -72,6 +72,12 @@ export enum SharedSpaceRole {
   Viewer = 'viewer',
 }
 
+export enum AgentProviderType {
+  OpenAI = 'openai',
+  Anthropic = 'anthropic',
+  OpenAICompatible = 'openai-compatible',
+}
+
 export enum SharedSpaceActivityType {
   AssetAdd = 'asset_add',
   AssetRemove = 'asset_remove',
