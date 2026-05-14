@@ -5,15 +5,29 @@ set -euo pipefail
 
 # usage: ./bin/generate-open-api.sh
 
+function download {
+  local url=$1
+  local output=$2
+
+  if command -v wget >/dev/null 2>&1; then
+    wget -O "$output" "$url"
+  elif command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$url" -o "$output"
+  else
+    echo "Neither wget nor curl is available to download $url" >&2
+    return 127
+  fi
+}
+
 function dart {
   rm -rf ../mobile/openapi
   cd ./templates/mobile/serialization/native
-  wget -O native_class.mustache https://raw.githubusercontent.com/OpenAPITools/openapi-generator/$OPENAPI_GENERATOR_VERSION/modules/openapi-generator/src/main/resources/dart2/serialization/native/native_class.mustache
+  download https://raw.githubusercontent.com/OpenAPITools/openapi-generator/$OPENAPI_GENERATOR_VERSION/modules/openapi-generator/src/main/resources/dart2/serialization/native/native_class.mustache native_class.mustache
   patch --no-backup-if-mismatch -u native_class.mustache <native_class.mustache.patch
   patch --no-backup-if-mismatch -u native_class.mustache <native_class_nullable_items_in_arrays.patch
 
   cd ../../
-  wget -O api.mustache https://raw.githubusercontent.com/OpenAPITools/openapi-generator/$OPENAPI_GENERATOR_VERSION/modules/openapi-generator/src/main/resources/dart2/api.mustache
+  download https://raw.githubusercontent.com/OpenAPITools/openapi-generator/$OPENAPI_GENERATOR_VERSION/modules/openapi-generator/src/main/resources/dart2/api.mustache api.mustache
   patch --no-backup-if-mismatch -u api.mustache <api.mustache.patch
 
   cd ../../
