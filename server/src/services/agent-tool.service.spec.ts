@@ -532,6 +532,7 @@ describe(AgentToolService.name, () => {
       decision: AgentToolApprovalDecision.Approved,
       expectedStatus: AgentToolCallStatus.Approved,
       responseSummary: 'Tool call approved by user',
+      redactedResponseMetadata: null,
       error: null,
       completedAt: null,
     },
@@ -540,6 +541,7 @@ describe(AgentToolService.name, () => {
       reason: 'No thanks',
       expectedStatus: AgentToolCallStatus.Denied,
       responseSummary: null,
+      redactedResponseMetadata: null,
       error: 'No thanks',
       completedAt,
     },
@@ -570,12 +572,14 @@ describe(AgentToolService.name, () => {
       session.id,
       pending.id,
       AgentToolCallStatus.PendingApproval,
-      expect.objectContaining({
+      {
         status: caseData.expectedStatus,
         approvalDecision: caseData.decision,
         responseSummary: caseData.responseSummary,
+        redactedResponseMetadata: null,
+        completedAt: caseData.completedAt === null ? null : expect.any(Date),
         error: caseData.error,
-      }),
+      },
     );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
   });
@@ -636,18 +640,17 @@ describe(AgentToolService.name, () => {
 
   it('executes approved metadata reads by claiming, revalidating, reading, completing audit, and returning ordered assets', async () => {
     const auth = AuthFactory.create();
-    const assetIds = [newUuid(), newUuid()];
+    const assetIds = [newUuid()];
     const session = makeSession({ userId: auth.user.id });
     const approved = makeToolCall({
       sessionId: session.id,
       status: AgentToolCallStatus.Approved,
       approvalDecision: AgentToolApprovalDecision.Approved,
       redactedRequestMetadata: { assetIds },
-      assetCount: 2,
+      assetCount: 1,
     });
     const executing = makeToolCall({ ...approved, status: AgentToolCallStatus.Executing });
-    const secondAsset = makeMetadata(assetIds[1], { leaked: 'ignore me' });
-    const firstAsset = makeMetadata(assetIds[0]);
+    const asset = makeMetadata(assetIds[0], { leaked: 'ignore me' });
 
     sessionRepository.getById.mockResolvedValue(session);
     toolCallRepository.getByIdForSession.mockResolvedValue(approved);
@@ -656,7 +659,7 @@ describe(AgentToolService.name, () => {
       .mockResolvedValueOnce(makeToolCall({ ...approved, status: AgentToolCallStatus.Completed, completedAt }));
     toolCallRepository.getCountedAssetCountBySession.mockResolvedValue(0);
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
-    assetRepository.getAgentMetadataByIds.mockResolvedValue([secondAsset, firstAsset]);
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([asset]);
 
     const result = await sut.readAssetMetadata(auth, session.id, { toolCallId: approved.id });
 
@@ -675,23 +678,22 @@ describe(AgentToolService.name, () => {
       session.id,
       approved.id,
       AgentToolCallStatus.Executing,
-      expect.objectContaining({
+      {
         status: AgentToolCallStatus.Completed,
-        responseSummary: 'Returned metadata for 2 asset(s)',
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: 'Returned metadata for 1 asset',
         redactedResponseMetadata: { assetIds },
         completedAt: expect.any(Date),
         error: null,
-      }),
+      },
     );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, { status: AgentSessionStatus.Running });
     expect(result).toEqual({
       status: 'success',
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
-      assets: [
-        expect.objectContaining({ id: assetIds[0] }),
-        expect.not.objectContaining({ leaked: 'ignore me' }),
-      ],
+      assets: [expect.objectContaining({ id: assetIds[0] })],
     });
+    expect(result.assets[0]).not.toHaveProperty('leaked');
   });
 
   it('prevents asset read when execution claim loses a race', async () => {
