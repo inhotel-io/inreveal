@@ -1905,6 +1905,52 @@
         "x-immich-state": "Alpha"
       }
     },
+    "/agent/runner/status": {
+      "get": {
+        "description": "Retrieve AI agent runner configuration, health, and capability status.",
+        "operationId": "getAgentRunnerStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunnerStatusDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Get agent runner status",
+        "tags": [
+          "Agent runner"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentRunner.read",
+        "x-immich-state": "Alpha"
+      }
+    },
     "/agent/sessions": {
       "get": {
         "description": "Retrieve all AI agent sessions owned by the current user.",
@@ -20124,6 +20170,10 @@
       "description": "AI agent provider credential management"
     },
     {
+      "name": "Agent runner",
+      "description": "AI agent runner health and capability status"
+    },
+    {
       "name": "Agent sessions",
       "description": "AI agent session management"
     },
@@ -20809,10 +20859,100 @@
         ],
         "type": "string"
       },
+      "AgentRunnerCapabilitiesDto": {
+        "properties": {
+          "models": {
+            "description": "Model IDs reported by the runner",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "protocolVersion": {
+            "description": "Runner protocol version",
+            "nullable": true,
+            "type": "string"
+          },
+          "streaming": {
+            "description": "Whether the runner can stream events",
+            "type": "boolean"
+          },
+          "tools": {
+            "description": "Tool names reported by the runner",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "models",
+          "protocolVersion",
+          "streaming",
+          "tools"
+        ],
+        "type": "object"
+      },
       "AgentRunnerCapabilitiesSnapshot": {
         "additionalProperties": {},
         "nullable": true,
         "type": "object"
+      },
+      "AgentRunnerStatusDto": {
+        "properties": {
+          "capabilities": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunnerCapabilitiesDto"
+              }
+            ],
+            "description": "Normalized runner capabilities",
+            "nullable": true
+          },
+          "checkedAt": {
+            "description": "When this status was checked",
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "configured": {
+            "description": "Whether a runner endpoint is configured",
+            "type": "boolean"
+          },
+          "healthy": {
+            "description": "Whether the configured runner is reachable and healthy",
+            "type": "boolean"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/AgentRunnerStatusReason"
+          },
+          "version": {
+            "description": "Runner version when reported",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "capabilities",
+          "checkedAt",
+          "configured",
+          "healthy",
+          "reason",
+          "version"
+        ],
+        "type": "object"
+      },
+      "AgentRunnerStatusReason": {
+        "description": "Agent runner availability reason",
+        "enum": [
+          "not-configured",
+          "healthy",
+          "unhealthy",
+          "timeout",
+          "invalid-response"
+        ],
+        "type": "string"
       },
       "AgentSessionCreateDto": {
         "properties": {
@@ -25429,6 +25569,7 @@
           "agentCredential.read",
           "agentCredential.update",
           "agentCredential.delete",
+          "agentRunner.read",
           "agentSession.create",
           "agentSession.read",
           "agentSession.update",
