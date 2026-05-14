@@ -1,15 +1,27 @@
 import { createZodDto } from 'nestjs-zod';
-import { AgentToolApprovalDecision, AssetTypeSchema, AssetVisibilitySchema } from 'src/enum';
+import {
+  AgentToolApprovalDecision,
+  AgentToolCallStatus,
+  AgentToolDataClass,
+  AgentToolName,
+  AssetTypeSchema,
+  AssetVisibilitySchema,
+} from 'src/enum';
 import { isoDatetimeToDate } from 'src/validation';
 import z from 'zod';
 
 const MAX_ASSET_IDS_PER_TOOL_CALL = 10_000;
+const uuid = z.uuidv4();
+const summary = z.string().trim().min(1).max(1000);
 const AgentToolApprovalDecisionSchema = z.enum(AgentToolApprovalDecision).meta({ id: 'AgentToolApprovalDecision' });
+const AgentToolCallStatusSchema = z.enum(AgentToolCallStatus).meta({ id: 'AgentToolCallStatus' });
+const AgentToolDataClassSchema = z.enum(AgentToolDataClass).meta({ id: 'AgentToolDataClass' });
+const AgentToolNameSchema = z.enum(AgentToolName).meta({ id: 'AgentToolName' });
 
 const AgentReadAssetMetadataToolRequestSchema = z
   .object({
-    assetIds: z.array(z.uuidv4()).min(1).max(MAX_ASSET_IDS_PER_TOOL_CALL).optional(),
-    toolCallId: z.uuidv4().optional(),
+    assetIds: z.array(uuid).min(1).max(MAX_ASSET_IDS_PER_TOOL_CALL).optional(),
+    toolCallId: uuid.optional(),
   })
   .superRefine((value, ctx) => {
     if (value.assetIds && value.toolCallId) {
@@ -54,22 +66,40 @@ const AgentAssetMetadataExifSchema = z
     lensModel: z.string().nullable(),
     latitude: z.number().nullable(),
     longitude: z.number().nullable(),
-    rating: z.number().nullable(),
+    rating: z.number().int().nullable(),
   })
   .meta({ id: 'AgentAssetMetadataExif' });
 
 const AgentAssetMetadataTagSchema = z
   .object({
-    id: z.uuidv4(),
+    id: uuid,
     value: z.string(),
     color: z.string().nullable(),
   })
   .meta({ id: 'AgentAssetMetadataTag' });
 
+const AgentToolCallResponseSchema = z
+  .object({
+    id: uuid,
+    sessionId: uuid,
+    toolName: AgentToolNameSchema,
+    status: AgentToolCallStatusSchema,
+    approvalDecision: AgentToolApprovalDecisionSchema.nullable(),
+    requestSummary: summary,
+    responseSummary: summary.nullable(),
+    dataClass: AgentToolDataClassSchema,
+    assetCount: z.number().int().min(0),
+    albumCount: z.number().int().min(0),
+    startedAt: isoDatetimeToDate,
+    completedAt: isoDatetimeToDate.nullable(),
+    error: z.string().nullable(),
+  })
+  .meta({ id: 'AgentToolCallResponseDto' });
+
 export const AgentAssetMetadataSchema = z
   .object({
-    id: z.uuidv4(),
-    ownerId: z.uuidv4(),
+    id: uuid,
+    ownerId: uuid,
     type: AssetTypeSchema,
     originalFileName: z.string(),
     localDateTime: isoDatetimeToDate,
@@ -85,25 +115,22 @@ export const AgentAssetMetadataSchema = z
 const AgentReadAssetMetadataToolApprovalRequiredResponseSchema = z
   .object({
     status: z.literal('approval-required'),
-    toolCallId: z.uuidv4(),
-    requestSummary: z.string(),
-    assetCount: z.number().int().min(0),
+    toolCall: AgentToolCallResponseSchema,
   })
   .meta({ id: 'AgentReadAssetMetadataToolApprovalRequiredResponse' });
 
 const AgentReadAssetMetadataToolDeniedResponseSchema = z
   .object({
     status: z.literal('denied'),
-    toolCallId: z.uuidv4(),
-    decision: AgentToolApprovalDecisionSchema,
-    reason: z.string().nullable(),
+    reason: z.string(),
+    toolCall: AgentToolCallResponseSchema,
   })
   .meta({ id: 'AgentReadAssetMetadataToolDeniedResponse' });
 
 const AgentReadAssetMetadataToolSuccessResponseSchema = z
   .object({
     status: z.literal('success'),
-    toolCallId: z.uuidv4(),
+    toolCall: AgentToolCallResponseSchema,
     assets: z.array(AgentAssetMetadataSchema),
   })
   .meta({ id: 'AgentReadAssetMetadataToolSuccessResponse' });
@@ -116,6 +143,15 @@ const AgentReadAssetMetadataToolResponseSchema = z
   ])
   .meta({ id: 'AgentReadAssetMetadataToolResponseDto' });
 
+const AgentToolCallParamsSchema = z
+  .object({
+    id: uuid,
+    toolCallId: uuid,
+  })
+  .meta({ id: 'AgentToolCallParamsDto' });
+
 export class AgentReadAssetMetadataToolRequestDto extends createZodDto(AgentReadAssetMetadataToolRequestSchema) {}
 export class AgentToolApprovalDto extends createZodDto(AgentToolApprovalSchema) {}
+export class AgentToolCallResponseDto extends createZodDto(AgentToolCallResponseSchema) {}
+export class AgentToolCallParamsDto extends createZodDto(AgentToolCallParamsSchema) {}
 export const AgentReadAssetMetadataToolResponseDto = createZodDto(AgentReadAssetMetadataToolResponseSchema);
