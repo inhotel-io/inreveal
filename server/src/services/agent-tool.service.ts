@@ -154,6 +154,10 @@ export class AgentToolService {
 
     const executing = await this.toolCallRepository.transition(session.id, toolCall.id, AgentToolCallStatus.Approved, {
       status: AgentToolCallStatus.Executing,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      responseSummary: 'Tool call execution started',
+      redactedResponseMetadata: null,
+      completedAt: null,
       error: null,
     });
 
@@ -170,6 +174,8 @@ export class AgentToolService {
         const denied = await this.transitionExecuting(auth, session, toolCall.id, {
           status: AgentToolCallStatus.Denied,
           approvalDecision: AgentToolApprovalDecision.Denied,
+          responseSummary: null,
+          redactedResponseMetadata: null,
           completedAt: new Date(),
           error: denialReason,
         });
@@ -187,6 +193,9 @@ export class AgentToolService {
         const reason = 'One or more assets were not found during metadata read';
         const failed = await this.transitionExecuting(auth, session, toolCall.id, {
           status: AgentToolCallStatus.Failed,
+          approvalDecision: AgentToolApprovalDecision.Approved,
+          responseSummary: null,
+          redactedResponseMetadata: { assetIds: assets.map((asset) => asset.id) },
           completedAt: new Date(),
           error: reason,
         });
@@ -206,6 +215,9 @@ export class AgentToolService {
       const reason = 'Metadata read failed';
       const failed = await this.transitionExecuting(auth, session, toolCall.id, {
         status: AgentToolCallStatus.Failed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: null,
+        redactedResponseMetadata: null,
         completedAt: new Date(),
         error: reason,
       });
