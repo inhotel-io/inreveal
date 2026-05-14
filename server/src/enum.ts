@@ -78,6 +78,32 @@ export enum AgentProviderType {
   OpenAICompatible = 'openai-compatible',
 }
 
+export enum AgentApprovalMode {
+  Strict = 'strict',
+  AskOnEscalation = 'ask-on-escalation',
+  PlanOnly = 'plan-only',
+  DangerouslySkipPermissions = 'dangerously-skip-permissions',
+}
+
+export enum AgentPermissionPreset {
+  Careful = 'careful',
+  VisualOrganizer = 'visual-organizer',
+  LocalPowerUser = 'local-power-user',
+  Custom = 'custom',
+}
+
+export enum AgentSessionStatus {
+  Created = 'created',
+  Running = 'running',
+  WaitingForToolApproval = 'waiting_for_tool_approval',
+  WaitingForPlanReview = 'waiting_for_plan_review',
+  Applying = 'applying',
+  Completed = 'completed',
+  Cancelled = 'cancelled',
+  Interrupted = 'interrupted',
+  Failed = 'failed',
+}
+
 export enum SharedSpaceActivityType {
   AssetAdd = 'asset_add',
   AssetRemove = 'asset_remove',
@@ -140,6 +166,10 @@ export enum Permission {
   AgentCredentialRead = 'agentCredential.read',
   AgentCredentialUpdate = 'agentCredential.update',
   AgentCredentialDelete = 'agentCredential.delete',
+
+  AgentSessionCreate = 'agentSession.create',
+  AgentSessionRead = 'agentSession.read',
+  AgentSessionUpdate = 'agentSession.update',
 
   // ASSET_CREATE = 'asset.create',
   AssetRead = 'asset.read',
@@ -1093,6 +1123,7 @@ export enum ApiTag {
   Activities = 'Activities',
   Albums = 'Albums',
   AgentCredentials = 'Agent credentials',
+  AgentSessions = 'Agent sessions',
   ApiKeys = 'API keys',
   Authentication = 'Authentication',
   AuthenticationAdmin = 'Authentication (admin)',
