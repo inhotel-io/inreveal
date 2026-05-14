@@ -469,6 +469,29 @@ export type AgentProviderCredentialUpdateDto = {
     providerType?: ProviderType;
     secret?: string;
 };
+export type AgentRunnerCapabilitiesDto = {
+    /** Model IDs reported by the runner */
+    models: string[];
+    /** Runner protocol version */
+    protocolVersion: string | null;
+    /** Whether the runner can stream events */
+    streaming: boolean;
+    /** Tool names reported by the runner */
+    tools: string[];
+};
+export type AgentRunnerStatusDto = {
+    /** Normalized runner capabilities */
+    capabilities: (AgentRunnerCapabilitiesDto) | null;
+    /** When this status was checked */
+    checkedAt: string;
+    /** Whether a runner endpoint is configured */
+    configured: boolean;
+    /** Whether the configured runner is reachable and healthy */
+    healthy: boolean;
+    reason: AgentRunnerStatusReason;
+    /** Runner version when reported */
+    version: string | null;
+};
 export type AgentCredentialSnapshot = {
     baseUrl: string | null;
     defaultModel: string | null;
@@ -4473,6 +4496,17 @@ export function updateAgentProviderCredential({ id, agentProviderCredentialUpdat
         method: "PUT",
         body: agentProviderCredentialUpdateDto
     })));
+}
+/**
+ * Get agent runner status
+ */
+export function getAgentRunnerStatus(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AgentRunnerStatusDto;
+    }>("/agent/runner/status", {
+        ...opts
+    }));
 }
 /**
  * List agent sessions
@@ -8697,6 +8731,13 @@ export enum ProviderType {
     Anthropic = "anthropic",
     OpenaiCompatible = "openai-compatible"
 }
+export enum AgentRunnerStatusReason {
+    NotConfigured = "not-configured",
+    Healthy = "healthy",
+    Unhealthy = "unhealthy",
+    Timeout = "timeout",
+    InvalidResponse = "invalid-response"
+}
 export enum AgentApprovalMode {
     Strict = "strict",
     AskOnEscalation = "ask-on-escalation",
@@ -8751,6 +8792,7 @@ export enum Permission {
     AgentCredentialRead = "agentCredential.read",
     AgentCredentialUpdate = "agentCredential.update",
     AgentCredentialDelete = "agentCredential.delete",
+    AgentRunnerRead = "agentRunner.read",
     AgentSessionCreate = "agentSession.create",
     AgentSessionRead = "agentSession.read",
     AgentSessionUpdate = "agentSession.update",
