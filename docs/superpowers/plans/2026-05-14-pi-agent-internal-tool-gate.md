@@ -925,7 +925,11 @@ const setup = (db?: Kysely<DB>) => {
   };
 };
 
-const createSession = async (ctx: ReturnType<typeof setup>['ctx'], credentialRepository: AgentProviderCredentialRepository, sessionRepository: AgentSessionRepository) => {
+const createSession = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  credentialRepository: AgentProviderCredentialRepository,
+  sessionRepository: AgentSessionRepository,
+) => {
   const { user } = await ctx.newUser();
   const credential = await credentialRepository.create({
     userId: user.id,
@@ -1063,7 +1067,8 @@ describe(AgentToolCallRepository.name, () => {
           baseUrl: null,
           model: 'gpt-5.1',
         },
-        completedAt: status === AgentToolCallStatus.Completed || status === AgentToolCallStatus.Denied ? new Date() : null,
+        completedAt:
+          status === AgentToolCallStatus.Completed || status === AgentToolCallStatus.Denied ? new Date() : null,
         error: status === AgentToolCallStatus.Denied ? 'Denied' : null,
       });
 
@@ -1140,12 +1145,7 @@ import { asUuid } from 'src/utils/database';
 
 type AgentToolCallUpdate = Pick<
   Updateable<AgentToolCallTable>,
-  | 'status'
-  | 'approvalDecision'
-  | 'responseSummary'
-  | 'redactedResponseMetadata'
-  | 'completedAt'
-  | 'error'
+  'status' | 'approvalDecision' | 'responseSummary' | 'redactedResponseMetadata' | 'completedAt' | 'error'
 >;
 
 @Injectable()
@@ -1232,22 +1232,50 @@ import { TagRepository } from 'src/repositories/tag.repository';
 Add this describe block inside `describe(AssetRepository.name, () => {`:
 
 ```ts
-  describe('getAgentMetadataByIds', () => {
-    it('returns redacted metadata with exif and tags while excluding media/original fields', async () => {
-      const { ctx, sut } = setup();
-      const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({
-        ownerId: user.id,
-        originalFileName: 'IMG_0001.jpg',
-        originalPath: '/uploads/private/IMG_0001.jpg',
-        localDateTime: new Date('2026-05-14T10:00:00.000Z'),
-        fileCreatedAt: new Date('2026-05-14T10:00:01.000Z'),
-        fileModifiedAt: new Date('2026-05-14T10:00:02.000Z'),
-        isFavorite: true,
-        visibility: AssetVisibility.Timeline,
-      });
-      await ctx.newExif({
-        assetId: asset.id,
+describe('getAgentMetadataByIds', () => {
+  it('returns redacted metadata with exif and tags while excluding media/original fields', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { asset } = await ctx.newAsset({
+      ownerId: user.id,
+      originalFileName: 'IMG_0001.jpg',
+      originalPath: '/uploads/private/IMG_0001.jpg',
+      localDateTime: new Date('2026-05-14T10:00:00.000Z'),
+      fileCreatedAt: new Date('2026-05-14T10:00:01.000Z'),
+      fileModifiedAt: new Date('2026-05-14T10:00:02.000Z'),
+      isFavorite: true,
+      visibility: AssetVisibility.Timeline,
+    });
+    await ctx.newExif({
+      assetId: asset.id,
+      dateTimeOriginal: new Date('2026-05-14T10:00:00.000Z'),
+      city: 'Berlin',
+      state: 'Berlin',
+      country: 'Germany',
+      make: 'Canon',
+      model: 'R5',
+      lensModel: 'RF 35mm',
+      latitude: 52.52,
+      longitude: 13.405,
+      rating: 5,
+    });
+    const tag = await ctx.get(TagRepository).upsertValue({ userId: user.id, value: 'travel' });
+    await ctx.newTagAsset({ tagIds: [tag.id], assetIds: [asset.id] });
+    await ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: 'preview.jpg' });
+
+    const [result] = await sut.getAgentMetadataByIds([asset.id]);
+
+    expect(result).toMatchObject({
+      id: asset.id,
+      ownerId: user.id,
+      type: asset.type,
+      originalFileName: 'IMG_0001.jpg',
+      localDateTime: new Date('2026-05-14T10:00:00.000Z'),
+      fileCreatedAt: new Date('2026-05-14T10:00:01.000Z'),
+      fileModifiedAt: new Date('2026-05-14T10:00:02.000Z'),
+      isFavorite: true,
+      visibility: AssetVisibility.Timeline,
+      exifInfo: expect.objectContaining({
         dateTimeOriginal: new Date('2026-05-14T10:00:00.000Z'),
         city: 'Berlin',
         state: 'Berlin',
@@ -1258,62 +1286,34 @@ Add this describe block inside `describe(AssetRepository.name, () => {`:
         latitude: 52.52,
         longitude: 13.405,
         rating: 5,
-      });
-      const tag = await ctx.get(TagRepository).upsertValue({ userId: user.id, value: 'travel' });
-      await ctx.newTagAsset({ tagIds: [tag.id], assetIds: [asset.id] });
-      await ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: 'preview.jpg' });
-
-      const [result] = await sut.getAgentMetadataByIds([asset.id]);
-
-      expect(result).toMatchObject({
-        id: asset.id,
-        ownerId: user.id,
-        type: asset.type,
-        originalFileName: 'IMG_0001.jpg',
-        localDateTime: new Date('2026-05-14T10:00:00.000Z'),
-        fileCreatedAt: new Date('2026-05-14T10:00:01.000Z'),
-        fileModifiedAt: new Date('2026-05-14T10:00:02.000Z'),
-        isFavorite: true,
-        visibility: AssetVisibility.Timeline,
-        exifInfo: expect.objectContaining({
-          dateTimeOriginal: new Date('2026-05-14T10:00:00.000Z'),
-          city: 'Berlin',
-          state: 'Berlin',
-          country: 'Germany',
-          make: 'Canon',
-          model: 'R5',
-          lensModel: 'RF 35mm',
-          latitude: 52.52,
-          longitude: 13.405,
-          rating: 5,
-        }),
-        tags: [expect.objectContaining({ id: tag.id, value: 'travel' })],
-      });
-      expect(result).not.toHaveProperty('originalPath');
-      expect(result).not.toHaveProperty('checksum');
-      expect(result).not.toHaveProperty('files');
-      expect(result).not.toHaveProperty('faces');
+      }),
+      tags: [expect.objectContaining({ id: tag.id, value: 'travel' })],
     });
+    expect(result).not.toHaveProperty('originalPath');
+    expect(result).not.toHaveProperty('checksum');
+    expect(result).not.toHaveProperty('files');
+    expect(result).not.toHaveProperty('faces');
   });
+});
 
-  describe('getAgentLockedIds', () => {
-    it('returns only requested assets with locked visibility', async () => {
-      const { ctx, sut } = setup();
-      const { user } = await ctx.newUser();
-      const { asset: timelineAsset } = await ctx.newAsset({
-        ownerId: user.id,
-        visibility: AssetVisibility.Timeline,
-      });
-      const { asset: lockedAsset } = await ctx.newAsset({
-        ownerId: user.id,
-        visibility: AssetVisibility.Locked,
-      });
-
-      await expect(sut.getAgentLockedIds(new Set([timelineAsset.id, lockedAsset.id, factory.uuid()]))).resolves.toEqual(
-        new Set([lockedAsset.id]),
-      );
+describe('getAgentLockedIds', () => {
+  it('returns only requested assets with locked visibility', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { asset: timelineAsset } = await ctx.newAsset({
+      ownerId: user.id,
+      visibility: AssetVisibility.Timeline,
     });
+    const { asset: lockedAsset } = await ctx.newAsset({
+      ownerId: user.id,
+      visibility: AssetVisibility.Locked,
+    });
+
+    await expect(sut.getAgentLockedIds(new Set([timelineAsset.id, lockedAsset.id, factory.uuid()]))).resolves.toEqual(
+      new Set([lockedAsset.id]),
+    );
   });
+});
 ```
 
 - [ ] **Step 5: Run asset repository tests to verify they fail**
@@ -1747,14 +1747,19 @@ describe(AgentToolService.name, () => {
     });
 
     expect(result.status).toBe(AgentToolCallStatus.Approved);
-    expect(toolCallRepository.transition).toHaveBeenCalledWith(sessionId, toolCallId, AgentToolCallStatus.PendingApproval, {
-      status: AgentToolCallStatus.Approved,
-      approvalDecision: AgentToolApprovalDecision.Approved,
-      responseSummary: 'Tool call approved by user',
-      redactedResponseMetadata: null,
-      completedAt: null,
-      error: null,
-    });
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      sessionId,
+      toolCallId,
+      AgentToolCallStatus.PendingApproval,
+      {
+        status: AgentToolCallStatus.Approved,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: 'Tool call approved by user',
+        redactedResponseMetadata: null,
+        completedAt: null,
+        error: null,
+      },
+    );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, sessionId, {
       status: AgentSessionStatus.Running,
     });
@@ -1769,14 +1774,19 @@ describe(AgentToolService.name, () => {
     });
 
     expect(result.status).toBe(AgentToolCallStatus.Denied);
-    expect(toolCallRepository.transition).toHaveBeenCalledWith(sessionId, toolCallId, AgentToolCallStatus.PendingApproval, {
-      status: AgentToolCallStatus.Denied,
-      approvalDecision: AgentToolApprovalDecision.Denied,
-      responseSummary: null,
-      redactedResponseMetadata: null,
-      completedAt: expect.any(Date),
-      error: 'Private photos',
-    });
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      sessionId,
+      toolCallId,
+      AgentToolCallStatus.PendingApproval,
+      {
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        responseSummary: null,
+        redactedResponseMetadata: null,
+        completedAt: expect.any(Date),
+        error: 'Private photos',
+      },
+    );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, sessionId, {
       status: AgentSessionStatus.Running,
     });
@@ -1835,22 +1845,34 @@ describe(AgentToolService.name, () => {
     expect(result.status).toBe('success');
     expect(result.assets).toMatchObject([{ id: assetId, originalFileName: 'IMG_0001.jpg' }]);
     expect(toolCallRepository.getCountedAssetCountBySession).toHaveBeenCalledWith(sessionId, toolCallId);
-    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(1, sessionId, toolCallId, AgentToolCallStatus.Approved, {
-      status: AgentToolCallStatus.Executing,
-      approvalDecision: AgentToolApprovalDecision.Approved,
-      responseSummary: 'Tool call execution started',
-      redactedResponseMetadata: null,
-      completedAt: null,
-      error: null,
-    });
-    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(2, sessionId, toolCallId, AgentToolCallStatus.Executing, {
-      status: AgentToolCallStatus.Completed,
-      approvalDecision: AgentToolApprovalDecision.Approved,
-      responseSummary: 'Returned metadata for 1 asset',
-      redactedResponseMetadata: { assetIds: [assetId] },
-      completedAt: expect.any(Date),
-      error: null,
-    });
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      1,
+      sessionId,
+      toolCallId,
+      AgentToolCallStatus.Approved,
+      {
+        status: AgentToolCallStatus.Executing,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: 'Tool call execution started',
+        redactedResponseMetadata: null,
+        completedAt: null,
+        error: null,
+      },
+    );
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      2,
+      sessionId,
+      toolCallId,
+      AgentToolCallStatus.Executing,
+      {
+        status: AgentToolCallStatus.Completed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: 'Returned metadata for 1 asset',
+        redactedResponseMetadata: { assetIds: [assetId] },
+        completedAt: expect.any(Date),
+        error: null,
+      },
+    );
   });
 
   it('does not read asset metadata when an approved call was already claimed by another execution', async () => {
@@ -1878,14 +1900,20 @@ describe(AgentToolService.name, () => {
 
     expect(result.status).toBe('denied');
     expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
-    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(2, sessionId, toolCallId, AgentToolCallStatus.Executing, {
-      status: AgentToolCallStatus.Denied,
-      approvalDecision: AgentToolApprovalDecision.Denied,
-      responseSummary: null,
-      redactedResponseMetadata: null,
-      completedAt: expect.any(Date),
-      error: 'Not found or no asset.read access',
-    });
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      2,
+      sessionId,
+      toolCallId,
+      AgentToolCallStatus.Executing,
+      {
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        responseSummary: null,
+        redactedResponseMetadata: null,
+        completedAt: expect.any(Date),
+        error: 'Not found or no asset.read access',
+      },
+    );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, sessionId, {
       status: AgentSessionStatus.Running,
     });
@@ -1904,14 +1932,20 @@ describe(AgentToolService.name, () => {
     expect(result.status).toBe('denied');
     expect(result.reason).toBe('Session policy allows at most 10 assets per session');
     expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
-    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(2, sessionId, toolCallId, AgentToolCallStatus.Executing, {
-      status: AgentToolCallStatus.Denied,
-      approvalDecision: AgentToolApprovalDecision.Denied,
-      responseSummary: null,
-      redactedResponseMetadata: null,
-      completedAt: expect.any(Date),
-      error: 'Session policy allows at most 10 assets per session',
-    });
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      2,
+      sessionId,
+      toolCallId,
+      AgentToolCallStatus.Executing,
+      {
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        responseSummary: null,
+        redactedResponseMetadata: null,
+        completedAt: expect.any(Date),
+        error: 'Session policy allows at most 10 assets per session',
+      },
+    );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, sessionId, {
       status: AgentSessionStatus.Running,
     });
@@ -1929,14 +1963,20 @@ describe(AgentToolService.name, () => {
 
     expect(result.status).toBe('denied');
     expect(result.reason).toBe('One or more assets were not found during metadata read');
-    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(2, sessionId, toolCallId, AgentToolCallStatus.Executing, {
-      status: AgentToolCallStatus.Failed,
-      approvalDecision: AgentToolApprovalDecision.Approved,
-      responseSummary: null,
-      redactedResponseMetadata: { assetIds: [] },
-      completedAt: expect.any(Date),
-      error: 'One or more assets were not found during metadata read',
-    });
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      2,
+      sessionId,
+      toolCallId,
+      AgentToolCallStatus.Executing,
+      {
+        status: AgentToolCallStatus.Failed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: null,
+        redactedResponseMetadata: { assetIds: [] },
+        completedAt: expect.any(Date),
+        error: 'One or more assets were not found during metadata read',
+      },
+    );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, sessionId, {
       status: AgentSessionStatus.Running,
     });
@@ -1954,14 +1994,20 @@ describe(AgentToolService.name, () => {
 
     expect(result.status).toBe('denied');
     expect(result.reason).toBe('Metadata read failed');
-    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(2, sessionId, toolCallId, AgentToolCallStatus.Executing, {
-      status: AgentToolCallStatus.Failed,
-      approvalDecision: AgentToolApprovalDecision.Approved,
-      responseSummary: null,
-      redactedResponseMetadata: null,
-      completedAt: expect.any(Date),
-      error: 'Metadata read failed',
-    });
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      2,
+      sessionId,
+      toolCallId,
+      AgentToolCallStatus.Executing,
+      {
+        status: AgentToolCallStatus.Failed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: null,
+        redactedResponseMetadata: null,
+        completedAt: expect.any(Date),
+        error: 'Metadata read failed',
+      },
+    );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, sessionId, {
       status: AgentSessionStatus.Running,
     });
@@ -2087,7 +2133,9 @@ export class AgentToolService {
       error: null,
     });
 
-    await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.WaitingForToolApproval });
+    await this.sessionRepository.update(auth.user.id, session.id, {
+      status: AgentSessionStatus.WaitingForToolApproval,
+    });
 
     return { status: 'approval-required', toolCall: this.mapToolCall(toolCall) };
   }
@@ -2112,14 +2160,19 @@ export class AgentToolService {
     }
 
     if (dto.decision === AgentToolApprovalDecision.Denied) {
-      const updated = await this.toolCallRepository.transition(session.id, toolCall.id, AgentToolCallStatus.PendingApproval, {
-        status: AgentToolCallStatus.Denied,
-        approvalDecision: AgentToolApprovalDecision.Denied,
-        responseSummary: null,
-        redactedResponseMetadata: null,
-        completedAt: new Date(),
-        error: dto.reason ?? 'Denied by user',
-      });
+      const updated = await this.toolCallRepository.transition(
+        session.id,
+        toolCall.id,
+        AgentToolCallStatus.PendingApproval,
+        {
+          status: AgentToolCallStatus.Denied,
+          approvalDecision: AgentToolApprovalDecision.Denied,
+          responseSummary: null,
+          redactedResponseMetadata: null,
+          completedAt: new Date(),
+          error: dto.reason ?? 'Denied by user',
+        },
+      );
       if (!updated) {
         throw new BadRequestException('Agent tool call is not pending approval');
       }
@@ -2127,14 +2180,19 @@ export class AgentToolService {
       return this.mapToolCall(updated);
     }
 
-    const updated = await this.toolCallRepository.transition(session.id, toolCall.id, AgentToolCallStatus.PendingApproval, {
-      status: AgentToolCallStatus.Approved,
-      approvalDecision: AgentToolApprovalDecision.Approved,
-      responseSummary: 'Tool call approved by user',
-      redactedResponseMetadata: null,
-      completedAt: null,
-      error: null,
-    });
+    const updated = await this.toolCallRepository.transition(
+      session.id,
+      toolCall.id,
+      AgentToolCallStatus.PendingApproval,
+      {
+        status: AgentToolCallStatus.Approved,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: 'Tool call approved by user',
+        redactedResponseMetadata: null,
+        completedAt: null,
+        error: null,
+      },
+    );
     if (!updated) {
       throw new BadRequestException('Agent tool call is not pending approval');
     }
@@ -2180,14 +2238,19 @@ export class AgentToolService {
         excludedToolCallId: toolCall.id,
       });
       if (denialReason) {
-        const denied = await this.toolCallRepository.transition(session.id, toolCall.id, AgentToolCallStatus.Executing, {
-          status: AgentToolCallStatus.Denied,
-          approvalDecision: AgentToolApprovalDecision.Denied,
-          responseSummary: null,
-          redactedResponseMetadata: null,
-          completedAt: new Date(),
-          error: denialReason,
-        });
+        const denied = await this.toolCallRepository.transition(
+          session.id,
+          toolCall.id,
+          AgentToolCallStatus.Executing,
+          {
+            status: AgentToolCallStatus.Denied,
+            approvalDecision: AgentToolApprovalDecision.Denied,
+            responseSummary: null,
+            redactedResponseMetadata: null,
+            completedAt: new Date(),
+            error: denialReason,
+          },
+        );
         if (!denied) {
           throw new BadRequestException('Agent tool call is already completed');
         }
@@ -2198,14 +2261,19 @@ export class AgentToolService {
       const assets = await this.assetRepository.getAgentMetadataByIds(assetIds);
       const orderedAssets = this.orderAssets(assetIds, assets).map((asset) => this.mapAssetMetadata(asset));
       if (orderedAssets.length !== assetIds.length) {
-        const failed = await this.toolCallRepository.transition(session.id, toolCall.id, AgentToolCallStatus.Executing, {
-          status: AgentToolCallStatus.Failed,
-          approvalDecision: AgentToolApprovalDecision.Approved,
-          responseSummary: null,
-          redactedResponseMetadata: { assetIds: orderedAssets.map((asset) => asset.id) },
-          completedAt: new Date(),
-          error: 'One or more assets were not found during metadata read',
-        });
+        const failed = await this.toolCallRepository.transition(
+          session.id,
+          toolCall.id,
+          AgentToolCallStatus.Executing,
+          {
+            status: AgentToolCallStatus.Failed,
+            approvalDecision: AgentToolApprovalDecision.Approved,
+            responseSummary: null,
+            redactedResponseMetadata: { assetIds: orderedAssets.map((asset) => asset.id) },
+            completedAt: new Date(),
+            error: 'One or more assets were not found during metadata read',
+          },
+        );
         if (!failed) {
           throw new BadRequestException('Agent tool call is already completed');
         }
@@ -2463,7 +2531,10 @@ import { automock, ControllerContext, controllerSetup } from 'test/utils';
 
 describe(AgentToolController.name, () => {
   let ctx: ControllerContext;
-  const service = automock(AgentToolService, { args: [{} as never, {} as never, {} as never, {} as never], strict: false });
+  const service = automock(AgentToolService, {
+    args: [{} as never, {} as never, {} as never, {} as never],
+    strict: false,
+  });
   const auth = AuthFactory.create();
   const sessionId = factory.uuid();
   const toolCallId = factory.uuid();
@@ -2511,9 +2582,11 @@ describe(AgentToolController.name, () => {
   it('requires session update permission for metadata tool requests', async () => {
     service.readAssetMetadata.mockResolvedValue(approvalRequired);
 
-    await request(ctx.getHttpServer()).post(`/agent/sessions/${sessionId}/tools/read-asset-metadata`).send({
-      assetIds: [assetId],
-    });
+    await request(ctx.getHttpServer())
+      .post(`/agent/sessions/${sessionId}/tools/read-asset-metadata`)
+      .send({
+        assetIds: [assetId],
+      });
 
     expect(ctx.authenticate).toHaveBeenCalled();
     expectPermission(Permission.AgentSessionUpdate);
@@ -2538,9 +2611,7 @@ describe(AgentToolController.name, () => {
 
     expect(status).toBe(400);
     expect(body).toEqual(
-      factory.responses.badRequest([
-        'Provide assetIds for a new tool request or toolCallId for an approved request',
-      ]),
+      factory.responses.badRequest(['Provide assetIds for a new tool request or toolCallId for an approved request']),
     );
   });
 
@@ -2554,12 +2625,18 @@ describe(AgentToolController.name, () => {
   });
 
   it('requires session update permission for approvals', async () => {
-    const approved = { ...toolCall, status: AgentToolCallStatus.Approved, approvalDecision: AgentToolApprovalDecision.Approved };
+    const approved = {
+      ...toolCall,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+    };
     service.approveToolCall.mockResolvedValue(approved);
 
-    await request(ctx.getHttpServer()).post(`/agent/sessions/${sessionId}/tool-calls/${toolCallId}/approval`).send({
-      decision: AgentToolApprovalDecision.Approved,
-    } satisfies AgentToolApprovalDto);
+    await request(ctx.getHttpServer())
+      .post(`/agent/sessions/${sessionId}/tool-calls/${toolCallId}/approval`)
+      .send({
+        decision: AgentToolApprovalDecision.Approved,
+      } satisfies AgentToolApprovalDto);
 
     expect(service.approveToolCall).toHaveBeenCalledWith(auth, sessionId, toolCallId, {
       decision: AgentToolApprovalDecision.Approved,

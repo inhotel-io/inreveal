@@ -90,11 +90,14 @@ Class | Method | HTTP request | Description
 *AgentCredentialsApi* | [**updateAgentProviderCredential**](doc//AgentCredentialsApi.md#updateagentprovidercredential) | **PUT** /agent/provider-credentials/{id} | Update an agent provider credential
 *AgentRunnerApi* | [**getAgentRunnerStatus**](doc//AgentRunnerApi.md#getagentrunnerstatus) | **GET** /agent/runner/status | Get agent runner status
 *AgentSessionsApi* | [**appendAgentSessionMessage**](doc//AgentSessionsApi.md#appendagentsessionmessage) | **POST** /agent/sessions/{id}/messages | Append an agent session message
+*AgentSessionsApi* | [**approveToolCall**](doc//AgentSessionsApi.md#approvetoolcall) | **POST** /agent/sessions/{id}/tool-calls/{toolCallId}/approval | Approve or deny an agent tool call
 *AgentSessionsApi* | [**cancelAgentSession**](doc//AgentSessionsApi.md#cancelagentsession) | **POST** /agent/sessions/{id}/cancel | Cancel an agent session
 *AgentSessionsApi* | [**createAgentSession**](doc//AgentSessionsApi.md#createagentsession) | **POST** /agent/sessions | Create an agent session
 *AgentSessionsApi* | [**getAgentSession**](doc//AgentSessionsApi.md#getagentsession) | **GET** /agent/sessions/{id} | Retrieve an agent session
 *AgentSessionsApi* | [**getAgentSessionMessages**](doc//AgentSessionsApi.md#getagentsessionmessages) | **GET** /agent/sessions/{id}/messages | List agent session messages
 *AgentSessionsApi* | [**getAgentSessions**](doc//AgentSessionsApi.md#getagentsessions) | **GET** /agent/sessions | List agent sessions
+*AgentSessionsApi* | [**getToolCalls**](doc//AgentSessionsApi.md#gettoolcalls) | **GET** /agent/sessions/{id}/tool-calls | List agent tool calls
+*AgentSessionsApi* | [**readAssetMetadata**](doc//AgentSessionsApi.md#readassetmetadata) | **POST** /agent/sessions/{id}/tools/read-asset-metadata | Execute the internal readAssetMetadata agent tool
 *AlbumsApi* | [**addAssetsToAlbum**](doc//AlbumsApi.md#addassetstoalbum) | **PUT** /albums/{id}/assets | Add assets to an album
 *AlbumsApi* | [**addAssetsToAlbums**](doc//AlbumsApi.md#addassetstoalbums) | **PUT** /albums/assets | Add assets to albums
 *AlbumsApi* | [**addUsersToAlbum**](doc//AlbumsApi.md#adduserstoalbum) | **PUT** /albums/{id}/users | Share album with users
@@ -449,12 +452,19 @@ Class | Method | HTTP request | Description
  - [AgentProviderCredentialResponseDto](doc//AgentProviderCredentialResponseDto.md)
  - [AgentProviderCredentialUpdateDto](doc//AgentProviderCredentialUpdateDto.md)
  - [AgentProviderType](doc//AgentProviderType.md)
+ - [AgentReadAssetMetadataToolRequestDto](doc//AgentReadAssetMetadataToolRequestDto.md)
  - [AgentRunnerCapabilitiesDto](doc//AgentRunnerCapabilitiesDto.md)
  - [AgentRunnerStatusDto](doc//AgentRunnerStatusDto.md)
  - [AgentRunnerStatusReason](doc//AgentRunnerStatusReason.md)
  - [AgentSessionCreateDto](doc//AgentSessionCreateDto.md)
  - [AgentSessionResponseDto](doc//AgentSessionResponseDto.md)
  - [AgentSessionStatus](doc//AgentSessionStatus.md)
+ - [AgentToolApprovalDecision](doc//AgentToolApprovalDecision.md)
+ - [AgentToolApprovalDto](doc//AgentToolApprovalDto.md)
+ - [AgentToolCallResponseDto](doc//AgentToolCallResponseDto.md)
+ - [AgentToolCallStatus](doc//AgentToolCallStatus.md)
+ - [AgentToolDataClass](doc//AgentToolDataClass.md)
+ - [AgentToolName](doc//AgentToolName.md)
  - [AgentUserMessageContent](doc//AgentUserMessageContent.md)
  - [AlbumNameDto](doc//AlbumNameDto.md)
  - [AlbumResponseDto](doc//AlbumResponseDto.md)
