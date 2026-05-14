@@ -16,6 +16,67 @@ class AgentSessionsApi {
 
   final ApiClient apiClient;
 
+  /// Append an agent session message
+  ///
+  /// Append a user-authored message to an AI agent session owned by the current user.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentMessageCreateDto] agentMessageCreateDto (required):
+  Future<Response> appendAgentSessionMessageWithHttpInfo(String id, AgentMessageCreateDto agentMessageCreateDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/{id}/messages'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = agentMessageCreateDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Append an agent session message
+  ///
+  /// Append a user-authored message to an AI agent session owned by the current user.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentMessageCreateDto] agentMessageCreateDto (required):
+  Future<AgentMessageResponseDto?> appendAgentSessionMessage(String id, AgentMessageCreateDto agentMessageCreateDto,) async {
+    final response = await appendAgentSessionMessageWithHttpInfo(id, agentMessageCreateDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentMessageResponseDto',) as AgentMessageResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Cancel an agent session
   ///
   /// Cancel an active AI agent session owned by the current user.
@@ -182,6 +243,66 @@ class AgentSessionsApi {
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentSessionResponseDto',) as AgentSessionResponseDto;
     
+    }
+    return null;
+  }
+
+  /// List agent session messages
+  ///
+  /// Retrieve persisted chat messages for an AI agent session owned by the current user.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  Future<Response> getAgentSessionMessagesWithHttpInfo(String id,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/{id}/messages'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// List agent session messages
+  ///
+  /// Retrieve persisted chat messages for an AI agent session owned by the current user.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  Future<List<AgentMessageResponseDto>?> getAgentSessionMessages(String id,) async {
+    final response = await getAgentSessionMessagesWithHttpInfo(id,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      final responseBody = await _decodeBodyBytes(response);
+      return (await apiClient.deserializeAsync(responseBody, 'List<AgentMessageResponseDto>') as List)
+        .cast<AgentMessageResponseDto>()
+        .toList(growable: false);
+
     }
     return null;
   }
