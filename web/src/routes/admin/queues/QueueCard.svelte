@@ -65,6 +65,7 @@
   });
 
   const commonClasses = 'flex place-items-center justify-between w-full py-2 sm:py-4 pe-4 ps-6';
+  const jobTypeGridClasses = 'grid grid-cols-[minmax(0,1fr)_8rem_5rem] items-center gap-4 px-4 py-2';
 </script>
 
 <div class="flex flex-col overflow-hidden rounded-2xl bg-gray-100 dark:bg-immich-dark-gray sm:flex-row sm:rounded-9">
@@ -157,20 +158,18 @@
         <div
           class="mt-2 flex w-full max-w-xl flex-col divide-y divide-gray-200 rounded-lg bg-white/70 text-sm text-gray-700 dark:divide-gray-700 dark:bg-black/20 dark:text-gray-200"
         >
-          <div
-            class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 px-4 py-2 text-xs font-medium uppercase text-gray-500 dark:text-gray-400"
-          >
+          <div class={cleanClass(jobTypeGridClasses, 'text-xs font-medium uppercase text-gray-500 dark:text-gray-400')}>
             <span>Job type</span>
-            <span class="text-end">In progress</span>
-            <span class="text-end">Queued</span>
+            <span class="justify-self-end text-end">In progress</span>
+            <span class="justify-self-end text-end">Queued</span>
           </div>
           {#each jobTypeRows as row (row.label)}
-            <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 px-4 py-2">
+            <div class={jobTypeGridClasses}>
               <span class="min-w-0 truncate">{row.label}</span>
-              <span class="tabular-nums">
+              <span class="justify-self-end tabular-nums">
                 {formatSampledJobTypeCount(row.active, (count) => count.toLocaleString($locale))}
               </span>
-              <span class="tabular-nums text-gray-500 dark:text-gray-400">
+              <span class="justify-self-end tabular-nums text-gray-500 dark:text-gray-400">
                 {formatSampledJobTypeCount(row.pending, (count) => count.toLocaleString($locale))}
               </span>
             </div>
