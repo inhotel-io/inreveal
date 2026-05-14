@@ -12,7 +12,7 @@ import {
   Updateable,
   UpdateResult,
 } from 'kysely';
-import { jsonArrayFrom } from 'kysely/helpers/postgres';
+import { jsonArrayFrom, jsonObjectFrom } from 'kysely/helpers/postgres';
 import { isEmpty, isUndefined, omitBy } from 'lodash';
 import { InjectKysely } from 'nestjs-kysely';
 import { lockableProperties, LockableProperty, Stack } from 'src/database';
@@ -358,6 +358,28 @@ function withTimeBucketAssetFilters<O>(
     .$if(!!options.tagIds?.length, (qb) => withAnyTagId(qb, options.tagIds!))
     .$if(!!options.takenAfter, (qb) => qb.where('asset.localDateTime', '>=', new Date(options.takenAfter!)))
     .$if(!!options.takenBefore, (qb) => qb.where('asset.localDateTime', '<=', new Date(options.takenBefore!)));
+}
+
+function withAgentExif<O>(qb: SelectQueryBuilder<DB, 'asset', O>) {
+  return qb.select((eb) =>
+    jsonObjectFrom(
+      eb
+        .selectFrom('asset_exif')
+        .select([
+          'asset_exif.dateTimeOriginal',
+          'asset_exif.city',
+          'asset_exif.state',
+          'asset_exif.country',
+          'asset_exif.make',
+          'asset_exif.model',
+          'asset_exif.lensModel',
+          'asset_exif.latitude',
+          'asset_exif.longitude',
+          'asset_exif.rating',
+        ])
+        .whereRef('asset_exif.assetId', '=', 'asset.id'),
+    ).as('exifInfo'),
+  );
 }
 
 @Injectable()
@@ -871,7 +893,7 @@ export class AssetRepository {
         'asset.visibility',
       ])
       .select(withTags)
-      .$call(withExif)
+      .$call(withAgentExif)
       .where('asset.id', '=', anyUuid(ids))
       .execute();
   }
