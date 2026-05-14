@@ -172,12 +172,13 @@ describe(AgentToolController.name, () => {
     });
 
     it('should pass through denied decisions with a reason', async () => {
-      const body: AgentToolApprovalDto = { decision: AgentToolApprovalDecision.Denied, reason: 'Too broad.' };
+      const reason = 'Too broad.';
+      const body: AgentToolApprovalDto = { decision: AgentToolApprovalDecision.Denied, reason };
       service.approveToolCall.mockResolvedValue({
         ...toolCall,
         status: AgentToolCallStatus.Denied,
         approvalDecision: AgentToolApprovalDecision.Denied,
-        error: body.reason,
+        error: reason,
         completedAt,
       });
 

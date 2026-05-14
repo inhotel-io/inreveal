@@ -155,3 +155,4 @@ export class AgentToolApprovalDto extends createZodDto(AgentToolApprovalSchema) 
 export class AgentToolCallResponseDto extends createZodDto(AgentToolCallResponseSchema) {}
 export class AgentToolCallParamsDto extends createZodDto(AgentToolCallParamsSchema) {}
 export const AgentReadAssetMetadataToolResponseDto = createZodDto(AgentReadAssetMetadataToolResponseSchema);
+export type AgentReadAssetMetadataToolResponseDto = z.output<typeof AgentReadAssetMetadataToolResponseSchema>;
