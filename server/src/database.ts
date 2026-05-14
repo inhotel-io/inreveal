@@ -14,6 +14,7 @@ import {
   UserStatus,
 } from 'src/enum';
 import { AlbumTable } from 'src/schema/tables/album.table';
+import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
 import { AssetTable } from 'src/schema/tables/asset.table';
 import { PluginTable } from 'src/schema/tables/plugin.table';
@@ -81,6 +82,9 @@ export type ApiKey = {
   updatedAt: Date;
   permissions: Permission[];
 };
+
+export type AgentProviderCredential = Selectable<AgentProviderCredentialTable>;
+
 
 export type Tag = {
   id: string;
@@ -483,6 +487,21 @@ export const columns = {
   ],
   tag: ['tag.id', 'tag.value', 'tag.createdAt', 'tag.updatedAt', 'tag.color', 'tag.parentId'],
   apiKey: ['id', 'name', 'userId', 'createdAt', 'updatedAt', 'permissions'],
+  agentProviderCredential: [
+    'id',
+    'userId',
+    'providerType',
+    'label',
+    'baseUrl',
+    'encryptedSecret',
+    'secretVersion',
+    'models',
+    'defaultModel',
+    'lastUsedAt',
+    'createdAt',
+    'updatedAt',
+    'updateId',
+  ],
   notification: ['id', 'createdAt', 'level', 'type', 'title', 'description', 'data', 'readAt'],
   pluginMethod: [
     'plugin_method.name',
