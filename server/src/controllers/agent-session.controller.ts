@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import { AgentSessionCreateDto, AgentSessionResponseDto } from 'src/dtos/agent-session.dto';
@@ -51,6 +51,7 @@ export class AgentSessionController {
   }
 
   @Post(':id/cancel')
+  @HttpCode(HttpStatus.OK)
   @Authenticated({ permission: Permission.AgentSessionUpdate })
   @Endpoint({
     summary: 'Cancel an agent session',
