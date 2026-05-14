@@ -630,6 +630,44 @@ export type AgentSessionCreateDto = {
     providerCredentialId: string;
     runnerEndpoint?: string | null;
 };
+export type AgentMessageTextBlock = {
+    text: string;
+    "type": AgentMessageTextBlockType;
+};
+export type AgentMessageToolCallBlock = {
+    summary?: string;
+    toolCallId: string;
+    "type": AgentMessageToolCallBlockType;
+};
+export type AgentMessageAssetBlock = {
+    assetId: string;
+    label?: string;
+    "type": AgentMessageAssetBlockType;
+};
+export type AgentMessagePlanBlock = {
+    label?: string;
+    planId: string;
+    "type": AgentMessagePlanBlockType;
+};
+export type AgentMessageBlock = AgentMessageTextBlock | AgentMessageToolCallBlock | AgentMessageAssetBlock | AgentMessagePlanBlock;
+export type AgentMessageContent = {
+    blocks: AgentMessageBlock[];
+};
+export type AgentMessageResponseDto = {
+    content: AgentMessageContent;
+    createdAt: string;
+    id: string;
+    providerMessageId: string | null;
+    role: AgentMessageRole;
+    sessionId: string;
+    toolCallId: string | null;
+};
+export type AgentUserMessageContent = {
+    blocks: AgentMessageTextBlock[];
+};
+export type AgentMessageCreateDto = {
+    content: AgentUserMessageContent;
+};
 export type AlbumUserResponseDto = {
     role: AlbumUserRole;
     user: UserResponseDto;
@@ -4710,6 +4748,35 @@ export function cancelAgentSession({ id }: {
         ...opts,
         method: "POST"
     }));
+}
+/**
+ * List agent session messages
+ */
+export function getAgentSessionMessages({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AgentMessageResponseDto[];
+    }>(`/agent/sessions/${encodeURIComponent(id)}/messages`, {
+        ...opts
+    }));
+}
+/**
+ * Append an agent session message
+ */
+export function appendAgentSessionMessage({ id, agentMessageCreateDto }: {
+    id: string;
+    agentMessageCreateDto: AgentMessageCreateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentMessageResponseDto;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/messages`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentMessageCreateDto
+    })));
 }
 /**
  * List all albums
@@ -9191,6 +9258,24 @@ export enum AgentSessionStatus {
     Cancelled = "cancelled",
     Interrupted = "interrupted",
     Failed = "failed"
+}
+export enum AgentMessageTextBlockType {
+    Text = "text"
+}
+export enum AgentMessageToolCallBlockType {
+    ToolCall = "tool-call"
+}
+export enum AgentMessageAssetBlockType {
+    Asset = "asset"
+}
+export enum AgentMessagePlanBlockType {
+    Plan = "plan"
+}
+export enum AgentMessageRole {
+    User = "user",
+    Assistant = "assistant",
+    System = "system",
+    Tool = "tool"
 }
 export enum AlbumUserRole {
     Editor = "editor",
