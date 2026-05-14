@@ -1,4 +1,5 @@
 import { ActivityService } from 'src/services/activity.service';
+import { AgentMessageService } from 'src/services/agent-message.service';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
@@ -59,6 +60,7 @@ import { WorkflowService } from 'src/services/workflow.service';
 export const services = [
   ApiKeyService,
   ActivityService,
+  AgentMessageService,
   AgentProviderCredentialService,
   AgentRunnerService,
   AgentSessionService,
