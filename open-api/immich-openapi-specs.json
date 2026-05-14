@@ -2718,6 +2718,210 @@
         "x-immich-state": "Alpha"
       }
     },
+    "/agent/sessions/{id}/tool-calls": {
+      "get": {
+        "description": "List audited internal tool calls for an AI agent session owned by the current user.",
+        "operationId": "getToolCalls",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentToolCallResponseDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List agent tool calls",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentSession.read",
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/agent/sessions/{id}/tool-calls/{toolCallId}/approval": {
+      "post": {
+        "description": "Record an explicit user approval decision for a pending internal agent tool call.",
+        "operationId": "approveToolCall",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "toolCallId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentToolApprovalDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentToolCallResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Approve or deny an agent tool call",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentSession.update",
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/agent/sessions/{id}/tools/read-asset-metadata": {
+      "post": {
+        "description": "Internal route for requesting or resuming a strict-approved metadata read tool call for an AI agent session.",
+        "operationId": "readAssetMetadata",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentReadAssetMetadataToolRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Execute the internal readAssetMetadata agent tool",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Internal"
+          }
+        ],
+        "x-immich-permission": "agentSession.update",
+        "x-immich-state": "Internal"
+      }
+    },
     "/albums": {
       "get": {
         "description": "Retrieve a list of albums available to the authenticated user.",
@@ -22874,6 +23078,26 @@
         ],
         "type": "string"
       },
+      "AgentReadAssetMetadataToolRequestDto": {
+        "properties": {
+          "assetIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "type": "array"
+          },
+          "toolCallId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "AgentRunnerCapabilitiesDto": {
         "properties": {
           "models": {
@@ -23103,6 +23327,137 @@
           "cancelled",
           "interrupted",
           "failed"
+        ],
+        "type": "string"
+      },
+      "AgentToolApprovalDecision": {
+        "enum": [
+          "approved",
+          "denied"
+        ],
+        "type": "string"
+      },
+      "AgentToolApprovalDto": {
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/AgentToolApprovalDecision"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "type": "object"
+      },
+      "AgentToolCallResponseDto": {
+        "properties": {
+          "albumCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "approvalDecision": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AgentToolApprovalDecision"
+              }
+            ],
+            "nullable": true
+          },
+          "assetCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "completedAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "dataClass": {
+            "$ref": "#/components/schemas/AgentToolDataClass"
+          },
+          "error": {
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "requestSummary": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "responseSummary": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "nullable": true,
+            "type": "string"
+          },
+          "sessionId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "startedAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentToolCallStatus"
+          },
+          "toolName": {
+            "$ref": "#/components/schemas/AgentToolName"
+          }
+        },
+        "required": [
+          "albumCount",
+          "approvalDecision",
+          "assetCount",
+          "completedAt",
+          "dataClass",
+          "error",
+          "id",
+          "requestSummary",
+          "responseSummary",
+          "sessionId",
+          "startedAt",
+          "status",
+          "toolName"
+        ],
+        "type": "object"
+      },
+      "AgentToolCallStatus": {
+        "enum": [
+          "pending_approval",
+          "approved",
+          "executing",
+          "denied",
+          "completed",
+          "failed"
+        ],
+        "type": "string"
+      },
+      "AgentToolDataClass": {
+        "enum": [
+          "metadata"
+        ],
+        "type": "string"
+      },
+      "AgentToolName": {
+        "enum": [
+          "readAssetMetadata"
         ],
         "type": "string"
       },
