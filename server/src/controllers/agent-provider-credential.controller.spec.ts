@@ -1,5 +1,5 @@
 import { AgentProviderCredentialController } from 'src/controllers/agent-provider-credential.controller';
-import { AgentProviderType } from 'src/enum';
+import { AgentProviderType, Permission } from 'src/enum';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
 import request from 'supertest';
 import { AuthFactory } from 'test/factories/auth.factory';
@@ -57,6 +57,14 @@ describe(AgentProviderCredentialController.name, () => {
     expect(body).not.toHaveProperty('secretVersion');
   };
 
+  const expectPermission = (permission: Permission) => {
+    expect(ctx.authenticate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ permission }),
+      }),
+    );
+  };
+
   describe('POST /agent/provider-credentials', () => {
     const body = {
       providerType: AgentProviderType.OpenAI,
@@ -72,6 +80,7 @@ describe(AgentProviderCredentialController.name, () => {
       await request(ctx.getHttpServer()).post('/agent/provider-credentials').send(body);
 
       expect(ctx.authenticate).toHaveBeenCalled();
+      expectPermission(Permission.AgentCredentialCreate);
     });
 
     it('should call the service with auth and body, redact the response, and return 201', async () => {
@@ -130,6 +139,7 @@ describe(AgentProviderCredentialController.name, () => {
       await request(ctx.getHttpServer()).get('/agent/provider-credentials');
 
       expect(ctx.authenticate).toHaveBeenCalled();
+      expectPermission(Permission.AgentCredentialRead);
     });
 
     it('should call the service with auth and redact the response', async () => {
@@ -151,6 +161,7 @@ describe(AgentProviderCredentialController.name, () => {
       await request(ctx.getHttpServer()).get(`/agent/provider-credentials/${id}`);
 
       expect(ctx.authenticate).toHaveBeenCalled();
+      expectPermission(Permission.AgentCredentialRead);
     });
 
     it('should require a valid uuid', async () => {
@@ -180,6 +191,7 @@ describe(AgentProviderCredentialController.name, () => {
       await request(ctx.getHttpServer()).put(`/agent/provider-credentials/${id}`).send(body);
 
       expect(ctx.authenticate).toHaveBeenCalled();
+      expectPermission(Permission.AgentCredentialUpdate);
     });
 
     it('should require a valid uuid', async () => {
@@ -211,6 +223,7 @@ describe(AgentProviderCredentialController.name, () => {
       await request(ctx.getHttpServer()).delete(`/agent/provider-credentials/${id}`);
 
       expect(ctx.authenticate).toHaveBeenCalled();
+      expectPermission(Permission.AgentCredentialDelete);
     });
 
     it('should require a valid uuid', async () => {
