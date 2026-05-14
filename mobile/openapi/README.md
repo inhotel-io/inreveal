@@ -89,9 +89,11 @@ Class | Method | HTTP request | Description
 *AgentCredentialsApi* | [**getAgentProviderCredentials**](doc//AgentCredentialsApi.md#getagentprovidercredentials) | **GET** /agent/provider-credentials | List agent provider credentials
 *AgentCredentialsApi* | [**updateAgentProviderCredential**](doc//AgentCredentialsApi.md#updateagentprovidercredential) | **PUT** /agent/provider-credentials/{id} | Update an agent provider credential
 *AgentRunnerApi* | [**getAgentRunnerStatus**](doc//AgentRunnerApi.md#getagentrunnerstatus) | **GET** /agent/runner/status | Get agent runner status
+*AgentSessionsApi* | [**appendAgentSessionMessage**](doc//AgentSessionsApi.md#appendagentsessionmessage) | **POST** /agent/sessions/{id}/messages | Append an agent session message
 *AgentSessionsApi* | [**cancelAgentSession**](doc//AgentSessionsApi.md#cancelagentsession) | **POST** /agent/sessions/{id}/cancel | Cancel an agent session
 *AgentSessionsApi* | [**createAgentSession**](doc//AgentSessionsApi.md#createagentsession) | **POST** /agent/sessions | Create an agent session
 *AgentSessionsApi* | [**getAgentSession**](doc//AgentSessionsApi.md#getagentsession) | **GET** /agent/sessions/{id} | Retrieve an agent session
+*AgentSessionsApi* | [**getAgentSessionMessages**](doc//AgentSessionsApi.md#getagentsessionmessages) | **GET** /agent/sessions/{id}/messages | List agent session messages
 *AgentSessionsApi* | [**getAgentSessions**](doc//AgentSessionsApi.md#getagentsessions) | **GET** /agent/sessions | List agent sessions
 *AlbumsApi* | [**addAssetsToAlbum**](doc//AlbumsApi.md#addassetstoalbum) | **PUT** /albums/{id}/assets | Add assets to an album
 *AlbumsApi* | [**addAssetsToAlbums**](doc//AlbumsApi.md#addassetstoalbums) | **PUT** /albums/assets | Add assets to albums
@@ -397,6 +399,19 @@ Class | Method | HTTP request | Description
  - [AdminOnboardingUpdateDto](doc//AdminOnboardingUpdateDto.md)
  - [AgentApprovalMode](doc//AgentApprovalMode.md)
  - [AgentCredentialSnapshot](doc//AgentCredentialSnapshot.md)
+ - [AgentMessageAssetBlock](doc//AgentMessageAssetBlock.md)
+ - [AgentMessageAssetBlockType](doc//AgentMessageAssetBlockType.md)
+ - [AgentMessageBlock](doc//AgentMessageBlock.md)
+ - [AgentMessageContent](doc//AgentMessageContent.md)
+ - [AgentMessageCreateDto](doc//AgentMessageCreateDto.md)
+ - [AgentMessagePlanBlock](doc//AgentMessagePlanBlock.md)
+ - [AgentMessagePlanBlockType](doc//AgentMessagePlanBlockType.md)
+ - [AgentMessageResponseDto](doc//AgentMessageResponseDto.md)
+ - [AgentMessageRole](doc//AgentMessageRole.md)
+ - [AgentMessageTextBlock](doc//AgentMessageTextBlock.md)
+ - [AgentMessageTextBlockType](doc//AgentMessageTextBlockType.md)
+ - [AgentMessageToolCallBlock](doc//AgentMessageToolCallBlock.md)
+ - [AgentMessageToolCallBlockType](doc//AgentMessageToolCallBlockType.md)
  - [AgentModelSnapshot](doc//AgentModelSnapshot.md)
  - [AgentPermissionPlan](doc//AgentPermissionPlan.md)
  - [AgentPermissionPlanAssetScope](doc//AgentPermissionPlanAssetScope.md)
@@ -415,6 +430,7 @@ Class | Method | HTTP request | Description
  - [AgentSessionCreateDto](doc//AgentSessionCreateDto.md)
  - [AgentSessionResponseDto](doc//AgentSessionResponseDto.md)
  - [AgentSessionStatus](doc//AgentSessionStatus.md)
+ - [AgentUserMessageContent](doc//AgentUserMessageContent.md)
  - [AlbumNameDto](doc//AlbumNameDto.md)
  - [AlbumResponseDto](doc//AlbumResponseDto.md)
  - [AlbumStatisticsResponseDto](doc//AlbumStatisticsResponseDto.md)

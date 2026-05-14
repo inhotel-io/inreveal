@@ -196,6 +196,32 @@ class ApiClient {
           return AgentApprovalModeTypeTransformer().decode(value);
         case 'AgentCredentialSnapshot':
           return AgentCredentialSnapshot.fromJson(value);
+        case 'AgentMessageAssetBlock':
+          return AgentMessageAssetBlock.fromJson(value);
+        case 'AgentMessageAssetBlockType':
+          return AgentMessageAssetBlockTypeTypeTransformer().decode(value);
+        case 'AgentMessageBlock':
+          return AgentMessageBlock.fromJson(value);
+        case 'AgentMessageContent':
+          return AgentMessageContent.fromJson(value);
+        case 'AgentMessageCreateDto':
+          return AgentMessageCreateDto.fromJson(value);
+        case 'AgentMessagePlanBlock':
+          return AgentMessagePlanBlock.fromJson(value);
+        case 'AgentMessagePlanBlockType':
+          return AgentMessagePlanBlockTypeTypeTransformer().decode(value);
+        case 'AgentMessageResponseDto':
+          return AgentMessageResponseDto.fromJson(value);
+        case 'AgentMessageRole':
+          return AgentMessageRoleTypeTransformer().decode(value);
+        case 'AgentMessageTextBlock':
+          return AgentMessageTextBlock.fromJson(value);
+        case 'AgentMessageTextBlockType':
+          return AgentMessageTextBlockTypeTypeTransformer().decode(value);
+        case 'AgentMessageToolCallBlock':
+          return AgentMessageToolCallBlock.fromJson(value);
+        case 'AgentMessageToolCallBlockType':
+          return AgentMessageToolCallBlockTypeTypeTransformer().decode(value);
         case 'AgentModelSnapshot':
           return AgentModelSnapshot.fromJson(value);
         case 'AgentPermissionPlan':
@@ -232,6 +258,8 @@ class ApiClient {
           return AgentSessionResponseDto.fromJson(value);
         case 'AgentSessionStatus':
           return AgentSessionStatusTypeTransformer().decode(value);
+        case 'AgentUserMessageContent':
+          return AgentUserMessageContent.fromJson(value);
         case 'AlbumNameDto':
           return AlbumNameDto.fromJson(value);
         case 'AlbumResponseDto':
