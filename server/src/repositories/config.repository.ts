@@ -52,6 +52,8 @@ export interface EnvData {
 
   agent: {
     secretKey?: string;
+    runnerUrl?: string;
+    runnerHealthTimeoutMs: number;
   };
 
   bull: {
@@ -300,6 +302,8 @@ const getEnv = (): EnvData => {
 
     agent: {
       secretKey: dto.IMMICH_AGENT_SECRET_KEY,
+      runnerUrl: dto.IMMICH_AGENT_RUNNER_URL,
+      runnerHealthTimeoutMs: dto.IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS ?? 2000,
     },
 
     bull: {
