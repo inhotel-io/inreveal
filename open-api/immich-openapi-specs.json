@@ -1765,6 +1765,279 @@
         "x-immich-state": "Stable"
       }
     },
+    "/agent/provider-credentials": {
+      "get": {
+        "description": "Retrieve all AI agent provider credentials owned by the current user.",
+        "operationId": "getAgentProviderCredentials",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentProviderCredentialResponseDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List agent provider credentials",
+        "tags": [
+          "Agent credentials"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentCredential.read",
+        "x-immich-state": "Alpha"
+      },
+      "post": {
+        "description": "Create an encrypted AI agent provider credential for the current user.",
+        "operationId": "createAgentProviderCredential",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentProviderCredentialCreateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProviderCredentialResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Create an agent provider credential",
+        "tags": [
+          "Agent credentials"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentCredential.create",
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/agent/provider-credentials/{id}": {
+      "delete": {
+        "description": "Delete an AI agent provider credential by ID. The current user must own this credential.",
+        "operationId": "deleteAgentProviderCredential",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Delete an agent provider credential",
+        "tags": [
+          "Agent credentials"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentCredential.delete",
+        "x-immich-state": "Alpha"
+      },
+      "get": {
+        "description": "Retrieve an AI agent provider credential by ID. The current user must own this credential.",
+        "operationId": "getAgentProviderCredential",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProviderCredentialResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Retrieve an agent provider credential",
+        "tags": [
+          "Agent credentials"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentCredential.read",
+        "x-immich-state": "Alpha"
+      },
+      "put": {
+        "description": "Update an AI agent provider credential by ID. The current user must own this credential.",
+        "operationId": "updateAgentProviderCredential",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentProviderCredentialUpdateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProviderCredentialResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Update an agent provider credential",
+        "tags": [
+          "Agent credentials"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentCredential.update",
+        "x-immich-state": "Alpha"
+      }
+    },
     "/albums": {
       "get": {
         "description": "Retrieve a list of albums available to the authenticated user.",
@@ -21009,6 +21282,10 @@
       "description": "An album is a collection of assets that can be shared with other users or via shared links."
     },
     {
+      "name": "Agent credentials",
+      "description": "AI agent provider credential management"
+    },
+    {
       "name": "API keys",
       "description": "An api key can be used to programmatically access the Immich API."
     },
@@ -21309,6 +21586,157 @@
         "required": [
           "isOnboarded"
         ],
+        "type": "object"
+      },
+      "AgentProviderCredentialCreateDto": {
+        "properties": {
+          "baseUrl": {
+            "format": "uri",
+            "type": "string"
+          },
+          "defaultModel": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "providerType": {
+            "enum": [
+              "openai",
+              "anthropic",
+              "openai-compatible"
+            ],
+            "type": "string"
+          },
+          "secret": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "providerType",
+          "secret"
+        ],
+        "type": "object"
+      },
+      "AgentProviderCredentialResponseDto": {
+        "properties": {
+          "baseUrl": {
+            "format": "uri",
+            "nullable": true,
+            "type": "string"
+          },
+          "createdAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "defaultModel": {
+            "minLength": 1,
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "providerType": {
+            "enum": [
+              "openai",
+              "anthropic",
+              "openai-compatible"
+            ],
+            "type": "string"
+          },
+          "updatedAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "baseUrl",
+          "createdAt",
+          "defaultModel",
+          "id",
+          "label",
+          "lastUsedAt",
+          "models",
+          "providerType",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "AgentProviderCredentialUpdateDto": {
+        "properties": {
+          "baseUrl": {
+            "format": "uri",
+            "nullable": true,
+            "type": "string"
+          },
+          "defaultModel": {
+            "minLength": 1,
+            "nullable": true,
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "providerType": {
+            "enum": [
+              "openai",
+              "anthropic",
+              "openai-compatible"
+            ],
+            "type": "string"
+          },
+          "secret": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "AlbumNameDto": {
@@ -26019,6 +26447,10 @@
           "apiKey.read",
           "apiKey.update",
           "apiKey.delete",
+          "agentCredential.create",
+          "agentCredential.read",
+          "agentCredential.update",
+          "agentCredential.delete",
           "asset.read",
           "asset.update",
           "asset.delete",
