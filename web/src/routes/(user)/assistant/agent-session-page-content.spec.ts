@@ -37,6 +37,7 @@ vi.mock('svelte-i18n', () => {
     assistant_runner_healthy: 'Runner healthy',
     assistant_runner_not_configured: 'Runner not configured',
     assistant_runner_unavailable: 'Runner unavailable',
+    assistant_session_create_error: 'Unable to start assistant session',
     assistant_session_created: 'Assistant session started',
     assistant_session_setup: 'Session setup',
     assistant_start_session: 'Start session',
@@ -176,6 +177,22 @@ describe(AgentSessionPageContent.name, () => {
     expect(within(summary).getByText(`status:${AgentSessionStatus.Created}`)).toBeInTheDocument();
     expect(within(summary).getByText(`preset:${AgentPermissionPreset.VisualOrganizer}`)).toBeInTheDocument();
     expect(within(summary).getByText(`approval:${AgentApprovalMode.AskOnEscalation}`)).toBeInTheDocument();
+  });
+
+  it('keeps the previous created-session summary when a later create attempt fails', async () => {
+    sdkMock.createAgentSession.mockResolvedValueOnce(createdSession).mockRejectedValueOnce(new Error('failed'));
+    render(AgentSessionPageContent, { props: { runnerStatus: healthyRunner, credentials } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    const summary = await screen.findByRole('region', { name: 'Created session' });
+    expect(within(summary).getByText('OpenAI personal')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to start assistant session');
+    expect(screen.getByRole('region', { name: 'Created session' })).toBeInTheDocument();
+    expect(sdkMock.createAgentSession).toHaveBeenCalledTimes(2);
   });
 
   it('renders setup disabled when the runner is unavailable', () => {
