@@ -2,8 +2,17 @@ import {
   AgentReadAssetMetadataToolRequestDto,
   AgentReadAssetMetadataToolResponseDto,
   AgentToolApprovalDto,
+  AgentToolCallParamsDto,
+  AgentToolCallResponseDto,
 } from 'src/dtos/agent-tool.dto';
-import { AgentToolApprovalDecision, AssetType, AssetVisibility } from 'src/enum';
+import {
+  AgentToolApprovalDecision,
+  AgentToolCallStatus,
+  AgentToolDataClass,
+  AgentToolName,
+  AssetType,
+  AssetVisibility,
+} from 'src/enum';
 import { factory } from 'test/small.factory';
 import z from 'zod';
 
@@ -51,6 +60,24 @@ describe('Agent tool DTOs', () => {
       if (result.success) {
         expect(result.data).toEqual({ toolCallId });
       }
+    });
+
+    it('rejects invalid toolCallId UUIDs', () => {
+      const result = parseRequest({ toolCallId: 'not-a-uuid' });
+
+      expectIssue(result, ['toolCallId'], 'Invalid UUID');
+    });
+
+    it('accepts exactly 10000 asset ids', () => {
+      const result = parseRequest({ assetIds: Array.from({ length: 10_000 }, () => factory.uuid()) });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects more than 10000 asset ids', () => {
+      const result = parseRequest({ assetIds: Array.from({ length: 10_001 }, () => factory.uuid()) });
+
+      expectIssue(result, ['assetIds'], 'Too big');
     });
 
     it('rejects requests without assetIds or toolCallId', () => {
@@ -102,38 +129,102 @@ describe('Agent tool DTOs', () => {
     });
   });
 
+  describe(AgentToolCallParamsDto.name, () => {
+    it('accepts session and tool call params', () => {
+      const result = AgentToolCallParamsDto.schema.safeParse({ id: factory.uuid(), toolCallId: factory.uuid() });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects invalid UUID params', () => {
+      const result = AgentToolCallParamsDto.schema.safeParse({ id: 'not-a-uuid', toolCallId: 'also-not-a-uuid' });
+
+      expectIssue(result, ['id'], 'Invalid UUID');
+      expectIssue(result, ['toolCallId'], 'Invalid UUID');
+    });
+  });
+
+  describe(AgentToolCallResponseDto.name, () => {
+    it('serializes tool call dates as ISO strings', () => {
+      const result = AgentToolCallResponseDto.schema.safeEncode(makeToolCall());
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.startedAt).toBe('2026-05-14T12:00:00.000Z');
+        expect(result.data.completedAt).toBe('2026-05-14T12:01:00.000Z');
+      }
+    });
+  });
+
   describe(AgentReadAssetMetadataToolResponseDto.name, () => {
-    it('serializes success responses with ISO dates and metadata only', () => {
-      const result = AgentReadAssetMetadataToolResponseDto.schema.safeEncode({
-        status: 'success',
-        toolCallId: factory.uuid(),
-        assets: [
-          {
-            id: factory.uuid(),
-            ownerId: factory.uuid(),
-            type: AssetType.Image,
-            originalFileName: 'IMG_0001.jpg',
-            localDateTime: new Date('2026-05-14T12:00:00.000Z'),
-            fileCreatedAt: new Date('2026-05-14T11:00:00.000Z'),
-            fileModifiedAt: new Date('2026-05-14T11:30:00.000Z'),
-            isFavorite: true,
-            visibility: AssetVisibility.Timeline,
-            exifInfo: {
-              dateTimeOriginal: new Date('2026-05-14T10:00:00.000Z'),
-              city: 'Berlin',
-              state: 'Berlin',
-              country: 'Germany',
-              make: 'Fujifilm',
-              model: 'X100V',
-              lensModel: '23mm',
-              latitude: 52.52,
-              longitude: 13.405,
-              rating: 5,
-            },
-            tags: [{ id: factory.uuid(), value: 'travel', color: '#00ff00' }],
+    const makeSuccessResponse = () => ({
+      status: 'success' as const,
+      toolCall: makeToolCall(),
+      assets: [
+        {
+          id: factory.uuid(),
+          ownerId: factory.uuid(),
+          type: AssetType.Image,
+          originalFileName: 'IMG_0001.jpg',
+          localDateTime: new Date('2026-05-14T12:00:00.000Z'),
+          fileCreatedAt: new Date('2026-05-14T11:00:00.000Z'),
+          fileModifiedAt: new Date('2026-05-14T11:30:00.000Z'),
+          isFavorite: true,
+          visibility: AssetVisibility.Timeline,
+          exifInfo: {
+            dateTimeOriginal: new Date('2026-05-14T10:00:00.000Z'),
+            city: 'Berlin',
+            state: 'Berlin',
+            country: 'Germany',
+            make: 'Fujifilm',
+            model: 'X100V',
+            lensModel: '23mm',
+            latitude: 52.52,
+            longitude: 13.405,
+            rating: 5,
           },
-        ],
+          tags: [{ id: factory.uuid(), value: 'travel', color: '#00ff00' }],
+        },
+      ],
+    });
+
+    it('serializes approval-required responses with embedded tool calls only', () => {
+      const result = AgentReadAssetMetadataToolResponseDto.schema.safeEncode({
+        status: 'approval-required',
+        toolCall: makeToolCall({ status: AgentToolCallStatus.PendingApproval, completedAt: null }),
       });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toHaveProperty('toolCall');
+        expect(result.data).not.toHaveProperty('toolCallId');
+        expect(result.data).not.toHaveProperty('requestSummary');
+        expect(result.data).not.toHaveProperty('assetCount');
+      }
+    });
+
+    it('serializes denied responses with a reason and embedded tool call only', () => {
+      const result = AgentReadAssetMetadataToolResponseDto.schema.safeEncode({
+        status: 'denied',
+        reason: 'User denied the request.',
+        toolCall: makeToolCall({
+          status: AgentToolCallStatus.Denied,
+          approvalDecision: AgentToolApprovalDecision.Denied,
+          error: 'User denied the request.',
+        }),
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toHaveProperty('reason', 'User denied the request.');
+        expect(result.data).toHaveProperty('toolCall');
+        expect(result.data).not.toHaveProperty('toolCallId');
+        expect(result.data).not.toHaveProperty('decision');
+      }
+    });
+
+    it('serializes success responses with ISO dates and metadata only', () => {
+      const result = AgentReadAssetMetadataToolResponseDto.schema.safeEncode(makeSuccessResponse());
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -142,6 +233,8 @@ describe('Agent tool DTOs', () => {
           return;
         }
 
+        expect(result.data.toolCall.startedAt).toBe('2026-05-14T12:00:00.000Z');
+        expect(result.data).not.toHaveProperty('toolCallId');
         expect(result.data.assets[0]).toEqual(
           expect.objectContaining({
             localDateTime: '2026-05-14T12:00:00.000Z',
@@ -158,4 +251,21 @@ describe('Agent tool DTOs', () => {
       }
     });
   });
+});
+
+const makeToolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentToolCallResponseDto => ({
+  id: factory.uuid(),
+  sessionId: factory.uuid(),
+  toolName: AgentToolName.ReadAssetMetadata,
+  status: AgentToolCallStatus.Completed,
+  approvalDecision: AgentToolApprovalDecision.Approved,
+  requestSummary: 'Read metadata for 1 asset',
+  responseSummary: 'Returned metadata for 1 asset',
+  dataClass: AgentToolDataClass.Metadata,
+  assetCount: 1,
+  albumCount: 0,
+  startedAt: new Date('2026-05-14T12:00:00.000Z'),
+  completedAt: new Date('2026-05-14T12:01:00.000Z'),
+  error: null,
+  ...overrides,
 });
