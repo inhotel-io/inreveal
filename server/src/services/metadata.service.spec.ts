@@ -588,6 +588,32 @@ describe(MetadataService.name, () => {
       });
     });
 
+    it('should merge Keywords with HierarchicalSubject when both are present', async () => {
+      const asset = AssetFactory.create();
+      mocks.assetJob.getForMetadataExtraction.mockResolvedValue(getForMetadataExtraction(asset));
+      mockReadTags({ HierarchicalSubject: ['Archive'], Keywords: ['Flat'] });
+
+      await sut.handleMetadataExtraction({ id: asset.id });
+
+      expect(mocks.asset.upsertExif).toHaveBeenCalledWith(
+        expect.objectContaining({ tags: expect.arrayContaining(['Archive', 'Flat']) }),
+        { lockedPropertiesBehavior: 'skip' },
+      );
+    });
+
+    it('should deduplicate merged Keywords and HierarchicalSubject', async () => {
+      const asset = AssetFactory.create();
+      mocks.assetJob.getForMetadataExtraction.mockResolvedValue(getForMetadataExtraction(asset));
+      mockReadTags({ HierarchicalSubject: ['Archive'], Keywords: ['Archive', 'Flat'] });
+
+      await sut.handleMetadataExtraction({ id: asset.id });
+
+      expect(mocks.asset.upsertExif).toHaveBeenCalledWith(
+        expect.objectContaining({ tags: ['Archive', 'Flat'] }),
+        { lockedPropertiesBehavior: 'skip' },
+      );
+    });
+
     it('should remove existing tags', async () => {
       const asset = AssetFactory.create();
       mocks.assetJob.getForMetadataExtraction.mockResolvedValue(getForMetadataExtraction(asset));
