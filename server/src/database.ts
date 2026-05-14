@@ -16,6 +16,7 @@ import {
   UserStatus,
 } from 'src/enum';
 import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
+import { AgentSessionTable } from 'src/schema/tables/agent-session.table';
 import { AlbumTable } from 'src/schema/tables/album.table';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
 import { AssetTable } from 'src/schema/tables/asset.table';
@@ -88,6 +89,7 @@ export type ApiKey = {
 };
 
 export type AgentProviderCredential = Selectable<AgentProviderCredentialTable>;
+export type AgentSession = Selectable<AgentSessionTable>;
 
 export type Tag = {
   id: string;
@@ -513,6 +515,25 @@ export const columns = {
     'lastUsedAt',
     'createdAt',
     'updatedAt',
+    'updateId',
+  ],
+  agentSession: [
+    'id',
+    'userId',
+    'providerCredentialId',
+    'credentialSnapshot',
+    'modelSnapshot',
+    'permissionPreset',
+    'permissionPlanSnapshot',
+    'approvalMode',
+    'runnerEndpoint',
+    'runnerSessionId',
+    'runnerCapabilitiesSnapshot',
+    'status',
+    'initialContextSnapshot',
+    'createdAt',
+    'updatedAt',
+    'endedAt',
     'updateId',
   ],
   notification: ['id', 'createdAt', 'level', 'type', 'title', 'description', 'data', 'readAt'],
