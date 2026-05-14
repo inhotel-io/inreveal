@@ -18,8 +18,10 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   await sql`CREATE INDEX "agent_message_sessionId_createdAt_id_idx" ON "agent_message" ("sessionId", "createdAt", "id")`.execute(
     db,
   );
+  await sql`CREATE INDEX "agent_message_sessionId_idx" ON "agent_message" ("sessionId")`.execute(db);
 }
 
 export async function down(db: Kysely<unknown>): Promise<void> {
+  await sql`DROP INDEX "agent_message_sessionId_idx"`.execute(db);
   await sql`DROP TABLE "agent_message"`.execute(db);
 }
