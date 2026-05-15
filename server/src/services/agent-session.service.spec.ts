@@ -134,6 +134,7 @@ describe(AgentSessionService.name, () => {
     repository = automock(AgentSessionRepository, { args: [{} as never] });
     credentialService = automock(AgentProviderCredentialService, { args: [{} as never, {} as never] });
     agentRunnerService = automock(AgentRunnerService);
+    credentialService.getSecret.mockResolvedValue('sk-session-secret');
     sut = new AgentSessionService(repository, credentialService, agentRunnerService);
   });
 
@@ -219,7 +220,7 @@ describe(AgentSessionService.name, () => {
     });
     expect(agentRunnerService.createSession).toHaveBeenCalledWith({
       gallerySessionId: createdSession.id,
-      credential: createdSession.credentialSnapshot,
+      credential: { ...createdSession.credentialSnapshot, secret: 'sk-session-secret' },
       model: dto.model,
       permissionPreset: AgentPermissionPreset.VisualOrganizer,
       permissionPlan: createdSession.permissionPlanSnapshot,
@@ -410,7 +411,7 @@ describe(AgentSessionService.name, () => {
     });
     expect(agentRunnerService.createSession).toHaveBeenCalledWith({
       gallerySessionId: createdSession.id,
-      credential: createdSession.credentialSnapshot,
+      credential: { ...createdSession.credentialSnapshot, secret: 'sk-session-secret' },
       model: 'gpt-5.1',
       permissionPreset: AgentPermissionPreset.Careful,
       permissionPlan: createdSession.permissionPlanSnapshot,
@@ -423,6 +424,102 @@ describe(AgentSessionService.name, () => {
       runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
       runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
     });
+  });
+
+  it('passes decrypted provider secret to the runner without storing it in session snapshots', async () => {
+    const auth = AuthFactory.create();
+    const providerCredentialId = newUuid();
+    const credential = makeCredential({
+      id: providerCredentialId,
+      providerType: AgentProviderType.OpenAI,
+      label: 'OpenAI personal',
+      models: ['gpt-5.1'],
+      defaultModel: 'gpt-5.1',
+    });
+    const dto: AgentSessionCreateDto = {
+      providerCredentialId,
+      model: 'gpt-5.1',
+      permissionPreset: AgentPermissionPreset.Careful,
+      approvalMode: AgentApprovalMode.Strict,
+    };
+    const created = makeSession({
+      userId: auth.user.id,
+      providerCredentialId,
+      credentialSnapshot: {
+        id: providerCredentialId,
+        providerType: AgentProviderType.OpenAI,
+        label: 'OpenAI personal',
+        baseUrl: null,
+        models: ['gpt-5.1'],
+        defaultModel: 'gpt-5.1',
+      },
+      modelSnapshot: { providerCredentialId, model: 'gpt-5.1' },
+    });
+    const running = makeSession({
+      ...created,
+      status: AgentSessionStatus.Running,
+      runnerEndpoint: 'http://agent-runner:4477',
+      runnerSessionId: 'pi-session-1',
+      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: [], models: ['gpt-5.1'] },
+    });
+
+    credentialService.getById.mockResolvedValue(credential);
+    credentialService.getSecret.mockResolvedValue('sk-session-secret');
+    repository.create.mockResolvedValue(created);
+    agentRunnerService.createSession.mockResolvedValue({
+      runnerEndpoint: 'http://agent-runner:4477',
+      runnerSessionId: 'pi-session-1',
+      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: [], models: ['gpt-5.1'] },
+    });
+    repository.markRunningFromCreated.mockResolvedValue(running);
+
+    await expect(sut.create(auth, dto)).resolves.toMatchObject({
+      id: running.id,
+      credentialSnapshot: expect.not.objectContaining({ secret: expect.anything() }),
+      runnerSessionId: 'pi-session-1',
+    });
+
+    expect(credentialService.getSecret).toHaveBeenCalledWith(auth, providerCredentialId);
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentialSnapshot: expect.not.objectContaining({ secret: expect.anything() }),
+      }),
+    );
+    expect(agentRunnerService.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credential: {
+          id: providerCredentialId,
+          providerType: AgentProviderType.OpenAI,
+          label: 'OpenAI personal',
+          baseUrl: null,
+          models: ['gpt-5.1'],
+          defaultModel: 'gpt-5.1',
+          secret: 'sk-session-secret',
+        },
+      }),
+    );
+  });
+
+  it('does not create a Gallery session when provider secret decryption fails', async () => {
+    const auth = AuthFactory.create();
+    const providerCredentialId = newUuid();
+    const credential = makeCredential({ id: providerCredentialId, models: ['gpt-5.1'] });
+    const dto: AgentSessionCreateDto = {
+      providerCredentialId,
+      model: 'gpt-5.1',
+      permissionPreset: AgentPermissionPreset.Careful,
+      approvalMode: AgentApprovalMode.Strict,
+    };
+    const error = new Error('decrypt failed');
+
+    credentialService.getById.mockResolvedValue(credential);
+    credentialService.getSecret.mockRejectedValue(error);
+
+    await expect(sut.create(auth, dto)).rejects.toBe(error);
+
+    expect(repository.create).not.toHaveBeenCalled();
+    expect(agentRunnerService.createSession).not.toHaveBeenCalled();
+    expect(repository.markFailedFromCreated).not.toHaveBeenCalled();
   });
 
   it('marks the created session failed when runner start fails', async () => {
