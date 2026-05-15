@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
+import { createPiRuntime } from './pi-runtime.mjs';
 
 const capabilities = {
   protocolVersion: '2026-05-14',
@@ -32,20 +33,38 @@ const readJsonOrSendError = async (request, response) => {
   }
 };
 
-const firstTextBlock = (content) => {
-  const block = content?.blocks?.find((item) => item?.type === 'text' && typeof item.text === 'string');
-  return block?.text ?? '';
-};
-
 const sendSse = (response, event, data) => {
   response.write(`event: ${event}\n`);
   response.write(`data: ${JSON.stringify(data)}\n\n`);
 };
 
+const validateCreateSessionBody = (body) => {
+  if (typeof body?.gallerySessionId !== 'string') {
+    return 'gallerySessionId is required';
+  }
+
+  if (!body.credential || typeof body.credential !== 'object') {
+    return 'credential is required';
+  }
+
+  if (typeof body.credential.secret !== 'string' || body.credential.secret.length === 0) {
+    return 'credential.secret is required';
+  }
+
+  if (typeof body.model !== 'string' || body.model.length === 0) {
+    return 'model is required';
+  }
+
+  return undefined;
+};
+
 export const startServer = ({
   port = Number(process.env.PORT ?? 4477),
   host = process.env.HOST ?? '127.0.0.1',
+  runtime = createPiRuntime(),
 } = {}) => {
+  const runnerSessionIds = new Set();
+
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
 
@@ -59,49 +78,60 @@ export const startServer = ({
       if (!result.ok) {
         return;
       }
-      const { body } = result;
-      if (typeof body?.gallerySessionId !== 'string') {
-        sendJson(response, 400, { error: 'gallerySessionId is required' });
+
+      const validationError = validateCreateSessionBody(result.body);
+      if (validationError) {
+        sendJson(response, 400, { error: validationError });
         return;
       }
 
-      sendJson(response, 201, {
-        runnerSessionId: `stub-${body.gallerySessionId}`,
-        capabilities,
-      });
+      try {
+        const runnerSession = await runtime.createSession(result.body);
+        runnerSessionIds.add(runnerSession.runnerSessionId);
+        sendJson(response, 201, runnerSession);
+      } catch {
+        sendJson(response, 502, { error: 'runner session creation failed' });
+      }
       return;
     }
 
     const messageMatch = url.pathname.match(/^\/sessions\/([^/]+)\/messages$/);
     if (request.method === 'POST' && messageMatch) {
+      const runnerSessionId = decodeURIComponent(messageMatch[1]);
+      if (!runnerSessionIds.has(runnerSessionId)) {
+        sendJson(response, 404, { error: 'runner session not found' });
+        return;
+      }
+
       const result = await readJsonOrSendError(request, response);
       if (!result.ok) {
         return;
       }
-      const { body } = result;
-      const runnerSessionId = decodeURIComponent(messageMatch[1]);
-      const text = firstTextBlock(body.content);
-      const echo = `Echo: ${text}`;
 
+      const { body } = result;
       response.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
       });
-      sendSse(response, 'assistant-message-delta', {
-        type: 'assistant-message-delta',
-        sessionId: body.gallerySessionId,
-        runnerSessionId,
-        delta: echo,
-        sequence: 1,
-      });
-      sendSse(response, 'assistant-message-completed', {
-        type: 'assistant-message-completed',
-        sessionId: body.gallerySessionId,
-        runnerSessionId,
-        providerMessageId: `stub-echo-${body.messageId}`,
-        content: { blocks: [{ type: 'text', text: echo }] },
-      });
+
+      try {
+        for await (const event of runtime.sendMessage({
+          runnerSessionId,
+          gallerySessionId: body.gallerySessionId,
+          messageId: body.messageId,
+          content: body.content,
+        })) {
+          sendSse(response, event.type, event);
+        }
+      } catch {
+        sendSse(response, 'runner-error', {
+          type: 'runner-error',
+          sessionId: body.gallerySessionId,
+          runnerSessionId,
+          message: 'Runner session failed',
+        });
+      }
       response.end();
       return;
     }
