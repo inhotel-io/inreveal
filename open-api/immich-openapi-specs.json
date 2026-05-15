@@ -24568,7 +24568,6 @@
                       "type": "boolean"
                     },
                     "payload": {
-                      "default": {},
                       "type": "object",
                       "properties": {},
                       "additionalProperties": false
@@ -24677,7 +24676,6 @@
                       "type": "boolean"
                     },
                     "payload": {
-                      "default": {},
                       "type": "object",
                       "properties": {},
                       "additionalProperties": false
@@ -25364,7 +25362,6 @@
                       "type": "boolean"
                     },
                     "payload": {
-                      "default": {},
                       "type": "object",
                       "properties": {},
                       "additionalProperties": false
@@ -25473,7 +25470,6 @@
                       "type": "boolean"
                     },
                     "payload": {
-                      "default": {},
                       "type": "object",
                       "properties": {},
                       "additionalProperties": false
