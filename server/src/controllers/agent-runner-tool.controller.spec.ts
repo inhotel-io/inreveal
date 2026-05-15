@@ -41,6 +41,38 @@ describe(AgentRunnerToolController.name, () => {
     completedAt: startedAt,
     error: null,
   };
+  const runnerRoutes = [
+    {
+      path: 'search-assets',
+      serviceMethod: 'searchAssets' as const,
+      body: {},
+    },
+    {
+      path: 'read-asset-metadata',
+      serviceMethod: 'readAssetMetadata' as const,
+      body: { assetIds: [assetId] },
+    },
+    {
+      path: 'read-asset-previews',
+      serviceMethod: 'readAssetPreviews' as const,
+      body: { assetIds: [assetId] },
+    },
+    {
+      path: 'read-asset-originals',
+      serviceMethod: 'readAssetOriginals' as const,
+      body: { assetIds: [assetId] },
+    },
+    {
+      path: 'list-albums',
+      serviceMethod: 'listAlbums' as const,
+      body: {},
+    },
+    {
+      path: 'read-album',
+      serviceMethod: 'readAlbum' as const,
+      body: { albumId },
+    },
+  ];
 
   beforeAll(async () => {
     ctx = await controllerSetup(AgentRunnerToolController, [
@@ -70,6 +102,19 @@ describe(AgentRunnerToolController.name, () => {
       { filters: {}, limit: 10_000 },
     );
   };
+
+  it('uses runner-prefixed method names for unique OpenAPI operation ids', () => {
+    expect(Object.getOwnPropertyNames(AgentRunnerToolController.prototype)).toEqual(
+      expect.arrayContaining([
+        'runnerSearchAssets',
+        'runnerReadAssetMetadata',
+        'runnerReadAssetPreviews',
+        'runnerReadAssetOriginals',
+        'runnerListAlbums',
+        'runnerReadAlbum',
+      ]),
+    );
+  });
 
   describe('POST /agent/internal/tools/sessions/:id/search-assets', () => {
     it('verifies bearer token and dispatches searchAssets with non-elevated auth', async () => {
@@ -135,12 +180,17 @@ describe(AgentRunnerToolController.name, () => {
         throw new UnauthorizedException('Invalid agent runner tool token');
       });
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/agent/internal/tools/sessions/${sessionId}/search-assets`)
         .set('Authorization', authorization)
         .send({});
 
       expect(status).toBe(401);
+      expect(body).toMatchObject({
+        error: 'Unauthorized',
+        message: 'Invalid agent runner tool token',
+        statusCode: 401,
+      });
       expect(service.searchAssets).not.toHaveBeenCalled();
     });
 
@@ -152,6 +202,35 @@ describe(AgentRunnerToolController.name, () => {
 
       expect(status).toBe(400);
       expect(service.searchAssets).not.toHaveBeenCalled();
+    });
+  });
+
+  describe.each(runnerRoutes)('POST /agent/internal/tools/sessions/:id/$path auth', ({ path, serviceMethod, body }) => {
+    it('rejects a token for a different session id without calling the service', async () => {
+      tokenService.verify.mockReturnValue({
+        sessionId: factory.uuid(),
+        userId,
+        expiresAt: new Date('2026-05-15T12:00:00.000Z'),
+      });
+
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/agent/internal/tools/sessions/${sessionId}/${path}`)
+        .set('Authorization', authorization)
+        .send(body);
+
+      expect(status).toBe(401);
+      expect(service[serviceMethod]).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid bearer auth without calling the service', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/agent/internal/tools/sessions/${sessionId}/${path}`)
+        .set('Authorization', 'Basic abc')
+        .send(body);
+
+      expect(status).toBe(401);
+      expect(tokenService.verify).not.toHaveBeenCalled();
+      expect(service[serviceMethod]).not.toHaveBeenCalled();
     });
   });
 
