@@ -427,6 +427,91 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.disposed, 1);
   });
 
+  it('redacts old and new provider secrets when duplicate session disposal fails', async () => {
+    const { sdk, ai } = createFakeDependencies();
+    let createdSessions = 0;
+    sdk.createAgentSession = async () => {
+      createdSessions += 1;
+      const sessionNumber = createdSessions;
+      return {
+        session: {
+          messages: [],
+          subscribe: () => () => {},
+          async prompt() {},
+          dispose() {
+            if (sessionNumber === 1 && createdSessions === 2) {
+              throw new Error('dispose failed with old-secret and new-secret');
+            }
+          },
+        },
+      };
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await runtime.createSession(
+      createSessionBody({
+        credential: { ...createSessionBody().credential, secret: 'old-secret' },
+      }),
+    );
+
+    await assert.rejects(
+      () =>
+        runtime.createSession(
+          createSessionBody({
+            credential: { ...createSessionBody().credential, secret: 'new-secret' },
+          }),
+        ),
+      (error) => {
+        assert.equal(error.message, 'dispose failed with [redacted] and [redacted]');
+        assert.equal(error.message.includes('old-secret'), false);
+        assert.equal(error.message.includes('new-secret'), false);
+        return true;
+      },
+    );
+  });
+
+  it('disposes the newly-created Pi SDK session when duplicate session replacement fails', async () => {
+    const { sdk, ai } = createFakeDependencies();
+    const sessions = [];
+    sdk.createAgentSession = async () => {
+      const session = {
+        messages: [],
+        disposed: 0,
+        subscribe: () => () => {},
+        async prompt() {},
+        dispose() {
+          this.disposed += 1;
+          if (sessions.length === 2 && this === sessions[0]) {
+            throw new Error('old dispose failed with old-secret');
+          }
+        },
+      };
+      sessions.push(session);
+      return { session };
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await runtime.createSession(
+      createSessionBody({
+        credential: { ...createSessionBody().credential, secret: 'old-secret' },
+      }),
+    );
+
+    await assert.rejects(
+      () =>
+        runtime.createSession(
+          createSessionBody({
+            credential: { ...createSessionBody().credential, secret: 'new-secret' },
+          }),
+        ),
+      /old dispose failed/,
+    );
+
+    assert.equal(sessions.length, 2);
+    assert.equal(sessions[0].disposed, 1);
+    assert.equal(sessions[1].disposed, 1);
+  });
+
   it('streams Pi text deltas and completion content as Gallery runner events', async () => {
     const { sdk, ai } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
