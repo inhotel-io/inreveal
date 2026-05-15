@@ -55,6 +55,18 @@ String parameterToString(dynamic value) {
   if (value is DateTime) {
     return value.toUtc().toIso8601String();
   }
+  if (value is AgentAlbumAddAssetsOperationType) {
+    return AgentAlbumAddAssetsOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAlbumCreateOperationType) {
+    return AgentAlbumCreateOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAlbumSetCoverOperationType) {
+    return AgentAlbumSetCoverOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAlbumUpdateDetailsOperationType) {
+    return AgentAlbumUpdateDetailsOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentApprovalMode) {
     return AgentApprovalModeTypeTransformer().encode(value).toString();
   }
@@ -72,6 +84,12 @@ String parameterToString(dynamic value) {
   }
   if (value is AgentMessageToolCallBlockType) {
     return AgentMessageToolCallBlockTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentOperationExistingAlbumTargetKind) {
+    return AgentOperationExistingAlbumTargetKindTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentOperationNewAlbumTargetKind) {
+    return AgentOperationNewAlbumTargetKindTypeTransformer().encode(value).toString();
   }
   if (value is AgentOperationPlanStatus) {
     return AgentOperationPlanStatusTypeTransformer().encode(value).toString();

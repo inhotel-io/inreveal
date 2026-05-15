@@ -16,7 +16,7 @@ import { AgentSessionTable } from 'src/schema/tables/agent-session.table';
 
 @Table('agent_operation_plan')
 @UpdatedAtTrigger('agent_operation_plan_updatedAt')
-@Unique({ columns: ['sessionId', 'revision'] })
+@Unique({ name: 'agent_operation_plan_sessionId_revision_key', columns: ['sessionId', 'revision'] })
 @Index({ columns: ['sessionId', 'status'] })
 export class AgentOperationPlanTable {
   @PrimaryGeneratedColumn()

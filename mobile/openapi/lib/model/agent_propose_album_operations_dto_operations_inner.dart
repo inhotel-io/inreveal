@@ -24,7 +24,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
     this.assetIds = const [],
   });
 
-  AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum type;
+  AgentAlbumSetCoverOperationType type;
 
   String summary;
 
@@ -123,7 +123,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInner(
-        type: AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum.fromJson(json[r'type'])!,
+        type: AgentAlbumSetCoverOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         targetKind: AgentOperationTargetKind.fromJson(json[r'targetKind'])!,
         temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
@@ -188,84 +188,4 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
     'assetIds',
   };
 }
-
-
-class AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum {
-  /// Instantiate a new enum with the provided [value].
-  const AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum._(this.value);
-
-  /// The underlying value of this enum member.
-  final String value;
-
-  @override
-  String toString() => value;
-
-  String toJson() => value;
-
-  static const create = AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum._(r'album.create');
-  static const addAssets = AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum._(r'album.addAssets');
-  static const updateDetails = AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum._(r'album.updateDetails');
-  static const setCover = AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum._(r'album.setCover');
-
-  /// List of all possible values in this [enum][AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum].
-  static const values = <AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum>[
-    create,
-    addAssets,
-    updateDetails,
-    setCover,
-  ];
-
-  static AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum? fromJson(dynamic value) => AgentProposeAlbumOperationsDtoOperationsInnerTypeEnumTypeTransformer().decode(value);
-
-  static List<AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum> listFromJson(dynamic json, {bool growable = false,}) {
-    final result = <AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum>[];
-    if (json is List && json.isNotEmpty) {
-      for (final row in json) {
-        final value = AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum.fromJson(row);
-        if (value != null) {
-          result.add(value);
-        }
-      }
-    }
-    return result.toList(growable: growable);
-  }
-}
-
-/// Transformation class that can [encode] an instance of [AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum] to String,
-/// and [decode] dynamic data back to [AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum].
-class AgentProposeAlbumOperationsDtoOperationsInnerTypeEnumTypeTransformer {
-  factory AgentProposeAlbumOperationsDtoOperationsInnerTypeEnumTypeTransformer() => _instance ??= const AgentProposeAlbumOperationsDtoOperationsInnerTypeEnumTypeTransformer._();
-
-  const AgentProposeAlbumOperationsDtoOperationsInnerTypeEnumTypeTransformer._();
-
-  String encode(AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum data) => data.value;
-
-  /// Decodes a [dynamic value][data] to a AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum.
-  ///
-  /// If [allowNull] is true and the [dynamic value][data] cannot be decoded successfully,
-  /// then null is returned. However, if [allowNull] is false and the [dynamic value][data]
-  /// cannot be decoded successfully, then an [UnimplementedError] is thrown.
-  ///
-  /// The [allowNull] is very handy when an API changes and a new enum value is added or removed,
-  /// and users are still using an old app with the old code.
-  AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum? decode(dynamic data, {bool allowNull = true}) {
-    if (data != null) {
-      switch (data) {
-        case r'album.create': return AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum.create;
-        case r'album.addAssets': return AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum.addAssets;
-        case r'album.updateDetails': return AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum.updateDetails;
-        case r'album.setCover': return AgentProposeAlbumOperationsDtoOperationsInnerTypeEnum.setCover;
-        default:
-          if (!allowNull) {
-            throw ArgumentError('Unknown enum value to decode: $data');
-          }
-      }
-    }
-    return null;
-  }
-
-  /// Singleton [AgentProposeAlbumOperationsDtoOperationsInnerTypeEnumTypeTransformer] instance.
-  static AgentProposeAlbumOperationsDtoOperationsInnerTypeEnumTypeTransformer? _instance;
-}
-
 
