@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { AgentMessage } from 'src/database';
 import { AgentRunnerStatusDto } from 'src/dtos/agent-runner.dto';
-import { AgentMessageRole } from 'src/enum';
+import { AgentMessageRole, AgentSessionStatus } from 'src/enum';
 import { AgentMessageRepository } from 'src/repositories/agent-message.repository';
 import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
@@ -14,8 +14,15 @@ const RUNNER_STATUS_CACHE_MS = 15_000;
 
 @Injectable()
 export class AgentRunnerService {
+  private static readonly completionActiveStatuses = [
+    AgentSessionStatus.Running,
+    AgentSessionStatus.WaitingForToolApproval,
+    AgentSessionStatus.WaitingForPlanReview,
+  ];
+
   private statusCache?: { key: string; value: AgentRunnerStatusDto; expiresAt: number };
   private statusInFlight = new Map<string, Promise<AgentRunnerStatusDto>>();
+  private sessionDispatches = new Map<string, Promise<void>>();
 
   constructor(
     private readonly configRepository: ConfigRepository,
@@ -107,16 +114,51 @@ export class AgentRunnerService {
     messageId: string;
     content: AgentMessageContent;
   }) {
+    const activeDispatch = this.sessionDispatches.get(sessionId);
+    if (activeDispatch) {
+      throw new BadRequestException('Agent session already has a message in progress');
+    }
+
+    const dispatch = this.sendMessageToRunner({ userId, sessionId, runnerSessionId, messageId, content });
+    this.sessionDispatches.set(sessionId, dispatch);
+
     try {
-      const { runnerUrl, runnerHealthTimeoutMs } = this.configRepository.getEnv().agent;
+      await dispatch;
+    } finally {
+      if (this.sessionDispatches.get(sessionId) === dispatch) {
+        this.sessionDispatches.delete(sessionId);
+      }
+    }
+  }
+
+  isSessionDispatchActive(sessionId: string) {
+    return this.sessionDispatches.has(sessionId);
+  }
+
+  private async sendMessageToRunner({
+    userId,
+    sessionId,
+    runnerSessionId,
+    messageId,
+    content,
+  }: {
+    userId: string;
+    sessionId: string;
+    runnerSessionId: string;
+    messageId: string;
+    content: AgentMessageContent;
+  }) {
+    try {
+      const { runnerUrl, runnerMessageStreamTimeoutMs } = this.configRepository.getEnv().agent;
       if (!runnerUrl) {
         throw new BadRequestException('Agent runner is not configured');
       }
 
+      let completed = false;
       for await (const event of this.agentRunnerRepository.streamMessage({
         url: runnerUrl,
         runnerSessionId,
-        timeoutMs: runnerHealthTimeoutMs,
+        timeoutMs: runnerMessageStreamTimeoutMs,
         body: { gallerySessionId: sessionId, messageId, content },
       })) {
         if (event.sessionId !== sessionId || event.runnerSessionId !== runnerSessionId) {
@@ -134,6 +176,12 @@ export class AgentRunnerService {
           continue;
         }
 
+        completed = true;
+        const session = await this.sessionRepository.getById(userId, sessionId);
+        if (!session || !AgentRunnerService.completionActiveStatuses.includes(session.status)) {
+          continue;
+        }
+
         const message = await this.messageRepository.create({
           sessionId,
           role: AgentMessageRole.Assistant,
@@ -147,6 +195,10 @@ export class AgentRunnerService {
           message: this.mapMessage(message),
           createdAt: this.toIsoNow(),
         });
+      }
+
+      if (!completed) {
+        throw new Error('Agent runner message stream ended before completion');
       }
     } catch (error) {
       await this.sessionRepository.markInterruptedFromActive(userId, sessionId).catch(() => undefined);

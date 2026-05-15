@@ -195,6 +195,36 @@ describe(AgentSessionChatPanel.name, () => {
     expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledTimes(1);
   });
 
+  it('does not allow another message while an assistant response is active', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(
+      makeMessage('message-created', AgentMessageRole.User, 'Start task'),
+    );
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Start task' } });
+    const sendButton = screen.getByRole('button', { name: 'Send' });
+
+    await fireEvent.click(sendButton);
+    await waitFor(() => expect(input).toBeDisabled());
+    expect(sendButton).toBeDisabled();
+
+    handler?.({
+      type: 'assistant-message-created',
+      sessionId: session.id,
+      message: makeMessage('message-assistant-created', AgentMessageRole.Assistant, 'Done.'),
+      createdAt: '2026-05-14T00:00:02.000Z',
+    });
+
+    await waitFor(() => expect(input).not.toBeDisabled());
+  });
+
   it('renders streaming deltas and completed assistant messages from websocket events', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {

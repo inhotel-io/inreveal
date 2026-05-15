@@ -89,6 +89,7 @@ describe(AgentMessageService.name, () => {
     messageRepository = automock(AgentMessageRepository, { args: [{} as never] });
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
     agentRunnerService = automock(AgentRunnerService);
+    agentRunnerService.isSessionDispatchActive.mockReturnValue(false);
     sut = new AgentMessageService(messageRepository, sessionRepository, agentRunnerService);
   });
 
@@ -149,6 +150,22 @@ describe(AgentMessageService.name, () => {
     agentRunnerService.sendMessage.mockRejectedValue(new Error('connection refused'));
 
     await expect(sut.appendUserMessage(auth, session.id, dto)).resolves.toEqual(saved);
+  });
+
+  it('rejects a new user message while the session already has an active runner dispatch', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, runnerSessionId: 'runner-session-1' });
+    const dto: AgentMessageCreateDto = { content: { blocks: [{ type: 'text', text: 'Hello' }] } };
+
+    sessionRepository.getById.mockResolvedValue(session);
+    agentRunnerService.isSessionDispatchActive.mockReturnValue(true);
+
+    await expect(sut.appendUserMessage(auth, session.id, dto)).rejects.toThrow(
+      'Agent session already has a message in progress',
+    );
+
+    expect(messageRepository.create).not.toHaveBeenCalled();
+    expect(agentRunnerService.sendMessage).not.toHaveBeenCalled();
   });
 
   it('persists the user message and skips dispatch before runner session creation', async () => {
