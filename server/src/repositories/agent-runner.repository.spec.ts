@@ -55,6 +55,14 @@ const sseBody = (body: string) =>
     },
   });
 
+const openSseBody = (body: string, cancel: () => void) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(body));
+    },
+    cancel,
+  });
+
 const collectStream = async <T>(stream: AsyncGenerator<T>): Promise<T[]> => {
   const events: T[] = [];
   for await (const event of stream) {
@@ -359,6 +367,41 @@ describe(AgentRunnerRepository.name, () => {
     ).resolves.toEqual([completedEvent]);
   });
 
+  it('parses CRLF-separated SSE frames as separate events', async () => {
+    const deltaEvent = {
+      type: 'assistant-message-delta',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      delta: 'Hello',
+      sequence: 1,
+    };
+    const completedEvent = {
+      type: 'assistant-message-completed',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      providerMessageId: 'provider-message-1',
+      content: { blocks: [{ type: 'text', text: 'Hello.' }] },
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(
+        `data: ${JSON.stringify(deltaEvent)}\r\n\r\n` + `data: ${JSON.stringify(completedEvent)}\r\n\r\n`,
+      ),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).resolves.toEqual([deltaEvent, completedEvent]);
+  });
+
   it('throws when runner message stream fails with a non-success response', async () => {
     mockFetch.mockResolvedValue({ ok: false, status: 500, body: sseBody('') });
 
@@ -408,11 +451,98 @@ describe(AgentRunnerRepository.name, () => {
     ).rejects.toThrow('Agent runner returned an invalid stream event');
   });
 
+  it('cancels the runner message stream when parsing fails', async () => {
+    const cancel = vi.fn();
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: openSseBody('data: {invalid json}\n\n', cancel),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).rejects.toThrow('Agent runner returned an invalid stream event');
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels the runner message stream when the consumer stops early', async () => {
+    const cancel = vi.fn();
+    const deltaEvent = {
+      type: 'assistant-message-delta',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      delta: 'Hello',
+      sequence: 1,
+    };
+    const completedEvent = {
+      type: 'assistant-message-completed',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      providerMessageId: 'provider-message-1',
+      content: { blocks: [{ type: 'text', text: 'Hello.' }] },
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: openSseBody(
+        `data: ${JSON.stringify(deltaEvent)}\n\n` + `data: ${JSON.stringify(completedEvent)}\n\n`,
+        cancel,
+      ),
+    });
+
+    const events: unknown[] = [];
+    for await (const event of sut.streamMessage({
+      url: 'http://agent-runner:4477',
+      runnerSessionId: 'runner-session-1',
+      timeoutMs: 3000,
+      body: messageBody,
+    })) {
+      events.push(event);
+      break;
+    }
+
+    expect(events).toEqual([deltaEvent]);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
   it('throws when the runner message stream contains an invalid event shape', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
       body: sseBody('data: {"type":"assistant-message-delta","sessionId":"gallery-session-1"}\n\n'),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).rejects.toThrow('Agent runner returned an invalid stream event');
+  });
+
+  it('throws when completed runner message content has malformed blocks', async () => {
+    const completedEvent = {
+      type: 'assistant-message-completed',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      providerMessageId: 'provider-message-1',
+      content: { blocks: [123] },
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`data: ${JSON.stringify(completedEvent)}\n\n`),
     });
 
     await expect(
