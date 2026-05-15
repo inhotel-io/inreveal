@@ -154,6 +154,11 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         agentDir: runtimeAgentDir,
         settingsManager,
         systemPromptOverride: () => systemPrompt,
+        noContextFiles: true,
+        noSkills: true,
+        noPromptTemplates: true,
+        noThemes: true,
+        noExtensions: true,
         extensionFactories,
       });
 
@@ -182,6 +187,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         credentialSecret: body.credential.secret,
         model: body.model,
         session,
+        inFlight: false,
         unsubscribe: undefined,
       });
 
@@ -202,6 +208,10 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       if (!entry || entry.gallerySessionId !== gallerySessionId) {
         throw new Error('Runner session not found');
       }
+      if (entry.inFlight) {
+        throw new Error('Runner session already has an active message stream');
+      }
+      entry.inFlight = true;
 
       let sequence = 0;
       const pendingEvents = [];
@@ -226,7 +236,16 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
           });
         }
       });
-      entry.unsubscribe = unsubscribe;
+      let subscribed = true;
+      const releaseSubscription = () => {
+        if (!subscribed) {
+          return;
+        }
+
+        subscribed = false;
+        unsubscribe();
+      };
+      entry.unsubscribe = releaseSubscription;
 
       try {
         const promptPromise = entry.session
@@ -267,8 +286,9 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
 
         await promptPromise;
       } finally {
-        unsubscribe();
-        if (entry.unsubscribe === unsubscribe) {
+        releaseSubscription();
+        entry.inFlight = false;
+        if (entry.unsubscribe === releaseSubscription) {
           entry.unsubscribe = undefined;
         }
       }
@@ -281,6 +301,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       }
 
       entry.unsubscribe?.();
+      entry.unsubscribe = undefined;
       entry.session.dispose?.();
       sessions.delete(runnerSessionId);
     },
