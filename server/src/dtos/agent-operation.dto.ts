@@ -42,12 +42,30 @@ const operationDefaults = {
   riskLevel: AgentOperationRiskLevelSchema.optional().default(AgentOperationRiskLevel.Low),
   enabled: z.boolean().optional().default(true),
 };
+const AlbumCreateOperationTypeSchema = z
+  .literal(AgentOperationType.AlbumCreate)
+  .meta({ id: 'AgentAlbumCreateOperationType' });
+const AlbumAddAssetsOperationTypeSchema = z
+  .literal(AgentOperationType.AlbumAddAssets)
+  .meta({ id: 'AgentAlbumAddAssetsOperationType' });
+const AlbumUpdateDetailsOperationTypeSchema = z
+  .literal(AgentOperationType.AlbumUpdateDetails)
+  .meta({ id: 'AgentAlbumUpdateDetailsOperationType' });
+const AlbumSetCoverOperationTypeSchema = z
+  .literal(AgentOperationType.AlbumSetCover)
+  .meta({ id: 'AgentAlbumSetCoverOperationType' });
+const NewAlbumTargetKindSchema = z
+  .literal(AgentOperationTargetKind.NewAlbum)
+  .meta({ id: 'AgentOperationNewAlbumTargetKind' });
+const ExistingAlbumTargetKindSchema = z
+  .literal(AgentOperationTargetKind.ExistingAlbum)
+  .meta({ id: 'AgentOperationExistingAlbumTargetKind' });
 
 const createAlbumOperationSchema = z
   .strictObject({
-    type: z.literal(AgentOperationType.AlbumCreate),
+    type: AlbumCreateOperationTypeSchema,
     summary,
-    targetKind: z.literal(AgentOperationTargetKind.NewAlbum),
+    targetKind: NewAlbumTargetKindSchema,
     temporaryTargetId: temporaryTargetId.optional(),
     riskLevel: operationDefaults.riskLevel,
     enabled: operationDefaults.enabled,
@@ -68,7 +86,7 @@ const createAlbumOperationSchema = z
 
 const addAssetsOperationSchema = z
   .strictObject({
-    type: z.literal(AgentOperationType.AlbumAddAssets),
+    type: AlbumAddAssetsOperationTypeSchema,
     summary,
     targetKind: AgentOperationTargetKindSchema,
     targetId: uuid.optional(),
@@ -82,9 +100,9 @@ const addAssetsOperationSchema = z
 
 const updateDetailsOperationSchema = z
   .strictObject({
-    type: z.literal(AgentOperationType.AlbumUpdateDetails),
+    type: AlbumUpdateDetailsOperationTypeSchema,
     summary,
-    targetKind: z.literal(AgentOperationTargetKind.ExistingAlbum),
+    targetKind: ExistingAlbumTargetKindSchema,
     targetId: uuid.optional(),
     riskLevel: operationDefaults.riskLevel,
     enabled: operationDefaults.enabled,
@@ -101,7 +119,7 @@ const updateDetailsOperationSchema = z
 
 const setCoverOperationSchema = z
   .strictObject({
-    type: z.literal(AgentOperationType.AlbumSetCover),
+    type: AlbumSetCoverOperationTypeSchema,
     summary,
     targetKind: AgentOperationTargetKindSchema,
     targetId: uuid.optional(),
