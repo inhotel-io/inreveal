@@ -357,6 +357,79 @@ describe(AgentToolCallRepository.name, () => {
     await expect(sut.getCountedAssetCountBySession(session.id)).resolves.toBe(5);
   });
 
+  it('atomically ignores counted preview and original rows when enforcing the metadata session asset limit', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAssetMetadata,
+      dataClass: AgentToolDataClass.Metadata,
+      status: AgentToolCallStatus.Completed,
+      assetCount: 1,
+    });
+    await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAssetPreviews,
+      dataClass: AgentToolDataClass.Previews,
+      status: AgentToolCallStatus.Completed,
+      assetCount: 100,
+    });
+    await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAssetOriginals,
+      dataClass: AgentToolDataClass.Originals,
+      status: AgentToolCallStatus.Approved,
+      assetCount: 100,
+    });
+    const assetIds = [factory.uuid(), factory.uuid()];
+
+    const result = await sut.createPendingReadAssetMetadataWithSessionLimit(
+      {
+        sessionId: session.id,
+        toolName: AgentToolName.ReadAssetMetadata,
+        status: AgentToolCallStatus.PendingApproval,
+        approvalDecision: null,
+        requestSummary: 'Read selected metadata.',
+        responseSummary: null,
+        redactedRequestMetadata: { assetIds },
+        redactedResponseMetadata: null,
+        dataClass: AgentToolDataClass.Metadata,
+        assetCount: assetIds.length,
+        albumCount: 0,
+        providerSnapshot,
+        completedAt: null,
+        error: null,
+      },
+      {
+        sessionId: session.id,
+        toolName: AgentToolName.ReadAssetMetadata,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        requestSummary: 'Read selected metadata.',
+        responseSummary: null,
+        redactedRequestMetadata: { assetIds },
+        redactedResponseMetadata: null,
+        dataClass: AgentToolDataClass.Metadata,
+        assetCount: assetIds.length,
+        albumCount: 0,
+        providerSnapshot,
+        completedAt: new Date('2026-05-14T12:00:00.000Z'),
+        error: 'Session policy allows at most 3 metadata assets per session',
+      },
+      3,
+    );
+
+    expect(result).toMatchObject({
+      status: 'created',
+      toolCall: {
+        sessionId: session.id,
+        status: AgentToolCallStatus.PendingApproval,
+        redactedRequestMetadata: { assetIds },
+        assetCount: 2,
+      },
+    });
+    await expect(sut.getCountedAssetCountBySessionAndDataClass(session.id, AgentToolDataClass.Metadata)).resolves.toBe(
+      3,
+    );
+  });
+
   it('atomically denies pending metadata creation when counted statuses exceed the session asset limit', async () => {
     const { ctx, credentialRepository, sessionRepository, sut } = setup();
     const { session } = await createSession(ctx, credentialRepository, sessionRepository);
