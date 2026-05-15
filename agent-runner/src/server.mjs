@@ -59,6 +59,52 @@ const validateCreateSessionBody = (body) => {
   return undefined;
 };
 
+const normalizeRuntimeCreateSessionResponse = (runnerSession) => {
+  const capabilities = runnerSession?.capabilities;
+  if (
+    typeof runnerSession?.runnerSessionId !== 'string' ||
+    !capabilities ||
+    typeof capabilities !== 'object' ||
+    typeof capabilities.protocolVersion !== 'string' ||
+    typeof capabilities.streaming !== 'boolean' ||
+    !Array.isArray(capabilities.tools) ||
+    !Array.isArray(capabilities.models)
+  ) {
+    throw new Error('invalid runtime session response');
+  }
+
+  const normalizedCapabilities = {
+    protocolVersion: capabilities.protocolVersion,
+    streaming: capabilities.streaming,
+    tools: capabilities.tools,
+    models: capabilities.models,
+  };
+  if (typeof capabilities.runtime === 'string') {
+    normalizedCapabilities.runtime = capabilities.runtime;
+  }
+
+  return {
+    runnerSessionId: runnerSession.runnerSessionId,
+    capabilities: normalizedCapabilities,
+  };
+};
+
+const validateMessageBody = (body) => {
+  if (typeof body?.gallerySessionId !== 'string') {
+    return 'gallerySessionId is required';
+  }
+
+  if (typeof body.messageId !== 'string') {
+    return 'messageId is required';
+  }
+
+  if (!body.content || typeof body.content !== 'object' || !Array.isArray(body.content.blocks)) {
+    return 'content is required';
+  }
+
+  return undefined;
+};
+
 export const startServer = ({
   port = Number(process.env.PORT ?? 4477),
   host = process.env.HOST ?? '127.0.0.1',
@@ -87,7 +133,7 @@ export const startServer = ({
       }
 
       try {
-        const runnerSession = await runtime.createSession(result.body);
+        const runnerSession = normalizeRuntimeCreateSessionResponse(await runtime.createSession(result.body));
         runnerSessionIds.add(runnerSession.runnerSessionId);
         sendJson(response, 201, runnerSession);
       } catch {
@@ -110,6 +156,12 @@ export const startServer = ({
       }
 
       const { body } = result;
+      const validationError = validateMessageBody(body);
+      if (validationError) {
+        sendJson(response, 400, { error: validationError });
+        return;
+      }
+
       response.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
