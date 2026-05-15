@@ -10,12 +10,12 @@ import {
   SettingsManager,
 } from '@earendil-works/pi-coding-agent';
 import { createGalleryToolClient } from './gallery-tool-client.mjs';
-import { createGalleryReadTools, galleryReadToolNames } from './gallery-tools.mjs';
+import { createGalleryTools, galleryToolNames } from './gallery-tools.mjs';
 
 const protocolVersion = '2026-05-14';
 const systemPrompt = [
   'You are Gallery Assistant, a personal photo organization assistant.',
-  'You may have Gallery read tools available for session-scoped asset and album inspection, but no write tools.',
+  'You may have Gallery read and planning tools available for session-scoped asset and album inspection and user-reviewed album plans, but no direct write tools.',
   'Never claim you changed albums. Album writes require a separate user-reviewed apply step.',
 ].join('\n');
 const runtimePackageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -218,7 +218,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             throw new Error(`Model ${body.model} is not available for provider ${providerName}`);
           }
           const customTools = body.toolGateway
-            ? createGalleryReadTools({
+            ? createGalleryTools({
                 client: createGalleryToolClient({
                   gateway: body.toolGateway,
                   gallerySessionId: body.gallerySessionId,
@@ -270,7 +270,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             capabilities: {
               protocolVersion,
               streaming: true,
-              tools: body.toolGateway ? galleryReadToolNames : [],
+              tools: body.toolGateway ? galleryToolNames : [],
               models: [body.model],
               runtime: 'pi',
             },
