@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { AgentMessage } from 'src/database';
 import { AgentRunnerStatusDto } from 'src/dtos/agent-runner.dto';
-import { AgentMessageRole, AgentSessionStatus } from 'src/enum';
+import { AgentMessageRole } from 'src/enum';
 import { AgentMessageRepository } from 'src/repositories/agent-message.repository';
 import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
@@ -107,12 +107,12 @@ export class AgentRunnerService {
     messageId: string;
     content: AgentMessageContent;
   }) {
-    const { runnerUrl, runnerHealthTimeoutMs } = this.configRepository.getEnv().agent;
-    if (!runnerUrl) {
-      throw new BadRequestException('Agent runner is not configured');
-    }
-
     try {
+      const { runnerUrl, runnerHealthTimeoutMs } = this.configRepository.getEnv().agent;
+      if (!runnerUrl) {
+        throw new BadRequestException('Agent runner is not configured');
+      }
+
       for await (const event of this.agentRunnerRepository.streamMessage({
         url: runnerUrl,
         runnerSessionId,
@@ -149,7 +149,7 @@ export class AgentRunnerService {
         });
       }
     } catch (error) {
-      await this.sessionRepository.update(userId, sessionId, { status: AgentSessionStatus.Interrupted });
+      await this.sessionRepository.markInterruptedFromActive(userId, sessionId).catch(() => undefined);
       this.websocketRepository.clientSend('on_agent_session_event', userId, {
         type: 'runner-error',
         sessionId,
