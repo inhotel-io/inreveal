@@ -27,6 +27,8 @@ function dart {
   # Don't include analysis_options.yaml for the generated openapi files
   # so that language servers can properly exclude the mobile/openapi directory
   rm ../mobile/openapi/analysis_options.yaml
+
+  node ./bin/patch-agent-tool-response-dtos.mjs
 }
 
 function typescript {
