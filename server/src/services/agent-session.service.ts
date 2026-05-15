@@ -5,6 +5,7 @@ import { AuthDto } from 'src/dtos/auth.dto';
 import { AgentPermissionPreset, AgentSessionStatus } from 'src/enum';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
+import { AgentRunnerService } from 'src/services/agent-runner.service';
 import {
   AgentCredentialSnapshot,
   AgentPermissionPlanSnapshot,
@@ -73,6 +74,7 @@ export class AgentSessionService {
   constructor(
     private readonly repository: AgentSessionRepository,
     private readonly credentialService: AgentProviderCredentialService,
+    private readonly agentRunnerService: AgentRunnerService,
   ) {}
 
   async create(auth: AuthDto, dto: AgentSessionCreateDto): Promise<AgentSessionResponseDto> {
@@ -110,7 +112,32 @@ export class AgentSessionService {
       initialContextSnapshot: dto.initialContext ?? {},
     });
 
-    return this.map(session);
+    try {
+      const runnerSession = await this.agentRunnerService.createSession({
+        gallerySessionId: session.id,
+        credential: session.credentialSnapshot,
+        model: session.modelSnapshot.model,
+        permissionPreset: session.permissionPreset,
+        permissionPlan: session.permissionPlanSnapshot,
+        approvalMode: session.approvalMode,
+        initialContext: session.initialContextSnapshot,
+      });
+
+      const runningSession = await this.repository.update(auth.user.id, session.id, {
+        status: AgentSessionStatus.Running,
+        runnerEndpoint: runnerSession.runnerEndpoint,
+        runnerSessionId: runnerSession.runnerSessionId,
+        runnerCapabilitiesSnapshot: runnerSession.runnerCapabilitiesSnapshot,
+      });
+
+      return this.map(runningSession);
+    } catch (error) {
+      await this.repository.update(auth.user.id, session.id, {
+        status: AgentSessionStatus.Failed,
+        endedAt: new Date(),
+      });
+      throw error;
+    }
   }
 
   async getAll(auth: AuthDto): Promise<AgentSessionResponseDto[]> {
