@@ -323,6 +323,46 @@ describe(AgentRunnerService.name, () => {
     });
   });
 
+  it('marks the session interrupted with the runner-reported provider failure', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Organize my photos.' }] };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'runner-error',
+          sessionId,
+          runnerSessionId,
+          message: 'OpenAI rejected the request.',
+        },
+      ]),
+    );
+    sessionRepository.markInterruptedFromActive.mockResolvedValue({} as never);
+
+    await expect(sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content })).rejects.toThrow(
+      'OpenAI rejected the request.',
+    );
+
+    expect(sessionRepository.markInterruptedFromActive).toHaveBeenCalledWith(userId, sessionId);
+    expect(messageRepository.create).not.toHaveBeenCalled();
+    expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', userId, {
+      type: 'runner-error',
+      sessionId,
+      message: 'OpenAI rejected the request.',
+      createdAt: '2026-05-14T10:00:00.000Z',
+    });
+  });
+
   it.each([AgentSessionStatus.Cancelled, AgentSessionStatus.Interrupted])(
     'does not persist or emit assistant completion when the session is %s',
     async (status) => {
@@ -442,6 +482,51 @@ describe(AgentRunnerService.name, () => {
           runnerSessionId: 'other-runner-session',
           providerMessageId: 'provider-message-1',
           content: { blocks: [{ type: 'text', text: 'Wrong runner session.' }] },
+        },
+      ]),
+    );
+    sessionRepository.markInterruptedFromActive.mockResolvedValue({} as never);
+
+    await expect(sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content })).rejects.toThrow(
+      'Agent runner message stream ended before completion',
+    );
+
+    expect(messageRepository.create).not.toHaveBeenCalled();
+    expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', userId, {
+      type: 'runner-error',
+      sessionId,
+      message: 'The assistant runner stopped while processing the message.',
+      createdAt: '2026-05-14T10:00:00.000Z',
+    });
+  });
+
+  it('ignores runner-reported errors for another Gallery or runner session', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Organize my photos.' }] };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'runner-error',
+          sessionId: '00000000-0000-4000-8000-000000000999',
+          runnerSessionId,
+          message: 'Wrong Gallery session error.',
+        },
+        {
+          type: 'runner-error',
+          sessionId,
+          runnerSessionId: 'other-runner-session',
+          message: 'Wrong runner session error.',
         },
       ]),
     );
