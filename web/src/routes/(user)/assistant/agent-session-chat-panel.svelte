@@ -22,11 +22,12 @@
   let messages = $state<AgentMessageResponseDto[]>([]);
   let draft = $state('');
   let isSending = $state(false);
+  let isAssistantActive = $state(false);
   let errorMessage = $state<string | null>(null);
   let streamingText = $state('');
   let cleanupWebsocketListener: (() => void) | undefined;
 
-  const canSend = $derived(draft.trim().length > 0 && !isSending);
+  const canSend = $derived(draft.trim().length > 0 && !isSending && !isAssistantActive);
 
   const textForMessage = (message: AgentMessageResponseDto) =>
     message.content.blocks
@@ -60,16 +61,19 @@
     }
 
     if (event.type === 'assistant-message-delta') {
+      isAssistantActive = true;
       streamingText += event.delta;
       return;
     }
 
     if (event.type === 'assistant-message-created') {
+      isAssistantActive = false;
       streamingText = '';
       appendIfNew(event.message);
       return;
     }
 
+    isAssistantActive = false;
     streamingText = '';
     errorMessage = event.message;
   };
@@ -106,9 +110,11 @@
 
       appendIfNew(message);
       draft = '';
+      isAssistantActive = true;
     } catch (error) {
       errorMessage = $t('assistant_message_send_error');
       handleError(error, errorMessage);
+      isAssistantActive = false;
     } finally {
       isSending = false;
     }
@@ -178,7 +184,7 @@
           aria-label={$t('assistant_message')}
           class="min-h-24 w-full resize-y rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-immich-dark-gray"
           bind:value={draft}
-          disabled={isSending}
+          disabled={isSending || isAssistantActive}
         ></textarea>
       </div>
 

@@ -17,6 +17,7 @@ const resetEnv = () => {
     'IMMICH_API_METRICS_PORT',
     'IMMICH_AGENT_RUNNER_URL',
     'IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS',
+    'IMMICH_AGENT_RUNNER_MESSAGE_STREAM_TIMEOUT_MS',
     'IMMICH_MEDIA_LOCATION',
     'IMMICH_MICROSERVICES_METRICS_PORT',
     'IMMICH_TELEMETRY_INCLUDE',
@@ -127,24 +128,27 @@ describe('getEnv', () => {
   });
 
   describe('agent runner', () => {
-    it('should default runner config to disabled with a two second timeout', () => {
+    it('should default runner config to disabled with separate health and message stream timeouts', () => {
       const { agent } = getEnv();
 
       expect(agent).toMatchObject({
         runnerUrl: undefined,
         runnerHealthTimeoutMs: 2000,
+        runnerMessageStreamTimeoutMs: 300_000,
       });
     });
 
-    it('should parse runner URL and health timeout', () => {
+    it('should parse runner URL, health timeout, and message stream timeout', () => {
       process.env.IMMICH_AGENT_RUNNER_URL = 'http://agent-runner:4477';
       process.env.IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS = '5000';
+      process.env.IMMICH_AGENT_RUNNER_MESSAGE_STREAM_TIMEOUT_MS = '120000';
 
       const { agent } = getEnv();
 
       expect(agent).toMatchObject({
         runnerUrl: 'http://agent-runner:4477',
         runnerHealthTimeoutMs: 5000,
+        runnerMessageStreamTimeoutMs: 120_000,
       });
     });
 
@@ -164,6 +168,12 @@ describe('getEnv', () => {
       process.env.IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS = '0';
 
       expect(() => getEnv()).toThrowError('[IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS] Too small');
+    });
+
+    it('should reject non-positive runner message stream timeouts', () => {
+      process.env.IMMICH_AGENT_RUNNER_MESSAGE_STREAM_TIMEOUT_MS = '0';
+
+      expect(() => getEnv()).toThrowError('[IMMICH_AGENT_RUNNER_MESSAGE_STREAM_TIMEOUT_MS] Too small');
     });
   });
 
