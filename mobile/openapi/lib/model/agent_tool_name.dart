@@ -29,6 +29,9 @@ class AgentToolName {
   static const readAssetOriginals = AgentToolName._(r'readAssetOriginals');
   static const listAlbums = AgentToolName._(r'listAlbums');
   static const readAlbum = AgentToolName._(r'readAlbum');
+  static const proposeAlbumOperations = AgentToolName._(r'proposeAlbumOperations');
+  static const reviseProposedOperations = AgentToolName._(r'reviseProposedOperations');
+  static const summarizePlan = AgentToolName._(r'summarizePlan');
 
   /// List of all possible values in this [enum][AgentToolName].
   static const values = <AgentToolName>[
@@ -38,6 +41,9 @@ class AgentToolName {
     readAssetOriginals,
     listAlbums,
     readAlbum,
+    proposeAlbumOperations,
+    reviseProposedOperations,
+    summarizePlan,
   ];
 
   static AgentToolName? fromJson(dynamic value) => AgentToolNameTypeTransformer().decode(value);
@@ -82,6 +88,9 @@ class AgentToolNameTypeTransformer {
         case r'readAssetOriginals': return AgentToolName.readAssetOriginals;
         case r'listAlbums': return AgentToolName.listAlbums;
         case r'readAlbum': return AgentToolName.readAlbum;
+        case r'proposeAlbumOperations': return AgentToolName.proposeAlbumOperations;
+        case r'reviseProposedOperations': return AgentToolName.reviseProposedOperations;
+        case r'summarizePlan': return AgentToolName.summarizePlan;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
