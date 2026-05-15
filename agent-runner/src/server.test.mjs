@@ -130,8 +130,9 @@ describe('agent runner server', () => {
         capabilities: {
           protocolVersion: '2026-05-14',
           streaming: true,
-          tools: ['echo'],
+          tools: [],
           models: [],
+          runtime: 'pi',
         },
       });
     });
