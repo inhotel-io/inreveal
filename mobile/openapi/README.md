@@ -93,11 +93,22 @@ Class | Method | HTTP request | Description
 *AgentSessionsApi* | [**approveToolCall**](doc//AgentSessionsApi.md#approvetoolcall) | **POST** /agent/sessions/{id}/tool-calls/{toolCallId}/approval | Approve or deny an agent tool call
 *AgentSessionsApi* | [**cancelAgentSession**](doc//AgentSessionsApi.md#cancelagentsession) | **POST** /agent/sessions/{id}/cancel | Cancel an agent session
 *AgentSessionsApi* | [**createAgentSession**](doc//AgentSessionsApi.md#createagentsession) | **POST** /agent/sessions | Create an agent session
+*AgentSessionsApi* | [**executeAgentSearchAssets**](doc//AgentSessionsApi.md#executeagentsearchassets) | **POST** /agent/sessions/{id}/tools/search-assets | Execute the internal searchAssets agent tool
 *AgentSessionsApi* | [**getAgentSession**](doc//AgentSessionsApi.md#getagentsession) | **GET** /agent/sessions/{id} | Retrieve an agent session
 *AgentSessionsApi* | [**getAgentSessionMessages**](doc//AgentSessionsApi.md#getagentsessionmessages) | **GET** /agent/sessions/{id}/messages | List agent session messages
 *AgentSessionsApi* | [**getAgentSessions**](doc//AgentSessionsApi.md#getagentsessions) | **GET** /agent/sessions | List agent sessions
 *AgentSessionsApi* | [**getToolCalls**](doc//AgentSessionsApi.md#gettoolcalls) | **GET** /agent/sessions/{id}/tool-calls | List agent tool calls
+*AgentSessionsApi* | [**listAlbums**](doc//AgentSessionsApi.md#listalbums) | **POST** /agent/sessions/{id}/tools/list-albums | Execute the internal listAlbums agent tool
+*AgentSessionsApi* | [**readAlbum**](doc//AgentSessionsApi.md#readalbum) | **POST** /agent/sessions/{id}/tools/read-album | Execute the internal readAlbum agent tool
 *AgentSessionsApi* | [**readAssetMetadata**](doc//AgentSessionsApi.md#readassetmetadata) | **POST** /agent/sessions/{id}/tools/read-asset-metadata | Execute the internal readAssetMetadata agent tool
+*AgentSessionsApi* | [**readAssetOriginals**](doc//AgentSessionsApi.md#readassetoriginals) | **POST** /agent/sessions/{id}/tools/read-asset-originals | Execute the internal readAssetOriginals agent tool
+*AgentSessionsApi* | [**readAssetPreviews**](doc//AgentSessionsApi.md#readassetpreviews) | **POST** /agent/sessions/{id}/tools/read-asset-previews | Execute the internal readAssetPreviews agent tool
+*AgentSessionsApi* | [**runnerListAlbums**](doc//AgentSessionsApi.md#runnerlistalbums) | **POST** /agent/internal/tools/sessions/{id}/list-albums | Execute the runner listAlbums agent tool
+*AgentSessionsApi* | [**runnerReadAlbum**](doc//AgentSessionsApi.md#runnerreadalbum) | **POST** /agent/internal/tools/sessions/{id}/read-album | Execute the runner readAlbum agent tool
+*AgentSessionsApi* | [**runnerReadAssetMetadata**](doc//AgentSessionsApi.md#runnerreadassetmetadata) | **POST** /agent/internal/tools/sessions/{id}/read-asset-metadata | Execute the runner readAssetMetadata agent tool
+*AgentSessionsApi* | [**runnerReadAssetOriginals**](doc//AgentSessionsApi.md#runnerreadassetoriginals) | **POST** /agent/internal/tools/sessions/{id}/read-asset-originals | Execute the runner readAssetOriginals agent tool
+*AgentSessionsApi* | [**runnerReadAssetPreviews**](doc//AgentSessionsApi.md#runnerreadassetpreviews) | **POST** /agent/internal/tools/sessions/{id}/read-asset-previews | Execute the runner readAssetPreviews agent tool
+*AgentSessionsApi* | [**runnerSearchAssets**](doc//AgentSessionsApi.md#runnersearchassets) | **POST** /agent/internal/tools/sessions/{id}/search-assets | Execute the runner searchAssets agent tool
 *AlbumsApi* | [**addAssetsToAlbum**](doc//AlbumsApi.md#addassetstoalbum) | **PUT** /albums/{id}/assets | Add assets to an album
 *AlbumsApi* | [**addAssetsToAlbums**](doc//AlbumsApi.md#addassetstoalbums) | **PUT** /albums/assets | Add assets to albums
 *AlbumsApi* | [**addUsersToAlbum**](doc//AlbumsApi.md#adduserstoalbum) | **PUT** /albums/{id}/users | Share album with users
@@ -402,6 +413,7 @@ Class | Method | HTTP request | Description
  - [AdminOnboardingUpdateDto](doc//AdminOnboardingUpdateDto.md)
  - [AgentApprovalMode](doc//AgentApprovalMode.md)
  - [AgentCredentialSnapshot](doc//AgentCredentialSnapshot.md)
+ - [AgentListAlbumsToolRequestDto](doc//AgentListAlbumsToolRequestDto.md)
  - [AgentMessageAssetBlock](doc//AgentMessageAssetBlock.md)
  - [AgentMessageAssetBlockType](doc//AgentMessageAssetBlockType.md)
  - [AgentMessageBlock](doc//AgentMessageBlock.md)
@@ -427,10 +439,15 @@ Class | Method | HTTP request | Description
  - [AgentProviderCredentialResponseDto](doc//AgentProviderCredentialResponseDto.md)
  - [AgentProviderCredentialUpdateDto](doc//AgentProviderCredentialUpdateDto.md)
  - [AgentProviderType](doc//AgentProviderType.md)
+ - [AgentReadAlbumToolRequestDto](doc//AgentReadAlbumToolRequestDto.md)
  - [AgentReadAssetMetadataToolRequestDto](doc//AgentReadAssetMetadataToolRequestDto.md)
+ - [AgentReadAssetOriginalsToolRequestDto](doc//AgentReadAssetOriginalsToolRequestDto.md)
+ - [AgentReadAssetPreviewsToolRequestDto](doc//AgentReadAssetPreviewsToolRequestDto.md)
  - [AgentRunnerCapabilitiesDto](doc//AgentRunnerCapabilitiesDto.md)
  - [AgentRunnerStatusDto](doc//AgentRunnerStatusDto.md)
  - [AgentRunnerStatusReason](doc//AgentRunnerStatusReason.md)
+ - [AgentSearchAssetsFilters](doc//AgentSearchAssetsFilters.md)
+ - [AgentSearchAssetsToolRequestDto](doc//AgentSearchAssetsToolRequestDto.md)
  - [AgentSessionCreateDto](doc//AgentSessionCreateDto.md)
  - [AgentSessionResponseDto](doc//AgentSessionResponseDto.md)
  - [AgentSessionStatus](doc//AgentSessionStatus.md)
