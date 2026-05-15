@@ -68,6 +68,20 @@ describe(PersonRepository.name, () => {
         }),
       ).resolves.toBe(false);
     });
+
+    it('returns undefined when the person has no representative face embedding', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id, faceAssetId: null });
+
+      await expect(
+        sut.isPersonRepresentativeWithinDistance({
+          personId: person.id,
+          embedding: axisEmbedding(0),
+          maxDistance: 0.5,
+        }),
+      ).resolves.toBeUndefined();
+    });
   });
 
   describe('getByName', () => {

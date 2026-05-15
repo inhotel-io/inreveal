@@ -1041,19 +1041,20 @@ export class PersonService extends BaseService {
         continue;
       }
 
-      if (
-        await this.personRepository.isPersonRepresentativeWithinDistance({
-          personId: match.personId,
-          embedding,
-          maxDistance,
-        })
-      ) {
-        return match.personId;
+      const representativeCompatible = await this.personRepository.isPersonRepresentativeWithinDistance({
+        personId: match.personId,
+        embedding,
+        maxDistance,
+      });
+
+      if (representativeCompatible === false) {
+        this.logger.debug(
+          `Skipping automatic person match ${match.personId} because its representative face is outside the distance threshold`,
+        );
+        continue;
       }
 
-      this.logger.debug(
-        `Skipping automatic person match ${match.personId} because its representative face is outside the distance threshold`,
-      );
+      return match.personId;
     }
   }
 
@@ -1081,7 +1082,7 @@ export class PersonService extends BaseService {
       embedding: input.embedding,
       maxDistance: input.maxDistance,
     });
-    if (!representativeCompatible) {
+    if (representativeCompatible === false) {
       this.logger.debug(
         `Skipping accessible identity merge ${input.sourceIdentityId} -> ${match.identityId} because the representative face is outside the distance threshold`,
       );

@@ -201,7 +201,7 @@ export class FaceIdentityRepository {
     identityId,
     embedding,
     maxDistance,
-  }: IdentityRepresentativeDistanceOptions): Promise<boolean> {
+  }: IdentityRepresentativeDistanceOptions): Promise<boolean | undefined> {
     const row = await this.db
       .selectFrom('face_identity')
       .innerJoin('face_search', 'face_search.faceId', 'face_identity.representativeFaceId')
@@ -209,7 +209,7 @@ export class FaceIdentityRepository {
       .where('face_identity.id', '=', identityId)
       .executeTakeFirst();
 
-    return row?.withinDistance === true;
+    return row?.withinDistance;
   }
 
   @GenerateSql({

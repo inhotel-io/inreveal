@@ -225,6 +225,21 @@ describe(FaceIdentityRepository.name, () => {
         }),
       ).resolves.toBe(false);
     });
+
+    it('returns undefined when the identity has no representative face embedding', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id, faceAssetId: null });
+      const identity = await sut.ensurePersonIdentity(person.id);
+
+      await expect(
+        sut.isRepresentativeWithinDistance({
+          identityId: identity.id,
+          embedding: axisEmbedding(0),
+          maxDistance: 0.5,
+        }),
+      ).resolves.toBeUndefined();
+    });
   });
 
   it('returns no accessible identity match when multiple shared identities are within threshold', async () => {

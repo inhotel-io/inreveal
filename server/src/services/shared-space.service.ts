@@ -1444,7 +1444,7 @@ export class SharedSpaceService extends BaseService {
         embedding: input.spacePerson.embedding,
         maxDistance: input.maxDistance,
       });
-      if (!representativeCompatible) {
+      if (representativeCompatible === false) {
         continue;
       }
 

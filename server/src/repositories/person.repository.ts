@@ -136,7 +136,7 @@ export class PersonRepository {
     personId,
     embedding,
     maxDistance,
-  }: RepresentativeDistanceOptions): Promise<boolean> {
+  }: RepresentativeDistanceOptions): Promise<boolean | undefined> {
     const row = await this.db
       .selectFrom('person')
       .innerJoin('face_search', 'face_search.faceId', 'person.faceAssetId')
@@ -144,7 +144,7 @@ export class PersonRepository {
       .where('person.id', '=', personId)
       .executeTakeFirst();
 
-    return row?.withinDistance === true;
+    return row?.withinDistance;
   }
 
   async unassignFaces({ sourceType }: UnassignFacesOptions): Promise<void> {
