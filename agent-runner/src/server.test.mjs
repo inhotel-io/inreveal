@@ -467,6 +467,19 @@ describe('agent runner server', () => {
     });
   });
 
+  it('returns a JSON error for malformed encoded runner session ids', async () => {
+    await withServer(createRuntime(), async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions/%E0%A4%A/messages`, {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify(messageBody),
+      });
+
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: 'runner session not found' });
+    });
+  });
+
   it('rejects invalid message bodies before calling the runtime', async () => {
     const runtime = createRuntime();
     const cases = [
@@ -516,6 +529,32 @@ describe('agent runner server', () => {
         assert.deepEqual(await response.json(), { error: testCase.error });
       }
 
+      assert.deepEqual(runtime.calls.sendMessage, []);
+    });
+  });
+
+  it('rejects message requests whose Gallery session id does not match the runner session', async () => {
+    const runtime = createRuntime();
+
+    await withServer(runtime, async (baseUrl) => {
+      const createResponse = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+      assert.equal(createResponse.status, 201);
+
+      const response = await fetch(`${baseUrl}/sessions/pi-00000000-0000-4000-8000-000000000100/messages`, {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...messageBody,
+          gallerySessionId: '00000000-0000-4000-8000-000000000999',
+        }),
+      });
+
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: 'runner session not found' });
       assert.deepEqual(runtime.calls.sendMessage, []);
     });
   });
