@@ -197,6 +197,43 @@ describe(AlbumRepository.name, () => {
       );
     });
 
+    it('includes archived assets in agent album counts and detail asset ids', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: archived } = await ctx.newAsset({
+        ownerId: user.id,
+        visibility: AssetVisibility.Archive,
+        localDateTime: new Date('2026-05-04'),
+      });
+      const { album } = await ctx.newAlbum(
+        { ownerId: user.id, albumName: 'Archived trip', albumThumbnailAssetId: archived.id },
+        [archived.id],
+      );
+
+      const albums = await sut.getAgentAlbums(user.id);
+      const detail = await sut.getAgentAlbumById(user.id, album.id);
+
+      expect(albums).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: album.id,
+            assetCount: 1,
+            albumThumbnailAssetId: archived.id,
+            startDate: new Date('2026-05-04'),
+            endDate: new Date('2026-05-04'),
+          }),
+        ]),
+      );
+      expect(detail).toEqual(
+        expect.objectContaining({
+          id: album.id,
+          assetCount: 1,
+          albumThumbnailAssetId: archived.id,
+          assetIds: [archived.id],
+        }),
+      );
+    });
+
     it('excludes offline and locked assets from agent album summaries', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
@@ -230,22 +267,75 @@ describe(AlbumRepository.name, () => {
       );
     });
 
+    it('nulls agent album thumbnails that point at filtered assets', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: visible } = await ctx.newAsset({ ownerId: user.id });
+      const filteredAssets = await Promise.all([
+        ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked }),
+        ctx.newAsset({ ownerId: user.id, isOffline: true }),
+        ctx.newAsset({ ownerId: user.id, deletedAt: new Date() }),
+        ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Hidden }),
+      ]);
+
+      for (const { asset: filtered } of filteredAssets) {
+        const { album } = await ctx.newAlbum(
+          { ownerId: user.id, albumName: `Filtered thumbnail ${filtered.id}`, albumThumbnailAssetId: filtered.id },
+          [visible.id, filtered.id],
+        );
+
+        const [summary] = (await sut.getAgentAlbums(user.id)).filter(({ id }) => id === album.id);
+        const detail = await sut.getAgentAlbumById(user.id, album.id);
+
+        expect(summary).toEqual(
+          expect.objectContaining({
+            id: album.id,
+            assetCount: 1,
+            albumThumbnailAssetId: null,
+          }),
+        );
+        expect(detail).toEqual(
+          expect.objectContaining({
+            id: album.id,
+            assetCount: 1,
+            albumThumbnailAssetId: null,
+            assetIds: [visible.id],
+          }),
+        );
+      }
+    });
+
     it('returns accessible agent albums with empty asset ids when all assets are filtered', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
       const { asset: offline } = await ctx.newAsset({ ownerId: user.id, isOffline: true });
       const { asset: locked } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
-      const { album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'Private assets' }, [
-        offline.id,
-        locked.id,
-      ]);
+      const { asset: deleted } = await ctx.newAsset({ ownerId: user.id, deletedAt: new Date() });
+      const { asset: hidden } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Hidden });
+      const { album } = await ctx.newAlbum(
+        { ownerId: user.id, albumName: 'Private assets', albumThumbnailAssetId: locked.id },
+        [offline.id, locked.id, deleted.id, hidden.id],
+      );
 
+      const albums = await sut.getAgentAlbums(user.id);
       const result = await sut.getAgentAlbumById(user.id, album.id);
 
+      expect(albums).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: album.id,
+            assetCount: 0,
+            albumThumbnailAssetId: null,
+            startDate: null,
+            endDate: null,
+          }),
+        ]),
+      );
       expect(result).toEqual(
         expect.objectContaining({
           id: album.id,
           assetCount: 0,
+          albumThumbnailAssetId: null,
           startDate: null,
           endDate: null,
           assetIds: [],
