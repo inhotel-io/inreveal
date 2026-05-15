@@ -14,6 +14,7 @@ import { InjectKysely } from 'nestjs-kysely';
 import { columns } from 'src/database';
 import { Chunked, ChunkedArray, ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
 import { AlbumUserCreateDto } from 'src/dtos/album.dto';
+import { AssetVisibility } from 'src/enum';
 import { DB } from 'src/schema';
 import { AlbumTable } from 'src/schema/tables/album.table';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
@@ -311,6 +312,8 @@ export class AlbumRepository {
             .selectFrom('album_asset')
             .innerJoin('asset', 'asset.id', 'album_asset.assetId')
             .where('asset.deletedAt', 'is', null)
+            .where('asset.isOffline', '=', false)
+            .where('asset.visibility', '=', AssetVisibility.Timeline)
             .select('album_asset.albumId as albumId')
             .select((eb) => sql<number>`${eb.fn.count('album_asset.assetId')}::int`.as('assetCount'))
             .select((eb) =>
@@ -358,6 +361,8 @@ export class AlbumRepository {
             .selectFrom('album_asset')
             .innerJoin('asset', 'asset.id', 'album_asset.assetId')
             .where('asset.deletedAt', 'is', null)
+            .where('asset.isOffline', '=', false)
+            .where('asset.visibility', '=', AssetVisibility.Timeline)
             .select('album_asset.albumId as albumId')
             .select((eb) => sql<number>`${eb.fn.count('album_asset.assetId')}::int`.as('assetCount'))
             .select((eb) =>
@@ -404,6 +409,8 @@ export class AlbumRepository {
       .select('album_asset.assetId')
       .where('album_asset.albumId', '=', albumId)
       .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', '=', AssetVisibility.Timeline)
       .orderBy('album_asset.createdAt', 'asc')
       .execute();
 
