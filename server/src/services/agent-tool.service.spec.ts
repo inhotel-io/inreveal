@@ -749,7 +749,8 @@ describe(AgentToolService.name, () => {
     },
     {
       name: 'listAlbums',
-      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string) => sut.listAlbums(auth, sessionId, {}),
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string) =>
+        sut.listAlbums(auth, sessionId, {}),
       arrange: (_assetId: string, auth: ReturnType<typeof AuthFactory.create>) => {
         albumRepository.getAgentAlbums.mockResolvedValue([makeAlbumSummary({ ownerId: auth.user.id })]);
       },
