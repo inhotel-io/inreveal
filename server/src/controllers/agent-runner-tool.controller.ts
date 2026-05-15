@@ -12,6 +12,13 @@ import {
 import { ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import {
+  AgentOperationPlanParamsDto,
+  AgentOperationPlanSummaryRequestDto,
+  AgentOperationPlanToolResponseDto,
+  AgentProposeAlbumOperationsDto,
+  AgentReviseAlbumOperationsDto,
+} from 'src/dtos/agent-operation.dto';
+import {
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
   AgentReadAlbumToolRequestDto,
@@ -28,6 +35,7 @@ import {
 import { AuthDto } from 'src/dtos/auth.dto';
 import { ApiTag } from 'src/enum';
 import { Auth, AuthRequest } from 'src/middleware/auth.guard';
+import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import { UUIDParamDto } from 'src/validation';
@@ -69,7 +77,10 @@ export class AgentRunnerToolGuard implements CanActivate {
 @Controller('agent/internal/tools/sessions/:id')
 @UseGuards(AgentRunnerToolGuard)
 export class AgentRunnerToolController {
-  constructor(private readonly service: AgentToolService) {}
+  constructor(
+    private readonly service: AgentToolService,
+    private readonly operationPlanService: AgentOperationPlanService,
+  ) {}
 
   @Post('search-assets')
   @ApiCreatedResponse({ type: AgentSearchAssetsToolResponseDto })
@@ -159,5 +170,50 @@ export class AgentRunnerToolController {
     @Body() dto: AgentReadAlbumToolRequestDto,
   ): Promise<AgentReadAlbumToolResponseDto> {
     return this.service.readAlbum(auth, id, dto);
+  }
+
+  @Post('propose-album-operations')
+  @ApiCreatedResponse({ type: AgentOperationPlanToolResponseDto })
+  @Endpoint({
+    summary: 'Execute the runner proposeAlbumOperations agent tool',
+    description: 'Internal runner gateway for storing proposed album operations for an AI agent session.',
+    history: history(),
+  })
+  runnerProposeAlbumOperations(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: AgentProposeAlbumOperationsDto,
+  ): Promise<AgentOperationPlanToolResponseDto> {
+    return this.operationPlanService.proposeAlbumOperations(auth, id, dto);
+  }
+
+  @Post('revise-proposed-operations/:planId')
+  @ApiCreatedResponse({ type: AgentOperationPlanToolResponseDto })
+  @Endpoint({
+    summary: 'Execute the runner reviseProposedOperations agent tool',
+    description: 'Internal runner gateway for replacing a proposed album operation plan revision.',
+    history: history(),
+  })
+  runnerReviseProposedOperations(
+    @Auth() auth: AuthDto,
+    @Param() { id, planId }: AgentOperationPlanParamsDto,
+    @Body() dto: AgentReviseAlbumOperationsDto,
+  ): Promise<AgentOperationPlanToolResponseDto> {
+    return this.operationPlanService.reviseProposedOperations(auth, id, planId, dto);
+  }
+
+  @Post('summarize-plan/:planId')
+  @ApiCreatedResponse({ type: AgentOperationPlanToolResponseDto })
+  @Endpoint({
+    summary: 'Execute the runner summarizePlan agent tool',
+    description: 'Internal runner gateway for summarizing a proposed album operation plan.',
+    history: history(),
+  })
+  runnerSummarizePlan(
+    @Auth() auth: AuthDto,
+    @Param() { id, planId }: AgentOperationPlanParamsDto,
+    @Body() dto: AgentOperationPlanSummaryRequestDto,
+  ): Promise<AgentOperationPlanToolResponseDto> {
+    return this.operationPlanService.summarizePlan(auth, id, planId, dto);
   }
 }
