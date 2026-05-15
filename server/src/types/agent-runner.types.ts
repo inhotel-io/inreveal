@@ -2,9 +2,13 @@ import type { AgentApprovalMode, AgentPermissionPreset } from 'src/enum';
 import type { AgentMessageContent } from 'src/types/agent-message.types';
 import type { AgentCredentialSnapshot, AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 
+export type AgentRunnerCredentialMaterial = AgentCredentialSnapshot & {
+  secret: string;
+};
+
 export type AgentRunnerCreateSessionRequest = {
   gallerySessionId: string;
-  credential: AgentCredentialSnapshot;
+  credential: AgentRunnerCredentialMaterial;
   model: string;
   permissionPreset: AgentPermissionPreset;
   permissionPlan: AgentPermissionPlanSnapshot;
