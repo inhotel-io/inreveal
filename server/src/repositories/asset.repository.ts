@@ -194,6 +194,8 @@ type UpsertExifOptions = {
 const distinctLocked = <T extends LockableProperty[] | null>(eb: ExpressionBuilder<DB, 'asset_exif'>, columns: T) =>
   sql<T>`nullif(array(select distinct unnest(${eb.ref('asset_exif.lockedProperties')} || ${columns})), '{}')`;
 
+const agentDirectReadVisibilities = [AssetVisibility.Timeline, AssetVisibility.Archive, AssetVisibility.Locked];
+
 const getBoundingCircle = (bbox: BoundingBox) => {
   const { west, south, east, north } = bbox;
   const eastUnwrapped = west <= east ? east : east + 360;
@@ -930,6 +932,9 @@ export class AssetRepository {
       .select(withTags)
       .$call(withAgentExif)
       .where('asset.id', '=', anyUuid(ids))
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', agentDirectReadVisibilities)
       .execute();
   }
 
@@ -1157,6 +1162,7 @@ export class AssetRepository {
       .where('asset.id', '=', anyUuid(ids))
       .where('asset.deletedAt', 'is', null)
       .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', agentDirectReadVisibilities)
       .where('asset_file.type', '=', AssetFileType.Preview)
       .execute();
     const byId = new Map(rows.map((row) => [row.assetId, row]));
@@ -1197,6 +1203,7 @@ export class AssetRepository {
       .where('asset.id', '=', anyUuid(ids))
       .where('asset.deletedAt', 'is', null)
       .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', agentDirectReadVisibilities)
       .execute();
     const byId = new Map(rows.map((row) => [row.assetId, row]));
 

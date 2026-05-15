@@ -792,6 +792,79 @@ describe(AgentToolService.name, () => {
     expect(toolCallRepository.create).not.toHaveBeenCalled();
   });
 
+  it('backfills legacy preview session limits to the preview per-tool limit during execution', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const legacyLimits = { ...permissionPlanSnapshot.limits, maxPreviewsPerToolCall: 5 };
+    delete legacyLimits.maxPreviewsPerSession;
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: true, originals: false },
+        providerExposure: {
+          metadata: true,
+          previews: true,
+          originals: false,
+          allowOriginalsForExternalProviders: false,
+        },
+        limits: legacyLimits,
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+
+    await sut.readAssetPreviews(auth, session.id, { assetIds });
+
+    expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ error: 'Session policy allows at most 5 assets per session' }),
+      AgentToolDataClass.Previews,
+      5,
+    );
+  });
+
+  it('backfills legacy original session limits to the original per-tool limit during execution', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const legacyLimits = { ...permissionPlanSnapshot.limits, maxOriginalsPerToolCall: 5 };
+    delete legacyLimits.maxOriginalsPerSession;
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      credentialSnapshot: {
+        id: newUuid(),
+        providerType: AgentProviderType.OpenAICompatible,
+        label: 'Local compatible',
+        baseUrl: 'http://localhost:11434/v1',
+        models: ['local-model'],
+        defaultModel: 'local-model',
+      },
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: true, originals: true },
+        providerExposure: {
+          metadata: true,
+          previews: true,
+          originals: true,
+          allowOriginalsForExternalProviders: false,
+        },
+        limits: legacyLimits,
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+
+    await sut.readAssetOriginals(auth, session.id, { assetIds });
+
+    expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ error: 'Session policy allows at most 5 assets per session' }),
+      AgentToolDataClass.Originals,
+      5,
+    );
+  });
+
   it('denies immediate preview execution through atomic creation without repository reads when the session limit is exceeded', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid(), newUuid()];
