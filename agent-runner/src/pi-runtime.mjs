@@ -186,7 +186,23 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
           customTools: [],
         });
 
-        await this.disposeSession(runnerSessionId);
+        const existingEntry = sessions.get(runnerSessionId);
+        try {
+          await this.disposeSession(runnerSessionId);
+        } catch (error) {
+          try {
+            await session.dispose?.();
+          } catch {
+            // Preserve the replacement failure that prevented the new session from becoming owned by the runtime.
+          }
+
+          throw new Error(
+            redactSecret(
+              sanitizedErrorMessage(error, body.credential.secret),
+              existingEntry?.credentialSecret,
+            ),
+          );
+        }
         sessions.set(runnerSessionId, {
           gallerySessionId: body.gallerySessionId,
           credentialSecret: body.credential.secret,
