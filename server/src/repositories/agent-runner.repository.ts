@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { AgentRunnerCapabilities, AgentRunnerStatusReason } from 'src/dtos/agent-runner.dto';
+import type {
+  AgentRunnerCreateSessionRequest,
+  AgentRunnerCreateSessionResult,
+  AgentRunnerMessageRequest,
+  AgentRunnerStreamEvent,
+} from 'src/types/agent-runner.types';
 
 type RunnerHealthBody = {
   status?: unknown;
@@ -47,17 +53,95 @@ const unavailable = (
   capabilities: null,
 });
 
-const getRunnerHealthUrl = (url: string) => {
-  const healthUrl = new URL(url);
-  healthUrl.pathname = `${healthUrl.pathname.replace(/\/$/, '')}/health`;
-  return healthUrl;
+const getRunnerUrl = (url: string, path: string) => {
+  const runnerUrl = new URL(url);
+  runnerUrl.pathname = `${runnerUrl.pathname.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+  return runnerUrl;
 };
+
+const isCreateSessionResult = (value: unknown): value is AgentRunnerCreateSessionResult => {
+  const body = objectRecord(value);
+  return typeof body.runnerSessionId === 'string' && body.capabilities !== undefined;
+};
+
+const isStreamEvent = (value: unknown): value is AgentRunnerStreamEvent => {
+  const body = objectRecord(value);
+  if (body.type === 'assistant-message-delta') {
+    return (
+      typeof body.sessionId === 'string' &&
+      typeof body.runnerSessionId === 'string' &&
+      typeof body.delta === 'string' &&
+      typeof body.sequence === 'number'
+    );
+  }
+
+  if (body.type === 'assistant-message-completed') {
+    return (
+      typeof body.sessionId === 'string' &&
+      typeof body.runnerSessionId === 'string' &&
+      (typeof body.providerMessageId === 'string' || body.providerMessageId === null) &&
+      Array.isArray(objectRecord(body.content).blocks)
+    );
+  }
+
+  return false;
+};
+
+const parseSseFrame = (frame: string): AgentRunnerStreamEvent | null => {
+  const dataLine = frame.split('\n').find((line) => line.startsWith('data: '));
+  if (!dataLine) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(dataLine.slice('data: '.length));
+  } catch {
+    throw new Error('Agent runner returned an invalid stream event');
+  }
+
+  if (!isStreamEvent(parsed)) {
+    throw new Error('Agent runner returned an invalid stream event');
+  }
+
+  return parsed;
+};
+
+async function* parseSseStream(stream: ReadableStream<Uint8Array>): AsyncGenerator<AgentRunnerStreamEvent> {
+  const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += value;
+    const frames = buffer.split('\n\n');
+    buffer = frames.pop() ?? '';
+
+    for (const frame of frames) {
+      const event = parseSseFrame(frame);
+      if (event) {
+        yield event;
+      }
+    }
+  }
+
+  if (buffer.trim().length > 0) {
+    const event = parseSseFrame(buffer);
+    if (event) {
+      yield event;
+    }
+  }
+}
 
 @Injectable()
 export class AgentRunnerRepository {
   async getStatus({ url, timeoutMs }: AgentRunnerProbeConfig): Promise<AgentRunnerProbeResult> {
     try {
-      const response = await fetch(getRunnerHealthUrl(url), {
+      const response = await fetch(getRunnerUrl(url, 'health'), {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -90,5 +174,58 @@ export class AgentRunnerRepository {
     } catch (error) {
       return unavailable(error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'unhealthy');
     }
+  }
+
+  async createSession({
+    url,
+    timeoutMs,
+    body,
+  }: {
+    url: string;
+    timeoutMs: number;
+    body: AgentRunnerCreateSessionRequest;
+  }): Promise<AgentRunnerCreateSessionResult> {
+    const response = await fetch(getRunnerUrl(url, 'sessions'), {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Agent runner session creation failed with status ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (!isCreateSessionResult(result)) {
+      throw new Error('Agent runner returned an invalid session response');
+    }
+
+    return result;
+  }
+
+  async *streamMessage({
+    url,
+    runnerSessionId,
+    timeoutMs,
+    body,
+  }: {
+    url: string;
+    runnerSessionId: string;
+    timeoutMs: number;
+    body: AgentRunnerMessageRequest;
+  }): AsyncGenerator<AgentRunnerStreamEvent> {
+    const response = await fetch(getRunnerUrl(url, `sessions/${encodeURIComponent(runnerSessionId)}/messages`), {
+      method: 'POST',
+      headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`Agent runner message stream failed with status ${response.status}`);
+    }
+
+    yield* parseSseStream(response.body);
   }
 }
