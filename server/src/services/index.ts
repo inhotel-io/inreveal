@@ -1,6 +1,7 @@
 import { ActivityService } from 'src/services/activity.service';
 import { AgentMessageService } from 'src/services/agent-message.service';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
+import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
@@ -64,6 +65,7 @@ export const services = [
   AgentMessageService,
   AgentProviderCredentialService,
   AgentRunnerService,
+  AgentRunnerToolTokenService,
   AgentSessionService,
   AgentToolService,
   AlbumService,
