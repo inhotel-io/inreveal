@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { SharedLinkType } from 'src/enum';
+import { AssetVisibility, SharedLinkType } from 'src/enum';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SharedLinkRepository } from 'src/repositories/shared-link.repository';
@@ -173,10 +173,14 @@ describe(AlbumRepository.name, () => {
       const { user } = await ctx.newUser();
       const { asset: first } = await ctx.newAsset({ ownerId: user.id, localDateTime: new Date('2026-05-01') });
       const { asset: second } = await ctx.newAsset({ ownerId: user.id, localDateTime: new Date('2026-05-02') });
-      const { album } = await ctx.newAlbum(
-        { ownerId: user.id, albumName: 'Porto', description: 'Spring trip', albumThumbnailAssetId: first.id },
-        [first.id, second.id],
-      );
+      const { album } = await ctx.newAlbum({
+        ownerId: user.id,
+        albumName: 'Porto',
+        description: 'Spring trip',
+        albumThumbnailAssetId: first.id,
+      });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: first.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: second.id });
 
       const result = await sut.getAgentAlbumById(user.id, album.id);
 
@@ -189,6 +193,62 @@ describe(AlbumRepository.name, () => {
           assetCount: 2,
           albumThumbnailAssetId: first.id,
           assetIds: [first.id, second.id],
+        }),
+      );
+    });
+
+    it('excludes offline and locked assets from agent album summaries', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: visible } = await ctx.newAsset({ ownerId: user.id, localDateTime: new Date('2026-05-01') });
+      const { asset: offline } = await ctx.newAsset({
+        ownerId: user.id,
+        isOffline: true,
+        localDateTime: new Date('2026-05-02'),
+      });
+      const { asset: locked } = await ctx.newAsset({
+        ownerId: user.id,
+        visibility: AssetVisibility.Locked,
+        localDateTime: new Date('2026-05-03'),
+      });
+      const { album } = await ctx.newAlbum(
+        { ownerId: user.id, albumName: 'Filtered', albumThumbnailAssetId: visible.id },
+        [visible.id, offline.id, locked.id],
+      );
+
+      const result = await sut.getAgentAlbums(user.id);
+
+      expect(result).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: album.id,
+            assetCount: 1,
+            startDate: new Date('2026-05-01'),
+            endDate: new Date('2026-05-01'),
+          }),
+        ]),
+      );
+    });
+
+    it('returns accessible agent albums with empty asset ids when all assets are filtered', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: offline } = await ctx.newAsset({ ownerId: user.id, isOffline: true });
+      const { asset: locked } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      const { album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'Private assets' }, [
+        offline.id,
+        locked.id,
+      ]);
+
+      const result = await sut.getAgentAlbumById(user.id, album.id);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          id: album.id,
+          assetCount: 0,
+          startDate: null,
+          endDate: null,
+          assetIds: [],
         }),
       );
     });

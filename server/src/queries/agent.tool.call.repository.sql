@@ -57,7 +57,8 @@ from
   "agent_tool_call"
 where
   "sessionId" = $1::uuid
-  and "status" in ($2, $3, $4, $5)
+  and "dataClass" = $2
+  and "status" in ($3, $4, $5, $6)
 
 -- AgentToolCallRepository.getCountedAssetCountBySession (excluding tool call)
 select
@@ -66,5 +67,27 @@ from
   "agent_tool_call"
 where
   "sessionId" = $1::uuid
-  and "status" in ($2, $3, $4, $5)
-  and "id" != $6::uuid
+  and "dataClass" = $2
+  and "status" in ($3, $4, $5, $6)
+  and "id" != $7::uuid
+
+-- AgentToolCallRepository.getCountedAssetCountBySessionAndDataClass (including all)
+select
+  coalesce(sum("assetCount"), 0)::int as "assetCount"
+from
+  "agent_tool_call"
+where
+  "sessionId" = $1::uuid
+  and "dataClass" = $2
+  and "status" in ($3, $4, $5, $6)
+
+-- AgentToolCallRepository.getCountedAssetCountBySessionAndDataClass (excluding tool call)
+select
+  coalesce(sum("assetCount"), 0)::int as "assetCount"
+from
+  "agent_tool_call"
+where
+  "sessionId" = $1::uuid
+  and "dataClass" = $2
+  and "status" in ($3, $4, $5, $6)
+  and "id" != $7::uuid
