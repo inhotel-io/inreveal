@@ -2,12 +2,15 @@ import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import { websocketMock } from '@test-data/mocks/websocket.mock';
 import {
   AgentApprovalMode,
+  AgentMessageRole,
+  AgentMessageTextBlockType,
   AgentPermissionPreset,
   AgentProviderType,
   AgentRunnerStatusReason,
   AgentSessionStatus,
   ProviderType,
   type AgentProviderCredentialResponseDto,
+  type AgentMessageResponseDto,
   type AgentRunnerStatusDto,
   type AgentSessionResponseDto,
 } from '@immich/sdk';
@@ -159,6 +162,24 @@ const createdSession: AgentSessionResponseDto = {
   endedAt: null,
 };
 
+const secondSession: AgentSessionResponseDto = {
+  ...createdSession,
+  id: '00000000-0000-4000-8000-000000000200',
+  runnerSessionId: 'stub-00000000-0000-4000-8000-000000000200',
+};
+
+const makeMessage = (id: string, sessionId: string, text: string): AgentMessageResponseDto => ({
+  id,
+  sessionId,
+  role: AgentMessageRole.Assistant,
+  providerMessageId: null,
+  toolCallId: null,
+  content: {
+    blocks: [{ type: AgentMessageTextBlockType.Text, text }],
+  },
+  createdAt: '2026-05-14T00:00:00.000Z',
+});
+
 describe(AgentSessionPageContent.name, () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -205,6 +226,27 @@ describe(AgentSessionPageContent.name, () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to start assistant session');
     expect(screen.getByRole('region', { name: 'Created session' })).toBeInTheDocument();
     expect(sdkMock.createAgentSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('resets the chat panel when a new session is created', async () => {
+    sdkMock.createAgentSession.mockResolvedValueOnce(createdSession).mockResolvedValueOnce(secondSession);
+    sdkMock.getAgentSessionMessages
+      .mockResolvedValueOnce([makeMessage('message-old', createdSession.id, 'First transcript')])
+      .mockResolvedValueOnce([makeMessage('message-new', secondSession.id, 'Second transcript')]);
+
+    render(AgentSessionPageContent, { props: { runnerStatus: healthyRunner, credentials } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+    expect(await screen.findByText('First transcript')).toBeInTheDocument();
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'draft from first session' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    expect(await screen.findByText('Second transcript')).toBeInTheDocument();
+    expect(screen.queryByText('First transcript')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+    expect(sdkMock.getAgentSessionMessages).toHaveBeenCalledWith({ id: secondSession.id });
   });
 
   it('renders setup disabled when the runner is unavailable', () => {
