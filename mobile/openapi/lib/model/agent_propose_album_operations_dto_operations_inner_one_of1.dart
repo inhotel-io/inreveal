@@ -21,7 +21,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf1 {
     this.assetIds = const [],
     this.riskLevel,
     this.enabled = true,
-    this.payload = const {},
+    this.payload = {},
   });
 
   AgentAlbumAddAssetsOperationType type;
@@ -58,7 +58,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf1 {
 
   bool enabled;
 
-  Map<String, Object> payload;
+  Object payload;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf1 &&
@@ -70,7 +70,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf1 {
     _deepEquality.equals(other.assetIds, assetIds) &&
     other.riskLevel == riskLevel &&
     other.enabled == enabled &&
-    _deepEquality.equals(other.payload, payload);
+    other.payload == payload;
 
   @override
   int get hashCode =>
@@ -133,7 +133,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf1 {
             : const [],
         riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
         enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
-        payload: Object.mapFromJson(json[r'payload']),
+        payload: mapValueOfType<Object>(json, r'payload') ?? {},
       );
     }
     return null;

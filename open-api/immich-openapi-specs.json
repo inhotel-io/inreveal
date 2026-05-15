@@ -25017,9 +25017,8 @@
                     "payload": {
                       "default": {},
                       "type": "object",
-                      "additionalProperties": {
-                        "not": {}
-                      }
+                      "properties": {},
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -25127,9 +25126,8 @@
                     "payload": {
                       "default": {},
                       "type": "object",
-                      "additionalProperties": {
-                        "not": {}
-                      }
+                      "properties": {},
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -25815,9 +25813,8 @@
                     "payload": {
                       "default": {},
                       "type": "object",
-                      "additionalProperties": {
-                        "not": {}
-                      }
+                      "properties": {},
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -25925,9 +25922,8 @@
                     "payload": {
                       "default": {},
                       "type": "object",
-                      "additionalProperties": {
-                        "not": {}
-                      }
+                      "properties": {},
+                      "additionalProperties": false
                     }
                   },
                   "required": [
