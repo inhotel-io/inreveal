@@ -112,6 +112,24 @@ const createOpenAiCompatibleProviderFactories = ({ providerName, credential, mod
   ];
 };
 
+const applyPendingProviderRegistrations = (resourceLoader, modelRegistry) => {
+  const extensionsResult = resourceLoader.getExtensions?.();
+  const pendingRegistrations = extensionsResult?.runtime?.pendingProviderRegistrations ?? [];
+
+  for (const { name, config, extensionPath } of pendingRegistrations) {
+    try {
+      modelRegistry.registerProvider(name, config);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Extension "${extensionPath}" error: ${message}`);
+    }
+  }
+
+  if (extensionsResult?.runtime) {
+    extensionsResult.runtime.pendingProviderRegistrations = [];
+  }
+};
+
 export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDependencies.ai } = {}) => {
   const sessions = new Map();
 
@@ -140,6 +158,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       });
 
       await resourceLoader.reload();
+      applyPendingProviderRegistrations(resourceLoader, modelRegistry);
 
       const model = ai.getModel(providerName, body.model) ?? modelRegistry.find(providerName, body.model);
       if (!model) {
