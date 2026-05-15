@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { AssetFileType, AssetOrder, AssetVisibility } from 'src/enum';
+import { AssetFileType, AssetOrder, AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -361,6 +361,174 @@ describe(AssetRepository.name, () => {
       expect(result[0].exifInfo).not.toHaveProperty('lockedProperties');
       expect(result[0].exifInfo).not.toHaveProperty('updatedAt');
       expect(result[0].exifInfo).not.toHaveProperty('updateId');
+    });
+  });
+
+  describe('searchAgentMetadata', () => {
+    const agentScope = { owned: true, sharedSpaces: false, locked: false };
+
+    it('searches agent asset metadata without paths or media file rows', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({
+        ownerId: user.id,
+        originalFileName: 'lisbon.jpg',
+        originalPath: '/uploads/user/original/lisbon.jpg',
+      });
+      const tag = await ctx.get(TagRepository).upsertValue({ userId: user.id, value: 'Lisbon' });
+      await Promise.all([
+        ctx.newExif({ assetId: asset.id, city: 'Lisbon', country: 'Portugal', make: 'Canon', model: 'R5' }),
+        ctx.newTagAsset({ tagIds: [tag.id], assetIds: [asset.id] }),
+        ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: 'preview/lisbon.jpg' }),
+      ]);
+
+      const result = await sut.searchAgentMetadata({
+        userId: user.id,
+        filters: { city: 'Lisbon', country: 'Portugal' },
+        limit: 10,
+        scope: agentScope,
+      });
+
+      expect(result).toMatchObject({
+        nextPage: null,
+        assets: [
+          expect.objectContaining({
+            id: asset.id,
+            ownerId: user.id,
+            originalFileName: 'lisbon.jpg',
+            exifInfo: expect.objectContaining({ city: 'Lisbon', country: 'Portugal' }),
+            tags: [expect.objectContaining({ id: tag.id, value: 'Lisbon' })],
+          }),
+        ],
+      });
+      expect(JSON.stringify(result.assets)).not.toContain(asset.originalPath);
+      expect(JSON.stringify(result.assets)).not.toContain('preview/lisbon.jpg');
+    });
+
+    it('enforces owned, shared-space, locked, deleted, and offline scope', async () => {
+      const { ctx, sut } = setup();
+      const { user: viewer } = await ctx.newUser();
+      const { user: owner } = await ctx.newUser();
+      const { asset: owned } = await ctx.newAsset({ ownerId: viewer.id, visibility: AssetVisibility.Timeline });
+      const { asset: locked } = await ctx.newAsset({ ownerId: viewer.id, visibility: AssetVisibility.Locked });
+      const { asset: deleted } = await ctx.newAsset({ ownerId: viewer.id, deletedAt: new Date() });
+      const { asset: offline } = await ctx.newAsset({ ownerId: viewer.id, isOffline: true });
+      const { asset: shared } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      await Promise.all([
+        ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer }),
+        ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: shared.id, addedById: owner.id }),
+        ctx.newExif({ assetId: owned.id, country: 'Portugal' }),
+        ctx.newExif({ assetId: locked.id, country: 'Portugal' }),
+        ctx.newExif({ assetId: deleted.id, country: 'Portugal' }),
+        ctx.newExif({ assetId: offline.id, country: 'Portugal' }),
+        ctx.newExif({ assetId: shared.id, country: 'Portugal' }),
+      ]);
+
+      await expect(
+        sut.searchAgentMetadata({
+          userId: viewer.id,
+          filters: { country: 'Portugal' },
+          limit: 10,
+          scope: { owned: true, sharedSpaces: false, locked: false },
+        }),
+      ).resolves.toMatchObject({ assets: [expect.objectContaining({ id: owned.id })] });
+
+      const withShared = await sut.searchAgentMetadata({
+        userId: viewer.id,
+        filters: { country: 'Portugal' },
+        limit: 10,
+        scope: { owned: true, sharedSpaces: true, locked: false },
+      });
+      expect(withShared.assets.map(({ id }) => id).toSorted()).toEqual([owned.id, shared.id].toSorted());
+
+      const withLocked = await sut.searchAgentMetadata({
+        userId: viewer.id,
+        filters: { country: 'Portugal' },
+        limit: 10,
+        scope: { owned: true, sharedSpaces: false, locked: true },
+      });
+      expect(withLocked.assets.map(({ id }) => id).toSorted()).toEqual([locked.id, owned.id].toSorted());
+    });
+  });
+
+  describe('agent media references', () => {
+    it('returns preview references in requested order without filesystem paths and omits missing ids', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: first } = await ctx.newAsset({ ownerId: user.id, originalFileName: 'first.jpg' });
+      const { asset: second } = await ctx.newAsset({ ownerId: user.id, originalFileName: 'second.jpg' });
+      const { asset: missingPreview } = await ctx.newAsset({ ownerId: user.id, originalFileName: 'missing.jpg' });
+      await Promise.all([
+        ctx.newExif({ assetId: first.id, exifImageWidth: 100, exifImageHeight: 80 }),
+        ctx.newExif({ assetId: second.id, exifImageWidth: 200, exifImageHeight: 160 }),
+        ctx.newAssetFile({ assetId: first.id, type: AssetFileType.Preview, path: 'preview/first.jpg' }),
+        ctx.newAssetFile({ assetId: second.id, type: AssetFileType.Preview, path: 'preview/second.jpg' }),
+      ]);
+
+      const result = await sut.getAgentPreviewReferencesByIds([second.id, missingPreview.id, factory.uuid(), first.id]);
+
+      expect(result).toEqual([
+        {
+          assetId: second.id,
+          mediaUrl: `/api/assets/${second.id}/thumbnail?size=preview`,
+          mimeType: 'image/jpeg',
+          fileName: 'second.jpg',
+          width: 200,
+          height: 160,
+        },
+        {
+          assetId: first.id,
+          mediaUrl: `/api/assets/${first.id}/thumbnail?size=preview`,
+          mimeType: 'image/jpeg',
+          fileName: 'first.jpg',
+          width: 100,
+          height: 80,
+        },
+      ]);
+      expect(JSON.stringify(result)).not.toContain('preview/second.jpg');
+    });
+
+    it('returns original references in requested order without filesystem paths and omits missing ids', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: first } = await ctx.newAsset({
+        ownerId: user.id,
+        originalFileName: 'first.jpg',
+        originalPath: '/uploads/original/first.jpg',
+      });
+      const { asset: second } = await ctx.newAsset({
+        ownerId: user.id,
+        originalFileName: 'second.png',
+        originalPath: '/uploads/original/second.png',
+      });
+      await Promise.all([
+        ctx.newExif({ assetId: first.id, exifImageWidth: 300, exifImageHeight: 200 }),
+        ctx.newExif({ assetId: second.id, exifImageWidth: 640, exifImageHeight: 480 }),
+      ]);
+
+      const result = await sut.getAgentOriginalReferencesByIds([second.id, factory.uuid(), first.id]);
+
+      expect(result).toEqual([
+        {
+          assetId: second.id,
+          mediaUrl: `/api/assets/${second.id}/original`,
+          mimeType: 'image/png',
+          fileName: 'second.png',
+          width: 640,
+          height: 480,
+        },
+        {
+          assetId: first.id,
+          mediaUrl: `/api/assets/${first.id}/original`,
+          mimeType: 'image/jpeg',
+          fileName: 'first.jpg',
+          width: 300,
+          height: 200,
+        },
+      ]);
+      expect(JSON.stringify(result)).not.toContain(first.originalPath);
+      expect(JSON.stringify(result)).not.toContain(second.originalPath);
     });
   });
 

@@ -25,6 +25,7 @@ import { AssetFileTable } from 'src/schema/tables/asset-file.table';
 import { AssetJobStatusTable } from 'src/schema/tables/asset-job-status.table';
 import { AssetMetadataTable } from 'src/schema/tables/asset-metadata.table';
 import { AssetTable } from 'src/schema/tables/asset.table';
+import { AgentAssetMediaReference, AgentAssetMetadata, AgentSearchAssetsFilters } from 'src/types/agent-tool.types';
 import {
   anyUuid,
   asUuid,
@@ -188,6 +189,36 @@ const withBoundingBox = <T>(qb: SelectQueryBuilder<DB, 'asset' | 'asset_exif', T
   return withLatitude.where((eb) =>
     eb.or([eb('asset_exif.longitude', '>=', west), eb('asset_exif.longitude', '<=', east)]),
   );
+};
+
+const getAgentMimeType = (fileName: string) => {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+
+  switch (extension) {
+    case 'png': {
+      return 'image/png';
+    }
+
+    case 'webp': {
+      return 'image/webp';
+    }
+
+    case 'gif': {
+      return 'image/gif';
+    }
+
+    case 'mp4': {
+      return 'video/mp4';
+    }
+
+    case 'mov': {
+      return 'video/quicktime';
+    }
+
+    default: {
+      return 'image/jpeg';
+    }
+  }
 };
 
 function withAgentExif<O>(qb: SelectQueryBuilder<DB, 'asset', O>) {
@@ -665,6 +696,283 @@ export class AssetRepository {
       .$call(withAgentExif)
       .where('asset.id', '=', anyUuid(ids))
       .execute();
+  }
+
+  @GenerateSql({
+    params: [
+      {
+        userId: DummyValue.UUID,
+        filters: { city: DummyValue.STRING, country: DummyValue.STRING },
+        limit: 10,
+        scope: { owned: true, sharedSpaces: true, locked: false },
+      },
+    ],
+  })
+  async searchAgentMetadata({
+    userId,
+    filters,
+    limit,
+    scope,
+  }: {
+    userId: string;
+    filters: AgentSearchAssetsFilters;
+    limit: number;
+    scope: { owned: boolean; sharedSpaces: boolean; locked: boolean };
+  }): Promise<{ assets: AgentAssetMetadata[]; nextPage: string | null }> {
+    if (!scope.owned && !scope.sharedSpaces) {
+      return { assets: [], nextPage: null };
+    }
+
+    const assets = await this.db
+      .selectFrom('asset')
+      .select([
+        'asset.id',
+        'asset.ownerId',
+        'asset.type',
+        'asset.originalFileName',
+        'asset.localDateTime',
+        'asset.fileCreatedAt',
+        'asset.fileModifiedAt',
+        'asset.isFavorite',
+        'asset.visibility',
+      ])
+      .select(withTags)
+      .$call(withAgentExif)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .$if(!scope.locked, (qb) => qb.where('asset.visibility', '!=', AssetVisibility.Locked))
+      .where((eb) =>
+        scope.owned && scope.sharedSpaces
+          ? eb.or([
+              eb('asset.ownerId', '=', userId),
+              eb.exists(
+                eb
+                  .selectFrom('shared_space_asset')
+                  .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_asset.spaceId')
+                  .whereRef('shared_space_asset.assetId', '=', 'asset.id')
+                  .where('shared_space_member.userId', '=', userId),
+              ),
+              eb.exists(
+                eb
+                  .selectFrom('shared_space_library')
+                  .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_library.spaceId')
+                  .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+                  .where('shared_space_member.userId', '=', userId),
+              ),
+            ])
+          : scope.owned
+            ? eb('asset.ownerId', '=', userId)
+            : eb.or([
+                eb.exists(
+                  eb
+                    .selectFrom('shared_space_asset')
+                    .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_asset.spaceId')
+                    .whereRef('shared_space_asset.assetId', '=', 'asset.id')
+                    .where('shared_space_member.userId', '=', userId),
+                ),
+                eb.exists(
+                  eb
+                    .selectFrom('shared_space_library')
+                    .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_library.spaceId')
+                    .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+                    .where('shared_space_member.userId', '=', userId),
+                ),
+              ]),
+      )
+      .$if(filters.takenAfter !== undefined, (qb) => qb.where('asset.localDateTime', '>=', filters.takenAfter!))
+      .$if(filters.takenBefore !== undefined, (qb) => qb.where('asset.localDateTime', '<=', filters.takenBefore!))
+      .$if(filters.city !== undefined, (qb) =>
+        qb.where((eb) =>
+          eb.exists(
+            eb
+              .selectFrom('asset_exif')
+              .whereRef('asset_exif.assetId', '=', 'asset.id')
+              .$if(filters.city === null, (qb) => qb.where('asset_exif.city', 'is', null))
+              .$if(filters.city !== null, (qb) => qb.where('asset_exif.city', '=', filters.city as string)),
+          ),
+        ),
+      )
+      .$if(filters.state !== undefined, (qb) =>
+        qb.where((eb) =>
+          eb.exists(
+            eb
+              .selectFrom('asset_exif')
+              .whereRef('asset_exif.assetId', '=', 'asset.id')
+              .$if(filters.state === null, (qb) => qb.where('asset_exif.state', 'is', null))
+              .$if(filters.state !== null, (qb) => qb.where('asset_exif.state', '=', filters.state as string)),
+          ),
+        ),
+      )
+      .$if(filters.country !== undefined, (qb) =>
+        qb.where((eb) =>
+          eb.exists(
+            eb
+              .selectFrom('asset_exif')
+              .whereRef('asset_exif.assetId', '=', 'asset.id')
+              .$if(filters.country === null, (qb) => qb.where('asset_exif.country', 'is', null))
+              .$if(filters.country !== null, (qb) => qb.where('asset_exif.country', '=', filters.country as string)),
+          ),
+        ),
+      )
+      .$if(filters.make !== undefined, (qb) =>
+        qb.where((eb) =>
+          eb.exists(
+            eb
+              .selectFrom('asset_exif')
+              .whereRef('asset_exif.assetId', '=', 'asset.id')
+              .$if(filters.make === null, (qb) => qb.where('asset_exif.make', 'is', null))
+              .$if(filters.make !== null, (qb) => qb.where('asset_exif.make', '=', filters.make as string)),
+          ),
+        ),
+      )
+      .$if(filters.model !== undefined, (qb) =>
+        qb.where((eb) =>
+          eb.exists(
+            eb
+              .selectFrom('asset_exif')
+              .whereRef('asset_exif.assetId', '=', 'asset.id')
+              .$if(filters.model === null, (qb) => qb.where('asset_exif.model', 'is', null))
+              .$if(filters.model !== null, (qb) => qb.where('asset_exif.model', '=', filters.model as string)),
+          ),
+        ),
+      )
+      .$if(filters.lensModel !== undefined, (qb) =>
+        qb.where((eb) =>
+          eb.exists(
+            eb
+              .selectFrom('asset_exif')
+              .whereRef('asset_exif.assetId', '=', 'asset.id')
+              .$if(filters.lensModel === null, (qb) => qb.where('asset_exif.lensModel', 'is', null))
+              .$if(filters.lensModel !== null, (qb) =>
+                qb.where('asset_exif.lensModel', '=', filters.lensModel as string),
+              ),
+          ),
+        ),
+      )
+      .$if(filters.rating !== undefined, (qb) =>
+        qb.where((eb) =>
+          eb.exists(
+            eb
+              .selectFrom('asset_exif')
+              .whereRef('asset_exif.assetId', '=', 'asset.id')
+              .$if(filters.rating === null, (qb) => qb.where('asset_exif.rating', 'is', null))
+              .$if(filters.rating !== null, (qb) => qb.where('asset_exif.rating', '=', filters.rating as number)),
+          ),
+        ),
+      )
+      .$if(filters.isFavorite !== undefined, (qb) => qb.where('asset.isFavorite', '=', filters.isFavorite!))
+      .$if(filters.type !== undefined, (qb) => qb.where('asset.type', '=', filters.type!))
+      .$if(Boolean(filters.tagIds?.length), (qb) =>
+        qb.where((eb) =>
+          eb.exists(
+            eb
+              .selectFrom('tag_asset')
+              .whereRef('tag_asset.assetId', '=', 'asset.id')
+              .where('tag_asset.tagId', '=', anyUuid(filters.tagIds!)),
+          ),
+        ),
+      )
+      .$if(Boolean(filters.albumIds?.length), (qb) =>
+        qb.where((eb) =>
+          eb.exists(
+            eb
+              .selectFrom('album_asset')
+              .whereRef('album_asset.assetId', '=', 'asset.id')
+              .where('album_asset.albumId', '=', anyUuid(filters.albumIds!)),
+          ),
+        ),
+      )
+      .$if(filters.isNotInAlbum === true, (qb) =>
+        qb.where((eb) =>
+          eb.not(eb.exists(eb.selectFrom('album_asset').whereRef('album_asset.assetId', '=', 'asset.id'))),
+        ),
+      )
+      .orderBy('asset.localDateTime', 'desc')
+      .orderBy('asset.id', 'desc')
+      .limit(limit)
+      .execute();
+
+    return { assets: assets as AgentAssetMetadata[], nextPage: null };
+  }
+
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  @ChunkedArray()
+  async getAgentPreviewReferencesByIds(ids: string[]): Promise<AgentAssetMediaReference[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .selectFrom('asset')
+      .innerJoin('asset_file', 'asset_file.assetId', 'asset.id')
+      .leftJoin('asset_exif', 'asset_exif.assetId', 'asset.id')
+      .select([
+        'asset.id as assetId',
+        'asset.originalFileName as fileName',
+        'asset_exif.exifImageWidth as width',
+        'asset_exif.exifImageHeight as height',
+      ])
+      .where('asset.id', '=', anyUuid(ids))
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset_file.type', '=', AssetFileType.Preview)
+      .execute();
+    const byId = new Map(rows.map((row) => [row.assetId, row]));
+
+    return ids.flatMap((assetId) => {
+      const row = byId.get(assetId);
+      return row
+        ? [
+            {
+              assetId,
+              mediaUrl: `/api/assets/${assetId}/thumbnail?size=preview`,
+              mimeType: getAgentMimeType(row.fileName),
+              fileName: row.fileName,
+              width: row.width,
+              height: row.height,
+            },
+          ]
+        : [];
+    });
+  }
+
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  @ChunkedArray()
+  async getAgentOriginalReferencesByIds(ids: string[]): Promise<AgentAssetMediaReference[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .selectFrom('asset')
+      .leftJoin('asset_exif', 'asset_exif.assetId', 'asset.id')
+      .select([
+        'asset.id as assetId',
+        'asset.originalFileName as fileName',
+        'asset_exif.exifImageWidth as width',
+        'asset_exif.exifImageHeight as height',
+      ])
+      .where('asset.id', '=', anyUuid(ids))
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .execute();
+    const byId = new Map(rows.map((row) => [row.assetId, row]));
+
+    return ids.flatMap((assetId) => {
+      const row = byId.get(assetId);
+      return row
+        ? [
+            {
+              assetId,
+              mediaUrl: `/api/assets/${assetId}/original`,
+              mimeType: getAgentMimeType(row.fileName),
+              fileName: row.fileName,
+              width: row.width,
+              height: row.height,
+            },
+          ]
+        : [];
+    });
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
