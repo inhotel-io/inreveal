@@ -66,12 +66,13 @@ This slice intentionally does not implement:
 - `server/src/types/agent-tool.types.ts` - add typed request/response metadata and result projections for search assets, albums, previews, and originals.
 - `server/src/dtos/agent-tool.dto.ts` - add request/response DTO schemas for the expanded tools.
 - `server/src/dtos/agent-tool.dto.spec.ts` - TDD coverage for request validation, response encoding, and edge-case payloads.
+- `server/src/schema/tables/agent-tool-call.table.ts` - generalize audit metadata JSON types beyond the metadata-only tool.
 - `server/src/repositories/agent-tool-call.repository.ts` - generalize counted exposure totals and allow completion transitions to update counts.
-- `server/src/repositories/agent-tool-call.repository.spec.ts` - medium tests for counted totals by data class and guarded count updates.
+- `server/test/medium/specs/repositories/agent-tool-call.repository.spec.ts` - medium tests for counted totals by data class and guarded count updates.
 - `server/src/repositories/asset.repository.ts` - add agent-focused search, preview reference, and original reference projections.
-- `server/src/repositories/asset.repository.spec.ts` - medium tests for projection redaction, ordering, locked filtering inputs, and generated SQL.
+- `server/test/medium/specs/repositories/asset.repository.spec.ts` - medium tests for projection redaction, ordering, locked filtering inputs, and generated SQL.
 - `server/src/repositories/album.repository.ts` - add agent-focused album list/detail projections.
-- `server/src/repositories/album.repository.spec.ts` - medium tests for owned/shared album projections and deleted album exclusion.
+- `server/test/medium/specs/repositories/album.repository.spec.ts` - medium tests for owned/shared album projections and deleted album exclusion.
 - `server/src/services/agent-tool.service.ts` - refactor the current metadata-only flow into a generic read-tool gate and implement the six read tools.
 - `server/src/services/agent-tool.service.spec.ts` - core service TDD for approval matrix, policy denial, limits, access, audit, execution drift, and race cases.
 - `server/src/controllers/agent-tool.controller.ts` - add browser-authenticated expanded read-tool routes for typed API/SDK use.
@@ -461,6 +462,7 @@ git commit -m "feat: expand agent read permission limits"
 
 - Modify: `server/src/types/agent-tool.types.ts`
 - Modify: `server/src/dtos/agent-tool.dto.ts`
+- Modify: `server/src/schema/tables/agent-tool-call.table.ts`
 - Test: `server/src/dtos/agent-tool.dto.spec.ts`
 
 - [ ] **Step 1: Write failing DTO tests for expanded read-tool requests**
@@ -482,6 +484,19 @@ it('validates search assets request filters and limit', () => {
   });
 
   expect(result.success).toBe(true);
+});
+
+it('rejects search assets requests with both direct filters and toolCallId', () => {
+  const result = AgentSearchAssetsToolRequestDto.schema.safeParse({
+    filters: { city: 'Lisbon' },
+    limit: 50,
+    toolCallId: factory.uuid(),
+  });
+
+  expect(result.success).toBe(false);
+  expect(result.error?.issues.map((issue) => issue.message)).toContain(
+    'Provide either search filters or toolCallId, not both',
+  );
 });
 
 it('rejects expanded asset read requests with both assetIds and toolCallId', () => {
@@ -513,6 +528,15 @@ it('validates read album request requires albumId or toolCallId', () => {
   expect(result.success).toBe(false);
   expect(result.error?.issues.map((issue) => issue.message)).toContain(
     'Provide albumId for a new tool request or toolCallId for an approved request',
+  );
+});
+
+it('rejects read album requests with both albumId and toolCallId', () => {
+  const result = AgentReadAlbumToolRequestDto.schema.safeParse({ albumId: factory.uuid(), toolCallId: factory.uuid() });
+
+  expect(result.success).toBe(false);
+  expect(result.error?.issues.map((issue) => issue.message)).toContain(
+    'Provide either albumId or toolCallId, not both',
   );
 });
 ```
@@ -595,6 +619,24 @@ export type AgentAlbumDetail = AgentAlbumSummary & {
 ```
 
 Update `AgentToolReadAssetMetadataRequestMetadata` to reuse `AgentToolReadAssetIdsRequestMetadata`, and update `AgentToolReadAssetMetadataResponseMetadata` to reuse `AgentToolResponseIdsMetadata`.
+Add generic audit metadata unions and update the tool-call table to use them:
+
+```typescript
+export type AgentToolRequestMetadata =
+  | AgentToolSearchAssetsRequestMetadata
+  | AgentToolReadAssetIdsRequestMetadata
+  | AgentToolReadAlbumRequestMetadata
+  | AgentToolListAlbumsRequestMetadata;
+
+export type AgentToolResponseMetadata = AgentToolResponseIdsMetadata;
+```
+
+In `server/src/schema/tables/agent-tool-call.table.ts`:
+
+```typescript
+redactedRequestMetadata!: AgentToolRequestMetadata;
+redactedResponseMetadata!: AgentToolResponseMetadata | null;
+```
 
 - [ ] **Step 4: Add request and response DTO schemas**
 
@@ -644,6 +686,12 @@ const AgentSearchAssetsFiltersSchema = z
   .meta({ id: 'AgentSearchAssetsFilters' });
 ```
 
+Define direct-or-approved request schemas for non-asset-id tools:
+
+- `AgentSearchAssetsToolRequestSchema` accepts either `{ filters, limit }` for a new request or `{ toolCallId }` for approved strict execution, but rejects both together. It defaults `filters` to `{}` and `limit` to `MAX_TOOL_LIMIT` only for new requests.
+- `AgentListAlbumsToolRequestSchema` accepts `{}` for a new request or `{ toolCallId }` for approved strict execution, and rejects unknown keys.
+- `AgentReadAlbumToolRequestSchema` accepts either `{ albumId }` or `{ toolCallId }`, rejects both, and rejects neither.
+
 Add DTO classes:
 
 ```typescript
@@ -682,7 +730,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit expanded tool DTOs**
 
 ```bash
-git add server/src/types/agent-tool.types.ts server/src/dtos/agent-tool.dto.ts server/src/dtos/agent-tool.dto.spec.ts
+git add server/src/types/agent-tool.types.ts server/src/dtos/agent-tool.dto.ts server/src/dtos/agent-tool.dto.spec.ts server/src/schema/tables/agent-tool-call.table.ts
 git commit -m "feat: define expanded agent read tool DTOs"
 ```
 
@@ -691,15 +739,15 @@ git commit -m "feat: define expanded agent read tool DTOs"
 **Files:**
 
 - Modify: `server/src/repositories/agent-tool-call.repository.ts`
-- Modify: `server/src/repositories/agent-tool-call.repository.spec.ts`
+- Modify: `server/test/medium/specs/repositories/agent-tool-call.repository.spec.ts`
 - Modify: `server/src/repositories/asset.repository.ts`
-- Modify: `server/src/repositories/asset.repository.spec.ts`
+- Modify: `server/test/medium/specs/repositories/asset.repository.spec.ts`
 - Modify: `server/src/repositories/album.repository.ts`
-- Modify: `server/src/repositories/album.repository.spec.ts`
+- Modify: `server/test/medium/specs/repositories/album.repository.spec.ts`
 
 - [ ] **Step 1: Write failing audit counting tests**
 
-Add medium tests to `server/src/repositories/agent-tool-call.repository.spec.ts`:
+Add medium tests to `server/test/medium/specs/repositories/agent-tool-call.repository.spec.ts`:
 
 ```typescript
 it('counts completed exposures by session and data class', async () => {
@@ -806,7 +854,7 @@ Keep `getCountedAssetCountBySession()` for existing metadata tests by delegating
 
 - [ ] **Step 4: Add agent asset projection tests**
 
-Add these medium tests to `server/src/repositories/asset.repository.spec.ts`:
+Add these medium tests to `server/test/medium/specs/repositories/asset.repository.spec.ts`:
 
 ```typescript
 it('searches agent asset metadata without paths or media file rows', async () => {
@@ -849,9 +897,16 @@ it('returns original references without filesystem paths', async () => {
 });
 ```
 
+Also add repository-scope edge cases:
+
+- owned-only search excludes shared-space assets when `scope.sharedSpaces` is false;
+- shared-space search includes visible shared-space assets when `scope.sharedSpaces` is true;
+- locked assets are excluded unless `scope.locked` is true;
+- preview/original reference methods preserve requested order while omitting missing ids.
+
 - [ ] **Step 5: Add agent album projection tests**
 
-Add these medium tests to `server/src/repositories/album.repository.spec.ts`:
+Add these medium tests to `server/test/medium/specs/repositories/album.repository.spec.ts`:
 
 ```typescript
 it('lists owned and shared albums for agent reads without deleted albums', async () => {
@@ -904,6 +959,11 @@ searchAgentMetadata(options: {
   userId: string;
   filters: AgentSearchAssetsFilters;
   limit: number;
+  scope: {
+    owned: boolean;
+    sharedSpaces: boolean;
+    locked: boolean;
+  };
 }): Promise<{ assets: AgentAssetMetadata[]; nextPage: string | null }>;
 
 getAgentPreviewReferencesByIds(ids: string[]): Promise<AgentAssetMediaReference[]>;
@@ -918,7 +978,7 @@ getAgentAlbumById(userId: string, albumId: string): Promise<AgentAlbumDetail | n
 
 Implementation details:
 
-- `searchAgentMetadata()` must reuse the same selected fields as `getAgentMetadataByIds()`, include `withAgentExif`, include tags, apply filters directly in Kysely, exclude deleted/offline assets, and scope to owned assets only. Shared-space search is added by the service after checking `permissionPlan.assetScope.sharedSpaces`; if shared-space scope is enabled, include rows visible through `shared_space_asset` or `shared_space_library`.
+- `searchAgentMetadata()` must reuse the same selected fields as `getAgentMetadataByIds()`, include `withAgentExif`, include tags, apply filters directly in Kysely, exclude deleted/offline assets, and apply the explicit `scope` input. The service derives `scope.owned`, `scope.sharedSpaces`, and `scope.locked` from the permission plan plus elevated-auth checks; the repository enforces that owned/shared/locked scope in SQL, including rows visible through `shared_space_asset` or `shared_space_library` only when `scope.sharedSpaces` is true.
 - `getAgentPreviewReferencesByIds()` reads preview `asset_file` rows and returns relative `/api/assets/:id/thumbnail?size=preview` references. It must not return `asset_file.path`.
 - `getAgentOriginalReferencesByIds()` reads `asset.originalFileName`, MIME metadata, dimensions from exif when available, and returns relative `/api/assets/:id/original`. It must not return `asset.originalPath`.
 - `getAgentAlbums()` returns owned albums and albums shared through `album_user` or `shared_link`, deduped by album id.
@@ -937,7 +997,7 @@ Expected: PASS.
 - [ ] **Step 9: Commit repository projections**
 
 ```bash
-git add server/src/repositories/agent-tool-call.repository.ts server/src/repositories/agent-tool-call.repository.spec.ts server/src/repositories/asset.repository.ts server/src/repositories/asset.repository.spec.ts server/src/repositories/album.repository.ts server/src/repositories/album.repository.spec.ts
+git add server/src/repositories/agent-tool-call.repository.ts server/test/medium/specs/repositories/agent-tool-call.repository.spec.ts server/src/repositories/asset.repository.ts server/test/medium/specs/repositories/asset.repository.spec.ts server/src/repositories/album.repository.ts server/test/medium/specs/repositories/album.repository.spec.ts
 git commit -m "feat: add agent read repository projections"
 ```
 
@@ -1112,6 +1172,16 @@ it('denies YOLO mode until slice 10 without executing the repository read', asyn
 });
 ```
 
+Add table-driven edge tests proving the same gate applies to every asset read path:
+
+- `searchAssets`, `readAssetMetadata`, `readAssetPreviews`, and `readAssetOriginals` all deny inaccessible asset ids before returning data.
+- Shared-space assets are returned only when `permissionPlan.assetScope.sharedSpaces` is true.
+- Locked assets require both `permissionPlan.assetScope.locked` and elevated auth; runner gateway auth is not elevated.
+- Per-session limits are counted by `AgentToolDataClass` and exclude the current approved tool call during strict re-execution.
+- Search filters using album/tag ids are visibility-constrained and do not leak inaccessible ids through counts or errors.
+- Missing preview/original reference rows return only available references and audit the returned count, not the requested count.
+- `readAlbum` denies albums whose asset count would exceed `maxAssetsPerToolCall`.
+
 - [ ] **Step 3: Run service tests and confirm failure**
 
 Run:
@@ -1156,6 +1226,7 @@ readAlbum(auth: AuthDto, sessionId: string, dto: AgentReadAlbumToolRequestDto): 
 ```
 
 Keep `readAssetMetadata()` as a public method, but route it through the same executor.
+Approved execution by `toolCallId` must load the stored pending call for the same session, rehydrate the original request metadata, claim it with a guarded transition to `Executing`, and then re-run session ownership, policy, normal access, provider exposure, limits, and active-session checks before executing. This is the drift/race protection required by the design.
 
 - [ ] **Step 5: Implement policy helpers**
 
@@ -1219,7 +1290,7 @@ private requiresApproval(session: AgentSession, dataClass: AgentToolDataClass): 
 
 The tool implementations must satisfy:
 
-- `searchAssets`: validates metadata policy, limit `<= maxAssetsPerToolCall`, normal asset-scope filtering, executes `assetRepository.searchAgentMetadata()`, orders by repository result, and audits returned asset ids.
+- `searchAssets`: validates metadata policy, limit `<= maxAssetsPerToolCall`, derives repository scope from `permissionPlan.assetScope` plus elevated auth, executes `assetRepository.searchAgentMetadata({ scope })`, orders by repository result, and audits returned asset ids.
 - `readAssetMetadata`: preserves existing response shape and tests, but no longer denies `AskOnEscalation` or `PlanOnly`.
 - `readAssetPreviews`: validates preview read flags, provider exposure, `maxPreviewsPerToolCall`, `maxPreviewsPerSession`, normal asset access, and returns ordered preview references.
 - `readAssetOriginals`: validates original read flags, provider exposure, external-provider restriction, `maxOriginalsPerToolCall`, `maxOriginalsPerSession`, normal asset access, and returns ordered original references.
@@ -1314,16 +1385,24 @@ describe(AgentRunnerToolTokenService.name, () => {
 
   it('rejects tampered tokens', () => {
     const token = sut.create({ sessionId: 'session-1', userId: 'user-1', expiresAt: new Date('2026-05-15T15:00:00Z') });
+    const tampered = `${token.slice(0, -1)}${token.endsWith('a') ? 'b' : 'a'}`;
 
-    expect(() => sut.verify(token.replace('session-1', 'session-2'), new Date('2026-05-15T14:00:00Z'))).toThrow(
-      'Invalid agent runner tool token',
-    );
+    expect(() => sut.verify(tampered, new Date('2026-05-15T14:00:00Z'))).toThrow('Invalid agent runner tool token');
   });
 
   it('rejects expired tokens', () => {
     const token = sut.create({ sessionId: 'session-1', userId: 'user-1', expiresAt: new Date('2026-05-15T15:00:00Z') });
 
     expect(() => sut.verify(token, new Date('2026-05-15T15:00:01Z'))).toThrow('Agent runner tool token expired');
+  });
+
+  it('rejects token creation when the agent secret key is missing', () => {
+    configRepository.getEnv.mockReturnValue({ agent: { secretKey: '' } });
+    sut = new AgentRunnerToolTokenService(configRepository as never);
+
+    expect(() =>
+      sut.create({ sessionId: 'session-1', userId: 'user-1', expiresAt: new Date('2026-05-15T15:00:00Z') }),
+    ).toThrow('Agent credential encryption key is not configured');
   });
 });
 ```
@@ -1455,11 +1534,16 @@ export class AgentRunnerToolTokenService {
       throw new UnauthorizedException('Invalid agent runner tool token');
     }
 
-    const claims = JSON.parse(Buffer.from(encodedClaims, 'base64url').toString('utf8')) as {
+    let claims: {
       sessionId?: unknown;
       userId?: unknown;
       expiresAt?: unknown;
     };
+    try {
+      claims = JSON.parse(Buffer.from(encodedClaims, 'base64url').toString('utf8')) as typeof claims;
+    } catch {
+      throw new UnauthorizedException('Invalid agent runner tool token');
+    }
     if (
       typeof claims.sessionId !== 'string' ||
       typeof claims.userId !== 'string' ||
@@ -1600,7 +1684,15 @@ it('includes a short-lived tool gateway token when the gateway URL is configured
     capabilities: { streaming: true, tools: ['searchAssets'] },
   });
 
-  const result = await sut.createSession(createSessionBody);
+  const body = { ...createSessionBody, userId: 'user-1' };
+  const result = await sut.createSession(body);
+
+  expect(tokenService.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      sessionId: body.gallerySessionId,
+      userId: 'user-1',
+    }),
+  );
 
   expect(agentRunnerRepository.createSession).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -1613,6 +1705,29 @@ it('includes a short-lived tool gateway token when the gateway URL is configured
     }),
   );
   expect(JSON.stringify(result)).not.toContain('tool-token-1');
+});
+
+it('passes a null tool gateway when the gateway URL is not configured', async () => {
+  configRepository.getEnv.mockReturnValue({
+    agent: {
+      runnerUrl: 'http://agent-runner:4477',
+      runnerHealthTimeoutMs: 3000,
+      toolGatewayUrl: undefined,
+    },
+  });
+  agentRunnerRepository.createSession.mockResolvedValue({
+    runnerSessionId: 'runner-session-1',
+    capabilities: { streaming: true, tools: [] },
+  });
+
+  await sut.createSession({ ...createSessionBody, userId: 'user-1' });
+
+  expect(tokenService.create).not.toHaveBeenCalled();
+  expect(agentRunnerRepository.createSession).toHaveBeenCalledWith(
+    expect.objectContaining({
+      body: expect.objectContaining({ toolGateway: null }),
+    }),
+  );
 });
 ```
 
@@ -1631,16 +1746,23 @@ Expected: FAIL because `toolGatewayUrl` and token handoff are missing.
 Add to `server/src/dtos/env.dto.ts`:
 
 ```typescript
-IMMICH_AGENT_TOOL_GATEWAY_URL: httpUrl
-  .refine((value) => !value || value.startsWith('http://') || value.startsWith('https://'), {
-    message: 'Tool gateway URL must use http or https',
-  })
-  .optional(),
+const agentToolGatewayUrl = z.url().refine((value) => /^https?:\/\//i.test(value), {
+  message: 'Tool gateway URL must use http or https',
+});
+
+// ...
+IMMICH_AGENT_TOOL_GATEWAY_URL: agentToolGatewayUrl.optional(),
 ```
 
 Add `toolGatewayUrl?: string` to `ConfigRepository` agent env shape and map `dto.IMMICH_AGENT_TOOL_GATEWAY_URL`.
 
-Update `server/src/types/agent-runner.types.ts` with `AgentRunnerToolGateway` and nullable `toolGateway`.
+Update `server/src/types/agent-runner.types.ts` with `AgentRunnerToolGateway`, nullable `toolGateway`, and a service-only input type:
+
+```typescript
+export type AgentRunnerCreateSessionInput = AgentRunnerCreateSessionRequest & {
+  userId: string;
+};
+```
 
 - [ ] **Step 5: Include tool gateway token in runner session creation**
 
@@ -1656,14 +1778,27 @@ const toolGateway = toolGatewayUrl
       url: toolGatewayUrl,
       token: this.agentRunnerToolTokenService.create({
         sessionId: body.gallerySessionId,
-        userId: sessionUserId,
+        userId,
         expiresAt,
       }),
     }
   : null;
 ```
 
-Pass `toolGateway` to `AgentRunnerRepository.createSession()`. If the existing `createSession()` input does not include `userId`, add `userId` to the internal service input and pass it from `AgentSessionService.create()` as `auth.user.id`.
+Change `AgentRunnerService.createSession()` to accept `AgentRunnerCreateSessionInput`, destructure `userId` out before calling the runner repository, and pass only the runner protocol body plus `toolGateway`:
+
+```typescript
+async createSession({ userId, ...body }: AgentRunnerCreateSessionInput) {
+  // ...
+  await this.agentRunnerRepository.createSession({
+    url: runnerUrl,
+    timeoutMs: runnerHealthTimeoutMs,
+    body: { ...body, toolGateway },
+  });
+}
+```
+
+Pass `userId: auth.user.id` from `AgentSessionService.create()`. Do not add `userId` to the runner protocol payload.
 
 - [ ] **Step 6: Run server handoff tests**
 
@@ -1734,6 +1869,37 @@ describe('gallery tool client', () => {
   it('redacts tool gateway tokens from errors', async () => {
     assert.equal(redactGatewayToken('failed runner-token-1', 'runner-token-1'), 'failed [redacted]');
   });
+
+  it('passes approval-required and denied responses through unchanged', async () => {
+    for (const responseBody of [
+      { status: 'approval-required', toolCall: { id: 'tool-1' } },
+      { status: 'denied', reason: 'policy denied', toolCall: { id: 'tool-2' } },
+    ]) {
+      const client = createGalleryToolClient({
+        fetch: async () => new Response(JSON.stringify(responseBody), { status: 201 }),
+        gateway: { url: 'http://gallery/api/agent/internal/tools', token: 'runner-token-1' },
+        gallerySessionId: 'gallery-session-1',
+      });
+
+      assert.deepEqual(await client.call('search-assets', { filters: {}, limit: 10 }), responseBody);
+    }
+  });
+
+  it('redacts the bearer token from invalid JSON errors', async () => {
+    const client = createGalleryToolClient({
+      fetch: async () => new Response('not-json runner-token-1', { status: 201 }),
+      gateway: { url: 'http://gallery/api/agent/internal/tools', token: 'runner-token-1' },
+      gallerySessionId: 'gallery-session-1',
+    });
+
+    await assert.rejects(
+      () => client.call('search-assets', { filters: {}, limit: 10 }),
+      (error) => {
+        assert.equal(error.message.includes('runner-token-1'), false);
+        return true;
+      },
+    );
+  });
 });
 ```
 
@@ -1781,6 +1947,31 @@ describe('gallery read tools', () => {
     assert.deepEqual(calls, [{ path: 'search-assets', body: { filters: {}, limit: 10 } }]);
     assert.deepEqual(result.details.status, 'success');
     assert.equal(result.content[0].text.includes('searchAssets returned success'), true);
+  });
+
+  it('maps every read tool to its server route', async () => {
+    const calls = [];
+    const tools = createGalleryReadTools({
+      call: async (path, body) => {
+        calls.push({ path, body });
+        return { status: 'success', toolCall: { id: `tool-${calls.length}` } };
+      },
+    });
+
+    const cases = [
+      ['searchAssets', 'search-assets', { filters: {}, limit: 10 }],
+      ['readAssetMetadata', 'read-asset-metadata', { assetIds: ['asset-1'] }],
+      ['readAssetPreviews', 'read-asset-previews', { assetIds: ['asset-1'] }],
+      ['readAssetOriginals', 'read-asset-originals', { assetIds: ['asset-1'] }],
+      ['listAlbums', 'list-albums', {}],
+      ['readAlbum', 'read-album', { albumId: 'album-1' }],
+    ];
+
+    for (const [name, path, body] of cases) {
+      const tool = tools.find((item) => item.name === name);
+      await tool.execute(`pi-${name}`, body);
+      assert.deepEqual(calls.at(-1), { path, body });
+    }
   });
 });
 ```
@@ -1863,7 +2054,7 @@ Create `agent-runner/src/gallery-tools.mjs`:
 
 ```javascript
 import { defineTool } from '@earendil-works/pi-coding-agent';
-import { Type } from 'typebox';
+import * as Type from 'typebox';
 
 export const galleryReadToolNames = [
   'searchAssets',
