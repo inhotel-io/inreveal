@@ -166,6 +166,81 @@ describe('agent runner server', () => {
     });
   });
 
+  it('filters successful runtime session creation responses to protocol fields', async () => {
+    const runtime = createRuntime({
+      createSession: async () => ({
+        runnerSessionId: 'pi-extra-fields',
+        capabilities: {
+          protocolVersion: '2026-05-14',
+          streaming: true,
+          tools: [],
+          models: ['gpt-5.1'],
+          runtime: 'pi',
+        },
+        credential: { secret: 'sk-runtime-response-secret' },
+        debug: 'runtime internals',
+      }),
+    });
+
+    await withServer(runtime, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+
+      assert.equal(response.status, 201);
+      const responseBody = await response.text();
+      assert.equal(responseBody.includes('sk-runtime-response-secret'), false);
+      assert.deepEqual(JSON.parse(responseBody), {
+        runnerSessionId: 'pi-extra-fields',
+        capabilities: {
+          protocolVersion: '2026-05-14',
+          streaming: true,
+          tools: [],
+          models: ['gpt-5.1'],
+          runtime: 'pi',
+        },
+      });
+    });
+  });
+
+  it('rejects invalid runtime session creation responses without leaking or tracking them', async () => {
+    const runtime = createRuntime({
+      createSession: async () => ({
+        runnerSessionId: 123,
+        capabilities: {
+          protocolVersion: '2026-05-14',
+          streaming: true,
+          tools: [],
+          models: ['gpt-5.1'],
+        },
+        credential: { secret: 'sk-runtime-response-secret' },
+      }),
+    });
+
+    await withServer(runtime, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+
+      assert.equal(response.status, 502);
+      const responseBody = await response.text();
+      assert.equal(responseBody.includes('sk-runtime-response-secret'), false);
+      assert.deepEqual(JSON.parse(responseBody), { error: 'runner session creation failed' });
+
+      const messageResponse = await fetch(`${baseUrl}/sessions/123/messages`, {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify(messageBody),
+      });
+      assert.equal(messageResponse.status, 404);
+      assert.deepEqual(await messageResponse.json(), { error: 'runner session not found' });
+    });
+  });
+
   it('rejects session creation without a Gallery session id', async () => {
     await withServer(createRuntime(), async (baseUrl) => {
       const body = createSessionBody();
@@ -376,6 +451,59 @@ describe('agent runner server', () => {
 
       assert.equal(response.status, 404);
       assert.deepEqual(await response.json(), { error: 'runner session not found' });
+    });
+  });
+
+  it('rejects invalid message bodies before calling the runtime', async () => {
+    const runtime = createRuntime();
+    const cases = [
+      {
+        body: { messageId: messageBody.messageId, content: messageBody.content },
+        error: 'gallerySessionId is required',
+      },
+      {
+        body: { ...messageBody, gallerySessionId: 123 },
+        error: 'gallerySessionId is required',
+      },
+      {
+        body: { gallerySessionId: messageBody.gallerySessionId, content: messageBody.content },
+        error: 'messageId is required',
+      },
+      {
+        body: { ...messageBody, messageId: 123 },
+        error: 'messageId is required',
+      },
+      {
+        body: { gallerySessionId: messageBody.gallerySessionId, messageId: messageBody.messageId },
+        error: 'content is required',
+      },
+      {
+        body: { ...messageBody, content: { blocks: 'not-array' } },
+        error: 'content is required',
+      },
+    ];
+
+    await withServer(runtime, async (baseUrl) => {
+      const createResponse = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+      assert.equal(createResponse.status, 201);
+
+      for (const testCase of cases) {
+        const response = await fetch(`${baseUrl}/sessions/pi-00000000-0000-4000-8000-000000000100/messages`, {
+          method: 'POST',
+          headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+          body: JSON.stringify(testCase.body),
+        });
+
+        assert.equal(response.status, 400);
+        assert.equal(response.headers.get('content-type'), 'application/json');
+        assert.deepEqual(await response.json(), { error: testCase.error });
+      }
+
+      assert.deepEqual(runtime.calls.sendMessage, []);
     });
   });
 
