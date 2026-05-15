@@ -6,7 +6,7 @@ export type AgentRunnerCredentialMaterial = AgentCredentialSnapshot & {
   secret: string;
 };
 
-export type AgentRunnerCreateSessionRequest = {
+type AgentRunnerCreateSessionBase = {
   gallerySessionId: string;
   credential: AgentRunnerCredentialMaterial;
   model: string;
@@ -14,6 +14,16 @@ export type AgentRunnerCreateSessionRequest = {
   permissionPlan: AgentPermissionPlanSnapshot;
   approvalMode: AgentApprovalMode;
   initialContext: Record<string, unknown>;
+};
+
+export type AgentRunnerToolGateway = { url: string; token: string };
+
+export type AgentRunnerCreateSessionRequest = AgentRunnerCreateSessionBase & {
+  toolGateway?: AgentRunnerToolGateway | null;
+};
+
+export type AgentRunnerCreateSessionInput = AgentRunnerCreateSessionBase & {
+  userId: string;
 };
 
 export type AgentRunnerCreateSessionResult = {
