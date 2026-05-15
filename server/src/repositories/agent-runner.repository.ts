@@ -61,7 +61,7 @@ const getRunnerUrl = (url: string, path: string) => {
 
 const isCreateSessionResult = (value: unknown): value is AgentRunnerCreateSessionResult => {
   const body = objectRecord(value);
-  return typeof body.runnerSessionId === 'string' && body.capabilities !== undefined;
+  return typeof body.runnerSessionId === 'string' && objectRecord(body.capabilities) === body.capabilities;
 };
 
 const isStreamEvent = (value: unknown): value is AgentRunnerStreamEvent => {
