@@ -73,6 +73,15 @@ type AgentReadToolDescriptor<TRequest, TResult extends Record<string, unknown>> 
 
 class AgentToolDeniedError extends Error {}
 
+class AgentToolRecordedDeniedError extends Error {
+  constructor(
+    message: string,
+    readonly toolCall: AgentToolCall,
+  ) {
+    super(message);
+  }
+}
+
 class AgentToolFailedError extends Error {}
 
 const isReadAssetIdsRequestMetadata = (
@@ -222,8 +231,9 @@ export class AgentToolService {
     descriptor: AgentReadToolDescriptor<TRequest, TResult>,
   ): Promise<AgentReadToolResponse<TResult>> {
     if (this.requiresApproval(session, descriptor.dataClass)) {
+      const shouldUseAtomicSessionLimit = this.shouldUseAtomicSessionLimit(session, request, descriptor);
       const denialReason = await this.validateReadRequest(auth, session, request, descriptor, undefined, {
-        validateSessionLimit: !this.usesAtomicPendingSessionLimit(descriptor),
+        validateSessionLimit: !shouldUseAtomicSessionLimit,
       });
 
       if (denialReason) {
@@ -243,13 +253,16 @@ export class AgentToolService {
       return { status: 'approval-required', toolCall: this.mapToolCall(result.toolCall) };
     }
 
-    const denialReason = await this.validateReadRequest(auth, session, request, descriptor);
+    const shouldUseAtomicSessionLimit = this.shouldUseAtomicSessionLimit(session, request, descriptor);
+    const denialReason = await this.validateReadRequest(auth, session, request, descriptor, undefined, {
+      validateSessionLimit: !shouldUseAtomicSessionLimit,
+    });
     if (denialReason) {
       const toolCall = await this.createDeniedAudit(session, request, descriptor, denialReason);
       return { status: 'denied', reason: denialReason, toolCall: this.mapToolCall(toolCall) };
     }
 
-    const executing = await this.toolCallRepository.create({
+    const executingDto: ToolCallCreate = {
       ...this.baseToolCall(session, request, descriptor),
       status: AgentToolCallStatus.Executing,
       approvalDecision: AgentToolApprovalDecision.Approved,
@@ -257,7 +270,14 @@ export class AgentToolService {
       redactedResponseMetadata: null,
       completedAt: null,
       error: null,
-    });
+    };
+    const executing = shouldUseAtomicSessionLimit
+      ? await this.createExecutingAuditWithSessionLimit(session, request, descriptor, executingDto)
+      : await this.toolCallRepository.create(executingDto);
+
+    if ('reason' in executing) {
+      return { status: 'denied', reason: executing.reason, toolCall: this.mapToolCall(executing.toolCall) };
+    }
 
     return this.executeClaimedRead(auth, session, executing.id, request, descriptor);
   }
@@ -297,7 +317,20 @@ export class AgentToolService {
       throw new BadRequestException('Agent tool call is already executing or completed');
     }
 
-    const refreshedSession = await this.getOwnedSession(auth, session.id, { requireActive: true });
+    let refreshedSession: AgentSession;
+    try {
+      refreshedSession = await this.getOwnedSession(auth, session.id, { requireActive: true });
+    } catch (error) {
+      await this.toolCallRepository.transition(session.id, toolCall.id, AgentToolCallStatus.Executing, {
+        status: AgentToolCallStatus.Failed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: null,
+        redactedResponseMetadata: null,
+        completedAt: new Date(),
+        error: 'Agent session not found',
+      });
+      throw error;
+    }
     const denialReason = await this.validateReadRequest(auth, refreshedSession, request, descriptor, toolCall.id);
     if (denialReason) {
       const denied = await this.transitionExecuting(auth, refreshedSession, toolCall.id, {
@@ -346,6 +379,10 @@ export class AgentToolService {
           error: error.message,
         });
         return { status: 'denied', reason: error.message, toolCall: this.mapToolCall(denied) };
+      }
+
+      if (error instanceof AgentToolRecordedDeniedError) {
+        return { status: 'denied', reason: error.message, toolCall: this.mapToolCall(error.toolCall) };
       }
 
       if (!(error instanceof AgentToolFailedError)) {
@@ -576,27 +613,36 @@ export class AgentToolService {
           throw new AgentToolDeniedError('Requested asset count exceeds per-tool limit');
         }
 
-        const sessionLimitDenial = await this.getSessionLimitDenialReasonForCount(
-          session,
+        const reservation = await this.toolCallRepository.transitionWithSessionLimit(
+          session.id,
+          toolCallId,
+          AgentToolCallStatus.Executing,
+          {
+            status: AgentToolCallStatus.Executing,
+            approvalDecision: AgentToolApprovalDecision.Approved,
+            responseSummary: 'Tool call execution started',
+            redactedResponseMetadata: null,
+            assetCount: album.assetCount,
+            albumCount: 1,
+            completedAt: null,
+            error: null,
+          },
           AgentToolDataClass.Metadata,
           session.permissionPlanSnapshot.limits.maxAssetsPerSession,
-          album.assetCount,
-          toolCallId,
         );
-        if (sessionLimitDenial) {
-          throw new AgentToolDeniedError(sessionLimitDenial);
+
+        await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+
+        if (reservation.status === 'stale') {
+          throw new BadRequestException('Agent tool call is already executing or completed');
         }
 
-        await this.transitionExecuting(auth, session, toolCallId, {
-          status: AgentToolCallStatus.Executing,
-          approvalDecision: AgentToolApprovalDecision.Approved,
-          responseSummary: 'Tool call execution started',
-          redactedResponseMetadata: null,
-          assetCount: album.assetCount,
-          albumCount: 1,
-          completedAt: null,
-          error: null,
-        });
+        if (reservation.status === 'limit-exceeded') {
+          throw new AgentToolRecordedDeniedError(
+            this.getSessionLimitReason(session.permissionPlanSnapshot.limits.maxAssetsPerSession),
+            reservation.toolCall,
+          );
+        }
 
         return { album };
       },
@@ -608,37 +654,42 @@ export class AgentToolService {
     };
   }
 
-  private async validateReadRequest<TRequest, TResult extends Record<string, unknown>>(
-    auth: AuthDto,
+  private async createExecutingAuditWithSessionLimit<TRequest, TResult extends Record<string, unknown>>(
     session: AgentSession,
     request: TRequest,
     descriptor: AgentReadToolDescriptor<TRequest, TResult>,
-    excludedToolCallId?: string,
-    options?: { validateSessionLimit: boolean },
-  ): Promise<string | null> {
-    const plan = session.permissionPlanSnapshot;
-    const policyDenial = this.getPolicyDenial(session, descriptor.dataClass);
-    if (policyDenial) {
-      return policyDenial;
-    }
+    executingDto: ToolCallCreate,
+  ): Promise<AgentToolCall | { status: 'limit-exceeded'; toolCall: AgentToolCall; reason: string }> {
+    const maxAssetsPerSession = descriptor.perSessionLimit(session.permissionPlanSnapshot);
+    const reason = this.getSessionLimitReason(maxAssetsPerSession);
+    const deniedDto: ToolCallCreate = {
+      ...this.baseToolCall(session, request, descriptor),
+      status: AgentToolCallStatus.Denied,
+      approvalDecision: AgentToolApprovalDecision.Denied,
+      responseSummary: null,
+      redactedResponseMetadata: null,
+      completedAt: new Date(),
+      error: reason,
+    };
+    const result = await this.toolCallRepository.createWithSessionLimit(
+      executingDto,
+      deniedDto,
+      descriptor.dataClass,
+      maxAssetsPerSession,
+    );
+    return result.status === 'limit-exceeded'
+      ? { status: 'limit-exceeded', toolCall: result.toolCall, reason }
+      : result.toolCall;
+  }
 
-    if (descriptor.requestedAssetCount(request) > descriptor.perToolLimit(plan)) {
-      return 'Requested asset count exceeds per-tool limit';
-    }
-
-    if (options?.validateSessionLimit ?? true) {
-      const sessionLimitDenial = await this.getSessionLimitDenialReason(
-        session,
-        request,
-        descriptor,
-        excludedToolCallId,
-      );
-      if (sessionLimitDenial) {
-        return sessionLimitDenial;
-      }
-    }
-
-    return descriptor.validateAccess(auth, session, request);
+  private shouldUseAtomicSessionLimit<TRequest, TResult extends Record<string, unknown>>(
+    session: AgentSession,
+    request: TRequest,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+  ): boolean {
+    const requestedAssetCount = descriptor.requestedAssetCount(request);
+    const maxAssetsPerSession = descriptor.perSessionLimit(session.permissionPlanSnapshot);
+    return requestedAssetCount > 0 && maxAssetsPerSession !== Number.MAX_SAFE_INTEGER;
   }
 
   private getPolicyDenial(session: AgentSession, dataClass: AgentToolDataClass): string | null {
@@ -677,6 +728,39 @@ export class AgentToolService {
     }
 
     return null;
+  }
+
+  private async validateReadRequest<TRequest, TResult extends Record<string, unknown>>(
+    auth: AuthDto,
+    session: AgentSession,
+    request: TRequest,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+    excludedToolCallId?: string,
+    options?: { validateSessionLimit: boolean },
+  ): Promise<string | null> {
+    const plan = session.permissionPlanSnapshot;
+    const policyDenial = this.getPolicyDenial(session, descriptor.dataClass);
+    if (policyDenial) {
+      return policyDenial;
+    }
+
+    if (descriptor.requestedAssetCount(request) > descriptor.perToolLimit(plan)) {
+      return 'Requested asset count exceeds per-tool limit';
+    }
+
+    if (options?.validateSessionLimit ?? true) {
+      const sessionLimitDenial = await this.getSessionLimitDenialReason(
+        session,
+        request,
+        descriptor,
+        excludedToolCallId,
+      );
+      if (sessionLimitDenial) {
+        return sessionLimitDenial;
+      }
+    }
+
+    return descriptor.validateAccess(auth, session, request);
   }
 
   private requiresApproval(session: AgentSession, dataClass: AgentToolDataClass): boolean {
@@ -724,10 +808,11 @@ export class AgentToolService {
       error: reason,
     };
 
-    if (this.usesAtomicPendingSessionLimit(descriptor)) {
-      const result = await this.toolCallRepository.createPendingReadAssetMetadataWithSessionLimit(
+    if (this.shouldUseAtomicSessionLimit(session, request, descriptor)) {
+      const result = await this.toolCallRepository.createWithSessionLimit(
         pendingDto,
         deniedDto,
+        descriptor.dataClass,
         descriptor.perSessionLimit(session.permissionPlanSnapshot),
       );
       return result.status === 'limit-exceeded'
@@ -742,14 +827,6 @@ export class AgentToolService {
     }
 
     return { status: 'created', toolCall: await this.toolCallRepository.create(pendingDto) };
-  }
-
-  private usesAtomicPendingSessionLimit<TRequest, TResult extends Record<string, unknown>>(
-    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
-  ): boolean {
-    return (
-      descriptor.toolName === AgentToolName.ReadAssetMetadata && descriptor.dataClass === AgentToolDataClass.Metadata
-    );
   }
 
   private async getSessionLimitDenialReason<TRequest, TResult extends Record<string, unknown>>(

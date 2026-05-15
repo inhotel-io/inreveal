@@ -3,7 +3,7 @@ import { Insertable, Kysely, sql, Updateable } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { columns } from 'src/database';
 import { DummyValue, GenerateSql } from 'src/decorators';
-import { AgentToolCallStatus, AgentToolDataClass } from 'src/enum';
+import { AgentToolApprovalDecision, AgentToolCallStatus, AgentToolDataClass } from 'src/enum';
 import { DB } from 'src/schema';
 import { AgentToolCallTable } from 'src/schema/tables/agent-tool-call.table';
 import { asUuid } from 'src/utils/database';
@@ -41,32 +41,99 @@ export class AgentToolCallRepository {
     deniedDto: AgentToolCallCreate,
     maxAssetsPerSession: number,
   ) {
+    return this.createWithSessionLimit(pendingDto, deniedDto, AgentToolDataClass.Metadata, maxAssetsPerSession);
+  }
+
+  async createWithSessionLimit(
+    dto: AgentToolCallCreate,
+    deniedDto: AgentToolCallCreate,
+    dataClass: AgentToolDataClass,
+    maxAssetsPerSession: number,
+  ) {
     return this.db.transaction().execute(async (trx) => {
       await trx
         .selectFrom('agent_session')
         .select('id')
-        .where('id', '=', asUuid(pendingDto.sessionId))
+        .where('id', '=', asUuid(dto.sessionId))
         .forUpdate()
         .executeTakeFirstOrThrow();
 
       const result = await trx
         .selectFrom('agent_tool_call')
         .select((eb) => sql<number>`coalesce(sum(${eb.ref('assetCount')}), 0)::int`.as('assetCount'))
-        .where('sessionId', '=', asUuid(pendingDto.sessionId))
-        .where('dataClass', '=', AgentToolDataClass.Metadata)
+        .where('sessionId', '=', asUuid(dto.sessionId))
+        .where('dataClass', '=', dataClass)
         .where('status', 'in', AgentToolCallRepository.countedStatuses)
         .executeTakeFirstOrThrow();
 
-      const dto = result.assetCount + Number(pendingDto.assetCount) > maxAssetsPerSession ? deniedDto : pendingDto;
+      const insertDto = result.assetCount + Number(dto.assetCount) > maxAssetsPerSession ? deniedDto : dto;
       const toolCall = await trx
         .insertInto('agent_tool_call')
-        .values(dto)
+        .values(insertDto)
         .returning(columns.agentToolCall)
         .executeTakeFirstOrThrow();
 
-      return dto === deniedDto
+      return insertDto === deniedDto
         ? ({ status: 'limit-exceeded', toolCall } as const)
         : ({ status: 'created', toolCall } as const);
+    });
+  }
+
+  async transitionWithSessionLimit(
+    sessionId: string,
+    id: string,
+    expectedStatus: AgentToolCallStatus,
+    dto: AgentToolCallUpdate,
+    dataClass: AgentToolDataClass,
+    maxAssetsPerSession: number,
+  ) {
+    return this.db.transaction().execute(async (trx) => {
+      await trx
+        .selectFrom('agent_session')
+        .select('id')
+        .where('id', '=', asUuid(sessionId))
+        .forUpdate()
+        .executeTakeFirstOrThrow();
+
+      const result = await trx
+        .selectFrom('agent_tool_call')
+        .select((eb) => sql<number>`coalesce(sum(${eb.ref('assetCount')}), 0)::int`.as('assetCount'))
+        .where('sessionId', '=', asUuid(sessionId))
+        .where('dataClass', '=', dataClass)
+        .where('status', 'in', AgentToolCallRepository.countedStatuses)
+        .where('id', '!=', asUuid(id))
+        .executeTakeFirstOrThrow();
+
+      if (result.assetCount + Number(dto.assetCount ?? 0) > maxAssetsPerSession) {
+        const toolCall = await trx
+          .updateTable('agent_tool_call')
+          .set({
+            status: AgentToolCallStatus.Denied,
+            approvalDecision: AgentToolApprovalDecision.Denied,
+            responseSummary: null,
+            redactedResponseMetadata: null,
+            completedAt: new Date(),
+            error: this.getSessionLimitReason(maxAssetsPerSession),
+          })
+          .where('sessionId', '=', asUuid(sessionId))
+          .where('id', '=', asUuid(id))
+          .where('status', '=', expectedStatus)
+          .returning(columns.agentToolCall)
+          .executeTakeFirst();
+
+        return toolCall ? ({ status: 'limit-exceeded', toolCall } as const) : ({ status: 'stale' } as const);
+      }
+
+      const toolCall = await trx
+        .updateTable('agent_tool_call')
+        .set(dto)
+        .where('sessionId', '=', asUuid(sessionId))
+        .where('id', '=', asUuid(id))
+        .where('status', '=', expectedStatus)
+        .returning(columns.agentToolCall)
+        .executeTakeFirst();
+
+      return toolCall ? ({ status: 'transitioned', toolCall } as const) : ({ status: 'stale' } as const);
     });
   }
 
@@ -129,5 +196,9 @@ export class AgentToolCallRepository {
       .where('status', '=', expectedStatus)
       .returning(columns.agentToolCall)
       .executeTakeFirst();
+  }
+
+  private getSessionLimitReason(maxAssetsPerSession: number): string {
+    return `Session policy allows at most ${maxAssetsPerSession} assets per session`;
   }
 }

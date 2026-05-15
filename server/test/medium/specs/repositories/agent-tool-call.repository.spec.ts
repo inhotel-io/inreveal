@@ -487,6 +487,209 @@ describe(AgentToolCallRepository.name, () => {
     await expect(sut.getCountedAssetCountBySession(session.id)).resolves.toBe(2);
   });
 
+  it('atomically creates or denies preview tool calls using only counted preview rows', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAssetMetadata,
+      dataClass: AgentToolDataClass.Metadata,
+      status: AgentToolCallStatus.Completed,
+      assetCount: 100,
+    });
+    await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAssetPreviews,
+      dataClass: AgentToolDataClass.Previews,
+      status: AgentToolCallStatus.Completed,
+      assetCount: 2,
+    });
+    await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAssetOriginals,
+      dataClass: AgentToolDataClass.Originals,
+      status: AgentToolCallStatus.Completed,
+      assetCount: 100,
+    });
+    const executingAssetIds = [factory.uuid()];
+    const pendingAssetIds = [factory.uuid()];
+
+    const executingResult = await sut.createWithSessionLimit(
+      {
+        sessionId: session.id,
+        toolName: AgentToolName.ReadAssetPreviews,
+        status: AgentToolCallStatus.Executing,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        requestSummary: 'Read selected previews.',
+        responseSummary: 'Tool call execution started',
+        redactedRequestMetadata: { assetIds: executingAssetIds },
+        redactedResponseMetadata: null,
+        dataClass: AgentToolDataClass.Previews,
+        assetCount: executingAssetIds.length,
+        albumCount: 0,
+        providerSnapshot,
+        completedAt: null,
+        error: null,
+      },
+      {
+        sessionId: session.id,
+        toolName: AgentToolName.ReadAssetPreviews,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        requestSummary: 'Read selected previews.',
+        responseSummary: null,
+        redactedRequestMetadata: { assetIds: executingAssetIds },
+        redactedResponseMetadata: null,
+        dataClass: AgentToolDataClass.Previews,
+        assetCount: executingAssetIds.length,
+        albumCount: 0,
+        providerSnapshot,
+        completedAt: new Date('2026-05-14T12:00:00.000Z'),
+        error: 'Session policy allows at most 3 assets per session',
+      },
+      AgentToolDataClass.Previews,
+      3,
+    );
+    const pendingResult = await sut.createWithSessionLimit(
+      {
+        sessionId: session.id,
+        toolName: AgentToolName.ReadAssetPreviews,
+        status: AgentToolCallStatus.PendingApproval,
+        approvalDecision: null,
+        requestSummary: 'Read selected previews.',
+        responseSummary: null,
+        redactedRequestMetadata: { assetIds: pendingAssetIds },
+        redactedResponseMetadata: null,
+        dataClass: AgentToolDataClass.Previews,
+        assetCount: pendingAssetIds.length,
+        albumCount: 0,
+        providerSnapshot,
+        completedAt: null,
+        error: null,
+      },
+      {
+        sessionId: session.id,
+        toolName: AgentToolName.ReadAssetPreviews,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        requestSummary: 'Read selected previews.',
+        responseSummary: null,
+        redactedRequestMetadata: { assetIds: pendingAssetIds },
+        redactedResponseMetadata: null,
+        dataClass: AgentToolDataClass.Previews,
+        assetCount: pendingAssetIds.length,
+        albumCount: 0,
+        providerSnapshot,
+        completedAt: new Date('2026-05-14T12:00:00.000Z'),
+        error: 'Session policy allows at most 3 assets per session',
+      },
+      AgentToolDataClass.Previews,
+      3,
+    );
+
+    expect(executingResult).toMatchObject({
+      status: 'created',
+      toolCall: {
+        status: AgentToolCallStatus.Executing,
+        dataClass: AgentToolDataClass.Previews,
+        assetCount: 1,
+      },
+    });
+    expect(pendingResult).toMatchObject({
+      status: 'limit-exceeded',
+      toolCall: {
+        status: AgentToolCallStatus.Denied,
+        dataClass: AgentToolDataClass.Previews,
+        error: 'Session policy allows at most 3 assets per session',
+      },
+    });
+    await expect(sut.getCountedAssetCountBySessionAndDataClass(session.id, AgentToolDataClass.Previews)).resolves.toBe(
+      3,
+    );
+  });
+
+  it('atomically reserves transition asset counts by data class while excluding the current tool call', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAssetMetadata,
+      dataClass: AgentToolDataClass.Metadata,
+      status: AgentToolCallStatus.Completed,
+      assetCount: 1,
+    });
+    await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAssetPreviews,
+      dataClass: AgentToolDataClass.Previews,
+      status: AgentToolCallStatus.Completed,
+      assetCount: 100,
+    });
+    const current = await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAlbum,
+      dataClass: AgentToolDataClass.Metadata,
+      status: AgentToolCallStatus.Executing,
+      assetCount: 2,
+      albumCount: 1,
+    });
+
+    const reserved = await sut.transitionWithSessionLimit(
+      session.id,
+      current.id,
+      AgentToolCallStatus.Executing,
+      {
+        status: AgentToolCallStatus.Executing,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: 'Tool call execution started',
+        redactedResponseMetadata: null,
+        assetCount: 2,
+        albumCount: 1,
+        completedAt: null,
+        error: null,
+      },
+      AgentToolDataClass.Metadata,
+      3,
+    );
+    const second = await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAlbum,
+      dataClass: AgentToolDataClass.Metadata,
+      status: AgentToolCallStatus.Executing,
+      assetCount: 0,
+      albumCount: 1,
+    });
+    const denied = await sut.transitionWithSessionLimit(
+      session.id,
+      second.id,
+      AgentToolCallStatus.Executing,
+      {
+        status: AgentToolCallStatus.Executing,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: 'Tool call execution started',
+        redactedResponseMetadata: null,
+        assetCount: 1,
+        albumCount: 1,
+        completedAt: null,
+        error: null,
+      },
+      AgentToolDataClass.Metadata,
+      3,
+    );
+
+    expect(reserved).toMatchObject({
+      status: 'transitioned',
+      toolCall: {
+        id: current.id,
+        status: AgentToolCallStatus.Executing,
+        assetCount: 2,
+      },
+    });
+    expect(denied).toMatchObject({
+      status: 'limit-exceeded',
+      toolCall: {
+        id: second.id,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        assetCount: 0,
+        error: 'Session policy allows at most 3 assets per session',
+      },
+    });
+  });
+
   it('does not allow cross-session access through getByIdForSession', async () => {
     const { ctx, credentialRepository, sessionRepository, sut } = setup();
     const { session } = await createSession(ctx, credentialRepository, sessionRepository);
