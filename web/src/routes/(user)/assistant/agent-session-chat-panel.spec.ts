@@ -105,6 +105,36 @@ describe(AgentSessionChatPanel.name, () => {
     expect(sdkMock.getAgentSessionMessages).toHaveBeenCalledWith({ id: session.id });
   });
 
+  it('keeps messages received before the initial transcript load resolves', async () => {
+    let resolveMessages: (messages: AgentMessageResponseDto[]) => void;
+    sdkMock.getAgentSessionMessages.mockReturnValue(
+      new Promise<AgentMessageResponseDto[]>((resolve) => {
+        resolveMessages = resolve;
+      }),
+    );
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+
+    render(AgentSessionChatPanel, { props: { session } });
+    await screen.findByRole('textbox', { name: 'Message' });
+
+    handler?.({
+      type: 'assistant-message-created',
+      sessionId: session.id,
+      message: makeMessage('message-live', AgentMessageRole.Assistant, 'Live response'),
+      createdAt: '2026-05-14T00:00:02.000Z',
+    });
+    expect(await screen.findByText('Live response')).toBeInTheDocument();
+
+    resolveMessages!([makeMessage('message-loaded', AgentMessageRole.User, 'Loaded prompt')]);
+
+    expect(await screen.findByText('Loaded prompt')).toBeInTheDocument();
+    expect(screen.getByText('Live response')).toBeInTheDocument();
+  });
+
   it('shows error when transcript loading fails', async () => {
     sdkMock.getAgentSessionMessages.mockRejectedValue(new Error('failed'));
 
@@ -195,6 +225,46 @@ describe(AgentSessionChatPanel.name, () => {
 
     expect(await screen.findByText('Done.')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText('Thinking...')).not.toBeInTheDocument());
+  });
+
+  it('clears streaming text when the runner reports an error', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+
+    render(AgentSessionChatPanel, { props: { session } });
+    await screen.findByRole('textbox', { name: 'Message' });
+
+    handler?.({
+      type: 'assistant-message-delta',
+      sessionId: session.id,
+      delta: 'Partial response',
+      sequence: 1,
+      createdAt: '2026-05-14T00:00:01.000Z',
+    });
+    expect(await screen.findByText('Partial response')).toBeInTheDocument();
+
+    handler?.({
+      type: 'runner-error',
+      sessionId: session.id,
+      message: 'Runner failed',
+      createdAt: '2026-05-14T00:00:02.000Z',
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Runner failed');
+    await waitFor(() => expect(screen.queryByText('Partial response')).not.toBeInTheDocument());
+  });
+
+  it('renders a visible label for the message draft', async () => {
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    const label = screen.getByText('Message');
+
+    expect(label).toBeVisible();
+    expect(label).toHaveAttribute('for', input.id);
   });
 
   it('ignores websocket events for other sessions', async () => {
