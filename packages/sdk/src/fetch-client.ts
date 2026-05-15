@@ -508,22 +508,171 @@ export type AssetStatsResponseDto = {
 export type AgentListAlbumsToolRequestDto = {
     toolCallId?: string;
 };
+export type AgentToolCallResponseDto = {
+    albumCount: number;
+    approvalDecision: (AgentToolApprovalDecision) | null;
+    assetCount: number;
+    completedAt: string | null;
+    dataClass: AgentToolDataClass;
+    error: string | null;
+    id: string;
+    requestSummary: string;
+    responseSummary: string | null;
+    sessionId: string;
+    startedAt: string;
+    status: AgentToolCallStatus;
+    toolName: AgentToolName;
+};
+export type AgentListAlbumsToolApprovalRequiredResponse = {
+    status: Status;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentListAlbumsToolDeniedResponse = {
+    reason: string;
+    status: Status2;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentAlbumSummary = {
+    albumName: string;
+    albumThumbnailAssetId: string | null;
+    assetCount: number;
+    description: string;
+    endDate: string | null;
+    id: string;
+    ownerId: string;
+    startDate: string | null;
+};
+export type AgentListAlbumsToolSuccessResponse = {
+    albums: AgentAlbumSummary[];
+    status: Status3;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentListAlbumsToolResponseDto = AgentListAlbumsToolApprovalRequiredResponse | AgentListAlbumsToolDeniedResponse | AgentListAlbumsToolSuccessResponse;
 export type AgentReadAlbumToolRequestDto = {
     albumId?: string;
     toolCallId?: string;
 };
+export type AgentReadAlbumToolApprovalRequiredResponse = {
+    status: Status4;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentReadAlbumToolDeniedResponse = {
+    reason: string;
+    status: Status5;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentAlbumDetail = {
+    albumName: string;
+    albumThumbnailAssetId: string | null;
+    assetCount: number;
+    assetIds: string[];
+    description: string;
+    endDate: string | null;
+    id: string;
+    ownerId: string;
+    startDate: string | null;
+};
+export type AgentReadAlbumToolSuccessResponse = {
+    album: AgentAlbumDetail;
+    status: Status6;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentReadAlbumToolResponseDto = AgentReadAlbumToolApprovalRequiredResponse | AgentReadAlbumToolDeniedResponse | AgentReadAlbumToolSuccessResponse;
 export type AgentReadAssetMetadataToolRequestDto = {
     assetIds?: string[];
     toolCallId?: string;
 };
+export type AgentReadAssetMetadataToolApprovalRequiredResponse = {
+    status: Status7;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentReadAssetMetadataToolDeniedResponse = {
+    reason: string;
+    status: Status8;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentAssetMetadataExif = {
+    city: string | null;
+    country: string | null;
+    dateTimeOriginal: string | null;
+    latitude: number | null;
+    lensModel: string | null;
+    longitude: number | null;
+    make: string | null;
+    model: string | null;
+    rating: number | null;
+    state: string | null;
+};
+export type AgentAssetMetadataTag = {
+    color: string | null;
+    id: string;
+    value: string;
+};
+export type AgentAssetMetadata = {
+    exifInfo: (AgentAssetMetadataExif) | null;
+    fileCreatedAt: string;
+    fileModifiedAt: string;
+    id: string;
+    isFavorite: boolean;
+    localDateTime: string;
+    originalFileName: string;
+    ownerId: string;
+    tags: AgentAssetMetadataTag[];
+    "type": AssetTypeEnum;
+    visibility: AssetVisibility;
+};
+export type AgentReadAssetMetadataToolSuccessResponse = {
+    assets: AgentAssetMetadata[];
+    status: Status9;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentReadAssetMetadataToolResponseDto = AgentReadAssetMetadataToolApprovalRequiredResponse | AgentReadAssetMetadataToolDeniedResponse | AgentReadAssetMetadataToolSuccessResponse;
 export type AgentReadAssetOriginalsToolRequestDto = {
     assetIds?: string[];
     toolCallId?: string;
 };
+export type AgentReadAssetOriginalsToolApprovalRequiredResponse = {
+    status: Status10;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentReadAssetOriginalsToolDeniedResponse = {
+    reason: string;
+    status: Status11;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentAssetMediaReference = {
+    assetId: string;
+    fileName: string;
+    height: number | null;
+    mediaUrl: string;
+    mimeType: string;
+    width: number | null;
+};
+export type AgentReadAssetOriginalsToolSuccessResponse = {
+    originals: AgentAssetMediaReference[];
+    status: Status12;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentReadAssetOriginalsToolResponseDto = AgentReadAssetOriginalsToolApprovalRequiredResponse | AgentReadAssetOriginalsToolDeniedResponse | AgentReadAssetOriginalsToolSuccessResponse;
 export type AgentReadAssetPreviewsToolRequestDto = {
     assetIds?: string[];
     toolCallId?: string;
 };
+export type AgentReadAssetPreviewsToolApprovalRequiredResponse = {
+    status: Status13;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentReadAssetPreviewsToolDeniedResponse = {
+    reason: string;
+    status: Status14;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentReadAssetPreviewsToolSuccessResponse = {
+    previews: AgentAssetMediaReference[];
+    status: Status15;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentReadAssetPreviewsToolResponseDto = AgentReadAssetPreviewsToolApprovalRequiredResponse | AgentReadAssetPreviewsToolDeniedResponse | AgentReadAssetPreviewsToolSuccessResponse;
 export type AgentSearchAssetsFilters = {
     albumIds?: string[];
     city?: string | null;
@@ -545,6 +694,22 @@ export type AgentSearchAssetsToolRequestDto = {
     limit?: number;
     toolCallId?: string;
 };
+export type AgentSearchAssetsToolApprovalRequiredResponse = {
+    status: Status16;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentSearchAssetsToolDeniedResponse = {
+    reason: string;
+    status: Status17;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentSearchAssetsToolSuccessResponse = {
+    assets: AgentAssetMetadata[];
+    nextPage: string | null;
+    status: Status18;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentSearchAssetsToolResponseDto = AgentSearchAssetsToolApprovalRequiredResponse | AgentSearchAssetsToolDeniedResponse | AgentSearchAssetsToolSuccessResponse;
 export type AgentProviderCredentialResponseDto = {
     baseUrl: string | null;
     createdAt: string;
@@ -709,21 +874,6 @@ export type AgentUserMessageContent = {
 };
 export type AgentMessageCreateDto = {
     content: AgentUserMessageContent;
-};
-export type AgentToolCallResponseDto = {
-    albumCount: number;
-    approvalDecision: (AgentToolApprovalDecision) | null;
-    assetCount: number;
-    completedAt: string | null;
-    dataClass: AgentToolDataClass;
-    error: string | null;
-    id: string;
-    requestSummary: string;
-    responseSummary: string | null;
-    sessionId: string;
-    startedAt: string;
-    status: AgentToolCallStatus;
-    toolName: AgentToolName;
 };
 export type AgentToolApprovalDto = {
     decision: AgentToolApprovalDecision;
@@ -4689,7 +4839,7 @@ export function runnerListAlbums({ id, agentListAlbumsToolRequestDto }: {
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
-        data: object;
+        data: AgentListAlbumsToolResponseDto;
     }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/list-albums`, oazapfts.json({
         ...opts,
         method: "POST",
@@ -4705,7 +4855,7 @@ export function runnerReadAlbum({ id, agentReadAlbumToolRequestDto }: {
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
-        data: object;
+        data: AgentReadAlbumToolResponseDto;
     }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/read-album`, oazapfts.json({
         ...opts,
         method: "POST",
@@ -4721,7 +4871,7 @@ export function runnerReadAssetMetadata({ id, agentReadAssetMetadataToolRequestD
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
-        data: object;
+        data: AgentReadAssetMetadataToolResponseDto;
     }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/read-asset-metadata`, oazapfts.json({
         ...opts,
         method: "POST",
@@ -4737,7 +4887,7 @@ export function runnerReadAssetOriginals({ id, agentReadAssetOriginalsToolReques
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
-        data: object;
+        data: AgentReadAssetOriginalsToolResponseDto;
     }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/read-asset-originals`, oazapfts.json({
         ...opts,
         method: "POST",
@@ -4753,7 +4903,7 @@ export function runnerReadAssetPreviews({ id, agentReadAssetPreviewsToolRequestD
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
-        data: object;
+        data: AgentReadAssetPreviewsToolResponseDto;
     }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/read-asset-previews`, oazapfts.json({
         ...opts,
         method: "POST",
@@ -4769,7 +4919,7 @@ export function runnerSearchAssets({ id, agentSearchAssetsToolRequestDto }: {
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
-        data: object;
+        data: AgentSearchAssetsToolResponseDto;
     }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/search-assets`, oazapfts.json({
         ...opts,
         method: "POST",
@@ -4974,7 +5124,7 @@ export function listAlbums({ id, agentListAlbumsToolRequestDto }: {
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
-        data: object;
+        data: AgentListAlbumsToolResponseDto;
     }>(`/agent/sessions/${encodeURIComponent(id)}/tools/list-albums`, oazapfts.json({
         ...opts,
         method: "POST",
@@ -4990,7 +5140,7 @@ export function readAlbum({ id, agentReadAlbumToolRequestDto }: {
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
-        data: object;
+        data: AgentReadAlbumToolResponseDto;
     }>(`/agent/sessions/${encodeURIComponent(id)}/tools/read-album`, oazapfts.json({
         ...opts,
         method: "POST",
@@ -5006,7 +5156,7 @@ export function readAssetMetadata({ id, agentReadAssetMetadataToolRequestDto }: 
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
-        data: object;
+        data: AgentReadAssetMetadataToolResponseDto;
     }>(`/agent/sessions/${encodeURIComponent(id)}/tools/read-asset-metadata`, oazapfts.json({
         ...opts,
         method: "POST",
@@ -5022,7 +5172,7 @@ export function readAssetOriginals({ id, agentReadAssetOriginalsToolRequestDto }
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
-        data: object;
+        data: AgentReadAssetOriginalsToolResponseDto;
     }>(`/agent/sessions/${encodeURIComponent(id)}/tools/read-asset-originals`, oazapfts.json({
         ...opts,
         method: "POST",
@@ -5038,7 +5188,7 @@ export function readAssetPreviews({ id, agentReadAssetPreviewsToolRequestDto }: 
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
-        data: object;
+        data: AgentReadAssetPreviewsToolResponseDto;
     }>(`/agent/sessions/${encodeURIComponent(id)}/tools/read-asset-previews`, oazapfts.json({
         ...opts,
         method: "POST",
@@ -5054,7 +5204,7 @@ export function executeAgentSearchAssets({ id, agentSearchAssetsToolRequestDto }
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
-        data: object;
+        data: AgentSearchAssetsToolResponseDto;
     }>(`/agent/sessions/${encodeURIComponent(id)}/tools/search-assets`, oazapfts.json({
         ...opts,
         method: "POST",
@@ -9502,11 +9652,90 @@ export enum AssetVisibility {
     Hidden = "hidden",
     Locked = "locked"
 }
+export enum Status {
+    ApprovalRequired = "approval-required"
+}
+export enum AgentToolApprovalDecision {
+    Approved = "approved",
+    Denied = "denied"
+}
+export enum AgentToolDataClass {
+    Metadata = "metadata",
+    Previews = "previews",
+    Originals = "originals"
+}
+export enum AgentToolCallStatus {
+    PendingApproval = "pending_approval",
+    Approved = "approved",
+    Executing = "executing",
+    Denied = "denied",
+    Completed = "completed",
+    Failed = "failed"
+}
+export enum AgentToolName {
+    SearchAssets = "searchAssets",
+    ReadAssetMetadata = "readAssetMetadata",
+    ReadAssetPreviews = "readAssetPreviews",
+    ReadAssetOriginals = "readAssetOriginals",
+    ListAlbums = "listAlbums",
+    ReadAlbum = "readAlbum"
+}
+export enum Status2 {
+    Denied = "denied"
+}
+export enum Status3 {
+    Success = "success"
+}
+export enum Status4 {
+    ApprovalRequired = "approval-required"
+}
+export enum Status5 {
+    Denied = "denied"
+}
+export enum Status6 {
+    Success = "success"
+}
+export enum Status7 {
+    ApprovalRequired = "approval-required"
+}
+export enum Status8 {
+    Denied = "denied"
+}
 export enum AssetTypeEnum {
     Image = "IMAGE",
     Video = "VIDEO",
     Audio = "AUDIO",
     Other = "OTHER"
+}
+export enum Status9 {
+    Success = "success"
+}
+export enum Status10 {
+    ApprovalRequired = "approval-required"
+}
+export enum Status11 {
+    Denied = "denied"
+}
+export enum Status12 {
+    Success = "success"
+}
+export enum Status13 {
+    ApprovalRequired = "approval-required"
+}
+export enum Status14 {
+    Denied = "denied"
+}
+export enum Status15 {
+    Success = "success"
+}
+export enum Status16 {
+    ApprovalRequired = "approval-required"
+}
+export enum Status17 {
+    Denied = "denied"
+}
+export enum Status18 {
+    Success = "success"
 }
 export enum ProviderType {
     Openai = "openai",
@@ -9565,31 +9794,6 @@ export enum AgentMessageRole {
     Assistant = "assistant",
     System = "system",
     Tool = "tool"
-}
-export enum AgentToolApprovalDecision {
-    Approved = "approved",
-    Denied = "denied"
-}
-export enum AgentToolDataClass {
-    Metadata = "metadata",
-    Previews = "previews",
-    Originals = "originals"
-}
-export enum AgentToolCallStatus {
-    PendingApproval = "pending_approval",
-    Approved = "approved",
-    Executing = "executing",
-    Denied = "denied",
-    Completed = "completed",
-    Failed = "failed"
-}
-export enum AgentToolName {
-    SearchAssets = "searchAssets",
-    ReadAssetMetadata = "readAssetMetadata",
-    ReadAssetPreviews = "readAssetPreviews",
-    ReadAssetOriginals = "readAssetOriginals",
-    ListAlbums = "listAlbums",
-    ReadAlbum = "readAlbum"
 }
 export enum AlbumUserRole {
     Editor = "editor",

@@ -1,4 +1,4 @@
-import { createZodDto } from 'nestjs-zod';
+import { createZodDto, type ZodDto } from 'nestjs-zod';
 import {
   AgentToolApprovalDecision,
   AgentToolCallStatus,
@@ -349,6 +349,12 @@ const AgentToolCallParamsSchema = z
   })
   .meta({ id: 'AgentToolCallParamsDto' });
 
+const namedZodDto = <TSchema extends z.ZodType>(schemaName: string, schema: TSchema): ZodDto<TSchema, false> => {
+  const dto = createZodDto(schema);
+  Object.defineProperty(dto, 'name', { value: schemaName });
+  return dto;
+};
+
 export class AgentReadAssetMetadataToolRequestDto extends createZodDto(AgentReadAssetMetadataToolRequestSchema) {}
 export class AgentSearchAssetsToolRequestDto extends createZodDto(AgentSearchAssetsToolRequestSchema) {}
 export class AgentReadAssetPreviewsToolRequestDto extends createZodDto(AgentReadAssetPreviewsToolRequestSchema) {}
@@ -358,15 +364,33 @@ export class AgentReadAlbumToolRequestDto extends createZodDto(AgentReadAlbumToo
 export class AgentToolApprovalDto extends createZodDto(AgentToolApprovalSchema) {}
 export class AgentToolCallResponseDto extends createZodDto(AgentToolCallResponseSchema) {}
 export class AgentToolCallParamsDto extends createZodDto(AgentToolCallParamsSchema) {}
-export const AgentReadAssetMetadataToolResponseDto = createZodDto(AgentReadAssetMetadataToolResponseSchema);
+export const AgentReadAssetMetadataToolResponseDto = namedZodDto(
+  'AgentReadAssetMetadataToolResponseDto',
+  AgentReadAssetMetadataToolResponseSchema,
+);
 export type AgentReadAssetMetadataToolResponseDto = z.output<typeof AgentReadAssetMetadataToolResponseSchema>;
-export const AgentSearchAssetsToolResponseDto = createZodDto(AgentSearchAssetsToolResponseSchema);
+export const AgentSearchAssetsToolResponseDto = namedZodDto(
+  'AgentSearchAssetsToolResponseDto',
+  AgentSearchAssetsToolResponseSchema,
+);
 export type AgentSearchAssetsToolResponseDto = z.output<typeof AgentSearchAssetsToolResponseSchema>;
-export const AgentReadAssetPreviewsToolResponseDto = createZodDto(AgentReadAssetPreviewsToolResponseSchema);
+export const AgentReadAssetPreviewsToolResponseDto = namedZodDto(
+  'AgentReadAssetPreviewsToolResponseDto',
+  AgentReadAssetPreviewsToolResponseSchema,
+);
 export type AgentReadAssetPreviewsToolResponseDto = z.output<typeof AgentReadAssetPreviewsToolResponseSchema>;
-export const AgentReadAssetOriginalsToolResponseDto = createZodDto(AgentReadAssetOriginalsToolResponseSchema);
+export const AgentReadAssetOriginalsToolResponseDto = namedZodDto(
+  'AgentReadAssetOriginalsToolResponseDto',
+  AgentReadAssetOriginalsToolResponseSchema,
+);
 export type AgentReadAssetOriginalsToolResponseDto = z.output<typeof AgentReadAssetOriginalsToolResponseSchema>;
-export const AgentListAlbumsToolResponseDto = createZodDto(AgentListAlbumsToolResponseSchema);
+export const AgentListAlbumsToolResponseDto = namedZodDto(
+  'AgentListAlbumsToolResponseDto',
+  AgentListAlbumsToolResponseSchema,
+);
 export type AgentListAlbumsToolResponseDto = z.output<typeof AgentListAlbumsToolResponseSchema>;
-export const AgentReadAlbumToolResponseDto = createZodDto(AgentReadAlbumToolResponseSchema);
+export const AgentReadAlbumToolResponseDto = namedZodDto(
+  'AgentReadAlbumToolResponseDto',
+  AgentReadAlbumToolResponseSchema,
+);
 export type AgentReadAlbumToolResponseDto = z.output<typeof AgentReadAlbumToolResponseSchema>;
