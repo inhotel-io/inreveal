@@ -112,8 +112,9 @@ export class AgentSessionService {
       initialContextSnapshot: dto.initialContext ?? {},
     });
 
+    let runnerSession: Awaited<ReturnType<AgentRunnerService['createSession']>>;
     try {
-      const runnerSession = await this.agentRunnerService.createSession({
+      runnerSession = await this.agentRunnerService.createSession({
         gallerySessionId: session.id,
         credential: session.credentialSnapshot,
         model: session.modelSnapshot.model,
@@ -122,15 +123,6 @@ export class AgentSessionService {
         approvalMode: session.approvalMode,
         initialContext: session.initialContextSnapshot,
       });
-
-      const runningSession = await this.repository.update(auth.user.id, session.id, {
-        status: AgentSessionStatus.Running,
-        runnerEndpoint: runnerSession.runnerEndpoint,
-        runnerSessionId: runnerSession.runnerSessionId,
-        runnerCapabilitiesSnapshot: runnerSession.runnerCapabilitiesSnapshot,
-      });
-
-      return this.map(runningSession);
     } catch (error) {
       await this.repository.update(auth.user.id, session.id, {
         status: AgentSessionStatus.Failed,
@@ -138,6 +130,15 @@ export class AgentSessionService {
       });
       throw error;
     }
+
+    const runningSession = await this.repository.update(auth.user.id, session.id, {
+      status: AgentSessionStatus.Running,
+      runnerEndpoint: runnerSession.runnerEndpoint,
+      runnerSessionId: runnerSession.runnerSessionId,
+      runnerCapabilitiesSnapshot: runnerSession.runnerCapabilitiesSnapshot,
+    });
+
+    return this.map(runningSession);
   }
 
   async getAll(auth: AuthDto): Promise<AgentSessionResponseDto[]> {
