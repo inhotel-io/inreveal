@@ -114,7 +114,7 @@ export const startServer = ({
   });
 };
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const server = await startServer();
   const address = server.address();
   if (address && typeof address === 'object') {
