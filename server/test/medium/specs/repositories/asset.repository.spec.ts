@@ -701,6 +701,25 @@ describe(AssetRepository.name, () => {
     });
   });
 
+  describe('getAgentReadableIds', () => {
+    it('returns requested timeline, archived, and locked ids while excluding hidden, deleted, and offline ids', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: visible } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { asset: archived } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Archive });
+      const { asset: locked } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      const { asset: hidden } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Hidden });
+      const { asset: deleted } = await ctx.newAsset({ ownerId: user.id, deletedAt: new Date() });
+      const { asset: offline } = await ctx.newAsset({ ownerId: user.id, isOffline: true });
+
+      const result = await sut.getAgentReadableIds(
+        new Set([visible.id, archived.id, locked.id, hidden.id, deleted.id, offline.id]),
+      );
+
+      expect(result).toEqual(new Set([visible.id, archived.id, locked.id]));
+    });
+  });
+
   describe('upsertExif', () => {
     it('should append to locked columns', async () => {
       const { ctx, sut } = setup();
