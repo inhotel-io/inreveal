@@ -86,6 +86,17 @@ const assistantTextFromSession = (session) => {
   return assistantTextFromMessages(session.messages);
 };
 
+const assistantErrorFromSession = (session) => {
+  const assistant = [...(session.messages ?? [])].reverse().find((message) => message?.role === 'assistant');
+  if (assistant?.stopReason !== 'error') {
+    return undefined;
+  }
+
+  return typeof assistant.errorMessage === 'string' && assistant.errorMessage.length > 0
+    ? assistant.errorMessage
+    : 'Provider request failed';
+};
+
 const sanitizedErrorMessage = (error, secret) => {
   const message = error instanceof Error ? error.message : String(error);
   return redactSecret(message || 'Provider request failed', secret);
@@ -362,6 +373,17 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
           .then(() => entry.session.prompt(textPromptFromContent(content)))
           .then(() => {
             if (aborted) {
+              return;
+            }
+
+            const assistantError = assistantErrorFromSession(entry.session);
+            if (assistantError) {
+              enqueue({
+                type: 'runner-error',
+                sessionId: gallerySessionId,
+                runnerSessionId,
+                message: redactSecret(assistantError, entry.credentialSecret),
+              });
               return;
             }
 
