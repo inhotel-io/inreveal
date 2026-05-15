@@ -73,6 +73,10 @@
       return;
     }
 
+    if (event.type === 'operation-plan-ready') {
+      return;
+    }
+
     isAssistantActive = false;
     streamingText = '';
     errorMessage = event.message;
