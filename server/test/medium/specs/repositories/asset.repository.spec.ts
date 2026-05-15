@@ -553,6 +553,25 @@ describe(AssetRepository.name, () => {
       expect(JSON.stringify(result)).not.toContain('preview/second.jpg');
     });
 
+    it('infers preview media reference MIME types from generated preview file names', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const previewPath = 'upload/thumbs/image-preview.jpg';
+      const { asset } = await ctx.newAsset({ ownerId: user.id, originalFileName: 'image.heic' });
+      await ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: previewPath });
+
+      const result = await sut.getAgentPreviewReferencesByIds([asset.id]);
+
+      expect(result).toEqual([
+        expect.objectContaining({
+          assetId: asset.id,
+          mimeType: 'image/jpeg',
+          fileName: 'image.heic',
+        }),
+      ]);
+      expect(JSON.stringify(result)).not.toContain(previewPath);
+    });
+
     it('returns original references in requested order without filesystem paths and omits missing ids', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
