@@ -1,4 +1,4 @@
-import { AgentSessionCreateDto } from 'src/dtos/agent-session.dto';
+import { AgentPermissionPlanSchema, AgentSessionCreateDto } from 'src/dtos/agent-session.dto';
 import { AgentApprovalMode, AgentPermissionPreset } from 'src/enum';
 import type { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import type z from 'zod';
@@ -35,7 +35,9 @@ const makePermissionPlan = (): AgentPermissionPlanSnapshot => ({
     maxAssetsPerToolCall: 20,
     maxAssetsPerSession: 100,
     maxPreviewsPerToolCall: 10,
+    maxPreviewsPerSession: 50,
     maxOriginalsPerToolCall: 5,
+    maxOriginalsPerSession: 25,
     expiresInMinutes: 60,
   },
 });
@@ -82,6 +84,126 @@ const expectIssue = (input: AgentSessionCreateInput, path: (string | number)[], 
   );
 };
 
+describe('AgentPermissionPlanSchema', () => {
+  it('accepts preview and original per-session limits when matching reads are enabled', () => {
+    const result = AgentPermissionPlanSchema.safeParse({
+      read: { metadata: true, previews: true, originals: true },
+      providerExposure: {
+        metadata: true,
+        previews: true,
+        originals: true,
+        allowOriginalsForExternalProviders: false,
+      },
+      assetScope: { owned: true, sharedSpaces: true, locked: false },
+      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      limits: {
+        maxAssetsPerToolCall: 500,
+        maxAssetsPerSession: 5000,
+        maxPreviewsPerToolCall: 100,
+        maxPreviewsPerSession: 500,
+        maxOriginalsPerToolCall: 25,
+        maxOriginalsPerSession: 50,
+        expiresInMinutes: 120,
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects preview and original session limits that exceed total asset session limits', () => {
+    const result = AgentPermissionPlanSchema.safeParse({
+      read: { metadata: true, previews: true, originals: true },
+      providerExposure: {
+        metadata: true,
+        previews: true,
+        originals: true,
+        allowOriginalsForExternalProviders: false,
+      },
+      assetScope: { owned: true, sharedSpaces: true, locked: false },
+      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      limits: {
+        maxAssetsPerToolCall: 100,
+        maxAssetsPerSession: 100,
+        maxPreviewsPerToolCall: 10,
+        maxPreviewsPerSession: 101,
+        maxOriginalsPerToolCall: 5,
+        maxOriginalsPerSession: 101,
+        expiresInMinutes: 120,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual(
+      expect.arrayContaining([
+        'preview session limit cannot exceed the asset session limit',
+        'original session limit cannot exceed the asset session limit',
+      ]),
+    );
+  });
+
+  it('rejects positive preview and original session limits without matching reads', () => {
+    const result = AgentPermissionPlanSchema.safeParse({
+      read: { metadata: true, previews: false, originals: false },
+      providerExposure: {
+        metadata: true,
+        previews: false,
+        originals: false,
+        allowOriginalsForExternalProviders: false,
+      },
+      assetScope: { owned: true, sharedSpaces: true, locked: false },
+      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      limits: {
+        maxAssetsPerToolCall: 100,
+        maxAssetsPerSession: 100,
+        maxPreviewsPerToolCall: 0,
+        maxPreviewsPerSession: 1,
+        maxOriginalsPerToolCall: 0,
+        maxOriginalsPerSession: 1,
+        expiresInMinutes: 120,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual(
+      expect.arrayContaining([
+        'preview session limits require preview reads',
+        'original session limits require original reads',
+      ]),
+    );
+  });
+
+  it('rejects preview and original session limits below matching per-tool-call limits', () => {
+    const result = AgentPermissionPlanSchema.safeParse({
+      read: { metadata: true, previews: true, originals: true },
+      providerExposure: {
+        metadata: true,
+        previews: true,
+        originals: true,
+        allowOriginalsForExternalProviders: false,
+      },
+      assetScope: { owned: true, sharedSpaces: true, locked: false },
+      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      limits: {
+        maxAssetsPerToolCall: 100,
+        maxAssetsPerSession: 100,
+        maxPreviewsPerToolCall: 10,
+        maxPreviewsPerSession: 9,
+        maxOriginalsPerToolCall: 5,
+        maxOriginalsPerSession: 4,
+        expiresInMinutes: 120,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual(
+      expect.arrayContaining([
+        'preview session limit must be at least the preview per-tool-call limit',
+        'original session limit must be at least the original per-tool-call limit',
+      ]),
+    );
+  });
+});
+
 describe('AgentSessionCreateDto', () => {
   it('should accept a valid custom session request', () => {
     const result = AgentSessionCreateDto.schema.safeParse(makeCustomCreateInput());
@@ -122,6 +244,7 @@ describe('AgentSessionCreateDto', () => {
         const permissionPlan = makePermissionPlan();
         permissionPlan.read.previews = false;
         permissionPlan.limits.maxPreviewsPerToolCall = 0;
+        permissionPlan.limits.maxPreviewsPerSession = 0;
         return makeCustomCreateInput({ permissionPlan });
       },
       path: ['permissionPlan', 'providerExposure', 'previews'],
@@ -133,6 +256,7 @@ describe('AgentSessionCreateDto', () => {
         const permissionPlan = makePermissionPlan();
         permissionPlan.read.originals = false;
         permissionPlan.limits.maxOriginalsPerToolCall = 0;
+        permissionPlan.limits.maxOriginalsPerSession = 0;
         return makeCustomCreateInput({ permissionPlan });
       },
       path: ['permissionPlan', 'providerExposure', 'originals'],
@@ -149,6 +273,7 @@ describe('AgentSessionCreateDto', () => {
         const permissionPlan = makePermissionPlan();
         permissionPlan.read.previews = false;
         permissionPlan.providerExposure.previews = false;
+        permissionPlan.limits.maxPreviewsPerSession = 0;
         permissionPlan.limits.maxPreviewsPerToolCall = 1;
         return makeCustomCreateInput({ permissionPlan });
       },
@@ -161,6 +286,7 @@ describe('AgentSessionCreateDto', () => {
         const permissionPlan = makePermissionPlan();
         permissionPlan.read.originals = false;
         permissionPlan.providerExposure.originals = false;
+        permissionPlan.limits.maxOriginalsPerSession = 0;
         permissionPlan.limits.maxOriginalsPerToolCall = 1;
         return makeCustomCreateInput({ permissionPlan });
       },
