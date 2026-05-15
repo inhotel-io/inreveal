@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import {
   AgentListAlbumsToolRequestDto,
@@ -31,6 +31,7 @@ export class AgentToolController {
 
   @Post('tools/search-assets')
   @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @ApiCreatedResponse({ type: AgentSearchAssetsToolResponseDto })
   @Endpoint({
     summary: 'Execute the internal searchAssets agent tool',
     description:
@@ -47,6 +48,7 @@ export class AgentToolController {
 
   @Post('tools/read-asset-metadata')
   @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @ApiCreatedResponse({ type: AgentReadAssetMetadataToolResponseDto })
   @Endpoint({
     summary: 'Execute the internal readAssetMetadata agent tool',
     description:
@@ -63,6 +65,7 @@ export class AgentToolController {
 
   @Post('tools/read-asset-previews')
   @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @ApiCreatedResponse({ type: AgentReadAssetPreviewsToolResponseDto })
   @Endpoint({
     summary: 'Execute the internal readAssetPreviews agent tool',
     description:
@@ -79,6 +82,7 @@ export class AgentToolController {
 
   @Post('tools/read-asset-originals')
   @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @ApiCreatedResponse({ type: AgentReadAssetOriginalsToolResponseDto })
   @Endpoint({
     summary: 'Execute the internal readAssetOriginals agent tool',
     description:
@@ -95,6 +99,7 @@ export class AgentToolController {
 
   @Post('tools/list-albums')
   @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @ApiCreatedResponse({ type: AgentListAlbumsToolResponseDto })
   @Endpoint({
     summary: 'Execute the internal listAlbums agent tool',
     description:
@@ -111,6 +116,7 @@ export class AgentToolController {
 
   @Post('tools/read-album')
   @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @ApiCreatedResponse({ type: AgentReadAlbumToolResponseDto })
   @Endpoint({
     summary: 'Execute the internal readAlbum agent tool',
     description:
