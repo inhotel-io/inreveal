@@ -124,7 +124,7 @@ class SharedSpacePersonResponseDto {
     }
       json[r'assetCount'] = this.assetCount;
     if (this.birthDate != null) {
-      json[r'birthDate'] = _dateFormatter.format(this.birthDate!.toUtc());
+      json[r'birthDate'] = _dateFormatter.format(this.birthDate!);
     } else {
     //  json[r'birthDate'] = null;
     }
@@ -233,6 +233,7 @@ class SharedSpacePersonResponseDto {
   };
 }
 
+
 /// Representative face source
 class SharedSpacePersonResponseDtoRepresentativeFaceSourceEnum {
   /// Instantiate a new enum with the provided [value].
@@ -305,5 +306,3 @@ class SharedSpacePersonResponseDtoRepresentativeFaceSourceEnumTypeTransformer {
   /// Singleton [SharedSpacePersonResponseDtoRepresentativeFaceSourceEnumTypeTransformer] instance.
   static SharedSpacePersonResponseDtoRepresentativeFaceSourceEnumTypeTransformer? _instance;
 }
-
-

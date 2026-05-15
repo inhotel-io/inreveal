@@ -64,7 +64,7 @@ class SharedSpacePersonUpdateDto {
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
     if (this.birthDate != null) {
-      json[r'birthDate'] = _dateFormatter.format(this.birthDate!.toUtc());
+      json[r'birthDate'] = _dateFormatter.format(this.birthDate!);
     } else {
     //  json[r'birthDate'] = null;
     }
@@ -148,4 +148,3 @@ class SharedSpacePersonUpdateDto {
   static const requiredKeys = <String>{
   };
 }
-
