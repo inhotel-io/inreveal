@@ -493,7 +493,7 @@ export class AgentToolService {
       requestSummary: (count) => `Read previews for ${count} asset(s)`,
       responseSummary: (count) => `Returned previews for ${count} asset(s)`,
       perToolLimit: (plan) => plan.limits.maxPreviewsPerToolCall,
-      perSessionLimit: (plan) => plan.limits.maxPreviewsPerSession ?? plan.limits.maxAssetsPerSession,
+      perSessionLimit: (plan) => plan.limits.maxPreviewsPerSession ?? plan.limits.maxPreviewsPerToolCall ?? 0,
       execute: (ids) => this.assetRepository.getAgentPreviewReferencesByIds(ids),
       resultKey: 'previews',
       failedReason: 'Preview read failed',
@@ -510,7 +510,7 @@ export class AgentToolService {
       requestSummary: (count) => `Read originals for ${count} asset(s)`,
       responseSummary: (count) => `Returned originals for ${count} asset(s)`,
       perToolLimit: (plan) => plan.limits.maxOriginalsPerToolCall,
-      perSessionLimit: (plan) => plan.limits.maxOriginalsPerSession ?? plan.limits.maxAssetsPerSession,
+      perSessionLimit: (plan) => plan.limits.maxOriginalsPerSession ?? plan.limits.maxOriginalsPerToolCall ?? 0,
       execute: (ids) => this.assetRepository.getAgentOriginalReferencesByIds(ids),
       resultKey: 'originals',
       failedReason: 'Original read failed',
@@ -1130,7 +1130,21 @@ export class AgentToolService {
       throw new BadRequestException('Agent session not found');
     }
 
-    return session;
+    return {
+      ...session,
+      permissionPlanSnapshot: this.normalizePermissionPlanSnapshot(session.permissionPlanSnapshot),
+    };
+  }
+
+  private normalizePermissionPlanSnapshot(plan: AgentPermissionPlanSnapshot): AgentPermissionPlanSnapshot {
+    return {
+      ...plan,
+      limits: {
+        ...plan.limits,
+        maxPreviewsPerSession: plan.limits.maxPreviewsPerSession ?? plan.limits.maxPreviewsPerToolCall ?? 0,
+        maxOriginalsPerSession: plan.limits.maxOriginalsPerSession ?? plan.limits.maxOriginalsPerToolCall ?? 0,
+      },
+    };
   }
 
   private async getToolCallForSession(sessionId: string, toolCallId: string): Promise<AgentToolCall> {

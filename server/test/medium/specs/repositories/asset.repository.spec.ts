@@ -976,6 +976,28 @@ describe(AssetRepository.name, () => {
       expect(result[0].exifInfo).not.toHaveProperty('updatedAt');
       expect(result[0].exifInfo).not.toHaveProperty('updateId');
     });
+
+    it('excludes hidden, deleted, and offline assets from direct agent metadata reads', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: visible } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { asset: archived } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Archive });
+      const { asset: locked } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      const { asset: hidden } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Hidden });
+      const { asset: deleted } = await ctx.newAsset({ ownerId: user.id, deletedAt: new Date() });
+      const { asset: offline } = await ctx.newAsset({ ownerId: user.id, isOffline: true });
+
+      const result = await sut.getAgentMetadataByIds([
+        visible.id,
+        archived.id,
+        locked.id,
+        hidden.id,
+        deleted.id,
+        offline.id,
+      ]);
+
+      expect(result.map((asset) => asset.id).toSorted()).toEqual([visible.id, archived.id, locked.id].toSorted());
+    });
   });
 
   describe('searchAgentMetadata', () => {
@@ -1185,6 +1207,24 @@ describe(AssetRepository.name, () => {
       expect(JSON.stringify(result)).not.toContain(previewPath);
     });
 
+    it('excludes hidden, deleted, and offline assets from direct preview references', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: visible } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { asset: hidden } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Hidden });
+      const { asset: deleted } = await ctx.newAsset({ ownerId: user.id, deletedAt: new Date() });
+      const { asset: offline } = await ctx.newAsset({ ownerId: user.id, isOffline: true });
+      await Promise.all(
+        [visible, hidden, deleted, offline].map((asset) =>
+          ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `preview/${asset.id}.jpg` }),
+        ),
+      );
+
+      const result = await sut.getAgentPreviewReferencesByIds([visible.id, hidden.id, deleted.id, offline.id]);
+
+      expect(result.map((reference) => reference.assetId)).toEqual([visible.id]);
+    });
+
     it('returns original references in requested order without filesystem paths and omits missing ids', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
@@ -1239,6 +1279,19 @@ describe(AssetRepository.name, () => {
         mimeType: mimeTypes.lookup('image.heic'),
         fileName: 'image.heic',
       });
+    });
+
+    it('excludes hidden, deleted, and offline assets from direct original references', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: visible } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { asset: hidden } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Hidden });
+      const { asset: deleted } = await ctx.newAsset({ ownerId: user.id, deletedAt: new Date() });
+      const { asset: offline } = await ctx.newAsset({ ownerId: user.id, isOffline: true });
+
+      const result = await sut.getAgentOriginalReferencesByIds([visible.id, hidden.id, deleted.id, offline.id]);
+
+      expect(result.map((reference) => reference.assetId)).toEqual([visible.id]);
     });
   });
 

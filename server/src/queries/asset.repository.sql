@@ -410,6 +410,9 @@ from
   "asset"
 where
   "asset"."id" = any ($1::uuid[])
+  and "asset"."deletedAt" is null
+  and "asset"."isOffline" = $2
+  and "asset"."visibility" in ($3, $4, $5)
 
 -- AssetRepository.searchAgentMetadata
 select
@@ -527,7 +530,8 @@ where
   "asset"."id" = any ($1::uuid[])
   and "asset"."deletedAt" is null
   and "asset"."isOffline" = $2
-  and "asset_file"."type" = $3
+  and "asset"."visibility" in ($3, $4, $5)
+  and "asset_file"."type" = $6
 
 -- AssetRepository.getAgentOriginalReferencesByIds
 select
@@ -542,6 +546,7 @@ where
   "asset"."id" = any ($1::uuid[])
   and "asset"."deletedAt" is null
   and "asset"."isOffline" = $2
+  and "asset"."visibility" in ($3, $4, $5)
 
 -- AssetRepository.deleteAll
 delete from "asset"
