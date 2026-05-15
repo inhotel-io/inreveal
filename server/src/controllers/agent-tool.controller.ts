@@ -37,7 +37,7 @@ export class AgentToolController {
       'Internal route for requesting or resuming a strict-approved asset search tool call for an AI agent session.',
     history: new HistoryBuilder().added('v2.7.5').internal('v2.7.5'),
   })
-  searchAssets(
+  executeAgentSearchAssets(
     @Auth() auth: AuthDto,
     @Param() { id }: UUIDParamDto,
     @Body() dto: AgentSearchAssetsToolRequestDto,
