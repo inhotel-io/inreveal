@@ -490,6 +490,7 @@ limit
 select
   "asset"."id" as "assetId",
   "asset"."originalFileName" as "fileName",
+  "asset_file"."path" as "previewPath",
   "asset_exif"."exifImageWidth" as "width",
   "asset_exif"."exifImageHeight" as "height"
 from
