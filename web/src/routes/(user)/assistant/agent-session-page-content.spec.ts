@@ -1,4 +1,5 @@
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
+import { websocketMock } from '@test-data/mocks/websocket.mock';
 import {
   AgentApprovalMode,
   AgentPermissionPreset,
@@ -14,6 +15,8 @@ import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import AgentSessionPageContent from './agent-session-page-content.svelte';
 
+vi.mock('$lib/stores/websocket');
+
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant: 'Assistant',
@@ -21,9 +24,13 @@ vi.mock('svelte-i18n', () => {
     assistant_approval_mode_ask_on_escalation: 'Ask on escalation',
     assistant_approval_mode_plan_only: 'Plan review only',
     assistant_approval_mode_strict: 'Strict',
+    assistant_chat: 'Chat',
     assistant_configured: 'Configured',
     assistant_created_session: 'Created session',
     assistant_healthy: 'Healthy',
+    assistant_message: 'Message',
+    assistant_message_load_error: 'Unable to load messages',
+    assistant_message_send_error: 'Unable to send message',
     assistant_model: 'Model',
     assistant_no: 'no',
     assistant_no_credentials: 'Add an agent provider credential before starting a session.',
@@ -40,8 +47,10 @@ vi.mock('svelte-i18n', () => {
     assistant_session_create_error: 'Unable to start assistant session',
     assistant_session_created: 'Assistant session started',
     assistant_session_setup: 'Session setup',
+    assistant_send: 'Send',
     assistant_start_session: 'Start session',
     assistant_streaming: 'Streaming',
+    assistant_streaming_response: 'Assistant is responding',
     assistant_subtitle: 'Album organization assistant',
     assistant_yes: 'yes',
     unknown: 'Unknown',
@@ -115,7 +124,7 @@ const credentials: AgentProviderCredentialResponseDto[] = [
 
 const createdSession: AgentSessionResponseDto = {
   id: '00000000-0000-4000-8000-000000000100',
-  status: AgentSessionStatus.Created,
+  status: AgentSessionStatus.Running,
   providerCredentialId: credentials[0].id,
   credentialSnapshot: {
     id: credentials[0].id,
@@ -142,9 +151,9 @@ const createdSession: AgentSessionResponseDto = {
   },
   permissionPreset: AgentPermissionPreset.VisualOrganizer,
   approvalMode: AgentApprovalMode.AskOnEscalation,
-  runnerCapabilitiesSnapshot: null,
-  runnerEndpoint: null,
-  runnerSessionId: null,
+  runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+  runnerEndpoint: 'http://agent-runner:4477',
+  runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
   createdAt: '2026-05-14T00:00:00.000Z',
   updatedAt: '2026-05-14T00:00:00.000Z',
   endedAt: null,
@@ -154,6 +163,8 @@ describe(AgentSessionPageContent.name, () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sdkMock.createAgentSession.mockResolvedValue(createdSession);
+    sdkMock.getAgentSessionMessages.mockResolvedValue([]);
+    websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
   });
 
   it('renders runner status and setup for a healthy runner with credentials', () => {
@@ -174,9 +185,10 @@ describe(AgentSessionPageContent.name, () => {
     const summary = screen.getByRole('region', { name: 'Created session' });
     expect(within(summary).getByText('OpenAI personal')).toBeInTheDocument();
     expect(within(summary).getByText('gpt-5.1')).toBeInTheDocument();
-    expect(within(summary).getByText(`status:${AgentSessionStatus.Created}`)).toBeInTheDocument();
+    expect(within(summary).getByText(`status:${AgentSessionStatus.Running}`)).toBeInTheDocument();
     expect(within(summary).getByText(`preset:${AgentPermissionPreset.VisualOrganizer}`)).toBeInTheDocument();
     expect(within(summary).getByText(`approval:${AgentApprovalMode.AskOnEscalation}`)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Chat' })).toBeInTheDocument();
   });
 
   it('keeps the previous created-session summary when a later create attempt fails', async () => {
