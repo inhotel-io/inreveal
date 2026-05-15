@@ -106,7 +106,7 @@ const setCoverOperationSchema = z
     targetKind: AgentOperationTargetKindSchema,
     targetId: uuid.optional(),
     temporaryTargetId: temporaryTargetId.optional(),
-    assetIds: z.tuple([uuid]),
+    assetIds: z.array(uuid).length(1),
     riskLevel: operationDefaults.riskLevel,
     enabled: operationDefaults.enabled,
     payload: emptyPayload,
