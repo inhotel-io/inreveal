@@ -257,9 +257,7 @@ describe(AgentSessionSetupPanel.name, () => {
     await fireEvent.input(screen.getByLabelText('Model'), { target: { value: ' local-model ' } });
     const approvalModeSelect = screen.getByLabelText('Approval mode');
     await user.selectOptions(approvalModeSelect, AgentApprovalMode.DangerouslySkipPermissions);
-    await waitFor(() =>
-      expect(approvalModeSelect).toHaveValue(AgentApprovalMode.DangerouslySkipPermissions),
-    );
+    await waitFor(() => expect(approvalModeSelect).toHaveValue(AgentApprovalMode.DangerouslySkipPermissions));
 
     const submit = screen.getByRole('button', { name: 'Start session' });
     await fireEvent.click(submit);
