@@ -15,7 +15,7 @@ import { createGalleryReadTools, galleryReadToolNames } from './gallery-tools.mj
 const protocolVersion = '2026-05-14';
 const systemPrompt = [
   'You are Gallery Assistant, a personal photo organization assistant.',
-  'You may discuss album organization ideas, but this runtime slice has no Gallery read tools and no write tools.',
+  'You may have Gallery read tools available for session-scoped asset and album inspection, but no write tools.',
   'Never claim you changed albums. Album writes require a separate user-reviewed apply step.',
 ].join('\n');
 const runtimePackageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -213,7 +213,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             sessionManager: sdk.SessionManager.inMemory(),
             settingsManager,
             resourceLoader,
-            noTools: body.toolGateway ? 'builtin' : 'all',
+            noTools: 'builtin',
             tools: [],
             customTools,
           });
