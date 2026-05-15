@@ -5,6 +5,7 @@ import { AuthDto } from 'src/dtos/auth.dto';
 import { AgentMessageRole, AgentSessionStatus } from 'src/enum';
 import { AgentMessageRepository } from 'src/repositories/agent-message.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
+import { AgentRunnerService } from 'src/services/agent-runner.service';
 
 @Injectable()
 export class AgentMessageService {
@@ -19,6 +20,7 @@ export class AgentMessageService {
   constructor(
     private readonly messageRepository: AgentMessageRepository,
     private readonly sessionRepository: AgentSessionRepository,
+    private readonly agentRunnerService: AgentRunnerService,
   ) {}
 
   async appendUserMessage(
@@ -39,6 +41,18 @@ export class AgentMessageService {
       providerMessageId: null,
       toolCallId: null,
     });
+
+    if (session.runnerSessionId) {
+      void this.agentRunnerService
+        .sendMessage({
+          userId: auth.user.id,
+          sessionId: session.id,
+          runnerSessionId: session.runnerSessionId,
+          messageId: message.id,
+          content: message.content,
+        })
+        .catch(() => undefined);
+    }
 
     return this.map(message);
   }
