@@ -296,6 +296,34 @@ describe(AgentSessionService.name, () => {
     });
   });
 
+  it('dangerously-skip-permissions approval mode is accepted and forwarded to the runner', async () => {
+    const auth = AuthFactory.create();
+    const credential = makeCredential();
+    const dto = makeCreateDto({
+      providerCredentialId: credential.id,
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
+    });
+    const createdSession = makeSession({
+      userId: auth.user.id,
+      providerCredentialId: credential.id,
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
+    });
+
+    credentialService.getById.mockResolvedValue(credential);
+    repository.create.mockResolvedValue(createdSession);
+    mockSuccessfulRunnerHandoff(createdSession);
+
+    await expect(sut.create(auth, dto)).resolves.toMatchObject({
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
+    });
+    expect(agentRunnerService.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
+        permissionPlan: carefulPermissionPlan,
+      }),
+    );
+  });
+
   it('backfills missing preview and original session limits for legacy custom permission plans', async () => {
     const auth = AuthFactory.create();
     const credential = makeCredential();
