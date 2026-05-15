@@ -12,6 +12,7 @@ export const envData: EnvData = {
 
   agent: {
     runnerHealthTimeoutMs: 2000,
+    runnerMessageStreamTimeoutMs: 300_000,
   },
 
   bull: {
