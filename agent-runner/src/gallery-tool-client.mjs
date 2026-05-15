@@ -24,6 +24,11 @@ export const createGalleryToolClient = ({ gateway, gallerySessionId, fetch: fetc
     });
 
     const text = await response.text();
+    if (!response.ok) {
+      const bodyDetails = text.length === 0 ? '' : `: ${text}`;
+      throw new Error(redactGatewayToken(`Gallery tool request failed with status ${response.status}${bodyDetails}`, gateway));
+    }
+
     try {
       return text.length === 0 ? {} : JSON.parse(text);
     } catch (error) {
