@@ -204,7 +204,7 @@ export class AgentSessionService {
         throw new BadRequestException('permissionPlan is required when permissionPreset is custom');
       }
 
-      return structuredClone(dto.permissionPlan);
+      return this.backfillPermissionPlan(structuredClone(dto.permissionPlan));
     }
 
     if (dto.permissionPlan) {
@@ -212,6 +212,19 @@ export class AgentSessionService {
     }
 
     return structuredClone(AgentSessionService.permissionPresets[dto.permissionPreset]);
+  }
+
+  private backfillPermissionPlan(permissionPlan: AgentPermissionPlanSnapshot): AgentPermissionPlanSnapshot {
+    return {
+      ...permissionPlan,
+      limits: {
+        ...permissionPlan.limits,
+        maxPreviewsPerSession:
+          permissionPlan.limits.maxPreviewsPerSession ?? permissionPlan.limits.maxPreviewsPerToolCall,
+        maxOriginalsPerSession:
+          permissionPlan.limits.maxOriginalsPerSession ?? permissionPlan.limits.maxOriginalsPerToolCall,
+      },
+    };
   }
 
   private async getOwned(auth: AuthDto, id: string) {

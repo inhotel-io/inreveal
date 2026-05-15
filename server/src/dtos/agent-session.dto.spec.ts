@@ -110,6 +110,29 @@ describe('AgentPermissionPlanSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts legacy permission plans without preview and original per-session limits', () => {
+    const result = AgentPermissionPlanSchema.safeParse({
+      read: { metadata: true, previews: true, originals: true },
+      providerExposure: {
+        metadata: true,
+        previews: true,
+        originals: true,
+        allowOriginalsForExternalProviders: false,
+      },
+      assetScope: { owned: true, sharedSpaces: true, locked: false },
+      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      limits: {
+        maxAssetsPerToolCall: 500,
+        maxAssetsPerSession: 5000,
+        maxPreviewsPerToolCall: 100,
+        maxOriginalsPerToolCall: 25,
+        expiresInMinutes: 120,
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it('rejects preview and original session limits that exceed total asset session limits', () => {
     const result = AgentPermissionPlanSchema.safeParse({
       read: { metadata: true, previews: true, originals: true },
