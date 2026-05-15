@@ -39,6 +39,14 @@ const sendSse = (response, event, data) => {
   response.write(`data: ${JSON.stringify(data)}\n\n`);
 };
 
+const decodeRunnerSessionId = (encodedRunnerSessionId) => {
+  try {
+    return decodeURIComponent(encodedRunnerSessionId);
+  } catch {
+    return undefined;
+  }
+};
+
 const validateCreateSessionBody = (body) => {
   if (typeof body?.gallerySessionId !== 'string') {
     return 'gallerySessionId is required';
@@ -110,7 +118,7 @@ export const startServer = ({
   host = process.env.HOST ?? '127.0.0.1',
   runtime = createPiRuntime(),
 } = {}) => {
-  const runnerSessionIds = new Set();
+  const runnerSessions = new Map();
 
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
@@ -134,7 +142,7 @@ export const startServer = ({
 
       try {
         const runnerSession = normalizeRuntimeCreateSessionResponse(await runtime.createSession(result.body));
-        runnerSessionIds.add(runnerSession.runnerSessionId);
+        runnerSessions.set(runnerSession.runnerSessionId, result.body.gallerySessionId);
         sendJson(response, 201, runnerSession);
       } catch {
         sendJson(response, 502, { error: 'runner session creation failed' });
@@ -144,7 +152,12 @@ export const startServer = ({
 
     const messageMatch = url.pathname.match(/^\/sessions\/([^/]+)\/messages$/);
     if (request.method === 'POST' && messageMatch) {
-      const runnerSessionId = decodeURIComponent(messageMatch[1]);
+      const runnerSessionId = decodeRunnerSessionId(messageMatch[1]);
+      if (!runnerSessionId) {
+        sendJson(response, 404, { error: 'runner session not found' });
+        return;
+      }
+
       const result = await readJsonOrSendError(request, response);
       if (!result.ok) {
         return;
@@ -157,7 +170,7 @@ export const startServer = ({
         return;
       }
 
-      if (!runnerSessionIds.has(runnerSessionId)) {
+      if (runnerSessions.get(runnerSessionId) !== body.gallerySessionId) {
         sendJson(response, 404, { error: 'runner session not found' });
         return;
       }
