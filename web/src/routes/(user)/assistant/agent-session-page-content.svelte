@@ -6,6 +6,7 @@
   } from '@immich/sdk';
   import { t } from 'svelte-i18n';
   import AgentRunnerStatusPanel from './agent-runner-status-panel.svelte';
+  import AgentSessionChatPanel from './agent-session-chat-panel.svelte';
   import AgentSessionSetupPanel from './agent-session-setup-panel.svelte';
   import { getApprovalModeLabelKey, getPermissionPresetLabelKey, getSessionStatusLabelKey } from './agent-session-ui';
 
@@ -60,5 +61,7 @@
         </dl>
       </div>
     </section>
+
+    <AgentSessionChatPanel session={createdSession} />
   {/if}
 </div>
