@@ -10,6 +10,7 @@ import {
 import { AgentMessageRepository } from 'src/repositories/agent-message.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentMessageService } from 'src/services/agent-message.service';
+import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { newUuid } from 'test/small.factory';
@@ -82,11 +83,13 @@ describe(AgentMessageService.name, () => {
   let sut: AgentMessageService;
   let messageRepository: ReturnType<typeof automock<AgentMessageRepository>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
+  let agentRunnerService: ReturnType<typeof automock<AgentRunnerService>>;
 
   beforeEach(() => {
     messageRepository = automock(AgentMessageRepository, { args: [{} as never] });
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
-    sut = new AgentMessageService(messageRepository, sessionRepository);
+    agentRunnerService = automock(AgentRunnerService);
+    sut = new AgentMessageService(messageRepository, sessionRepository, agentRunnerService);
   });
 
   it('appends a user message to an owned active session', async () => {
@@ -111,6 +114,54 @@ describe(AgentMessageService.name, () => {
       toolCallId: null,
     });
     expect(result).toEqual(saved);
+  });
+
+  it('queues appended user messages to the runner when a runner session exists', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, runnerSessionId: 'runner-session-1' });
+    const dto: AgentMessageCreateDto = {
+      content: { blocks: [{ type: 'text', text: 'Organize my Portugal photos.' }] },
+    };
+    const saved = makeMessage({ sessionId: session.id, content: dto.content });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    messageRepository.create.mockResolvedValue(saved);
+    agentRunnerService.sendMessage.mockReturnValue(new Promise<void>(() => undefined));
+
+    await expect(sut.appendUserMessage(auth, session.id, dto)).resolves.toEqual(saved);
+    expect(agentRunnerService.sendMessage).toHaveBeenCalledWith({
+      userId: auth.user.id,
+      sessionId: session.id,
+      runnerSessionId: 'runner-session-1',
+      messageId: saved.id,
+      content: saved.content,
+    });
+  });
+
+  it('does not fail the append request when asynchronous runner dispatch rejects', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, runnerSessionId: 'runner-session-1' });
+    const dto: AgentMessageCreateDto = { content: { blocks: [{ type: 'text', text: 'Hello' }] } };
+    const saved = makeMessage({ sessionId: session.id, content: dto.content });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    messageRepository.create.mockResolvedValue(saved);
+    agentRunnerService.sendMessage.mockRejectedValue(new Error('connection refused'));
+
+    await expect(sut.appendUserMessage(auth, session.id, dto)).resolves.toEqual(saved);
+  });
+
+  it('persists the user message and skips dispatch before runner session creation', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Created, runnerSessionId: null });
+    const dto: AgentMessageCreateDto = { content: { blocks: [{ type: 'text', text: 'Hello' }] } };
+    const saved = makeMessage({ sessionId: session.id, content: dto.content });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    messageRepository.create.mockResolvedValue(saved);
+
+    await expect(sut.appendUserMessage(auth, session.id, dto)).resolves.toEqual(saved);
+    expect(agentRunnerService.sendMessage).not.toHaveBeenCalled();
   });
 
   it.each([

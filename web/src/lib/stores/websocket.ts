@@ -1,5 +1,6 @@
 import {
   MaintenanceAction,
+  type AgentMessageResponseDto,
   type AssetResponseDto,
   type MaintenanceStatusResponseDto,
   type NotificationDto,
@@ -22,6 +23,27 @@ interface AppRestartEvent {
   isMaintenanceMode: boolean;
 }
 
+export type AgentSessionClientEvent =
+  | {
+      type: 'assistant-message-delta';
+      sessionId: string;
+      delta: string;
+      sequence: number;
+      createdAt: string;
+    }
+  | {
+      type: 'assistant-message-created';
+      sessionId: string;
+      message: AgentMessageResponseDto;
+      createdAt: string;
+    }
+  | {
+      type: 'runner-error';
+      sessionId: string;
+      message: string;
+      createdAt: string;
+    };
+
 export interface Events {
   on_upload_success: (asset: AssetResponseDto) => void;
   on_user_delete: (id: string) => void;
@@ -37,6 +59,7 @@ export interface Events {
   on_new_release: (event: ReleaseEventV1) => void;
   on_session_delete: (sessionId: string) => void;
   on_notification: (notification: NotificationDto) => void;
+  on_agent_session_event: (event: AgentSessionClientEvent) => void;
 
   AppRestartV1: (event: AppRestartEvent) => void;
 
