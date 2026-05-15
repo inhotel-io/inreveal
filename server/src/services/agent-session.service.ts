@@ -123,6 +123,7 @@ export class AgentSessionService {
     let runnerSession: Awaited<ReturnType<AgentRunnerService['createSession']>>;
     try {
       runnerSession = await this.agentRunnerService.createSession({
+        userId: auth.user.id,
         gallerySessionId: session.id,
         credential: { ...session.credentialSnapshot, secret: credentialSecret },
         model: session.modelSnapshot.model,
