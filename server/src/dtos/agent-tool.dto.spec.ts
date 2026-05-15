@@ -1,11 +1,16 @@
 import {
   AgentListAlbumsToolRequestDto,
+  AgentListAlbumsToolResponseDto,
   AgentReadAlbumToolRequestDto,
+  AgentReadAlbumToolResponseDto,
   AgentReadAssetMetadataToolRequestDto,
   AgentReadAssetMetadataToolResponseDto,
   AgentReadAssetOriginalsToolRequestDto,
+  AgentReadAssetOriginalsToolResponseDto,
   AgentReadAssetPreviewsToolRequestDto,
+  AgentReadAssetPreviewsToolResponseDto,
   AgentSearchAssetsToolRequestDto,
+  AgentSearchAssetsToolResponseDto,
   AgentToolApprovalDto,
   AgentToolCallParamsDto,
   AgentToolCallResponseDto,
@@ -25,6 +30,7 @@ type AgentReadAssetMetadataToolRequestInput = z.input<typeof AgentReadAssetMetad
 type AgentSearchAssetsToolRequestInput = z.input<typeof AgentSearchAssetsToolRequestDto.schema>;
 type AgentReadAssetPreviewsToolRequestInput = z.input<typeof AgentReadAssetPreviewsToolRequestDto.schema>;
 type AgentReadAssetOriginalsToolRequestInput = z.input<typeof AgentReadAssetOriginalsToolRequestDto.schema>;
+type AgentListAlbumsToolRequestInput = z.input<typeof AgentListAlbumsToolRequestDto.schema>;
 type AgentReadAlbumToolRequestInput = z.input<typeof AgentReadAlbumToolRequestDto.schema>;
 type AgentToolApprovalInput = z.input<typeof AgentToolApprovalDto.schema>;
 
@@ -36,6 +42,8 @@ const parseReadAssetPreviewsRequest = (input: AgentReadAssetPreviewsToolRequestI
   AgentReadAssetPreviewsToolRequestDto.schema.safeParse(input);
 const parseReadAssetOriginalsRequest = (input: AgentReadAssetOriginalsToolRequestInput) =>
   AgentReadAssetOriginalsToolRequestDto.schema.safeParse(input);
+const parseListAlbumsRequest = (input: AgentListAlbumsToolRequestInput) =>
+  AgentListAlbumsToolRequestDto.schema.safeParse(input);
 const parseReadAlbumRequest = (input: AgentReadAlbumToolRequestInput) =>
   AgentReadAlbumToolRequestDto.schema.safeParse(input);
 
@@ -194,6 +202,33 @@ describe('Agent tool DTOs', () => {
     });
   });
 
+  describe(AgentListAlbumsToolRequestDto.name, () => {
+    it('accepts empty new tool requests', () => {
+      const result = parseListAlbumsRequest({});
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({});
+      }
+    });
+
+    it('accepts toolCallId for approved-call resume', () => {
+      const toolCallId = factory.uuid();
+      const result = parseListAlbumsRequest({ toolCallId });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({ toolCallId });
+      }
+    });
+
+    it('rejects unknown keys', () => {
+      const result = parseListAlbumsRequest({ albumId: factory.uuid() } as AgentListAlbumsToolRequestInput);
+
+      expectIssue(result, [], 'Unrecognized key');
+    });
+  });
+
   describe(AgentToolApprovalDto.name, () => {
     it.each([AgentToolApprovalDecision.Approved, AgentToolApprovalDecision.Denied])(
       'accepts %s approval decisions',
@@ -308,6 +343,119 @@ describe('Agent tool DTOs', () => {
       }
     });
   });
+
+  describe('expanded agent tool response DTOs', () => {
+    it('encodes and parses search responses with assets and nextPage', () => {
+      const response = { status: 'success' as const, toolCall: makeToolCall(), assets: makeAssets(), nextPage: '2' };
+      const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode(response);
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success) {
+        return;
+      }
+
+      if (encoded.data.status !== 'success') {
+        return;
+      }
+
+      expect(encoded.data.assets[0].localDateTime).toBe('2026-05-14T12:00:00.000Z');
+      expect(encoded.data.nextPage).toBe('2');
+      const parsed = AgentSearchAssetsToolResponseDto.schema.safeParse(encoded.data);
+      expect(parsed.success).toBe(true);
+      if (parsed.success && parsed.data.status === 'success') {
+        expect(parsed.data.assets[0].localDateTime).toEqual(new Date('2026-05-14T12:00:00.000Z'));
+        expect(parsed.data.nextPage).toBe('2');
+      }
+    });
+
+    it('encodes and parses preview media reference responses', () => {
+      const encoded = AgentReadAssetPreviewsToolResponseDto.schema.safeEncode({
+        status: 'success',
+        toolCall: makeToolCall(),
+        previews: [makeMediaReference()],
+      });
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success) {
+        return;
+      }
+
+      if (encoded.data.status !== 'success') {
+        return;
+      }
+
+      expect(encoded.data.previews[0]).toEqual(expect.objectContaining({ mediaUrl: '/api/assets/asset-1/preview' }));
+      expect(AgentReadAssetPreviewsToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
+    });
+
+    it('encodes and parses original media reference responses', () => {
+      const encoded = AgentReadAssetOriginalsToolResponseDto.schema.safeEncode({
+        status: 'success',
+        toolCall: makeToolCall(),
+        originals: [makeMediaReference()],
+      });
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success) {
+        return;
+      }
+
+      if (encoded.data.status !== 'success') {
+        return;
+      }
+
+      expect(encoded.data.originals[0]).toEqual(expect.objectContaining({ mediaUrl: '/api/assets/asset-1/preview' }));
+      expect(AgentReadAssetOriginalsToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
+    });
+
+    it('encodes and parses list albums responses with empty and null date ranges', () => {
+      const response = {
+        status: 'success' as const,
+        toolCall: makeToolCall({ albumCount: 2 }),
+        albums: [
+          makeAlbumSummary({ startDate: null, endDate: null }),
+          makeAlbumSummary({ assetCount: 0, startDate: null, endDate: null }),
+        ],
+      };
+      const encoded = AgentListAlbumsToolResponseDto.schema.safeEncode(response);
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success) {
+        return;
+      }
+
+      if (encoded.data.status !== 'success') {
+        return;
+      }
+
+      expect(encoded.data.albums).toEqual([
+        expect.objectContaining({ startDate: null, endDate: null }),
+        expect.objectContaining({ assetCount: 0, startDate: null, endDate: null }),
+      ]);
+      expect(AgentListAlbumsToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
+    });
+
+    it('encodes and parses read album responses with assetIds', () => {
+      const assetIds = [factory.uuid(), factory.uuid()];
+      const encoded = AgentReadAlbumToolResponseDto.schema.safeEncode({
+        status: 'success',
+        toolCall: makeToolCall({ albumCount: 1, assetCount: assetIds.length }),
+        album: { ...makeAlbumSummary({ assetCount: assetIds.length }), assetIds },
+      });
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success) {
+        return;
+      }
+
+      if (encoded.data.status !== 'success') {
+        return;
+      }
+
+      expect(encoded.data.album.assetIds).toEqual(assetIds);
+      expect(AgentReadAlbumToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
+    });
+  });
 });
 
 const makeToolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentToolCallResponseDto => ({
@@ -330,30 +478,57 @@ const makeToolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentT
 const makeSuccessResponse = () => ({
   status: 'success' as const,
   toolCall: makeToolCall(),
-  assets: [
-    {
-      id: factory.uuid(),
-      ownerId: factory.uuid(),
-      type: AssetType.Image,
-      originalFileName: 'IMG_0001.jpg',
-      localDateTime: new Date('2026-05-14T12:00:00.000Z'),
-      fileCreatedAt: new Date('2026-05-14T11:00:00.000Z'),
-      fileModifiedAt: new Date('2026-05-14T11:30:00.000Z'),
-      isFavorite: true,
-      visibility: AssetVisibility.Timeline,
-      exifInfo: {
-        dateTimeOriginal: new Date('2026-05-14T10:00:00.000Z'),
-        city: 'Berlin',
-        state: 'Berlin',
-        country: 'Germany',
-        make: 'Fujifilm',
-        model: 'X100V',
-        lensModel: '23mm',
-        latitude: 52.52,
-        longitude: 13.405,
-        rating: 5,
-      },
-      tags: [{ id: factory.uuid(), value: 'travel', color: '#00ff00' }],
+  assets: makeAssets(),
+});
+
+const makeAssets = () => [
+  {
+    id: factory.uuid(),
+    ownerId: factory.uuid(),
+    type: AssetType.Image,
+    originalFileName: 'IMG_0001.jpg',
+    localDateTime: new Date('2026-05-14T12:00:00.000Z'),
+    fileCreatedAt: new Date('2026-05-14T11:00:00.000Z'),
+    fileModifiedAt: new Date('2026-05-14T11:30:00.000Z'),
+    isFavorite: true,
+    visibility: AssetVisibility.Timeline,
+    exifInfo: {
+      dateTimeOriginal: new Date('2026-05-14T10:00:00.000Z'),
+      city: 'Berlin',
+      state: 'Berlin',
+      country: 'Germany',
+      make: 'Fujifilm',
+      model: 'X100V',
+      lensModel: '23mm',
+      latitude: 52.52,
+      longitude: 13.405,
+      rating: 5,
     },
-  ],
+    tags: [{ id: factory.uuid(), value: 'travel', color: '#00ff00' }],
+  },
+];
+
+const makeMediaReference = () => ({
+  assetId: factory.uuid(),
+  mediaUrl: '/api/assets/asset-1/preview',
+  mimeType: 'image/jpeg',
+  fileName: 'IMG_0001.jpg',
+  width: 4000,
+  height: 3000,
+});
+
+const makeAlbumSummary = (overrides: {
+  assetCount?: number;
+  startDate?: Date | null;
+  endDate?: Date | null;
+} = {}) => ({
+  id: factory.uuid(),
+  albumName: 'Berlin',
+  description: '',
+  ownerId: factory.uuid(),
+  assetCount: 1,
+  startDate: new Date('2026-05-01T00:00:00.000Z'),
+  endDate: new Date('2026-05-31T23:59:59.999Z'),
+  albumThumbnailAssetId: null,
+  ...overrides,
 });

@@ -135,6 +135,11 @@ describe(AgentToolCallRepository.name, () => {
     const { session } = await createSession(ctx, credentialRepository, sessionRepository);
     const older = await createToolCall(sut, session.id, { startedAt: new Date('2026-05-14T12:00:00.000Z') });
     const newer = await createToolCall(sut, session.id, { startedAt: new Date('2026-05-14T12:00:01.000Z') });
+    const olderRequestMetadata = older.redactedRequestMetadata;
+
+    if (!('assetIds' in olderRequestMetadata)) {
+      throw new Error('Expected read asset metadata fixture request metadata');
+    }
 
     await expect(sut.getBySessionId(session.id)).resolves.toMatchObject([{ id: newer.id }, { id: older.id }]);
     await expect(sut.getByIdForSession(session.id, older.id)).resolves.toMatchObject({
@@ -145,7 +150,7 @@ describe(AgentToolCallRepository.name, () => {
       approvalDecision: null,
       requestSummary: 'Read selected metadata.',
       responseSummary: null,
-      redactedRequestMetadata: older.redactedRequestMetadata,
+      redactedRequestMetadata: olderRequestMetadata,
       redactedResponseMetadata: null,
       dataClass: AgentToolDataClass.Metadata,
       assetCount: 1,
@@ -160,7 +165,7 @@ describe(AgentToolCallRepository.name, () => {
       status: AgentToolCallStatus.Completed,
       approvalDecision: AgentToolApprovalDecision.Approved,
       responseSummary: 'Returned one asset.',
-      redactedResponseMetadata: { assetIds: older.redactedRequestMetadata.assetIds },
+      redactedResponseMetadata: { assetIds: olderRequestMetadata.assetIds },
       completedAt,
       error: null,
     });
@@ -170,7 +175,7 @@ describe(AgentToolCallRepository.name, () => {
       status: AgentToolCallStatus.Completed,
       approvalDecision: AgentToolApprovalDecision.Approved,
       responseSummary: 'Returned one asset.',
-      redactedResponseMetadata: { assetIds: older.redactedRequestMetadata.assetIds },
+      redactedResponseMetadata: { assetIds: olderRequestMetadata.assetIds },
       completedAt,
       error: null,
     });
