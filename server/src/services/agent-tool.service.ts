@@ -40,7 +40,6 @@ import {
   AgentAssetMetadata,
   AgentSearchAssetsFilters,
   AgentToolListAlbumsRequestMetadata,
-  AgentToolReadAlbumRequestMetadata,
   AgentToolReadAssetIdsRequestMetadata,
   AgentToolResponseMetadata,
   AgentToolSearchAssetsRequestMetadata,
@@ -572,7 +571,7 @@ export class AgentToolService {
       requestedAlbumCount: () => 0,
       perToolLimit: () => Number.MAX_SAFE_INTEGER,
       perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
-      validateAccess: async () => null,
+      validateAccess: () => Promise.resolve(null),
       execute: async (auth, session) => {
         const albums = await this.albumRepository.getAgentAlbums(auth.user.id);
         return {
@@ -877,7 +876,7 @@ export class AgentToolService {
   }
 
   private async validateAlbumAccess(auth: AuthDto, session: AgentSession, albumId: string): Promise<string | null> {
-    const albumIds = new Set([albumId]);
+    const albumIds = albumId ? new Set([albumId]) : new Set<string>();
     const readableIds = await this.getReadableAlbumIds(auth, session.permissionPlanSnapshot, albumIds);
     return readableIds.size === 1 ? null : 'Album is not accessible';
   }
@@ -887,7 +886,7 @@ export class AgentToolService {
     session: AgentSession,
     filters: AgentSearchAssetsFilters,
   ): Promise<string | null> {
-    const albumIds = new Set(filters.albumIds ?? []);
+    const albumIds = filters.albumIds ? new Set(filters.albumIds) : new Set<string>();
     if (albumIds.size > 0) {
       const readableAlbumIds = await this.getReadableAlbumIds(auth, session.permissionPlanSnapshot, albumIds);
       if (readableAlbumIds.size !== albumIds.size) {
@@ -895,7 +894,7 @@ export class AgentToolService {
       }
     }
 
-    const tagIds = new Set(filters.tagIds ?? []);
+    const tagIds = filters.tagIds ? new Set(filters.tagIds) : new Set<string>();
     if (tagIds.size > 0) {
       const readableTagIds = await this.accessRepository.tag.checkOwnerAccess(auth.user.id, tagIds);
       if (readableTagIds.size !== tagIds.size) {

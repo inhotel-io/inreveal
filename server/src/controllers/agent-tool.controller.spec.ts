@@ -93,10 +93,9 @@ describe(AgentToolController.name, () => {
     ['listAlbums', AgentListAlbumsToolResponseDto, 'AgentListAlbumsToolResponseDto'],
     ['readAlbum', AgentReadAlbumToolResponseDto, 'AgentReadAlbumToolResponseDto'],
   ] as const)('documents %s with its typed tool response DTO', (methodName, responseDto, schemaName) => {
-    const responses = Reflect.getMetadata(
-      DECORATORS.API_RESPONSE,
-      AgentToolController.prototype[methodName],
-    ) as Record<number, { type?: unknown }> | undefined;
+    const responses = Reflect.getMetadata(DECORATORS.API_RESPONSE, AgentToolController.prototype[methodName]) as
+      | Record<number, { type?: unknown }>
+      | undefined;
 
     expect(responses?.[201]?.type).toBe(responseDto);
     expect(responseDto.name).toBe(schemaName);
