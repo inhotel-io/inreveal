@@ -16,10 +16,16 @@ import {
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
+import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
-import { AgentAssetMetadata } from 'src/types/agent-tool.types';
+import {
+  AgentAlbumDetail,
+  AgentAlbumSummary,
+  AgentAssetMediaReference,
+  AgentAssetMetadata,
+} from 'src/types/agent-tool.types';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { newAccessRepositoryMock } from 'test/repositories/access.repository.mock';
 import { newAssetRepositoryMock } from 'test/repositories/asset.repository.mock';
@@ -150,21 +156,57 @@ const makeMetadata = (
   ...overrides,
 });
 
+const makeMediaReference = (
+  assetId: string,
+  overrides: Partial<AgentAssetMediaReference> = {},
+): AgentAssetMediaReference => ({
+  assetId,
+  mediaUrl: `/api/assets/${assetId}/thumbnail?size=preview`,
+  mimeType: 'image/jpeg',
+  fileName: `${assetId}.jpg`,
+  width: 1024,
+  height: 768,
+  ...overrides,
+});
+
+const makeAlbumSummary = (overrides: Partial<AgentAlbumSummary> = {}): AgentAlbumSummary => ({
+  id: newUuid(),
+  albumName: 'Trip',
+  description: 'Summer trip',
+  ownerId: newUuid(),
+  assetCount: 1,
+  startDate: now,
+  endDate: now,
+  albumThumbnailAssetId: null,
+  ...overrides,
+});
+
+const makeAlbumDetail = (overrides: Partial<AgentAlbumDetail> = {}): AgentAlbumDetail => {
+  const assetIds = overrides.assetIds ?? [newUuid()];
+  return {
+    ...makeAlbumSummary({ assetCount: assetIds.length, ...overrides }),
+    assetIds,
+  };
+};
+
 describe(AgentToolService.name, () => {
   let sut: AgentToolService;
   let accessRepository: ReturnType<typeof newAccessRepositoryMock>;
   let assetRepository: ReturnType<typeof newAssetRepositoryMock>;
+  let albumRepository: ReturnType<typeof automock<AlbumRepository>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
   let toolCallRepository: ReturnType<typeof automock<AgentToolCallRepository>>;
 
   beforeEach(() => {
     accessRepository = newAccessRepositoryMock();
     assetRepository = newAssetRepositoryMock();
+    albumRepository = automock(AlbumRepository, { args: [{} as never] });
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
     toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
     sut = new AgentToolService(
       accessRepository as unknown as AccessRepository,
       assetRepository as unknown as AssetRepository,
+      albumRepository,
       sessionRepository,
       toolCallRepository,
     );
@@ -197,6 +239,9 @@ describe(AgentToolService.name, () => {
       }),
     );
     toolCallRepository.getCountedAssetCountBySession.mockResolvedValue(0);
+    toolCallRepository.getCountedAssetCountBySessionAndDataClass.mockResolvedValue(0);
+    albumRepository.getAgentAlbums.mockResolvedValue([]);
+    albumRepository.getAgentAlbumById.mockResolvedValue(null);
   });
 
   it('returns approval-required and creates a pending audit row for strict metadata reads', async () => {
@@ -375,41 +420,231 @@ describe(AgentToolService.name, () => {
     expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
   });
 
-  it('creates a denied audit row when approval mode is not strict', async () => {
+  it('executes metadata reads immediately when approval mode is plan-only', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid()];
     const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
-    const denied = makeToolCall({
-      sessionId: session.id,
-      status: AgentToolCallStatus.Denied,
-      approvalDecision: AgentToolApprovalDecision.Denied,
-      error: 'Only strict approval mode is supported for metadata tools in this slice',
-      completedAt,
-    });
+    const asset = makeMetadata(assetIds[0]);
 
     sessionRepository.getById.mockResolvedValue(session);
-    toolCallRepository.create.mockResolvedValue(denied);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([asset] as never);
+    toolCallRepository.create.mockResolvedValue(
+      makeToolCall({
+        sessionId: session.id,
+        toolName: AgentToolName.ReadAssetMetadata,
+        status: AgentToolCallStatus.Executing,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        redactedRequestMetadata: { assetIds },
+        assetCount: 1,
+      }),
+    );
 
     const result = await sut.readAssetMetadata(auth, session.id, { assetIds });
 
     expect(result).toEqual({
-      status: 'denied',
-      reason: 'Only strict approval mode is supported for metadata tools in this slice',
-      toolCall: expect.objectContaining({
-        status: AgentToolCallStatus.Denied,
-        error: 'Only strict approval mode is supported for metadata tools in this slice',
+      status: 'success',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+      assets: [expect.objectContaining({ id: assetIds[0] })],
+    });
+    expect(assetRepository.getAgentMetadataByIds).toHaveBeenCalledWith(assetIds);
+  });
+
+  it.each([
+    {
+      name: 'Strict + searchAssets',
+      approvalMode: AgentApprovalMode.Strict,
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string) =>
+        sut.searchAssets(auth, sessionId, { filters: {}, limit: 1 }),
+      expectedStatus: 'approval-required',
+    },
+    {
+      name: 'Strict + readAssetPreviews',
+      approvalMode: AgentApprovalMode.Strict,
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetPreviews(auth, sessionId, { assetIds }),
+      expectedStatus: 'approval-required',
+    },
+    {
+      name: 'AskOnEscalation + searchAssets',
+      approvalMode: AgentApprovalMode.AskOnEscalation,
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string) =>
+        sut.searchAssets(auth, sessionId, { filters: {}, limit: 1 }),
+      expectedStatus: 'success',
+    },
+    {
+      name: 'AskOnEscalation + readAssetPreviews',
+      approvalMode: AgentApprovalMode.AskOnEscalation,
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetPreviews(auth, sessionId, { assetIds }),
+      expectedStatus: 'approval-required',
+    },
+    {
+      name: 'PlanOnly + searchAssets',
+      approvalMode: AgentApprovalMode.PlanOnly,
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string) =>
+        sut.searchAssets(auth, sessionId, { filters: {}, limit: 1 }),
+      expectedStatus: 'success',
+    },
+    {
+      name: 'PlanOnly + readAssetPreviews',
+      approvalMode: AgentApprovalMode.PlanOnly,
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetPreviews(auth, sessionId, { assetIds }),
+      expectedStatus: 'success',
+    },
+  ])('$name follows the read-tool approval matrix', async ({ approvalMode, call, expectedStatus }) => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode,
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: true, originals: false },
+        providerExposure: {
+          metadata: true,
+          previews: true,
+          originals: false,
+          allowOriginalsForExternalProviders: false,
+        },
+        limits: { ...permissionPlanSnapshot.limits, maxPreviewsPerToolCall: 5 },
       }),
     });
-    expect(toolCallRepository.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: AgentToolCallStatus.Denied,
-        approvalDecision: AgentToolApprovalDecision.Denied,
-        redactedRequestMetadata: { assetIds },
-        completedAt: expect.any(Date),
-        error: 'Only strict approval mode is supported for metadata tools in this slice',
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [makeMetadata(assetIds[0])], nextPage: null });
+    assetRepository.getAgentPreviewReferencesByIds.mockResolvedValue([makeMediaReference(assetIds[0])]);
+
+    const result = await call(auth, session.id, assetIds);
+
+    expect(result.status).toBe(expectedStatus);
+  });
+
+  it('denies original reads for external providers unless explicitly allowed and skips access checks', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: true, originals: true },
+        providerExposure: {
+          metadata: true,
+          previews: true,
+          originals: true,
+          allowOriginalsForExternalProviders: false,
+        },
+        limits: { ...permissionPlanSnapshot.limits, maxOriginalsPerToolCall: 5 },
       }),
-    );
-    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.readAssetOriginals(auth, session.id, { assetIds });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Agent provider exposure policy only allows originals for local or self-hosted providers',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
+    expect(assetRepository.getAgentOriginalReferencesByIds).not.toHaveBeenCalled();
+  });
+
+  it('allows original reads for OpenAICompatible credentials when policy allows originals and plan-only mode', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      credentialSnapshot: {
+        id: newUuid(),
+        providerType: AgentProviderType.OpenAICompatible,
+        label: 'Local compatible',
+        baseUrl: 'http://localhost:11434/v1',
+        models: ['local-model'],
+        defaultModel: 'local-model',
+      },
+      modelSnapshot: { providerCredentialId: newUuid(), model: 'local-model' },
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: true, originals: true },
+        providerExposure: {
+          metadata: true,
+          previews: true,
+          originals: true,
+          allowOriginalsForExternalProviders: false,
+        },
+        limits: { ...permissionPlanSnapshot.limits, maxOriginalsPerToolCall: 5, maxOriginalsPerSession: 5 },
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentOriginalReferencesByIds.mockResolvedValue([makeMediaReference(assetIds[0])]);
+
+    const result = await sut.readAssetOriginals(auth, session.id, { assetIds });
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+      originals: [expect.objectContaining({ assetId: assetIds[0] })],
+    });
+  });
+
+  it.each([
+    {
+      name: 'searchAssets',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.searchAssets(auth, sessionId, { filters: {}, limit: assetIds.length }),
+      repositoryRead: () => assetRepository.searchAgentMetadata,
+    },
+    {
+      name: 'readAssetMetadata',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetMetadata(auth, sessionId, { assetIds }),
+      repositoryRead: () => assetRepository.getAgentMetadataByIds,
+    },
+    {
+      name: 'readAssetPreviews',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetPreviews(auth, sessionId, { assetIds }),
+      repositoryRead: () => assetRepository.getAgentPreviewReferencesByIds,
+    },
+    {
+      name: 'readAssetOriginals',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetOriginals(auth, sessionId, { assetIds }),
+      repositoryRead: () => assetRepository.getAgentOriginalReferencesByIds,
+    },
+  ])('denies YOLO mode for $name without executing repository reads', async ({ call, repositoryRead }) => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: true, originals: true },
+        providerExposure: {
+          metadata: true,
+          previews: true,
+          originals: true,
+          allowOriginalsForExternalProviders: true,
+        },
+        limits: { ...permissionPlanSnapshot.limits, maxPreviewsPerToolCall: 5, maxOriginalsPerToolCall: 5 },
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await call(auth, session.id, assetIds);
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'YOLO read mode is implemented in slice 10',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    expect(repositoryRead()).not.toHaveBeenCalled();
   });
 
   it('denies inaccessible assets before pending approval', async () => {
@@ -585,6 +820,326 @@ describe(AgentToolService.name, () => {
     );
   });
 
+  it('passes shared-space and locked scope to search only when permission plan and elevated auth allow it', async () => {
+    const elevatedAuth = AuthFactory.from().session({ hasElevatedPermission: true }).build();
+    const runnerAuth = AuthFactory.from({ id: elevatedAuth.user.id }).session({ hasElevatedPermission: false }).build();
+    const session = makeSession({
+      userId: elevatedAuth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: true } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [], nextPage: null });
+
+    await sut.searchAssets(elevatedAuth, session.id, { filters: {}, limit: 1 });
+    expect(assetRepository.searchAgentMetadata).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userId: elevatedAuth.user.id,
+        scope: { owned: true, sharedSpaces: true, locked: true },
+      }),
+    );
+
+    await sut.searchAssets(runnerAuth, session.id, { filters: {}, limit: 1 });
+    expect(assetRepository.searchAgentMetadata).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userId: elevatedAuth.user.id,
+        scope: { owned: true, sharedSpaces: true, locked: false },
+      }),
+    );
+  });
+
+  it('returns shared-space search assets only when permission plan allows shared spaces', async () => {
+    const auth = AuthFactory.create();
+    const sharedAssetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set([sharedAssetId]));
+    assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [makeMetadata(sharedAssetId)], nextPage: null });
+
+    const result = await sut.searchAssets(auth, session.id, { filters: {}, limit: 1 });
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+      assets: [expect.objectContaining({ id: sharedAssetId })],
+      nextPage: null,
+    });
+    expect(assetRepository.searchAgentMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: { owned: false, sharedSpaces: true, locked: false } }),
+    );
+  });
+
+  it.each([
+    {
+      name: 'readAssetMetadata',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetMetadata(auth, sessionId, { assetIds }),
+      repositoryRead: () => assetRepository.getAgentMetadataByIds,
+    },
+    {
+      name: 'readAssetPreviews',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetPreviews(auth, sessionId, { assetIds }),
+      repositoryRead: () => assetRepository.getAgentPreviewReferencesByIds,
+    },
+    {
+      name: 'readAssetOriginals',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetOriginals(auth, sessionId, { assetIds }),
+      repositoryRead: () => assetRepository.getAgentOriginalReferencesByIds,
+    },
+  ])('$name denies inaccessible asset ids before returning data', async ({ call, repositoryRead }) => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      credentialSnapshot: {
+        id: newUuid(),
+        providerType: AgentProviderType.OpenAICompatible,
+        label: 'Local compatible',
+        baseUrl: 'http://localhost:11434/v1',
+        models: ['local-model'],
+        defaultModel: 'local-model',
+      },
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: true, originals: true },
+        providerExposure: {
+          metadata: true,
+          previews: true,
+          originals: true,
+          allowOriginalsForExternalProviders: false,
+        },
+        limits: { ...permissionPlanSnapshot.limits, maxPreviewsPerToolCall: 5, maxOriginalsPerToolCall: 5 },
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+
+    const result = await call(auth, session.id, assetIds);
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'One or more assets are not accessible',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    expect(repositoryRead()).not.toHaveBeenCalled();
+  });
+
+  it('denies inaccessible search result asset ids before returning data', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [makeMetadata(assetId)], nextPage: null });
+
+    const result = await sut.searchAssets(auth, session.id, { filters: {}, limit: 1 });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'One or more assets are not accessible',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+  });
+
+  it('counts per-session limits by data class and excludes the current approved strict call during re-execution', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: true, originals: false },
+        providerExposure: {
+          metadata: true,
+          previews: true,
+          originals: false,
+          allowOriginalsForExternalProviders: false,
+        },
+        limits: {
+          ...permissionPlanSnapshot.limits,
+          maxPreviewsPerToolCall: 5,
+          maxPreviewsPerSession: 3,
+        },
+      }),
+    });
+    const approved = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.ReadAssetPreviews,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      redactedRequestMetadata: { assetIds },
+      dataClass: AgentToolDataClass.Previews,
+      assetCount: assetIds.length,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(approved);
+    toolCallRepository.transition.mockResolvedValueOnce(
+      makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }),
+    );
+    toolCallRepository.getCountedAssetCountBySessionAndDataClass.mockResolvedValue(1);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentPreviewReferencesByIds.mockResolvedValue(assetIds.map((id) => makeMediaReference(id)));
+
+    await sut.readAssetPreviews(auth, session.id, { toolCallId: approved.id });
+
+    expect(toolCallRepository.getCountedAssetCountBySessionAndDataClass).toHaveBeenCalledWith(
+      session.id,
+      AgentToolDataClass.Previews,
+      approved.id,
+    );
+  });
+
+  it('visibility-constrains album and tag search filters without leaking inaccessible ids through errors', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+    accessRepository.tag.checkOwnerAccess.mockResolvedValue(new Set());
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: { albumIds: [newUuid()], tagIds: [newUuid()] },
+      limit: 1,
+    });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'One or more search filters are not accessible',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    if (result.status !== 'denied') {
+      throw new Error(`Expected denied response, got ${result.status}`);
+    }
+    expect(result.reason).not.toContain('album');
+    expect(result.reason).not.toContain('tag');
+    expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
+  });
+
+  it('returns only available preview references and audits the returned count', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const returnedPreview = makeMediaReference(assetIds[0]);
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: true, originals: false },
+        providerExposure: {
+          metadata: true,
+          previews: true,
+          originals: false,
+          allowOriginalsForExternalProviders: false,
+        },
+        limits: { ...permissionPlanSnapshot.limits, maxPreviewsPerToolCall: 5 },
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentPreviewReferencesByIds.mockResolvedValue([returnedPreview]);
+
+    const result = await sut.readAssetPreviews(auth, session.id, { assetIds });
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+      previews: [returnedPreview],
+    });
+    expect(toolCallRepository.transition).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.any(String),
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        assetCount: 1,
+        redactedResponseMetadata: { assetIds: [assetIds[0]] },
+      }),
+    );
+  });
+
+  it('returns only available original references and audits the returned count', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const returnedOriginal = makeMediaReference(assetIds[1]);
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      credentialSnapshot: {
+        id: newUuid(),
+        providerType: AgentProviderType.OpenAICompatible,
+        label: 'Local compatible',
+        baseUrl: 'http://localhost:11434/v1',
+        models: ['local-model'],
+        defaultModel: 'local-model',
+      },
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: true, originals: true },
+        providerExposure: {
+          metadata: true,
+          previews: true,
+          originals: true,
+          allowOriginalsForExternalProviders: false,
+        },
+        limits: { ...permissionPlanSnapshot.limits, maxOriginalsPerToolCall: 5 },
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentOriginalReferencesByIds.mockResolvedValue([returnedOriginal]);
+
+    const result = await sut.readAssetOriginals(auth, session.id, { assetIds });
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+      originals: [returnedOriginal],
+    });
+    expect(toolCallRepository.transition).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.any(String),
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        assetCount: 1,
+        redactedResponseMetadata: { assetIds: [assetIds[1]] },
+      }),
+    );
+  });
+
+  it('readAlbum denies albums whose asset count exceeds maxAssetsPerToolCall', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1 } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    albumRepository.getAgentAlbumById.mockResolvedValue(
+      makeAlbumDetail({ id: albumId, assetIds: [newUuid(), newUuid()] }),
+    );
+
+    const result = await sut.readAlbum(auth, session.id, { albumId });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Requested asset count exceeds per-tool limit',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+  });
+
   it('lists historical tool calls after completed session', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Completed });
@@ -758,14 +1313,16 @@ describe(AgentToolService.name, () => {
       session.id,
       approved.id,
       AgentToolCallStatus.Executing,
-      {
+      expect.objectContaining({
         status: AgentToolCallStatus.Completed,
         approvalDecision: AgentToolApprovalDecision.Approved,
         responseSummary: 'Returned metadata for 1 asset',
         redactedResponseMetadata: { assetIds },
+        assetCount: 1,
+        albumCount: 0,
         completedAt: expect.any(Date),
         error: null,
-      },
+      }),
     );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
       status: AgentSessionStatus.Running,
@@ -904,11 +1461,6 @@ describe(AgentToolService.name, () => {
         }),
       },
       reason: 'Agent provider exposure policy does not allow metadata reads',
-    },
-    {
-      name: 'approval mode is no longer strict',
-      sessionOverrides: { approvalMode: AgentApprovalMode.PlanOnly },
-      reason: 'Only strict approval mode is supported for metadata tools in this slice',
     },
   ])(
     'records denied and restores session when approval-time policy drifts: $name',
