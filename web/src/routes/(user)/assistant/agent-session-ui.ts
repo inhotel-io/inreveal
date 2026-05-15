@@ -22,6 +22,10 @@ export const approvalModeOptions = [
   { value: AgentApprovalMode.Strict, labelKey: 'assistant_approval_mode_strict' as Translations },
   { value: AgentApprovalMode.AskOnEscalation, labelKey: 'assistant_approval_mode_ask_on_escalation' as Translations },
   { value: AgentApprovalMode.PlanOnly, labelKey: 'assistant_approval_mode_plan_only' as Translations },
+  {
+    value: AgentApprovalMode.DangerouslySkipPermissions,
+    labelKey: 'assistant_approval_mode_dangerously_skip_permissions' as Translations,
+  },
 ] as const;
 
 export const supportedPermissionPresets = [
@@ -34,6 +38,7 @@ export const supportedApprovalModes = [
   AgentApprovalMode.Strict,
   AgentApprovalMode.AskOnEscalation,
   AgentApprovalMode.PlanOnly,
+  AgentApprovalMode.DangerouslySkipPermissions,
 ] as const;
 
 export const DEFAULT_AGENT_PERMISSION_PRESET = AgentPermissionPreset.Careful;

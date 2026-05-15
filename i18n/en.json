@@ -664,6 +664,7 @@
   "assistant": "Assistant",
   "assistant_approval_mode": "Approval mode",
   "assistant_approval_mode_ask_on_escalation": "Ask on escalation",
+  "assistant_approval_mode_dangerously_skip_permissions": "Dangerously skip read approvals",
   "assistant_approval_mode_plan_only": "Plan review only",
   "assistant_approval_mode_strict": "Strict",
   "assistant_chat": "Chat",
