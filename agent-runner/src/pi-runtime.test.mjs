@@ -40,12 +40,30 @@ const createSessionBody = (overrides = {}) => ({
   ...overrides,
 });
 
-const createFakeDependencies = () => {
+const createDeferred = () => {
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+
+  return { promise, resolve };
+};
+
+const createMessageRequest = (overrides = {}) => ({
+  runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+  gallerySessionId: '00000000-0000-4000-8000-000000000100',
+  messageId: '00000000-0000-4000-8000-000000000200',
+  content: { blocks: [{ type: 'text', text: 'Organize my photos.' }] },
+  ...overrides,
+});
+
+const createFakeDependencies = ({ promptGate } = {}) => {
   const calls = {
     runtimeApiKeys: [],
     loaders: [],
     createAgentSession: [],
     prompts: [],
+    subscribed: 0,
     unsubscribed: 0,
     disposed: 0,
   };
@@ -55,6 +73,7 @@ const createFakeDependencies = () => {
     sessionId: 'pi-sdk-session-1',
     messages: [],
     subscribe(next) {
+      calls.subscribed += 1;
       listener = next;
       return () => {
         calls.unsubscribed += 1;
@@ -66,6 +85,7 @@ const createFakeDependencies = () => {
         type: 'message_update',
         assistantMessageEvent: { type: 'text_delta', delta: 'I can help.' },
       });
+      await promptGate?.promise;
       this.messages.push({ role: 'assistant', content: [{ type: 'text', text: 'I can help.' }] });
       listener?.({ type: 'message_end' });
     },
@@ -195,6 +215,12 @@ describe('pi runtime adapter', () => {
     assert.equal(typeof calls.loaders[0].agentDir, 'string');
     assert.notEqual(calls.loaders[0].agentDir, '');
     assert.ok(calls.loaders[0].agentDir.endsWith('agent-runner/.pi-runtime'));
+    assert.equal(calls.loaders[0].noContextFiles, true);
+    assert.equal(calls.loaders[0].noSkills, true);
+    assert.equal(calls.loaders[0].noPromptTemplates, true);
+    assert.equal(calls.loaders[0].noThemes, true);
+    assert.equal(calls.loaders[0].noExtensions, true);
+    assert.ok(Array.isArray(calls.loaders[0].extensionFactories));
   });
 
   it('registers an OpenAI-compatible provider without persisting the secret', async () => {
@@ -235,12 +261,7 @@ describe('pi runtime adapter', () => {
     await runtime.createSession(createSessionBody());
 
     const events = await collect(
-      runtime.sendMessage({
-        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
-        gallerySessionId: '00000000-0000-4000-8000-000000000100',
-        messageId: '00000000-0000-4000-8000-000000000200',
-        content: { blocks: [{ type: 'text', text: 'Organize my photos.' }] },
-      }),
+      runtime.sendMessage(createMessageRequest()),
     );
 
     assert.deepEqual(events, [
@@ -267,13 +288,53 @@ describe('pi runtime adapter', () => {
     await runtime.createSession(createSessionBody());
 
     await collect(
-      runtime.sendMessage({
-        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
-        gallerySessionId: '00000000-0000-4000-8000-000000000100',
-        messageId: '00000000-0000-4000-8000-000000000200',
-        content: { blocks: [{ type: 'text', text: 'Organize my photos.' }] },
-      }),
+      runtime.sendMessage(createMessageRequest()),
     );
+
+    assert.equal(calls.unsubscribed, 1);
+  });
+
+  it('rejects overlapping message streams for the same runner session before subscribing or prompting again', async () => {
+    const promptGate = createDeferred();
+    const { sdk, ai, calls } = createFakeDependencies({ promptGate });
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+    const first = runtime.sendMessage(createMessageRequest())[Symbol.asyncIterator]();
+    const second = runtime.sendMessage(
+      createMessageRequest({ messageId: '00000000-0000-4000-8000-000000000201' }),
+    )[Symbol.asyncIterator]();
+
+    try {
+      assert.equal((await first.next()).value.type, 'assistant-message-delta');
+
+      await assert.rejects(() => second.next(), /already has an active message stream/);
+      assert.equal(calls.subscribed, 1);
+      assert.deepEqual(calls.prompts, ['Organize my photos.']);
+    } finally {
+      await second.return?.();
+      await first.return?.();
+      promptGate.resolve();
+    }
+  });
+
+  it('unsubscribes the active listener and disposes the Pi SDK session when disposed mid-stream', async () => {
+    const promptGate = createDeferred();
+    const { sdk, ai, calls } = createFakeDependencies({ promptGate });
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+    const stream = runtime.sendMessage(createMessageRequest())[Symbol.asyncIterator]();
+
+    try {
+      assert.equal((await stream.next()).value.type, 'assistant-message-delta');
+
+      runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
+
+      assert.equal(calls.unsubscribed, 1);
+      assert.equal(calls.disposed, 1);
+    } finally {
+      await stream.return?.();
+      promptGate.resolve();
+    }
 
     assert.equal(calls.unsubscribed, 1);
   });
@@ -287,12 +348,7 @@ describe('pi runtime adapter', () => {
     await runtime.createSession(createSessionBody());
 
     const events = await collect(
-      runtime.sendMessage({
-        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
-        gallerySessionId: '00000000-0000-4000-8000-000000000100',
-        messageId: '00000000-0000-4000-8000-000000000200',
-        content: { blocks: [{ type: 'text', text: 'Organize my photos.' }] },
-      }),
+      runtime.sendMessage(createMessageRequest()),
     );
 
     assert.deepEqual(events, [
