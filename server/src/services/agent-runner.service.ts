@@ -148,6 +148,8 @@ export class AgentRunnerService {
     messageId: string;
     content: AgentMessageContent;
   }) {
+    let runnerErrorMessage: string | undefined;
+
     try {
       const { runnerUrl, runnerMessageStreamTimeoutMs } = this.configRepository.getEnv().agent;
       if (!runnerUrl) {
@@ -174,6 +176,11 @@ export class AgentRunnerService {
             createdAt: this.toIsoNow(),
           });
           continue;
+        }
+
+        if (event.type === 'runner-error') {
+          runnerErrorMessage = event.message;
+          throw new Error(event.message);
         }
 
         completed = true;
@@ -205,7 +212,7 @@ export class AgentRunnerService {
       this.websocketRepository.clientSend('on_agent_session_event', userId, {
         type: 'runner-error',
         sessionId,
-        message: 'The assistant runner stopped while processing the message.',
+        message: runnerErrorMessage ?? 'The assistant runner stopped while processing the message.',
         createdAt: this.toIsoNow(),
       });
       throw error;
