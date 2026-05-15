@@ -1,6 +1,7 @@
 import { ActivityController } from 'src/controllers/activity.controller';
 import { AgentMessageController } from 'src/controllers/agent-message.controller';
 import { AgentProviderCredentialController } from 'src/controllers/agent-provider-credential.controller';
+import { AgentRunnerToolController } from 'src/controllers/agent-runner-tool.controller';
 import { AgentRunnerController } from 'src/controllers/agent-runner.controller';
 import { AgentSessionController } from 'src/controllers/agent-session.controller';
 import { AgentToolController } from 'src/controllers/agent-tool.controller';
@@ -57,6 +58,7 @@ export const controllers = [
   AgentMessageController,
   AgentProviderCredentialController,
   AgentRunnerController,
+  AgentRunnerToolController,
   AgentSessionController,
   AgentToolController,
   AlbumController,

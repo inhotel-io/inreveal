@@ -1,6 +1,11 @@
 import { AgentToolController } from 'src/controllers/agent-tool.controller';
 import {
+  AgentListAlbumsToolRequestDto,
+  AgentReadAlbumToolRequestDto,
   AgentReadAssetMetadataToolRequestDto,
+  AgentReadAssetOriginalsToolRequestDto,
+  AgentReadAssetPreviewsToolRequestDto,
+  AgentSearchAssetsToolRequestDto,
   AgentToolApprovalDto,
   AgentToolCallResponseDto,
 } from 'src/dtos/agent-tool.dto';
@@ -32,6 +37,7 @@ describe(AgentToolController.name, () => {
   const metadataBody: AgentReadAssetMetadataToolRequestDto = {
     assetIds: [assetId],
   };
+  const albumId = factory.uuid();
   const toolCall: AgentToolCallResponseDto = {
     id: toolCallId,
     sessionId,
@@ -107,6 +113,84 @@ describe(AgentToolController.name, () => {
       expect(result).toEqual(
         factory.responses.badRequest(['Provide assetIds for a new tool request or toolCallId for an approved request']),
       );
+    });
+  });
+
+  describe.each([
+    {
+      path: 'search-assets',
+      method: 'searchAssets' as const,
+      body: { filters: { takenAfter: '2026-05-13T00:00:00.000Z' }, limit: 5 },
+      expectedDto: {
+        filters: { takenAfter: new Date('2026-05-13T00:00:00.000Z') },
+        limit: 5,
+      } satisfies AgentSearchAssetsToolRequestDto,
+      invalidBody: { limit: 0 },
+    },
+    {
+      path: 'read-asset-previews',
+      method: 'readAssetPreviews' as const,
+      body: { assetIds: [assetId] },
+      expectedDto: { assetIds: [assetId] } satisfies AgentReadAssetPreviewsToolRequestDto,
+      invalidBody: {},
+    },
+    {
+      path: 'read-asset-originals',
+      method: 'readAssetOriginals' as const,
+      body: { assetIds: [assetId] },
+      expectedDto: { assetIds: [assetId] } satisfies AgentReadAssetOriginalsToolRequestDto,
+      invalidBody: {},
+    },
+    {
+      path: 'list-albums',
+      method: 'listAlbums' as const,
+      body: {},
+      expectedDto: {} satisfies AgentListAlbumsToolRequestDto,
+      invalidBody: { unexpected: true },
+    },
+    {
+      path: 'read-album',
+      method: 'readAlbum' as const,
+      body: { albumId },
+      expectedDto: { albumId } satisfies AgentReadAlbumToolRequestDto,
+      invalidBody: {},
+    },
+  ])('POST /agent/sessions/:id/tools/$path', ({ path, method, body, expectedDto, invalidBody }) => {
+    it('should be an authenticated route with update permission', async () => {
+      service[method].mockResolvedValue({ status: 'approval-required', toolCall } as never);
+
+      await request(ctx.getHttpServer()).post(`/agent/sessions/${sessionId}/tools/${path}`).send(body);
+
+      expect(ctx.authenticate).toHaveBeenCalled();
+      expectPermission(Permission.AgentSessionUpdate);
+    });
+
+    it('should call the service and serialize tool call dates', async () => {
+      service[method].mockResolvedValue({ status: 'approval-required', toolCall } as never);
+
+      const { status, body: result } = await request(ctx.getHttpServer())
+        .post(`/agent/sessions/${sessionId}/tools/${path}`)
+        .send(body);
+
+      expect(status).toBe(201);
+      expect(service[method]).toHaveBeenCalledWith(auth, sessionId, expectedDto);
+      expect(result).toEqual({
+        status: 'approval-required',
+        toolCall: {
+          ...toolCall,
+          startedAt: startedAt.toISOString(),
+          completedAt: null,
+        },
+      });
+    });
+
+    it('should validate body DTOs before calling the service', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/agent/sessions/${sessionId}/tools/${path}`)
+        .send(invalidBody);
+
+      expect(status).toBe(400);
+      expect(service[method]).not.toHaveBeenCalled();
     });
   });
 
