@@ -16,6 +16,8 @@ import {
   UserStatus,
 } from 'src/enum';
 import { AgentMessageTable } from 'src/schema/tables/agent-message.table';
+import { AgentOperationPlanTable } from 'src/schema/tables/agent-operation-plan.table';
+import { AgentOperationTable } from 'src/schema/tables/agent-operation.table';
 import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
 import { AgentSessionTable } from 'src/schema/tables/agent-session.table';
 import { AgentToolCallTable } from 'src/schema/tables/agent-tool-call.table';
@@ -94,6 +96,8 @@ export type AgentProviderCredential = Selectable<AgentProviderCredentialTable>;
 export type AgentMessage = Selectable<AgentMessageTable>;
 export type AgentSession = Selectable<AgentSessionTable>;
 export type AgentToolCall = Selectable<AgentToolCallTable>;
+export type AgentOperationPlan = Selectable<AgentOperationPlanTable>;
+export type AgentOperation = Selectable<AgentOperationTable>;
 
 export type Tag = {
   id: string;
@@ -522,6 +526,27 @@ export const columns = {
     'updateId',
   ],
   agentMessage: ['id', 'sessionId', 'role', 'content', 'providerMessageId', 'toolCallId', 'createdAt'],
+  agentOperationPlan: ['id', 'sessionId', 'revision', 'status', 'summary', 'createdAt', 'updatedAt'],
+  agentOperation: [
+    'id',
+    'planId',
+    'type',
+    'position',
+    'summary',
+    'targetKind',
+    'targetId',
+    'temporaryTargetId',
+    'assetIds',
+    'payload',
+    'dependencyIds',
+    'riskLevel',
+    'enabled',
+    'status',
+    'result',
+    'error',
+    'createdAt',
+    'updatedAt',
+  ],
   agentToolCall: [
     'id',
     'sessionId',
