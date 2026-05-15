@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { pathToFileURL } from 'node:url';
 
 const capabilities = {
   protocolVersion: '2026-05-14',
@@ -113,7 +114,7 @@ export const startServer = ({
   });
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const server = await startServer();
   const address = server.address();
   if (address && typeof address === 'object') {
