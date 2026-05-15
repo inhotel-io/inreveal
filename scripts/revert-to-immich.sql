@@ -361,6 +361,7 @@ DELETE FROM "kysely_migrations"
    '1778800000000-AgentMessage',
    '1778778147082-AddAgentSessionProviderCredentialIndex',
    '1778900000000-AgentToolCall',
+   '1778910000000-BackfillAgentReadSessionLimits',
 
    -- Post-v2.7.5 upstream migrations pulled in by rebase. Paired with the
    -- schema rollbacks in step 7 above.
