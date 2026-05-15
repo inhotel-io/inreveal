@@ -30,6 +30,23 @@ const withServer = async (test) => {
 };
 
 describe('agent runner stub', () => {
+  it('can be imported when process argv path is undefined', async () => {
+    const originalArgvPath = process.argv[1];
+    process.argv[1] = undefined;
+
+    try {
+      const module = await import(`./server.mjs?argv-undefined=${Date.now()}`);
+
+      assert.equal(typeof module.startServer, 'function');
+    } finally {
+      if (originalArgvPath === undefined) {
+        delete process.argv[1];
+      } else {
+        process.argv[1] = originalArgvPath;
+      }
+    }
+  });
+
   it('returns health capabilities', async () => {
     await withServer(async (baseUrl) => {
       const response = await fetch(`${baseUrl}/health`);
