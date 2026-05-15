@@ -270,7 +270,7 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.createAgentSession.length, 1);
     assert.equal(calls.createAgentSession[0].model.provider, 'openai');
     assert.equal(calls.createAgentSession[0].model.id, 'gpt-5.1');
-    assert.equal(calls.createAgentSession[0].noTools, 'all');
+    assert.equal(calls.createAgentSession[0].noTools, 'builtin');
     assert.deepEqual(calls.createAgentSession[0].tools, []);
     assert.deepEqual(calls.createAgentSession[0].customTools, []);
   });
@@ -336,6 +336,8 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].noExtensions, true);
     assert.ok(Array.isArray(calls.loaders[0].extensionFactories));
     assert.equal(calls.loaders[0].systemPrompt.startsWith('You are Gallery Assistant'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('may have Gallery read tools available'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('has no Gallery read tools'), false);
     assert.deepEqual(calls.loaders[0].appendSystemPrompt, []);
     assert.equal(calls.loaders[0].systemPromptOverride, undefined);
     assert.equal(calls.loaders[0].appendSystemPromptOverride, undefined);
