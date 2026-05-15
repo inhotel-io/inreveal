@@ -39,22 +39,3 @@ where
   and "status" = $2
 order by
   "revision" desc
-
--- AgentOperationPlanRepository.getAppliedBySessionId
-select
-  "id",
-  "sessionId",
-  "revision",
-  "status",
-  "summary",
-  "createdAt",
-  "updatedAt"
-from
-  "agent_operation_plan"
-where
-  "sessionId" = $1::uuid
-  and "status" = $2
-order by
-  "updatedAt" asc,
-  "revision" asc,
-  "id" asc
