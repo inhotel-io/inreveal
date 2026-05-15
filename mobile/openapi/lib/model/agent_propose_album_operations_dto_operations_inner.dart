@@ -19,7 +19,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
     this.temporaryTargetId,
     this.riskLevel,
     this.enabled = true,
-    this.payload = const {},
+    this.payload = {},
     this.targetId,
     this.assetIds = const [],
   });
@@ -48,7 +48,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
 
   bool enabled;
 
-  Map<String, Object> payload;
+  Object payload;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -68,7 +68,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
     other.temporaryTargetId == temporaryTargetId &&
     other.riskLevel == riskLevel &&
     other.enabled == enabled &&
-    _deepEquality.equals(other.payload, payload) &&
+    other.payload == payload &&
     other.targetId == targetId &&
     _deepEquality.equals(other.assetIds, assetIds);
 
@@ -129,7 +129,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
         temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
         riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
         enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
-        payload: mapCastOfType<String, Object>(json, r'payload')!,
+        payload: mapValueOfType<Object>(json, r'payload')!,
         targetId: mapValueOfType<String>(json, r'targetId'),
         assetIds: json[r'assetIds'] is Iterable
             ? (json[r'assetIds'] as Iterable).cast<String>().toList(growable: false)
