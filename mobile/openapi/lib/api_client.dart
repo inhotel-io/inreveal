@@ -193,10 +193,18 @@ class ApiClient {
           return AddUsersDto.fromJson(value);
         case 'AdminOnboardingUpdateDto':
           return AdminOnboardingUpdateDto.fromJson(value);
+        case 'AgentAlbumAddAssetsOperationType':
+          return AgentAlbumAddAssetsOperationTypeTypeTransformer().decode(value);
+        case 'AgentAlbumCreateOperationType':
+          return AgentAlbumCreateOperationTypeTypeTransformer().decode(value);
         case 'AgentAlbumDetail':
           return AgentAlbumDetail.fromJson(value);
+        case 'AgentAlbumSetCoverOperationType':
+          return AgentAlbumSetCoverOperationTypeTypeTransformer().decode(value);
         case 'AgentAlbumSummary':
           return AgentAlbumSummary.fromJson(value);
+        case 'AgentAlbumUpdateDetailsOperationType':
+          return AgentAlbumUpdateDetailsOperationTypeTypeTransformer().decode(value);
         case 'AgentApprovalMode':
           return AgentApprovalModeTypeTransformer().decode(value);
         case 'AgentAssetMediaReference':
@@ -247,6 +255,10 @@ class ApiClient {
           return AgentMessageToolCallBlockTypeTypeTransformer().decode(value);
         case 'AgentModelSnapshot':
           return AgentModelSnapshot.fromJson(value);
+        case 'AgentOperationExistingAlbumTargetKind':
+          return AgentOperationExistingAlbumTargetKindTypeTransformer().decode(value);
+        case 'AgentOperationNewAlbumTargetKind':
+          return AgentOperationNewAlbumTargetKindTypeTransformer().decode(value);
         case 'AgentOperationPlanResponseDto':
           return AgentOperationPlanResponseDto.fromJson(value);
         case 'AgentOperationPlanStatus':

@@ -29,7 +29,7 @@ export class AgentOperationTable {
   @Column()
   type!: AgentOperationType;
 
-  @Column()
+  @Column({ type: 'integer' })
   position!: number;
 
   @Column({ type: 'text' })
