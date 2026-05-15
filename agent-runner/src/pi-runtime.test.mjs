@@ -82,6 +82,7 @@ const createFakeDependencies = ({ promptGate, sessionAbortGate } = {}) => {
     runtimeApiKeys: [],
     loaders: [],
     createAgentSession: [],
+    activeToolNames: [],
     prompts: [],
     authCreate: 0,
     authInMemory: 0,
@@ -219,6 +220,9 @@ const createFakeDependencies = ({ promptGate, sessionAbortGate } = {}) => {
     DefaultResourceLoader,
     createAgentSession: async (options) => {
       calls.createAgentSession.push(options);
+      const customToolNames = options.customTools?.map((tool) => tool.name) ?? [];
+      calls.activeToolNames =
+        Array.isArray(options.tools) ? customToolNames.filter((toolName) => options.tools.includes(toolName)) : customToolNames;
       return { session };
     },
   };
@@ -297,11 +301,12 @@ describe('pi runtime adapter', () => {
       'readAlbum',
     ]);
     assert.equal(calls.createAgentSession[0].noTools, 'builtin');
-    assert.deepEqual(calls.createAgentSession[0].tools, []);
+    assert.equal(calls.createAgentSession[0].tools, undefined);
     assert.deepEqual(
       calls.createAgentSession[0].customTools.map((tool) => tool.name),
       result.capabilities.tools,
     );
+    assert.deepEqual(calls.activeToolNames, result.capabilities.tools);
   });
 
   it('uses transient in-memory Pi auth storage and model registry', async () => {
