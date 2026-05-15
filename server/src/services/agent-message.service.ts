@@ -34,6 +34,10 @@ export class AgentMessageService {
       throw new BadRequestException('Agent session does not accept new messages');
     }
 
+    if (session.runnerSessionId && this.agentRunnerService.isSessionDispatchActive(session.id)) {
+      throw new BadRequestException('Agent session already has a message in progress');
+    }
+
     const message = await this.messageRepository.create({
       sessionId: session.id,
       role: AgentMessageRole.User,
