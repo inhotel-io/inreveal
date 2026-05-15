@@ -137,10 +137,12 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
     async createSession(body) {
       const providerName = mapProviderType(body.credential.providerType, body.gallerySessionId);
       const runnerSessionId = `pi-${body.gallerySessionId}`;
-      const authStorage = sdk.AuthStorage.create();
+      const authStorage = sdk.AuthStorage.inMemory ? sdk.AuthStorage.inMemory() : sdk.AuthStorage.create();
       authStorage.setRuntimeApiKey(providerName, body.credential.secret);
 
-      const modelRegistry = sdk.ModelRegistry.create(authStorage);
+      const modelRegistry = sdk.ModelRegistry.inMemory
+        ? sdk.ModelRegistry.inMemory(authStorage)
+        : sdk.ModelRegistry.create(authStorage);
       const settingsManager = sdk.SettingsManager.inMemory({
         compaction: { enabled: false },
       });
@@ -182,12 +184,14 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         customTools: [],
       });
 
+      this.disposeSession(runnerSessionId);
       sessions.set(runnerSessionId, {
         gallerySessionId: body.gallerySessionId,
         credentialSecret: body.credential.secret,
         model: body.model,
         session,
         inFlight: false,
+        abortActiveStream: undefined,
         unsubscribe: undefined,
       });
 
@@ -217,9 +221,26 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       const pendingEvents = [];
       let wake;
       let finished = false;
+      let aborted = false;
 
       const enqueue = (event) => {
         pendingEvents.push(event);
+        wake?.();
+        wake = undefined;
+      };
+      const abortActiveStream = () => {
+        if (aborted) {
+          return;
+        }
+
+        aborted = true;
+        enqueue({
+          type: 'runner-error',
+          sessionId: gallerySessionId,
+          runnerSessionId,
+          message: 'Runner session disposed',
+        });
+        finished = true;
         wake?.();
         wake = undefined;
       };
@@ -246,11 +267,16 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         unsubscribe();
       };
       entry.unsubscribe = releaseSubscription;
+      entry.abortActiveStream = abortActiveStream;
 
       try {
         const promptPromise = entry.session
           .prompt(textPromptFromContent(content))
           .then(() => {
+            if (aborted) {
+              return;
+            }
+
             enqueue({
               type: 'assistant-message-completed',
               sessionId: gallerySessionId,
@@ -260,6 +286,10 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             });
           })
           .catch((error) => {
+            if (aborted) {
+              return;
+            }
+
             enqueue({
               type: 'runner-error',
               sessionId: gallerySessionId,
@@ -284,10 +314,15 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
           yield pendingEvents.shift();
         }
 
-        await promptPromise;
+        if (!aborted) {
+          await promptPromise;
+        }
       } finally {
         releaseSubscription();
         entry.inFlight = false;
+        if (entry.abortActiveStream === abortActiveStream) {
+          entry.abortActiveStream = undefined;
+        }
         if (entry.unsubscribe === releaseSubscription) {
           entry.unsubscribe = undefined;
         }
@@ -300,6 +335,8 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         return;
       }
 
+      entry.abortActiveStream?.();
+      entry.abortActiveStream = undefined;
       entry.unsubscribe?.();
       entry.unsubscribe = undefined;
       entry.session.dispose?.();
