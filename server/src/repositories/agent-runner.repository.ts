@@ -139,7 +139,8 @@ const parseSseFrame = (frame: string): AgentRunnerStreamEvent | null => {
 };
 
 async function* parseSseStream(stream: ReadableStream<Uint8Array>): AsyncGenerator<AgentRunnerStreamEvent> {
-  const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
   let buffer = '';
   let completed = false;
 
@@ -150,7 +151,7 @@ async function* parseSseStream(stream: ReadableStream<Uint8Array>): AsyncGenerat
         break;
       }
 
-      buffer += value;
+      buffer += decoder.decode(value, { stream: true });
       buffer = buffer.replace(/\r\n/g, '\n');
       const frames = buffer.split('\n\n');
       buffer = frames.pop() ?? '';
@@ -162,6 +163,8 @@ async function* parseSseStream(stream: ReadableStream<Uint8Array>): AsyncGenerat
         }
       }
     }
+
+    buffer += decoder.decode();
 
     if (buffer.trim().length > 0) {
       const event = parseSseFrame(buffer);
