@@ -1,21 +1,47 @@
-import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType } from 'src/enum';
+import { AgentMessage } from 'src/database';
+import {
+  AgentApprovalMode,
+  AgentMessageRole,
+  AgentPermissionPreset,
+  AgentProviderType,
+  AgentSessionStatus,
+} from 'src/enum';
+import { AgentMessageRepository } from 'src/repositories/agent-message.repository';
 import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository';
+import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
-import { AgentRunnerCreateSessionRequest } from 'src/types/agent-runner.types';
+import { AgentMessageContent } from 'src/types/agent-message.types';
+import { AgentRunnerCreateSessionRequest, AgentRunnerStreamEvent } from 'src/types/agent-runner.types';
 import { automock } from 'test/utils';
 
 describe(AgentRunnerService.name, () => {
   let sut: AgentRunnerService;
   let configRepository: ReturnType<typeof automock<ConfigRepository>>;
   let agentRunnerRepository: ReturnType<typeof automock<AgentRunnerRepository>>;
+  let messageRepository: ReturnType<typeof automock<AgentMessageRepository>>;
+  let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
+  let websocketRepository: ReturnType<typeof automock<WebsocketRepository>>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-14T10:00:00.000Z'));
     configRepository = automock(ConfigRepository);
     agentRunnerRepository = automock(AgentRunnerRepository);
-    sut = new AgentRunnerService(configRepository, agentRunnerRepository);
+    messageRepository = automock(AgentMessageRepository, { args: [{} as never] });
+    sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
+    websocketRepository = automock(WebsocketRepository, {
+      args: [{} as never, { setContext: vi.fn() } as never],
+      strict: false,
+    });
+    sut = new AgentRunnerService(
+      configRepository,
+      agentRunnerRepository,
+      messageRepository,
+      sessionRepository,
+      websocketRepository,
+    );
   });
 
   afterEach(() => {
@@ -56,6 +82,27 @@ describe(AgentRunnerService.name, () => {
     initialContext: {},
   });
 
+  const makeAssistantMessage = (overrides: Partial<AgentMessage> = {}): AgentMessage => ({
+    id: '00000000-0000-4000-8000-000000000301',
+    sessionId: '00000000-0000-4000-8000-000000000100',
+    role: AgentMessageRole.Assistant,
+    content: { blocks: [{ type: 'text', text: 'Done.' }] },
+    providerMessageId: 'provider-message-1',
+    toolCallId: null,
+    createdAt: new Date('2026-05-14T10:00:01.000Z'),
+    ...overrides,
+  });
+
+  async function* streamEvents(events: AgentRunnerStreamEvent[]) {
+    for (const event of events) {
+      yield event;
+    }
+  }
+
+  async function* failingStream(error: Error): AsyncGenerator<AgentRunnerStreamEvent> {
+    throw error;
+  }
+
   it('creates a runner session through the configured runner', async () => {
     configRepository.getEnv.mockReturnValue({
       agent: { runnerUrl: 'http://agent-runner:4477', runnerHealthTimeoutMs: 3000 },
@@ -87,6 +134,138 @@ describe(AgentRunnerService.name, () => {
 
     await expect(sut.createSession(makeCreateSessionBody())).rejects.toThrow('Agent runner is not configured');
     expect(agentRunnerRepository.createSession).not.toHaveBeenCalled();
+  });
+
+  it('streams a user message to the runner, emits deltas, and persists the completed assistant message', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Organize my photos.' }] };
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'I can help with that.' }] };
+    const assistantMessage = makeAssistantMessage({ sessionId, content: assistantContent });
+
+    configRepository.getEnv.mockReturnValue({
+      agent: { runnerUrl: 'http://agent-runner:4477', runnerHealthTimeoutMs: 3000 },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-delta',
+          sessionId,
+          runnerSessionId,
+          delta: 'I can',
+          sequence: 1,
+        },
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: 'provider-message-1',
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(assistantMessage);
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(agentRunnerRepository.streamMessage).toHaveBeenCalledWith({
+      url: 'http://agent-runner:4477',
+      runnerSessionId,
+      timeoutMs: 3000,
+      body: { gallerySessionId: sessionId, messageId, content },
+    });
+    expect(websocketRepository.clientSend).toHaveBeenNthCalledWith(1, 'on_agent_session_event', userId, {
+      type: 'assistant-message-delta',
+      sessionId,
+      delta: 'I can',
+      sequence: 1,
+      createdAt: '2026-05-14T10:00:00.000Z',
+    });
+    expect(messageRepository.create).toHaveBeenCalledWith({
+      sessionId,
+      role: AgentMessageRole.Assistant,
+      content: assistantContent,
+      providerMessageId: 'provider-message-1',
+      toolCallId: null,
+    });
+    expect(websocketRepository.clientSend).toHaveBeenNthCalledWith(2, 'on_agent_session_event', userId, {
+      type: 'assistant-message-created',
+      sessionId,
+      message: {
+        id: assistantMessage.id,
+        sessionId,
+        role: AgentMessageRole.Assistant,
+        content: assistantContent,
+        providerMessageId: 'provider-message-1',
+        toolCallId: null,
+        createdAt: new Date('2026-05-14T10:00:01.000Z'),
+      },
+      createdAt: '2026-05-14T10:00:00.000Z',
+    });
+  });
+
+  it('marks the session interrupted and emits an error when runner message streaming fails', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Organize my photos.' }] };
+    const error = new Error('connection refused');
+
+    configRepository.getEnv.mockReturnValue({
+      agent: { runnerUrl: 'http://agent-runner:4477', runnerHealthTimeoutMs: 3000 },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(failingStream(error));
+    sessionRepository.update.mockResolvedValue({} as never);
+
+    await expect(sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content })).rejects.toBe(error);
+
+    expect(sessionRepository.update).toHaveBeenCalledWith(userId, sessionId, {
+      status: AgentSessionStatus.Interrupted,
+    });
+    expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', userId, {
+      type: 'runner-error',
+      sessionId,
+      message: 'The assistant runner stopped while processing the message.',
+      createdAt: '2026-05-14T10:00:00.000Z',
+    });
+  });
+
+  it('ignores runner stream events for another Gallery or runner session', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Organize my photos.' }] };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: { runnerUrl: 'http://agent-runner:4477', runnerHealthTimeoutMs: 3000 },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-delta',
+          sessionId: '00000000-0000-4000-8000-000000000999',
+          runnerSessionId,
+          delta: 'wrong gallery session',
+          sequence: 1,
+        },
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId: 'other-runner-session',
+          providerMessageId: 'provider-message-1',
+          content: { blocks: [{ type: 'text', text: 'Wrong runner session.' }] },
+        },
+      ]),
+    );
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(messageRepository.create).not.toHaveBeenCalled();
+    expect(websocketRepository.clientSend).not.toHaveBeenCalled();
   });
 
   it('returns disabled status without probing when runner URL is missing', async () => {
