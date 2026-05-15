@@ -225,6 +225,7 @@ describe(AgentSessionService.name, () => {
       initialContextSnapshot: dto.initialContext,
     });
     expect(agentRunnerService.createSession).toHaveBeenCalledWith({
+      userId: auth.user.id,
       gallerySessionId: createdSession.id,
       credential: { ...createdSession.credentialSnapshot, secret: 'sk-session-secret' },
       model: dto.model,
@@ -334,6 +335,7 @@ describe(AgentSessionService.name, () => {
     );
     expect(agentRunnerService.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
+        userId: auth.user.id,
         permissionPlan: expectedPermissionPlan,
       }),
     );
@@ -460,6 +462,7 @@ describe(AgentSessionService.name, () => {
       runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
     });
     expect(agentRunnerService.createSession).toHaveBeenCalledWith({
+      userId: auth.user.id,
       gallerySessionId: createdSession.id,
       credential: { ...createdSession.credentialSnapshot, secret: 'sk-session-secret' },
       model: 'gpt-5.1',
@@ -537,6 +540,7 @@ describe(AgentSessionService.name, () => {
     );
     expect(agentRunnerService.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
+        userId: auth.user.id,
         credential: {
           id: providerCredentialId,
           providerType: AgentProviderType.OpenAI,

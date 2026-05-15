@@ -7,8 +7,9 @@ import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository'
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
+import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
 import { AgentMessageContent } from 'src/types/agent-message.types';
-import { AgentRunnerCreateSessionRequest, AgentRunnerStreamEvent } from 'src/types/agent-runner.types';
+import { AgentRunnerCreateSessionInput, AgentRunnerStreamEvent } from 'src/types/agent-runner.types';
 
 const RUNNER_STATUS_CACHE_MS = 15_000;
 
@@ -30,18 +31,33 @@ export class AgentRunnerService {
     private readonly messageRepository: AgentMessageRepository,
     private readonly sessionRepository: AgentSessionRepository,
     private readonly websocketRepository: WebsocketRepository,
+    private readonly toolTokenService: AgentRunnerToolTokenService,
   ) {}
 
-  async createSession(body: AgentRunnerCreateSessionRequest) {
-    const { runnerUrl, runnerHealthTimeoutMs } = this.configRepository.getEnv().agent;
+  async createSession(input: AgentRunnerCreateSessionInput) {
+    const { userId, ...body } = input;
+    const { runnerUrl, runnerHealthTimeoutMs, toolGatewayUrl } = this.configRepository.getEnv().agent;
     if (!runnerUrl) {
       throw new BadRequestException('Agent runner is not configured');
     }
 
+    const toolGateway = toolGatewayUrl
+      ? {
+          url: toolGatewayUrl,
+          token: this.toolTokenService.create({
+            sessionId: body.gallerySessionId,
+            userId,
+            expiresAt: body.permissionPlan.limits.expiresInMinutes
+              ? new Date(Date.now() + body.permissionPlan.limits.expiresInMinutes * 60_000)
+              : new Date(Date.now() + 2 * 60 * 60_000),
+          }),
+        }
+      : null;
+
     const result = await this.agentRunnerRepository.createSession({
       url: runnerUrl,
       timeoutMs: runnerHealthTimeoutMs,
-      body,
+      body: { ...body, toolGateway },
     });
 
     return {
