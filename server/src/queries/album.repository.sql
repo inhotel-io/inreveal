@@ -423,14 +423,6 @@ where
         "album_user"."albumId" = "album"."id"
         and "album_user"."userId" = $7
     )
-    or exists (
-      select
-      from
-        "shared_link"
-      where
-        "shared_link"."albumId" = "album"."id"
-        and "shared_link"."userId" = $8
-    )
   )
 order by
   "album"."createdAt" desc
@@ -494,14 +486,6 @@ where
       where
         "album_user"."albumId" = "album"."id"
         and "album_user"."userId" = $8
-    )
-    or exists (
-      select
-      from
-        "shared_link"
-      where
-        "shared_link"."albumId" = "album"."id"
-        and "shared_link"."userId" = $9
     )
   )
 
