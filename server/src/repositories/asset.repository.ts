@@ -58,6 +58,7 @@ import {
   withSmartSearch,
   withTags,
 } from 'src/utils/database';
+import { mimeTypes } from 'src/utils/mime-types';
 import { globToSqlPattern } from 'src/utils/misc';
 
 export type AssetStats = Record<AssetType, number>;
@@ -220,35 +221,6 @@ const withBoundingBox = <T>(qb: SelectQueryBuilder<DB, 'asset' | 'asset_exif', T
   );
 };
 
-const getAgentMimeType = (fileName: string) => {
-  const extension = fileName.split('.').pop()?.toLowerCase();
-
-  switch (extension) {
-    case 'png': {
-      return 'image/png';
-    }
-
-    case 'webp': {
-      return 'image/webp';
-    }
-
-    case 'gif': {
-      return 'image/gif';
-    }
-
-    case 'mp4': {
-      return 'video/mp4';
-    }
-
-    case 'mov': {
-      return 'video/quicktime';
-    }
-
-    default: {
-      return 'image/jpeg';
-    }
-  }
-};
 const formatUtcDate = (date: Date) => date.toISOString().slice(0, 10);
 
 // Advance a YYYY-MM-DD bucket-start date by one bucket interval (the exclusive
@@ -970,7 +942,13 @@ export class AssetRepository {
       .$call(withAgentExif)
       .where('asset.deletedAt', 'is', null)
       .where('asset.isOffline', '=', false)
-      .$if(!scope.locked, (qb) => qb.where('asset.visibility', '!=', AssetVisibility.Locked))
+      .where(
+        'asset.visibility',
+        'in',
+        scope.locked
+          ? [AssetVisibility.Timeline, AssetVisibility.Archive, AssetVisibility.Locked]
+          : [AssetVisibility.Timeline, AssetVisibility.Archive],
+      )
       .where((eb) =>
         scope.owned && scope.sharedSpaces
           ? eb.or([
@@ -1156,7 +1134,7 @@ export class AssetRepository {
             {
               assetId,
               mediaUrl: `/api/assets/${assetId}/thumbnail?size=preview`,
-              mimeType: getAgentMimeType(row.fileName),
+              mimeType: mimeTypes.lookup(row.fileName),
               fileName: row.fileName,
               width: row.width,
               height: row.height,
@@ -1195,7 +1173,7 @@ export class AssetRepository {
             {
               assetId,
               mediaUrl: `/api/assets/${assetId}/original`,
-              mimeType: getAgentMimeType(row.fileName),
+              mimeType: mimeTypes.lookup(row.fileName),
               fileName: row.fileName,
               width: row.width,
               height: row.height,
