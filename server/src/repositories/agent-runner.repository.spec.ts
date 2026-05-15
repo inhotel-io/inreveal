@@ -259,6 +259,21 @@ describe(AgentRunnerRepository.name, () => {
     ).rejects.toThrow('Agent runner returned an invalid session response');
   });
 
+  it('throws when the runner session creation capabilities are null', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ runnerSessionId: 'stub-1', capabilities: null }),
+    });
+
+    await expect(
+      sut.createSession({
+        url: 'http://agent-runner:4477',
+        timeoutMs: 3000,
+        body: createSessionBody,
+      }),
+    ).rejects.toThrow('Agent runner returned an invalid session response');
+  });
+
   it('throws when runner session creation fails with a non-success response', async () => {
     mockFetch.mockResolvedValue({ ok: false, status: 502 });
 
