@@ -697,7 +697,7 @@ describe(AgentToolService.name, () => {
   it.each([
     {
       name: 'searchAssets',
-      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetId: string) =>
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, _assetId: string) =>
         sut.searchAssets(auth, sessionId, { filters: {}, limit: 1 }),
       arrange: (assetId: string) => {
         assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [makeMetadata(assetId)], nextPage: null });
