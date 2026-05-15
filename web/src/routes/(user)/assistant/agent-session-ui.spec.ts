@@ -81,13 +81,13 @@ describe('agent session UI helpers', () => {
     expect(permissionPresetOptions.map((option) => option.value)).toEqual(supportedPermissionPresets);
   });
 
-  it('exposes supported approval modes without dangerously-skip-permissions', () => {
+  it('exposes supported approval modes', () => {
     expect(supportedApprovalModes).toEqual([
       AgentApprovalMode.Strict,
       AgentApprovalMode.AskOnEscalation,
       AgentApprovalMode.PlanOnly,
+      AgentApprovalMode.DangerouslySkipPermissions,
     ]);
-    expect(supportedApprovalModes).not.toContain(AgentApprovalMode.DangerouslySkipPermissions);
     expect(approvalModeOptions.map((option) => option.value)).toEqual(supportedApprovalModes);
   });
 
@@ -104,6 +104,7 @@ describe('agent session UI helpers', () => {
       'assistant_approval_mode_strict',
       'assistant_approval_mode_ask_on_escalation',
       'assistant_approval_mode_plan_only',
+      'assistant_approval_mode_dangerously_skip_permissions',
     ]);
   });
 
