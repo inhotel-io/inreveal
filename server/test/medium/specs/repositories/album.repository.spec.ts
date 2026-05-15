@@ -307,7 +307,8 @@ describe(AlbumRepository.name, () => {
           [visible.id, filtered.id],
         );
 
-        const [summary] = (await sut.getAgentAlbums(user.id)).filter(({ id }) => id === album.id);
+        const summaries = await sut.getAgentAlbums(user.id);
+        const summary = summaries.find(({ id }) => id === album.id);
         const detail = await sut.getAgentAlbumById(user.id, album.id);
 
         expect(summary).toEqual(
