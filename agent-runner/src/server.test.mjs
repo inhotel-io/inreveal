@@ -96,6 +96,20 @@ describe('agent runner stub', () => {
     });
   });
 
+  it('rejects null session JSON without a Gallery session id', async () => {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(250),
+        body: 'null',
+      });
+
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: 'gallerySessionId is required' });
+    });
+  });
+
   it('returns 400 for malformed session JSON', async () => {
     await withServer(async (baseUrl) => {
       const response = await fetch(`${baseUrl}/sessions`, {
@@ -145,6 +159,15 @@ describe('agent runner stub', () => {
           },
         },
       ]);
+    });
+  });
+
+  it('returns 404 for unknown routes', async () => {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/unknown`);
+
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: 'not found' });
     });
   });
 });
