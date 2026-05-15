@@ -110,6 +110,19 @@ describe('agent runner stub', () => {
     });
   });
 
+  it('rejects non-string Gallery session ids', async () => {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gallerySessionId: 123 }),
+      });
+
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: 'gallerySessionId is required' });
+    });
+  });
+
   it('returns 400 for malformed session JSON', async () => {
     await withServer(async (baseUrl) => {
       const response = await fetch(`${baseUrl}/sessions`, {
