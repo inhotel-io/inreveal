@@ -214,7 +214,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             settingsManager,
             resourceLoader,
             noTools: 'builtin',
-            tools: [],
+            ...(body.toolGateway ? {} : { tools: [] }),
             customTools,
           });
 
