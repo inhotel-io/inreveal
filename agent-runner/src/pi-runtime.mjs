@@ -363,9 +363,18 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
 
         await promptPromise;
       } finally {
+        let cleanupError;
         if (!promptSettled) {
-          await abortActiveStream({ emitError: false });
-          await promptPromise;
+          try {
+            await abortActiveStream({ emitError: false });
+          } catch (error) {
+            cleanupError = error;
+          }
+          try {
+            await promptPromise;
+          } catch (error) {
+            cleanupError ??= error;
+          }
         }
         releaseSubscription();
         entry.inFlight = false;
@@ -374,6 +383,9 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         }
         if (entry.unsubscribe === releaseSubscription) {
           entry.unsubscribe = undefined;
+        }
+        if (cleanupError) {
+          throw new Error(sanitizedErrorMessage(cleanupError, entry.credentialSecret));
         }
       }
     },
@@ -384,12 +396,28 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         return;
       }
 
-      await entry.abortActiveStream?.();
+      let cleanupError;
+      try {
+        await entry.abortActiveStream?.();
+      } catch (error) {
+        cleanupError = error;
+      }
       entry.abortActiveStream = undefined;
-      entry.unsubscribe?.();
+      try {
+        entry.unsubscribe?.();
+      } catch (error) {
+        cleanupError ??= error;
+      }
       entry.unsubscribe = undefined;
-      entry.session.dispose?.();
+      try {
+        await entry.session.dispose?.();
+      } catch (error) {
+        cleanupError ??= error;
+      }
       sessions.delete(runnerSessionId);
+      if (cleanupError) {
+        throw new Error(sanitizedErrorMessage(cleanupError, entry.credentialSecret));
+      }
     },
   };
 };

@@ -717,6 +717,98 @@ describe('pi runtime adapter', () => {
     promptGate.resolve();
   });
 
+  it('cleans up and redacts the error when early stream return abort fails', async () => {
+    const promptGate = createDeferred();
+    const { sdk, ai, calls, session } = createFakeDependencies({ promptGate });
+    session.abort = async () => {
+      calls.sessionAborted += 1;
+      throw new Error('abort failed for sk-openai-secret');
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+    const first = runtime.sendMessage(createMessageRequest())[Symbol.asyncIterator]();
+
+    assert.equal((await first.next()).value.type, 'assistant-message-delta');
+
+    const returnPromise = first.return();
+    await waitForCondition(() => calls.sessionAborted === 1);
+    promptGate.resolve();
+    await assert.rejects(
+      () => returnPromise,
+      (error) => {
+        assert.equal(error.message, 'abort failed for [redacted]');
+        assert.equal(error.message.includes('sk-openai-secret'), false);
+        return true;
+      },
+    );
+    assert.equal(calls.unsubscribed, 1);
+
+    const retryEvents = await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.equal(retryEvents[0].type, 'assistant-message-delta');
+  });
+
+  it('sanitizes public dispose abort failures and removes the runner session', async () => {
+    const promptGate = createDeferred();
+    const { sdk, ai, calls, session } = createFakeDependencies({ promptGate });
+    session.abort = async () => {
+      calls.sessionAborted += 1;
+      throw new Error('dispose abort failed for sk-openai-secret');
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+    const stream = runtime.sendMessage(createMessageRequest())[Symbol.asyncIterator]();
+    assert.equal((await stream.next()).value.type, 'assistant-message-delta');
+
+    await assert.rejects(
+      () => runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100'),
+      (error) => {
+        assert.equal(error.message, 'dispose abort failed for [redacted]');
+        assert.equal(error.message.includes('sk-openai-secret'), false);
+        return true;
+      },
+    );
+    promptGate.resolve();
+    try {
+      await stream.return?.();
+    } catch (error) {
+      assert.equal(error.message, 'dispose abort failed for [redacted]');
+      assert.equal(error.message.includes('sk-openai-secret'), false);
+    }
+
+    assert.equal(calls.unsubscribed, 1);
+    assert.equal(calls.disposed, 1);
+    await assert.rejects(
+      () => collect(runtime.sendMessage(createMessageRequest())),
+      /Runner session not found/,
+    );
+  });
+
+  it('sanitizes public dispose failures and removes the runner session', async () => {
+    const { sdk, ai, calls, session } = createFakeDependencies();
+    session.dispose = () => {
+      calls.disposed += 1;
+      throw new Error('dispose failed for sk-openai-secret');
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    await assert.rejects(
+      () => runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100'),
+      (error) => {
+        assert.equal(error.message, 'dispose failed for [redacted]');
+        assert.equal(error.message.includes('sk-openai-secret'), false);
+        return true;
+      },
+    );
+
+    assert.equal(calls.disposed, 1);
+    await assert.rejects(
+      () => collect(runtime.sendMessage(createMessageRequest())),
+      /Runner session not found/,
+    );
+  });
+
   it('returns a sanitized runner-error event when Pi prompt fails', async () => {
     const { sdk, ai, session } = createFakeDependencies();
     session.prompt = async () => {
