@@ -302,7 +302,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentSearchAssetsToolRequestDto] agentSearchAssetsToolRequestDto (required):
-  Future<Object?> executeAgentSearchAssets(String id, AgentSearchAssetsToolRequestDto agentSearchAssetsToolRequestDto,) async {
+  Future<AgentSearchAssetsToolResponseDto?> executeAgentSearchAssets(String id, AgentSearchAssetsToolRequestDto agentSearchAssetsToolRequestDto,) async {
     final response = await executeAgentSearchAssetsWithHttpInfo(id, agentSearchAssetsToolRequestDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
@@ -311,7 +311,7 @@ class AgentSessionsApi {
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentSearchAssetsToolResponseDto',) as AgentSearchAssetsToolResponseDto;
     
     }
     return null;
@@ -591,7 +591,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentListAlbumsToolRequestDto] agentListAlbumsToolRequestDto (required):
-  Future<Object?> listAlbums(String id, AgentListAlbumsToolRequestDto agentListAlbumsToolRequestDto,) async {
+  Future<AgentListAlbumsToolResponseDto?> listAlbums(String id, AgentListAlbumsToolRequestDto agentListAlbumsToolRequestDto,) async {
     final response = await listAlbumsWithHttpInfo(id, agentListAlbumsToolRequestDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
@@ -600,7 +600,7 @@ class AgentSessionsApi {
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentListAlbumsToolResponseDto',) as AgentListAlbumsToolResponseDto;
     
     }
     return null;
@@ -652,7 +652,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAlbumToolRequestDto] agentReadAlbumToolRequestDto (required):
-  Future<Object?> readAlbum(String id, AgentReadAlbumToolRequestDto agentReadAlbumToolRequestDto,) async {
+  Future<AgentReadAlbumToolResponseDto?> readAlbum(String id, AgentReadAlbumToolRequestDto agentReadAlbumToolRequestDto,) async {
     final response = await readAlbumWithHttpInfo(id, agentReadAlbumToolRequestDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
@@ -661,7 +661,7 @@ class AgentSessionsApi {
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentReadAlbumToolResponseDto',) as AgentReadAlbumToolResponseDto;
     
     }
     return null;
@@ -713,7 +713,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAssetMetadataToolRequestDto] agentReadAssetMetadataToolRequestDto (required):
-  Future<Object?> readAssetMetadata(String id, AgentReadAssetMetadataToolRequestDto agentReadAssetMetadataToolRequestDto,) async {
+  Future<AgentReadAssetMetadataToolResponseDto?> readAssetMetadata(String id, AgentReadAssetMetadataToolRequestDto agentReadAssetMetadataToolRequestDto,) async {
     final response = await readAssetMetadataWithHttpInfo(id, agentReadAssetMetadataToolRequestDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
@@ -722,7 +722,7 @@ class AgentSessionsApi {
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentReadAssetMetadataToolResponseDto',) as AgentReadAssetMetadataToolResponseDto;
     
     }
     return null;
@@ -774,7 +774,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAssetOriginalsToolRequestDto] agentReadAssetOriginalsToolRequestDto (required):
-  Future<Object?> readAssetOriginals(String id, AgentReadAssetOriginalsToolRequestDto agentReadAssetOriginalsToolRequestDto,) async {
+  Future<AgentReadAssetOriginalsToolResponseDto?> readAssetOriginals(String id, AgentReadAssetOriginalsToolRequestDto agentReadAssetOriginalsToolRequestDto,) async {
     final response = await readAssetOriginalsWithHttpInfo(id, agentReadAssetOriginalsToolRequestDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
@@ -783,7 +783,7 @@ class AgentSessionsApi {
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentReadAssetOriginalsToolResponseDto',) as AgentReadAssetOriginalsToolResponseDto;
     
     }
     return null;
@@ -835,7 +835,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAssetPreviewsToolRequestDto] agentReadAssetPreviewsToolRequestDto (required):
-  Future<Object?> readAssetPreviews(String id, AgentReadAssetPreviewsToolRequestDto agentReadAssetPreviewsToolRequestDto,) async {
+  Future<AgentReadAssetPreviewsToolResponseDto?> readAssetPreviews(String id, AgentReadAssetPreviewsToolRequestDto agentReadAssetPreviewsToolRequestDto,) async {
     final response = await readAssetPreviewsWithHttpInfo(id, agentReadAssetPreviewsToolRequestDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
@@ -844,7 +844,7 @@ class AgentSessionsApi {
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentReadAssetPreviewsToolResponseDto',) as AgentReadAssetPreviewsToolResponseDto;
     
     }
     return null;
@@ -896,7 +896,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentListAlbumsToolRequestDto] agentListAlbumsToolRequestDto (required):
-  Future<Object?> runnerListAlbums(String id, AgentListAlbumsToolRequestDto agentListAlbumsToolRequestDto,) async {
+  Future<AgentListAlbumsToolResponseDto?> runnerListAlbums(String id, AgentListAlbumsToolRequestDto agentListAlbumsToolRequestDto,) async {
     final response = await runnerListAlbumsWithHttpInfo(id, agentListAlbumsToolRequestDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
@@ -905,7 +905,7 @@ class AgentSessionsApi {
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentListAlbumsToolResponseDto',) as AgentListAlbumsToolResponseDto;
     
     }
     return null;
@@ -957,7 +957,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAlbumToolRequestDto] agentReadAlbumToolRequestDto (required):
-  Future<Object?> runnerReadAlbum(String id, AgentReadAlbumToolRequestDto agentReadAlbumToolRequestDto,) async {
+  Future<AgentReadAlbumToolResponseDto?> runnerReadAlbum(String id, AgentReadAlbumToolRequestDto agentReadAlbumToolRequestDto,) async {
     final response = await runnerReadAlbumWithHttpInfo(id, agentReadAlbumToolRequestDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
@@ -966,7 +966,7 @@ class AgentSessionsApi {
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentReadAlbumToolResponseDto',) as AgentReadAlbumToolResponseDto;
     
     }
     return null;
@@ -1018,7 +1018,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAssetMetadataToolRequestDto] agentReadAssetMetadataToolRequestDto (required):
-  Future<Object?> runnerReadAssetMetadata(String id, AgentReadAssetMetadataToolRequestDto agentReadAssetMetadataToolRequestDto,) async {
+  Future<AgentReadAssetMetadataToolResponseDto?> runnerReadAssetMetadata(String id, AgentReadAssetMetadataToolRequestDto agentReadAssetMetadataToolRequestDto,) async {
     final response = await runnerReadAssetMetadataWithHttpInfo(id, agentReadAssetMetadataToolRequestDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
@@ -1027,7 +1027,7 @@ class AgentSessionsApi {
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentReadAssetMetadataToolResponseDto',) as AgentReadAssetMetadataToolResponseDto;
     
     }
     return null;
@@ -1079,7 +1079,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAssetOriginalsToolRequestDto] agentReadAssetOriginalsToolRequestDto (required):
-  Future<Object?> runnerReadAssetOriginals(String id, AgentReadAssetOriginalsToolRequestDto agentReadAssetOriginalsToolRequestDto,) async {
+  Future<AgentReadAssetOriginalsToolResponseDto?> runnerReadAssetOriginals(String id, AgentReadAssetOriginalsToolRequestDto agentReadAssetOriginalsToolRequestDto,) async {
     final response = await runnerReadAssetOriginalsWithHttpInfo(id, agentReadAssetOriginalsToolRequestDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
@@ -1088,7 +1088,7 @@ class AgentSessionsApi {
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentReadAssetOriginalsToolResponseDto',) as AgentReadAssetOriginalsToolResponseDto;
     
     }
     return null;
@@ -1140,7 +1140,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAssetPreviewsToolRequestDto] agentReadAssetPreviewsToolRequestDto (required):
-  Future<Object?> runnerReadAssetPreviews(String id, AgentReadAssetPreviewsToolRequestDto agentReadAssetPreviewsToolRequestDto,) async {
+  Future<AgentReadAssetPreviewsToolResponseDto?> runnerReadAssetPreviews(String id, AgentReadAssetPreviewsToolRequestDto agentReadAssetPreviewsToolRequestDto,) async {
     final response = await runnerReadAssetPreviewsWithHttpInfo(id, agentReadAssetPreviewsToolRequestDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
@@ -1149,7 +1149,7 @@ class AgentSessionsApi {
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentReadAssetPreviewsToolResponseDto',) as AgentReadAssetPreviewsToolResponseDto;
     
     }
     return null;
@@ -1201,7 +1201,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentSearchAssetsToolRequestDto] agentSearchAssetsToolRequestDto (required):
-  Future<Object?> runnerSearchAssets(String id, AgentSearchAssetsToolRequestDto agentSearchAssetsToolRequestDto,) async {
+  Future<AgentSearchAssetsToolResponseDto?> runnerSearchAssets(String id, AgentSearchAssetsToolRequestDto agentSearchAssetsToolRequestDto,) async {
     final response = await runnerSearchAssetsWithHttpInfo(id, agentSearchAssetsToolRequestDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
@@ -1210,7 +1210,7 @@ class AgentSessionsApi {
     // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentSearchAssetsToolResponseDto',) as AgentSearchAssetsToolResponseDto;
     
     }
     return null;

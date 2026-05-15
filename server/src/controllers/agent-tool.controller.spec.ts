@@ -1,11 +1,18 @@
+import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import { AgentToolController } from 'src/controllers/agent-tool.controller';
 import {
   AgentListAlbumsToolRequestDto,
+  AgentListAlbumsToolResponseDto,
   AgentReadAlbumToolRequestDto,
+  AgentReadAlbumToolResponseDto,
   AgentReadAssetMetadataToolRequestDto,
+  AgentReadAssetMetadataToolResponseDto,
   AgentReadAssetOriginalsToolRequestDto,
+  AgentReadAssetOriginalsToolResponseDto,
   AgentReadAssetPreviewsToolRequestDto,
+  AgentReadAssetPreviewsToolResponseDto,
   AgentSearchAssetsToolRequestDto,
+  AgentSearchAssetsToolResponseDto,
   AgentToolApprovalDto,
   AgentToolCallResponseDto,
 } from 'src/dtos/agent-tool.dto';
@@ -76,6 +83,23 @@ describe(AgentToolController.name, () => {
   it('should use a unique operation method name for agent search assets', () => {
     expect(AgentToolController.prototype).not.toHaveProperty('searchAssets');
     expect(AgentToolController.prototype).toHaveProperty('executeAgentSearchAssets');
+  });
+
+  it.each([
+    ['executeAgentSearchAssets', AgentSearchAssetsToolResponseDto, 'AgentSearchAssetsToolResponseDto'],
+    ['readAssetMetadata', AgentReadAssetMetadataToolResponseDto, 'AgentReadAssetMetadataToolResponseDto'],
+    ['readAssetPreviews', AgentReadAssetPreviewsToolResponseDto, 'AgentReadAssetPreviewsToolResponseDto'],
+    ['readAssetOriginals', AgentReadAssetOriginalsToolResponseDto, 'AgentReadAssetOriginalsToolResponseDto'],
+    ['listAlbums', AgentListAlbumsToolResponseDto, 'AgentListAlbumsToolResponseDto'],
+    ['readAlbum', AgentReadAlbumToolResponseDto, 'AgentReadAlbumToolResponseDto'],
+  ] as const)('documents %s with its typed tool response DTO', (methodName, responseDto, schemaName) => {
+    const responses = Reflect.getMetadata(
+      DECORATORS.API_RESPONSE,
+      AgentToolController.prototype[methodName],
+    ) as Record<number, { type?: unknown }> | undefined;
+
+    expect(responses?.[201]?.type).toBe(responseDto);
+    expect(responseDto.name).toBe(schemaName);
   });
 
   describe('POST /agent/sessions/:id/tools/read-asset-metadata', () => {
