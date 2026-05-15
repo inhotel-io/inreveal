@@ -16,6 +16,66 @@ import { AgentMessageContent } from 'src/types/agent-message.types';
 import { AgentRunnerCreateSessionRequest, AgentRunnerStreamEvent } from 'src/types/agent-runner.types';
 import { automock } from 'test/utils';
 
+const makeCreateSessionBody = (): AgentRunnerCreateSessionRequest => ({
+  gallerySessionId: '00000000-0000-4000-8000-000000000100',
+  credential: {
+    id: '00000000-0000-4000-8000-000000000001',
+    providerType: AgentProviderType.OpenAI,
+    label: 'OpenAI personal',
+    baseUrl: null,
+    models: ['gpt-5.1'],
+    defaultModel: 'gpt-5.1',
+  },
+  model: 'gpt-5.1',
+  permissionPreset: AgentPermissionPreset.Careful,
+  permissionPlan: {
+    read: { metadata: true, previews: false, originals: false },
+    providerExposure: {
+      metadata: true,
+      previews: false,
+      originals: false,
+      allowOriginalsForExternalProviders: false,
+    },
+    assetScope: { owned: true, sharedSpaces: false, locked: false },
+    writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+    limits: {
+      maxAssetsPerToolCall: 200,
+      maxAssetsPerSession: 2000,
+      maxPreviewsPerToolCall: 0,
+      maxOriginalsPerToolCall: 0,
+      expiresInMinutes: 120,
+    },
+  },
+  approvalMode: AgentApprovalMode.Strict,
+  initialContext: {},
+});
+
+const makeAssistantMessage = (overrides: Partial<AgentMessage> = {}): AgentMessage => ({
+  id: '00000000-0000-4000-8000-000000000301',
+  sessionId: '00000000-0000-4000-8000-000000000100',
+  role: AgentMessageRole.Assistant,
+  content: { blocks: [{ type: 'text', text: 'Done.' }] },
+  providerMessageId: 'provider-message-1',
+  toolCallId: null,
+  createdAt: new Date('2026-05-14T10:00:01.000Z'),
+  ...overrides,
+});
+
+const streamEvents = (events: AgentRunnerStreamEvent[]): AsyncGenerator<AgentRunnerStreamEvent> =>
+  (async function* () {
+    await Promise.resolve();
+    for (const event of events) {
+      yield event;
+    }
+  })();
+
+const failingStream = (error: Error): AsyncGenerator<AgentRunnerStreamEvent> =>
+  (async function* () {
+    await Promise.resolve();
+    throw error;
+    yield undefined as never;
+  })();
+
 describe(AgentRunnerService.name, () => {
   let sut: AgentRunnerService;
   let configRepository: ReturnType<typeof automock<ConfigRepository>>;
@@ -47,61 +107,6 @@ describe(AgentRunnerService.name, () => {
   afterEach(() => {
     vi.useRealTimers();
   });
-
-  const makeCreateSessionBody = (): AgentRunnerCreateSessionRequest => ({
-    gallerySessionId: '00000000-0000-4000-8000-000000000100',
-    credential: {
-      id: '00000000-0000-4000-8000-000000000001',
-      providerType: AgentProviderType.OpenAI,
-      label: 'OpenAI personal',
-      baseUrl: null,
-      models: ['gpt-5.1'],
-      defaultModel: 'gpt-5.1',
-    },
-    model: 'gpt-5.1',
-    permissionPreset: AgentPermissionPreset.Careful,
-    permissionPlan: {
-      read: { metadata: true, previews: false, originals: false },
-      providerExposure: {
-        metadata: true,
-        previews: false,
-        originals: false,
-        allowOriginalsForExternalProviders: false,
-      },
-      assetScope: { owned: true, sharedSpaces: false, locked: false },
-      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
-      limits: {
-        maxAssetsPerToolCall: 200,
-        maxAssetsPerSession: 2000,
-        maxPreviewsPerToolCall: 0,
-        maxOriginalsPerToolCall: 0,
-        expiresInMinutes: 120,
-      },
-    },
-    approvalMode: AgentApprovalMode.Strict,
-    initialContext: {},
-  });
-
-  const makeAssistantMessage = (overrides: Partial<AgentMessage> = {}): AgentMessage => ({
-    id: '00000000-0000-4000-8000-000000000301',
-    sessionId: '00000000-0000-4000-8000-000000000100',
-    role: AgentMessageRole.Assistant,
-    content: { blocks: [{ type: 'text', text: 'Done.' }] },
-    providerMessageId: 'provider-message-1',
-    toolCallId: null,
-    createdAt: new Date('2026-05-14T10:00:01.000Z'),
-    ...overrides,
-  });
-
-  async function* streamEvents(events: AgentRunnerStreamEvent[]) {
-    for (const event of events) {
-      yield event;
-    }
-  }
-
-  async function* failingStream(error: Error): AsyncGenerator<AgentRunnerStreamEvent> {
-    throw error;
-  }
 
   it('creates a runner session through the configured runner', async () => {
     configRepository.getEnv.mockReturnValue({
