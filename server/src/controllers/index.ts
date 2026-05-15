@@ -1,5 +1,6 @@
 import { ActivityController } from 'src/controllers/activity.controller';
 import { AgentMessageController } from 'src/controllers/agent-message.controller';
+import { AgentOperationPlanController } from 'src/controllers/agent-operation-plan.controller';
 import { AgentProviderCredentialController } from 'src/controllers/agent-provider-credential.controller';
 import { AgentRunnerToolController } from 'src/controllers/agent-runner-tool.controller';
 import { AgentRunnerController } from 'src/controllers/agent-runner.controller';
@@ -56,6 +57,7 @@ export const controllers = [
   ApiKeyController,
   ActivityController,
   AgentMessageController,
+  AgentOperationPlanController,
   AgentProviderCredentialController,
   AgentRunnerController,
   AgentRunnerToolController,
