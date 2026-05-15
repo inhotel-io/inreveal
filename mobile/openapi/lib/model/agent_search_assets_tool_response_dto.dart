@@ -15,16 +15,16 @@ class AgentSearchAssetsToolResponseDto {
   AgentSearchAssetsToolResponseDto({
     required this.status,
     required this.toolCall,
-    required this.reason,
+    this.reason,
     this.assets = const [],
-    required this.nextPage,
+    this.nextPage,
   });
 
   AgentSearchAssetsToolResponseDtoStatusEnum status;
 
   AgentToolCallResponseDto toolCall;
 
-  String reason;
+  String? reason;
 
   List<AgentAssetMetadata> assets;
 
@@ -43,7 +43,7 @@ class AgentSearchAssetsToolResponseDto {
     // ignore: unnecessary_parenthesis
     (status.hashCode) +
     (toolCall.hashCode) +
-    (reason.hashCode) +
+    (reason == null ? 0 : reason!.hashCode) +
     (assets.hashCode) +
     (nextPage == null ? 0 : nextPage!.hashCode);
 
@@ -54,12 +54,12 @@ class AgentSearchAssetsToolResponseDto {
     final json = <String, dynamic>{};
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
+    if (this.reason != null) {
       json[r'reason'] = this.reason;
+    }
       json[r'assets'] = this.assets;
     if (this.nextPage != null) {
       json[r'nextPage'] = this.nextPage;
-    } else {
-    //  json[r'nextPage'] = null;
     }
     return json;
   }
@@ -75,7 +75,7 @@ class AgentSearchAssetsToolResponseDto {
       return AgentSearchAssetsToolResponseDto(
         status: AgentSearchAssetsToolResponseDtoStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
-        reason: mapValueOfType<String>(json, r'reason')!,
+        reason: mapValueOfType<String>(json, r'reason'),
         assets: AgentAssetMetadata.listFromJson(json[r'assets']),
         nextPage: mapValueOfType<String>(json, r'nextPage'),
       );
@@ -127,9 +127,6 @@ class AgentSearchAssetsToolResponseDto {
   static const requiredKeys = <String>{
     'status',
     'toolCall',
-    'reason',
-    'assets',
-    'nextPage',
   };
 }
 
@@ -146,10 +143,14 @@ class AgentSearchAssetsToolResponseDtoStatusEnum {
 
   String toJson() => value;
 
+  static const approvalRequired = AgentSearchAssetsToolResponseDtoStatusEnum._(r'approval-required');
+  static const denied = AgentSearchAssetsToolResponseDtoStatusEnum._(r'denied');
   static const success = AgentSearchAssetsToolResponseDtoStatusEnum._(r'success');
 
   /// List of all possible values in this [enum][AgentSearchAssetsToolResponseDtoStatusEnum].
   static const values = <AgentSearchAssetsToolResponseDtoStatusEnum>[
+    approvalRequired,
+    denied,
     success,
   ];
 
@@ -189,6 +190,8 @@ class AgentSearchAssetsToolResponseDtoStatusEnumTypeTransformer {
   AgentSearchAssetsToolResponseDtoStatusEnum? decode(dynamic data, {bool allowNull = true}) {
     if (data != null) {
       switch (data) {
+        case r'approval-required': return AgentSearchAssetsToolResponseDtoStatusEnum.approvalRequired;
+        case r'denied': return AgentSearchAssetsToolResponseDtoStatusEnum.denied;
         case r'success': return AgentSearchAssetsToolResponseDtoStatusEnum.success;
         default:
           if (!allowNull) {
@@ -202,5 +205,4 @@ class AgentSearchAssetsToolResponseDtoStatusEnumTypeTransformer {
   /// Singleton [AgentSearchAssetsToolResponseDtoStatusEnumTypeTransformer] instance.
   static AgentSearchAssetsToolResponseDtoStatusEnumTypeTransformer? _instance;
 }
-
 
