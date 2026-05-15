@@ -16,7 +16,9 @@ class AgentPermissionPlanLimits {
     required this.expiresInMinutes,
     required this.maxAssetsPerSession,
     required this.maxAssetsPerToolCall,
+    this.maxOriginalsPerSession,
     required this.maxOriginalsPerToolCall,
+    this.maxPreviewsPerSession,
     required this.maxPreviewsPerToolCall,
   });
 
@@ -33,8 +35,28 @@ class AgentPermissionPlanLimits {
   int maxAssetsPerToolCall;
 
   /// Minimum value: 0
+  /// Maximum value: 10000
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  int? maxOriginalsPerSession;
+
+  /// Minimum value: 0
   /// Maximum value: 1000
   int maxOriginalsPerToolCall;
+
+  /// Minimum value: 0
+  /// Maximum value: 100000
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  int? maxPreviewsPerSession;
 
   /// Minimum value: 0
   /// Maximum value: 10000
@@ -45,7 +67,9 @@ class AgentPermissionPlanLimits {
     other.expiresInMinutes == expiresInMinutes &&
     other.maxAssetsPerSession == maxAssetsPerSession &&
     other.maxAssetsPerToolCall == maxAssetsPerToolCall &&
+    other.maxOriginalsPerSession == maxOriginalsPerSession &&
     other.maxOriginalsPerToolCall == maxOriginalsPerToolCall &&
+    other.maxPreviewsPerSession == maxPreviewsPerSession &&
     other.maxPreviewsPerToolCall == maxPreviewsPerToolCall;
 
   @override
@@ -54,11 +78,13 @@ class AgentPermissionPlanLimits {
     (expiresInMinutes == null ? 0 : expiresInMinutes!.hashCode) +
     (maxAssetsPerSession.hashCode) +
     (maxAssetsPerToolCall.hashCode) +
+    (maxOriginalsPerSession == null ? 0 : maxOriginalsPerSession!.hashCode) +
     (maxOriginalsPerToolCall.hashCode) +
+    (maxPreviewsPerSession == null ? 0 : maxPreviewsPerSession!.hashCode) +
     (maxPreviewsPerToolCall.hashCode);
 
   @override
-  String toString() => 'AgentPermissionPlanLimits[expiresInMinutes=$expiresInMinutes, maxAssetsPerSession=$maxAssetsPerSession, maxAssetsPerToolCall=$maxAssetsPerToolCall, maxOriginalsPerToolCall=$maxOriginalsPerToolCall, maxPreviewsPerToolCall=$maxPreviewsPerToolCall]';
+  String toString() => 'AgentPermissionPlanLimits[expiresInMinutes=$expiresInMinutes, maxAssetsPerSession=$maxAssetsPerSession, maxAssetsPerToolCall=$maxAssetsPerToolCall, maxOriginalsPerSession=$maxOriginalsPerSession, maxOriginalsPerToolCall=$maxOriginalsPerToolCall, maxPreviewsPerSession=$maxPreviewsPerSession, maxPreviewsPerToolCall=$maxPreviewsPerToolCall]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -69,7 +95,17 @@ class AgentPermissionPlanLimits {
     }
       json[r'maxAssetsPerSession'] = this.maxAssetsPerSession;
       json[r'maxAssetsPerToolCall'] = this.maxAssetsPerToolCall;
+    if (this.maxOriginalsPerSession != null) {
+      json[r'maxOriginalsPerSession'] = this.maxOriginalsPerSession;
+    } else {
+    //  json[r'maxOriginalsPerSession'] = null;
+    }
       json[r'maxOriginalsPerToolCall'] = this.maxOriginalsPerToolCall;
+    if (this.maxPreviewsPerSession != null) {
+      json[r'maxPreviewsPerSession'] = this.maxPreviewsPerSession;
+    } else {
+    //  json[r'maxPreviewsPerSession'] = null;
+    }
       json[r'maxPreviewsPerToolCall'] = this.maxPreviewsPerToolCall;
     return json;
   }
@@ -86,7 +122,9 @@ class AgentPermissionPlanLimits {
         expiresInMinutes: mapValueOfType<int>(json, r'expiresInMinutes'),
         maxAssetsPerSession: mapValueOfType<int>(json, r'maxAssetsPerSession')!,
         maxAssetsPerToolCall: mapValueOfType<int>(json, r'maxAssetsPerToolCall')!,
+        maxOriginalsPerSession: mapValueOfType<int>(json, r'maxOriginalsPerSession'),
         maxOriginalsPerToolCall: mapValueOfType<int>(json, r'maxOriginalsPerToolCall')!,
+        maxPreviewsPerSession: mapValueOfType<int>(json, r'maxPreviewsPerSession'),
         maxPreviewsPerToolCall: mapValueOfType<int>(json, r'maxPreviewsPerToolCall')!,
       );
     }
