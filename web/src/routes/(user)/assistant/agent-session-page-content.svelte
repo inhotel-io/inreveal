@@ -62,6 +62,8 @@
       </div>
     </section>
 
-    <AgentSessionChatPanel session={createdSession} />
+    {#key createdSession.id}
+      <AgentSessionChatPanel session={createdSession} />
+    {/key}
   {/if}
 </div>
