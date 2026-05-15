@@ -12,6 +12,10 @@ type AgentSessionUpdate = Pick<
   Updateable<AgentSessionTable>,
   'status' | 'endedAt' | 'runnerEndpoint' | 'runnerSessionId' | 'runnerCapabilitiesSnapshot'
 >;
+type AgentSessionMarkRunning = Pick<
+  Updateable<AgentSessionTable>,
+  'status' | 'runnerEndpoint' | 'runnerSessionId' | 'runnerCapabilitiesSnapshot'
+>;
 
 @Injectable()
 export class AgentSessionRepository {
@@ -58,6 +62,48 @@ export class AgentSessionRepository {
       .where('id', '=', asUuid(id))
       .returning(columns.agentSession)
       .executeTakeFirstOrThrow();
+  }
+
+  @GenerateSql({
+    params: [
+      DummyValue.UUID,
+      DummyValue.UUID,
+      {
+        status: AgentSessionStatus.Running,
+        runnerEndpoint: 'http://agent-runner:4477',
+        runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
+        runnerCapabilitiesSnapshot: {
+          protocolVersion: '2026-05-14',
+          streaming: true,
+          tools: ['echo'],
+          models: [],
+        },
+      },
+    ],
+  })
+  markRunningFromCreated(userId: string, id: string, dto: AgentSessionMarkRunning) {
+    return this.db
+      .updateTable('agent_session')
+      .set(dto)
+      .where('userId', '=', userId)
+      .where('id', '=', asUuid(id))
+      .where('status', '=', AgentSessionStatus.Created)
+      .returning(columns.agentSession)
+      .executeTakeFirst();
+  }
+
+  @GenerateSql({
+    params: [DummyValue.UUID, DummyValue.UUID, DummyValue.DATE],
+  })
+  markFailedFromCreated(userId: string, id: string, endedAt: Date) {
+    return this.db
+      .updateTable('agent_session')
+      .set({ status: AgentSessionStatus.Failed, endedAt })
+      .where('userId', '=', userId)
+      .where('id', '=', asUuid(id))
+      .where('status', '=', AgentSessionStatus.Created)
+      .returning(columns.agentSession)
+      .executeTakeFirst();
   }
 
   @GenerateSql({

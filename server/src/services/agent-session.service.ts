@@ -124,19 +124,29 @@ export class AgentSessionService {
         initialContext: session.initialContextSnapshot,
       });
     } catch (error) {
-      await this.repository.update(auth.user.id, session.id, {
-        status: AgentSessionStatus.Failed,
-        endedAt: new Date(),
-      });
+      try {
+        await this.repository.markFailedFromCreated(auth.user.id, session.id, new Date());
+      } catch {
+        // Preserve the runner start error; failed-state marking is best-effort diagnostics.
+      }
       throw error;
     }
 
-    const runningSession = await this.repository.update(auth.user.id, session.id, {
+    const runningSession = await this.repository.markRunningFromCreated(auth.user.id, session.id, {
       status: AgentSessionStatus.Running,
       runnerEndpoint: runnerSession.runnerEndpoint,
       runnerSessionId: runnerSession.runnerSessionId,
       runnerCapabilitiesSnapshot: runnerSession.runnerCapabilitiesSnapshot,
     });
+
+    if (!runningSession) {
+      const current = await this.repository.getById(auth.user.id, session.id);
+      if (current) {
+        return this.map(current);
+      }
+
+      throw new BadRequestException('Agent session not found');
+    }
 
     return this.map(runningSession);
   }
