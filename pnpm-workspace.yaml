@@ -1,4 +1,5 @@
 packages:
+  - agent-runner
   - packages/**
   - docs
   - e2e
