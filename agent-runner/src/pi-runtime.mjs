@@ -155,7 +155,8 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         cwd: runtimePackageRoot,
         agentDir: runtimeAgentDir,
         settingsManager,
-        systemPromptOverride: () => systemPrompt,
+        systemPrompt,
+        appendSystemPrompt: [],
         noContextFiles: true,
         noSkills: true,
         noPromptTemplates: true,
@@ -222,25 +223,29 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       let wake;
       let finished = false;
       let aborted = false;
+      let promptSettled = false;
 
       const enqueue = (event) => {
         pendingEvents.push(event);
         wake?.();
         wake = undefined;
       };
-      const abortActiveStream = () => {
+      const abortActiveStream = ({ emitError } = { emitError: true }) => {
         if (aborted) {
           return;
         }
 
         aborted = true;
-        enqueue({
-          type: 'runner-error',
-          sessionId: gallerySessionId,
-          runnerSessionId,
-          message: 'Runner session disposed',
-        });
-        finished = true;
+        entry.session.agent?.abort?.();
+        if (emitError) {
+          enqueue({
+            type: 'runner-error',
+            sessionId: gallerySessionId,
+            runnerSessionId,
+            message: 'Runner session disposed',
+          });
+          finished = true;
+        }
         wake?.();
         wake = undefined;
       };
@@ -268,9 +273,10 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       };
       entry.unsubscribe = releaseSubscription;
       entry.abortActiveStream = abortActiveStream;
+      let promptPromise;
 
       try {
-        const promptPromise = entry.session
+        promptPromise = entry.session
           .prompt(textPromptFromContent(content))
           .then(() => {
             if (aborted) {
@@ -298,6 +304,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             });
           })
           .finally(() => {
+            promptSettled = true;
             finished = true;
             wake?.();
             wake = undefined;
@@ -314,10 +321,12 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
           yield pendingEvents.shift();
         }
 
-        if (!aborted) {
+        await promptPromise;
+      } finally {
+        if (!promptSettled) {
+          abortActiveStream({ emitError: false });
           await promptPromise;
         }
-      } finally {
         releaseSubscription();
         entry.inFlight = false;
         if (entry.abortActiveStream === abortActiveStream) {
