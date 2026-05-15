@@ -10,6 +10,9 @@ export const galleryReadToolNames = [
   'readAlbum',
 ];
 
+export const galleryPlanningToolNames = ['proposeAlbumOperations', 'reviseProposedOperations', 'summarizePlan'];
+export const galleryToolNames = [...galleryReadToolNames, ...galleryPlanningToolNames];
+
 const toolDefinitions = [
   {
     name: 'searchAssets',
@@ -47,11 +50,42 @@ const toolDefinitions = [
     label: 'Read album',
     description: 'Read a Gallery album visible to this session.',
   },
+  {
+    name: 'proposeAlbumOperations',
+    route: 'propose-album-operations',
+    label: 'Propose album operations',
+    description: 'Store a structured album organization plan for user review without applying it.',
+  },
+  {
+    name: 'reviseProposedOperations',
+    route: ({ planId }) => `revise-proposed-operations/${encodeURIComponent(planId)}`,
+    label: 'Revise proposed album operations',
+    description: 'Replace an existing proposed album operation plan with a new revision.',
+  },
+  {
+    name: 'summarizePlan',
+    route: ({ planId }) => `summarize-plan/${encodeURIComponent(planId)}`,
+    label: 'Summarize plan',
+    description: 'Summarize a stored proposed album operation plan.',
+  },
 ];
 
 const parameters = Type.Object({}, { additionalProperties: true });
 
-export const createGalleryReadTools = ({ client }) =>
+const getRouteAndBody = (tool, params) => {
+  if (typeof tool.route === 'string') {
+    return { route: tool.route, body: params };
+  }
+
+  if (!params || typeof params.planId !== 'string' || params.planId.length === 0) {
+    throw new Error(`${tool.name} requires planId`);
+  }
+
+  const { planId: _planId, ...body } = params;
+  return { route: tool.route(params), body };
+};
+
+export const createGalleryTools = ({ client }) =>
   toolDefinitions.map((tool) =>
     defineTool({
       name: tool.name,
@@ -59,7 +93,8 @@ export const createGalleryReadTools = ({ client }) =>
       description: tool.description,
       parameters,
       async execute(_toolCallId, params, signal) {
-        const result = await client.post(tool.route, params, { signal });
+        const { route, body } = getRouteAndBody(tool, params);
+        const result = await client.post(route, body, { signal });
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }],
           details: result,
@@ -67,3 +102,5 @@ export const createGalleryReadTools = ({ client }) =>
       },
     }),
   );
+
+export const createGalleryReadTools = createGalleryTools;
