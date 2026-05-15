@@ -617,6 +617,27 @@ describe('pi runtime adapter', () => {
     ]);
   });
 
+  it('uses Pi session completed assistant text when SDK message internals differ', async () => {
+    const { sdk, ai, session } = createFakeDependencies();
+    session.prompt = async () => {};
+    session.messages = [];
+    session.getLastAssistantText = () => 'I can help from the Pi SDK.';
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.deepEqual(events, [
+      {
+        type: 'assistant-message-completed',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        providerMessageId: null,
+        content: { blocks: [{ type: 'text', text: 'I can help from the Pi SDK.' }] },
+      },
+    ]);
+  });
+
   it('unsubscribes from Pi runtime events after a message stream completes', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });

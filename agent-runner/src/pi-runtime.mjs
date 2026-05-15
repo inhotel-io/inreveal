@@ -77,6 +77,15 @@ const assistantTextFromMessages = (messages) => {
     .join('');
 };
 
+const assistantTextFromSession = (session) => {
+  const completedText = session.getLastAssistantText?.();
+  if (typeof completedText === 'string' && completedText.length > 0) {
+    return completedText;
+  }
+
+  return assistantTextFromMessages(session.messages);
+};
+
 const sanitizedErrorMessage = (error, secret) => {
   const message = error instanceof Error ? error.message : String(error);
   return redactSecret(message || 'Provider request failed', secret);
@@ -361,7 +370,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
               sessionId: gallerySessionId,
               runnerSessionId,
               providerMessageId: null,
-              content: { blocks: [{ type: 'text', text: assistantTextFromMessages(entry.session.messages) }] },
+              content: { blocks: [{ type: 'text', text: assistantTextFromSession(entry.session) }] },
             });
           })
           .catch((error) => {
