@@ -1,4 +1,6 @@
 import { getModel } from '@earendil-works/pi-ai';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   AuthStorage,
   createAgentSession,
@@ -14,6 +16,8 @@ const systemPrompt = [
   'You may discuss album organization ideas, but this runtime slice has no Gallery read tools and no write tools.',
   'Never claim you changed albums. Album writes require a separate user-reviewed apply step.',
 ].join('\n');
+const runtimePackageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const runtimeAgentDir = join(runtimePackageRoot, '.pi-runtime');
 
 const defaultDependencies = {
   ai: { getModel },
@@ -128,6 +132,8 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         model: body.model,
       });
       const resourceLoader = new sdk.DefaultResourceLoader({
+        cwd: runtimePackageRoot,
+        agentDir: runtimeAgentDir,
         settingsManager,
         systemPromptOverride: () => systemPrompt,
         extensionFactories,

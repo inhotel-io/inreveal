@@ -162,6 +162,21 @@ describe('pi runtime adapter', () => {
     assert.deepEqual(calls.createAgentSession[0].customTools, []);
   });
 
+  it('constructs the Pi resource loader with concrete runtime paths', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await runtime.createSession(createSessionBody());
+
+    assert.equal(calls.loaders.length, 1);
+    assert.equal(typeof calls.loaders[0].cwd, 'string');
+    assert.notEqual(calls.loaders[0].cwd, '');
+    assert.ok(calls.loaders[0].cwd.endsWith('agent-runner'));
+    assert.equal(typeof calls.loaders[0].agentDir, 'string');
+    assert.notEqual(calls.loaders[0].agentDir, '');
+    assert.ok(calls.loaders[0].agentDir.endsWith('agent-runner/.pi-runtime'));
+  });
+
   it('registers an OpenAI-compatible provider without persisting the secret', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
