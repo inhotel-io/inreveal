@@ -2,6 +2,8 @@
   import { handleError } from '$lib/utils/handle-error';
   import { Button, Field, Input, Text, toastManager } from '@immich/ui';
   import {
+    AgentApprovalMode,
+    AgentPermissionPreset,
     createAgentSession,
     type AgentProviderCredentialResponseDto,
     type AgentRunnerStatusDto,
@@ -67,6 +69,14 @@
     const nextCredential = credentials.find((credential) => credential.id === nextCredentialId);
     selectedCredentialId = nextCredentialId;
     model = getDefaultModel(nextCredential);
+  };
+
+  const handlePermissionPresetChange = (event: Event) => {
+    permissionPreset = (event.currentTarget as HTMLSelectElement).value as AgentPermissionPreset;
+  };
+
+  const handleApprovalModeChange = (event: Event) => {
+    approvalMode = (event.currentTarget as HTMLSelectElement).value as AgentApprovalMode;
   };
 
   const handleSubmit = async () => {
@@ -158,7 +168,8 @@
           id="assistant-permission-preset"
           aria-label={$t('assistant_permission_preset')}
           class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-immich-dark-gray"
-          bind:value={permissionPreset}
+          value={permissionPreset}
+          onchange={handlePermissionPresetChange}
           disabled={isCreating}
         >
           {#each permissionPresetOptions as option (option.value)}
@@ -172,7 +183,8 @@
           id="assistant-approval-mode"
           aria-label={$t('assistant_approval_mode')}
           class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-immich-dark-gray"
-          bind:value={approvalMode}
+          value={approvalMode}
+          onchange={handleApprovalModeChange}
           disabled={isCreating}
         >
           {#each approvalModeOptions as option (option.value)}

@@ -25,6 +25,7 @@ vi.mock('svelte-i18n', () => {
     assistant: 'Assistant',
     assistant_approval_mode: 'Approval mode',
     assistant_approval_mode_ask_on_escalation: 'Ask on escalation',
+    assistant_approval_mode_dangerously_skip_permissions: 'Dangerously skip read approvals',
     assistant_approval_mode_plan_only: 'Plan review only',
     assistant_approval_mode_strict: 'Strict',
     assistant_chat: 'Chat',
@@ -75,6 +76,10 @@ vi.mock('./agent-session-ui', () => ({
     { value: AgentApprovalMode.Strict, labelKey: 'assistant_approval_mode_strict' },
     { value: AgentApprovalMode.AskOnEscalation, labelKey: 'assistant_approval_mode_ask_on_escalation' },
     { value: AgentApprovalMode.PlanOnly, labelKey: 'assistant_approval_mode_plan_only' },
+    {
+      value: AgentApprovalMode.DangerouslySkipPermissions,
+      labelKey: 'assistant_approval_mode_dangerously_skip_permissions',
+    },
   ],
   getApprovalModeLabelKey: (mode: AgentApprovalMode) => `approval:${mode}`,
   getDefaultModel: (credential: AgentProviderCredentialResponseDto | undefined) => credential?.defaultModel ?? '',

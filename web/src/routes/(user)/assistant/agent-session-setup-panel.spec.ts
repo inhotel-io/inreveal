@@ -11,6 +11,7 @@ import {
   type AgentSessionResponseDto,
 } from '@immich/sdk';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'svelte';
 import { readable } from 'svelte/store';
 import AgentSessionSetupPanel from './agent-session-setup-panel.svelte';
@@ -19,6 +20,7 @@ vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_approval_mode: 'Approval mode',
     assistant_approval_mode_ask_on_escalation: 'Ask on escalation',
+    assistant_approval_mode_dangerously_skip_permissions: 'Dangerously skip read approvals',
     assistant_approval_mode_plan_only: 'Plan review only',
     assistant_approval_mode_strict: 'Strict',
     assistant_model: 'Model',
@@ -46,6 +48,10 @@ vi.mock('./agent-session-ui', () => ({
     { value: AgentApprovalMode.Strict, labelKey: 'assistant_approval_mode_strict' },
     { value: AgentApprovalMode.AskOnEscalation, labelKey: 'assistant_approval_mode_ask_on_escalation' },
     { value: AgentApprovalMode.PlanOnly, labelKey: 'assistant_approval_mode_plan_only' },
+    {
+      value: AgentApprovalMode.DangerouslySkipPermissions,
+      labelKey: 'assistant_approval_mode_dangerously_skip_permissions',
+    },
   ],
   getDefaultModel: (credential: AgentProviderCredentialResponseDto | undefined) => {
     if (!credential) {
@@ -213,7 +219,9 @@ describe(AgentSessionSetupPanel.name, () => {
     expect(screen.getByLabelText('Approval mode')).toHaveValue(AgentApprovalMode.Strict);
     expect(screen.getByRole('button', { name: 'Start session' })).toBeEnabled();
     expect(screen.queryByRole('option', { name: 'custom' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'dangerously-skip-permissions' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Dangerously skip read approvals' })).toHaveValue(
+      AgentApprovalMode.DangerouslySkipPermissions,
+    );
 
     await fireEvent.change(screen.getByLabelText('Permission preset'), {
       target: { value: AgentPermissionPreset.VisualOrganizer },
@@ -245,7 +253,13 @@ describe(AgentSessionSetupPanel.name, () => {
       }),
     );
     const { onSessionCreated } = renderPanel({ credentials: [manualModelCredential] });
+    const user = userEvent.setup();
     await fireEvent.input(screen.getByLabelText('Model'), { target: { value: ' local-model ' } });
+    const approvalModeSelect = screen.getByLabelText('Approval mode');
+    await user.selectOptions(approvalModeSelect, AgentApprovalMode.DangerouslySkipPermissions);
+    await waitFor(() =>
+      expect(approvalModeSelect).toHaveValue(AgentApprovalMode.DangerouslySkipPermissions),
+    );
 
     const submit = screen.getByRole('button', { name: 'Start session' });
     await fireEvent.click(submit);
@@ -258,7 +272,7 @@ describe(AgentSessionSetupPanel.name, () => {
         providerCredentialId: manualModelCredential.id,
         model: 'local-model',
         permissionPreset: AgentPermissionPreset.Careful,
-        approvalMode: AgentApprovalMode.Strict,
+        approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
       },
     });
     expect(sdkMock.createAgentSession.mock.calls[0][0].agentSessionCreateDto).not.toHaveProperty('permissionPlan');
