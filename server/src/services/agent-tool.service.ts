@@ -348,15 +348,17 @@ export class AgentToolService {
         return { status: 'denied', reason: error.message, toolCall: this.mapToolCall(denied) };
       }
 
-      const reason = error instanceof AgentToolFailedError ? error.message : descriptor.failedReason;
+      if (!(error instanceof AgentToolFailedError)) {
+        await this.tryRecordUnexpectedReadFailure(auth, session, toolCallId, descriptor.failedReason);
+        throw error;
+      }
+
+      const reason = error.message;
       const failed = await this.transitionExecuting(auth, session, toolCallId, {
         status: AgentToolCallStatus.Failed,
         approvalDecision: AgentToolApprovalDecision.Approved,
         responseSummary: null,
-        redactedResponseMetadata:
-          error instanceof AgentToolFailedError && 'metadata' in error
-            ? (error.metadata as AgentToolResponseMetadata)
-            : null,
+        redactedResponseMetadata: 'metadata' in error ? (error.metadata as AgentToolResponseMetadata) : null,
         completedAt: new Date(),
         error: reason,
       });
@@ -534,7 +536,17 @@ export class AgentToolService {
       perToolLimit: () => Number.MAX_SAFE_INTEGER,
       perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
       validateAccess: async () => null,
-      execute: async (auth) => ({ albums: await this.albumRepository.getAgentAlbums(auth.user.id) }),
+      execute: async (auth, session) => {
+        const albums = await this.albumRepository.getAgentAlbums(auth.user.id);
+        return {
+          albums: albums.filter((album) => {
+            const isOwned = album.ownerId === auth.user.id;
+            return isOwned
+              ? session.permissionPlanSnapshot.assetScope.owned
+              : session.permissionPlanSnapshot.assetScope.sharedSpaces;
+          }),
+        };
+      },
       responseSummary: (result) => `Returned ${result.albums.length} album(s)`,
       responseMetadata: (result) => ({ albumIds: result.albums.map((album) => album.id) }),
       resultAssetCount: () => 0,
@@ -574,6 +586,17 @@ export class AgentToolService {
         if (sessionLimitDenial) {
           throw new AgentToolDeniedError(sessionLimitDenial);
         }
+
+        await this.transitionExecuting(auth, session, toolCallId, {
+          status: AgentToolCallStatus.Executing,
+          approvalDecision: AgentToolApprovalDecision.Approved,
+          responseSummary: 'Tool call execution started',
+          redactedResponseMetadata: null,
+          assetCount: album.assetCount,
+          albumCount: 1,
+          completedAt: null,
+          error: null,
+        });
 
         return { album };
       },
@@ -827,9 +850,11 @@ export class AgentToolService {
     albumIds: Set<string>,
   ): Promise<Set<string>> {
     const readableIds = new Set<string>();
-    const ownerIds = await this.accessRepository.album.checkOwnerAccess(auth.user.id, albumIds);
-    for (const id of ownerIds) {
-      readableIds.add(id);
+    if (plan.assetScope.owned) {
+      const ownerIds = await this.accessRepository.album.checkOwnerAccess(auth.user.id, albumIds);
+      for (const id of ownerIds) {
+        readableIds.add(id);
+      }
     }
 
     if (plan.assetScope.sharedSpaces) {
@@ -954,6 +979,32 @@ export class AgentToolService {
     }
 
     return transitioned;
+  }
+
+  private async tryRecordUnexpectedReadFailure(
+    auth: AuthDto,
+    session: AgentSession,
+    toolCallId: string,
+    failedReason: string,
+  ): Promise<void> {
+    try {
+      await this.toolCallRepository.transition(session.id, toolCallId, AgentToolCallStatus.Executing, {
+        status: AgentToolCallStatus.Failed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: null,
+        redactedResponseMetadata: null,
+        completedAt: new Date(),
+        error: failedReason,
+      });
+    } catch {
+      // Preserve the original unexpected error.
+    }
+
+    try {
+      await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+    } catch {
+      // Preserve the original unexpected error.
+    }
   }
 
   private getStoredRequest<TRequest, TResult extends Record<string, unknown>>(
