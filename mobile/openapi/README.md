@@ -97,18 +97,25 @@ Class | Method | HTTP request | Description
 *AgentSessionsApi* | [**getAgentSession**](doc//AgentSessionsApi.md#getagentsession) | **GET** /agent/sessions/{id} | Retrieve an agent session
 *AgentSessionsApi* | [**getAgentSessionMessages**](doc//AgentSessionsApi.md#getagentsessionmessages) | **GET** /agent/sessions/{id}/messages | List agent session messages
 *AgentSessionsApi* | [**getAgentSessions**](doc//AgentSessionsApi.md#getagentsessions) | **GET** /agent/sessions | List agent sessions
+*AgentSessionsApi* | [**getCurrentOperationPlan**](doc//AgentSessionsApi.md#getcurrentoperationplan) | **GET** /agent/sessions/{id}/operation-plan | Get the current agent operation plan
 *AgentSessionsApi* | [**getToolCalls**](doc//AgentSessionsApi.md#gettoolcalls) | **GET** /agent/sessions/{id}/tool-calls | List agent tool calls
 *AgentSessionsApi* | [**listAlbums**](doc//AgentSessionsApi.md#listalbums) | **POST** /agent/sessions/{id}/tools/list-albums | Execute the internal listAlbums agent tool
+*AgentSessionsApi* | [**proposeAlbumOperations**](doc//AgentSessionsApi.md#proposealbumoperations) | **POST** /agent/sessions/{id}/operation-plan/proposals | Propose agent album operations
 *AgentSessionsApi* | [**readAlbum**](doc//AgentSessionsApi.md#readalbum) | **POST** /agent/sessions/{id}/tools/read-album | Execute the internal readAlbum agent tool
 *AgentSessionsApi* | [**readAssetMetadata**](doc//AgentSessionsApi.md#readassetmetadata) | **POST** /agent/sessions/{id}/tools/read-asset-metadata | Execute the internal readAssetMetadata agent tool
 *AgentSessionsApi* | [**readAssetOriginals**](doc//AgentSessionsApi.md#readassetoriginals) | **POST** /agent/sessions/{id}/tools/read-asset-originals | Execute the internal readAssetOriginals agent tool
 *AgentSessionsApi* | [**readAssetPreviews**](doc//AgentSessionsApi.md#readassetpreviews) | **POST** /agent/sessions/{id}/tools/read-asset-previews | Execute the internal readAssetPreviews agent tool
+*AgentSessionsApi* | [**reviseProposedOperations**](doc//AgentSessionsApi.md#reviseproposedoperations) | **POST** /agent/sessions/{id}/operation-plan/{planId}/revisions | Revise agent album operations
 *AgentSessionsApi* | [**runnerListAlbums**](doc//AgentSessionsApi.md#runnerlistalbums) | **POST** /agent/internal/tools/sessions/{id}/list-albums | Execute the runner listAlbums agent tool
+*AgentSessionsApi* | [**runnerProposeAlbumOperations**](doc//AgentSessionsApi.md#runnerproposealbumoperations) | **POST** /agent/internal/tools/sessions/{id}/propose-album-operations | Execute the runner proposeAlbumOperations agent tool
 *AgentSessionsApi* | [**runnerReadAlbum**](doc//AgentSessionsApi.md#runnerreadalbum) | **POST** /agent/internal/tools/sessions/{id}/read-album | Execute the runner readAlbum agent tool
 *AgentSessionsApi* | [**runnerReadAssetMetadata**](doc//AgentSessionsApi.md#runnerreadassetmetadata) | **POST** /agent/internal/tools/sessions/{id}/read-asset-metadata | Execute the runner readAssetMetadata agent tool
 *AgentSessionsApi* | [**runnerReadAssetOriginals**](doc//AgentSessionsApi.md#runnerreadassetoriginals) | **POST** /agent/internal/tools/sessions/{id}/read-asset-originals | Execute the runner readAssetOriginals agent tool
 *AgentSessionsApi* | [**runnerReadAssetPreviews**](doc//AgentSessionsApi.md#runnerreadassetpreviews) | **POST** /agent/internal/tools/sessions/{id}/read-asset-previews | Execute the runner readAssetPreviews agent tool
+*AgentSessionsApi* | [**runnerReviseProposedOperations**](doc//AgentSessionsApi.md#runnerreviseproposedoperations) | **POST** /agent/internal/tools/sessions/{id}/revise-proposed-operations/{planId} | Execute the runner reviseProposedOperations agent tool
 *AgentSessionsApi* | [**runnerSearchAssets**](doc//AgentSessionsApi.md#runnersearchassets) | **POST** /agent/internal/tools/sessions/{id}/search-assets | Execute the runner searchAssets agent tool
+*AgentSessionsApi* | [**runnerSummarizePlan**](doc//AgentSessionsApi.md#runnersummarizeplan) | **POST** /agent/internal/tools/sessions/{id}/summarize-plan/{planId} | Execute the runner summarizePlan agent tool
+*AgentSessionsApi* | [**summarizePlan**](doc//AgentSessionsApi.md#summarizeplan) | **POST** /agent/sessions/{id}/operation-plan/{planId}/summary | Summarize an agent operation plan
 *AlbumsApi* | [**addAssetsToAlbum**](doc//AlbumsApi.md#addassetstoalbum) | **PUT** /albums/{id}/assets | Add assets to an album
 *AlbumsApi* | [**addAssetsToAlbums**](doc//AlbumsApi.md#addassetstoalbums) | **PUT** /albums/assets | Add assets to albums
 *AlbumsApi* | [**addUsersToAlbum**](doc//AlbumsApi.md#adduserstoalbum) | **PUT** /albums/{id}/users | Share album with users
@@ -463,6 +470,15 @@ Class | Method | HTTP request | Description
  - [AgentMessageToolCallBlock](doc//AgentMessageToolCallBlock.md)
  - [AgentMessageToolCallBlockType](doc//AgentMessageToolCallBlockType.md)
  - [AgentModelSnapshot](doc//AgentModelSnapshot.md)
+ - [AgentOperationPlanResponseDto](doc//AgentOperationPlanResponseDto.md)
+ - [AgentOperationPlanStatus](doc//AgentOperationPlanStatus.md)
+ - [AgentOperationPlanSummaryRequestDto](doc//AgentOperationPlanSummaryRequestDto.md)
+ - [AgentOperationPlanToolResponseDto](doc//AgentOperationPlanToolResponseDto.md)
+ - [AgentOperationResponseDto](doc//AgentOperationResponseDto.md)
+ - [AgentOperationRiskLevel](doc//AgentOperationRiskLevel.md)
+ - [AgentOperationStatus](doc//AgentOperationStatus.md)
+ - [AgentOperationTargetKind](doc//AgentOperationTargetKind.md)
+ - [AgentOperationType](doc//AgentOperationType.md)
  - [AgentPermissionPlan](doc//AgentPermissionPlan.md)
  - [AgentPermissionPlanAssetScope](doc//AgentPermissionPlanAssetScope.md)
  - [AgentPermissionPlanLimits](doc//AgentPermissionPlanLimits.md)
@@ -470,6 +486,14 @@ Class | Method | HTTP request | Description
  - [AgentPermissionPlanRead](doc//AgentPermissionPlanRead.md)
  - [AgentPermissionPlanWriteScope](doc//AgentPermissionPlanWriteScope.md)
  - [AgentPermissionPreset](doc//AgentPermissionPreset.md)
+ - [AgentProposeAlbumOperationsDto](doc//AgentProposeAlbumOperationsDto.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInner](doc//AgentProposeAlbumOperationsDtoOperationsInner.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf1](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf1.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf2](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf2.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf2Payload](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf2Payload.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf3](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf3.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload.md)
  - [AgentProviderCredentialCreateDto](doc//AgentProviderCredentialCreateDto.md)
  - [AgentProviderCredentialResponseDto](doc//AgentProviderCredentialResponseDto.md)
  - [AgentProviderCredentialUpdateDto](doc//AgentProviderCredentialUpdateDto.md)
@@ -494,6 +518,7 @@ Class | Method | HTTP request | Description
  - [AgentReadAssetPreviewsToolRequestDto](doc//AgentReadAssetPreviewsToolRequestDto.md)
  - [AgentReadAssetPreviewsToolResponseDto](doc//AgentReadAssetPreviewsToolResponseDto.md)
  - [AgentReadAssetPreviewsToolSuccessResponse](doc//AgentReadAssetPreviewsToolSuccessResponse.md)
+ - [AgentReviseAlbumOperationsDto](doc//AgentReviseAlbumOperationsDto.md)
  - [AgentRunnerCapabilitiesDto](doc//AgentRunnerCapabilitiesDto.md)
  - [AgentRunnerStatusDto](doc//AgentRunnerStatusDto.md)
  - [AgentRunnerStatusReason](doc//AgentRunnerStatusReason.md)
