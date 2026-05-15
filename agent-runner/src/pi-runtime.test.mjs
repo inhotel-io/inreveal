@@ -551,6 +551,36 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.unsubscribed, 1);
   });
 
+  it('clears in-flight and redacts the secret when Pi subscription setup fails', async () => {
+    const { sdk, ai, session } = createFakeDependencies();
+    const originalSubscribe = session.subscribe.bind(session);
+    let subscribeAttempts = 0;
+    session.subscribe = (next) => {
+      subscribeAttempts += 1;
+      if (subscribeAttempts === 1) {
+        throw new Error('subscribe failed for sk-openai-secret');
+      }
+
+      return originalSubscribe(next);
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    await assert.rejects(
+      () => collect(runtime.sendMessage(createMessageRequest())),
+      (error) => {
+        assert.equal(error.message, 'subscribe failed for [redacted]');
+        assert.equal(error.message.includes('sk-openai-secret'), false);
+        return true;
+      },
+    );
+
+    const events = await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.equal(subscribeAttempts, 2);
+    assert.equal(events[0].type, 'assistant-message-delta');
+  });
+
   it('rejects overlapping message streams for the same runner session before subscribing or prompting again', async () => {
     const promptGate = createDeferred();
     const { sdk, ai, calls } = createFakeDependencies({ promptGate });
