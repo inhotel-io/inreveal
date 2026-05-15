@@ -34,6 +34,19 @@ export interface AlbumInfoOptions {
   withAssets: boolean;
 }
 
+const agentVisibleAlbumAssetVisibilities = [AssetVisibility.Timeline, AssetVisibility.Archive];
+
+const withAgentAlbumThumbnail = sql<string | null>`case when exists (
+  select 1
+  from "album_asset" as "thumbnail_album_asset"
+  inner join "asset" as "thumbnail_asset" on "thumbnail_asset"."id" = "thumbnail_album_asset"."assetId"
+  where "thumbnail_album_asset"."albumId" = "album"."id"
+    and "thumbnail_album_asset"."assetId" = "album"."albumThumbnailAssetId"
+    and "thumbnail_asset"."deletedAt" is null
+    and "thumbnail_asset"."isOffline" = false
+    and "thumbnail_asset"."visibility" in (${AssetVisibility.Timeline}, ${AssetVisibility.Archive})
+) then "album"."albumThumbnailAssetId" else null end`.as('albumThumbnailAssetId');
+
 const withAlbumUsers = (authUserId?: string) => (eb: ExpressionBuilder<DB, 'album'>) =>
   jsonArrayFrom(
     eb
@@ -340,7 +353,7 @@ export class AlbumRepository {
             .innerJoin('asset', 'asset.id', 'album_asset.assetId')
             .where('asset.deletedAt', 'is', null)
             .where('asset.isOffline', '=', false)
-            .where('asset.visibility', '=', AssetVisibility.Timeline)
+            .where('asset.visibility', 'in', agentVisibleAlbumAssetVisibilities)
             .select('album_asset.albumId as albumId')
             .select((eb) => sql<number>`${eb.fn.count('album_asset.assetId')}::int`.as('assetCount'))
             .select((eb) =>
@@ -353,7 +366,8 @@ export class AlbumRepository {
             .as('metadata'),
         (join) => join.onRef('metadata.albumId', '=', 'album.id'),
       )
-      .select(['album.id', 'album.albumName', 'album.description', 'album.ownerId', 'album.albumThumbnailAssetId'])
+      .select(['album.id', 'album.albumName', 'album.description', 'album.ownerId'])
+      .select(withAgentAlbumThumbnail)
       .select((eb) => sql<number>`coalesce(${eb.ref('metadata.assetCount')}, 0)::int`.as('assetCount'))
       .select(['metadata.startDate as startDate', 'metadata.endDate as endDate'])
       .where('album.deletedAt', 'is', null)
@@ -389,7 +403,7 @@ export class AlbumRepository {
             .innerJoin('asset', 'asset.id', 'album_asset.assetId')
             .where('asset.deletedAt', 'is', null)
             .where('asset.isOffline', '=', false)
-            .where('asset.visibility', '=', AssetVisibility.Timeline)
+            .where('asset.visibility', 'in', agentVisibleAlbumAssetVisibilities)
             .select('album_asset.albumId as albumId')
             .select((eb) => sql<number>`${eb.fn.count('album_asset.assetId')}::int`.as('assetCount'))
             .select((eb) =>
@@ -402,7 +416,8 @@ export class AlbumRepository {
             .as('metadata'),
         (join) => join.onRef('metadata.albumId', '=', 'album.id'),
       )
-      .select(['album.id', 'album.albumName', 'album.description', 'album.ownerId', 'album.albumThumbnailAssetId'])
+      .select(['album.id', 'album.albumName', 'album.description', 'album.ownerId'])
+      .select(withAgentAlbumThumbnail)
       .select((eb) => sql<number>`coalesce(${eb.ref('metadata.assetCount')}, 0)::int`.as('assetCount'))
       .select(['metadata.startDate as startDate', 'metadata.endDate as endDate'])
       .where('album.id', '=', albumId)
@@ -437,7 +452,7 @@ export class AlbumRepository {
       .where('album_asset.albumId', '=', albumId)
       .where('asset.deletedAt', 'is', null)
       .where('asset.isOffline', '=', false)
-      .where('asset.visibility', '=', AssetVisibility.Timeline)
+      .where('asset.visibility', 'in', agentVisibleAlbumAssetVisibilities)
       .orderBy('album_asset.createdAt', 'asc')
       .execute();
 
