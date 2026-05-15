@@ -107,9 +107,7 @@ from
 where
   "asset"."id" in ($1)
   and "asset"."ownerId" = $2
-  and "asset"."deletedAt" is null
-  and "asset"."isOffline" = $3
-  and "asset"."visibility" in ($4, $5)
+  and "asset"."visibility" != $3
 
 -- AccessRepository.asset.checkPartnerAccess
 select
@@ -142,13 +140,11 @@ from
       inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_asset"."spaceId"
       inner join "asset" on "asset"."id" = "shared_space_asset"."assetId"
       and "asset"."deletedAt" is null
-      and "asset"."isOffline" = $1
-      and "asset"."visibility" in ($2, $3, $4)
     where
-      "shared_space_member"."userId" = $5
+      "shared_space_member"."userId" = $1
       and (
-        "asset"."id" in ($6)
-        or "asset"."livePhotoVideoId" in ($7)
+        "asset"."id" in ($2)
+        or "asset"."livePhotoVideoId" in ($3)
       )
     union
     select
@@ -159,13 +155,12 @@ from
       inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_library"."spaceId"
       inner join "asset" on "asset"."libraryId" = "shared_space_library"."libraryId"
       and "asset"."deletedAt" is null
-      and "asset"."isOffline" = $8
-      and "asset"."visibility" in ($9, $10, $11)
+      and "asset"."isOffline" = $4
     where
-      "shared_space_member"."userId" = $12
+      "shared_space_member"."userId" = $5
       and (
-        "asset"."id" in ($13)
-        or "asset"."livePhotoVideoId" in ($14)
+        "asset"."id" in ($6)
+        or "asset"."livePhotoVideoId" in ($7)
       )
   ) as "combined"
 
@@ -183,14 +178,12 @@ from
       inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_asset"."spaceId"
       inner join "asset" on "asset"."id" = "shared_space_asset"."assetId"
       and "asset"."deletedAt" is null
-      and "asset"."isOffline" = $1
-      and "asset"."visibility" in ($2, $3, $4)
     where
-      "shared_space_member"."userId" = $5
-      and "shared_space_asset"."spaceId" = $6
+      "shared_space_member"."userId" = $1
+      and "shared_space_asset"."spaceId" = $2
       and (
-        "asset"."id" in ($7)
-        or "asset"."livePhotoVideoId" in ($8)
+        "asset"."id" in ($3)
+        or "asset"."livePhotoVideoId" in ($4)
       )
     union
     select
@@ -201,14 +194,13 @@ from
       inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_library"."spaceId"
       inner join "asset" on "asset"."libraryId" = "shared_space_library"."libraryId"
       and "asset"."deletedAt" is null
-      and "asset"."isOffline" = $9
-      and "asset"."visibility" in ($10, $11, $12)
+      and "asset"."isOffline" = $5
     where
-      "shared_space_member"."userId" = $13
-      and "shared_space_library"."spaceId" = $14
+      "shared_space_member"."userId" = $6
+      and "shared_space_library"."spaceId" = $7
       and (
-        "asset"."id" in ($15)
-        or "asset"."livePhotoVideoId" in ($16)
+        "asset"."id" in ($8)
+        or "asset"."livePhotoVideoId" in ($9)
       )
   ) as "combined"
 

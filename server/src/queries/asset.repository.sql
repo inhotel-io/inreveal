@@ -328,6 +328,17 @@ where
   "asset"."id" in ($1)
   and "asset"."visibility" = $2
 
+-- AssetRepository.getAgentReadableIds
+select
+  "asset"."id"
+from
+  "asset"
+where
+  "asset"."id" in ($1)
+  and "asset"."deletedAt" is null
+  and "asset"."isOffline" = $2
+  and "asset"."visibility" in ($3, $4, $5)
+
 -- AssetRepository.getAgentMetadataByIds
 select
   "asset"."id",
