@@ -281,19 +281,8 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         return abortPromise;
       };
 
-      const unsubscribe = entry.session.subscribe((event) => {
-        if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {
-          sequence += 1;
-          enqueue({
-            type: 'assistant-message-delta',
-            sessionId: gallerySessionId,
-            runnerSessionId,
-            delta: event.assistantMessageEvent.delta,
-            sequence,
-          });
-        }
-      });
-      let subscribed = true;
+      let unsubscribe;
+      let subscribed = false;
       const releaseSubscription = () => {
         if (!subscribed) {
           return;
@@ -302,6 +291,26 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         subscribed = false;
         unsubscribe();
       };
+
+      try {
+        unsubscribe = entry.session.subscribe((event) => {
+          if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {
+            sequence += 1;
+            enqueue({
+              type: 'assistant-message-delta',
+              sessionId: gallerySessionId,
+              runnerSessionId,
+              delta: event.assistantMessageEvent.delta,
+              sequence,
+            });
+          }
+        });
+        subscribed = true;
+      } catch (error) {
+        entry.inFlight = false;
+        throw new Error(sanitizedErrorMessage(error, entry.credentialSecret));
+      }
+
       entry.unsubscribe = releaseSubscription;
       entry.abortActiveStream = abortActiveStream;
       let promptPromise;
