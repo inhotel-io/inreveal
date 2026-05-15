@@ -8,7 +8,7 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentMessageContent } from 'src/types/agent-message.types';
-import { AgentRunnerCreateSessionRequest } from 'src/types/agent-runner.types';
+import { AgentRunnerCreateSessionRequest, AgentRunnerStreamEvent } from 'src/types/agent-runner.types';
 
 const RUNNER_STATUS_CACHE_MS = 15_000;
 
@@ -156,7 +156,7 @@ export class AgentRunnerService {
         throw new BadRequestException('Agent runner is not configured');
       }
 
-      let completed = false;
+      let completedEvent: Extract<AgentRunnerStreamEvent, { type: 'assistant-message-completed' }> | undefined;
       for await (const event of this.agentRunnerRepository.streamMessage({
         url: runnerUrl,
         runnerSessionId,
@@ -183,30 +183,31 @@ export class AgentRunnerService {
           throw new Error(event.message);
         }
 
-        completed = true;
-        const session = await this.sessionRepository.getById(userId, sessionId);
-        if (!session || !AgentRunnerService.completionActiveStatuses.includes(session.status)) {
-          continue;
-        }
-
-        const message = await this.messageRepository.create({
-          sessionId,
-          role: AgentMessageRole.Assistant,
-          content: event.content,
-          providerMessageId: event.providerMessageId,
-          toolCallId: null,
-        });
-        this.websocketRepository.clientSend('on_agent_session_event', userId, {
-          type: 'assistant-message-created',
-          sessionId,
-          message: this.mapMessage(message),
-          createdAt: this.toIsoNow(),
-        });
+        completedEvent = event;
       }
 
-      if (!completed) {
+      if (!completedEvent) {
         throw new Error('Agent runner message stream ended before completion');
       }
+
+      const session = await this.sessionRepository.getById(userId, sessionId);
+      if (!session || !AgentRunnerService.completionActiveStatuses.includes(session.status)) {
+        return;
+      }
+
+      const message = await this.messageRepository.create({
+        sessionId,
+        role: AgentMessageRole.Assistant,
+        content: completedEvent.content,
+        providerMessageId: completedEvent.providerMessageId,
+        toolCallId: null,
+      });
+      this.websocketRepository.clientSend('on_agent_session_event', userId, {
+        type: 'assistant-message-created',
+        sessionId,
+        message: this.mapMessage(message),
+        createdAt: this.toIsoNow(),
+      });
     } catch (error) {
       await this.sessionRepository.markInterruptedFromActive(userId, sessionId).catch(() => {});
       this.websocketRepository.clientSend('on_agent_session_event', userId, {
