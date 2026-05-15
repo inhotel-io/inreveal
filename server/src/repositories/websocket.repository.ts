@@ -39,6 +39,12 @@ export type AgentSessionClientEvent =
       sessionId: string;
       message: string;
       createdAt: string;
+    }
+  | {
+      type: 'operation-plan-ready';
+      sessionId: string;
+      planId: string;
+      revision: number;
     };
 
 export interface ClientEventMap {
