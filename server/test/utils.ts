@@ -54,6 +54,7 @@ import { NotificationRepository } from 'src/repositories/notification.repository
 import { OAuthRepository } from 'src/repositories/oauth.repository';
 import { OcrRepository } from 'src/repositories/ocr.repository';
 import { PartnerRepository } from 'src/repositories/partner.repository';
+import { PersonFaceSuggestionRepository } from 'src/repositories/person-face-suggestion.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
 import { PluginRepository } from 'src/repositories/plugin.repository';
 import { ProcessRepository } from 'src/repositories/process.repository';
@@ -266,6 +267,7 @@ export type ServiceOverrides = {
   ocr: OcrRepository;
   oauth: OAuthRepository;
   partner: PartnerRepository;
+  personFaceSuggestion: PersonFaceSuggestionRepository;
   person: PersonRepository;
   plugin: PluginRepository;
   process: ProcessRepository;
@@ -364,6 +366,7 @@ export const getMocks = () => {
     ocr: automock(OcrRepository, { strict: false }),
     oauth: automock(OAuthRepository, { args: [loggerMock] }),
     partner: automock(PartnerRepository, { strict: false }),
+    personFaceSuggestion: automock(PersonFaceSuggestionRepository, { strict: false }),
     person: automock(PersonRepository, { strict: false }),
     plugin: automock(PluginRepository, { strict: true, args: [databaseMock, loggerMock] }),
     process: automock(ProcessRepository),
@@ -442,6 +445,7 @@ export const newTestService = <T extends BaseService>(
     overrides.oauth || (mocks.oauth as As<OAuthRepository>),
     overrides.ocr || (mocks.ocr as As<OcrRepository>),
     overrides.partner || (mocks.partner as As<PartnerRepository>),
+    overrides.personFaceSuggestion || (mocks.personFaceSuggestion as As<PersonFaceSuggestionRepository>),
     overrides.person || (mocks.person as As<PersonRepository>),
     overrides.plugin || (mocks.plugin as As<PluginRepository>),
     overrides.process || (mocks.process as As<ProcessRepository>),
