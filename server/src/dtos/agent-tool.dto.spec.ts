@@ -517,11 +517,13 @@ const makeMediaReference = () => ({
   height: 3000,
 });
 
-const makeAlbumSummary = (overrides: {
-  assetCount?: number;
-  startDate?: Date | null;
-  endDate?: Date | null;
-} = {}) => ({
+const makeAlbumSummary = (
+  overrides: {
+    assetCount?: number;
+    startDate?: Date | null;
+    endDate?: Date | null;
+  } = {},
+) => ({
   id: factory.uuid(),
   albumName: 'Berlin',
   description: '',
