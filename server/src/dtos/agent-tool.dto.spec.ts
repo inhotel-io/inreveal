@@ -1,6 +1,11 @@
 import {
+  AgentListAlbumsToolRequestDto,
+  AgentReadAlbumToolRequestDto,
   AgentReadAssetMetadataToolRequestDto,
   AgentReadAssetMetadataToolResponseDto,
+  AgentReadAssetOriginalsToolRequestDto,
+  AgentReadAssetPreviewsToolRequestDto,
+  AgentSearchAssetsToolRequestDto,
   AgentToolApprovalDto,
   AgentToolCallParamsDto,
   AgentToolCallResponseDto,
@@ -17,10 +22,22 @@ import { factory } from 'test/small.factory';
 import z from 'zod';
 
 type AgentReadAssetMetadataToolRequestInput = z.input<typeof AgentReadAssetMetadataToolRequestDto.schema>;
+type AgentSearchAssetsToolRequestInput = z.input<typeof AgentSearchAssetsToolRequestDto.schema>;
+type AgentReadAssetPreviewsToolRequestInput = z.input<typeof AgentReadAssetPreviewsToolRequestDto.schema>;
+type AgentReadAssetOriginalsToolRequestInput = z.input<typeof AgentReadAssetOriginalsToolRequestDto.schema>;
+type AgentReadAlbumToolRequestInput = z.input<typeof AgentReadAlbumToolRequestDto.schema>;
 type AgentToolApprovalInput = z.input<typeof AgentToolApprovalDto.schema>;
 
 const parseRequest = (input: AgentReadAssetMetadataToolRequestInput) =>
   AgentReadAssetMetadataToolRequestDto.schema.safeParse(input);
+const parseSearchAssetsRequest = (input: AgentSearchAssetsToolRequestInput) =>
+  AgentSearchAssetsToolRequestDto.schema.safeParse(input);
+const parseReadAssetPreviewsRequest = (input: AgentReadAssetPreviewsToolRequestInput) =>
+  AgentReadAssetPreviewsToolRequestDto.schema.safeParse(input);
+const parseReadAssetOriginalsRequest = (input: AgentReadAssetOriginalsToolRequestInput) =>
+  AgentReadAssetOriginalsToolRequestDto.schema.safeParse(input);
+const parseReadAlbumRequest = (input: AgentReadAlbumToolRequestInput) =>
+  AgentReadAlbumToolRequestDto.schema.safeParse(input);
 
 const parseApproval = (input: AgentToolApprovalInput) => AgentToolApprovalDto.schema.safeParse(input);
 
@@ -103,6 +120,77 @@ describe('Agent tool DTOs', () => {
       const result = parseRequest({ assetIds: [assetId, assetId] });
 
       expectIssue(result, ['assetIds'], 'assetIds must be unique');
+    });
+  });
+
+  describe(AgentSearchAssetsToolRequestDto.name, () => {
+    it('accepts filters and limit for a new tool request', () => {
+      const result = parseSearchAssetsRequest({
+        filters: {
+          type: AssetType.Image,
+          isFavorite: true,
+          isNotInAlbum: true,
+          takenAfter: '2026-05-01T00:00:00.000Z',
+          takenBefore: '2026-05-31T23:59:59.999Z',
+          city: 'Berlin',
+          country: 'Germany',
+          tagIds: [factory.uuid()],
+        },
+        limit: 25,
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.limit).toBe(25);
+        const filters = result.data.filters;
+        expect(filters).toEqual(
+          expect.objectContaining({
+            type: AssetType.Image,
+            city: 'Berlin',
+            country: 'Germany',
+          }),
+        );
+        expect(filters?.takenAfter).toEqual(new Date('2026-05-01T00:00:00.000Z'));
+        expect(filters?.takenBefore).toEqual(new Date('2026-05-31T23:59:59.999Z'));
+      }
+    });
+
+    it('rejects requests containing both filters/limit and toolCallId', () => {
+      const result = parseSearchAssetsRequest({ filters: {}, limit: 10, toolCallId: factory.uuid() });
+
+      expectIssue(result, [], 'Provide either search filters or toolCallId, not both');
+    });
+  });
+
+  describe.each([
+    [AgentReadAssetPreviewsToolRequestDto.name, parseReadAssetPreviewsRequest],
+    [AgentReadAssetOriginalsToolRequestDto.name, parseReadAssetOriginalsRequest],
+  ])('%s', (_name, parseReadAssetRequest) => {
+    it('rejects requests containing both assetIds and toolCallId', () => {
+      const result = parseReadAssetRequest({ assetIds: [factory.uuid()], toolCallId: factory.uuid() });
+
+      expectIssue(result, [], 'Provide either assetIds or toolCallId, not both');
+    });
+
+    it('rejects duplicate asset ids', () => {
+      const assetId = factory.uuid();
+      const result = parseReadAssetRequest({ assetIds: [assetId, assetId] });
+
+      expectIssue(result, ['assetIds'], 'assetIds must be unique');
+    });
+  });
+
+  describe(AgentReadAlbumToolRequestDto.name, () => {
+    it('requires albumId or toolCallId', () => {
+      const result = parseReadAlbumRequest({});
+
+      expectIssue(result, [], 'Provide albumId for a new tool request or toolCallId for an approved request');
+    });
+
+    it('rejects requests containing both albumId and toolCallId', () => {
+      const result = parseReadAlbumRequest({ albumId: factory.uuid(), toolCallId: factory.uuid() });
+
+      expectIssue(result, [], 'Provide either albumId or toolCallId, not both');
     });
   });
 
