@@ -19,7 +19,7 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
-import { AgentAssetMetadata } from 'src/types/agent-tool.types';
+import { AgentAssetMetadata, AgentToolReadAssetIdsRequestMetadata } from 'src/types/agent-tool.types';
 
 type ReadAssetMetadataResponse =
   | { status: 'approval-required'; toolCall: AgentToolCallResponseDto }
@@ -27,6 +27,11 @@ type ReadAssetMetadataResponse =
   | { status: 'success'; toolCall: AgentToolCallResponseDto; assets: AgentAssetMetadata[] };
 
 type AgentToolCallCreate = Parameters<AgentToolCallRepository['create']>[0];
+
+const isReadAssetIdsRequestMetadata = (
+  metadata: AgentToolCall['redactedRequestMetadata'],
+): metadata is AgentToolReadAssetIdsRequestMetadata =>
+  'assetIds' in metadata && Array.isArray(metadata.assetIds) && metadata.assetIds.every((id) => typeof id === 'string');
 
 @Injectable()
 export class AgentToolService {
@@ -177,6 +182,8 @@ export class AgentToolService {
       throw new BadRequestException('Agent tool call has not been approved');
     }
 
+    const assetIds = this.getReadAssetIdsRequestMetadata(toolCall).assetIds;
+
     const executing = await this.toolCallRepository.transition(session.id, toolCall.id, AgentToolCallStatus.Approved, {
       status: AgentToolCallStatus.Executing,
       approvalDecision: AgentToolApprovalDecision.Approved,
@@ -189,8 +196,6 @@ export class AgentToolService {
     if (!executing) {
       throw new BadRequestException('Agent tool call is already executing or completed');
     }
-
-    const assetIds = toolCall.redactedRequestMetadata.assetIds;
 
     try {
       const denialReason = await this.validateReadRequest(auth, session, assetIds, toolCall.id);
@@ -281,6 +286,17 @@ export class AgentToolService {
 
   private getSessionLimitReason(maxAssetsPerSession: number): string {
     return `Session policy allows at most ${maxAssetsPerSession} assets per session`;
+  }
+
+  private getReadAssetIdsRequestMetadata(toolCall: AgentToolCall): AgentToolReadAssetIdsRequestMetadata {
+    if (
+      toolCall.toolName !== AgentToolName.ReadAssetMetadata ||
+      !isReadAssetIdsRequestMetadata(toolCall.redactedRequestMetadata)
+    ) {
+      throw new BadRequestException('Agent tool call is not a read asset metadata request');
+    }
+
+    return toolCall.redactedRequestMetadata;
   }
 
   private async validateReadRequest(
