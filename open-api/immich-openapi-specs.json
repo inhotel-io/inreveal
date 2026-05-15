@@ -23040,6 +23040,7 @@
           "FacialRecognitionQueueAll",
           "FacialRecognition",
           "FaceIdentityBackfill",
+          "FaceIdentityMaintenanceAfterRecognition",
           "FileDelete",
           "FileMigrationQueueAll",
           "LibraryDeleteCheck",
