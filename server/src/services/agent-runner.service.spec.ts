@@ -1,6 +1,8 @@
+import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType } from 'src/enum';
 import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
+import { AgentRunnerCreateSessionRequest } from 'src/types/agent-runner.types';
 import { automock } from 'test/utils';
 
 describe(AgentRunnerService.name, () => {
@@ -18,6 +20,73 @@ describe(AgentRunnerService.name, () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  const makeCreateSessionBody = (): AgentRunnerCreateSessionRequest => ({
+    gallerySessionId: '00000000-0000-4000-8000-000000000100',
+    credential: {
+      id: '00000000-0000-4000-8000-000000000001',
+      providerType: AgentProviderType.OpenAI,
+      label: 'OpenAI personal',
+      baseUrl: null,
+      models: ['gpt-5.1'],
+      defaultModel: 'gpt-5.1',
+    },
+    model: 'gpt-5.1',
+    permissionPreset: AgentPermissionPreset.Careful,
+    permissionPlan: {
+      read: { metadata: true, previews: false, originals: false },
+      providerExposure: {
+        metadata: true,
+        previews: false,
+        originals: false,
+        allowOriginalsForExternalProviders: false,
+      },
+      assetScope: { owned: true, sharedSpaces: false, locked: false },
+      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      limits: {
+        maxAssetsPerToolCall: 200,
+        maxAssetsPerSession: 2000,
+        maxPreviewsPerToolCall: 0,
+        maxOriginalsPerToolCall: 0,
+        expiresInMinutes: 120,
+      },
+    },
+    approvalMode: AgentApprovalMode.Strict,
+    initialContext: {},
+  });
+
+  it('creates a runner session through the configured runner', async () => {
+    configRepository.getEnv.mockReturnValue({
+      agent: { runnerUrl: 'http://agent-runner:4477', runnerHealthTimeoutMs: 3000 },
+    } as never);
+    agentRunnerRepository.createSession.mockResolvedValue({
+      runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
+      capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+    });
+
+    await expect(sut.createSession(makeCreateSessionBody())).resolves.toEqual({
+      runnerEndpoint: 'http://agent-runner:4477',
+      runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
+      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+    });
+    expect(agentRunnerRepository.createSession).toHaveBeenCalledWith({
+      url: 'http://agent-runner:4477',
+      timeoutMs: 3000,
+      body: expect.objectContaining({
+        gallerySessionId: '00000000-0000-4000-8000-000000000100',
+        model: 'gpt-5.1',
+      }),
+    });
+  });
+
+  it('rejects runner session creation when the runner is not configured', async () => {
+    configRepository.getEnv.mockReturnValue({
+      agent: { runnerHealthTimeoutMs: 2000 },
+    } as never);
+
+    await expect(sut.createSession(makeCreateSessionBody())).rejects.toThrow('Agent runner is not configured');
+    expect(agentRunnerRepository.createSession).not.toHaveBeenCalled();
   });
 
   it('returns disabled status without probing when runner URL is missing', async () => {
