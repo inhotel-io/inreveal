@@ -9,6 +9,8 @@ import {
   SessionManager,
   SettingsManager,
 } from '@earendil-works/pi-coding-agent';
+import { createGalleryToolClient } from './gallery-tool-client.mjs';
+import { createGalleryReadTools, galleryReadToolNames } from './gallery-tools.mjs';
 
 const protocolVersion = '2026-05-14';
 const systemPrompt = [
@@ -195,6 +197,14 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
           if (!model) {
             throw new Error(`Model ${body.model} is not available for provider ${providerName}`);
           }
+          const customTools = body.toolGateway
+            ? createGalleryReadTools({
+                client: createGalleryToolClient({
+                  gateway: body.toolGateway,
+                  gallerySessionId: body.gallerySessionId,
+                }),
+              })
+            : [];
 
           const { session } = await sdk.createAgentSession({
             model,
@@ -203,9 +213,9 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             sessionManager: sdk.SessionManager.inMemory(),
             settingsManager,
             resourceLoader,
-            noTools: 'all',
+            noTools: body.toolGateway ? 'builtin' : 'all',
             tools: [],
-            customTools: [],
+            customTools,
           });
 
           const existingEntry = sessions.get(runnerSessionId);
@@ -240,7 +250,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             capabilities: {
               protocolVersion,
               streaming: true,
-              tools: [],
+              tools: body.toolGateway ? galleryReadToolNames : [],
               models: [body.model],
               runtime: 'pi',
             },
