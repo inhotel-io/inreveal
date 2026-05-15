@@ -295,6 +295,50 @@ describe(AgentSessionService.name, () => {
     });
   });
 
+  it('backfills missing preview and original session limits for legacy custom permission plans', async () => {
+    const auth = AuthFactory.create();
+    const credential = makeCredential();
+    const legacyPermissionPlan = structuredClone(localPowerUserPermissionPlan);
+    delete legacyPermissionPlan.limits.maxPreviewsPerSession;
+    delete legacyPermissionPlan.limits.maxOriginalsPerSession;
+    const expectedPermissionPlan: AgentPermissionPlanSnapshot = {
+      ...legacyPermissionPlan,
+      limits: {
+        ...legacyPermissionPlan.limits,
+        maxPreviewsPerSession: legacyPermissionPlan.limits.maxPreviewsPerToolCall,
+        maxOriginalsPerSession: legacyPermissionPlan.limits.maxOriginalsPerToolCall,
+      },
+    };
+    const dto = makeCreateDto({
+      providerCredentialId: credential.id,
+      permissionPreset: AgentPermissionPreset.Custom,
+      permissionPlan: legacyPermissionPlan,
+    });
+    const createdSession = makeSession({
+      userId: auth.user.id,
+      providerCredentialId: credential.id,
+      permissionPreset: AgentPermissionPreset.Custom,
+      permissionPlanSnapshot: expectedPermissionPlan,
+    });
+
+    credentialService.getById.mockResolvedValue(credential);
+    repository.create.mockResolvedValue(createdSession);
+    mockSuccessfulRunnerHandoff(createdSession);
+
+    await sut.create(auth, dto);
+
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        permissionPlanSnapshot: expectedPermissionPlan,
+      }),
+    );
+    expect(agentRunnerService.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        permissionPlan: expectedPermissionPlan,
+      }),
+    );
+  });
+
   it('rejects custom session without permissionPlan before credential lookup/repo create', async () => {
     const auth = AuthFactory.create();
 
