@@ -880,6 +880,25 @@ export class AssetRepository {
     return new Set(results.map(({ id }) => id));
   }
 
+  @GenerateSql({ params: [DummyValue.UUID_SET] })
+  @ChunkedSet()
+  async getAgentReadableIds(ids: Set<string>): Promise<Set<string>> {
+    if (ids.size === 0) {
+      return new Set();
+    }
+
+    const results = await this.db
+      .selectFrom('asset')
+      .select('asset.id')
+      .where('asset.id', 'in', [...ids])
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', agentDirectReadVisibilities)
+      .execute();
+
+    return new Set(results.map(({ id }) => id));
+  }
+
   @GenerateSql({ params: [[DummyValue.UUID]] })
   @ChunkedArray()
   getAgentMetadataByIds(ids: string[]) {

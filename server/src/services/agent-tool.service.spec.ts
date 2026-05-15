@@ -979,6 +979,29 @@ describe(AgentToolService.name, () => {
     });
   });
 
+  it('denies agent-hidden assets even when generic access checks allow the ids', async () => {
+    const auth = AuthFactory.create();
+    const visibleId = newUuid();
+    const hiddenId = newUuid();
+    const assetIds = [visibleId, hiddenId];
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([visibleId]));
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'One or more assets are not accessible',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+  });
+
   it('allows locked shared-space assets when assetScope.locked is true and auth is elevated', async () => {
     const auth = AuthFactory.from().session({ hasElevatedPermission: true }).build();
     const assetIds = [newUuid()];
