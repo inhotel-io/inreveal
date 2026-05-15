@@ -1144,6 +1144,7 @@ export class AssetRepository {
       .select([
         'asset.id as assetId',
         'asset.originalFileName as fileName',
+        'asset_file.path as previewPath',
         'asset_exif.exifImageWidth as width',
         'asset_exif.exifImageHeight as height',
       ])
@@ -1161,7 +1162,7 @@ export class AssetRepository {
             {
               assetId,
               mediaUrl: `/api/assets/${assetId}/thumbnail?size=preview`,
-              mimeType: mimeTypes.lookup(row.fileName),
+              mimeType: mimeTypes.lookup(row.previewPath),
               fileName: row.fileName,
               width: row.width,
               height: row.height,
