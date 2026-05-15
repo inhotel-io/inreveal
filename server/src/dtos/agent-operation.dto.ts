@@ -18,7 +18,7 @@ const temporaryTargetId = z
   .min(1)
   .max(120)
   .regex(/^[a-zA-Z0-9_-]+$/);
-const emptyPayload = z.strictObject({}).optional().default({});
+const emptyPayload = z.strictObject({}).optional();
 const uniqueAssetIds = z
   .array(uuid)
   .min(1)

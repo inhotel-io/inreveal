@@ -19,7 +19,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
     this.temporaryTargetId,
     this.riskLevel,
     this.enabled = true,
-    this.payload = {},
+    required this.payload,
     this.targetId,
     this.assetIds = const [],
   });

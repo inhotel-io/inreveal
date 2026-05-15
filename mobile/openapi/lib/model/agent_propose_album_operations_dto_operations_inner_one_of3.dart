@@ -21,7 +21,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf3 {
     this.assetIds = const [],
     this.riskLevel,
     this.enabled = true,
-    this.payload = {},
+    this.payload,
   });
 
   AgentAlbumSetCoverOperationType type;
@@ -58,7 +58,13 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf3 {
 
   bool enabled;
 
-  Object payload;
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Object? payload;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf3 &&
@@ -83,7 +89,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf3 {
     (assetIds.hashCode) +
     (riskLevel == null ? 0 : riskLevel!.hashCode) +
     (enabled.hashCode) +
-    (payload.hashCode);
+    (payload == null ? 0 : payload!.hashCode);
 
   @override
   String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3[type=$type, summary=$summary, targetKind=$targetKind, targetId=$targetId, temporaryTargetId=$temporaryTargetId, assetIds=$assetIds, riskLevel=$riskLevel, enabled=$enabled, payload=$payload]';
@@ -110,7 +116,11 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf3 {
     //  json[r'riskLevel'] = null;
     }
       json[r'enabled'] = this.enabled;
+    if (this.payload != null) {
       json[r'payload'] = this.payload;
+    } else {
+    //  json[r'payload'] = null;
+    }
     return json;
   }
 
@@ -133,7 +143,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf3 {
             : const [],
         riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
         enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
-        payload: mapValueOfType<Object>(json, r'payload') ?? {},
+        payload: mapValueOfType<Object>(json, r'payload'),
       );
     }
     return null;
