@@ -246,6 +246,24 @@ class ApiClient {
           return AgentMessageToolCallBlockTypeTypeTransformer().decode(value);
         case 'AgentModelSnapshot':
           return AgentModelSnapshot.fromJson(value);
+        case 'AgentOperationPlanResponseDto':
+          return AgentOperationPlanResponseDto.fromJson(value);
+        case 'AgentOperationPlanStatus':
+          return AgentOperationPlanStatusTypeTransformer().decode(value);
+        case 'AgentOperationPlanSummaryRequestDto':
+          return AgentOperationPlanSummaryRequestDto.fromJson(value);
+        case 'AgentOperationPlanToolResponseDto':
+          return AgentOperationPlanToolResponseDto.fromJson(value);
+        case 'AgentOperationResponseDto':
+          return AgentOperationResponseDto.fromJson(value);
+        case 'AgentOperationRiskLevel':
+          return AgentOperationRiskLevelTypeTransformer().decode(value);
+        case 'AgentOperationStatus':
+          return AgentOperationStatusTypeTransformer().decode(value);
+        case 'AgentOperationTargetKind':
+          return AgentOperationTargetKindTypeTransformer().decode(value);
+        case 'AgentOperationType':
+          return AgentOperationTypeTypeTransformer().decode(value);
         case 'AgentPermissionPlan':
           return AgentPermissionPlan.fromJson(value);
         case 'AgentPermissionPlanAssetScope':
@@ -260,6 +278,22 @@ class ApiClient {
           return AgentPermissionPlanWriteScope.fromJson(value);
         case 'AgentPermissionPreset':
           return AgentPermissionPresetTypeTransformer().decode(value);
+        case 'AgentProposeAlbumOperationsDto':
+          return AgentProposeAlbumOperationsDto.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInner':
+          return AgentProposeAlbumOperationsDtoOperationsInner.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf1':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf1.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf2':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf2.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf2Payload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf2Payload.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf3.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload.fromJson(value);
         case 'AgentProviderCredentialCreateDto':
           return AgentProviderCredentialCreateDto.fromJson(value);
         case 'AgentProviderCredentialResponseDto':
@@ -308,6 +342,8 @@ class ApiClient {
           return AgentReadAssetPreviewsToolResponseDto.fromJson(value);
         case 'AgentReadAssetPreviewsToolSuccessResponse':
           return AgentReadAssetPreviewsToolSuccessResponse.fromJson(value);
+        case 'AgentReviseAlbumOperationsDto':
+          return AgentReviseAlbumOperationsDto.fromJson(value);
         case 'AgentRunnerCapabilitiesDto':
           return AgentRunnerCapabilitiesDto.fromJson(value);
         case 'AgentRunnerStatusDto':
