@@ -63,7 +63,7 @@ type AgentReadToolDescriptor<TRequest, TResult extends Record<string, unknown>> 
   perToolLimit: (plan: AgentPermissionPlanSnapshot) => number;
   perSessionLimit: (plan: AgentPermissionPlanSnapshot) => number;
   validateAccess: (auth: AuthDto, session: AgentSession, request: TRequest) => Promise<string | null>;
-  execute: (auth: AuthDto, session: AgentSession, request: TRequest) => Promise<TResult>;
+  execute: (auth: AuthDto, session: AgentSession, request: TRequest, toolCallId: string) => Promise<TResult>;
   responseSummary: (result: TResult) => string;
   responseMetadata: (result: TResult) => AgentToolCall['redactedResponseMetadata'];
   resultAssetCount: (result: TResult) => number;
@@ -297,9 +297,10 @@ export class AgentToolService {
       throw new BadRequestException('Agent tool call is already executing or completed');
     }
 
-    const denialReason = await this.validateReadRequest(auth, session, request, descriptor, toolCall.id);
+    const refreshedSession = await this.getOwnedSession(auth, session.id, { requireActive: true });
+    const denialReason = await this.validateReadRequest(auth, refreshedSession, request, descriptor, toolCall.id);
     if (denialReason) {
-      const denied = await this.transitionExecuting(auth, session, toolCall.id, {
+      const denied = await this.transitionExecuting(auth, refreshedSession, toolCall.id, {
         status: AgentToolCallStatus.Denied,
         approvalDecision: AgentToolApprovalDecision.Denied,
         responseSummary: null,
@@ -310,7 +311,7 @@ export class AgentToolService {
       return { status: 'denied', reason: denialReason, toolCall: this.mapToolCall(denied) };
     }
 
-    return this.executeClaimedRead(auth, session, toolCall.id, request, descriptor);
+    return this.executeClaimedRead(auth, refreshedSession, toolCall.id, request, descriptor);
   }
 
   private async executeClaimedRead<TRequest, TResult extends Record<string, unknown>>(
@@ -321,7 +322,7 @@ export class AgentToolService {
     descriptor: AgentReadToolDescriptor<TRequest, TResult>,
   ): Promise<AgentReadToolResponse<TResult>> {
     try {
-      const result = await descriptor.execute(auth, session, request);
+      const result = await descriptor.execute(auth, session, request, toolCallId);
       const completed = await this.transitionExecuting(auth, session, toolCallId, {
         status: AgentToolCallStatus.Completed,
         approvalDecision: AgentToolApprovalDecision.Approved,
@@ -553,7 +554,7 @@ export class AgentToolService {
       perToolLimit: () => Number.MAX_SAFE_INTEGER,
       perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
       validateAccess: (auth, session, request) => this.validateAlbumAccess(auth, session, request.albumId ?? ''),
-      execute: async (auth, session, request) => {
+      execute: async (auth, session, request, toolCallId) => {
         const album = await this.albumRepository.getAgentAlbumById(auth.user.id, request.albumId ?? '');
         if (!album) {
           throw new AgentToolDeniedError('Album is not accessible');
@@ -561,6 +562,17 @@ export class AgentToolService {
 
         if (album.assetCount > session.permissionPlanSnapshot.limits.maxAssetsPerToolCall) {
           throw new AgentToolDeniedError('Requested asset count exceeds per-tool limit');
+        }
+
+        const sessionLimitDenial = await this.getSessionLimitDenialReasonForCount(
+          session,
+          AgentToolDataClass.Metadata,
+          session.permissionPlanSnapshot.limits.maxAssetsPerSession,
+          album.assetCount,
+          toolCallId,
+        );
+        if (sessionLimitDenial) {
+          throw new AgentToolDeniedError(sessionLimitDenial);
         }
 
         return { album };
@@ -725,11 +737,27 @@ export class AgentToolService {
   ): Promise<string | null> {
     const maxCount = descriptor.perSessionLimit(session.permissionPlanSnapshot);
     const requestedCount = descriptor.requestedAssetCount(request);
+    return this.getSessionLimitDenialReasonForCount(
+      session,
+      descriptor.dataClass,
+      maxCount,
+      requestedCount,
+      excludedToolCallId,
+    );
+  }
+
+  private async getSessionLimitDenialReasonForCount(
+    session: AgentSession,
+    dataClass: AgentToolDataClass,
+    maxCount: number,
+    requestedCount: number,
+    excludedToolCallId?: string,
+  ): Promise<string | null> {
     if (requestedCount === 0 || maxCount === Number.MAX_SAFE_INTEGER) {
       return null;
     }
 
-    const countedAssetCount = await this.getCountedAssetCount(session, descriptor.dataClass, excludedToolCallId);
+    const countedAssetCount = await this.getCountedAssetCount(session, dataClass, excludedToolCallId);
     return countedAssetCount + requestedCount > maxCount ? this.getSessionLimitReason(maxCount) : null;
   }
 
