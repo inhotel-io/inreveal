@@ -512,6 +512,48 @@ describe('pi runtime adapter', () => {
     assert.equal(sessions[1].disposed, 1);
   });
 
+  it('does not leak Pi SDK sessions when deterministic session creation overlaps', async () => {
+    const { sdk, ai } = createFakeDependencies();
+    const sessions = [];
+    const creationGates = [createDeferred(), createDeferred()];
+    sdk.createAgentSession = async () => {
+      const sessionIndex = sessions.length;
+      const session = {
+        messages: [],
+        disposed: 0,
+        subscribe: () => () => {},
+        async prompt() {},
+        dispose() {
+          this.disposed += 1;
+        },
+      };
+      sessions.push(session);
+      await creationGates[sessionIndex].promise;
+      return { session };
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+
+    const first = runtime.createSession(createSessionBody());
+    const second = runtime.createSession(createSessionBody());
+    await waitForCondition(() => sessions.length >= 1);
+    const overlapped = await waitForCondition(() => sessions.length >= 2, 25)
+      .then(() => true)
+      .catch(() => false);
+    if (overlapped) {
+      creationGates[0].resolve();
+      creationGates[1].resolve();
+    } else {
+      creationGates[0].resolve();
+      await waitForCondition(() => sessions.length >= 2);
+      creationGates[1].resolve();
+    }
+    await Promise.all([first, second]);
+    await runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
+
+    assert.equal(sessions.length, 2);
+    assert.deepEqual(sessions.map((session) => session.disposed), [1, 1]);
+  });
+
   it('streams Pi text deltas and completion content as Gallery runner events', async () => {
     const { sdk, ai } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
