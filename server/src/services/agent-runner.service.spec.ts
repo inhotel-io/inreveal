@@ -12,11 +12,15 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
+import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
 import { AgentMessageContent } from 'src/types/agent-message.types';
 import { AgentRunnerCreateSessionRequest, AgentRunnerStreamEvent } from 'src/types/agent-runner.types';
 import { automock } from 'test/utils';
 
-const makeCreateSessionBody = (): AgentRunnerCreateSessionRequest => ({
+const userId = '00000000-0000-4000-8000-000000000001';
+
+const makeCreateSessionBody = (): Omit<AgentRunnerCreateSessionRequest, 'toolGateway'> & { userId: string } => ({
+  userId,
   gallerySessionId: '00000000-0000-4000-8000-000000000100',
   credential: {
     id: '00000000-0000-4000-8000-000000000001',
@@ -84,6 +88,7 @@ describe(AgentRunnerService.name, () => {
   let messageRepository: ReturnType<typeof automock<AgentMessageRepository>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
   let websocketRepository: ReturnType<typeof automock<WebsocketRepository>>;
+  let toolTokenService: ReturnType<typeof automock<AgentRunnerToolTokenService>>;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -96,12 +101,14 @@ describe(AgentRunnerService.name, () => {
       args: [{} as never, { setContext: vi.fn() } as never],
       strict: false,
     });
+    toolTokenService = automock(AgentRunnerToolTokenService, { args: [{} as never] });
     sut = new AgentRunnerService(
       configRepository,
       agentRunnerRepository,
       messageRepository,
       sessionRepository,
       websocketRepository,
+      toolTokenService,
     );
   });
 
@@ -115,6 +122,7 @@ describe(AgentRunnerService.name, () => {
         runnerUrl: 'http://agent-runner:4477',
         runnerHealthTimeoutMs: 3000,
         runnerMessageStreamTimeoutMs: 120_000,
+        toolGatewayUrl: undefined,
       },
     } as never);
     agentRunnerRepository.createSession.mockResolvedValue({
@@ -133,8 +141,79 @@ describe(AgentRunnerService.name, () => {
       body: expect.objectContaining({
         gallerySessionId: '00000000-0000-4000-8000-000000000100',
         model: 'gpt-5.1',
+        toolGateway: null,
       }),
     });
+    expect(agentRunnerRepository.createSession.mock.calls[0][0].body).not.toHaveProperty('userId');
+    expect(toolTokenService.create).not.toHaveBeenCalled();
+  });
+
+  it('passes configured tool gateway URL and short-lived token to the runner without returning the token', async () => {
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+        toolGatewayUrl: 'http://immich-server:2283/api/agent/internal/tools',
+      },
+    } as never);
+    const body = makeCreateSessionBody();
+    body.permissionPlan.limits.expiresInMinutes = 45;
+    toolTokenService.create.mockReturnValue('tool-token');
+    agentRunnerRepository.createSession.mockResolvedValue({
+      runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
+      capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+    });
+
+    await expect(sut.createSession(body)).resolves.toEqual({
+      runnerEndpoint: 'http://agent-runner:4477',
+      runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
+      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+    });
+
+    expect(toolTokenService.create).toHaveBeenCalledWith({
+      sessionId: '00000000-0000-4000-8000-000000000100',
+      userId,
+      expiresAt: new Date('2026-05-14T10:45:00.000Z'),
+    });
+    expect(agentRunnerRepository.createSession).toHaveBeenCalledWith({
+      url: 'http://agent-runner:4477',
+      timeoutMs: 3000,
+      body: expect.objectContaining({
+        gallerySessionId: '00000000-0000-4000-8000-000000000100',
+        toolGateway: {
+          url: 'http://immich-server:2283/api/agent/internal/tools',
+          token: 'tool-token',
+        },
+      }),
+    });
+    expect(agentRunnerRepository.createSession.mock.calls[0][0].body).not.toHaveProperty('userId');
+  });
+
+  it('uses the default two-hour tool token expiry when the permission plan has no explicit expiry', async () => {
+    const body = makeCreateSessionBody();
+    body.permissionPlan.limits.expiresInMinutes = null;
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+        toolGatewayUrl: 'http://immich-server:2283/api/agent/internal/tools',
+      },
+    } as never);
+    toolTokenService.create.mockReturnValue('tool-token');
+    agentRunnerRepository.createSession.mockResolvedValue({
+      runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
+      capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+    });
+
+    await sut.createSession(body);
+
+    expect(toolTokenService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expiresAt: new Date('2026-05-14T12:00:00.000Z'),
+      }),
+    );
   });
 
   it('rejects runner session creation when the runner is not configured', async () => {
