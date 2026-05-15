@@ -15,7 +15,7 @@ class AgentListAlbumsToolResponseDto {
   AgentListAlbumsToolResponseDto({
     required this.status,
     required this.toolCall,
-    required this.reason,
+    this.reason,
     this.albums = const [],
   });
 
@@ -23,7 +23,7 @@ class AgentListAlbumsToolResponseDto {
 
   AgentToolCallResponseDto toolCall;
 
-  String reason;
+  String? reason;
 
   List<AgentAlbumSummary> albums;
 
@@ -39,7 +39,7 @@ class AgentListAlbumsToolResponseDto {
     // ignore: unnecessary_parenthesis
     (status.hashCode) +
     (toolCall.hashCode) +
-    (reason.hashCode) +
+    (reason == null ? 0 : reason!.hashCode) +
     (albums.hashCode);
 
   @override
@@ -49,7 +49,9 @@ class AgentListAlbumsToolResponseDto {
     final json = <String, dynamic>{};
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
+    if (this.reason != null) {
       json[r'reason'] = this.reason;
+    }
       json[r'albums'] = this.albums;
     return json;
   }
@@ -65,7 +67,7 @@ class AgentListAlbumsToolResponseDto {
       return AgentListAlbumsToolResponseDto(
         status: AgentListAlbumsToolResponseDtoStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
-        reason: mapValueOfType<String>(json, r'reason')!,
+        reason: mapValueOfType<String>(json, r'reason'),
         albums: AgentAlbumSummary.listFromJson(json[r'albums']),
       );
     }
@@ -116,8 +118,6 @@ class AgentListAlbumsToolResponseDto {
   static const requiredKeys = <String>{
     'status',
     'toolCall',
-    'reason',
-    'albums',
   };
 }
 
@@ -134,10 +134,14 @@ class AgentListAlbumsToolResponseDtoStatusEnum {
 
   String toJson() => value;
 
+  static const approvalRequired = AgentListAlbumsToolResponseDtoStatusEnum._(r'approval-required');
+  static const denied = AgentListAlbumsToolResponseDtoStatusEnum._(r'denied');
   static const success = AgentListAlbumsToolResponseDtoStatusEnum._(r'success');
 
   /// List of all possible values in this [enum][AgentListAlbumsToolResponseDtoStatusEnum].
   static const values = <AgentListAlbumsToolResponseDtoStatusEnum>[
+    approvalRequired,
+    denied,
     success,
   ];
 
@@ -177,6 +181,8 @@ class AgentListAlbumsToolResponseDtoStatusEnumTypeTransformer {
   AgentListAlbumsToolResponseDtoStatusEnum? decode(dynamic data, {bool allowNull = true}) {
     if (data != null) {
       switch (data) {
+        case r'approval-required': return AgentListAlbumsToolResponseDtoStatusEnum.approvalRequired;
+        case r'denied': return AgentListAlbumsToolResponseDtoStatusEnum.denied;
         case r'success': return AgentListAlbumsToolResponseDtoStatusEnum.success;
         default:
           if (!allowNull) {
@@ -190,5 +196,4 @@ class AgentListAlbumsToolResponseDtoStatusEnumTypeTransformer {
   /// Singleton [AgentListAlbumsToolResponseDtoStatusEnumTypeTransformer] instance.
   static AgentListAlbumsToolResponseDtoStatusEnumTypeTransformer? _instance;
 }
-
 
