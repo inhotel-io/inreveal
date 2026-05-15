@@ -12,8 +12,8 @@ import { AgentToolApprovalDecision, AgentToolCallStatus, AgentToolDataClass, Age
 import { AgentSessionTable } from 'src/schema/tables/agent-session.table';
 import type {
   AgentToolProviderSnapshot,
-  AgentToolReadAssetMetadataRequestMetadata,
-  AgentToolReadAssetMetadataResponseMetadata,
+  AgentToolRequestMetadata,
+  AgentToolResponseMetadata,
 } from 'src/types/agent-tool.types';
 
 @Index({ columns: ['sessionId', 'status'] })
@@ -42,10 +42,10 @@ export class AgentToolCallTable {
   responseSummary!: string | null;
 
   @Column({ type: 'jsonb' })
-  redactedRequestMetadata!: AgentToolReadAssetMetadataRequestMetadata;
+  redactedRequestMetadata!: AgentToolRequestMetadata;
 
   @Column({ type: 'jsonb', nullable: true })
-  redactedResponseMetadata!: AgentToolReadAssetMetadataResponseMetadata | null;
+  redactedResponseMetadata!: AgentToolResponseMetadata | null;
 
   @Column()
   dataClass!: AgentToolDataClass;
