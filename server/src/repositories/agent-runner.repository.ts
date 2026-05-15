@@ -89,7 +89,7 @@ const isMessageBlock = (value: unknown): boolean => {
 
 const isMessageContent = (value: unknown): boolean => {
   const content = objectRecord(value);
-  return Array.isArray(content.blocks) && content.blocks.every(isMessageBlock);
+  return Array.isArray(content.blocks) && content.blocks.every((block) => isMessageBlock(block));
 };
 
 const isStreamEvent = (value: unknown): value is AgentRunnerStreamEvent => {
@@ -117,7 +117,7 @@ const isStreamEvent = (value: unknown): value is AgentRunnerStreamEvent => {
 
 const parseSseFrame = (frame: string): AgentRunnerStreamEvent | null => {
   const dataLine = frame
-    .replace(/\r\n/g, '\n')
+    .replaceAll('\r\n', '\n')
     .split('\n')
     .find((line) => line.startsWith('data: '));
   if (!dataLine) {
@@ -152,7 +152,7 @@ async function* parseSseStream(stream: ReadableStream<Uint8Array>): AsyncGenerat
       }
 
       buffer += decoder.decode(value, { stream: true });
-      buffer = buffer.replace(/\r\n/g, '\n');
+      buffer = buffer.replaceAll('\r\n', '\n');
       const frames = buffer.split('\n\n');
       buffer = frames.pop() ?? '';
 
@@ -177,7 +177,7 @@ async function* parseSseStream(stream: ReadableStream<Uint8Array>): AsyncGenerat
   } finally {
     try {
       if (!completed) {
-        await reader.cancel().catch(() => undefined);
+        await reader.cancel().catch(() => {});
       }
     } finally {
       reader.releaseLock();
