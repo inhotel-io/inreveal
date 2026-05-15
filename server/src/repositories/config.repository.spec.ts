@@ -16,6 +16,7 @@ const resetEnv = () => {
     'IMMICH_TRUSTED_PROXIES',
     'IMMICH_API_METRICS_PORT',
     'IMMICH_AGENT_RUNNER_URL',
+    'IMMICH_AGENT_TOOL_GATEWAY_URL',
     'IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS',
     'IMMICH_AGENT_RUNNER_MESSAGE_STREAM_TIMEOUT_MS',
     'IMMICH_MEDIA_LOCATION',
@@ -152,6 +153,14 @@ describe('getEnv', () => {
       });
     });
 
+    it('should parse tool gateway URL', () => {
+      process.env.IMMICH_AGENT_TOOL_GATEWAY_URL = 'http://immich-server:2283/api/agent/internal/tools';
+
+      const { agent } = getEnv();
+
+      expect(agent.toolGatewayUrl).toBe('http://immich-server:2283/api/agent/internal/tools');
+    });
+
     it('should reject invalid runner URLs', () => {
       process.env.IMMICH_AGENT_RUNNER_URL = 'not-a-url';
 
@@ -162,6 +171,12 @@ describe('getEnv', () => {
       process.env.IMMICH_AGENT_RUNNER_URL = 'ftp://agent-runner.local';
 
       expect(() => getEnv()).toThrowError('[IMMICH_AGENT_RUNNER_URL] Runner URL must use http or https');
+    });
+
+    it('should reject non-http tool gateway URLs', () => {
+      process.env.IMMICH_AGENT_TOOL_GATEWAY_URL = 'ftp://immich-server.local';
+
+      expect(() => getEnv()).toThrowError('[IMMICH_AGENT_TOOL_GATEWAY_URL] Tool gateway URL must use http or https');
     });
 
     it('should reject non-positive runner health timeouts', () => {
