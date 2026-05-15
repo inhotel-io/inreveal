@@ -122,7 +122,7 @@ services:
       context: ../
       dockerfile: server/Dockerfile.dev
       target: dev
-    command: ['pnpm --dir agent-runner start']
+    command: ['exec pnpm --dir agent-runner start']
     environment:
       HOST: 0.0.0.0
       PORT: 4477
