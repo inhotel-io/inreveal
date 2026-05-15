@@ -875,6 +875,50 @@ describe(AgentToolService.name, () => {
     );
   });
 
+  it('listAlbums filters out owned albums when assetScope.owned is false', async () => {
+    const auth = AuthFactory.create();
+    const ownedAlbum = makeAlbumSummary({ ownerId: auth.user.id });
+    const sharedAlbum = makeAlbumSummary({ ownerId: newUuid() });
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    albumRepository.getAgentAlbums.mockResolvedValue([ownedAlbum, sharedAlbum]);
+
+    const result = await sut.listAlbums(auth, session.id, {});
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+      albums: [sharedAlbum],
+    });
+  });
+
+  it('listAlbums filters out shared albums when assetScope.sharedSpaces is false', async () => {
+    const auth = AuthFactory.create();
+    const ownedAlbum = makeAlbumSummary({ ownerId: auth.user.id });
+    const sharedAlbum = makeAlbumSummary({ ownerId: newUuid() });
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    albumRepository.getAgentAlbums.mockResolvedValue([ownedAlbum, sharedAlbum]);
+
+    const result = await sut.listAlbums(auth, session.id, {});
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+      albums: [ownedAlbum],
+    });
+  });
+
   it.each([
     {
       name: 'readAssetMetadata',
@@ -949,6 +993,53 @@ describe(AgentToolService.name, () => {
       reason: 'One or more assets are not accessible',
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
     });
+  });
+
+  it('readAlbum denies an owned album when assetScope.owned is false', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+    albumRepository.getAgentAlbumById.mockResolvedValue(makeAlbumDetail({ id: albumId, ownerId: auth.user.id }));
+
+    const result = await sut.readAlbum(auth, session.id, { albumId });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Album is not accessible',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    expect(albumRepository.getAgentAlbumById).not.toHaveBeenCalled();
+  });
+
+  it('readAlbum denies a shared album when assetScope.sharedSpaces is false', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.album.checkSharedAlbumAccess.mockResolvedValue(new Set([albumId]));
+
+    const result = await sut.readAlbum(auth, session.id, { albumId });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Album is not accessible',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    expect(albumRepository.getAgentAlbumById).not.toHaveBeenCalled();
   });
 
   it('counts per-session limits by data class and excludes the current approved strict call during re-execution', async () => {
@@ -1183,6 +1274,68 @@ describe(AgentToolService.name, () => {
     );
   });
 
+  it('readAlbum reserves the loaded asset count before completing plan-only execution', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const album = makeAlbumDetail({ id: albumId, assetIds: [newUuid(), newUuid()] });
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ limits: { ...permissionPlanSnapshot.limits, maxAssetsPerSession: 5 } }),
+    });
+    const executing = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.ReadAlbum,
+      status: AgentToolCallStatus.Executing,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      requestSummary: `Read album ${albumId}`,
+      redactedRequestMetadata: { albumId },
+      assetCount: 0,
+      albumCount: 1,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.create.mockResolvedValueOnce(executing);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    albumRepository.getAgentAlbumById.mockResolvedValue(album);
+    toolCallRepository.getCountedAssetCountBySession.mockResolvedValue(1);
+
+    const result = await sut.readAlbum(auth, session.id, { albumId });
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+      album,
+    });
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      1,
+      session.id,
+      executing.id,
+      AgentToolCallStatus.Executing,
+      {
+        status: AgentToolCallStatus.Executing,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: 'Tool call execution started',
+        redactedResponseMetadata: null,
+        assetCount: album.assetCount,
+        albumCount: 1,
+        completedAt: null,
+        error: null,
+      },
+    );
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      2,
+      session.id,
+      executing.id,
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        status: AgentToolCallStatus.Completed,
+        assetCount: album.assetCount,
+        albumCount: 1,
+      }),
+    );
+  });
+
   it('readAlbum excludes the current approved tool call when checking loaded album session limits', async () => {
     const auth = AuthFactory.create();
     const albumId = newUuid();
@@ -1220,6 +1373,28 @@ describe(AgentToolService.name, () => {
       album,
     });
     expect(toolCallRepository.getCountedAssetCountBySession).toHaveBeenCalledWith(session.id, approved.id);
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      2,
+      session.id,
+      approved.id,
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        status: AgentToolCallStatus.Executing,
+        assetCount: album.assetCount,
+        albumCount: 1,
+      }),
+    );
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      3,
+      session.id,
+      approved.id,
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        status: AgentToolCallStatus.Completed,
+        assetCount: album.assetCount,
+        albumCount: 1,
+      }),
+    );
   });
 
   it('lists historical tool calls after completed session', async () => {
@@ -1726,7 +1901,7 @@ describe(AgentToolService.name, () => {
     });
   });
 
-  it('records failed and restores session when metadata repository throws', async () => {
+  it('records failed, restores session, and rethrows when metadata repository throws', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid()];
     const session = makeSession({ userId: auth.user.id });
@@ -1745,13 +1920,9 @@ describe(AgentToolService.name, () => {
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
     assetRepository.getAgentMetadataByIds.mockRejectedValue(new Error('database unavailable'));
 
-    const result = await sut.readAssetMetadata(auth, session.id, { toolCallId: approved.id });
-
-    expect(result).toEqual({
-      status: 'denied',
-      reason: 'Metadata read failed',
-      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Failed }),
-    });
+    await expect(sut.readAssetMetadata(auth, session.id, { toolCallId: approved.id })).rejects.toThrow(
+      'database unavailable',
+    );
     expect(toolCallRepository.transition).toHaveBeenLastCalledWith(
       session.id,
       approved.id,
