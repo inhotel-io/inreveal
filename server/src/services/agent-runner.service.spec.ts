@@ -363,6 +363,57 @@ describe(AgentRunnerService.name, () => {
     });
   });
 
+  it('does not persist assistant completion when a later matching runner error arrives', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Organize my photos.' }] };
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'I started organizing.' }] };
+    const assistantMessage = makeAssistantMessage({ sessionId, content: assistantContent });
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: 'provider-message-1',
+          content: assistantContent,
+        },
+        {
+          type: 'runner-error',
+          sessionId,
+          runnerSessionId,
+          message: 'Provider failed after completion.',
+        },
+      ]),
+    );
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
+    messageRepository.create.mockResolvedValue(assistantMessage);
+    sessionRepository.markInterruptedFromActive.mockResolvedValue({} as never);
+
+    await expect(sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content })).rejects.toThrow(
+      'Provider failed after completion.',
+    );
+
+    expect(messageRepository.create).not.toHaveBeenCalled();
+    expect(sessionRepository.markInterruptedFromActive).toHaveBeenCalledWith(userId, sessionId);
+    expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', userId, {
+      type: 'runner-error',
+      sessionId,
+      message: 'Provider failed after completion.',
+      createdAt: '2026-05-14T10:00:00.000Z',
+    });
+  });
+
   it.each([AgentSessionStatus.Cancelled, AgentSessionStatus.Interrupted])(
     'does not persist or emit assistant completion when the session is %s',
     async (status) => {
