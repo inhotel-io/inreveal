@@ -52,6 +52,64 @@ where
   "userId" = $1
   and "id" = $2::uuid
 
+-- AgentSessionRepository.markRunningFromCreated
+update "agent_session"
+set
+  "status" = $1,
+  "runnerEndpoint" = $2,
+  "runnerSessionId" = $3,
+  "runnerCapabilitiesSnapshot" = $4
+where
+  "userId" = $5
+  and "id" = $6::uuid
+  and "status" = $7
+returning
+  "id",
+  "userId",
+  "providerCredentialId",
+  "credentialSnapshot",
+  "modelSnapshot",
+  "permissionPreset",
+  "permissionPlanSnapshot",
+  "approvalMode",
+  "runnerEndpoint",
+  "runnerSessionId",
+  "runnerCapabilitiesSnapshot",
+  "status",
+  "initialContextSnapshot",
+  "createdAt",
+  "updatedAt",
+  "endedAt",
+  "updateId"
+
+-- AgentSessionRepository.markFailedFromCreated
+update "agent_session"
+set
+  "status" = $1,
+  "endedAt" = $2
+where
+  "userId" = $3
+  and "id" = $4::uuid
+  and "status" = $5
+returning
+  "id",
+  "userId",
+  "providerCredentialId",
+  "credentialSnapshot",
+  "modelSnapshot",
+  "permissionPreset",
+  "permissionPlanSnapshot",
+  "approvalMode",
+  "runnerEndpoint",
+  "runnerSessionId",
+  "runnerCapabilitiesSnapshot",
+  "status",
+  "initialContextSnapshot",
+  "createdAt",
+  "updatedAt",
+  "endedAt",
+  "updateId"
+
 -- AgentSessionRepository.cancel
 update "agent_session"
 set
