@@ -616,9 +616,9 @@ from
 where
   "asset"."deletedAt" is null
   and "asset"."isOffline" = $1
-  and "asset"."visibility" != $2
+  and "asset"."visibility" in ($2, $3)
   and (
-    "asset"."ownerId" = $3
+    "asset"."ownerId" = $4
     or exists (
       select
       from
@@ -626,7 +626,7 @@ where
         inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_asset"."spaceId"
       where
         "shared_space_asset"."assetId" = "asset"."id"
-        and "shared_space_member"."userId" = $4
+        and "shared_space_member"."userId" = $5
     )
     or exists (
       select
@@ -635,7 +635,7 @@ where
         inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_library"."spaceId"
       where
         "shared_space_library"."libraryId" = "asset"."libraryId"
-        and "shared_space_member"."userId" = $5
+        and "shared_space_member"."userId" = $6
     )
   )
   and exists (
@@ -644,7 +644,7 @@ where
       "asset_exif"
     where
       "asset_exif"."assetId" = "asset"."id"
-      and "asset_exif"."city" = $6
+      and "asset_exif"."city" = $7
   )
   and exists (
     select
@@ -652,18 +652,19 @@ where
       "asset_exif"
     where
       "asset_exif"."assetId" = "asset"."id"
-      and "asset_exif"."country" = $7
+      and "asset_exif"."country" = $8
   )
 order by
   "asset"."localDateTime" desc,
   "asset"."id" desc
 limit
-  $8
+  $9
 
 -- AssetRepository.getAgentPreviewReferencesByIds
 select
   "asset"."id" as "assetId",
   "asset"."originalFileName" as "fileName",
+  "asset_file"."path" as "previewPath",
   "asset_exif"."exifImageWidth" as "width",
   "asset_exif"."exifImageHeight" as "height"
 from
