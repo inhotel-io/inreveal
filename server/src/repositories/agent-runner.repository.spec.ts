@@ -385,9 +385,7 @@ describe(AgentRunnerRepository.name, () => {
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
-      body: sseBody(
-        `data: ${JSON.stringify(deltaEvent)}\r\n\r\n` + `data: ${JSON.stringify(completedEvent)}\r\n\r\n`,
-      ),
+      body: sseBody(`data: ${JSON.stringify(deltaEvent)}\r\n\r\n` + `data: ${JSON.stringify(completedEvent)}\r\n\r\n`),
     });
 
     await expect(
