@@ -74,6 +74,7 @@ import { OcrSearchTable } from 'src/schema/tables/ocr-search.table';
 import { PartnerAuditTable } from 'src/schema/tables/partner-audit.table';
 import { PartnerTable } from 'src/schema/tables/partner.table';
 import { PersonAuditTable } from 'src/schema/tables/person-audit.table';
+import { PersonFaceSuggestionTable } from 'src/schema/tables/person-face-suggestion.table';
 import { PersonTable } from 'src/schema/tables/person.table';
 import { PluginMethodTable } from 'src/schema/tables/plugin-method.table';
 import { PluginTable } from 'src/schema/tables/plugin.table';
@@ -176,6 +177,7 @@ export class ImmichDatabase {
     PartnerTable,
     PersonTable,
     PersonAuditTable,
+    PersonFaceSuggestionTable,
     SessionTable,
     SharedLinkAssetTable,
     SharedLinkTable,
@@ -323,6 +325,7 @@ export interface DB {
 
   person: PersonTable;
   person_audit: PersonAuditTable;
+  person_face_suggestion: PersonFaceSuggestionTable;
 
   session: SessionTable;
   session_sync_checkpoint: SessionSyncCheckpointTable;
