@@ -168,6 +168,29 @@ describe(AlbumRepository.name, () => {
       expect(result.map((album) => album.albumName)).not.toContain('Deleted');
     });
 
+    it('does not expose shared-link-only albums to agent reads', async () => {
+      const { ctx, sut } = setup();
+      const { user: viewer } = await ctx.newUser();
+      const { user: owner } = await ctx.newUser();
+      const { album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'Shared link only' });
+      await ctx.get(SharedLinkRepository).create({
+        userId: viewer.id,
+        key: Buffer.from(factory.uuid()),
+        type: SharedLinkType.Album,
+        albumId: album.id,
+        allowUpload: false,
+        allowDownload: true,
+        showExif: true,
+        expiresAt: null,
+        password: null,
+        description: null,
+        slug: null,
+      });
+
+      await expect(sut.getAgentAlbums(viewer.id)).resolves.toEqual([]);
+      await expect(sut.getAgentAlbumById(viewer.id, album.id)).resolves.toBeNull();
+    });
+
     it('reads an agent album with ordered asset ids and summary metadata', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
