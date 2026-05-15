@@ -1,6 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import { AgentRunnerToolController, AgentRunnerToolGuard } from 'src/controllers/agent-runner-tool.controller';
+import { AgentOperationPlanToolResponseDto, AgentProposeAlbumOperationsDto } from 'src/dtos/agent-operation.dto';
 import {
   AgentListAlbumsToolResponseDto,
   AgentReadAlbumToolResponseDto,
@@ -11,7 +12,15 @@ import {
   AgentToolCallResponseDto,
 } from 'src/dtos/agent-tool.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
-import { AgentToolCallStatus, AgentToolDataClass, AgentToolName } from 'src/enum';
+import {
+  AgentOperationRiskLevel,
+  AgentOperationTargetKind,
+  AgentOperationType,
+  AgentToolCallStatus,
+  AgentToolDataClass,
+  AgentToolName,
+} from 'src/enum';
+import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import request from 'supertest';
@@ -28,12 +37,17 @@ describe(AgentRunnerToolController.name, () => {
     args: [{} as never],
     strict: false,
   });
+  const operationPlanService = automock(AgentOperationPlanService, {
+    args: [{} as never, {} as never, {} as never, {} as never, {} as never, {} as never],
+    strict: false,
+  });
   const sessionId = factory.uuid();
   const userId = factory.uuid();
   const token = 'runner-tool-token';
   const authorization = `Bearer ${token}`;
   const assetId = factory.uuid();
   const albumId = factory.uuid();
+  const planId = factory.uuid();
   const startedAt = new Date('2026-05-15T10:00:00.000Z');
   const toolCall: AgentToolCallResponseDto = {
     id: factory.uuid(),
@@ -88,18 +102,34 @@ describe(AgentRunnerToolController.name, () => {
       missingBearerBody: { albumId },
     },
   ];
+  const planningBody: AgentProposeAlbumOperationsDto = {
+    summary: 'Portugal plan.',
+    operations: [
+      {
+        type: AgentOperationType.AlbumCreate,
+        summary: 'Create Portugal.',
+        targetKind: AgentOperationTargetKind.NewAlbum,
+        temporaryTargetId: 'tmp-portugal',
+        payload: { albumName: 'Portugal', description: '' },
+        riskLevel: AgentOperationRiskLevel.Low,
+        enabled: true,
+      },
+    ],
+  };
 
   beforeAll(async () => {
     ctx = await controllerSetup(AgentRunnerToolController, [
       AgentRunnerToolGuard,
       { provide: AgentRunnerToolTokenService, useValue: tokenService },
       { provide: AgentToolService, useValue: service },
+      { provide: AgentOperationPlanService, useValue: operationPlanService },
     ]);
     return () => ctx.close();
   });
 
   beforeEach(() => {
     service.resetAllMocks();
+    operationPlanService.resetAllMocks();
     tokenService.resetAllMocks();
     ctx.reset();
     tokenService.verify.mockReturnValue({
@@ -128,6 +158,9 @@ describe(AgentRunnerToolController.name, () => {
         'runnerReadAssetOriginals',
         'runnerListAlbums',
         'runnerReadAlbum',
+        'runnerProposeAlbumOperations',
+        'runnerReviseProposedOperations',
+        'runnerSummarizePlan',
       ]),
     );
   });
@@ -139,6 +172,9 @@ describe(AgentRunnerToolController.name, () => {
     ['runnerReadAssetOriginals', AgentReadAssetOriginalsToolResponseDto, 'AgentReadAssetOriginalsToolResponseDto'],
     ['runnerListAlbums', AgentListAlbumsToolResponseDto, 'AgentListAlbumsToolResponseDto'],
     ['runnerReadAlbum', AgentReadAlbumToolResponseDto, 'AgentReadAlbumToolResponseDto'],
+    ['runnerProposeAlbumOperations', AgentOperationPlanToolResponseDto, 'AgentOperationPlanToolResponseDto'],
+    ['runnerReviseProposedOperations', AgentOperationPlanToolResponseDto, 'AgentOperationPlanToolResponseDto'],
+    ['runnerSummarizePlan', AgentOperationPlanToolResponseDto, 'AgentOperationPlanToolResponseDto'],
   ] as const)('documents %s with its typed tool response DTO', (methodName, responseDto, schemaName) => {
     const responses = Reflect.getMetadata(DECORATORS.API_RESPONSE, AgentRunnerToolController.prototype[methodName]) as
       | Record<number, { type?: unknown }>
@@ -335,6 +371,110 @@ describe(AgentRunnerToolController.name, () => {
       expect(status).toBe(201);
       expect(service[method]).toHaveBeenCalledWith({ user: { id: userId } }, sessionId, body);
       expect(ctx.authenticate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe.each([
+    {
+      path: 'propose-album-operations',
+      serviceMethod: 'proposeAlbumOperations' as const,
+      body: planningBody,
+      expectedArguments: [{ user: { id: userId } }, sessionId, planningBody],
+    },
+    {
+      path: `revise-proposed-operations/${planId}`,
+      serviceMethod: 'reviseProposedOperations' as const,
+      body: { ...planningBody, feedback: 'Use a shorter name.' },
+      expectedArguments: [
+        { user: { id: userId } },
+        sessionId,
+        planId,
+        { ...planningBody, feedback: 'Use a shorter name.' },
+      ],
+    },
+    {
+      path: `summarize-plan/${planId}`,
+      serviceMethod: 'summarizePlan' as const,
+      body: { focus: 'risk' },
+      expectedArguments: [{ user: { id: userId } }, sessionId, planId, { focus: 'risk' }],
+    },
+  ])(
+    'POST /agent/internal/tools/sessions/:id/$path planning route',
+    ({ path, serviceMethod, body, expectedArguments }) => {
+      it(`delegates to ${serviceMethod} through bearer auth`, async () => {
+        operationPlanService[serviceMethod].mockResolvedValue({
+          status: 'success',
+          plan: null,
+          toolCall: null,
+          summary: 'Plan revision 1.',
+        } as never);
+
+        const { status } = await request(ctx.getHttpServer())
+          .post(`/agent/internal/tools/sessions/${sessionId}/${path}`)
+          .set('Authorization', authorization)
+          .send(body);
+
+        expect(status).toBe(201);
+        expect(tokenService.verify).toHaveBeenCalledWith(token);
+        expect(operationPlanService[serviceMethod]).toHaveBeenCalledWith(...expectedArguments);
+        expect(ctx.authenticate).not.toHaveBeenCalled();
+      });
+
+      it('rejects missing bearer auth before body validation', async () => {
+        const { status } = await request(ctx.getHttpServer())
+          .post(`/agent/internal/tools/sessions/${sessionId}/${path}`)
+          .send({ summary: 'Broken', operations: [] });
+
+        expect(status).toBe(401);
+        expect(tokenService.verify).not.toHaveBeenCalled();
+        expect(operationPlanService[serviceMethod]).not.toHaveBeenCalled();
+      });
+    },
+  );
+
+  describe('POST /agent/internal/tools/sessions/:id planning route validation', () => {
+    it('rejects an invalid proposal body with bearer auth before calling the service', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/agent/internal/tools/sessions/${sessionId}/propose-album-operations`)
+        .set('Authorization', authorization)
+        .send({ summary: 'Broken', operations: [] });
+
+      expect(status).toBe(400);
+      expect(tokenService.verify).toHaveBeenCalledWith(token);
+      expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid revise planId with bearer auth before calling the service', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/agent/internal/tools/sessions/${sessionId}/revise-proposed-operations/not-a-uuid`)
+        .set('Authorization', authorization)
+        .send({ ...planningBody, feedback: 'Use a shorter name.' });
+
+      expect(status).toBe(400);
+      expect(tokenService.verify).toHaveBeenCalledWith(token);
+      expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid summary body with bearer auth before calling the service', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/agent/internal/tools/sessions/${sessionId}/summarize-plan/${planId}`)
+        .set('Authorization', authorization)
+        .send({ focus: '' });
+
+      expect(status).toBe(400);
+      expect(tokenService.verify).toHaveBeenCalledWith(token);
+      expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid summary planId with bearer auth before calling the service', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/agent/internal/tools/sessions/${sessionId}/summarize-plan/not-a-uuid`)
+        .set('Authorization', authorization)
+        .send({ focus: 'risk' });
+
+      expect(status).toBe(400);
+      expect(tokenService.verify).toHaveBeenCalledWith(token);
+      expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
     });
   });
 });
