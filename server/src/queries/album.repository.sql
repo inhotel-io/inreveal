@@ -364,6 +364,117 @@ where
   )
   and "album"."deletedAt" is null
 
+-- AlbumRepository.getAgentAlbums
+select
+  "album"."id",
+  "album"."albumName",
+  "album"."description",
+  "album"."ownerId",
+  "album"."albumThumbnailAssetId",
+  coalesce("metadata"."assetCount", 0)::int as "assetCount",
+  "metadata"."startDate" as "startDate",
+  "metadata"."endDate" as "endDate"
+from
+  "album"
+  left join (
+    select
+      "album_asset"."albumId" as "albumId",
+      count("album_asset"."assetId")::int as "assetCount",
+      min(
+        ("asset"."localDateTime" AT TIME ZONE 'UTC'::text)::date
+      ) as "startDate",
+      max(
+        ("asset"."localDateTime" AT TIME ZONE 'UTC'::text)::date
+      ) as "endDate"
+    from
+      "album_asset"
+      inner join "asset" on "asset"."id" = "album_asset"."assetId"
+    where
+      "asset"."deletedAt" is null
+      and "asset"."isOffline" = $1
+      and "asset"."visibility" = $2
+    group by
+      "album_asset"."albumId"
+  ) as "metadata" on "metadata"."albumId" = "album"."id"
+where
+  "album"."deletedAt" is null
+  and (
+    "album"."ownerId" = $3
+    or exists (
+      select
+      from
+        "album_user"
+      where
+        "album_user"."albumId" = "album"."id"
+        and "album_user"."userId" = $4
+    )
+    or exists (
+      select
+      from
+        "shared_link"
+      where
+        "shared_link"."albumId" = "album"."id"
+        and "shared_link"."userId" = $5
+    )
+  )
+order by
+  "album"."createdAt" desc
+
+-- AlbumRepository.getAgentAlbumById
+select
+  "album"."id",
+  "album"."albumName",
+  "album"."description",
+  "album"."ownerId",
+  "album"."albumThumbnailAssetId",
+  coalesce("metadata"."assetCount", 0)::int as "assetCount",
+  "metadata"."startDate" as "startDate",
+  "metadata"."endDate" as "endDate"
+from
+  "album"
+  left join (
+    select
+      "album_asset"."albumId" as "albumId",
+      count("album_asset"."assetId")::int as "assetCount",
+      min(
+        ("asset"."localDateTime" AT TIME ZONE 'UTC'::text)::date
+      ) as "startDate",
+      max(
+        ("asset"."localDateTime" AT TIME ZONE 'UTC'::text)::date
+      ) as "endDate"
+    from
+      "album_asset"
+      inner join "asset" on "asset"."id" = "album_asset"."assetId"
+    where
+      "asset"."deletedAt" is null
+      and "asset"."isOffline" = $1
+      and "asset"."visibility" = $2
+    group by
+      "album_asset"."albumId"
+  ) as "metadata" on "metadata"."albumId" = "album"."id"
+where
+  "album"."id" = $3
+  and "album"."deletedAt" is null
+  and (
+    "album"."ownerId" = $4
+    or exists (
+      select
+      from
+        "album_user"
+      where
+        "album_user"."albumId" = "album"."id"
+        and "album_user"."userId" = $5
+    )
+    or exists (
+      select
+      from
+        "shared_link"
+      where
+        "shared_link"."albumId" = "album"."id"
+        and "shared_link"."userId" = $6
+    )
+  )
+
 -- AlbumRepository.getShared
 select
   "album".*,
