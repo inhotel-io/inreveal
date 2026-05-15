@@ -370,7 +370,22 @@ select
   "album"."albumName",
   "album"."description",
   "album"."ownerId",
-  "album"."albumThumbnailAssetId",
+  case
+    when exists (
+      select
+        1
+      from
+        "album_asset" as "thumbnail_album_asset"
+        inner join "asset" as "thumbnail_asset" on "thumbnail_asset"."id" = "thumbnail_album_asset"."assetId"
+      where
+        "thumbnail_album_asset"."albumId" = "album"."id"
+        and "thumbnail_album_asset"."assetId" = "album"."albumThumbnailAssetId"
+        and "thumbnail_asset"."deletedAt" is null
+        and "thumbnail_asset"."isOffline" = false
+        and "thumbnail_asset"."visibility" in ($1, $2)
+    ) then "album"."albumThumbnailAssetId"
+    else null
+  end as "albumThumbnailAssetId",
   coalesce("metadata"."assetCount", 0)::int as "assetCount",
   "metadata"."startDate" as "startDate",
   "metadata"."endDate" as "endDate"
@@ -391,22 +406,22 @@ from
       inner join "asset" on "asset"."id" = "album_asset"."assetId"
     where
       "asset"."deletedAt" is null
-      and "asset"."isOffline" = $1
-      and "asset"."visibility" = $2
+      and "asset"."isOffline" = $3
+      and "asset"."visibility" in ($4, $5)
     group by
       "album_asset"."albumId"
   ) as "metadata" on "metadata"."albumId" = "album"."id"
 where
   "album"."deletedAt" is null
   and (
-    "album"."ownerId" = $3
+    "album"."ownerId" = $6
     or exists (
       select
       from
         "album_user"
       where
         "album_user"."albumId" = "album"."id"
-        and "album_user"."userId" = $4
+        and "album_user"."userId" = $7
     )
     or exists (
       select
@@ -414,7 +429,7 @@ where
         "shared_link"
       where
         "shared_link"."albumId" = "album"."id"
-        and "shared_link"."userId" = $5
+        and "shared_link"."userId" = $8
     )
   )
 order by
@@ -426,7 +441,22 @@ select
   "album"."albumName",
   "album"."description",
   "album"."ownerId",
-  "album"."albumThumbnailAssetId",
+  case
+    when exists (
+      select
+        1
+      from
+        "album_asset" as "thumbnail_album_asset"
+        inner join "asset" as "thumbnail_asset" on "thumbnail_asset"."id" = "thumbnail_album_asset"."assetId"
+      where
+        "thumbnail_album_asset"."albumId" = "album"."id"
+        and "thumbnail_album_asset"."assetId" = "album"."albumThumbnailAssetId"
+        and "thumbnail_asset"."deletedAt" is null
+        and "thumbnail_asset"."isOffline" = false
+        and "thumbnail_asset"."visibility" in ($1, $2)
+    ) then "album"."albumThumbnailAssetId"
+    else null
+  end as "albumThumbnailAssetId",
   coalesce("metadata"."assetCount", 0)::int as "assetCount",
   "metadata"."startDate" as "startDate",
   "metadata"."endDate" as "endDate"
@@ -447,23 +477,23 @@ from
       inner join "asset" on "asset"."id" = "album_asset"."assetId"
     where
       "asset"."deletedAt" is null
-      and "asset"."isOffline" = $1
-      and "asset"."visibility" = $2
+      and "asset"."isOffline" = $3
+      and "asset"."visibility" in ($4, $5)
     group by
       "album_asset"."albumId"
   ) as "metadata" on "metadata"."albumId" = "album"."id"
 where
-  "album"."id" = $3
+  "album"."id" = $6
   and "album"."deletedAt" is null
   and (
-    "album"."ownerId" = $4
+    "album"."ownerId" = $7
     or exists (
       select
       from
         "album_user"
       where
         "album_user"."albumId" = "album"."id"
-        and "album_user"."userId" = $5
+        and "album_user"."userId" = $8
     )
     or exists (
       select
@@ -471,7 +501,7 @@ where
         "shared_link"
       where
         "shared_link"."albumId" = "album"."id"
-        and "shared_link"."userId" = $6
+        and "shared_link"."userId" = $9
     )
   )
 
