@@ -275,6 +275,35 @@ describe('pi runtime adapter', () => {
     assert.deepEqual(calls.createAgentSession[0].customTools, []);
   });
 
+  it('keeps built-in tools disabled and enables only Gallery read custom tools when a gateway is present', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+
+    const result = await runtime.createSession(
+      createSessionBody({
+        toolGateway: {
+          url: 'https://gallery.example.test/tools',
+          token: 'gateway-token-secret',
+        },
+      }),
+    );
+
+    assert.deepEqual(result.capabilities.tools, [
+      'searchAssets',
+      'readAssetMetadata',
+      'readAssetPreviews',
+      'readAssetOriginals',
+      'listAlbums',
+      'readAlbum',
+    ]);
+    assert.equal(calls.createAgentSession[0].noTools, 'builtin');
+    assert.deepEqual(calls.createAgentSession[0].tools, []);
+    assert.deepEqual(
+      calls.createAgentSession[0].customTools.map((tool) => tool.name),
+      result.capabilities.tools,
+    );
+  });
+
   it('uses transient in-memory Pi auth storage and model registry', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
