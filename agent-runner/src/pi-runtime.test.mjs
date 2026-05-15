@@ -739,6 +739,39 @@ describe('pi runtime adapter', () => {
     ]);
   });
 
+  it('returns a sanitized runner-error event when Pi prompt throws synchronously', async () => {
+    const { sdk, ai, session, calls } = createFakeDependencies();
+    let promptAttempts = 0;
+    const originalPrompt = session.prompt.bind(session);
+    session.prompt = (text) => {
+      promptAttempts += 1;
+      if (promptAttempts === 1) {
+        throw new Error('provider sync rejected sk-openai-secret');
+      }
+
+      return originalPrompt(text);
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.deepEqual(events, [
+      {
+        type: 'runner-error',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        message: 'provider sync rejected [redacted]',
+      },
+    ]);
+    assert.equal(calls.unsubscribed, 1);
+
+    const retryEvents = await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.equal(promptAttempts, 2);
+    assert.equal(retryEvents[0].type, 'assistant-message-delta');
+  });
+
   it('throws a sanitized not-found error for unknown runner sessions', async () => {
     const { sdk, ai } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
