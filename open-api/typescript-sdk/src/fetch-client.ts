@@ -487,9 +487,9 @@ export type AgentListAlbumsToolSuccessResponse = {
 export type AgentListAlbumsToolResponseDto = AgentListAlbumsToolApprovalRequiredResponse | AgentListAlbumsToolDeniedResponse | AgentListAlbumsToolSuccessResponse;
 export type AgentProposeAlbumOperationsDto = {
     operations: ({
-        "type": Type;
+        "type": AgentAlbumCreateOperationType;
         summary: string;
-        targetKind: TargetKind;
+        targetKind: AgentOperationNewAlbumTargetKind;
         temporaryTargetId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
@@ -498,7 +498,7 @@ export type AgentProposeAlbumOperationsDto = {
             description?: string;
         };
     } | {
-        "type": Type2;
+        "type": AgentAlbumAddAssetsOperationType;
         summary: string;
         targetKind: AgentOperationTargetKind;
         targetId?: string;
@@ -510,9 +510,9 @@ export type AgentProposeAlbumOperationsDto = {
             [key: string]: any;
         };
     } | {
-        "type": Type3;
+        "type": AgentAlbumUpdateDetailsOperationType;
         summary: string;
-        targetKind: TargetKind2;
+        targetKind: AgentOperationExistingAlbumTargetKind;
         targetId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
@@ -521,7 +521,7 @@ export type AgentProposeAlbumOperationsDto = {
             description?: string;
         };
     } | {
-        "type": Type4;
+        "type": AgentAlbumSetCoverOperationType;
         summary: string;
         targetKind: AgentOperationTargetKind;
         targetId?: string;
@@ -702,9 +702,9 @@ export type AgentReadAssetPreviewsToolResponseDto = AgentReadAssetPreviewsToolAp
 export type AgentReviseAlbumOperationsDto = {
     feedback?: string;
     operations: ({
-        "type": Type5;
+        "type": AgentAlbumCreateOperationType;
         summary: string;
-        targetKind: TargetKind3;
+        targetKind: AgentOperationNewAlbumTargetKind;
         temporaryTargetId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
@@ -713,7 +713,7 @@ export type AgentReviseAlbumOperationsDto = {
             description?: string;
         };
     } | {
-        "type": Type6;
+        "type": AgentAlbumAddAssetsOperationType;
         summary: string;
         targetKind: AgentOperationTargetKind;
         targetId?: string;
@@ -725,9 +725,9 @@ export type AgentReviseAlbumOperationsDto = {
             [key: string]: any;
         };
     } | {
-        "type": Type7;
+        "type": AgentAlbumUpdateDetailsOperationType;
         summary: string;
-        targetKind: TargetKind4;
+        targetKind: AgentOperationExistingAlbumTargetKind;
         targetId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
@@ -736,7 +736,7 @@ export type AgentReviseAlbumOperationsDto = {
             description?: string;
         };
     } | {
-        "type": Type8;
+        "type": AgentAlbumSetCoverOperationType;
         summary: string;
         targetKind: AgentOperationTargetKind;
         targetId?: string;
@@ -1335,7 +1335,7 @@ export type AssetFaceWithoutPersonResponseDto = {
 export type ScopedPrimaryProfile = {
     id: string;
     spaceId?: string;
-    "type": Type9;
+    "type": Type;
 };
 export type PersonWithFacesResponseDto = {
     /** Person date of birth */
@@ -2064,7 +2064,7 @@ export type ScopedPersonProfileRefDto = {
     /** Space ID for Space Person refs */
     spaceId?: string;
     /** Scoped profile type */
-    "type": Type10;
+    "type": Type2;
 };
 export type DetachScopedPersonDto = {
     /** Scoped profile to detach */
@@ -9520,10 +9520,10 @@ export enum Status2 {
 export enum Status3 {
     Success = "success"
 }
-export enum Type {
+export enum AgentAlbumCreateOperationType {
     AlbumCreate = "album.create"
 }
-export enum TargetKind {
+export enum AgentOperationNewAlbumTargetKind {
     NewAlbum = "new_album"
 }
 export enum AgentOperationRiskLevel {
@@ -9531,20 +9531,20 @@ export enum AgentOperationRiskLevel {
     Medium = "medium",
     High = "high"
 }
-export enum Type2 {
+export enum AgentAlbumAddAssetsOperationType {
     AlbumAddAssets = "album.addAssets"
 }
 export enum AgentOperationTargetKind {
     NewAlbum = "new_album",
     ExistingAlbum = "existing_album"
 }
-export enum Type3 {
+export enum AgentAlbumUpdateDetailsOperationType {
     AlbumUpdateDetails = "album.updateDetails"
 }
-export enum TargetKind2 {
+export enum AgentOperationExistingAlbumTargetKind {
     ExistingAlbum = "existing_album"
 }
-export enum Type4 {
+export enum AgentAlbumSetCoverOperationType {
     AlbumSetCover = "album.setCover"
 }
 export enum AgentOperationStatus {
@@ -9606,24 +9606,6 @@ export enum Status14 {
 }
 export enum Status15 {
     Success = "success"
-}
-export enum Type5 {
-    AlbumCreate = "album.create"
-}
-export enum TargetKind3 {
-    NewAlbum = "new_album"
-}
-export enum Type6 {
-    AlbumAddAssets = "album.addAssets"
-}
-export enum Type7 {
-    AlbumUpdateDetails = "album.updateDetails"
-}
-export enum TargetKind4 {
-    ExistingAlbum = "existing_album"
-}
-export enum Type8 {
-    AlbumSetCover = "album.setCover"
 }
 export enum Status16 {
     ApprovalRequired = "approval-required"
@@ -9907,7 +9889,7 @@ export enum SourceType {
     Exif = "exif",
     Manual = "manual"
 }
-export enum Type9 {
+export enum Type {
     UserPerson = "user-person",
     SpacePerson = "space-person"
 }
@@ -9985,7 +9967,7 @@ export enum PartnerDirection {
     SharedBy = "shared-by",
     SharedWith = "shared-with"
 }
-export enum Type10 {
+export enum Type2 {
     Person = "person",
     SpacePerson = "space-person"
 }
