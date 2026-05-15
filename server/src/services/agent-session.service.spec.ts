@@ -616,7 +616,10 @@ describe(AgentSessionService.name, () => {
     repository.create.mockResolvedValue(createdSession);
     const { runnerSession } = mockSuccessfulRunnerHandoff(createdSession);
 
-    const result = await sut.create(auth, makeCreateDto({ providerCredentialId: credential.id, model: 'custom-model' }));
+    const result = await sut.create(
+      auth,
+      makeCreateDto({ providerCredentialId: credential.id, model: 'custom-model' }),
+    );
 
     expect(repository.create).toHaveBeenCalledWith(
       expect.objectContaining({

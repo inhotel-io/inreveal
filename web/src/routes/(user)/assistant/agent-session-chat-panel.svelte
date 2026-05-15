@@ -10,6 +10,7 @@
   } from '@immich/sdk';
   import { Button } from '@immich/ui';
   import { onDestroy, onMount } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -34,7 +35,7 @@
       .join('\n');
 
   const mergeMessages = (firstMessages: AgentMessageResponseDto[], secondMessages: AgentMessageResponseDto[]) => {
-    const seenIds = new Set<string>();
+    const seenIds = new SvelteSet<string>();
     const mergedMessages: AgentMessageResponseDto[] = [];
 
     for (const message of [...firstMessages, ...secondMessages]) {
@@ -152,7 +153,9 @@
       {/each}
 
       {#if streamingText}
-        <article class="mr-auto max-w-[85%] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900">
+        <article
+          class="mr-auto max-w-[85%] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+        >
           <div class="text-xs font-medium text-gray-500 dark:text-gray-400">{$t('assistant_streaming_response')}</div>
           <div class="mt-1 whitespace-pre-wrap">{streamingText}</div>
         </article>
