@@ -1,3 +1,4 @@
+import { AgentRunnerToolGuard } from 'src/controllers/agent-runner-tool.controller';
 import { ActivityService } from 'src/services/activity.service';
 import { AgentMessageService } from 'src/services/agent-message.service';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
@@ -66,6 +67,7 @@ import { WorkflowService } from 'src/services/workflow.service';
 export const services = [
   ApiKeyService,
   ActivityService,
+  AgentRunnerToolGuard,
   AgentMessageService,
   AgentProviderCredentialService,
   AgentRunnerService,

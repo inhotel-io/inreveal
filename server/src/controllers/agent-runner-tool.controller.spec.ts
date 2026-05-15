@@ -1,5 +1,5 @@
 import { UnauthorizedException } from '@nestjs/common';
-import { AgentRunnerToolController } from 'src/controllers/agent-runner-tool.controller';
+import { AgentRunnerToolController, AgentRunnerToolGuard } from 'src/controllers/agent-runner-tool.controller';
 import { AgentToolCallResponseDto } from 'src/dtos/agent-tool.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { AgentToolCallStatus, AgentToolDataClass, AgentToolName } from 'src/enum';
@@ -46,36 +46,43 @@ describe(AgentRunnerToolController.name, () => {
       path: 'search-assets',
       serviceMethod: 'searchAssets' as const,
       body: {},
+      missingBearerBody: { limit: 0 },
     },
     {
       path: 'read-asset-metadata',
       serviceMethod: 'readAssetMetadata' as const,
       body: { assetIds: [assetId] },
+      missingBearerBody: { assetIds: [assetId] },
     },
     {
       path: 'read-asset-previews',
       serviceMethod: 'readAssetPreviews' as const,
       body: { assetIds: [assetId] },
+      missingBearerBody: { assetIds: [assetId] },
     },
     {
       path: 'read-asset-originals',
       serviceMethod: 'readAssetOriginals' as const,
       body: { assetIds: [assetId] },
+      missingBearerBody: { assetIds: [assetId] },
     },
     {
       path: 'list-albums',
       serviceMethod: 'listAlbums' as const,
       body: {},
+      missingBearerBody: {},
     },
     {
       path: 'read-album',
       serviceMethod: 'readAlbum' as const,
       body: { albumId },
+      missingBearerBody: { albumId },
     },
   ];
 
   beforeAll(async () => {
     ctx = await controllerSetup(AgentRunnerToolController, [
+      AgentRunnerToolGuard,
       { provide: AgentRunnerToolTokenService, useValue: tokenService },
       { provide: AgentToolService, useValue: service },
     ]);
@@ -175,6 +182,24 @@ describe(AgentRunnerToolController.name, () => {
       expect(service.searchAssets).not.toHaveBeenCalled();
     });
 
+    it.each([undefined, 'Basic abc'])(
+      'rejects missing or invalid bearer auth %s before validating an invalid request body',
+      async (header) => {
+        const requestBuilder = request(ctx.getHttpServer())
+          .post(`/agent/internal/tools/sessions/${sessionId}/search-assets`)
+          .send({ limit: 0 });
+        if (header !== undefined) {
+          requestBuilder.set('Authorization', header);
+        }
+
+        const { status } = await requestBuilder;
+
+        expect(status).toBe(401);
+        expect(tokenService.verify).not.toHaveBeenCalled();
+        expect(service.searchAssets).not.toHaveBeenCalled();
+      },
+    );
+
     it('returns 401 when token verification fails', async () => {
       tokenService.verify.mockImplementation(() => {
         throw new UnauthorizedException('Invalid agent runner tool token');
@@ -205,34 +230,47 @@ describe(AgentRunnerToolController.name, () => {
     });
   });
 
-  describe.each(runnerRoutes)('POST /agent/internal/tools/sessions/:id/$path auth', ({ path, serviceMethod, body }) => {
-    it('rejects a token for a different session id without calling the service', async () => {
-      tokenService.verify.mockReturnValue({
-        sessionId: factory.uuid(),
-        userId,
-        expiresAt: new Date('2026-05-15T12:00:00.000Z'),
+  describe.each(runnerRoutes)(
+    'POST /agent/internal/tools/sessions/:id/$path auth',
+    ({ path, serviceMethod, body, missingBearerBody }) => {
+      it('rejects a token for a different session id without calling the service', async () => {
+        tokenService.verify.mockReturnValue({
+          sessionId: factory.uuid(),
+          userId,
+          expiresAt: new Date('2026-05-15T12:00:00.000Z'),
+        });
+
+        const { status } = await request(ctx.getHttpServer())
+          .post(`/agent/internal/tools/sessions/${sessionId}/${path}`)
+          .set('Authorization', authorization)
+          .send(body);
+
+        expect(status).toBe(401);
+        expect(service[serviceMethod]).not.toHaveBeenCalled();
       });
 
-      const { status } = await request(ctx.getHttpServer())
-        .post(`/agent/internal/tools/sessions/${sessionId}/${path}`)
-        .set('Authorization', authorization)
-        .send(body);
+      it('rejects invalid bearer auth without calling the service', async () => {
+        const { status } = await request(ctx.getHttpServer())
+          .post(`/agent/internal/tools/sessions/${sessionId}/${path}`)
+          .set('Authorization', 'Basic abc')
+          .send(body);
 
-      expect(status).toBe(401);
-      expect(service[serviceMethod]).not.toHaveBeenCalled();
-    });
+        expect(status).toBe(401);
+        expect(tokenService.verify).not.toHaveBeenCalled();
+        expect(service[serviceMethod]).not.toHaveBeenCalled();
+      });
 
-    it('rejects invalid bearer auth without calling the service', async () => {
-      const { status } = await request(ctx.getHttpServer())
-        .post(`/agent/internal/tools/sessions/${sessionId}/${path}`)
-        .set('Authorization', 'Basic abc')
-        .send(body);
+      it('rejects missing bearer auth before service delegation', async () => {
+        const { status } = await request(ctx.getHttpServer())
+          .post(`/agent/internal/tools/sessions/${sessionId}/${path}`)
+          .send(missingBearerBody);
 
-      expect(status).toBe(401);
-      expect(tokenService.verify).not.toHaveBeenCalled();
-      expect(service[serviceMethod]).not.toHaveBeenCalled();
-    });
-  });
+        expect(status).toBe(401);
+        expect(tokenService.verify).not.toHaveBeenCalled();
+        expect(service[serviceMethod]).not.toHaveBeenCalled();
+      });
+    },
+  );
 
   describe.each([
     {
