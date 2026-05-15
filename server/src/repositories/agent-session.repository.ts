@@ -26,6 +26,12 @@ export class AgentSessionRepository {
     AgentSessionStatus.WaitingForPlanReview,
     AgentSessionStatus.Interrupted,
   ];
+  private static readonly interruptibleStatuses = [
+    AgentSessionStatus.Running,
+    AgentSessionStatus.WaitingForToolApproval,
+    AgentSessionStatus.WaitingForPlanReview,
+    AgentSessionStatus.Interrupted,
+  ];
 
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
@@ -102,6 +108,20 @@ export class AgentSessionRepository {
       .where('userId', '=', userId)
       .where('id', '=', asUuid(id))
       .where('status', '=', AgentSessionStatus.Created)
+      .returning(columns.agentSession)
+      .executeTakeFirst();
+  }
+
+  @GenerateSql({
+    params: [DummyValue.UUID, DummyValue.UUID],
+  })
+  markInterruptedFromActive(userId: string, id: string) {
+    return this.db
+      .updateTable('agent_session')
+      .set({ status: AgentSessionStatus.Interrupted })
+      .where('userId', '=', userId)
+      .where('id', '=', asUuid(id))
+      .where('status', 'in', AgentSessionRepository.interruptibleStatuses)
       .returning(columns.agentSession)
       .executeTakeFirst();
   }
