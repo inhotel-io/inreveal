@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { galleryToolNames } from './gallery-tools.mjs';
 import { createPiRuntime, mapProviderType, redactSecret } from './pi-runtime.mjs';
 
 const permissionPlan = {
@@ -279,7 +280,7 @@ describe('pi runtime adapter', () => {
     assert.deepEqual(calls.createAgentSession[0].customTools, []);
   });
 
-  it('keeps built-in tools disabled and enables only Gallery read custom tools when a gateway is present', async () => {
+  it('keeps built-in tools disabled and enables all Gallery custom tools when a gateway is present', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
 
@@ -292,14 +293,7 @@ describe('pi runtime adapter', () => {
       }),
     );
 
-    assert.deepEqual(result.capabilities.tools, [
-      'searchAssets',
-      'readAssetMetadata',
-      'readAssetPreviews',
-      'readAssetOriginals',
-      'listAlbums',
-      'readAlbum',
-    ]);
+    assert.deepEqual(result.capabilities.tools, galleryToolNames);
     assert.equal(calls.createAgentSession[0].noTools, 'builtin');
     assert.equal(calls.createAgentSession[0].tools, undefined);
     assert.deepEqual(
@@ -341,7 +335,8 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].noExtensions, true);
     assert.ok(Array.isArray(calls.loaders[0].extensionFactories));
     assert.equal(calls.loaders[0].systemPrompt.startsWith('You are Gallery Assistant'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('may have Gallery read tools available'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('may have Gallery read and planning tools available'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('no direct write tools'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('has no Gallery read tools'), false);
     assert.deepEqual(calls.loaders[0].appendSystemPrompt, []);
     assert.equal(calls.loaders[0].systemPromptOverride, undefined);
