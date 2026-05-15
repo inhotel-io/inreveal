@@ -380,12 +380,6 @@ export class AlbumRepository {
               .whereRef('album_user.albumId', '=', 'album.id')
               .where('album_user.userId', '=', userId),
           ),
-          eb.exists(
-            eb
-              .selectFrom('shared_link')
-              .whereRef('shared_link.albumId', '=', 'album.id')
-              .where('shared_link.userId', '=', userId),
-          ),
         ]),
       )
       .orderBy('album.createdAt', 'desc')
@@ -430,12 +424,6 @@ export class AlbumRepository {
               .selectFrom('album_user')
               .whereRef('album_user.albumId', '=', 'album.id')
               .where('album_user.userId', '=', userId),
-          ),
-          eb.exists(
-            eb
-              .selectFrom('shared_link')
-              .whereRef('shared_link.albumId', '=', 'album.id')
-              .where('shared_link.userId', '=', userId),
           ),
         ]),
       )
