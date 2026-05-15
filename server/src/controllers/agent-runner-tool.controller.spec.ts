@@ -1,6 +1,15 @@
 import { UnauthorizedException } from '@nestjs/common';
+import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import { AgentRunnerToolController, AgentRunnerToolGuard } from 'src/controllers/agent-runner-tool.controller';
-import { AgentToolCallResponseDto } from 'src/dtos/agent-tool.dto';
+import {
+  AgentListAlbumsToolResponseDto,
+  AgentReadAlbumToolResponseDto,
+  AgentReadAssetMetadataToolResponseDto,
+  AgentReadAssetOriginalsToolResponseDto,
+  AgentReadAssetPreviewsToolResponseDto,
+  AgentSearchAssetsToolResponseDto,
+  AgentToolCallResponseDto,
+} from 'src/dtos/agent-tool.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { AgentToolCallStatus, AgentToolDataClass, AgentToolName } from 'src/enum';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
@@ -121,6 +130,23 @@ describe(AgentRunnerToolController.name, () => {
         'runnerReadAlbum',
       ]),
     );
+  });
+
+  it.each([
+    ['runnerSearchAssets', AgentSearchAssetsToolResponseDto, 'AgentSearchAssetsToolResponseDto'],
+    ['runnerReadAssetMetadata', AgentReadAssetMetadataToolResponseDto, 'AgentReadAssetMetadataToolResponseDto'],
+    ['runnerReadAssetPreviews', AgentReadAssetPreviewsToolResponseDto, 'AgentReadAssetPreviewsToolResponseDto'],
+    ['runnerReadAssetOriginals', AgentReadAssetOriginalsToolResponseDto, 'AgentReadAssetOriginalsToolResponseDto'],
+    ['runnerListAlbums', AgentListAlbumsToolResponseDto, 'AgentListAlbumsToolResponseDto'],
+    ['runnerReadAlbum', AgentReadAlbumToolResponseDto, 'AgentReadAlbumToolResponseDto'],
+  ] as const)('documents %s with its typed tool response DTO', (methodName, responseDto, schemaName) => {
+    const responses = Reflect.getMetadata(
+      DECORATORS.API_RESPONSE,
+      AgentRunnerToolController.prototype[methodName],
+    ) as Record<number, { type?: unknown }> | undefined;
+
+    expect(responses?.[201]?.type).toBe(responseDto);
+    expect(responseDto.name).toBe(schemaName);
   });
 
   describe('POST /agent/internal/tools/sessions/:id/search-assets', () => {

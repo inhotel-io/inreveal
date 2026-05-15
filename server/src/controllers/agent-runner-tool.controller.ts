@@ -9,7 +9,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import {
   AgentListAlbumsToolRequestDto,
@@ -72,6 +72,7 @@ export class AgentRunnerToolController {
   constructor(private readonly service: AgentToolService) {}
 
   @Post('search-assets')
+  @ApiCreatedResponse({ type: AgentSearchAssetsToolResponseDto })
   @Endpoint({
     summary: 'Execute the runner searchAssets agent tool',
     description: 'Internal runner gateway for executing an asset search tool call for an AI agent session.',
@@ -86,6 +87,7 @@ export class AgentRunnerToolController {
   }
 
   @Post('read-asset-metadata')
+  @ApiCreatedResponse({ type: AgentReadAssetMetadataToolResponseDto })
   @Endpoint({
     summary: 'Execute the runner readAssetMetadata agent tool',
     description: 'Internal runner gateway for executing a metadata read tool call for an AI agent session.',
@@ -100,6 +102,7 @@ export class AgentRunnerToolController {
   }
 
   @Post('read-asset-previews')
+  @ApiCreatedResponse({ type: AgentReadAssetPreviewsToolResponseDto })
   @Endpoint({
     summary: 'Execute the runner readAssetPreviews agent tool',
     description: 'Internal runner gateway for executing a preview read tool call for an AI agent session.',
@@ -114,6 +117,7 @@ export class AgentRunnerToolController {
   }
 
   @Post('read-asset-originals')
+  @ApiCreatedResponse({ type: AgentReadAssetOriginalsToolResponseDto })
   @Endpoint({
     summary: 'Execute the runner readAssetOriginals agent tool',
     description: 'Internal runner gateway for executing an original read tool call for an AI agent session.',
@@ -128,6 +132,7 @@ export class AgentRunnerToolController {
   }
 
   @Post('list-albums')
+  @ApiCreatedResponse({ type: AgentListAlbumsToolResponseDto })
   @Endpoint({
     summary: 'Execute the runner listAlbums agent tool',
     description: 'Internal runner gateway for executing an album list tool call for an AI agent session.',
@@ -142,6 +147,7 @@ export class AgentRunnerToolController {
   }
 
   @Post('read-album')
+  @ApiCreatedResponse({ type: AgentReadAlbumToolResponseDto })
   @Endpoint({
     summary: 'Execute the runner readAlbum agent tool',
     description: 'Internal runner gateway for executing an album read tool call for an AI agent session.',
