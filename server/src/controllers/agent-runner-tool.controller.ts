@@ -37,7 +37,7 @@ export class AgentRunnerToolController {
     description: 'Internal runner gateway for executing an asset search tool call for an AI agent session.',
     history: history(),
   })
-  searchAssets(
+  runnerSearchAssets(
     @Param() { id }: UUIDParamDto,
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: AgentSearchAssetsToolRequestDto,
@@ -51,7 +51,7 @@ export class AgentRunnerToolController {
     description: 'Internal runner gateway for executing a metadata read tool call for an AI agent session.',
     history: history(),
   })
-  readAssetMetadata(
+  runnerReadAssetMetadata(
     @Param() { id }: UUIDParamDto,
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: AgentReadAssetMetadataToolRequestDto,
@@ -65,7 +65,7 @@ export class AgentRunnerToolController {
     description: 'Internal runner gateway for executing a preview read tool call for an AI agent session.',
     history: history(),
   })
-  readAssetPreviews(
+  runnerReadAssetPreviews(
     @Param() { id }: UUIDParamDto,
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: AgentReadAssetPreviewsToolRequestDto,
@@ -79,7 +79,7 @@ export class AgentRunnerToolController {
     description: 'Internal runner gateway for executing an original read tool call for an AI agent session.',
     history: history(),
   })
-  readAssetOriginals(
+  runnerReadAssetOriginals(
     @Param() { id }: UUIDParamDto,
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: AgentReadAssetOriginalsToolRequestDto,
@@ -93,7 +93,7 @@ export class AgentRunnerToolController {
     description: 'Internal runner gateway for executing an album list tool call for an AI agent session.',
     history: history(),
   })
-  listAlbums(
+  runnerListAlbums(
     @Param() { id }: UUIDParamDto,
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: AgentListAlbumsToolRequestDto,
@@ -107,7 +107,7 @@ export class AgentRunnerToolController {
     description: 'Internal runner gateway for executing an album read tool call for an AI agent session.',
     history: history(),
   })
-  readAlbum(
+  runnerReadAlbum(
     @Param() { id }: UUIDParamDto,
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: AgentReadAlbumToolRequestDto,
