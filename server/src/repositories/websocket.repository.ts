@@ -7,6 +7,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { AgentMessageResponseDto } from 'src/dtos/agent-message.dto';
 import { AssetResponseDto } from 'src/dtos/asset-response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { NotificationDto } from 'src/dtos/notification.dto';
@@ -18,6 +19,27 @@ import { handlePromiseError } from 'src/utils/misc';
 
 export const serverEvents = ['ConfigUpdate', 'AppRestart'] as const;
 export type ServerEvents = (typeof serverEvents)[number];
+
+export type AgentSessionClientEvent =
+  | {
+      type: 'assistant-message-delta';
+      sessionId: string;
+      delta: string;
+      sequence: number;
+      createdAt: string;
+    }
+  | {
+      type: 'assistant-message-created';
+      sessionId: string;
+      message: AgentMessageResponseDto;
+      createdAt: string;
+    }
+  | {
+      type: 'runner-error';
+      sessionId: string;
+      message: string;
+      createdAt: string;
+    };
 
 export interface ClientEventMap {
   on_upload_success: [AssetResponseDto];
@@ -34,6 +56,7 @@ export interface ClientEventMap {
   on_new_release: [ReleaseNotification];
   on_notification: [NotificationDto];
   on_session_delete: [string];
+  on_agent_session_event: [AgentSessionClientEvent];
 
   AssetUploadReadyV1: [{ asset: SyncAssetV1; exif: SyncAssetExifV1 }];
   AppRestartV1: [AppRestartEvent];

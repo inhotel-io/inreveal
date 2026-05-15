@@ -8,6 +8,7 @@ import type { ReleaseEvent } from '$lib/types';
 import { createEventEmitter } from '$lib/utils/eventemitter';
 import {
   MaintenanceAction,
+  type AgentMessageResponseDto,
   type AssetResponseDto,
   type MaintenanceStatusResponseDto,
   type NotificationDto,
@@ -21,6 +22,27 @@ import { get, writable } from 'svelte/store';
 interface AppRestartEvent {
   isMaintenanceMode: boolean;
 }
+
+export type AgentSessionClientEvent =
+  | {
+      type: 'assistant-message-delta';
+      sessionId: string;
+      delta: string;
+      sequence: number;
+      createdAt: string;
+    }
+  | {
+      type: 'assistant-message-created';
+      sessionId: string;
+      message: AgentMessageResponseDto;
+      createdAt: string;
+    }
+  | {
+      type: 'runner-error';
+      sessionId: string;
+      message: string;
+      createdAt: string;
+    };
 
 export interface Events {
   on_upload_success: (asset: AssetResponseDto) => void;
@@ -37,6 +59,7 @@ export interface Events {
   on_new_release: (event: ReleaseEvent) => void;
   on_session_delete: (sessionId: string) => void;
   on_notification: (notification: NotificationDto) => void;
+  on_agent_session_event: (event: AgentSessionClientEvent) => void;
 
   AppRestartV1: (event: AppRestartEvent) => void;
 
