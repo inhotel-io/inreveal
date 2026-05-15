@@ -24,10 +24,10 @@ const readJson = async (request) => {
 
 const readJsonOrSendError = async (request, response) => {
   try {
-    return await readJson(request);
+    return { ok: true, body: await readJson(request) };
   } catch {
     sendJson(response, 400, { error: 'invalid JSON body' });
-    return null;
+    return { ok: false };
   }
 };
 
@@ -54,11 +54,12 @@ export const startServer = ({
     }
 
     if (request.method === 'POST' && url.pathname === '/sessions') {
-      const body = await readJsonOrSendError(request, response);
-      if (!body) {
+      const result = await readJsonOrSendError(request, response);
+      if (!result.ok) {
         return;
       }
-      if (typeof body.gallerySessionId !== 'string') {
+      const { body } = result;
+      if (typeof body?.gallerySessionId !== 'string') {
         sendJson(response, 400, { error: 'gallerySessionId is required' });
         return;
       }
@@ -72,10 +73,11 @@ export const startServer = ({
 
     const messageMatch = url.pathname.match(/^\/sessions\/([^/]+)\/messages$/);
     if (request.method === 'POST' && messageMatch) {
-      const body = await readJsonOrSendError(request, response);
-      if (!body) {
+      const result = await readJsonOrSendError(request, response);
+      if (!result.ok) {
         return;
       }
+      const { body } = result;
       const runnerSessionId = decodeURIComponent(messageMatch[1]);
       const text = firstTextBlock(body.content);
       const echo = `Echo: ${text}`;
