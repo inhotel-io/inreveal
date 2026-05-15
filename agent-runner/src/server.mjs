@@ -5,8 +5,9 @@ import { createPiRuntime } from './pi-runtime.mjs';
 const capabilities = {
   protocolVersion: '2026-05-14',
   streaming: true,
-  tools: ['echo'],
+  tools: [],
   models: [],
+  runtime: 'pi',
 };
 
 const sendJson = (response, status, body) => {
