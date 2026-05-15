@@ -27,7 +27,9 @@ const carefulPermissionPlan: AgentPermissionPlanSnapshot = {
     maxAssetsPerToolCall: 200,
     maxAssetsPerSession: 2000,
     maxPreviewsPerToolCall: 0,
+    maxPreviewsPerSession: 0,
     maxOriginalsPerToolCall: 0,
+    maxOriginalsPerSession: 0,
     expiresInMinutes: 120,
   },
 };
@@ -46,7 +48,9 @@ const visualOrganizerPermissionPlan: AgentPermissionPlanSnapshot = {
     maxAssetsPerToolCall: 500,
     maxAssetsPerSession: 5000,
     maxPreviewsPerToolCall: 100,
+    maxPreviewsPerSession: 500,
     maxOriginalsPerToolCall: 0,
+    maxOriginalsPerSession: 0,
     expiresInMinutes: 120,
   },
 };
@@ -65,7 +69,9 @@ const localPowerUserPermissionPlan: AgentPermissionPlanSnapshot = {
     maxAssetsPerToolCall: 500,
     maxAssetsPerSession: 5000,
     maxPreviewsPerToolCall: 100,
+    maxPreviewsPerSession: 500,
     maxOriginalsPerToolCall: 25,
+    maxOriginalsPerSession: 50,
     expiresInMinutes: 120,
   },
 };
