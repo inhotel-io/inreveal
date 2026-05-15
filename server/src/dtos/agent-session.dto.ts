@@ -58,7 +58,9 @@ const AgentPermissionPlanSchema = z
       maxAssetsPerToolCall: z.number().int().min(1).max(10_000),
       maxAssetsPerSession: z.number().int().min(1).max(100_000),
       maxPreviewsPerToolCall: z.number().int().min(0).max(10_000),
+      maxPreviewsPerSession: z.number().int().min(0).max(100_000),
       maxOriginalsPerToolCall: z.number().int().min(0).max(1000),
+      maxOriginalsPerSession: z.number().int().min(0).max(10_000),
       expiresInMinutes: z.number().int().min(1).max(10_080).nullable(),
     }),
   })
@@ -95,11 +97,27 @@ const AgentPermissionPlanSchema = z
       });
     }
 
+    if (value.limits.maxPreviewsPerSession > 0 && !value.read.previews) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['limits', 'maxPreviewsPerSession'],
+        message: 'preview session limits require preview reads',
+      });
+    }
+
     if (value.limits.maxOriginalsPerToolCall > 0 && !value.read.originals) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['limits', 'maxOriginalsPerToolCall'],
         message: 'original limits require original reads',
+      });
+    }
+
+    if (value.limits.maxOriginalsPerSession > 0 && !value.read.originals) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['limits', 'maxOriginalsPerSession'],
+        message: 'original session limits require original reads',
       });
     }
 
@@ -124,6 +142,38 @@ const AgentPermissionPlanSchema = z
         code: z.ZodIssueCode.custom,
         path: ['limits', 'maxOriginalsPerToolCall'],
         message: 'original limit cannot exceed the per-tool-call asset limit',
+      });
+    }
+
+    if (value.limits.maxPreviewsPerSession < value.limits.maxPreviewsPerToolCall) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['limits', 'maxPreviewsPerSession'],
+        message: 'preview session limit must be at least the preview per-tool-call limit',
+      });
+    }
+
+    if (value.limits.maxOriginalsPerSession < value.limits.maxOriginalsPerToolCall) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['limits', 'maxOriginalsPerSession'],
+        message: 'original session limit must be at least the original per-tool-call limit',
+      });
+    }
+
+    if (value.limits.maxPreviewsPerSession > value.limits.maxAssetsPerSession) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['limits', 'maxPreviewsPerSession'],
+        message: 'preview session limit cannot exceed the asset session limit',
+      });
+    }
+
+    if (value.limits.maxOriginalsPerSession > value.limits.maxAssetsPerSession) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['limits', 'maxOriginalsPerSession'],
+        message: 'original session limit cannot exceed the asset session limit',
       });
     }
   })

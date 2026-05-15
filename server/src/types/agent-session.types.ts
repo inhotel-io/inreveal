@@ -43,7 +43,9 @@ export type AgentPermissionPlanSnapshot = {
     maxAssetsPerToolCall: number;
     maxAssetsPerSession: number;
     maxPreviewsPerToolCall: number;
+    maxPreviewsPerSession: number;
     maxOriginalsPerToolCall: number;
+    maxOriginalsPerSession: number;
     expiresInMinutes: number | null;
   };
 };
