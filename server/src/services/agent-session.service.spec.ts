@@ -152,7 +152,7 @@ describe(AgentSessionService.name, () => {
     });
 
     agentRunnerService.createSession.mockResolvedValue(runnerSession);
-    repository.update.mockResolvedValue(runningSession);
+    repository.markRunningFromCreated.mockResolvedValue(runningSession);
 
     return { runnerSession, runningSession };
   };
@@ -226,7 +226,7 @@ describe(AgentSessionService.name, () => {
       approvalMode: AgentApprovalMode.PlanOnly,
       initialContext: createdSession.initialContextSnapshot,
     });
-    expect(repository.update).toHaveBeenCalledWith(auth.user.id, createdSession.id, {
+    expect(repository.markRunningFromCreated).toHaveBeenCalledWith(auth.user.id, createdSession.id, {
       status: AgentSessionStatus.Running,
       runnerEndpoint: runnerSession.runnerEndpoint,
       runnerSessionId: runnerSession.runnerSessionId,
@@ -343,7 +343,7 @@ describe(AgentSessionService.name, () => {
         initialContextSnapshot: {},
       }),
     );
-    expect(repository.update).toHaveBeenCalledWith(
+    expect(repository.markRunningFromCreated).toHaveBeenCalledWith(
       auth.user.id,
       createdSession.id,
       expect.objectContaining({
@@ -387,7 +387,7 @@ describe(AgentSessionService.name, () => {
 
     credentialService.getById.mockResolvedValue(credentialResponse);
     repository.create.mockResolvedValue(createdSession);
-    repository.update.mockResolvedValue(runningSession);
+    repository.markRunningFromCreated.mockResolvedValue(runningSession);
     agentRunnerService.createSession.mockResolvedValue({
       runnerEndpoint: 'http://agent-runner:4477',
       runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
@@ -417,7 +417,7 @@ describe(AgentSessionService.name, () => {
       approvalMode: AgentApprovalMode.Strict,
       initialContext: {},
     });
-    expect(repository.update).toHaveBeenCalledWith(auth.user.id, createdSession.id, {
+    expect(repository.markRunningFromCreated).toHaveBeenCalledWith(auth.user.id, createdSession.id, {
       status: AgentSessionStatus.Running,
       runnerEndpoint: 'http://agent-runner:4477',
       runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
@@ -442,7 +442,7 @@ describe(AgentSessionService.name, () => {
 
     credentialService.getById.mockResolvedValue(credentialResponse);
     repository.create.mockResolvedValue(createdSession);
-    repository.update.mockResolvedValue(
+    repository.markFailedFromCreated.mockResolvedValue(
       makeSession({ ...createdSession, status: AgentSessionStatus.Failed, endedAt: now }),
     );
     agentRunnerService.createSession.mockRejectedValue(new BadRequestException('Agent runner is not configured'));
@@ -455,13 +455,51 @@ describe(AgentSessionService.name, () => {
         approvalMode: AgentApprovalMode.Strict,
       }),
     ).rejects.toThrow('Agent runner is not configured');
-    expect(repository.update).toHaveBeenCalledWith(auth.user.id, createdSession.id, {
-      status: AgentSessionStatus.Failed,
-      endedAt: expect.any(Date),
-    });
+    expect(repository.markFailedFromCreated).toHaveBeenCalledWith(auth.user.id, createdSession.id, expect.any(Date));
   });
 
-  it('propagates a running update failure without marking the session failed', async () => {
+  it('returns the current session when a concurrent cancel wins before the running transition', async () => {
+    const auth = AuthFactory.create();
+    const credential = makeCredential();
+    const createdSession = makeSession({
+      userId: auth.user.id,
+      providerCredentialId: credential.id,
+      status: AgentSessionStatus.Created,
+      runnerEndpoint: null,
+      runnerSessionId: null,
+      runnerCapabilitiesSnapshot: null,
+    });
+    const cancelledSession = makeSession({
+      ...createdSession,
+      status: AgentSessionStatus.Cancelled,
+      endedAt: now,
+    });
+    const runnerSession = {
+      runnerEndpoint: 'http://agent-runner:4477',
+      runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
+      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+    };
+
+    credentialService.getById.mockResolvedValue(credential);
+    repository.create.mockResolvedValue(createdSession);
+    agentRunnerService.createSession.mockResolvedValue(runnerSession);
+    repository.markRunningFromCreated.mockResolvedValue(undefined);
+    repository.getById.mockResolvedValue(cancelledSession);
+
+    await expect(sut.create(auth, makeCreateDto({ providerCredentialId: credential.id }))).resolves.toMatchObject({
+      id: createdSession.id,
+      status: AgentSessionStatus.Cancelled,
+    });
+    expect(repository.markRunningFromCreated).toHaveBeenCalledWith(auth.user.id, createdSession.id, {
+      status: AgentSessionStatus.Running,
+      runnerEndpoint: runnerSession.runnerEndpoint,
+      runnerSessionId: runnerSession.runnerSessionId,
+      runnerCapabilitiesSnapshot: runnerSession.runnerCapabilitiesSnapshot,
+    });
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('propagates a running transition failure without marking the session failed', async () => {
     const auth = AuthFactory.create();
     const credential = makeCredential();
     const createdSession = makeSession({
@@ -482,7 +520,7 @@ describe(AgentSessionService.name, () => {
     credentialService.getById.mockResolvedValue(credential);
     repository.create.mockResolvedValue(createdSession);
     agentRunnerService.createSession.mockResolvedValue(runnerSession);
-    repository.update.mockRejectedValueOnce(updateError).mockResolvedValueOnce(
+    repository.markRunningFromCreated.mockRejectedValueOnce(updateError).mockResolvedValueOnce(
       makeSession({
         ...createdSession,
         status: AgentSessionStatus.Failed,
@@ -491,18 +529,53 @@ describe(AgentSessionService.name, () => {
     );
 
     await expect(sut.create(auth, makeCreateDto({ providerCredentialId: credential.id }))).rejects.toBe(updateError);
-    expect(repository.update).toHaveBeenCalledTimes(1);
-    expect(repository.update).toHaveBeenCalledWith(auth.user.id, createdSession.id, {
+    expect(repository.markRunningFromCreated).toHaveBeenCalledTimes(1);
+    expect(repository.markRunningFromCreated).toHaveBeenCalledWith(auth.user.id, createdSession.id, {
       status: AgentSessionStatus.Running,
       runnerEndpoint: runnerSession.runnerEndpoint,
       runnerSessionId: runnerSession.runnerSessionId,
       runnerCapabilitiesSnapshot: runnerSession.runnerCapabilitiesSnapshot,
     });
-    expect(repository.update).not.toHaveBeenCalledWith(
-      auth.user.id,
-      createdSession.id,
-      expect.objectContaining({ status: AgentSessionStatus.Failed }),
-    );
+    expect(repository.markFailedFromCreated).not.toHaveBeenCalled();
+  });
+
+  it('does not mark failed when a concurrent cancel wins before runner failure handling', async () => {
+    const auth = AuthFactory.create();
+    const credential = makeCredential();
+    const createdSession = makeSession({
+      userId: auth.user.id,
+      providerCredentialId: credential.id,
+      status: AgentSessionStatus.Created,
+    });
+    const runnerError = new BadRequestException('Agent runner is not configured');
+
+    credentialService.getById.mockResolvedValue(credential);
+    repository.create.mockResolvedValue(createdSession);
+    agentRunnerService.createSession.mockRejectedValue(runnerError);
+    repository.markFailedFromCreated.mockResolvedValue(undefined);
+
+    await expect(sut.create(auth, makeCreateDto({ providerCredentialId: credential.id }))).rejects.toBe(runnerError);
+    expect(repository.markFailedFromCreated).toHaveBeenCalledWith(auth.user.id, createdSession.id, expect.any(Date));
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('preserves the runner error when marking failed throws', async () => {
+    const auth = AuthFactory.create();
+    const credential = makeCredential();
+    const createdSession = makeSession({
+      userId: auth.user.id,
+      providerCredentialId: credential.id,
+      status: AgentSessionStatus.Created,
+    });
+    const runnerError = new BadRequestException('Agent runner is not configured');
+
+    credentialService.getById.mockResolvedValue(credential);
+    repository.create.mockResolvedValue(createdSession);
+    agentRunnerService.createSession.mockRejectedValue(runnerError);
+    repository.markFailedFromCreated.mockRejectedValue(new Error('failed to mark session failed'));
+
+    await expect(sut.create(auth, makeCreateDto({ providerCredentialId: credential.id }))).rejects.toBe(runnerError);
+    expect(repository.markFailedFromCreated).toHaveBeenCalledWith(auth.user.id, createdSession.id, expect.any(Date));
   });
 
   it('does not create when credential lookup fails', async () => {
