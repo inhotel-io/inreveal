@@ -25,6 +25,7 @@ const makeCreateSessionBody = (): AgentRunnerCreateSessionRequest => ({
     baseUrl: null,
     models: ['gpt-5.1'],
     defaultModel: 'gpt-5.1',
+    secret: 'sk-session-secret',
   },
   model: 'gpt-5.1',
   permissionPreset: AgentPermissionPreset.Careful,

@@ -85,6 +85,8 @@ export class AgentSessionService {
       throw new BadRequestException('Model is not listed for the selected credential');
     }
 
+    const credentialSecret = await this.credentialService.getSecret(auth, dto.providerCredentialId);
+
     const credentialSnapshot: AgentCredentialSnapshot = {
       id: credential.id,
       providerType: credential.providerType,
@@ -116,7 +118,7 @@ export class AgentSessionService {
     try {
       runnerSession = await this.agentRunnerService.createSession({
         gallerySessionId: session.id,
-        credential: session.credentialSnapshot,
+        credential: { ...session.credentialSnapshot, secret: credentialSecret },
         model: session.modelSnapshot.model,
         permissionPreset: session.permissionPreset,
         permissionPlan: session.permissionPlanSnapshot,
