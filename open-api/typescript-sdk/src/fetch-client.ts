@@ -506,9 +506,7 @@ export type AgentProposeAlbumOperationsDto = {
         assetIds: string[];
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
-        payload?: {
-            [key: string]: any;
-        };
+        payload?: {};
     } | {
         "type": AgentAlbumUpdateDetailsOperationType;
         summary: string;
@@ -529,9 +527,7 @@ export type AgentProposeAlbumOperationsDto = {
         assetIds: string[];
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
-        payload?: {
-            [key: string]: any;
-        };
+        payload?: {};
     })[];
     summary: string;
 };
@@ -721,9 +717,7 @@ export type AgentReviseAlbumOperationsDto = {
         assetIds: string[];
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
-        payload?: {
-            [key: string]: any;
-        };
+        payload?: {};
     } | {
         "type": AgentAlbumUpdateDetailsOperationType;
         summary: string;
@@ -744,9 +738,7 @@ export type AgentReviseAlbumOperationsDto = {
         assetIds: string[];
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
-        payload?: {
-            [key: string]: any;
-        };
+        payload?: {};
     })[];
     summary: string;
 };
