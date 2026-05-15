@@ -15,17 +15,17 @@ class AgentReadAlbumToolResponseDto {
   AgentReadAlbumToolResponseDto({
     required this.status,
     required this.toolCall,
-    required this.reason,
-    required this.album,
+    this.reason,
+    this.album,
   });
 
   AgentReadAlbumToolResponseDtoStatusEnum status;
 
   AgentToolCallResponseDto toolCall;
 
-  String reason;
+  String? reason;
 
-  AgentAlbumDetail album;
+  AgentAlbumDetail? album;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadAlbumToolResponseDto &&
@@ -39,8 +39,8 @@ class AgentReadAlbumToolResponseDto {
     // ignore: unnecessary_parenthesis
     (status.hashCode) +
     (toolCall.hashCode) +
-    (reason.hashCode) +
-    (album.hashCode);
+    (reason == null ? 0 : reason!.hashCode) +
+    (album == null ? 0 : album!.hashCode);
 
   @override
   String toString() => 'AgentReadAlbumToolResponseDto[status=$status, toolCall=$toolCall, reason=$reason, album=$album]';
@@ -49,8 +49,12 @@ class AgentReadAlbumToolResponseDto {
     final json = <String, dynamic>{};
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
+    if (this.reason != null) {
       json[r'reason'] = this.reason;
+    }
+    if (this.album != null) {
       json[r'album'] = this.album;
+    }
     return json;
   }
 
@@ -65,8 +69,8 @@ class AgentReadAlbumToolResponseDto {
       return AgentReadAlbumToolResponseDto(
         status: AgentReadAlbumToolResponseDtoStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
-        reason: mapValueOfType<String>(json, r'reason')!,
-        album: AgentAlbumDetail.fromJson(json[r'album'])!,
+        reason: mapValueOfType<String>(json, r'reason'),
+        album: AgentAlbumDetail.fromJson(json[r'album']),
       );
     }
     return null;
@@ -116,8 +120,6 @@ class AgentReadAlbumToolResponseDto {
   static const requiredKeys = <String>{
     'status',
     'toolCall',
-    'reason',
-    'album',
   };
 }
 
@@ -134,10 +136,14 @@ class AgentReadAlbumToolResponseDtoStatusEnum {
 
   String toJson() => value;
 
+  static const approvalRequired = AgentReadAlbumToolResponseDtoStatusEnum._(r'approval-required');
+  static const denied = AgentReadAlbumToolResponseDtoStatusEnum._(r'denied');
   static const success = AgentReadAlbumToolResponseDtoStatusEnum._(r'success');
 
   /// List of all possible values in this [enum][AgentReadAlbumToolResponseDtoStatusEnum].
   static const values = <AgentReadAlbumToolResponseDtoStatusEnum>[
+    approvalRequired,
+    denied,
     success,
   ];
 
@@ -177,6 +183,8 @@ class AgentReadAlbumToolResponseDtoStatusEnumTypeTransformer {
   AgentReadAlbumToolResponseDtoStatusEnum? decode(dynamic data, {bool allowNull = true}) {
     if (data != null) {
       switch (data) {
+        case r'approval-required': return AgentReadAlbumToolResponseDtoStatusEnum.approvalRequired;
+        case r'denied': return AgentReadAlbumToolResponseDtoStatusEnum.denied;
         case r'success': return AgentReadAlbumToolResponseDtoStatusEnum.success;
         default:
           if (!allowNull) {
@@ -190,5 +198,4 @@ class AgentReadAlbumToolResponseDtoStatusEnumTypeTransformer {
   /// Singleton [AgentReadAlbumToolResponseDtoStatusEnumTypeTransformer] instance.
   static AgentReadAlbumToolResponseDtoStatusEnumTypeTransformer? _instance;
 }
-
 

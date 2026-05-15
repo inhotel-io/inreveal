@@ -15,7 +15,7 @@ class AgentReadAssetMetadataToolResponseDto {
   AgentReadAssetMetadataToolResponseDto({
     required this.status,
     required this.toolCall,
-    required this.reason,
+    this.reason,
     this.assets = const [],
   });
 
@@ -23,7 +23,7 @@ class AgentReadAssetMetadataToolResponseDto {
 
   AgentToolCallResponseDto toolCall;
 
-  String reason;
+  String? reason;
 
   List<AgentAssetMetadata> assets;
 
@@ -39,7 +39,7 @@ class AgentReadAssetMetadataToolResponseDto {
     // ignore: unnecessary_parenthesis
     (status.hashCode) +
     (toolCall.hashCode) +
-    (reason.hashCode) +
+    (reason == null ? 0 : reason!.hashCode) +
     (assets.hashCode);
 
   @override
@@ -49,7 +49,9 @@ class AgentReadAssetMetadataToolResponseDto {
     final json = <String, dynamic>{};
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
+    if (this.reason != null) {
       json[r'reason'] = this.reason;
+    }
       json[r'assets'] = this.assets;
     return json;
   }
@@ -65,7 +67,7 @@ class AgentReadAssetMetadataToolResponseDto {
       return AgentReadAssetMetadataToolResponseDto(
         status: AgentReadAssetMetadataToolResponseDtoStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
-        reason: mapValueOfType<String>(json, r'reason')!,
+        reason: mapValueOfType<String>(json, r'reason'),
         assets: AgentAssetMetadata.listFromJson(json[r'assets']),
       );
     }
@@ -116,8 +118,6 @@ class AgentReadAssetMetadataToolResponseDto {
   static const requiredKeys = <String>{
     'status',
     'toolCall',
-    'reason',
-    'assets',
   };
 }
 
@@ -134,10 +134,14 @@ class AgentReadAssetMetadataToolResponseDtoStatusEnum {
 
   String toJson() => value;
 
+  static const approvalRequired = AgentReadAssetMetadataToolResponseDtoStatusEnum._(r'approval-required');
+  static const denied = AgentReadAssetMetadataToolResponseDtoStatusEnum._(r'denied');
   static const success = AgentReadAssetMetadataToolResponseDtoStatusEnum._(r'success');
 
   /// List of all possible values in this [enum][AgentReadAssetMetadataToolResponseDtoStatusEnum].
   static const values = <AgentReadAssetMetadataToolResponseDtoStatusEnum>[
+    approvalRequired,
+    denied,
     success,
   ];
 
@@ -177,6 +181,8 @@ class AgentReadAssetMetadataToolResponseDtoStatusEnumTypeTransformer {
   AgentReadAssetMetadataToolResponseDtoStatusEnum? decode(dynamic data, {bool allowNull = true}) {
     if (data != null) {
       switch (data) {
+        case r'approval-required': return AgentReadAssetMetadataToolResponseDtoStatusEnum.approvalRequired;
+        case r'denied': return AgentReadAssetMetadataToolResponseDtoStatusEnum.denied;
         case r'success': return AgentReadAssetMetadataToolResponseDtoStatusEnum.success;
         default:
           if (!allowNull) {
@@ -190,5 +196,4 @@ class AgentReadAssetMetadataToolResponseDtoStatusEnumTypeTransformer {
   /// Singleton [AgentReadAssetMetadataToolResponseDtoStatusEnumTypeTransformer] instance.
   static AgentReadAssetMetadataToolResponseDtoStatusEnumTypeTransformer? _instance;
 }
-
 
