@@ -3,7 +3,7 @@ import { Insertable, Kysely, sql, Updateable } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { columns } from 'src/database';
 import { DummyValue, GenerateSql } from 'src/decorators';
-import { AgentToolCallStatus } from 'src/enum';
+import { AgentToolCallStatus, AgentToolDataClass } from 'src/enum';
 import { DB } from 'src/schema';
 import { AgentToolCallTable } from 'src/schema/tables/agent-tool-call.table';
 import { asUuid } from 'src/utils/database';
@@ -11,7 +11,14 @@ import { asUuid } from 'src/utils/database';
 type AgentToolCallCreate = Insertable<AgentToolCallTable>;
 type AgentToolCallUpdate = Pick<
   Updateable<AgentToolCallTable>,
-  'status' | 'approvalDecision' | 'responseSummary' | 'redactedResponseMetadata' | 'completedAt' | 'error'
+  | 'status'
+  | 'approvalDecision'
+  | 'responseSummary'
+  | 'redactedResponseMetadata'
+  | 'assetCount'
+  | 'albumCount'
+  | 'completedAt'
+  | 'error'
 >;
 
 @Injectable()
@@ -88,10 +95,23 @@ export class AgentToolCallRepository {
     { name: 'excluding tool call', params: [DummyValue.UUID, DummyValue.UUID] },
   )
   async getCountedAssetCountBySession(sessionId: string, excludedToolCallId?: string): Promise<number> {
+    return this.getCountedAssetCountBySessionAndDataClass(sessionId, AgentToolDataClass.Metadata, excludedToolCallId);
+  }
+
+  @GenerateSql(
+    { name: 'including all', params: [DummyValue.UUID, AgentToolDataClass.Metadata] },
+    { name: 'excluding tool call', params: [DummyValue.UUID, AgentToolDataClass.Previews, DummyValue.UUID] },
+  )
+  async getCountedAssetCountBySessionAndDataClass(
+    sessionId: string,
+    dataClass: AgentToolDataClass,
+    excludedToolCallId?: string,
+  ): Promise<number> {
     const result = await this.db
       .selectFrom('agent_tool_call')
       .select((eb) => sql<number>`coalesce(sum(${eb.ref('assetCount')}), 0)::int`.as('assetCount'))
       .where('sessionId', '=', asUuid(sessionId))
+      .where('dataClass', '=', dataClass)
       .where('status', 'in', AgentToolCallRepository.countedStatuses)
       .$if(Boolean(excludedToolCallId), (qb) => qb.where('id', '!=', asUuid(excludedToolCallId!)))
       .executeTakeFirstOrThrow();
