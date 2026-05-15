@@ -485,6 +485,95 @@ export type AgentListAlbumsToolSuccessResponse = {
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentListAlbumsToolResponseDto = AgentListAlbumsToolApprovalRequiredResponse | AgentListAlbumsToolDeniedResponse | AgentListAlbumsToolSuccessResponse;
+export type AgentProposeAlbumOperationsDto = {
+    operations: ({
+        "type": Type;
+        summary: string;
+        targetKind: TargetKind;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            albumName: string;
+            description?: string;
+        };
+    } | {
+        "type": Type2;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {
+            [key: string]: any;
+        };
+    } | {
+        "type": Type3;
+        summary: string;
+        targetKind: TargetKind2;
+        targetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            albumName?: string;
+            description?: string;
+        };
+    } | {
+        "type": Type4;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {
+            [key: string]: any;
+        };
+    })[];
+    summary: string;
+};
+export type AgentOperationResponseDto = {
+    assetIds: string[];
+    createdAt: string;
+    dependencyIds: string[];
+    enabled: boolean;
+    error: string | null;
+    id: string;
+    payload: {
+        [key: string]: any;
+    };
+    planId: string;
+    result: {
+        [key: string]: any;
+    } | null;
+    riskLevel: AgentOperationRiskLevel;
+    status: AgentOperationStatus;
+    summary: string;
+    targetId: string | null;
+    targetKind: AgentOperationTargetKind;
+    temporaryTargetId: string | null;
+    "type": AgentOperationType;
+    updatedAt: string;
+};
+export type AgentOperationPlanResponseDto = {
+    createdAt: string;
+    id: string;
+    operations: AgentOperationResponseDto[];
+    revision: number;
+    sessionId: string;
+    status: AgentOperationPlanStatus;
+    summary: string;
+    updatedAt: string;
+};
+export type AgentOperationPlanToolResponseDto = {
+    plan: (AgentOperationPlanResponseDto) | null;
+    status: Status3;
+    summary: string;
+    toolCall: (AgentToolCallResponseDto) | null;
+};
 export type AgentReadAlbumToolRequestDto = {
     albumId?: string;
     toolCallId?: string;
@@ -610,6 +699,57 @@ export type AgentReadAssetPreviewsToolSuccessResponse = {
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentReadAssetPreviewsToolResponseDto = AgentReadAssetPreviewsToolApprovalRequiredResponse | AgentReadAssetPreviewsToolDeniedResponse | AgentReadAssetPreviewsToolSuccessResponse;
+export type AgentReviseAlbumOperationsDto = {
+    feedback?: string;
+    operations: ({
+        "type": Type5;
+        summary: string;
+        targetKind: TargetKind3;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            albumName: string;
+            description?: string;
+        };
+    } | {
+        "type": Type6;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {
+            [key: string]: any;
+        };
+    } | {
+        "type": Type7;
+        summary: string;
+        targetKind: TargetKind4;
+        targetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            albumName?: string;
+            description?: string;
+        };
+    } | {
+        "type": Type8;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {
+            [key: string]: any;
+        };
+    })[];
+    summary: string;
+};
 export type AgentSearchAssetsFilters = {
     albumIds?: string[];
     city?: string | null;
@@ -647,6 +787,9 @@ export type AgentSearchAssetsToolSuccessResponse = {
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentSearchAssetsToolResponseDto = AgentSearchAssetsToolApprovalRequiredResponse | AgentSearchAssetsToolDeniedResponse | AgentSearchAssetsToolSuccessResponse;
+export type AgentOperationPlanSummaryRequestDto = {
+    focus?: string;
+};
 export type AgentProviderCredentialResponseDto = {
     baseUrl: string | null;
     createdAt: string;
@@ -1192,7 +1335,7 @@ export type AssetFaceWithoutPersonResponseDto = {
 export type ScopedPrimaryProfile = {
     id: string;
     spaceId?: string;
-    "type": Type;
+    "type": Type9;
 };
 export type PersonWithFacesResponseDto = {
     /** Person date of birth */
@@ -1921,7 +2064,7 @@ export type ScopedPersonProfileRefDto = {
     /** Space ID for Space Person refs */
     spaceId?: string;
     /** Scoped profile type */
-    "type": Type2;
+    "type": Type10;
 };
 export type DetachScopedPersonDto = {
     /** Scoped profile to detach */
@@ -4697,6 +4840,22 @@ export function runnerListAlbums({ id, agentListAlbumsToolRequestDto }: {
     })));
 }
 /**
+ * Execute the runner proposeAlbumOperations agent tool
+ */
+export function runnerProposeAlbumOperations({ id, agentProposeAlbumOperationsDto }: {
+    id: string;
+    agentProposeAlbumOperationsDto: AgentProposeAlbumOperationsDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentOperationPlanToolResponseDto;
+    }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/propose-album-operations`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentProposeAlbumOperationsDto
+    })));
+}
+/**
  * Execute the runner readAlbum agent tool
  */
 export function runnerReadAlbum({ id, agentReadAlbumToolRequestDto }: {
@@ -4761,6 +4920,23 @@ export function runnerReadAssetPreviews({ id, agentReadAssetPreviewsToolRequestD
     })));
 }
 /**
+ * Execute the runner reviseProposedOperations agent tool
+ */
+export function runnerReviseProposedOperations({ id, planId, agentReviseAlbumOperationsDto }: {
+    id: string;
+    planId: string;
+    agentReviseAlbumOperationsDto: AgentReviseAlbumOperationsDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentOperationPlanToolResponseDto;
+    }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/revise-proposed-operations/${encodeURIComponent(planId)}`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentReviseAlbumOperationsDto
+    })));
+}
+/**
  * Execute the runner searchAssets agent tool
  */
 export function runnerSearchAssets({ id, agentSearchAssetsToolRequestDto }: {
@@ -4774,6 +4950,23 @@ export function runnerSearchAssets({ id, agentSearchAssetsToolRequestDto }: {
         ...opts,
         method: "POST",
         body: agentSearchAssetsToolRequestDto
+    })));
+}
+/**
+ * Execute the runner summarizePlan agent tool
+ */
+export function runnerSummarizePlan({ id, planId, agentOperationPlanSummaryRequestDto }: {
+    id: string;
+    planId: string;
+    agentOperationPlanSummaryRequestDto: AgentOperationPlanSummaryRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentOperationPlanToolResponseDto;
+    }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/summarize-plan/${encodeURIComponent(planId)}`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentOperationPlanSummaryRequestDto
     })));
 }
 /**
@@ -4933,6 +5126,69 @@ export function appendAgentSessionMessage({ id, agentMessageCreateDto }: {
         ...opts,
         method: "POST",
         body: agentMessageCreateDto
+    })));
+}
+/**
+ * Get the current agent operation plan
+ */
+export function getCurrentOperationPlan({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AgentOperationPlanResponseDto | null;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/operation-plan`, {
+        ...opts
+    }));
+}
+/**
+ * Propose agent album operations
+ */
+export function proposeAlbumOperations({ id, agentProposeAlbumOperationsDto }: {
+    id: string;
+    agentProposeAlbumOperationsDto: AgentProposeAlbumOperationsDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentOperationPlanToolResponseDto;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/operation-plan/proposals`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentProposeAlbumOperationsDto
+    })));
+}
+/**
+ * Revise agent album operations
+ */
+export function reviseProposedOperations({ id, planId, agentReviseAlbumOperationsDto }: {
+    id: string;
+    planId: string;
+    agentReviseAlbumOperationsDto: AgentReviseAlbumOperationsDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentOperationPlanToolResponseDto;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/operation-plan/${encodeURIComponent(planId)}/revisions`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentReviseAlbumOperationsDto
+    })));
+}
+/**
+ * Summarize an agent operation plan
+ */
+export function summarizePlan({ id, planId, agentOperationPlanSummaryRequestDto }: {
+    id: string;
+    planId: string;
+    agentOperationPlanSummaryRequestDto: AgentOperationPlanSummaryRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentOperationPlanToolResponseDto;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/operation-plan/${encodeURIComponent(planId)}/summary`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentOperationPlanSummaryRequestDto
     })));
 }
 /**
@@ -9236,7 +9492,8 @@ export enum AgentToolApprovalDecision {
 export enum AgentToolDataClass {
     Metadata = "metadata",
     Previews = "previews",
-    Originals = "originals"
+    Originals = "originals",
+    Plan = "plan"
 }
 export enum AgentToolCallStatus {
     PendingApproval = "pending_approval",
@@ -9252,13 +9509,61 @@ export enum AgentToolName {
     ReadAssetPreviews = "readAssetPreviews",
     ReadAssetOriginals = "readAssetOriginals",
     ListAlbums = "listAlbums",
-    ReadAlbum = "readAlbum"
+    ReadAlbum = "readAlbum",
+    ProposeAlbumOperations = "proposeAlbumOperations",
+    ReviseProposedOperations = "reviseProposedOperations",
+    SummarizePlan = "summarizePlan"
 }
 export enum Status2 {
     Denied = "denied"
 }
 export enum Status3 {
     Success = "success"
+}
+export enum Type {
+    AlbumCreate = "album.create"
+}
+export enum TargetKind {
+    NewAlbum = "new_album"
+}
+export enum AgentOperationRiskLevel {
+    Low = "low",
+    Medium = "medium",
+    High = "high"
+}
+export enum Type2 {
+    AlbumAddAssets = "album.addAssets"
+}
+export enum AgentOperationTargetKind {
+    NewAlbum = "new_album",
+    ExistingAlbum = "existing_album"
+}
+export enum Type3 {
+    AlbumUpdateDetails = "album.updateDetails"
+}
+export enum TargetKind2 {
+    ExistingAlbum = "existing_album"
+}
+export enum Type4 {
+    AlbumSetCover = "album.setCover"
+}
+export enum AgentOperationStatus {
+    Proposed = "proposed",
+    Applied = "applied",
+    Skipped = "skipped",
+    Failed = "failed"
+}
+export enum AgentOperationType {
+    AlbumCreate = "album.create",
+    AlbumAddAssets = "album.addAssets",
+    AlbumUpdateDetails = "album.updateDetails",
+    AlbumSetCover = "album.setCover"
+}
+export enum AgentOperationPlanStatus {
+    Proposed = "proposed",
+    Superseded = "superseded",
+    Applied = "applied",
+    Cancelled = "cancelled"
 }
 export enum Status4 {
     ApprovalRequired = "approval-required"
@@ -9301,6 +9606,24 @@ export enum Status14 {
 }
 export enum Status15 {
     Success = "success"
+}
+export enum Type5 {
+    AlbumCreate = "album.create"
+}
+export enum TargetKind3 {
+    NewAlbum = "new_album"
+}
+export enum Type6 {
+    AlbumAddAssets = "album.addAssets"
+}
+export enum Type7 {
+    AlbumUpdateDetails = "album.updateDetails"
+}
+export enum TargetKind4 {
+    ExistingAlbum = "existing_album"
+}
+export enum Type8 {
+    AlbumSetCover = "album.setCover"
 }
 export enum Status16 {
     ApprovalRequired = "approval-required"
@@ -9584,7 +9907,7 @@ export enum SourceType {
     Exif = "exif",
     Manual = "manual"
 }
-export enum Type {
+export enum Type9 {
     UserPerson = "user-person",
     SpacePerson = "space-person"
 }
@@ -9662,7 +9985,7 @@ export enum PartnerDirection {
     SharedBy = "shared-by",
     SharedWith = "shared-with"
 }
-export enum Type2 {
+export enum Type10 {
     Person = "person",
     SpacePerson = "space-person"
 }
