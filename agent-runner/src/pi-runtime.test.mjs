@@ -324,6 +324,57 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.createAgentSession[0].model.source, 'registered-provider');
   });
 
+  it('redacts provider secrets from Pi session creation failures', async () => {
+    const { sdk, ai } = createFakeDependencies();
+    sdk.createAgentSession = async () => {
+      throw new Error('create failed with sk-openai-secret');
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await assert.rejects(
+      () => runtime.createSession(createSessionBody()),
+      (error) => {
+        assert.equal(error.message, 'create failed with [redacted]');
+        assert.equal(error.message.includes('sk-openai-secret'), false);
+        return true;
+      },
+    );
+  });
+
+  it('redacts provider secrets from provider registration setup failures', async () => {
+    const { sdk, ai } = createFakeDependencies();
+    sdk.ModelRegistry.inMemory = () => ({
+      find: () => undefined,
+      registerProvider: () => {
+        throw new Error('registration rejected local-secret');
+      },
+    });
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await assert.rejects(
+      () =>
+        runtime.createSession(
+          createSessionBody({
+            credential: {
+              id: '00000000-0000-4000-8000-000000000001',
+              providerType: 'openai-compatible',
+              label: 'Local model',
+              baseUrl: 'http://localhost:11434/v1',
+              models: ['llama-local'],
+              defaultModel: 'llama-local',
+              secret: 'local-secret',
+            },
+            model: 'llama-local',
+          }),
+        ),
+      (error) => {
+        assert.equal(error.message, 'Extension "<inline:1>" error: registration rejected [redacted]');
+        assert.equal(error.message.includes('local-secret'), false);
+        return true;
+      },
+    );
+  });
+
   it('does not resolve OpenAI-compatible models from file-backed external model config', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
