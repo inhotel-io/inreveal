@@ -1,32 +1,79 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { AgentSession, AgentToolCall } from 'src/database';
 import {
+  AgentListAlbumsToolRequestDto,
+  AgentListAlbumsToolResponseDto,
+  AgentReadAlbumToolRequestDto,
+  AgentReadAlbumToolResponseDto,
   AgentReadAssetMetadataToolRequestDto,
+  AgentReadAssetMetadataToolResponseDto,
+  AgentReadAssetOriginalsToolRequestDto,
+  AgentReadAssetOriginalsToolResponseDto,
+  AgentReadAssetPreviewsToolRequestDto,
+  AgentReadAssetPreviewsToolResponseDto,
+  AgentSearchAssetsToolRequestDto,
+  AgentSearchAssetsToolResponseDto,
   AgentToolApprovalDto,
   AgentToolCallResponseDto,
 } from 'src/dtos/agent-tool.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
   AgentApprovalMode,
+  AgentProviderType,
   AgentSessionStatus,
   AgentToolApprovalDecision,
   AgentToolCallStatus,
   AgentToolDataClass,
   AgentToolName,
+  AlbumUserRole,
 } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
+import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
-import { AgentAssetMetadata, AgentToolReadAssetIdsRequestMetadata } from 'src/types/agent-tool.types';
+import {
+  AgentAlbumDetail,
+  AgentAlbumSummary,
+  AgentAssetMediaReference,
+  AgentAssetMetadata,
+  AgentSearchAssetsFilters,
+  AgentToolListAlbumsRequestMetadata,
+  AgentToolReadAlbumRequestMetadata,
+  AgentToolReadAssetIdsRequestMetadata,
+  AgentToolResponseMetadata,
+  AgentToolSearchAssetsRequestMetadata,
+} from 'src/types/agent-tool.types';
 
-type ReadAssetMetadataResponse =
+type AgentReadToolResponse<TResult extends Record<string, unknown>> =
   | { status: 'approval-required'; toolCall: AgentToolCallResponseDto }
   | { status: 'denied'; reason: string; toolCall: AgentToolCallResponseDto }
-  | { status: 'success'; toolCall: AgentToolCallResponseDto; assets: AgentAssetMetadata[] };
+  | ({ status: 'success'; toolCall: AgentToolCallResponseDto } & TResult);
 
-type AgentToolCallCreate = Parameters<AgentToolCallRepository['create']>[0];
+type ToolCallCreate = Parameters<AgentToolCallRepository['create']>[0];
+
+type AgentReadToolDescriptor<TRequest, TResult extends Record<string, unknown>> = {
+  toolName: AgentToolName;
+  dataClass: AgentToolDataClass;
+  requestSummary: (request: TRequest) => string;
+  requestMetadata: (request: TRequest) => AgentToolCall['redactedRequestMetadata'];
+  requestedAssetCount: (request: TRequest) => number;
+  requestedAlbumCount: (request: TRequest) => number;
+  perToolLimit: (plan: AgentPermissionPlanSnapshot) => number;
+  perSessionLimit: (plan: AgentPermissionPlanSnapshot) => number;
+  validateAccess: (auth: AuthDto, session: AgentSession, request: TRequest) => Promise<string | null>;
+  execute: (auth: AuthDto, session: AgentSession, request: TRequest) => Promise<TResult>;
+  responseSummary: (result: TResult) => string;
+  responseMetadata: (result: TResult) => AgentToolCall['redactedResponseMetadata'];
+  resultAssetCount: (result: TResult) => number;
+  resultAlbumCount: (result: TResult) => number;
+  failedReason: string;
+};
+
+class AgentToolDeniedError extends Error {}
+
+class AgentToolFailedError extends Error {}
 
 const isReadAssetIdsRequestMetadata = (
   metadata: AgentToolCall['redactedRequestMetadata'],
@@ -35,8 +82,6 @@ const isReadAssetIdsRequestMetadata = (
 
 @Injectable()
 export class AgentToolService {
-  private static readonly strictModeReason = 'Only strict approval mode is supported for metadata tools in this slice';
-
   private static readonly activeStatuses = [
     AgentSessionStatus.Created,
     AgentSessionStatus.Running,
@@ -48,65 +93,57 @@ export class AgentToolService {
   constructor(
     private readonly accessRepository: AccessRepository,
     private readonly assetRepository: AssetRepository,
+    private readonly albumRepository: AlbumRepository,
     private readonly sessionRepository: AgentSessionRepository,
     private readonly toolCallRepository: AgentToolCallRepository,
   ) {}
+
+  async searchAssets(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentSearchAssetsToolRequestDto,
+  ): Promise<AgentSearchAssetsToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.searchAssetsDescriptor());
+  }
 
   async readAssetMetadata(
     auth: AuthDto,
     sessionId: string,
     dto: AgentReadAssetMetadataToolRequestDto,
-  ): Promise<ReadAssetMetadataResponse> {
-    const session = await this.getOwnedSession(auth, sessionId, { requireActive: true });
+  ): Promise<AgentReadAssetMetadataToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.readAssetMetadataDescriptor());
+  }
 
-    if (dto.toolCallId) {
-      return this.executeApprovedRead(auth, session, dto.toolCallId);
-    }
+  async readAssetPreviews(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentReadAssetPreviewsToolRequestDto,
+  ): Promise<AgentReadAssetPreviewsToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.readAssetPreviewsDescriptor());
+  }
 
-    const assetIds = dto.assetIds ?? [];
-    const denialReason = await this.validateReadRequest(auth, session, assetIds, undefined, {
-      validateSessionLimit: false,
-    });
+  async readAssetOriginals(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentReadAssetOriginalsToolRequestDto,
+  ): Promise<AgentReadAssetOriginalsToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.readAssetOriginalsDescriptor());
+  }
 
-    if (denialReason) {
-      const toolCall = await this.createDeniedAudit(session, assetIds, denialReason);
-      return { status: 'denied', reason: denialReason, toolCall: this.mapToolCall(toolCall) };
-    }
+  async listAlbums(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentListAlbumsToolRequestDto,
+  ): Promise<AgentListAlbumsToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.listAlbumsDescriptor());
+  }
 
-    const pendingDto: AgentToolCallCreate = {
-      ...this.baseToolCall(session, assetIds),
-      status: AgentToolCallStatus.PendingApproval,
-      approvalDecision: null,
-      responseSummary: null,
-      redactedResponseMetadata: null,
-      completedAt: null,
-      error: null,
-    };
-    const sessionLimitReason = this.getSessionLimitReason(session.permissionPlanSnapshot.limits.maxAssetsPerSession);
-    const deniedDto: AgentToolCallCreate = {
-      ...this.baseToolCall(session, assetIds),
-      status: AgentToolCallStatus.Denied,
-      approvalDecision: AgentToolApprovalDecision.Denied,
-      responseSummary: null,
-      redactedResponseMetadata: null,
-      completedAt: new Date(),
-      error: sessionLimitReason,
-    };
-    const result = await this.toolCallRepository.createPendingReadAssetMetadataWithSessionLimit(
-      pendingDto,
-      deniedDto,
-      session.permissionPlanSnapshot.limits.maxAssetsPerSession,
-    );
-
-    if (result.status === 'limit-exceeded') {
-      return { status: 'denied', reason: sessionLimitReason, toolCall: this.mapToolCall(result.toolCall) };
-    }
-
-    await this.sessionRepository.update(auth.user.id, session.id, {
-      status: AgentSessionStatus.WaitingForToolApproval,
-    });
-
-    return { status: 'approval-required', toolCall: this.mapToolCall(result.toolCall) };
+  async readAlbum(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentReadAlbumToolRequestDto,
+  ): Promise<AgentReadAlbumToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.readAlbumDescriptor());
   }
 
   async approveToolCall(
@@ -163,11 +200,74 @@ export class AgentToolService {
     return toolCalls.map((toolCall) => this.mapToolCall(toolCall));
   }
 
-  private async executeApprovedRead(
+  private async runReadTool<TRequest extends { toolCallId?: string }, TResult extends Record<string, unknown>>(
+    auth: AuthDto,
+    sessionId: string,
+    dto: TRequest,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+  ): Promise<AgentReadToolResponse<TResult>> {
+    const session = await this.getOwnedSession(auth, sessionId, { requireActive: true });
+
+    if (dto.toolCallId) {
+      return this.executeApprovedRead(auth, session, dto.toolCallId, descriptor);
+    }
+
+    return this.createOrExecuteRead(auth, session, dto, descriptor);
+  }
+
+  private async createOrExecuteRead<TRequest, TResult extends Record<string, unknown>>(
+    auth: AuthDto,
+    session: AgentSession,
+    request: TRequest,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+  ): Promise<AgentReadToolResponse<TResult>> {
+    if (this.requiresApproval(session, descriptor.dataClass)) {
+      const denialReason = await this.validateReadRequest(auth, session, request, descriptor, undefined, {
+        validateSessionLimit: !this.usesAtomicPendingSessionLimit(descriptor),
+      });
+
+      if (denialReason) {
+        const toolCall = await this.createDeniedAudit(session, request, descriptor, denialReason);
+        return { status: 'denied', reason: denialReason, toolCall: this.mapToolCall(toolCall) };
+      }
+
+      const result = await this.createPendingAudit(session, request, descriptor);
+      if (result.status === 'limit-exceeded') {
+        return { status: 'denied', reason: result.reason, toolCall: this.mapToolCall(result.toolCall) };
+      }
+
+      await this.sessionRepository.update(session.userId, session.id, {
+        status: AgentSessionStatus.WaitingForToolApproval,
+      });
+
+      return { status: 'approval-required', toolCall: this.mapToolCall(result.toolCall) };
+    }
+
+    const denialReason = await this.validateReadRequest(auth, session, request, descriptor);
+    if (denialReason) {
+      const toolCall = await this.createDeniedAudit(session, request, descriptor, denialReason);
+      return { status: 'denied', reason: denialReason, toolCall: this.mapToolCall(toolCall) };
+    }
+
+    const executing = await this.toolCallRepository.create({
+      ...this.baseToolCall(session, request, descriptor),
+      status: AgentToolCallStatus.Executing,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      responseSummary: 'Tool call execution started',
+      redactedResponseMetadata: null,
+      completedAt: null,
+      error: null,
+    });
+
+    return this.executeClaimedRead(auth, session, executing.id, request, descriptor);
+  }
+
+  private async executeApprovedRead<TRequest, TResult extends Record<string, unknown>>(
     auth: AuthDto,
     session: AgentSession,
     toolCallId: string,
-  ): Promise<ReadAssetMetadataResponse> {
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+  ): Promise<AgentReadToolResponse<TResult>> {
     const toolCall = await this.getToolCallForSession(session.id, toolCallId);
 
     if (toolCall.status === AgentToolCallStatus.Denied) {
@@ -182,7 +282,7 @@ export class AgentToolService {
       throw new BadRequestException('Agent tool call has not been approved');
     }
 
-    const assetIds = this.getReadAssetIdsRequestMetadata(toolCall).assetIds;
+    const request = this.getStoredRequest(toolCall, descriptor);
 
     const executing = await this.toolCallRepository.transition(session.id, toolCall.id, AgentToolCallStatus.Approved, {
       status: AgentToolCallStatus.Executing,
@@ -197,60 +297,65 @@ export class AgentToolService {
       throw new BadRequestException('Agent tool call is already executing or completed');
     }
 
-    try {
-      const denialReason = await this.validateReadRequest(auth, session, assetIds, toolCall.id);
+    const denialReason = await this.validateReadRequest(auth, session, request, descriptor, toolCall.id);
+    if (denialReason) {
+      const denied = await this.transitionExecuting(auth, session, toolCall.id, {
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        responseSummary: null,
+        redactedResponseMetadata: null,
+        completedAt: new Date(),
+        error: denialReason,
+      });
+      return { status: 'denied', reason: denialReason, toolCall: this.mapToolCall(denied) };
+    }
 
-      if (denialReason) {
-        const denied = await this.transitionExecuting(auth, session, toolCall.id, {
+    return this.executeClaimedRead(auth, session, toolCall.id, request, descriptor);
+  }
+
+  private async executeClaimedRead<TRequest, TResult extends Record<string, unknown>>(
+    auth: AuthDto,
+    session: AgentSession,
+    toolCallId: string,
+    request: TRequest,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+  ): Promise<AgentReadToolResponse<TResult>> {
+    try {
+      const result = await descriptor.execute(auth, session, request);
+      const completed = await this.transitionExecuting(auth, session, toolCallId, {
+        status: AgentToolCallStatus.Completed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: descriptor.responseSummary(result),
+        redactedResponseMetadata: descriptor.responseMetadata(result),
+        assetCount: descriptor.resultAssetCount(result),
+        albumCount: descriptor.resultAlbumCount(result),
+        completedAt: new Date(),
+        error: null,
+      });
+
+      return { status: 'success', toolCall: this.mapToolCall(completed), ...result };
+    } catch (error) {
+      if (error instanceof AgentToolDeniedError) {
+        const denied = await this.transitionExecuting(auth, session, toolCallId, {
           status: AgentToolCallStatus.Denied,
           approvalDecision: AgentToolApprovalDecision.Denied,
           responseSummary: null,
           redactedResponseMetadata: null,
           completedAt: new Date(),
-          error: denialReason,
+          error: error.message,
         });
-        return { status: 'denied', reason: denialReason, toolCall: this.mapToolCall(denied) };
+        return { status: 'denied', reason: error.message, toolCall: this.mapToolCall(denied) };
       }
 
-      const unorderedAssets = await this.assetRepository.getAgentMetadataByIds(assetIds);
-      const assetsById = new Map(
-        unorderedAssets.map((asset) => [asset.id, this.mapAssetMetadata(asset as AgentAssetMetadata)]),
-      );
-      const assets = assetIds.flatMap((id) => {
-        const asset = assetsById.get(id);
-        return asset ? [asset] : [];
-      });
-
-      if (assets.length !== assetIds.length) {
-        const reason = 'One or more assets were not found during metadata read';
-        const failed = await this.transitionExecuting(auth, session, toolCall.id, {
-          status: AgentToolCallStatus.Failed,
-          approvalDecision: AgentToolApprovalDecision.Approved,
-          responseSummary: null,
-          redactedResponseMetadata: { assetIds: assets.map((asset) => asset.id) },
-          completedAt: new Date(),
-          error: reason,
-        });
-        return { status: 'denied', reason, toolCall: this.mapToolCall(failed) };
-      }
-
-      const completed = await this.transitionExecuting(auth, session, toolCall.id, {
-        status: AgentToolCallStatus.Completed,
-        approvalDecision: AgentToolApprovalDecision.Approved,
-        responseSummary: this.getReturnedMetadataSummary(assetIds.length),
-        redactedResponseMetadata: { assetIds },
-        completedAt: new Date(),
-        error: null,
-      });
-
-      return { status: 'success', toolCall: this.mapToolCall(completed), assets };
-    } catch {
-      const reason = 'Metadata read failed';
-      const failed = await this.transitionExecuting(auth, session, toolCall.id, {
+      const reason = error instanceof AgentToolFailedError ? error.message : descriptor.failedReason;
+      const failed = await this.transitionExecuting(auth, session, toolCallId, {
         status: AgentToolCallStatus.Failed,
         approvalDecision: AgentToolApprovalDecision.Approved,
         responseSummary: null,
-        redactedResponseMetadata: null,
+        redactedResponseMetadata:
+          error instanceof AgentToolFailedError && 'metadata' in error
+            ? (error.metadata as AgentToolResponseMetadata)
+            : null,
         completedAt: new Date(),
         error: reason,
       });
@@ -258,87 +363,459 @@ export class AgentToolService {
     }
   }
 
-  private async transitionExecuting(
+  private searchAssetsDescriptor(): AgentReadToolDescriptor<
+    AgentSearchAssetsToolRequestDto,
+    { assets: AgentAssetMetadata[]; nextPage: string | null }
+  > {
+    return {
+      toolName: AgentToolName.SearchAssets,
+      dataClass: AgentToolDataClass.Metadata,
+      requestSummary: (request) => `Search assets (limit ${request.limit ?? 0})`,
+      requestMetadata: (request) =>
+        ({ filters: request.filters ?? {}, limit: request.limit ?? 0 }) as AgentToolSearchAssetsRequestMetadata,
+      requestedAssetCount: (request) => request.limit ?? 0,
+      requestedAlbumCount: () => 0,
+      perToolLimit: (plan) => plan.limits.maxAssetsPerToolCall,
+      perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
+      validateAccess: (auth, session, request) => this.validateSearchFilters(auth, session, request.filters ?? {}),
+      execute: async (auth, session, request) => {
+        const result = await this.assetRepository.searchAgentMetadata({
+          userId: auth.user.id,
+          filters: request.filters ?? {},
+          limit: request.limit ?? 0,
+          scope: this.getRepositoryScope(auth, session.permissionPlanSnapshot),
+        });
+        await this.assertReturnedAssetsAreAccessible(
+          auth,
+          session,
+          result.assets.map((asset) => asset.id),
+        );
+        return { assets: result.assets.map((asset) => this.mapAssetMetadata(asset)), nextPage: result.nextPage };
+      },
+      responseSummary: (result) => this.getReturnedMetadataSummary(result.assets.length),
+      responseMetadata: (result) => ({ assetIds: result.assets.map((asset) => asset.id) }),
+      resultAssetCount: (result) => result.assets.length,
+      resultAlbumCount: () => 0,
+      failedReason: 'Asset search failed',
+    };
+  }
+
+  private readAssetMetadataDescriptor(): AgentReadToolDescriptor<
+    AgentReadAssetMetadataToolRequestDto,
+    { assets: AgentAssetMetadata[] }
+  > {
+    return {
+      toolName: AgentToolName.ReadAssetMetadata,
+      dataClass: AgentToolDataClass.Metadata,
+      requestSummary: (request) => `Read metadata for ${(request.assetIds ?? []).length} asset(s)`,
+      requestMetadata: (request) => ({ assetIds: request.assetIds ?? [] }),
+      requestedAssetCount: (request) => (request.assetIds ?? []).length,
+      requestedAlbumCount: () => 0,
+      perToolLimit: (plan) => plan.limits.maxAssetsPerToolCall,
+      perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
+      validateAccess: (auth, session, request) => this.validateAssetAccess(auth, session, request.assetIds ?? []),
+      execute: async (_auth, _session, request) => {
+        const assetIds = request.assetIds ?? [];
+        const unorderedAssets = await this.assetRepository.getAgentMetadataByIds(assetIds);
+        const assetsById = new Map(
+          unorderedAssets.map((asset) => [asset.id, this.mapAssetMetadata(asset as AgentAssetMetadata)]),
+        );
+        const assets = assetIds.flatMap((id) => {
+          const asset = assetsById.get(id);
+          return asset ? [asset] : [];
+        });
+
+        if (assets.length !== assetIds.length) {
+          const error = new AgentToolFailedError('One or more assets were not found during metadata read');
+          (error as AgentToolFailedError & { metadata: AgentToolResponseMetadata }).metadata = {
+            assetIds: assets.map((asset) => asset.id),
+          };
+          throw error;
+        }
+
+        return { assets };
+      },
+      responseSummary: (result) => this.getReturnedMetadataSummary(result.assets.length),
+      responseMetadata: (result) => ({ assetIds: result.assets.map((asset) => asset.id) }),
+      resultAssetCount: (result) => result.assets.length,
+      resultAlbumCount: () => 0,
+      failedReason: 'Metadata read failed',
+    };
+  }
+
+  private readAssetPreviewsDescriptor(): AgentReadToolDescriptor<
+    AgentReadAssetPreviewsToolRequestDto,
+    { previews: AgentAssetMediaReference[] }
+  > {
+    return this.assetReferenceDescriptor({
+      toolName: AgentToolName.ReadAssetPreviews,
+      dataClass: AgentToolDataClass.Previews,
+      requestSummary: (count) => `Read previews for ${count} asset(s)`,
+      responseSummary: (count) => `Returned previews for ${count} asset(s)`,
+      perToolLimit: (plan) => plan.limits.maxPreviewsPerToolCall,
+      perSessionLimit: (plan) => plan.limits.maxPreviewsPerSession ?? plan.limits.maxAssetsPerSession,
+      execute: (ids) => this.assetRepository.getAgentPreviewReferencesByIds(ids),
+      resultKey: 'previews',
+      failedReason: 'Preview read failed',
+    });
+  }
+
+  private readAssetOriginalsDescriptor(): AgentReadToolDescriptor<
+    AgentReadAssetOriginalsToolRequestDto,
+    { originals: AgentAssetMediaReference[] }
+  > {
+    return this.assetReferenceDescriptor({
+      toolName: AgentToolName.ReadAssetOriginals,
+      dataClass: AgentToolDataClass.Originals,
+      requestSummary: (count) => `Read originals for ${count} asset(s)`,
+      responseSummary: (count) => `Returned originals for ${count} asset(s)`,
+      perToolLimit: (plan) => plan.limits.maxOriginalsPerToolCall,
+      perSessionLimit: (plan) => plan.limits.maxOriginalsPerSession ?? plan.limits.maxAssetsPerSession,
+      execute: (ids) => this.assetRepository.getAgentOriginalReferencesByIds(ids),
+      resultKey: 'originals',
+      failedReason: 'Original read failed',
+    });
+  }
+
+  private assetReferenceDescriptor<TKey extends 'previews' | 'originals'>(options: {
+    toolName: AgentToolName;
+    dataClass: AgentToolDataClass;
+    requestSummary: (count: number) => string;
+    responseSummary: (count: number) => string;
+    perToolLimit: (plan: AgentPermissionPlanSnapshot) => number;
+    perSessionLimit: (plan: AgentPermissionPlanSnapshot) => number;
+    execute: (assetIds: string[]) => Promise<AgentAssetMediaReference[]>;
+    resultKey: TKey;
+    failedReason: string;
+  }): AgentReadToolDescriptor<
+    { assetIds?: string[]; toolCallId?: string },
+    TKey extends 'previews' ? { previews: AgentAssetMediaReference[] } : { originals: AgentAssetMediaReference[] }
+  > {
+    type Result = TKey extends 'previews'
+      ? { previews: AgentAssetMediaReference[] }
+      : { originals: AgentAssetMediaReference[] };
+
+    return {
+      toolName: options.toolName,
+      dataClass: options.dataClass,
+      requestSummary: (request) => options.requestSummary((request.assetIds ?? []).length),
+      requestMetadata: (request) => ({ assetIds: request.assetIds ?? [] }),
+      requestedAssetCount: (request) => (request.assetIds ?? []).length,
+      requestedAlbumCount: () => 0,
+      perToolLimit: options.perToolLimit,
+      perSessionLimit: options.perSessionLimit,
+      validateAccess: (auth, session, request) => this.validateAssetAccess(auth, session, request.assetIds ?? []),
+      execute: async (_auth, _session, request) => {
+        const refs = await options.execute(request.assetIds ?? []);
+        return { [options.resultKey]: refs } as Result;
+      },
+      responseSummary: (result) => options.responseSummary(this.getMediaReferences(result, options.resultKey).length),
+      responseMetadata: (result) => ({
+        assetIds: this.getMediaReferences(result, options.resultKey).map((reference) => reference.assetId),
+      }),
+      resultAssetCount: (result) => this.getMediaReferences(result, options.resultKey).length,
+      resultAlbumCount: () => 0,
+      failedReason: options.failedReason,
+    };
+  }
+
+  private listAlbumsDescriptor(): AgentReadToolDescriptor<
+    AgentListAlbumsToolRequestDto,
+    { albums: AgentAlbumSummary[] }
+  > {
+    return {
+      toolName: AgentToolName.ListAlbums,
+      dataClass: AgentToolDataClass.Metadata,
+      requestSummary: () => 'List albums',
+      requestMetadata: () => ({}) as AgentToolListAlbumsRequestMetadata,
+      requestedAssetCount: () => 0,
+      requestedAlbumCount: () => 0,
+      perToolLimit: () => Number.MAX_SAFE_INTEGER,
+      perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
+      validateAccess: async () => null,
+      execute: async (auth) => ({ albums: await this.albumRepository.getAgentAlbums(auth.user.id) }),
+      responseSummary: (result) => `Returned ${result.albums.length} album(s)`,
+      responseMetadata: (result) => ({ albumIds: result.albums.map((album) => album.id) }),
+      resultAssetCount: () => 0,
+      resultAlbumCount: (result) => result.albums.length,
+      failedReason: 'Album list failed',
+    };
+  }
+
+  private readAlbumDescriptor(): AgentReadToolDescriptor<AgentReadAlbumToolRequestDto, { album: AgentAlbumDetail }> {
+    return {
+      toolName: AgentToolName.ReadAlbum,
+      dataClass: AgentToolDataClass.Metadata,
+      requestSummary: (request) => `Read album ${request.albumId}`,
+      requestMetadata: (request) => ({ albumId: request.albumId ?? '' }),
+      requestedAssetCount: () => 0,
+      requestedAlbumCount: () => 1,
+      perToolLimit: () => Number.MAX_SAFE_INTEGER,
+      perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
+      validateAccess: (auth, session, request) => this.validateAlbumAccess(auth, session, request.albumId ?? ''),
+      execute: async (auth, session, request) => {
+        const album = await this.albumRepository.getAgentAlbumById(auth.user.id, request.albumId ?? '');
+        if (!album) {
+          throw new AgentToolDeniedError('Album is not accessible');
+        }
+
+        if (album.assetCount > session.permissionPlanSnapshot.limits.maxAssetsPerToolCall) {
+          throw new AgentToolDeniedError('Requested asset count exceeds per-tool limit');
+        }
+
+        return { album };
+      },
+      responseSummary: (result) => `Returned album with ${result.album.assetCount} asset(s)`,
+      responseMetadata: (result) => ({ albumIds: [result.album.id], assetIds: result.album.assetIds }),
+      resultAssetCount: (result) => result.album.assetCount,
+      resultAlbumCount: () => 1,
+      failedReason: 'Album read failed',
+    };
+  }
+
+  private async validateReadRequest<TRequest, TResult extends Record<string, unknown>>(
     auth: AuthDto,
     session: AgentSession,
-    toolCallId: string,
-    update: Parameters<AgentToolCallRepository['transition']>[3],
-  ): Promise<AgentToolCall> {
-    const transitioned = await this.toolCallRepository.transition(
-      session.id,
-      toolCallId,
-      AgentToolCallStatus.Executing,
-      update,
-    );
-
-    await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Running });
-
-    if (!transitioned) {
-      throw new BadRequestException('Agent tool call is already executing or completed');
-    }
-
-    return transitioned;
-  }
-
-  private getReturnedMetadataSummary(assetCount: number): string {
-    return `Returned metadata for ${assetCount} ${assetCount === 1 ? 'asset' : 'assets'}`;
-  }
-
-  private getSessionLimitReason(maxAssetsPerSession: number): string {
-    return `Session policy allows at most ${maxAssetsPerSession} assets per session`;
-  }
-
-  private getReadAssetIdsRequestMetadata(toolCall: AgentToolCall): AgentToolReadAssetIdsRequestMetadata {
-    if (
-      toolCall.toolName !== AgentToolName.ReadAssetMetadata ||
-      !isReadAssetIdsRequestMetadata(toolCall.redactedRequestMetadata)
-    ) {
-      throw new BadRequestException('Agent tool call is not a read asset metadata request');
-    }
-
-    return toolCall.redactedRequestMetadata;
-  }
-
-  private async validateReadRequest(
-    auth: AuthDto,
-    session: AgentSession,
-    assetIds: string[],
+    request: TRequest,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
     excludedToolCallId?: string,
     options?: { validateSessionLimit: boolean },
   ): Promise<string | null> {
     const plan = session.permissionPlanSnapshot;
-
-    if (session.approvalMode !== AgentApprovalMode.Strict) {
-      return AgentToolService.strictModeReason;
+    const policyDenial = this.getPolicyDenial(session, descriptor.dataClass);
+    if (policyDenial) {
+      return policyDenial;
     }
 
-    if (!plan.read.metadata) {
-      return 'Agent permission policy does not allow metadata reads';
-    }
-
-    if (!plan.providerExposure.metadata) {
-      return 'Agent provider exposure policy does not allow metadata reads';
-    }
-
-    if (assetIds.length > plan.limits.maxAssetsPerToolCall) {
+    if (descriptor.requestedAssetCount(request) > descriptor.perToolLimit(plan)) {
       return 'Requested asset count exceeds per-tool limit';
     }
 
     if (options?.validateSessionLimit ?? true) {
-      const countedAssetCount = excludedToolCallId
-        ? await this.toolCallRepository.getCountedAssetCountBySession(session.id, excludedToolCallId)
-        : await this.toolCallRepository.getCountedAssetCountBySession(session.id);
-      if (countedAssetCount + assetIds.length > plan.limits.maxAssetsPerSession) {
-        return this.getSessionLimitReason(plan.limits.maxAssetsPerSession);
+      const sessionLimitDenial = await this.getSessionLimitDenialReason(
+        session,
+        request,
+        descriptor,
+        excludedToolCallId,
+      );
+      if (sessionLimitDenial) {
+        return sessionLimitDenial;
       }
     }
 
-    const readableIds = await this.getReadableAssetIds(auth, plan, assetIds);
-    if (readableIds.size !== assetIds.length) {
-      return 'One or more assets are not accessible';
+    return descriptor.validateAccess(auth, session, request);
+  }
+
+  private getPolicyDenial(session: AgentSession, dataClass: AgentToolDataClass): string | null {
+    if (session.approvalMode === AgentApprovalMode.DangerouslySkipPermissions) {
+      return 'YOLO read mode is implemented in slice 10';
+    }
+
+    const { read, providerExposure } = session.permissionPlanSnapshot;
+
+    if (dataClass === AgentToolDataClass.Metadata && !read.metadata) {
+      return 'Agent permission policy does not allow metadata reads';
+    }
+    if (dataClass === AgentToolDataClass.Previews && !read.previews) {
+      return 'Agent permission policy does not allow preview reads';
+    }
+    if (dataClass === AgentToolDataClass.Originals && !read.originals) {
+      return 'Agent permission policy does not allow original reads';
+    }
+
+    if (dataClass === AgentToolDataClass.Metadata && !providerExposure.metadata) {
+      return 'Agent provider exposure policy does not allow metadata reads';
+    }
+    if (dataClass === AgentToolDataClass.Previews && !providerExposure.previews) {
+      return 'Agent provider exposure policy does not allow preview reads';
+    }
+    if (dataClass === AgentToolDataClass.Originals && !providerExposure.originals) {
+      return 'Agent provider exposure policy does not allow original reads';
+    }
+
+    if (
+      dataClass === AgentToolDataClass.Originals &&
+      !providerExposure.allowOriginalsForExternalProviders &&
+      session.credentialSnapshot.providerType !== AgentProviderType.OpenAICompatible
+    ) {
+      return 'Agent provider exposure policy only allows originals for local or self-hosted providers';
     }
 
     return null;
+  }
+
+  private requiresApproval(session: AgentSession, dataClass: AgentToolDataClass): boolean {
+    switch (session.approvalMode) {
+      case AgentApprovalMode.Strict: {
+        return true;
+      }
+      case AgentApprovalMode.AskOnEscalation: {
+        return dataClass !== AgentToolDataClass.Metadata;
+      }
+      case AgentApprovalMode.PlanOnly: {
+        return false;
+      }
+      default: {
+        return true;
+      }
+    }
+  }
+
+  private async createPendingAudit<TRequest, TResult extends Record<string, unknown>>(
+    session: AgentSession,
+    request: TRequest,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+  ): Promise<
+    | { status: 'created'; toolCall: AgentToolCall }
+    | { status: 'limit-exceeded'; toolCall: AgentToolCall; reason: string }
+  > {
+    const pendingDto: ToolCallCreate = {
+      ...this.baseToolCall(session, request, descriptor),
+      status: AgentToolCallStatus.PendingApproval,
+      approvalDecision: null,
+      responseSummary: null,
+      redactedResponseMetadata: null,
+      completedAt: null,
+      error: null,
+    };
+    const reason = this.getSessionLimitReason(descriptor.perSessionLimit(session.permissionPlanSnapshot));
+    const deniedDto: ToolCallCreate = {
+      ...this.baseToolCall(session, request, descriptor),
+      status: AgentToolCallStatus.Denied,
+      approvalDecision: AgentToolApprovalDecision.Denied,
+      responseSummary: null,
+      redactedResponseMetadata: null,
+      completedAt: new Date(),
+      error: reason,
+    };
+
+    if (this.usesAtomicPendingSessionLimit(descriptor)) {
+      const result = await this.toolCallRepository.createPendingReadAssetMetadataWithSessionLimit(
+        pendingDto,
+        deniedDto,
+        descriptor.perSessionLimit(session.permissionPlanSnapshot),
+      );
+      return result.status === 'limit-exceeded'
+        ? { status: 'limit-exceeded', toolCall: result.toolCall, reason }
+        : { status: 'created', toolCall: result.toolCall };
+    }
+
+    const limitReason = await this.getSessionLimitDenialReason(session, request, descriptor);
+    if (limitReason) {
+      const toolCall = await this.toolCallRepository.create({ ...deniedDto, error: limitReason });
+      return { status: 'limit-exceeded', toolCall, reason: limitReason };
+    }
+
+    return { status: 'created', toolCall: await this.toolCallRepository.create(pendingDto) };
+  }
+
+  private usesAtomicPendingSessionLimit<TRequest, TResult extends Record<string, unknown>>(
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+  ): boolean {
+    return (
+      descriptor.toolName === AgentToolName.ReadAssetMetadata && descriptor.dataClass === AgentToolDataClass.Metadata
+    );
+  }
+
+  private async getSessionLimitDenialReason<TRequest, TResult extends Record<string, unknown>>(
+    session: AgentSession,
+    request: TRequest,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+    excludedToolCallId?: string,
+  ): Promise<string | null> {
+    const maxCount = descriptor.perSessionLimit(session.permissionPlanSnapshot);
+    const requestedCount = descriptor.requestedAssetCount(request);
+    if (requestedCount === 0 || maxCount === Number.MAX_SAFE_INTEGER) {
+      return null;
+    }
+
+    const countedAssetCount = await this.getCountedAssetCount(session, descriptor.dataClass, excludedToolCallId);
+    return countedAssetCount + requestedCount > maxCount ? this.getSessionLimitReason(maxCount) : null;
+  }
+
+  private getCountedAssetCount(
+    session: AgentSession,
+    dataClass: AgentToolDataClass,
+    excludedToolCallId?: string,
+  ): Promise<number> {
+    return dataClass === AgentToolDataClass.Metadata
+      ? this.toolCallRepository.getCountedAssetCountBySession(session.id, excludedToolCallId)
+      : this.toolCallRepository.getCountedAssetCountBySessionAndDataClass(session.id, dataClass, excludedToolCallId);
+  }
+
+  private async validateAssetAccess(auth: AuthDto, session: AgentSession, assetIds: string[]): Promise<string | null> {
+    const readableIds = await this.getReadableAssetIds(auth, session.permissionPlanSnapshot, assetIds);
+    return readableIds.size === new Set(assetIds).size ? null : 'One or more assets are not accessible';
+  }
+
+  private async validateAlbumAccess(auth: AuthDto, session: AgentSession, albumId: string): Promise<string | null> {
+    const albumIds = new Set([albumId]);
+    const readableIds = await this.getReadableAlbumIds(auth, session.permissionPlanSnapshot, albumIds);
+    return readableIds.size === 1 ? null : 'Album is not accessible';
+  }
+
+  private async validateSearchFilters(
+    auth: AuthDto,
+    session: AgentSession,
+    filters: AgentSearchAssetsFilters,
+  ): Promise<string | null> {
+    const albumIds = new Set(filters.albumIds ?? []);
+    if (albumIds.size > 0) {
+      const readableAlbumIds = await this.getReadableAlbumIds(auth, session.permissionPlanSnapshot, albumIds);
+      if (readableAlbumIds.size !== albumIds.size) {
+        return 'One or more search filters are not accessible';
+      }
+    }
+
+    const tagIds = new Set(filters.tagIds ?? []);
+    if (tagIds.size > 0) {
+      const readableTagIds = await this.accessRepository.tag.checkOwnerAccess(auth.user.id, tagIds);
+      if (readableTagIds.size !== tagIds.size) {
+        return 'One or more search filters are not accessible';
+      }
+    }
+
+    return null;
+  }
+
+  private async assertReturnedAssetsAreAccessible(
+    auth: AuthDto,
+    session: AgentSession,
+    assetIds: string[],
+  ): Promise<void> {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    const reason = await this.validateAssetAccess(auth, session, assetIds);
+    if (reason) {
+      throw new AgentToolDeniedError(reason);
+    }
+  }
+
+  private async getReadableAlbumIds(
+    auth: AuthDto,
+    plan: AgentPermissionPlanSnapshot,
+    albumIds: Set<string>,
+  ): Promise<Set<string>> {
+    const readableIds = new Set<string>();
+    const ownerIds = await this.accessRepository.album.checkOwnerAccess(auth.user.id, albumIds);
+    for (const id of ownerIds) {
+      readableIds.add(id);
+    }
+
+    if (plan.assetScope.sharedSpaces) {
+      const sharedIds = await this.accessRepository.album.checkSharedAlbumAccess(
+        auth.user.id,
+        albumIds,
+        AlbumUserRole.Viewer,
+      );
+      for (const id of sharedIds) {
+        readableIds.add(id);
+      }
+    }
+
+    return readableIds;
   }
 
   private async getReadableAssetIds(
@@ -378,9 +855,22 @@ export class AgentToolService {
     return readableIds;
   }
 
-  private async createDeniedAudit(session: AgentSession, assetIds: string[], reason: string): Promise<AgentToolCall> {
+  private getRepositoryScope(auth: AuthDto, plan: AgentPermissionPlanSnapshot) {
+    return {
+      owned: plan.assetScope.owned,
+      sharedSpaces: plan.assetScope.sharedSpaces,
+      locked: plan.assetScope.locked && auth.session?.hasElevatedPermission === true,
+    };
+  }
+
+  private async createDeniedAudit<TRequest, TResult extends Record<string, unknown>>(
+    session: AgentSession,
+    request: TRequest,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+    reason: string,
+  ): Promise<AgentToolCall> {
     return this.toolCallRepository.create({
-      ...this.baseToolCall(session, assetIds),
+      ...this.baseToolCall(session, request, descriptor),
       status: AgentToolCallStatus.Denied,
       approvalDecision: AgentToolApprovalDecision.Denied,
       responseSummary: null,
@@ -390,21 +880,22 @@ export class AgentToolService {
     });
   }
 
-  private baseToolCall(
+  private baseToolCall<TRequest, TResult extends Record<string, unknown>>(
     session: AgentSession,
-    assetIds: string[],
+    request: TRequest,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
   ): Omit<
-    AgentToolCallCreate,
+    ToolCallCreate,
     'status' | 'approvalDecision' | 'responseSummary' | 'redactedResponseMetadata' | 'completedAt' | 'error'
   > {
     return {
       sessionId: session.id,
-      toolName: AgentToolName.ReadAssetMetadata,
-      requestSummary: `Read metadata for ${assetIds.length} asset(s)`,
-      redactedRequestMetadata: { assetIds },
-      dataClass: AgentToolDataClass.Metadata,
-      assetCount: assetIds.length,
-      albumCount: 0,
+      toolName: descriptor.toolName,
+      requestSummary: descriptor.requestSummary(request),
+      redactedRequestMetadata: descriptor.requestMetadata(request),
+      dataClass: descriptor.dataClass,
+      assetCount: descriptor.requestedAssetCount(request),
+      albumCount: descriptor.requestedAlbumCount(request),
       providerSnapshot: {
         providerCredentialId: session.credentialSnapshot.id,
         providerType: session.credentialSnapshot.providerType,
@@ -413,6 +904,63 @@ export class AgentToolService {
         model: session.modelSnapshot.model,
       },
     };
+  }
+
+  private async transitionExecuting(
+    auth: AuthDto,
+    session: AgentSession,
+    toolCallId: string,
+    update: Parameters<AgentToolCallRepository['transition']>[3],
+  ): Promise<AgentToolCall> {
+    const transitioned = await this.toolCallRepository.transition(
+      session.id,
+      toolCallId,
+      AgentToolCallStatus.Executing,
+      update,
+    );
+
+    await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+
+    if (!transitioned) {
+      throw new BadRequestException('Agent tool call is already executing or completed');
+    }
+
+    return transitioned;
+  }
+
+  private getStoredRequest<TRequest, TResult extends Record<string, unknown>>(
+    toolCall: AgentToolCall,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+  ): TRequest {
+    if (toolCall.toolName !== descriptor.toolName) {
+      throw new BadRequestException(`Agent tool call is not a ${descriptor.toolName} request`);
+    }
+
+    if (
+      [AgentToolName.ReadAssetMetadata, AgentToolName.ReadAssetPreviews, AgentToolName.ReadAssetOriginals].includes(
+        descriptor.toolName,
+      ) &&
+      !isReadAssetIdsRequestMetadata(toolCall.redactedRequestMetadata)
+    ) {
+      throw new BadRequestException(`Agent tool call is not a ${descriptor.toolName} request`);
+    }
+
+    return toolCall.redactedRequestMetadata as TRequest;
+  }
+
+  private getReturnedMetadataSummary(assetCount: number): string {
+    return `Returned metadata for ${assetCount} ${assetCount === 1 ? 'asset' : 'assets'}`;
+  }
+
+  private getSessionLimitReason(maxAssetsPerSession: number): string {
+    return `Session policy allows at most ${maxAssetsPerSession} assets per session`;
+  }
+
+  private getMediaReferences<TResult extends Record<string, unknown>>(
+    result: TResult,
+    key: 'previews' | 'originals',
+  ): AgentAssetMediaReference[] {
+    return result[key] as AgentAssetMediaReference[];
   }
 
   private async getOwnedSession(
