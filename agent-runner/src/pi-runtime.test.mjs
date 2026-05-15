@@ -49,6 +49,14 @@ const createDeferred = () => {
   return { promise, resolve };
 };
 
+const withTimeout = async (promise, milliseconds = 250) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`timed out after ${milliseconds}ms`)), milliseconds);
+    }),
+  ]);
+
 const createMessageRequest = (overrides = {}) => ({
   runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
   gallerySessionId: '00000000-0000-4000-8000-000000000100',
@@ -63,6 +71,10 @@ const createFakeDependencies = ({ promptGate } = {}) => {
     loaders: [],
     createAgentSession: [],
     prompts: [],
+    authCreate: 0,
+    authInMemory: 0,
+    modelRegistryCreate: 0,
+    modelRegistryInMemory: 0,
     subscribed: 0,
     unsubscribed: 0,
     disposed: 0,
@@ -118,12 +130,42 @@ const createFakeDependencies = ({ promptGate } = {}) => {
 
   const sdk = {
     AuthStorage: {
-      create: () => ({
+      create: () => {
+        calls.authCreate += 1;
+        return {
+          setRuntimeApiKey: (provider, secret) => calls.runtimeApiKeys.push({ provider, secret }),
+        };
+      },
+      inMemory: () => {
+        calls.authInMemory += 1;
+        return {
         setRuntimeApiKey: (provider, secret) => calls.runtimeApiKeys.push({ provider, secret }),
-      }),
+        };
+      },
     },
     ModelRegistry: {
-      create: () => ({
+      create: () => {
+        calls.modelRegistryCreate += 1;
+        return {
+          find: (provider, model) => ({ provider, id: model, source: 'file-backed' }),
+          registerProvider: (name, config) => {
+            calls.registeredProvider = { name, config };
+            for (const model of config.models ?? []) {
+              registeredModels.push({
+                provider: name,
+                id: model.id,
+                name: model.name,
+                api: model.api ?? config.api,
+                baseUrl: model.baseUrl ?? config.baseUrl,
+                source: 'registered-provider',
+              });
+            }
+          },
+        };
+      },
+      inMemory: () => {
+        calls.modelRegistryInMemory += 1;
+        return {
         find: (provider, model) =>
           registeredModels.find((registeredModel) => registeredModel.provider === provider && registeredModel.id === model),
         registerProvider: (name, config) => {
@@ -139,7 +181,8 @@ const createFakeDependencies = ({ promptGate } = {}) => {
             });
           }
         },
-      }),
+        };
+      },
     },
     SessionManager: { inMemory: () => ({ kind: 'session-manager' }) },
     SettingsManager: { inMemory: (settings) => ({ kind: 'settings-manager', settings }) },
@@ -202,6 +245,18 @@ describe('pi runtime adapter', () => {
     assert.deepEqual(calls.createAgentSession[0].customTools, []);
   });
 
+  it('uses transient in-memory Pi auth storage and model registry', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await runtime.createSession(createSessionBody());
+
+    assert.equal(calls.authCreate, 0);
+    assert.equal(calls.modelRegistryCreate, 0);
+    assert.equal(calls.authInMemory, 1);
+    assert.equal(calls.modelRegistryInMemory, 1);
+  });
+
   it('constructs the Pi resource loader with concrete runtime paths', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
@@ -253,6 +308,38 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.createAgentSession[0].model.provider, 'gallery-00000000-0000-4000-8000-000000000100');
     assert.equal(calls.createAgentSession[0].model.id, 'llama-local');
     assert.equal(calls.createAgentSession[0].model.source, 'registered-provider');
+  });
+
+  it('does not resolve OpenAI-compatible models from file-backed external model config', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await runtime.createSession(
+      createSessionBody({
+        credential: {
+          id: '00000000-0000-4000-8000-000000000001',
+          providerType: 'openai-compatible',
+          label: 'Local model',
+          baseUrl: 'http://localhost:11434/v1',
+          models: ['llama-local'],
+          defaultModel: 'llama-local',
+          secret: 'local-secret',
+        },
+        model: 'llama-local',
+      }),
+    );
+
+    assert.notEqual(calls.createAgentSession[0].model.source, 'file-backed');
+  });
+
+  it('disposes the previous Pi SDK session when recreating the deterministic runner session', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await runtime.createSession(createSessionBody());
+    await runtime.createSession(createSessionBody({ model: 'gpt-4.1' }));
+
+    assert.equal(calls.disposed, 1);
   });
 
   it('streams Pi text deltas and completion content as Gallery runner events', async () => {
@@ -337,6 +424,34 @@ describe('pi runtime adapter', () => {
     }
 
     assert.equal(calls.unsubscribed, 1);
+  });
+
+  it('wakes an active message stream with a runner-error when disposed while waiting on Pi', async () => {
+    const promptGate = createDeferred();
+    const { sdk, ai, calls } = createFakeDependencies({ promptGate });
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+    const stream = runtime.sendMessage(createMessageRequest())[Symbol.asyncIterator]();
+
+    assert.equal((await stream.next()).value.type, 'assistant-message-delta');
+
+    runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
+
+    const next = await withTimeout(stream.next());
+    assert.deepEqual(next, {
+      done: false,
+      value: {
+        type: 'runner-error',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        message: 'Runner session disposed',
+      },
+    });
+    assert.equal((await withTimeout(stream.next())).done, true);
+    assert.equal(calls.unsubscribed, 1);
+    assert.equal(calls.disposed, 1);
+
+    promptGate.resolve();
   });
 
   it('returns a sanitized runner-error event when Pi prompt fails', async () => {
