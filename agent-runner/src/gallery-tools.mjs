@@ -49,7 +49,7 @@ const toolDefinitions = [
   },
 ];
 
-const parameters = Type.Record(Type.String(), Type.Any());
+const parameters = Type.Object({}, { additionalProperties: true });
 
 export const createGalleryReadTools = ({ client }) =>
   toolDefinitions.map((tool) =>
