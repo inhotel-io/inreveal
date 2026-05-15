@@ -73,6 +73,21 @@ String parameterToString(dynamic value) {
   if (value is AgentMessageToolCallBlockType) {
     return AgentMessageToolCallBlockTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentOperationPlanStatus) {
+    return AgentOperationPlanStatusTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentOperationRiskLevel) {
+    return AgentOperationRiskLevelTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentOperationStatus) {
+    return AgentOperationStatusTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentOperationTargetKind) {
+    return AgentOperationTargetKindTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentOperationType) {
+    return AgentOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentPermissionPreset) {
     return AgentPermissionPresetTypeTransformer().encode(value).toString();
   }
