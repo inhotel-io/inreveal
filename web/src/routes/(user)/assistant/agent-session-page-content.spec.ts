@@ -38,6 +38,7 @@ vi.mock('svelte-i18n', () => {
     assistant_model: 'Model',
     assistant_no: 'no',
     assistant_no_credentials: 'Add an agent provider credential before starting a session.',
+    assistant_operation_plan_empty: 'No proposed album plan yet.',
     assistant_permission_preset: 'Permission preset',
     assistant_permission_preset_careful: 'Careful',
     assistant_permission_preset_local_power_user: 'Local power user',
@@ -252,6 +253,17 @@ describe(AgentSessionPageContent.name, () => {
     expect(screen.queryByText('First transcript')).not.toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
     expect(sdkMock.getAgentSessionMessages).toHaveBeenCalledWith({ id: secondSession.id });
+  });
+
+  it('mounts the operation plan review panel after a session is created', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(null);
+
+    render(AgentSessionPageContent, { props: { runnerStatus: healthyRunner, credentials } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    expect(await screen.findByText('No proposed album plan yet.')).toBeInTheDocument();
+    expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: createdSession.id });
   });
 
   it('renders setup disabled when the runner is unavailable', () => {
