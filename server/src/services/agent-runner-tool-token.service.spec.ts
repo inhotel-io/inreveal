@@ -6,6 +6,12 @@ import { Mocked, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const configuredKey = 'runner-tool-token-secret';
 
+const createTokenWithClaims = (claims: unknown) => {
+  const encodedClaims = Buffer.from(typeof claims === 'string' ? claims : JSON.stringify(claims)).toString('base64url');
+  const signature = createHmac('sha256', configuredKey).update(encodedClaims).digest('base64url');
+  return `v1.${encodedClaims}.${signature}`;
+};
+
 describe(AgentRunnerToolTokenService.name, () => {
   let sut: AgentRunnerToolTokenService;
   let configRepository: Mocked<Pick<ConfigRepository, 'getEnv'>>;
@@ -24,14 +30,6 @@ describe(AgentRunnerToolTokenService.name, () => {
     };
 
     sut = new AgentRunnerToolTokenService(configRepository as unknown as ConfigRepository);
-  };
-
-  const createTokenWithClaims = (claims: unknown) => {
-    const encodedClaims = Buffer.from(typeof claims === 'string' ? claims : JSON.stringify(claims)).toString(
-      'base64url',
-    );
-    const signature = createHmac('sha256', configuredKey).update(encodedClaims).digest('base64url');
-    return `v1.${encodedClaims}.${signature}`;
   };
 
   beforeEach(() => {
