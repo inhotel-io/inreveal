@@ -8,7 +8,7 @@
     type AgentMessageResponseDto,
     type AgentSessionResponseDto,
   } from '@immich/sdk';
-  import { Button, Field } from '@immich/ui';
+  import { Button } from '@immich/ui';
   import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
 
@@ -33,12 +33,24 @@
       .map((block) => block.text)
       .join('\n');
 
-  const appendIfNew = (message: AgentMessageResponseDto) => {
-    if (messages.some((existingMessage) => existingMessage.id === message.id)) {
-      return;
+  const mergeMessages = (firstMessages: AgentMessageResponseDto[], secondMessages: AgentMessageResponseDto[]) => {
+    const seenIds = new Set<string>();
+    const mergedMessages: AgentMessageResponseDto[] = [];
+
+    for (const message of [...firstMessages, ...secondMessages]) {
+      if (seenIds.has(message.id)) {
+        continue;
+      }
+
+      seenIds.add(message.id);
+      mergedMessages.push(message);
     }
 
-    messages = [...messages, message];
+    return mergedMessages;
+  };
+
+  const appendIfNew = (message: AgentMessageResponseDto) => {
+    messages = mergeMessages(messages, [message]);
   };
 
   const handleSessionEvent = (event: AgentSessionClientEvent) => {
@@ -57,12 +69,14 @@
       return;
     }
 
+    streamingText = '';
     errorMessage = event.message;
   };
 
   const loadMessages = async () => {
     try {
-      messages = await getAgentSessionMessages({ id: session.id });
+      const loadedMessages = await getAgentSessionMessages({ id: session.id });
+      messages = mergeMessages(loadedMessages, messages);
     } catch (error) {
       errorMessage = $t('assistant_message_load_error');
       handleError(error, errorMessage);
@@ -152,7 +166,10 @@
         void sendMessage();
       }}
     >
-      <Field label={$t('assistant_message')}>
+      <div>
+        <label for="assistant-message" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          {$t('assistant_message')}
+        </label>
         <textarea
           id="assistant-message"
           aria-label={$t('assistant_message')}
@@ -160,7 +177,7 @@
           bind:value={draft}
           disabled={isSending}
         ></textarea>
-      </Field>
+      </div>
 
       <div>
         <Button type="submit" disabled={!canSend} loading={isSending}>{$t('assistant_send')}</Button>
