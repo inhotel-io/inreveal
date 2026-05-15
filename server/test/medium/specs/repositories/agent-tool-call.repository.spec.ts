@@ -223,6 +223,84 @@ describe(AgentToolCallRepository.name, () => {
     await expect(sut.getCountedAssetCountBySession(session.id, current.id)).resolves.toBe(15);
   });
 
+  it('counts active and completed exposures by session and data class', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const { session: otherSession } = await createSession(ctx, credentialRepository, sessionRepository);
+    const current = await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAssetMetadata,
+      dataClass: AgentToolDataClass.Metadata,
+      status: AgentToolCallStatus.PendingApproval,
+      assetCount: 2,
+    });
+    await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAssetMetadata,
+      dataClass: AgentToolDataClass.Metadata,
+      status: AgentToolCallStatus.Completed,
+      assetCount: 10,
+    });
+    await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAssetPreviews,
+      dataClass: AgentToolDataClass.Previews,
+      status: AgentToolCallStatus.Completed,
+      assetCount: 3,
+    });
+    await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAssetOriginals,
+      dataClass: AgentToolDataClass.Originals,
+      status: AgentToolCallStatus.Denied,
+      assetCount: 5,
+    });
+    await createToolCall(sut, otherSession.id, {
+      toolName: AgentToolName.ReadAssetMetadata,
+      dataClass: AgentToolDataClass.Metadata,
+      status: AgentToolCallStatus.Completed,
+      assetCount: 17,
+    });
+
+    await expect(sut.getCountedAssetCountBySessionAndDataClass(session.id, AgentToolDataClass.Metadata)).resolves.toBe(
+      12,
+    );
+    await expect(
+      sut.getCountedAssetCountBySessionAndDataClass(session.id, AgentToolDataClass.Metadata, current.id),
+    ).resolves.toBe(10);
+    await expect(sut.getCountedAssetCountBySessionAndDataClass(session.id, AgentToolDataClass.Previews)).resolves.toBe(
+      3,
+    );
+    await expect(sut.getCountedAssetCountBySessionAndDataClass(session.id, AgentToolDataClass.Originals)).resolves.toBe(
+      0,
+    );
+  });
+
+  it('updates asset and album counts only during guarded transitions', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const toolCall = await createToolCall(sut, session.id, {
+      toolName: AgentToolName.ReadAlbum,
+      status: AgentToolCallStatus.Executing,
+      assetCount: 0,
+      albumCount: 0,
+    });
+
+    const updated = await sut.transition(session.id, toolCall.id, AgentToolCallStatus.Executing, {
+      status: AgentToolCallStatus.Completed,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      responseSummary: 'Returned one album with two assets.',
+      redactedResponseMetadata: { albumIds: [factory.uuid()], assetIds: [factory.uuid(), factory.uuid()] },
+      assetCount: 2,
+      albumCount: 1,
+      completedAt: new Date('2026-05-14T12:00:00.000Z'),
+      error: null,
+    });
+
+    expect(updated).toMatchObject({
+      id: toolCall.id,
+      status: AgentToolCallStatus.Completed,
+      assetCount: 2,
+      albumCount: 1,
+    });
+  });
+
   it('atomically creates a pending metadata tool call when the session asset limit allows it', async () => {
     const { ctx, credentialRepository, sessionRepository, sut } = setup();
     const { session } = await createSession(ctx, credentialRepository, sessionRepository);
