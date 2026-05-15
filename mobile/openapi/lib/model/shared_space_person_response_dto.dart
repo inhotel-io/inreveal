@@ -233,7 +233,6 @@ class SharedSpacePersonResponseDto {
   };
 }
 
-
 /// Representative face source
 class SharedSpacePersonResponseDtoRepresentativeFaceSourceEnum {
   /// Instantiate a new enum with the provided [value].
@@ -306,3 +305,5 @@ class SharedSpacePersonResponseDtoRepresentativeFaceSourceEnumTypeTransformer {
   /// Singleton [SharedSpacePersonResponseDtoRepresentativeFaceSourceEnumTypeTransformer] instance.
   static SharedSpacePersonResponseDtoRepresentativeFaceSourceEnumTypeTransformer? _instance;
 }
+
+

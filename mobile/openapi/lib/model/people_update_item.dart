@@ -193,3 +193,4 @@ class PeopleUpdateItem {
     'id',
   };
 }
+
