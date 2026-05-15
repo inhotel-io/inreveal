@@ -78,11 +78,19 @@ const createFakeDependencies = ({ promptGate } = {}) => {
     subscribed: 0,
     unsubscribed: 0,
     disposed: 0,
+    aborted: 0,
   };
   const registeredModels = [];
   let listener;
+  const abortGate = createDeferred();
   const session = {
     sessionId: 'pi-sdk-session-1',
+    agent: {
+      abort() {
+        calls.aborted += 1;
+        abortGate.resolve();
+      },
+    },
     messages: [],
     subscribe(next) {
       calls.subscribed += 1;
@@ -97,7 +105,9 @@ const createFakeDependencies = ({ promptGate } = {}) => {
         type: 'message_update',
         assistantMessageEvent: { type: 'text_delta', delta: 'I can help.' },
       });
-      await promptGate?.promise;
+      if (promptGate) {
+        await Promise.race([promptGate.promise, abortGate.promise]);
+      }
       this.messages.push({ role: 'assistant', content: [{ type: 'text', text: 'I can help.' }] });
       listener?.({ type: 'message_end' });
     },
@@ -139,7 +149,7 @@ const createFakeDependencies = ({ promptGate } = {}) => {
       inMemory: () => {
         calls.authInMemory += 1;
         return {
-        setRuntimeApiKey: (provider, secret) => calls.runtimeApiKeys.push({ provider, secret }),
+          setRuntimeApiKey: (provider, secret) => calls.runtimeApiKeys.push({ provider, secret }),
         };
       },
     },
@@ -166,21 +176,21 @@ const createFakeDependencies = ({ promptGate } = {}) => {
       inMemory: () => {
         calls.modelRegistryInMemory += 1;
         return {
-        find: (provider, model) =>
-          registeredModels.find((registeredModel) => registeredModel.provider === provider && registeredModel.id === model),
-        registerProvider: (name, config) => {
-          calls.registeredProvider = { name, config };
-          for (const model of config.models ?? []) {
-            registeredModels.push({
-              provider: name,
-              id: model.id,
-              name: model.name,
-              api: model.api ?? config.api,
-              baseUrl: model.baseUrl ?? config.baseUrl,
-              source: 'registered-provider',
-            });
-          }
-        },
+          find: (provider, model) =>
+            registeredModels.find((registeredModel) => registeredModel.provider === provider && registeredModel.id === model),
+          registerProvider: (name, config) => {
+            calls.registeredProvider = { name, config };
+            for (const model of config.models ?? []) {
+              registeredModels.push({
+                provider: name,
+                id: model.id,
+                name: model.name,
+                api: model.api ?? config.api,
+                baseUrl: model.baseUrl ?? config.baseUrl,
+                source: 'registered-provider',
+              });
+            }
+          },
         };
       },
     },
@@ -276,6 +286,10 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].noThemes, true);
     assert.equal(calls.loaders[0].noExtensions, true);
     assert.ok(Array.isArray(calls.loaders[0].extensionFactories));
+    assert.equal(calls.loaders[0].systemPrompt.startsWith('You are Gallery Assistant'), true);
+    assert.deepEqual(calls.loaders[0].appendSystemPrompt, []);
+    assert.equal(calls.loaders[0].systemPromptOverride, undefined);
+    assert.equal(calls.loaders[0].appendSystemPromptOverride, undefined);
   });
 
   it('registers an OpenAI-compatible provider without persisting the secret', async () => {
@@ -399,8 +413,8 @@ describe('pi runtime adapter', () => {
       assert.deepEqual(calls.prompts, ['Organize my photos.']);
     } finally {
       await second.return?.();
-      await first.return?.();
       promptGate.resolve();
+      await first.return?.();
     }
   });
 
@@ -416,6 +430,7 @@ describe('pi runtime adapter', () => {
 
       runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
 
+      assert.equal(calls.aborted, 1);
       assert.equal(calls.unsubscribed, 1);
       assert.equal(calls.disposed, 1);
     } finally {
@@ -447,11 +462,37 @@ describe('pi runtime adapter', () => {
         message: 'Runner session disposed',
       },
     });
+    assert.equal(calls.aborted, 1);
     assert.equal((await withTimeout(stream.next())).done, true);
     assert.equal(calls.unsubscribed, 1);
     assert.equal(calls.disposed, 1);
 
     promptGate.resolve();
+  });
+
+  it('aborts the active Pi prompt and keeps overlap rejection until early stream return settles', async () => {
+    const promptGate = createDeferred();
+    const { sdk, ai, calls } = createFakeDependencies({ promptGate });
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+    const first = runtime.sendMessage(createMessageRequest())[Symbol.asyncIterator]();
+
+    assert.equal((await first.next()).value.type, 'assistant-message-delta');
+
+    const returnPromise = first.return();
+    await Promise.resolve();
+    const second = runtime.sendMessage(
+      createMessageRequest({ messageId: '00000000-0000-4000-8000-000000000201' }),
+    )[Symbol.asyncIterator]();
+
+    assert.equal(calls.aborted, 1);
+    await assert.rejects(() => second.next(), /already has an active message stream/);
+
+    promptGate.resolve();
+    assert.equal((await withTimeout(returnPromise)).done, true);
+    await second.return?.();
+
+    assert.equal(calls.unsubscribed, 1);
   });
 
   it('returns a sanitized runner-error event when Pi prompt fails', async () => {
