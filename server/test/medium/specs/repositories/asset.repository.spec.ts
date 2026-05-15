@@ -8,6 +8,7 @@ import { TagRepository } from 'src/repositories/tag.repository';
 import { DB } from 'src/schema';
 import { AssetTable } from 'src/schema/tables/asset.table';
 import { BaseService } from 'src/services/base.service';
+import { mimeTypes } from 'src/utils/mime-types';
 import { upsertTags } from 'src/utils/tag';
 import { newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
@@ -1063,6 +1064,69 @@ describe(AssetRepository.name, () => {
       });
       expect(withLocked.assets.map(({ id }) => id).toSorted()).toEqual([locked.id, owned.id].toSorted());
     });
+
+    it('excludes hidden assets when locked assets are included in agent metadata search', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: hidden } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Hidden });
+      const { asset: locked } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      await Promise.all([
+        ctx.newExif({ assetId: hidden.id, country: 'Portugal' }),
+        ctx.newExif({ assetId: locked.id, country: 'Portugal' }),
+      ]);
+
+      const result = await sut.searchAgentMetadata({
+        userId: user.id,
+        filters: { country: 'Portugal' },
+        limit: 10,
+        scope: { owned: true, sharedSpaces: false, locked: true },
+      });
+
+      expect(result.assets.map(({ id }) => id)).toEqual([locked.id]);
+    });
+
+    it('includes archived assets in normal agent metadata search', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Archive });
+      await ctx.newExif({ assetId: asset.id, country: 'Portugal' });
+
+      const result = await sut.searchAgentMetadata({
+        userId: user.id,
+        filters: { country: 'Portugal' },
+        limit: 10,
+        scope: agentScope,
+      });
+
+      expect(result.assets.map(({ id }) => id)).toEqual([asset.id]);
+    });
+
+    it('returns visible shared-space assets but not owned assets for shared-only scope', async () => {
+      const { ctx, sut } = setup();
+      const { user: viewer } = await ctx.newUser();
+      const { user: owner } = await ctx.newUser();
+      const { asset: owned } = await ctx.newAsset({ ownerId: viewer.id, visibility: AssetVisibility.Timeline });
+      const { asset: shared } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Archive });
+      const { asset: hiddenShared } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      await Promise.all([
+        ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer }),
+        ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: shared.id, addedById: owner.id }),
+        ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: hiddenShared.id, addedById: owner.id }),
+        ctx.newExif({ assetId: owned.id, country: 'Portugal' }),
+        ctx.newExif({ assetId: shared.id, country: 'Portugal' }),
+        ctx.newExif({ assetId: hiddenShared.id, country: 'Portugal' }),
+      ]);
+
+      const result = await sut.searchAgentMetadata({
+        userId: viewer.id,
+        filters: { country: 'Portugal' },
+        limit: 10,
+        scope: { owned: false, sharedSpaces: true, locked: false },
+      });
+
+      expect(result.assets.map(({ id }) => id)).toEqual([shared.id]);
+    });
   });
 
   describe('agent media references', () => {
@@ -1142,6 +1206,20 @@ describe(AssetRepository.name, () => {
       ]);
       expect(JSON.stringify(result)).not.toContain(first.originalPath);
       expect(JSON.stringify(result)).not.toContain(second.originalPath);
+    });
+
+    it('infers original media reference MIME types from supported file names', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id, originalFileName: 'image.heic' });
+
+      const result = await sut.getAgentOriginalReferencesByIds([asset.id]);
+
+      expect(result[0]).toMatchObject({
+        assetId: asset.id,
+        mimeType: mimeTypes.lookup('image.heic'),
+        fileName: 'image.heic',
+      });
     });
   });
 
