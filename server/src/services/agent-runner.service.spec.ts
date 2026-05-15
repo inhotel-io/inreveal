@@ -1,11 +1,5 @@
 import { AgentMessage } from 'src/database';
-import {
-  AgentApprovalMode,
-  AgentMessageRole,
-  AgentPermissionPreset,
-  AgentProviderType,
-  AgentSessionStatus,
-} from 'src/enum';
+import { AgentApprovalMode, AgentMessageRole, AgentPermissionPreset, AgentProviderType } from 'src/enum';
 import { AgentMessageRepository } from 'src/repositories/agent-message.repository';
 import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
@@ -218,13 +212,64 @@ describe(AgentRunnerService.name, () => {
       agent: { runnerUrl: 'http://agent-runner:4477', runnerHealthTimeoutMs: 3000 },
     } as never);
     agentRunnerRepository.streamMessage.mockReturnValue(failingStream(error));
-    sessionRepository.update.mockResolvedValue({} as never);
+    sessionRepository.markInterruptedFromActive.mockResolvedValue({} as never);
 
     await expect(sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content })).rejects.toBe(error);
 
-    expect(sessionRepository.update).toHaveBeenCalledWith(userId, sessionId, {
-      status: AgentSessionStatus.Interrupted,
+    expect(sessionRepository.markInterruptedFromActive).toHaveBeenCalledWith(userId, sessionId);
+    expect(sessionRepository.update).not.toHaveBeenCalled();
+    expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', userId, {
+      type: 'runner-error',
+      sessionId,
+      message: 'The assistant runner stopped while processing the message.',
+      createdAt: '2026-05-14T10:00:00.000Z',
     });
+  });
+
+  it('emits a runner error and attempts conditional interruption when runner config is removed', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Organize my photos.' }] };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: { runnerHealthTimeoutMs: 3000 },
+    } as never);
+    sessionRepository.markInterruptedFromActive.mockResolvedValue({} as never);
+
+    await expect(sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content })).rejects.toThrow(
+      'Agent runner is not configured',
+    );
+
+    expect(agentRunnerRepository.streamMessage).not.toHaveBeenCalled();
+    expect(sessionRepository.markInterruptedFromActive).toHaveBeenCalledWith(userId, sessionId);
+    expect(sessionRepository.update).not.toHaveBeenCalled();
+    expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', userId, {
+      type: 'runner-error',
+      sessionId,
+      message: 'The assistant runner stopped while processing the message.',
+      createdAt: '2026-05-14T10:00:00.000Z',
+    });
+  });
+
+  it('still emits runner error and rethrows the stream error when conditional interruption fails', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Organize my photos.' }] };
+    const streamError = new Error('connection refused');
+
+    configRepository.getEnv.mockReturnValue({
+      agent: { runnerUrl: 'http://agent-runner:4477', runnerHealthTimeoutMs: 3000 },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(failingStream(streamError));
+    sessionRepository.markInterruptedFromActive.mockRejectedValue(new Error('row update failed'));
+
+    await expect(sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content })).rejects.toBe(streamError);
+
+    expect(sessionRepository.markInterruptedFromActive).toHaveBeenCalledWith(userId, sessionId);
     expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', userId, {
       type: 'runner-error',
       sessionId,

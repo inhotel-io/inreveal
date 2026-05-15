@@ -110,6 +110,33 @@ returning
   "endedAt",
   "updateId"
 
+-- AgentSessionRepository.markInterruptedFromActive
+update "agent_session"
+set
+  "status" = $1
+where
+  "userId" = $2
+  and "id" = $3::uuid
+  and "status" in ($4, $5, $6, $7)
+returning
+  "id",
+  "userId",
+  "providerCredentialId",
+  "credentialSnapshot",
+  "modelSnapshot",
+  "permissionPreset",
+  "permissionPlanSnapshot",
+  "approvalMode",
+  "runnerEndpoint",
+  "runnerSessionId",
+  "runnerCapabilitiesSnapshot",
+  "status",
+  "initialContextSnapshot",
+  "createdAt",
+  "updatedAt",
+  "endedAt",
+  "updateId"
+
 -- AgentSessionRepository.cancel
 update "agent_session"
 set
