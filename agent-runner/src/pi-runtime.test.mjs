@@ -49,6 +49,7 @@ const createFakeDependencies = () => {
     unsubscribed: 0,
     disposed: 0,
   };
+  const registeredModels = [];
   let listener;
   const session = {
     sessionId: 'pi-sdk-session-1',
@@ -76,6 +77,7 @@ const createFakeDependencies = () => {
   class DefaultResourceLoader {
     constructor(options) {
       this.options = options;
+      this.extensionsResult = { runtime: { pendingProviderRegistrations: [] } };
       calls.loaders.push(options);
     }
 
@@ -83,10 +85,14 @@ const createFakeDependencies = () => {
       for (const factory of this.options.extensionFactories ?? []) {
         factory({
           registerProvider: (name, config) => {
-            calls.registeredProvider = { name, config };
+            this.extensionsResult.runtime.pendingProviderRegistrations.push({ name, config, extensionPath: '<inline:1>' });
           },
         });
       }
+    }
+
+    getExtensions() {
+      return this.extensionsResult;
     }
   }
 
@@ -98,7 +104,21 @@ const createFakeDependencies = () => {
     },
     ModelRegistry: {
       create: () => ({
-        find: (provider, model) => ({ provider, id: model, source: 'registry' }),
+        find: (provider, model) =>
+          registeredModels.find((registeredModel) => registeredModel.provider === provider && registeredModel.id === model),
+        registerProvider: (name, config) => {
+          calls.registeredProvider = { name, config };
+          for (const model of config.models ?? []) {
+            registeredModels.push({
+              provider: name,
+              id: model.id,
+              name: model.name,
+              api: model.api ?? config.api,
+              baseUrl: model.baseUrl ?? config.baseUrl,
+              source: 'registered-provider',
+            });
+          }
+        },
       }),
     },
     SessionManager: { inMemory: () => ({ kind: 'session-manager' }) },
@@ -204,6 +224,9 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.registeredProvider.config.apiKey, 'local-secret');
     assert.equal(calls.registeredProvider.config.api, 'openai-completions');
     assert.deepEqual(calls.registeredProvider.config.models.map((model) => model.id), ['llama-local']);
+    assert.equal(calls.createAgentSession[0].model.provider, 'gallery-00000000-0000-4000-8000-000000000100');
+    assert.equal(calls.createAgentSession[0].model.id, 'llama-local');
+    assert.equal(calls.createAgentSession[0].model.source, 'registered-provider');
   });
 
   it('streams Pi text deltas and completion content as Gallery runner events', async () => {
