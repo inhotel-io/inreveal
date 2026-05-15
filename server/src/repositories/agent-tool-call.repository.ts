@@ -53,6 +53,7 @@ export class AgentToolCallRepository {
         .selectFrom('agent_tool_call')
         .select((eb) => sql<number>`coalesce(sum(${eb.ref('assetCount')}), 0)::int`.as('assetCount'))
         .where('sessionId', '=', asUuid(pendingDto.sessionId))
+        .where('dataClass', '=', AgentToolDataClass.Metadata)
         .where('status', 'in', AgentToolCallRepository.countedStatuses)
         .executeTakeFirstOrThrow();
 
