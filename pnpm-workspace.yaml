@@ -1,4 +1,5 @@
 packages:
+  - agent-runner
   - cli
   - docs
   - e2e
