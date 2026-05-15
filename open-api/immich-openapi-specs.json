@@ -23637,6 +23637,18 @@
         ],
         "type": "object"
       },
+      "AgentAlbumAddAssetsOperationType": {
+        "enum": [
+          "album.addAssets"
+        ],
+        "type": "string"
+      },
+      "AgentAlbumCreateOperationType": {
+        "enum": [
+          "album.create"
+        ],
+        "type": "string"
+      },
       "AgentAlbumDetail": {
         "properties": {
           "albumName": {
@@ -23702,6 +23714,12 @@
         ],
         "type": "object"
       },
+      "AgentAlbumSetCoverOperationType": {
+        "enum": [
+          "album.setCover"
+        ],
+        "type": "string"
+      },
       "AgentAlbumSummary": {
         "properties": {
           "albumName": {
@@ -23757,6 +23775,12 @@
           "startDate"
         ],
         "type": "object"
+      },
+      "AgentAlbumUpdateDetailsOperationType": {
+        "enum": [
+          "album.updateDetails"
+        ],
+        "type": "string"
       },
       "AgentApprovalMode": {
         "enum": [
@@ -24324,6 +24348,18 @@
         ],
         "type": "object"
       },
+      "AgentOperationExistingAlbumTargetKind": {
+        "enum": [
+          "existing_album"
+        ],
+        "type": "string"
+      },
+      "AgentOperationNewAlbumTargetKind": {
+        "enum": [
+          "new_album"
+        ],
+        "type": "string"
+      },
       "AgentOperationPlanResponseDto": {
         "properties": {
           "createdAt": {
@@ -24742,10 +24778,7 @@
                   "type": "object",
                   "properties": {
                     "type": {
-                      "type": "string",
-                      "enum": [
-                        "album.create"
-                      ]
+                      "$ref": "#/components/schemas/AgentAlbumCreateOperationType"
                     },
                     "summary": {
                       "type": "string",
@@ -24753,10 +24786,7 @@
                       "maxLength": 1000
                     },
                     "targetKind": {
-                      "type": "string",
-                      "enum": [
-                        "new_album"
-                      ]
+                      "$ref": "#/components/schemas/AgentOperationNewAlbumTargetKind"
                     },
                     "temporaryTargetId": {
                       "type": "string",
@@ -24804,10 +24834,7 @@
                   "type": "object",
                   "properties": {
                     "type": {
-                      "type": "string",
-                      "enum": [
-                        "album.addAssets"
-                      ]
+                      "$ref": "#/components/schemas/AgentAlbumAddAssetsOperationType"
                     },
                     "summary": {
                       "type": "string",
@@ -24866,10 +24893,7 @@
                   "type": "object",
                   "properties": {
                     "type": {
-                      "type": "string",
-                      "enum": [
-                        "album.updateDetails"
-                      ]
+                      "$ref": "#/components/schemas/AgentAlbumUpdateDetailsOperationType"
                     },
                     "summary": {
                       "type": "string",
@@ -24877,10 +24901,7 @@
                       "maxLength": 1000
                     },
                     "targetKind": {
-                      "type": "string",
-                      "enum": [
-                        "existing_album"
-                      ]
+                      "$ref": "#/components/schemas/AgentOperationExistingAlbumTargetKind"
                     },
                     "targetId": {
                       "type": "string",
@@ -24923,10 +24944,7 @@
                   "type": "object",
                   "properties": {
                     "type": {
-                      "type": "string",
-                      "enum": [
-                        "album.setCover"
-                      ]
+                      "$ref": "#/components/schemas/AgentAlbumSetCoverOperationType"
                     },
                     "summary": {
                       "type": "string",
@@ -25558,10 +25576,7 @@
                   "type": "object",
                   "properties": {
                     "type": {
-                      "type": "string",
-                      "enum": [
-                        "album.create"
-                      ]
+                      "$ref": "#/components/schemas/AgentAlbumCreateOperationType"
                     },
                     "summary": {
                       "type": "string",
@@ -25569,10 +25584,7 @@
                       "maxLength": 1000
                     },
                     "targetKind": {
-                      "type": "string",
-                      "enum": [
-                        "new_album"
-                      ]
+                      "$ref": "#/components/schemas/AgentOperationNewAlbumTargetKind"
                     },
                     "temporaryTargetId": {
                       "type": "string",
@@ -25620,10 +25632,7 @@
                   "type": "object",
                   "properties": {
                     "type": {
-                      "type": "string",
-                      "enum": [
-                        "album.addAssets"
-                      ]
+                      "$ref": "#/components/schemas/AgentAlbumAddAssetsOperationType"
                     },
                     "summary": {
                       "type": "string",
@@ -25682,10 +25691,7 @@
                   "type": "object",
                   "properties": {
                     "type": {
-                      "type": "string",
-                      "enum": [
-                        "album.updateDetails"
-                      ]
+                      "$ref": "#/components/schemas/AgentAlbumUpdateDetailsOperationType"
                     },
                     "summary": {
                       "type": "string",
@@ -25693,10 +25699,7 @@
                       "maxLength": 1000
                     },
                     "targetKind": {
-                      "type": "string",
-                      "enum": [
-                        "existing_album"
-                      ]
+                      "$ref": "#/components/schemas/AgentOperationExistingAlbumTargetKind"
                     },
                     "targetId": {
                       "type": "string",
@@ -25739,10 +25742,7 @@
                   "type": "object",
                   "properties": {
                     "type": {
-                      "type": "string",
-                      "enum": [
-                        "album.setCover"
-                      ]
+                      "$ref": "#/components/schemas/AgentAlbumSetCoverOperationType"
                     },
                     "summary": {
                       "type": "string",
