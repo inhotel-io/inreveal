@@ -135,77 +135,81 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
 
   return {
     async createSession(body) {
-      const providerName = mapProviderType(body.credential.providerType, body.gallerySessionId);
-      const runnerSessionId = `pi-${body.gallerySessionId}`;
-      const authStorage = sdk.AuthStorage.inMemory ? sdk.AuthStorage.inMemory() : sdk.AuthStorage.create();
-      authStorage.setRuntimeApiKey(providerName, body.credential.secret);
+      try {
+        const providerName = mapProviderType(body.credential.providerType, body.gallerySessionId);
+        const runnerSessionId = `pi-${body.gallerySessionId}`;
+        const authStorage = sdk.AuthStorage.inMemory ? sdk.AuthStorage.inMemory() : sdk.AuthStorage.create();
+        authStorage.setRuntimeApiKey(providerName, body.credential.secret);
 
-      const modelRegistry = sdk.ModelRegistry.inMemory
-        ? sdk.ModelRegistry.inMemory(authStorage)
-        : sdk.ModelRegistry.create(authStorage);
-      const settingsManager = sdk.SettingsManager.inMemory({
-        compaction: { enabled: false },
-      });
-      const extensionFactories = createOpenAiCompatibleProviderFactories({
-        providerName,
-        credential: body.credential,
-        model: body.model,
-      });
-      const resourceLoader = new sdk.DefaultResourceLoader({
-        cwd: runtimePackageRoot,
-        agentDir: runtimeAgentDir,
-        settingsManager,
-        systemPrompt,
-        appendSystemPrompt: [],
-        noContextFiles: true,
-        noSkills: true,
-        noPromptTemplates: true,
-        noThemes: true,
-        noExtensions: true,
-        extensionFactories,
-      });
+        const modelRegistry = sdk.ModelRegistry.inMemory
+          ? sdk.ModelRegistry.inMemory(authStorage)
+          : sdk.ModelRegistry.create(authStorage);
+        const settingsManager = sdk.SettingsManager.inMemory({
+          compaction: { enabled: false },
+        });
+        const extensionFactories = createOpenAiCompatibleProviderFactories({
+          providerName,
+          credential: body.credential,
+          model: body.model,
+        });
+        const resourceLoader = new sdk.DefaultResourceLoader({
+          cwd: runtimePackageRoot,
+          agentDir: runtimeAgentDir,
+          settingsManager,
+          systemPrompt,
+          appendSystemPrompt: [],
+          noContextFiles: true,
+          noSkills: true,
+          noPromptTemplates: true,
+          noThemes: true,
+          noExtensions: true,
+          extensionFactories,
+        });
 
-      await resourceLoader.reload();
-      applyPendingProviderRegistrations(resourceLoader, modelRegistry);
+        await resourceLoader.reload();
+        applyPendingProviderRegistrations(resourceLoader, modelRegistry);
 
-      const model = ai.getModel(providerName, body.model) ?? modelRegistry.find(providerName, body.model);
-      if (!model) {
-        throw new Error(`Model ${body.model} is not available for provider ${providerName}`);
-      }
+        const model = ai.getModel(providerName, body.model) ?? modelRegistry.find(providerName, body.model);
+        if (!model) {
+          throw new Error(`Model ${body.model} is not available for provider ${providerName}`);
+        }
 
-      const { session } = await sdk.createAgentSession({
-        model,
-        authStorage,
-        modelRegistry,
-        sessionManager: sdk.SessionManager.inMemory(),
-        settingsManager,
-        resourceLoader,
-        noTools: 'all',
-        tools: [],
-        customTools: [],
-      });
-
-      this.disposeSession(runnerSessionId);
-      sessions.set(runnerSessionId, {
-        gallerySessionId: body.gallerySessionId,
-        credentialSecret: body.credential.secret,
-        model: body.model,
-        session,
-        inFlight: false,
-        abortActiveStream: undefined,
-        unsubscribe: undefined,
-      });
-
-      return {
-        runnerSessionId,
-        capabilities: {
-          protocolVersion,
-          streaming: true,
+        const { session } = await sdk.createAgentSession({
+          model,
+          authStorage,
+          modelRegistry,
+          sessionManager: sdk.SessionManager.inMemory(),
+          settingsManager,
+          resourceLoader,
+          noTools: 'all',
           tools: [],
-          models: [body.model],
-          runtime: 'pi',
-        },
-      };
+          customTools: [],
+        });
+
+        this.disposeSession(runnerSessionId);
+        sessions.set(runnerSessionId, {
+          gallerySessionId: body.gallerySessionId,
+          credentialSecret: body.credential.secret,
+          model: body.model,
+          session,
+          inFlight: false,
+          abortActiveStream: undefined,
+          unsubscribe: undefined,
+        });
+
+        return {
+          runnerSessionId,
+          capabilities: {
+            protocolVersion,
+            streaming: true,
+            tools: [],
+            models: [body.model],
+            runtime: 'pi',
+          },
+        };
+      } catch (error) {
+        throw new Error(sanitizedErrorMessage(error, body?.credential?.secret));
+      }
     },
 
     async *sendMessage({ runnerSessionId, gallerySessionId, messageId: _messageId, content }) {
