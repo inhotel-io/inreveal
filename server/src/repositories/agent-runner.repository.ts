@@ -112,6 +112,15 @@ const isStreamEvent = (value: unknown): value is AgentRunnerStreamEvent => {
     );
   }
 
+  if (body.type === 'runner-error') {
+    return (
+      typeof body.sessionId === 'string' &&
+      typeof body.runnerSessionId === 'string' &&
+      typeof body.message === 'string' &&
+      body.message.trim().length > 0
+    );
+  }
+
   return false;
 };
 
