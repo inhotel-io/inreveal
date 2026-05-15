@@ -64,6 +64,20 @@ const validateCreateSessionBody = (body) => {
     return 'model is required';
   }
 
+  if (body.toolGateway !== undefined && body.toolGateway !== null) {
+    if (typeof body.toolGateway !== 'object') {
+      return 'toolGateway is required';
+    }
+
+    if (typeof body.toolGateway.url !== 'string' || body.toolGateway.url.length === 0) {
+      return 'toolGateway.url is required';
+    }
+
+    if (typeof body.toolGateway.token !== 'string' || body.toolGateway.token.length === 0) {
+      return 'toolGateway.token is required';
+    }
+  }
+
   return undefined;
 };
 
