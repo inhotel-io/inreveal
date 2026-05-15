@@ -28,6 +28,8 @@ importers:
         specifier: ^3.7.4
         version: 3.8.3
 
+  agent-runner: {}
+
   cli:
     dependencies:
       chokidar:
