@@ -57,6 +57,18 @@ const withTimeout = async (promise, milliseconds = 250) =>
     }),
   ]);
 
+const waitForCondition = async (condition, milliseconds = 250) => {
+  const deadline = Date.now() + milliseconds;
+  while (!condition()) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out after ${milliseconds}ms`);
+    }
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1);
+    });
+  }
+};
+
 const createMessageRequest = (overrides = {}) => ({
   runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
   gallerySessionId: '00000000-0000-4000-8000-000000000100',
@@ -65,7 +77,7 @@ const createMessageRequest = (overrides = {}) => ({
   ...overrides,
 });
 
-const createFakeDependencies = ({ promptGate } = {}) => {
+const createFakeDependencies = ({ promptGate, sessionAbortGate } = {}) => {
   const calls = {
     runtimeApiKeys: [],
     loaders: [],
@@ -78,7 +90,8 @@ const createFakeDependencies = ({ promptGate } = {}) => {
     subscribed: 0,
     unsubscribed: 0,
     disposed: 0,
-    aborted: 0,
+    sessionAborted: 0,
+    agentAborted: 0,
   };
   const registeredModels = [];
   let listener;
@@ -87,7 +100,7 @@ const createFakeDependencies = ({ promptGate } = {}) => {
     sessionId: 'pi-sdk-session-1',
     agent: {
       abort() {
-        calls.aborted += 1;
+        calls.agentAborted += 1;
         abortGate.resolve();
       },
     },
@@ -113,6 +126,13 @@ const createFakeDependencies = ({ promptGate } = {}) => {
     },
     dispose() {
       calls.disposed += 1;
+    },
+    async abort() {
+      calls.sessionAborted += 1;
+      if (sessionAbortGate) {
+        await sessionAbortGate.promise;
+      }
+      abortGate.resolve();
     },
   };
 
@@ -479,9 +499,10 @@ describe('pi runtime adapter', () => {
     try {
       assert.equal((await stream.next()).value.type, 'assistant-message-delta');
 
-      runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
+      await runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
 
-      assert.equal(calls.aborted, 1);
+      assert.equal(calls.sessionAborted, 1);
+      assert.equal(calls.agentAborted, 0);
       assert.equal(calls.unsubscribed, 1);
       assert.equal(calls.disposed, 1);
     } finally {
@@ -501,7 +522,7 @@ describe('pi runtime adapter', () => {
 
     assert.equal((await stream.next()).value.type, 'assistant-message-delta');
 
-    runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
+    await runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
 
     const next = await withTimeout(stream.next());
     assert.deepEqual(next, {
@@ -513,7 +534,9 @@ describe('pi runtime adapter', () => {
         message: 'Runner session disposed',
       },
     });
-    assert.equal(calls.aborted, 1);
+    await waitForCondition(() => calls.sessionAborted === 1);
+    assert.equal(calls.sessionAborted, 1);
+    assert.equal(calls.agentAborted, 0);
     assert.equal((await withTimeout(stream.next())).done, true);
     assert.equal(calls.unsubscribed, 1);
     assert.equal(calls.disposed, 1);
@@ -523,7 +546,8 @@ describe('pi runtime adapter', () => {
 
   it('aborts the active Pi prompt and keeps overlap rejection until early stream return settles', async () => {
     const promptGate = createDeferred();
-    const { sdk, ai, calls } = createFakeDependencies({ promptGate });
+    const sessionAbortGate = createDeferred();
+    const { sdk, ai, calls } = createFakeDependencies({ promptGate, sessionAbortGate });
     const runtime = createPiRuntime({ sdk, ai });
     await runtime.createSession(createSessionBody());
     const first = runtime.sendMessage(createMessageRequest())[Symbol.asyncIterator]();
@@ -536,14 +560,46 @@ describe('pi runtime adapter', () => {
       createMessageRequest({ messageId: '00000000-0000-4000-8000-000000000201' }),
     )[Symbol.asyncIterator]();
 
-    assert.equal(calls.aborted, 1);
+    await waitForCondition(() => calls.sessionAborted === 1);
+    assert.equal(calls.sessionAborted, 1);
+    assert.equal(calls.agentAborted, 0);
     await assert.rejects(() => second.next(), /already has an active message stream/);
 
+    sessionAbortGate.resolve();
     promptGate.resolve();
     assert.equal((await withTimeout(returnPromise)).done, true);
     await second.return?.();
 
     assert.equal(calls.unsubscribed, 1);
+  });
+
+  it('waits for SDK abort before early stream return clears the in-flight guard', async () => {
+    const promptGate = createDeferred();
+    const sessionAbortGate = createDeferred();
+    const { sdk, ai, calls } = createFakeDependencies({ promptGate, sessionAbortGate });
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+    const first = runtime.sendMessage(createMessageRequest())[Symbol.asyncIterator]();
+
+    assert.equal((await first.next()).value.type, 'assistant-message-delta');
+
+    const returnPromise = first.return();
+    await Promise.resolve();
+
+    await waitForCondition(() => calls.sessionAborted === 1);
+    assert.equal(calls.sessionAborted, 1);
+    assert.equal(calls.agentAborted, 0);
+    await assert.rejects(() => withTimeout(returnPromise, 25), /timed out/);
+
+    const second = runtime.sendMessage(
+      createMessageRequest({ messageId: '00000000-0000-4000-8000-000000000201' }),
+    )[Symbol.asyncIterator]();
+    await assert.rejects(() => second.next(), /already has an active message stream/);
+
+    sessionAbortGate.resolve();
+    assert.equal((await withTimeout(returnPromise)).done, true);
+    await second.return?.();
+    promptGate.resolve();
   });
 
   it('returns a sanitized runner-error event when Pi prompt fails', async () => {
@@ -591,7 +647,7 @@ describe('pi runtime adapter', () => {
     const runtime = createPiRuntime({ sdk, ai });
     await runtime.createSession(createSessionBody());
 
-    runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
+    await runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
 
     assert.equal(calls.disposed, 1);
   });
