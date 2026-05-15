@@ -145,11 +145,6 @@ export const startServer = ({
     const messageMatch = url.pathname.match(/^\/sessions\/([^/]+)\/messages$/);
     if (request.method === 'POST' && messageMatch) {
       const runnerSessionId = decodeURIComponent(messageMatch[1]);
-      if (!runnerSessionIds.has(runnerSessionId)) {
-        sendJson(response, 404, { error: 'runner session not found' });
-        return;
-      }
-
       const result = await readJsonOrSendError(request, response);
       if (!result.ok) {
         return;
@@ -159,6 +154,11 @@ export const startServer = ({
       const validationError = validateMessageBody(body);
       if (validationError) {
         sendJson(response, 400, { error: validationError });
+        return;
+      }
+
+      if (!runnerSessionIds.has(runnerSessionId)) {
+        sendJson(response, 404, { error: 'runner session not found' });
         return;
       }
 

@@ -454,6 +454,19 @@ describe('agent runner server', () => {
     });
   });
 
+  it('returns 400 for malformed message JSON before checking runner session existence', async () => {
+    await withServer(createRuntime(), async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions/pi-missing/messages`, {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: '{',
+      });
+
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: 'invalid JSON body' });
+    });
+  });
+
   it('rejects invalid message bodies before calling the runtime', async () => {
     const runtime = createRuntime();
     const cases = [
