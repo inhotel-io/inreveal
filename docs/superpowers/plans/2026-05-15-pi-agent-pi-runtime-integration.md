@@ -504,7 +504,10 @@ describe('pi runtime adapter', () => {
   });
 
   it('redacts provider secrets from error messages', () => {
-    assert.equal(redactSecret('request failed for sk-openai-secret', 'sk-openai-secret'), 'request failed for [redacted]');
+    assert.equal(
+      redactSecret('request failed for sk-openai-secret', 'sk-openai-secret'),
+      'request failed for [redacted]',
+    );
     assert.equal(redactSecret('request failed', 'sk-openai-secret'), 'request failed');
   });
 
@@ -552,12 +555,17 @@ describe('pi runtime adapter', () => {
       }),
     );
 
-    assert.deepEqual(calls.runtimeApiKeys, [{ provider: 'gallery-00000000-0000-4000-8000-000000000100', secret: 'local-secret' }]);
+    assert.deepEqual(calls.runtimeApiKeys, [
+      { provider: 'gallery-00000000-0000-4000-8000-000000000100', secret: 'local-secret' },
+    ]);
     assert.equal(calls.registeredProvider.name, 'gallery-00000000-0000-4000-8000-000000000100');
     assert.equal(calls.registeredProvider.config.baseUrl, 'http://localhost:11434/v1');
     assert.equal(calls.registeredProvider.config.apiKey, 'local-secret');
     assert.equal(calls.registeredProvider.config.api, 'openai-completions');
-    assert.deepEqual(calls.registeredProvider.config.models.map((model) => model.id), ['llama-local']);
+    assert.deepEqual(
+      calls.registeredProvider.config.models.map((model) => model.id),
+      ['llama-local'],
+    );
   });
 
   it('streams Pi text deltas and completion content as Gallery runner events', async () => {
@@ -1338,7 +1346,13 @@ it('streams sanitized runtime errors as runner-error SSE events', async () => {
     async createSession(body) {
       return {
         runnerSessionId: `pi-${body.gallerySessionId}`,
-        capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: [], models: [body.model], runtime: 'pi' },
+        capabilities: {
+          protocolVersion: '2026-05-14',
+          streaming: true,
+          tools: [],
+          models: [body.model],
+          runtime: 'pi',
+        },
       };
     },
     async *sendMessage(body) {
@@ -1408,7 +1422,13 @@ it('streams a generic runner-error when runtime message streaming throws', async
     async createSession(body) {
       return {
         runnerSessionId: `pi-${body.gallerySessionId}`,
-        capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: [], models: [body.model], runtime: 'pi' },
+        capabilities: {
+          protocolVersion: '2026-05-14',
+          streaming: true,
+          tools: [],
+          models: [body.model],
+          runtime: 'pi',
+        },
       };
     },
     async *sendMessage() {
