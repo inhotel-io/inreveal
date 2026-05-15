@@ -401,6 +401,56 @@ describe(AgentRunnerRepository.name, () => {
     ).resolves.toEqual([deltaEvent, completedEvent]);
   });
 
+  it('streams runner-reported error SSE events', async () => {
+    const runnerErrorEvent = {
+      type: 'runner-error',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      message: 'Provider rejected the request.',
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`event: runner-error\ndata: ${JSON.stringify(runnerErrorEvent)}\n\n`),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).resolves.toEqual([runnerErrorEvent]);
+  });
+
+  it('throws when runner-reported error events are missing a non-empty message', async () => {
+    const runnerErrorEvent = {
+      type: 'runner-error',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      message: '',
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`event: runner-error\ndata: ${JSON.stringify(runnerErrorEvent)}\n\n`),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).rejects.toThrow('Agent runner returned an invalid stream event');
+  });
+
   it('throws when runner message stream fails with a non-success response', async () => {
     mockFetch.mockResolvedValue({ ok: false, status: 500, body: sseBody('') });
 

@@ -41,4 +41,10 @@ export type AgentRunnerStreamEvent =
       runnerSessionId: string;
       providerMessageId: string | null;
       content: AgentMessageContent;
+    }
+  | {
+      type: 'runner-error';
+      sessionId: string;
+      runnerSessionId: string;
+      message: string;
     };
