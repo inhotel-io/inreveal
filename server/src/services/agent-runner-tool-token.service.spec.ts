@@ -99,6 +99,19 @@ describe(AgentRunnerToolTokenService.name, () => {
     ).toThrow(new BadRequestException('Agent credential encryption key is not configured'));
   });
 
+  it('rejects token verification as invalid when the agent secret key is missing', () => {
+    const token = createTokenWithClaims({
+      sessionId: '00000000-0000-4000-8000-000000000100',
+      userId: '00000000-0000-4000-8000-000000000001',
+      expiresAt: '2026-05-15T12:00:00.000Z',
+    });
+    createServiceWithoutKey();
+
+    expect(() => sut.verify(token, new Date('2026-05-15T11:00:00.000Z'))).toThrow(
+      new UnauthorizedException('Invalid agent runner tool token'),
+    );
+  });
+
   it.each(['not-a-token', 'v2.e30.signature', 'v1.not-json.signature'])('rejects malformed token %s', (token) => {
     expect(() => sut.verify(token)).toThrow(new UnauthorizedException('Invalid agent runner tool token'));
   });

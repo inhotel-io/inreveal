@@ -44,7 +44,7 @@ export class AgentRunnerToolTokenService {
       throw new UnauthorizedException(INVALID_TOKEN);
     }
 
-    const expectedSignature = this.sign(encodedClaims);
+    const expectedSignature = this.signForVerify(encodedClaims);
     if (!this.safeEqual(signature, expectedSignature)) {
       throw new UnauthorizedException(INVALID_TOKEN);
     }
@@ -94,6 +94,18 @@ export class AgentRunnerToolTokenService {
     }
 
     return createHmac('sha256', secretKey).update(encodedClaims).digest('base64url');
+  }
+
+  private signForVerify(encodedClaims: string) {
+    try {
+      return this.sign(encodedClaims);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw new UnauthorizedException(INVALID_TOKEN);
+      }
+
+      throw error;
+    }
   }
 
   private safeEqual(value: string, expected: string) {
