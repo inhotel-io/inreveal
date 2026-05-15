@@ -186,7 +186,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
           customTools: [],
         });
 
-        this.disposeSession(runnerSessionId);
+        await this.disposeSession(runnerSessionId);
         sessions.set(runnerSessionId, {
           gallerySessionId: body.gallerySessionId,
           credentialSecret: body.credential.secret,
@@ -228,6 +228,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       let finished = false;
       let aborted = false;
       let promptSettled = false;
+      let abortPromise;
 
       const enqueue = (event) => {
         pendingEvents.push(event);
@@ -236,22 +237,32 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       };
       const abortActiveStream = ({ emitError } = { emitError: true }) => {
         if (aborted) {
-          return;
+          return abortPromise;
         }
 
         aborted = true;
-        entry.session.agent?.abort?.();
-        if (emitError) {
-          enqueue({
-            type: 'runner-error',
-            sessionId: gallerySessionId,
-            runnerSessionId,
-            message: 'Runner session disposed',
+        abortPromise = Promise.resolve()
+          .then(() => {
+            if (entry.session.abort) {
+              return entry.session.abort();
+            }
+
+            return entry.session.agent?.abort?.();
+          })
+          .finally(() => {
+            if (emitError) {
+              enqueue({
+                type: 'runner-error',
+                sessionId: gallerySessionId,
+                runnerSessionId,
+                message: 'Runner session disposed',
+              });
+              finished = true;
+            }
+            wake?.();
+            wake = undefined;
           });
-          finished = true;
-        }
-        wake?.();
-        wake = undefined;
+        return abortPromise;
       };
 
       const unsubscribe = entry.session.subscribe((event) => {
@@ -328,7 +339,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         await promptPromise;
       } finally {
         if (!promptSettled) {
-          abortActiveStream({ emitError: false });
+          await abortActiveStream({ emitError: false });
           await promptPromise;
         }
         releaseSubscription();
@@ -342,13 +353,13 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       }
     },
 
-    disposeSession(runnerSessionId) {
+    async disposeSession(runnerSessionId) {
       const entry = sessions.get(runnerSessionId);
       if (!entry) {
         return;
       }
 
-      entry.abortActiveStream?.();
+      await entry.abortActiveStream?.();
       entry.abortActiveStream = undefined;
       entry.unsubscribe?.();
       entry.unsubscribe = undefined;
