@@ -166,6 +166,80 @@ describe('agent runner server', () => {
     });
   });
 
+  it('accepts a null Gallery tool gateway and passes it to the runtime', async () => {
+    const runtime = createRuntime();
+
+    await withServer(runtime, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody({ toolGateway: null })),
+      });
+
+      assert.equal(response.status, 201);
+      assert.equal(runtime.calls.createSession.length, 1);
+      assert.equal(runtime.calls.createSession[0].toolGateway, null);
+    });
+  });
+
+  it('accepts a Gallery tool gateway without returning the gateway token', async () => {
+    const runtime = createRuntime({
+      createSession: async (body) => ({
+        runnerSessionId: `pi-${body.gallerySessionId}`,
+        capabilities: {
+          protocolVersion: '2026-05-14',
+          streaming: true,
+          tools: ['searchAssets', 'readAssetMetadata'],
+          models: [body.model],
+          runtime: 'pi',
+        },
+      }),
+    });
+
+    await withServer(runtime, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          createSessionBody({
+            toolGateway: {
+              url: 'https://gallery.example.test/tools',
+              token: 'gateway-token-secret',
+            },
+          }),
+        ),
+      });
+
+      assert.equal(response.status, 201);
+      const responseBody = await response.text();
+      assert.equal(responseBody.includes('gateway-token-secret'), false);
+      assert.deepEqual(JSON.parse(responseBody).capabilities.tools, ['searchAssets', 'readAssetMetadata']);
+      assert.deepEqual(runtime.calls.createSession[0].toolGateway, {
+        url: 'https://gallery.example.test/tools',
+        token: 'gateway-token-secret',
+      });
+    });
+  });
+
+  it('rejects a Gallery tool gateway without a token', async () => {
+    await withServer(createRuntime(), async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          createSessionBody({
+            toolGateway: {
+              url: 'https://gallery.example.test/tools',
+            },
+          }),
+        ),
+      });
+
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: 'toolGateway.token is required' });
+    });
+  });
+
   it('filters successful runtime session creation responses to protocol fields', async () => {
     const runtime = createRuntime({
       createSession: async () => ({
