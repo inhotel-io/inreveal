@@ -1663,7 +1663,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentListAlbumsToolResponseDto"
                 }
               }
             },
@@ -1718,7 +1718,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentReadAlbumToolResponseDto"
                 }
               }
             },
@@ -1773,7 +1773,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentReadAssetMetadataToolResponseDto"
                 }
               }
             },
@@ -1828,7 +1828,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentReadAssetOriginalsToolResponseDto"
                 }
               }
             },
@@ -1883,7 +1883,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentReadAssetPreviewsToolResponseDto"
                 }
               }
             },
@@ -1938,7 +1938,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentSearchAssetsToolResponseDto"
                 }
               }
             },
@@ -2791,7 +2791,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentListAlbumsToolResponseDto"
                 }
               }
             },
@@ -2858,7 +2858,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentReadAlbumToolResponseDto"
                 }
               }
             },
@@ -2925,7 +2925,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentReadAssetMetadataToolResponseDto"
                 }
               }
             },
@@ -2992,7 +2992,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentReadAssetOriginalsToolResponseDto"
                 }
               }
             },
@@ -3059,7 +3059,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentReadAssetPreviewsToolResponseDto"
                 }
               }
             },
@@ -3126,7 +3126,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentSearchAssetsToolResponseDto"
                 }
               }
             },
@@ -21474,6 +21474,127 @@
         ],
         "type": "object"
       },
+      "AgentAlbumDetail": {
+        "properties": {
+          "albumName": {
+            "type": "string"
+          },
+          "albumThumbnailAssetId": {
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "assetCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "assetIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "endDate": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "ownerId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "startDate": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "albumName",
+          "albumThumbnailAssetId",
+          "assetCount",
+          "assetIds",
+          "description",
+          "endDate",
+          "id",
+          "ownerId",
+          "startDate"
+        ],
+        "type": "object"
+      },
+      "AgentAlbumSummary": {
+        "properties": {
+          "albumName": {
+            "type": "string"
+          },
+          "albumThumbnailAssetId": {
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "assetCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "endDate": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "ownerId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "startDate": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "albumName",
+          "albumThumbnailAssetId",
+          "assetCount",
+          "description",
+          "endDate",
+          "id",
+          "ownerId",
+          "startDate"
+        ],
+        "type": "object"
+      },
       "AgentApprovalMode": {
         "enum": [
           "strict",
@@ -21482,6 +21603,201 @@
           "dangerously-skip-permissions"
         ],
         "type": "string"
+      },
+      "AgentAssetMediaReference": {
+        "properties": {
+          "assetId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "height": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "mediaUrl": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "width": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "assetId",
+          "fileName",
+          "height",
+          "mediaUrl",
+          "mimeType",
+          "width"
+        ],
+        "type": "object"
+      },
+      "AgentAssetMetadata": {
+        "properties": {
+          "exifInfo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AgentAssetMetadataExif"
+              }
+            ],
+            "nullable": true
+          },
+          "fileCreatedAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "fileModifiedAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "isFavorite": {
+            "type": "boolean"
+          },
+          "localDateTime": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "originalFileName": {
+            "type": "string"
+          },
+          "ownerId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/AgentAssetMetadataTag"
+            },
+            "type": "array"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AssetTypeEnum"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/AssetVisibility"
+          }
+        },
+        "required": [
+          "exifInfo",
+          "fileCreatedAt",
+          "fileModifiedAt",
+          "id",
+          "isFavorite",
+          "localDateTime",
+          "originalFileName",
+          "ownerId",
+          "tags",
+          "type",
+          "visibility"
+        ],
+        "type": "object"
+      },
+      "AgentAssetMetadataExif": {
+        "properties": {
+          "city": {
+            "nullable": true,
+            "type": "string"
+          },
+          "country": {
+            "nullable": true,
+            "type": "string"
+          },
+          "dateTimeOriginal": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "latitude": {
+            "nullable": true,
+            "type": "number"
+          },
+          "lensModel": {
+            "nullable": true,
+            "type": "string"
+          },
+          "longitude": {
+            "nullable": true,
+            "type": "number"
+          },
+          "make": {
+            "nullable": true,
+            "type": "string"
+          },
+          "model": {
+            "nullable": true,
+            "type": "string"
+          },
+          "rating": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer"
+          },
+          "state": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "city",
+          "country",
+          "dateTimeOriginal",
+          "latitude",
+          "lensModel",
+          "longitude",
+          "make",
+          "model",
+          "rating",
+          "state"
+        ],
+        "type": "object"
+      },
+      "AgentAssetMetadataTag": {
+        "properties": {
+          "color": {
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "color",
+          "id",
+          "value"
+        ],
+        "type": "object"
       },
       "AgentCredentialSnapshot": {
         "properties": {
@@ -21532,6 +21848,46 @@
         "additionalProperties": {},
         "type": "object"
       },
+      "AgentListAlbumsToolApprovalRequiredResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "approval-required"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentListAlbumsToolDeniedResponse": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "denied"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
       "AgentListAlbumsToolRequestDto": {
         "additionalProperties": false,
         "properties": {
@@ -21541,6 +21897,44 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "AgentListAlbumsToolResponseDto": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentListAlbumsToolApprovalRequiredResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentListAlbumsToolDeniedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentListAlbumsToolSuccessResponse"
+          }
+        ]
+      },
+      "AgentListAlbumsToolSuccessResponse": {
+        "properties": {
+          "albums": {
+            "items": {
+              "$ref": "#/components/schemas/AgentAlbumSummary"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "success"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "albums",
+          "status",
+          "toolCall"
+        ],
         "type": "object"
       },
       "AgentMessageAssetBlock": {
@@ -22079,6 +22473,46 @@
         ],
         "type": "string"
       },
+      "AgentReadAlbumToolApprovalRequiredResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "approval-required"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentReadAlbumToolDeniedResponse": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "denied"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
       "AgentReadAlbumToolRequestDto": {
         "additionalProperties": false,
         "properties": {
@@ -22093,6 +22527,81 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "AgentReadAlbumToolResponseDto": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentReadAlbumToolApprovalRequiredResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentReadAlbumToolDeniedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentReadAlbumToolSuccessResponse"
+          }
+        ]
+      },
+      "AgentReadAlbumToolSuccessResponse": {
+        "properties": {
+          "album": {
+            "$ref": "#/components/schemas/AgentAlbumDetail"
+          },
+          "status": {
+            "enum": [
+              "success"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "album",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentReadAssetMetadataToolApprovalRequiredResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "approval-required"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentReadAssetMetadataToolDeniedResponse": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "denied"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "toolCall"
+        ],
         "type": "object"
       },
       "AgentReadAssetMetadataToolRequestDto": {
@@ -22115,6 +22624,84 @@
         },
         "type": "object"
       },
+      "AgentReadAssetMetadataToolResponseDto": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentReadAssetMetadataToolApprovalRequiredResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentReadAssetMetadataToolDeniedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentReadAssetMetadataToolSuccessResponse"
+          }
+        ]
+      },
+      "AgentReadAssetMetadataToolSuccessResponse": {
+        "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/AgentAssetMetadata"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "success"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "assets",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentReadAssetOriginalsToolApprovalRequiredResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "approval-required"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentReadAssetOriginalsToolDeniedResponse": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "denied"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
       "AgentReadAssetOriginalsToolRequestDto": {
         "properties": {
           "assetIds": {
@@ -22135,6 +22722,84 @@
         },
         "type": "object"
       },
+      "AgentReadAssetOriginalsToolResponseDto": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentReadAssetOriginalsToolApprovalRequiredResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentReadAssetOriginalsToolDeniedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentReadAssetOriginalsToolSuccessResponse"
+          }
+        ]
+      },
+      "AgentReadAssetOriginalsToolSuccessResponse": {
+        "properties": {
+          "originals": {
+            "items": {
+              "$ref": "#/components/schemas/AgentAssetMediaReference"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "success"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "originals",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentReadAssetPreviewsToolApprovalRequiredResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "approval-required"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentReadAssetPreviewsToolDeniedResponse": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "denied"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
       "AgentReadAssetPreviewsToolRequestDto": {
         "properties": {
           "assetIds": {
@@ -22153,6 +22818,44 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "AgentReadAssetPreviewsToolResponseDto": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentReadAssetPreviewsToolApprovalRequiredResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentReadAssetPreviewsToolDeniedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentReadAssetPreviewsToolSuccessResponse"
+          }
+        ]
+      },
+      "AgentReadAssetPreviewsToolSuccessResponse": {
+        "properties": {
+          "previews": {
+            "items": {
+              "$ref": "#/components/schemas/AgentAssetMediaReference"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "success"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "previews",
+          "status",
+          "toolCall"
+        ],
         "type": "object"
       },
       "AgentRunnerCapabilitiesDto": {
@@ -22322,6 +23025,46 @@
         },
         "type": "object"
       },
+      "AgentSearchAssetsToolApprovalRequiredResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "approval-required"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentSearchAssetsToolDeniedResponse": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "denied"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
       "AgentSearchAssetsToolRequestDto": {
         "additionalProperties": false,
         "properties": {
@@ -22339,6 +23082,49 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "AgentSearchAssetsToolResponseDto": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentSearchAssetsToolApprovalRequiredResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentSearchAssetsToolDeniedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentSearchAssetsToolSuccessResponse"
+          }
+        ]
+      },
+      "AgentSearchAssetsToolSuccessResponse": {
+        "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/AgentAssetMetadata"
+            },
+            "type": "array"
+          },
+          "nextPage": {
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "success"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "assets",
+          "nextPage",
+          "status",
+          "toolCall"
+        ],
         "type": "object"
       },
       "AgentSessionCreateDto": {
