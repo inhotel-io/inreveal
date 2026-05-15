@@ -10,7 +10,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       "summary" text NOT NULL,
       "createdAt" timestamp with time zone NOT NULL DEFAULT now(),
       "updatedAt" timestamp with time zone NOT NULL DEFAULT now(),
-      "updateId" uuid NOT NULL DEFAULT immich_uuid_v7(clock_timestamp()),
+      "updateId" uuid NOT NULL DEFAULT immich_uuid_v7(),
       CONSTRAINT "agent_operation_plan_pkey" PRIMARY KEY ("id"),
       CONSTRAINT "agent_operation_plan_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "agent_session"("id") ON UPDATE CASCADE ON DELETE CASCADE,
       CONSTRAINT "agent_operation_plan_sessionId_revision_key" UNIQUE ("sessionId", "revision")
@@ -53,7 +53,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       "error" text,
       "createdAt" timestamp with time zone NOT NULL DEFAULT now(),
       "updatedAt" timestamp with time zone NOT NULL DEFAULT now(),
-      "updateId" uuid NOT NULL DEFAULT immich_uuid_v7(clock_timestamp()),
+      "updateId" uuid NOT NULL DEFAULT immich_uuid_v7(),
       CONSTRAINT "agent_operation_pkey" PRIMARY KEY ("id"),
       CONSTRAINT "agent_operation_planId_fkey" FOREIGN KEY ("planId") REFERENCES "agent_operation_plan"("id") ON UPDATE CASCADE ON DELETE CASCADE
     )

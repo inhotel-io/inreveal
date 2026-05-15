@@ -24,7 +24,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf1 {
     this.payload = const {},
   });
 
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum type;
+  AgentAlbumAddAssetsOperationType type;
 
   String summary;
 
@@ -123,7 +123,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf1 {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf1(
-        type: AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum.fromJson(json[r'type'])!,
+        type: AgentAlbumAddAssetsOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         targetKind: AgentOperationTargetKind.fromJson(json[r'targetKind'])!,
         targetId: mapValueOfType<String>(json, r'targetId'),
@@ -187,75 +187,4 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf1 {
     'assetIds',
   };
 }
-
-
-class AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum {
-  /// Instantiate a new enum with the provided [value].
-  const AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum._(this.value);
-
-  /// The underlying value of this enum member.
-  final String value;
-
-  @override
-  String toString() => value;
-
-  String toJson() => value;
-
-  static const albumPeriodAddAssets = AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum._(r'album.addAssets');
-
-  /// List of all possible values in this [enum][AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum].
-  static const values = <AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum>[
-    albumPeriodAddAssets,
-  ];
-
-  static AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum? fromJson(dynamic value) => AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnumTypeTransformer().decode(value);
-
-  static List<AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum> listFromJson(dynamic json, {bool growable = false,}) {
-    final result = <AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum>[];
-    if (json is List && json.isNotEmpty) {
-      for (final row in json) {
-        final value = AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum.fromJson(row);
-        if (value != null) {
-          result.add(value);
-        }
-      }
-    }
-    return result.toList(growable: growable);
-  }
-}
-
-/// Transformation class that can [encode] an instance of [AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum] to String,
-/// and [decode] dynamic data back to [AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum].
-class AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnumTypeTransformer {
-  factory AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnumTypeTransformer() => _instance ??= const AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnumTypeTransformer._();
-
-  const AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnumTypeTransformer._();
-
-  String encode(AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum data) => data.value;
-
-  /// Decodes a [dynamic value][data] to a AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum.
-  ///
-  /// If [allowNull] is true and the [dynamic value][data] cannot be decoded successfully,
-  /// then null is returned. However, if [allowNull] is false and the [dynamic value][data]
-  /// cannot be decoded successfully, then an [UnimplementedError] is thrown.
-  ///
-  /// The [allowNull] is very handy when an API changes and a new enum value is added or removed,
-  /// and users are still using an old app with the old code.
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum? decode(dynamic data, {bool allowNull = true}) {
-    if (data != null) {
-      switch (data) {
-        case r'album.addAssets': return AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnum.albumPeriodAddAssets;
-        default:
-          if (!allowNull) {
-            throw ArgumentError('Unknown enum value to decode: $data');
-          }
-      }
-    }
-    return null;
-  }
-
-  /// Singleton [AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnumTypeTransformer] instance.
-  static AgentProposeAlbumOperationsDtoOperationsInnerOneOf1TypeEnumTypeTransformer? _instance;
-}
-
 
