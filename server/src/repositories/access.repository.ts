@@ -138,12 +138,6 @@ class AlbumAccess {
 class AssetAccess {
   constructor(private db: Kysely<DB>) {}
 
-  private static readonly agentReadableVisibilities = [
-    AssetVisibility.Timeline,
-    AssetVisibility.Archive,
-    AssetVisibility.Locked,
-  ];
-
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID_SET] })
   @ChunkedSet({ paramIndex: 1 })
   async checkAlbumAccess(userId: string, assetIds: Set<string>) {
@@ -197,15 +191,7 @@ class AssetAccess {
       .select('asset.id')
       .where('asset.id', 'in', [...assetIds])
       .where('asset.ownerId', '=', userId)
-      .where('asset.deletedAt', 'is', null)
-      .where('asset.isOffline', '=', false)
-      .where(
-        'asset.visibility',
-        'in',
-        hasElevatedPermission
-          ? AssetAccess.agentReadableVisibilities
-          : [AssetVisibility.Timeline, AssetVisibility.Archive],
-      )
+      .$if(!hasElevatedPermission, (eb) => eb.where('asset.visibility', '!=', AssetVisibility.Locked))
       .execute()
       .then((assets) => new Set(assets.map((asset) => asset.id)));
   }
@@ -250,11 +236,7 @@ class AssetAccess {
           .selectFrom('shared_space_asset')
           .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_asset.spaceId')
           .innerJoin('asset', (join) =>
-            join
-              .onRef('asset.id', '=', 'shared_space_asset.assetId')
-              .on('asset.deletedAt', 'is', null)
-              .on('asset.isOffline', '=', false)
-              .on('asset.visibility', 'in', AssetAccess.agentReadableVisibilities),
+            join.onRef('asset.id', '=', 'shared_space_asset.assetId').on('asset.deletedAt', 'is', null),
           )
           .select(['asset.id', 'asset.livePhotoVideoId'])
           .where('shared_space_member.userId', '=', userId)
@@ -269,8 +251,7 @@ class AssetAccess {
                 join
                   .onRef('asset.libraryId', '=', 'shared_space_library.libraryId')
                   .on('asset.deletedAt', 'is', null)
-                  .on('asset.isOffline', '=', false)
-                  .on('asset.visibility', 'in', AssetAccess.agentReadableVisibilities),
+                  .on('asset.isOffline', '=', false),
               )
               .select(['asset.id', 'asset.livePhotoVideoId'])
               .where('shared_space_member.userId', '=', userId)
@@ -309,11 +290,7 @@ class AssetAccess {
           .selectFrom('shared_space_asset')
           .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_asset.spaceId')
           .innerJoin('asset', (join) =>
-            join
-              .onRef('asset.id', '=', 'shared_space_asset.assetId')
-              .on('asset.deletedAt', 'is', null)
-              .on('asset.isOffline', '=', false)
-              .on('asset.visibility', 'in', AssetAccess.agentReadableVisibilities),
+            join.onRef('asset.id', '=', 'shared_space_asset.assetId').on('asset.deletedAt', 'is', null),
           )
           .select(['asset.id', 'asset.livePhotoVideoId'])
           .where('shared_space_member.userId', '=', userId)
@@ -329,8 +306,7 @@ class AssetAccess {
                 join
                   .onRef('asset.libraryId', '=', 'shared_space_library.libraryId')
                   .on('asset.deletedAt', 'is', null)
-                  .on('asset.isOffline', '=', false)
-                  .on('asset.visibility', 'in', AssetAccess.agentReadableVisibilities),
+                  .on('asset.isOffline', '=', false),
               )
               .select(['asset.id', 'asset.livePhotoVideoId'])
               .where('shared_space_member.userId', '=', userId)
