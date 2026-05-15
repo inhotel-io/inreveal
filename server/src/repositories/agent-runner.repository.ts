@@ -64,6 +64,34 @@ const isCreateSessionResult = (value: unknown): value is AgentRunnerCreateSessio
   return typeof body.runnerSessionId === 'string' && objectRecord(body.capabilities) === body.capabilities;
 };
 
+const optionalString = (value: unknown): boolean => value === undefined || typeof value === 'string';
+
+const isMessageBlock = (value: unknown): boolean => {
+  const block = objectRecord(value);
+  if (block.type === 'text') {
+    return typeof block.text === 'string';
+  }
+
+  if (block.type === 'tool-call') {
+    return typeof block.toolCallId === 'string' && optionalString(block.summary);
+  }
+
+  if (block.type === 'asset') {
+    return typeof block.assetId === 'string' && optionalString(block.label);
+  }
+
+  if (block.type === 'plan') {
+    return typeof block.planId === 'string' && optionalString(block.label);
+  }
+
+  return false;
+};
+
+const isMessageContent = (value: unknown): boolean => {
+  const content = objectRecord(value);
+  return Array.isArray(content.blocks) && content.blocks.every(isMessageBlock);
+};
+
 const isStreamEvent = (value: unknown): value is AgentRunnerStreamEvent => {
   const body = objectRecord(value);
   if (body.type === 'assistant-message-delta') {
@@ -80,7 +108,7 @@ const isStreamEvent = (value: unknown): value is AgentRunnerStreamEvent => {
       typeof body.sessionId === 'string' &&
       typeof body.runnerSessionId === 'string' &&
       (typeof body.providerMessageId === 'string' || body.providerMessageId === null) &&
-      Array.isArray(objectRecord(body.content).blocks)
+      isMessageContent(body.content)
     );
   }
 
@@ -88,7 +116,10 @@ const isStreamEvent = (value: unknown): value is AgentRunnerStreamEvent => {
 };
 
 const parseSseFrame = (frame: string): AgentRunnerStreamEvent | null => {
-  const dataLine = frame.split('\n').find((line) => line.startsWith('data: '));
+  const dataLine = frame
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .find((line) => line.startsWith('data: '));
   if (!dataLine) {
     return null;
   }
@@ -110,29 +141,43 @@ const parseSseFrame = (frame: string): AgentRunnerStreamEvent | null => {
 async function* parseSseStream(stream: ReadableStream<Uint8Array>): AsyncGenerator<AgentRunnerStreamEvent> {
   const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = '';
+  let completed = false;
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) {
-      break;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += value;
+      buffer = buffer.replace(/\r\n/g, '\n');
+      const frames = buffer.split('\n\n');
+      buffer = frames.pop() ?? '';
+
+      for (const frame of frames) {
+        const event = parseSseFrame(frame);
+        if (event) {
+          yield event;
+        }
+      }
     }
 
-    buffer += value;
-    const frames = buffer.split('\n\n');
-    buffer = frames.pop() ?? '';
-
-    for (const frame of frames) {
-      const event = parseSseFrame(frame);
+    if (buffer.trim().length > 0) {
+      const event = parseSseFrame(buffer);
       if (event) {
         yield event;
       }
     }
-  }
 
-  if (buffer.trim().length > 0) {
-    const event = parseSseFrame(buffer);
-    if (event) {
-      yield event;
+    completed = true;
+  } finally {
+    try {
+      if (!completed) {
+        await reader.cancel().catch(() => undefined);
+      }
+    } finally {
+      reader.releaseLock();
     }
   }
 }
