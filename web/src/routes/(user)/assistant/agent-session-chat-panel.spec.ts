@@ -11,6 +11,7 @@ import {
 } from '@immich/sdk';
 import { websocketMock } from '@test-data/mocks/websocket.mock';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { readable } from 'svelte/store';
 import AgentSessionChatPanel from './agent-session-chat-panel.svelte';
 
@@ -285,6 +286,37 @@ describe(AgentSessionChatPanel.name, () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Runner failed');
     await waitFor(() => expect(screen.queryByText('Partial response')).not.toBeInTheDocument());
+  });
+
+  it('ignores operation plan ready websocket events without interrupting an active response', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+
+    render(AgentSessionChatPanel, { props: { session } });
+    await screen.findByRole('textbox', { name: 'Message' });
+
+    handler?.({
+      type: 'assistant-message-delta',
+      sessionId: session.id,
+      delta: 'Thinking...',
+      sequence: 1,
+      createdAt: '2026-05-14T00:00:01.000Z',
+    });
+    expect(await screen.findByText('Thinking...')).toBeInTheDocument();
+
+    handler?.({
+      type: 'operation-plan-ready',
+      sessionId: session.id,
+      planId: '00000000-0000-4000-8000-000000000200',
+      revision: 1,
+    });
+    await tick();
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Thinking...')).toBeInTheDocument();
   });
 
   it('renders a visible label for the message draft', async () => {
