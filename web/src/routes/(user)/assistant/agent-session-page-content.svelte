@@ -5,6 +5,7 @@
     type AgentSessionResponseDto,
   } from '@immich/sdk';
   import { t } from 'svelte-i18n';
+  import AgentOperationPlanReviewPanel from './agent-operation-plan-review-panel.svelte';
   import AgentRunnerStatusPanel from './agent-runner-status-panel.svelte';
   import AgentSessionChatPanel from './agent-session-chat-panel.svelte';
   import AgentSessionSetupPanel from './agent-session-setup-panel.svelte';
@@ -64,6 +65,7 @@
 
     {#key createdSession.id}
       <AgentSessionChatPanel session={createdSession} />
+      <AgentOperationPlanReviewPanel session={createdSession} />
     {/key}
   {/if}
 </div>
