@@ -2,8 +2,18 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import {
+  AgentListAlbumsToolRequestDto,
+  AgentListAlbumsToolResponseDto,
+  AgentReadAlbumToolRequestDto,
+  AgentReadAlbumToolResponseDto,
   AgentReadAssetMetadataToolRequestDto,
   AgentReadAssetMetadataToolResponseDto,
+  AgentReadAssetOriginalsToolRequestDto,
+  AgentReadAssetOriginalsToolResponseDto,
+  AgentReadAssetPreviewsToolRequestDto,
+  AgentReadAssetPreviewsToolResponseDto,
+  AgentSearchAssetsToolRequestDto,
+  AgentSearchAssetsToolResponseDto,
   AgentToolApprovalDto,
   AgentToolCallParamsDto,
   AgentToolCallResponseDto,
@@ -19,6 +29,22 @@ import { UUIDParamDto } from 'src/validation';
 export class AgentToolController {
   constructor(private readonly service: AgentToolService) {}
 
+  @Post('tools/search-assets')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @Endpoint({
+    summary: 'Execute the internal searchAssets agent tool',
+    description:
+      'Internal route for requesting or resuming a strict-approved asset search tool call for an AI agent session.',
+    history: new HistoryBuilder().added('v2.7.5').internal('v2.7.5'),
+  })
+  searchAssets(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: AgentSearchAssetsToolRequestDto,
+  ): Promise<AgentSearchAssetsToolResponseDto> {
+    return this.service.searchAssets(auth, id, dto);
+  }
+
   @Post('tools/read-asset-metadata')
   @Authenticated({ permission: Permission.AgentSessionUpdate })
   @Endpoint({
@@ -33,6 +59,70 @@ export class AgentToolController {
     @Body() dto: AgentReadAssetMetadataToolRequestDto,
   ): Promise<AgentReadAssetMetadataToolResponseDto> {
     return this.service.readAssetMetadata(auth, id, dto);
+  }
+
+  @Post('tools/read-asset-previews')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @Endpoint({
+    summary: 'Execute the internal readAssetPreviews agent tool',
+    description:
+      'Internal route for requesting or resuming a strict-approved preview read tool call for an AI agent session.',
+    history: new HistoryBuilder().added('v2.7.5').internal('v2.7.5'),
+  })
+  readAssetPreviews(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: AgentReadAssetPreviewsToolRequestDto,
+  ): Promise<AgentReadAssetPreviewsToolResponseDto> {
+    return this.service.readAssetPreviews(auth, id, dto);
+  }
+
+  @Post('tools/read-asset-originals')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @Endpoint({
+    summary: 'Execute the internal readAssetOriginals agent tool',
+    description:
+      'Internal route for requesting or resuming a strict-approved original read tool call for an AI agent session.',
+    history: new HistoryBuilder().added('v2.7.5').internal('v2.7.5'),
+  })
+  readAssetOriginals(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: AgentReadAssetOriginalsToolRequestDto,
+  ): Promise<AgentReadAssetOriginalsToolResponseDto> {
+    return this.service.readAssetOriginals(auth, id, dto);
+  }
+
+  @Post('tools/list-albums')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @Endpoint({
+    summary: 'Execute the internal listAlbums agent tool',
+    description:
+      'Internal route for requesting or resuming a strict-approved album list tool call for an AI agent session.',
+    history: new HistoryBuilder().added('v2.7.5').internal('v2.7.5'),
+  })
+  listAlbums(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: AgentListAlbumsToolRequestDto,
+  ): Promise<AgentListAlbumsToolResponseDto> {
+    return this.service.listAlbums(auth, id, dto);
+  }
+
+  @Post('tools/read-album')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @Endpoint({
+    summary: 'Execute the internal readAlbum agent tool',
+    description:
+      'Internal route for requesting or resuming a strict-approved album read tool call for an AI agent session.',
+    history: new HistoryBuilder().added('v2.7.5').internal('v2.7.5'),
+  })
+  readAlbum(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: AgentReadAlbumToolRequestDto,
+  ): Promise<AgentReadAlbumToolResponseDto> {
+    return this.service.readAlbum(auth, id, dto);
   }
 
   @Get('tool-calls')
