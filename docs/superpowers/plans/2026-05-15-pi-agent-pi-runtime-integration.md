@@ -6,7 +6,7 @@
 
 **Architecture:** Gallery decrypts the selected provider credential only for the runner session creation request; it never stores the raw secret in `agent_session` snapshots or response DTOs. The `agent-runner` package gains a Pi runtime adapter behind an injectable runtime interface, so unit tests can mock Pi/provider behavior while production uses `@earendil-works/pi-coding-agent`. The runner exposes the same HTTP protocol created in slice 7, but message streams now come from the Pi runtime instead of the echo stub; no write tools, album operation tools, approval UI changes, or expanded read tools are included in this slice.
 
-**Tech Stack:** NestJS services/repositories, existing encrypted credential service, Node.js HTTP/SSE runner, `@earendil-works/pi-coding-agent`, `@earendil-works/pi-ai`, `typebox`, Vitest, Node `node:test`, existing Socket.IO websocket channel.
+**Tech Stack:** NestJS services/repositories, existing encrypted credential service, Node.js HTTP/SSE runner, `@earendil-works/pi-coding-agent`, `@earendil-works/pi-ai`, Vitest, Node `node:test`, existing Socket.IO websocket channel.
 
 ---
 
@@ -40,7 +40,7 @@ This slice implements:
 - A runtime event bridge from Pi text deltas/completion/errors to the existing Gallery SSE protocol.
 - Runner HTTP route changes that create runtime-backed sessions and stream runtime-backed message events.
 - Server-side parsing and websocket propagation for runner-reported provider/runtime errors.
-- Focused edge-case tests around missing secrets, unknown runner sessions, runtime errors, event validation, and secret redaction.
+- Focused edge-case tests around missing credentials/secrets/models, unknown runner sessions, runtime errors, event validation, event subscription cleanup, and secret redaction.
 
 This slice intentionally does not implement:
 
@@ -272,7 +272,37 @@ export type AgentRunnerCreateSessionRequest = {
 
 Keep `AgentCredentialSnapshot` unchanged in `server/src/types/agent-session.types.ts`; the raw secret is protocol material only.
 
-- [ ] **Step 4: Decrypt before creating the Gallery session and pass secret only to the runner**
+- [ ] **Step 4: Update existing runner request fixtures for the new transient secret field**
+
+Any existing `AgentRunnerCreateSessionRequest` fixture must include the new transient `secret` field so later typecheck/lint CI sees a consistent protocol. Update the existing `makeCreateSessionBody()` fixture in `server/src/services/agent-runner.service.spec.ts`.
+
+```ts
+credential: {
+  id: '00000000-0000-4000-8000-000000000001',
+  providerType: AgentProviderType.OpenAI,
+  label: 'OpenAI personal',
+  baseUrl: null,
+  models: ['gpt-5.1'],
+  defaultModel: 'gpt-5.1',
+  secret: 'sk-session-secret',
+},
+```
+
+Update the existing `createSessionBody` fixture in `server/src/repositories/agent-runner.repository.spec.ts`.
+
+```ts
+credential: {
+  id: 'credential-1',
+  providerType: AgentProviderType.OpenAI,
+  label: 'OpenAI',
+  baseUrl: null,
+  models: ['gpt-5.1'],
+  defaultModel: 'gpt-5.1',
+  secret: 'sk-session-secret',
+},
+```
+
+- [ ] **Step 5: Decrypt before creating the Gallery session and pass secret only to the runner**
 
 Modify the create path in `server/src/services/agent-session.service.ts`.
 
@@ -310,7 +340,7 @@ runnerSession = await this.agentRunnerService.createSession({
 
 Place the `getSecret()` call after model validation and before `repository.create()`. This prevents durable orphan sessions when decryption fails.
 
-- [ ] **Step 5: Verify the session-service tests pass**
+- [ ] **Step 6: Verify the session-service tests pass**
 
 ```bash
 pnpm --dir server test agent-session.service.spec.ts
@@ -318,10 +348,10 @@ pnpm --dir server test agent-session.service.spec.ts
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit server credential handoff**
+- [ ] **Step 7: Commit server credential handoff**
 
 ```bash
-git add server/src/types/agent-runner.types.ts server/src/services/agent-session.service.ts server/src/services/agent-session.service.spec.ts
+git add server/src/types/agent-runner.types.ts server/src/services/agent-session.service.ts server/src/services/agent-session.service.spec.ts server/src/services/agent-runner.service.spec.ts server/src/repositories/agent-runner.repository.spec.ts
 git commit -m "feat: pass transient agent provider secret to runner"
 ```
 
@@ -562,6 +592,23 @@ describe('pi runtime adapter', () => {
     ]);
   });
 
+  it('unsubscribes from Pi runtime events after a message stream completes', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    await collect(
+      runtime.sendMessage({
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        gallerySessionId: '00000000-0000-4000-8000-000000000100',
+        messageId: '00000000-0000-4000-8000-000000000200',
+        content: { blocks: [{ type: 'text', text: 'Organize my photos.' }] },
+      }),
+    );
+
+    assert.equal(calls.unsubscribed, 1);
+  });
+
   it('returns a sanitized runner-error event when Pi prompt fails', async () => {
     const { sdk, ai, session } = createFakeDependencies();
     session.prompt = async () => {
@@ -614,7 +661,6 @@ describe('pi runtime adapter', () => {
 
     runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
 
-    assert.equal(calls.unsubscribed, 1);
     assert.equal(calls.disposed, 1);
   });
 });
@@ -644,8 +690,7 @@ Modify `agent-runner/package.json`.
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.74.0",
-    "@earendil-works/pi-coding-agent": "^0.74.0",
-    "typebox": "^1.1.38"
+    "@earendil-works/pi-coding-agent": "^0.74.0"
   }
 }
 ```
@@ -656,7 +701,7 @@ Then resolve the exact package versions available to the workspace:
 pnpm --dir agent-runner install
 ```
 
-Expected: `pnpm-lock.yaml` records `@earendil-works/pi-ai`, `@earendil-works/pi-coding-agent`, and `typebox` for the `agent-runner` importer.
+Expected: `pnpm-lock.yaml` records `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` for the `agent-runner` importer. Do not add `typebox` in this slice because the constrained registry intentionally exposes no custom Gallery tools yet.
 
 - [ ] **Step 4: Implement `pi-runtime.mjs`**
 
@@ -868,45 +913,52 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       });
       entry.unsubscribe = unsubscribe;
 
-      const prompt = firstTextPrompt(content);
-      const promptPromise = entry.session
-        .prompt(prompt)
-        .then(() => {
-          const text = assistantTextFromMessages(entry.session.messages);
-          enqueue({
-            type: 'assistant-message-completed',
-            sessionId: gallerySessionId,
-            runnerSessionId,
-            providerMessageId: null,
-            content: { blocks: [{ type: 'text', text }] },
+      try {
+        const prompt = firstTextPrompt(content);
+        const promptPromise = entry.session
+          .prompt(prompt)
+          .then(() => {
+            const text = assistantTextFromMessages(entry.session.messages);
+            enqueue({
+              type: 'assistant-message-completed',
+              sessionId: gallerySessionId,
+              runnerSessionId,
+              providerMessageId: null,
+              content: { blocks: [{ type: 'text', text }] },
+            });
+          })
+          .catch((error) => {
+            enqueue({
+              type: 'runner-error',
+              sessionId: gallerySessionId,
+              runnerSessionId,
+              message: normalizeErrorMessage(error, entry.credentialSecret),
+            });
+          })
+          .finally(() => {
+            finished = true;
+            wake?.();
+            wake = undefined;
           });
-        })
-        .catch((error) => {
-          enqueue({
-            type: 'runner-error',
-            sessionId: gallerySessionId,
-            runnerSessionId,
-            message: normalizeErrorMessage(error, entry.credentialSecret),
-          });
-        })
-        .finally(() => {
-          finished = true;
-          wake?.();
-          wake = undefined;
-        });
 
-      while (!finished || pendingEvents.length > 0) {
-        if (pendingEvents.length === 0) {
-          await new Promise((resolve) => {
-            wake = resolve;
-          });
-          continue;
+        while (!finished || pendingEvents.length > 0) {
+          if (pendingEvents.length === 0) {
+            await new Promise((resolve) => {
+              wake = resolve;
+            });
+            continue;
+          }
+
+          yield pendingEvents.shift();
         }
 
-        yield pendingEvents.shift();
+        await promptPromise;
+      } finally {
+        unsubscribe();
+        if (entry.unsubscribe === unsubscribe) {
+          entry.unsubscribe = undefined;
+        }
       }
-
-      await promptPromise;
     },
 
     disposeSession(runnerSessionId) {
@@ -1087,6 +1139,104 @@ it('rejects runtime session creation without a provider secret', async () => {
   );
 });
 
+it('rejects runtime session creation without credential metadata', async () => {
+  const { runtime } = createRuntime();
+
+  await withServer(
+    async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gallerySessionId: '00000000-0000-4000-8000-000000000100',
+          model: 'gpt-5.1',
+          permissionPreset: 'careful',
+          permissionPlan: {},
+          approvalMode: 'strict',
+          initialContext: {},
+        }),
+      });
+
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: 'credential is required' });
+    },
+    { runtime },
+  );
+});
+
+it('rejects runtime session creation without a model', async () => {
+  const { runtime } = createRuntime();
+
+  await withServer(
+    async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gallerySessionId: '00000000-0000-4000-8000-000000000100',
+          credential: {
+            id: '00000000-0000-4000-8000-000000000001',
+            providerType: 'openai',
+            label: 'OpenAI personal',
+            baseUrl: null,
+            models: ['gpt-5.1'],
+            defaultModel: 'gpt-5.1',
+            secret: 'sk-secret',
+          },
+          permissionPreset: 'careful',
+          permissionPlan: {},
+          approvalMode: 'strict',
+          initialContext: {},
+        }),
+      });
+
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: 'model is required' });
+    },
+    { runtime },
+  );
+});
+
+it('returns a generic create-session failure when runtime creation throws with a secret-bearing error', async () => {
+  const runtime = {
+    async createSession() {
+      throw new Error('provider rejected sk-secret');
+    },
+    async *sendMessage() {},
+    disposeSession() {},
+  };
+
+  await withServer(
+    async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gallerySessionId: '00000000-0000-4000-8000-000000000100',
+          credential: {
+            id: '00000000-0000-4000-8000-000000000001',
+            providerType: 'openai',
+            label: 'OpenAI personal',
+            baseUrl: null,
+            models: ['gpt-5.1'],
+            defaultModel: 'gpt-5.1',
+            secret: 'sk-secret',
+          },
+          model: 'gpt-5.1',
+          permissionPreset: 'careful',
+          permissionPlan: {},
+          approvalMode: 'strict',
+          initialContext: {},
+        }),
+      });
+
+      assert.equal(response.status, 502);
+      assert.deepEqual(await response.json(), { error: 'runner session creation failed' });
+    },
+    { runtime },
+  );
+});
+
 it('streams runtime message events for a known runner session', async () => {
   const { runtime, calls } = createRuntime();
 
@@ -1245,6 +1395,71 @@ it('streams sanitized runtime errors as runner-error SSE events', async () => {
             sessionId: '00000000-0000-4000-8000-000000000100',
             runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
             message: 'Provider request failed',
+          },
+        },
+      ]);
+    },
+    { runtime },
+  );
+});
+
+it('streams a generic runner-error when runtime message streaming throws', async () => {
+  const runtime = {
+    async createSession(body) {
+      return {
+        runnerSessionId: `pi-${body.gallerySessionId}`,
+        capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: [], models: [body.model], runtime: 'pi' },
+      };
+    },
+    async *sendMessage() {
+      throw new Error('provider leaked sk-secret');
+    },
+    disposeSession() {},
+  };
+
+  await withServer(
+    async (baseUrl) => {
+      await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gallerySessionId: '00000000-0000-4000-8000-000000000100',
+          credential: {
+            id: '00000000-0000-4000-8000-000000000001',
+            providerType: 'openai',
+            label: 'OpenAI personal',
+            baseUrl: null,
+            models: ['gpt-5.1'],
+            defaultModel: 'gpt-5.1',
+            secret: 'sk-secret',
+          },
+          model: 'gpt-5.1',
+          permissionPreset: 'careful',
+          permissionPlan: {},
+          approvalMode: 'strict',
+          initialContext: {},
+        }),
+      });
+
+      const response = await fetch(`${baseUrl}/sessions/pi-00000000-0000-4000-8000-000000000100/messages`, {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gallerySessionId: '00000000-0000-4000-8000-000000000100',
+          messageId: '00000000-0000-4000-8000-000000000200',
+          content: { blocks: [{ type: 'text', text: 'Hello runner' }] },
+        }),
+      });
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await readSse(response), [
+        {
+          event: 'runner-error',
+          data: {
+            type: 'runner-error',
+            sessionId: '00000000-0000-4000-8000-000000000100',
+            runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+            message: 'Runner session failed',
           },
         },
       ]);
@@ -1613,63 +1828,65 @@ if (body.type === 'runner-error') {
 Modify `sendMessageToRunner()` in `server/src/services/agent-runner.service.ts`.
 
 ```ts
-let completed = false;
 let runnerErrorMessage = 'The assistant runner stopped while processing the message.';
-for await (const event of this.agentRunnerRepository.streamMessage({
-  url: runnerUrl,
-  runnerSessionId,
-  timeoutMs: runnerMessageStreamTimeoutMs,
-  body: { gallerySessionId: sessionId, messageId, content },
-})) {
-  if (event.sessionId !== sessionId || event.runnerSessionId !== runnerSessionId) {
-    continue;
+
+try {
+  const { runnerUrl, runnerMessageStreamTimeoutMs } = this.configRepository.getEnv().agent;
+  if (!runnerUrl) {
+    throw new BadRequestException('Agent runner is not configured');
   }
 
-  if (event.type === 'runner-error') {
-    runnerErrorMessage = event.message;
-    throw new Error(event.message);
-  }
+  let completed = false;
+  for await (const event of this.agentRunnerRepository.streamMessage({
+    url: runnerUrl,
+    runnerSessionId,
+    timeoutMs: runnerMessageStreamTimeoutMs,
+    body: { gallerySessionId: sessionId, messageId, content },
+  })) {
+    if (event.sessionId !== sessionId || event.runnerSessionId !== runnerSessionId) {
+      continue;
+    }
 
-  if (event.type === 'assistant-message-delta') {
-    this.websocketRepository.clientSend('on_agent_session_event', userId, {
-      type: 'assistant-message-delta',
+    if (event.type === 'runner-error') {
+      runnerErrorMessage = event.message;
+      throw new Error(event.message);
+    }
+
+    if (event.type === 'assistant-message-delta') {
+      this.websocketRepository.clientSend('on_agent_session_event', userId, {
+        type: 'assistant-message-delta',
+        sessionId,
+        delta: event.delta,
+        sequence: event.sequence,
+        createdAt: this.toIsoNow(),
+      });
+      continue;
+    }
+
+    completed = true;
+    const session = await this.sessionRepository.getById(userId, sessionId);
+    if (!session || !AgentRunnerService.completionActiveStatuses.includes(session.status)) {
+      continue;
+    }
+
+    const message = await this.messageRepository.create({
       sessionId,
-      delta: event.delta,
-      sequence: event.sequence,
+      role: AgentMessageRole.Assistant,
+      content: event.content,
+      providerMessageId: event.providerMessageId,
+      toolCallId: null,
+    });
+    this.websocketRepository.clientSend('on_agent_session_event', userId, {
+      type: 'assistant-message-created',
+      sessionId,
+      message: this.mapMessage(message),
       createdAt: this.toIsoNow(),
     });
-    continue;
   }
 
-  completed = true;
-  const session = await this.sessionRepository.getById(userId, sessionId);
-  if (!session || !AgentRunnerService.completionActiveStatuses.includes(session.status)) {
-    continue;
+  if (!completed) {
+    throw new Error('Agent runner message stream ended before completion');
   }
-
-  const message = await this.messageRepository.create({
-    sessionId,
-    role: AgentMessageRole.Assistant,
-    content: event.content,
-    providerMessageId: event.providerMessageId,
-    toolCallId: null,
-  });
-  this.websocketRepository.clientSend('on_agent_session_event', userId, {
-    type: 'assistant-message-created',
-    sessionId,
-    message: this.mapMessage(message),
-    createdAt: this.toIsoNow(),
-  });
-}
-
-if (!completed) {
-  throw new Error('Agent runner message stream ended before completion');
-}
-```
-
-Update the catch block to use `runnerErrorMessage` for runner-reported errors while preserving the existing generic transport failure message.
-
-```ts
 } catch (error) {
   await this.sessionRepository.markInterruptedFromActive(userId, sessionId).catch(() => {});
   this.websocketRepository.clientSend('on_agent_session_event', userId, {
@@ -1749,9 +1966,10 @@ Confirm these are covered by tests:
 - Secret decryption failure happens before durable session creation.
 - Raw credential secret appears only in the server-to-runner request and the runner runtime API key override.
 - Runner session responses and Gallery session DTOs never include `credential.secret`.
-- Runner create-session rejects missing `gallerySessionId`, missing `credential`, missing `credential.secret`, and invalid JSON.
+- Runner create-session rejects missing `gallerySessionId`, missing `credential`, missing `credential.secret`, missing `model`, and invalid JSON.
 - Runner message endpoint rejects unknown `runnerSessionId` with `404`.
 - Pi runtime uses `noTools: "all"`, `tools: []`, and `customTools: []` in this slice.
+- Pi runtime unsubscribes from per-message event listeners after each message stream completes.
 - OpenAI-compatible credentials use a session-scoped provider name and base URL.
 - Provider/runtime errors are redacted before becoming SSE events.
 - Gallery treats valid `runner-error` as terminal and persists no assistant message.
@@ -1770,6 +1988,6 @@ git commit -m "fix: satisfy agent runner pi integration checks"
 
 - Spec coverage: This plan implements slice 8 only: Pi runtime/provider integration, constrained no-write tool configuration, transient credential handoff, runtime-backed streaming, and mocked provider boundary tests.
 - TDD discipline: Every implementation task starts with failing tests, has a focused pass command, and ends with a commit.
-- Edge cases: Secret leakage, decrypt failure, unknown runner sessions, invalid stream errors, provider errors, wrong-session stream events, OpenAI-compatible provider setup, and no-write/no-built-in-tool constraints are covered.
+- Edge cases: Secret leakage, decrypt failure, missing runner inputs, unknown runner sessions, invalid stream errors, provider errors, runtime creation/stream failures, per-message listener cleanup, wrong-session stream events, OpenAI-compatible provider setup, and no-write/no-built-in-tool constraints are covered.
 - Out of scope: Expanded Gallery read tools, approval grants, YOLO behavior, album operation plans, plan review UI, and album writes remain reserved for later slices.
 - Type consistency: The runner protocol uses `credential.secret` only in `AgentRunnerCreateSessionRequest`; persisted `AgentCredentialSnapshot` remains secret-free. `runner-error` is part of `AgentRunnerStreamEvent` and maps to the existing websocket `runner-error` client event.
