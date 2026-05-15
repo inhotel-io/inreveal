@@ -53,6 +53,17 @@ describe('Gallery read tools', () => {
     );
   });
 
+  it('uses object parameter schemas compatible with OpenAI function tools', () => {
+    const tools = createGalleryReadTools({ client: createRecordingClient() });
+
+    for (const tool of tools) {
+      assert.equal(tool.parameters.type, 'object');
+      assert.deepEqual(tool.parameters.properties, {});
+      assert.equal(tool.parameters.additionalProperties, true);
+      assert.equal(tool.parameters.patternProperties, undefined);
+    }
+  });
+
   it('searchAssets calls the search-assets gateway route', async () => {
     const client = createRecordingClient();
     const [tool] = createGalleryReadTools({ client }).filter((candidate) => candidate.name === 'searchAssets');
