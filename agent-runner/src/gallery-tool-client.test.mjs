@@ -86,4 +86,39 @@ describe('Gallery tool gateway client', () => {
       },
     );
   });
+
+  it('rejects non-2xx responses without leaking gateway tokens from the response body', async () => {
+    const tokenGateway = { ...gateway, token: 'runner-token-1' };
+    const client = createGalleryToolClient({
+      gateway: tokenGateway,
+      gallerySessionId,
+      fetch: async () =>
+        new Response(JSON.stringify({ error: 'gateway rejected runner-token-1' }), {
+          status: 502,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    });
+
+    await assert.rejects(
+      () => client.post('search-assets', {}),
+      (error) => {
+        assert.match(error.message, /Gallery tool request failed with status 502/);
+        assert.equal(error.message.includes('runner-token-1'), false);
+        return true;
+      },
+    );
+  });
+
+  it('rejects empty non-2xx responses with a useful status message', async () => {
+    const client = createGalleryToolClient({
+      gateway,
+      gallerySessionId,
+      fetch: async () => new Response('', { status: 500 }),
+    });
+
+    await assert.rejects(
+      () => client.post('search-assets', {}),
+      /Gallery tool request failed with status 500/,
+    );
+  });
 });
