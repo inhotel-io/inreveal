@@ -106,6 +106,9 @@ export enum AgentToolName {
   ReadAssetOriginals = 'readAssetOriginals',
   ListAlbums = 'listAlbums',
   ReadAlbum = 'readAlbum',
+  ProposeAlbumOperations = 'proposeAlbumOperations',
+  ReviseProposedOperations = 'reviseProposedOperations',
+  SummarizePlan = 'summarizePlan',
 }
 
 export enum AgentToolCallStatus {
@@ -126,6 +129,39 @@ export enum AgentToolDataClass {
   Metadata = 'metadata',
   Previews = 'previews',
   Originals = 'originals',
+  Plan = 'plan',
+}
+
+export enum AgentOperationPlanStatus {
+  Proposed = 'proposed',
+  Superseded = 'superseded',
+  Applied = 'applied',
+  Cancelled = 'cancelled',
+}
+
+export enum AgentOperationType {
+  AlbumCreate = 'album.create',
+  AlbumAddAssets = 'album.addAssets',
+  AlbumUpdateDetails = 'album.updateDetails',
+  AlbumSetCover = 'album.setCover',
+}
+
+export enum AgentOperationTargetKind {
+  NewAlbum = 'new_album',
+  ExistingAlbum = 'existing_album',
+}
+
+export enum AgentOperationRiskLevel {
+  Low = 'low',
+  Medium = 'medium',
+  High = 'high',
+}
+
+export enum AgentOperationStatus {
+  Proposed = 'proposed',
+  Applied = 'applied',
+  Skipped = 'skipped',
+  Failed = 'failed',
 }
 
 export enum AgentSessionStatus {

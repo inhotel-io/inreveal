@@ -32,6 +32,19 @@ export type AgentToolResponseIdsMetadata = {
   albumIds?: string[];
 };
 
+export type AgentToolOperationPlanRequestMetadata = {
+  planId?: string;
+  operationCount: number;
+  operationTypes: string[];
+  albumIds: string[];
+  assetIds: string[];
+};
+
+export type AgentToolOperationPlanResponseMetadata = {
+  planId: string | null;
+  operationIds: string[];
+};
+
 export type AgentSearchAssetsFilters = {
   takenAfter?: Date;
   takenBefore?: Date;
@@ -77,9 +90,10 @@ export type AgentToolRequestMetadata =
   | AgentToolSearchAssetsRequestMetadata
   | AgentToolReadAssetIdsRequestMetadata
   | AgentToolReadAlbumRequestMetadata
-  | AgentToolListAlbumsRequestMetadata;
+  | AgentToolListAlbumsRequestMetadata
+  | AgentToolOperationPlanRequestMetadata;
 
-export type AgentToolResponseMetadata = AgentToolResponseIdsMetadata;
+export type AgentToolResponseMetadata = AgentToolResponseIdsMetadata | AgentToolOperationPlanResponseMetadata;
 
 export type AgentAssetMetadata = {
   id: string;
