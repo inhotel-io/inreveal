@@ -100,7 +100,12 @@ export enum AgentMessageRole {
 }
 
 export enum AgentToolName {
+  SearchAssets = 'searchAssets',
   ReadAssetMetadata = 'readAssetMetadata',
+  ReadAssetPreviews = 'readAssetPreviews',
+  ReadAssetOriginals = 'readAssetOriginals',
+  ListAlbums = 'listAlbums',
+  ReadAlbum = 'readAlbum',
 }
 
 export enum AgentToolCallStatus {
@@ -119,6 +124,8 @@ export enum AgentToolApprovalDecision {
 
 export enum AgentToolDataClass {
   Metadata = 'metadata',
+  Previews = 'previews',
+  Originals = 'originals',
 }
 
 export enum AgentSessionStatus {
