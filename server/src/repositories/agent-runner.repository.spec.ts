@@ -1,7 +1,67 @@
+import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType } from 'src/enum';
 import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository';
+import type { AgentRunnerCreateSessionRequest, AgentRunnerMessageRequest } from 'src/types/agent-runner.types';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
+
+const permissionPlan = {
+  read: { metadata: true, previews: false, originals: false },
+  providerExposure: {
+    metadata: true,
+    previews: false,
+    originals: false,
+    allowOriginalsForExternalProviders: false,
+  },
+  assetScope: { owned: true, sharedSpaces: false, locked: false },
+  writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+  limits: {
+    maxAssetsPerToolCall: 200,
+    maxAssetsPerSession: 2000,
+    maxPreviewsPerToolCall: 0,
+    maxOriginalsPerToolCall: 0,
+    expiresInMinutes: 120,
+  },
+};
+
+const createSessionBody: AgentRunnerCreateSessionRequest = {
+  gallerySessionId: 'gallery-session-1',
+  credential: {
+    id: 'credential-1',
+    providerType: AgentProviderType.OpenAI,
+    label: 'OpenAI',
+    baseUrl: null,
+    models: ['gpt-5.1'],
+    defaultModel: 'gpt-5.1',
+  },
+  model: 'gpt-5.1',
+  permissionPreset: AgentPermissionPreset.Careful,
+  permissionPlan,
+  approvalMode: AgentApprovalMode.Strict,
+  initialContext: { albumId: 'album-1' },
+};
+
+const messageBody: AgentRunnerMessageRequest = {
+  gallerySessionId: 'gallery-session-1',
+  messageId: 'message-1',
+  content: { blocks: [{ type: 'text', text: 'Organize these photos.' }] },
+};
+
+const sseBody = (body: string) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(body));
+      controller.close();
+    },
+  });
+
+const collectStream = async <T>(stream: AsyncGenerator<T>): Promise<T[]> => {
+  const events: T[] = [];
+  for await (const event of stream) {
+    events.push(event);
+  }
+  return events;
+};
 
 describe(AgentRunnerRepository.name, () => {
   let sut: AgentRunnerRepository;
@@ -151,5 +211,204 @@ describe(AgentRunnerRepository.name, () => {
       version: null,
       capabilities: null,
     });
+  });
+
+  it('creates a runner session through the configured runner URL', async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          runnerSessionId: 'runner-session-1',
+          capabilities: { streaming: true },
+        }),
+    });
+
+    await expect(
+      sut.createSession({
+        url: 'https://gateway.local/pi-runner/',
+        timeoutMs: 3000,
+        body: createSessionBody,
+      }),
+    ).resolves.toEqual({
+      runnerSessionId: 'runner-session-1',
+      capabilities: { streaming: true },
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith(new URL('https://gateway.local/pi-runner/sessions'), {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(createSessionBody),
+      signal: expect.any(AbortSignal),
+    });
+    expect(timeoutSpy).toHaveBeenCalledWith(3000);
+  });
+
+  it('throws when the runner session creation response body is invalid', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ runnerSessionId: 123 }),
+    });
+
+    await expect(
+      sut.createSession({
+        url: 'http://agent-runner:4477',
+        timeoutMs: 3000,
+        body: createSessionBody,
+      }),
+    ).rejects.toThrow('Agent runner returned an invalid session response');
+  });
+
+  it('throws when runner session creation fails with a non-success response', async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 502 });
+
+    await expect(
+      sut.createSession({
+        url: 'http://agent-runner:4477',
+        timeoutMs: 3000,
+        body: createSessionBody,
+      }),
+    ).rejects.toThrow('Agent runner session creation failed with status 502');
+  });
+
+  it('streams and normalizes runner message SSE events', async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    const deltaEvent = {
+      type: 'assistant-message-delta',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      delta: 'Hello',
+      sequence: 1,
+    };
+    const completedEvent = {
+      type: 'assistant-message-completed',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      providerMessageId: null,
+      content: { blocks: [{ type: 'text', text: 'Hello there.' }] },
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(
+        `event: delta\ndata: ${JSON.stringify(deltaEvent)}\n\n` + `data: ${JSON.stringify(completedEvent)}\n\n`,
+      ),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'https://gateway.local/pi-runner/',
+          runnerSessionId: 'runner/session 1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).resolves.toEqual([deltaEvent, completedEvent]);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      new URL('https://gateway.local/pi-runner/sessions/runner%2Fsession%201/messages'),
+      {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify(messageBody),
+        signal: expect.any(AbortSignal),
+      },
+    );
+    expect(timeoutSpy).toHaveBeenCalledWith(3000);
+  });
+
+  it('parses a final SSE frame without a trailing blank-line separator', async () => {
+    const completedEvent = {
+      type: 'assistant-message-completed',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      providerMessageId: 'provider-message-1',
+      content: { blocks: [{ type: 'text', text: 'Done.' }] },
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`data: ${JSON.stringify(completedEvent)}`),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).resolves.toEqual([completedEvent]);
+  });
+
+  it('throws when runner message stream fails with a non-success response', async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 500, body: sseBody('') });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).rejects.toThrow('Agent runner message stream failed with status 500');
+  });
+
+  it('throws when runner message stream response has no body', async () => {
+    mockFetch.mockResolvedValue({ ok: true, status: 200, body: null });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).rejects.toThrow('Agent runner message stream failed with status 200');
+  });
+
+  it('throws when the runner message stream contains an invalid JSON SSE frame', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody('data: {invalid json}\n\n'),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).rejects.toThrow('Agent runner returned an invalid stream event');
+  });
+
+  it('throws when the runner message stream contains an invalid event shape', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody('data: {"type":"assistant-message-delta","sessionId":"gallery-session-1"}\n\n'),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).rejects.toThrow('Agent runner returned an invalid stream event');
   });
 });
