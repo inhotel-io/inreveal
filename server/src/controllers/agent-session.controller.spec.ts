@@ -57,7 +57,7 @@ const makeInitialContext = (targetBytes: number) => {
 
 describe(AgentSessionController.name, () => {
   let ctx: ControllerContext;
-  const service = automock(AgentSessionService, { args: [{} as never, {} as never], strict: false });
+  const service = automock(AgentSessionService, { args: [{} as never, {} as never, {} as never], strict: false });
   const auth = AuthFactory.create();
   const id = factory.uuid();
   const providerCredentialId = factory.uuid();
@@ -80,7 +80,7 @@ describe(AgentSessionController.name, () => {
   };
   const response: AgentSessionResponseDto = {
     id,
-    status: AgentSessionStatus.Created,
+    status: AgentSessionStatus.Running,
     providerCredentialId,
     credentialSnapshot: {
       id: providerCredentialId,
@@ -97,9 +97,9 @@ describe(AgentSessionController.name, () => {
     permissionPreset: AgentPermissionPreset.Careful,
     permissionPlanSnapshot: permissionPlan,
     approvalMode: AgentApprovalMode.Strict,
-    runnerEndpoint: 'https://runner.example.com/sessions',
-    runnerSessionId: null,
-    runnerCapabilitiesSnapshot: null,
+    runnerEndpoint: 'http://agent-runner:4477',
+    runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
+    runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
     initialContextSnapshot: initialContext,
     createdAt: now,
     updatedAt: now,
