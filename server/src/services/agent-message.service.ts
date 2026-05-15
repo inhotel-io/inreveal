@@ -55,7 +55,7 @@ export class AgentMessageService {
           messageId: message.id,
           content: message.content,
         })
-        .catch(() => undefined);
+        .catch(() => {});
     }
 
     return this.map(message);

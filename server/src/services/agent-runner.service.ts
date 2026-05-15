@@ -201,7 +201,7 @@ export class AgentRunnerService {
         throw new Error('Agent runner message stream ended before completion');
       }
     } catch (error) {
-      await this.sessionRepository.markInterruptedFromActive(userId, sessionId).catch(() => undefined);
+      await this.sessionRepository.markInterruptedFromActive(userId, sessionId).catch(() => {});
       this.websocketRepository.clientSend('on_agent_session_event', userId, {
         type: 'runner-error',
         sessionId,

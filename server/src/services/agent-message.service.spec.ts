@@ -127,7 +127,7 @@ describe(AgentMessageService.name, () => {
 
     sessionRepository.getById.mockResolvedValue(session);
     messageRepository.create.mockResolvedValue(saved);
-    agentRunnerService.sendMessage.mockReturnValue(new Promise<void>(() => undefined));
+    agentRunnerService.sendMessage.mockReturnValue(new Promise<void>(() => {}));
 
     await expect(sut.appendUserMessage(auth, session.id, dto)).resolves.toEqual(saved);
     expect(agentRunnerService.sendMessage).toHaveBeenCalledWith({
