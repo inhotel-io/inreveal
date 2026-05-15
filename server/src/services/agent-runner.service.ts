@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { AgentRunnerStatusDto } from 'src/dtos/agent-runner.dto';
 import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { AgentRunnerCreateSessionRequest } from 'src/types/agent-runner.types';
 
 const RUNNER_STATUS_CACHE_MS = 15_000;
 
@@ -14,6 +15,25 @@ export class AgentRunnerService {
     private readonly configRepository: ConfigRepository,
     private readonly agentRunnerRepository: AgentRunnerRepository,
   ) {}
+
+  async createSession(body: AgentRunnerCreateSessionRequest) {
+    const { runnerUrl, runnerHealthTimeoutMs } = this.configRepository.getEnv().agent;
+    if (!runnerUrl) {
+      throw new BadRequestException('Agent runner is not configured');
+    }
+
+    const result = await this.agentRunnerRepository.createSession({
+      url: runnerUrl,
+      timeoutMs: runnerHealthTimeoutMs,
+      body,
+    });
+
+    return {
+      runnerEndpoint: runnerUrl,
+      runnerSessionId: result.runnerSessionId,
+      runnerCapabilitiesSnapshot: result.capabilities,
+    };
+  }
 
   async getStatus(): Promise<AgentRunnerStatusDto> {
     const { runnerUrl, runnerHealthTimeoutMs } = this.configRepository.getEnv().agent;

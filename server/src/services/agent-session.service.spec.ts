@@ -4,6 +4,7 @@ import { AgentSessionCreateDto } from 'src/dtos/agent-session.dto';
 import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType, AgentSessionStatus } from 'src/enum';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
+import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import { AgentInitialContextSnapshot, AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import { AuthFactory } from 'test/factories/auth.factory';
@@ -127,12 +128,34 @@ describe(AgentSessionService.name, () => {
   let sut: AgentSessionService;
   let repository: ReturnType<typeof automock<AgentSessionRepository>>;
   let credentialService: ReturnType<typeof automock<AgentProviderCredentialService>>;
+  let agentRunnerService: ReturnType<typeof automock<AgentRunnerService>>;
 
   beforeEach(() => {
     repository = automock(AgentSessionRepository, { args: [{} as never] });
     credentialService = automock(AgentProviderCredentialService, { args: [{} as never, {} as never] });
-    sut = new AgentSessionService(repository, credentialService);
+    agentRunnerService = automock(AgentRunnerService);
+    sut = new AgentSessionService(repository, credentialService, agentRunnerService);
   });
+
+  const mockSuccessfulRunnerHandoff = (session: AgentSession) => {
+    const runnerSession = {
+      runnerEndpoint: 'http://agent-runner:4477',
+      runnerSessionId: `stub-${session.id}`,
+      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+    };
+    const runningSession = makeSession({
+      ...session,
+      status: AgentSessionStatus.Running,
+      runnerEndpoint: runnerSession.runnerEndpoint,
+      runnerSessionId: runnerSession.runnerSessionId,
+      runnerCapabilitiesSnapshot: runnerSession.runnerCapabilitiesSnapshot,
+    });
+
+    agentRunnerService.createSession.mockResolvedValue(runnerSession);
+    repository.update.mockResolvedValue(runningSession);
+
+    return { runnerSession, runningSession };
+  };
 
   it('creates a session with credential, model, permission, approval, and initial context snapshots', async () => {
     const auth = AuthFactory.create();
@@ -168,6 +191,7 @@ describe(AgentSessionService.name, () => {
 
     credentialService.getById.mockResolvedValue(credential);
     repository.create.mockResolvedValue(createdSession);
+    const { runnerSession, runningSession } = mockSuccessfulRunnerHandoff(createdSession);
 
     const result = await sut.create(auth, dto);
 
@@ -193,22 +217,37 @@ describe(AgentSessionService.name, () => {
       runnerCapabilitiesSnapshot: null,
       initialContextSnapshot: dto.initialContext,
     });
+    expect(agentRunnerService.createSession).toHaveBeenCalledWith({
+      gallerySessionId: createdSession.id,
+      credential: createdSession.credentialSnapshot,
+      model: dto.model,
+      permissionPreset: AgentPermissionPreset.VisualOrganizer,
+      permissionPlan: createdSession.permissionPlanSnapshot,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      initialContext: createdSession.initialContextSnapshot,
+    });
+    expect(repository.update).toHaveBeenCalledWith(auth.user.id, createdSession.id, {
+      status: AgentSessionStatus.Running,
+      runnerEndpoint: runnerSession.runnerEndpoint,
+      runnerSessionId: runnerSession.runnerSessionId,
+      runnerCapabilitiesSnapshot: runnerSession.runnerCapabilitiesSnapshot,
+    });
     expect(result).toEqual({
-      id: createdSession.id,
-      status: createdSession.status,
+      id: runningSession.id,
+      status: AgentSessionStatus.Running,
       providerCredentialId,
-      credentialSnapshot: createdSession.credentialSnapshot,
-      modelSnapshot: createdSession.modelSnapshot,
-      permissionPreset: createdSession.permissionPreset,
-      permissionPlanSnapshot: createdSession.permissionPlanSnapshot,
-      approvalMode: createdSession.approvalMode,
-      runnerEndpoint: createdSession.runnerEndpoint,
-      runnerSessionId: createdSession.runnerSessionId,
-      runnerCapabilitiesSnapshot: createdSession.runnerCapabilitiesSnapshot,
-      initialContextSnapshot: createdSession.initialContextSnapshot,
-      createdAt: createdSession.createdAt,
-      updatedAt: createdSession.updatedAt,
-      endedAt: createdSession.endedAt,
+      credentialSnapshot: runningSession.credentialSnapshot,
+      modelSnapshot: runningSession.modelSnapshot,
+      permissionPreset: runningSession.permissionPreset,
+      permissionPlanSnapshot: runningSession.permissionPlanSnapshot,
+      approvalMode: runningSession.approvalMode,
+      runnerEndpoint: runnerSession.runnerEndpoint,
+      runnerSessionId: runnerSession.runnerSessionId,
+      runnerCapabilitiesSnapshot: runnerSession.runnerCapabilitiesSnapshot,
+      initialContextSnapshot: runningSession.initialContextSnapshot,
+      createdAt: runningSession.createdAt,
+      updatedAt: runningSession.updatedAt,
+      endedAt: runningSession.endedAt,
     });
     expect(result).not.toHaveProperty('userId');
     expect(result).not.toHaveProperty('updateId');
@@ -231,6 +270,7 @@ describe(AgentSessionService.name, () => {
 
     credentialService.getById.mockResolvedValue(credential);
     repository.create.mockResolvedValue(createdSession);
+    mockSuccessfulRunnerHandoff(createdSession);
 
     await sut.create(auth, dto);
 
@@ -251,6 +291,7 @@ describe(AgentSessionService.name, () => {
 
     expect(credentialService.getById).not.toHaveBeenCalled();
     expect(repository.create).not.toHaveBeenCalled();
+    expect(agentRunnerService.createSession).not.toHaveBeenCalled();
   });
 
   it('rejects non-custom session with permissionPlan before credential lookup/repo create', async () => {
@@ -268,6 +309,7 @@ describe(AgentSessionService.name, () => {
 
     expect(credentialService.getById).not.toHaveBeenCalled();
     expect(repository.create).not.toHaveBeenCalled();
+    expect(agentRunnerService.createSession).not.toHaveBeenCalled();
   });
 
   it('defaults runnerEndpoint to null, runnerCapabilitiesSnapshot to null, initialContextSnapshot to {}', async () => {
@@ -284,6 +326,7 @@ describe(AgentSessionService.name, () => {
 
     credentialService.getById.mockResolvedValue(credential);
     repository.create.mockResolvedValue(createdSession);
+    mockSuccessfulRunnerHandoff(createdSession);
 
     await sut.create(auth, makeCreateDto({ providerCredentialId: credential.id }));
 
@@ -294,6 +337,115 @@ describe(AgentSessionService.name, () => {
         initialContextSnapshot: {},
       }),
     );
+    expect(repository.update).toHaveBeenCalledWith(
+      auth.user.id,
+      createdSession.id,
+      expect.objectContaining({
+        status: AgentSessionStatus.Running,
+        runnerEndpoint: 'http://agent-runner:4477',
+      }),
+    );
+  });
+
+  it('starts a configured runner session and returns a running Gallery session', async () => {
+    const auth = AuthFactory.create();
+    const credentialId = '00000000-0000-4000-8000-000000000001';
+    const credentialResponse = makeCredential({
+      id: credentialId,
+      models: ['gpt-5.1'],
+      defaultModel: 'gpt-5.1',
+    });
+    const createdSession = makeSession({
+      id: '00000000-0000-4000-8000-000000000100',
+      userId: auth.user.id,
+      providerCredentialId: credentialId,
+      status: AgentSessionStatus.Created,
+      runnerEndpoint: null,
+      runnerSessionId: null,
+      runnerCapabilitiesSnapshot: null,
+      initialContextSnapshot: {},
+    });
+    const runningSession = makeSession({
+      ...createdSession,
+      status: AgentSessionStatus.Running,
+      runnerEndpoint: 'http://agent-runner:4477',
+      runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
+      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+    });
+
+    credentialService.getById.mockResolvedValue(credentialResponse);
+    repository.create.mockResolvedValue(createdSession);
+    repository.update.mockResolvedValue(runningSession);
+    agentRunnerService.createSession.mockResolvedValue({
+      runnerEndpoint: 'http://agent-runner:4477',
+      runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
+      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+    });
+
+    await expect(
+      sut.create(auth, {
+        providerCredentialId: credentialId,
+        model: 'gpt-5.1',
+        permissionPreset: AgentPermissionPreset.Careful,
+        approvalMode: AgentApprovalMode.Strict,
+      }),
+    ).resolves.toMatchObject({
+      id: createdSession.id,
+      status: AgentSessionStatus.Running,
+      runnerEndpoint: 'http://agent-runner:4477',
+      runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
+    });
+    expect(agentRunnerService.createSession).toHaveBeenCalledWith({
+      gallerySessionId: createdSession.id,
+      credential: createdSession.credentialSnapshot,
+      model: 'gpt-5.1',
+      permissionPreset: AgentPermissionPreset.Careful,
+      permissionPlan: createdSession.permissionPlanSnapshot,
+      approvalMode: AgentApprovalMode.Strict,
+      initialContext: {},
+    });
+    expect(repository.update).toHaveBeenCalledWith(auth.user.id, createdSession.id, {
+      status: AgentSessionStatus.Running,
+      runnerEndpoint: 'http://agent-runner:4477',
+      runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
+      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+    });
+  });
+
+  it('marks the created session failed when runner start fails', async () => {
+    const auth = AuthFactory.create();
+    const credentialId = '00000000-0000-4000-8000-000000000001';
+    const credentialResponse = makeCredential({
+      id: credentialId,
+      models: ['gpt-5.1'],
+      defaultModel: 'gpt-5.1',
+    });
+    const createdSession = makeSession({
+      id: '00000000-0000-4000-8000-000000000100',
+      userId: auth.user.id,
+      providerCredentialId: credentialId,
+      status: AgentSessionStatus.Created,
+    });
+
+    credentialService.getById.mockResolvedValue(credentialResponse);
+    repository.create.mockResolvedValue(createdSession);
+    repository.update.mockResolvedValue(
+      makeSession({ ...createdSession, status: AgentSessionStatus.Failed, endedAt: now }),
+    );
+    agentRunnerService.createSession.mockRejectedValue(new BadRequestException('Agent runner is not configured'));
+
+    await expect(
+      sut.create(auth, {
+        providerCredentialId: credentialId,
+        model: 'gpt-5.1',
+        permissionPreset: AgentPermissionPreset.Careful,
+        approvalMode: AgentApprovalMode.Strict,
+      }),
+    ).rejects.toThrow('Agent runner is not configured');
+    expect(repository.update).toHaveBeenCalledWith(auth.user.id, createdSession.id, {
+      status: AgentSessionStatus.Failed,
+      endedAt: expect.any(Date),
+    });
   });
 
   it('does not create when credential lookup fails', async () => {
@@ -305,6 +457,7 @@ describe(AgentSessionService.name, () => {
     await expect(sut.create(auth, makeCreateDto())).rejects.toBe(error);
 
     expect(repository.create).not.toHaveBeenCalled();
+    expect(agentRunnerService.createSession).not.toHaveBeenCalled();
   });
 
   it('rejects selected model not listed on credential when credential.models has constraints', async () => {
@@ -317,6 +470,7 @@ describe(AgentSessionService.name, () => {
       sut.create(auth, makeCreateDto({ providerCredentialId: credential.id, model: 'gpt-5.1' })),
     ).rejects.toThrow('Model is not listed for the selected credential');
     expect(repository.create).not.toHaveBeenCalled();
+    expect(agentRunnerService.createSession).not.toHaveBeenCalled();
   });
 
   it('allows any model when credential.models is empty', async () => {
@@ -330,6 +484,7 @@ describe(AgentSessionService.name, () => {
 
     credentialService.getById.mockResolvedValue(credential);
     repository.create.mockResolvedValue(createdSession);
+    mockSuccessfulRunnerHandoff(createdSession);
 
     await sut.create(auth, makeCreateDto({ providerCredentialId: credential.id, model: 'custom-model' }));
 
