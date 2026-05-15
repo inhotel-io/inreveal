@@ -520,6 +520,46 @@ export type AssetStatsResponseDto = {
     /** Number of videos */
     videos: number;
 };
+export type AgentListAlbumsToolRequestDto = {
+    toolCallId?: string;
+};
+export type AgentReadAlbumToolRequestDto = {
+    albumId?: string;
+    toolCallId?: string;
+};
+export type AgentReadAssetMetadataToolRequestDto = {
+    assetIds?: string[];
+    toolCallId?: string;
+};
+export type AgentReadAssetOriginalsToolRequestDto = {
+    assetIds?: string[];
+    toolCallId?: string;
+};
+export type AgentReadAssetPreviewsToolRequestDto = {
+    assetIds?: string[];
+    toolCallId?: string;
+};
+export type AgentSearchAssetsFilters = {
+    albumIds?: string[];
+    city?: string | null;
+    country?: string | null;
+    isFavorite?: boolean;
+    isNotInAlbum?: boolean;
+    lensModel?: string | null;
+    make?: string | null;
+    model?: string | null;
+    rating?: number | null;
+    state?: string | null;
+    tagIds?: string[];
+    takenAfter?: string;
+    takenBefore?: string;
+    "type"?: AssetTypeEnum;
+};
+export type AgentSearchAssetsToolRequestDto = {
+    filters?: AgentSearchAssetsFilters;
+    limit?: number;
+    toolCallId?: string;
+};
 export type AgentProviderCredentialResponseDto = {
     baseUrl: string | null;
     createdAt: string;
@@ -595,7 +635,9 @@ export type AgentPermissionPlan = {
         expiresInMinutes: number | null;
         maxAssetsPerSession: number;
         maxAssetsPerToolCall: number;
+        maxOriginalsPerSession?: number;
         maxOriginalsPerToolCall: number;
+        maxPreviewsPerSession?: number;
         maxPreviewsPerToolCall: number;
     };
     providerExposure: {
@@ -701,10 +743,6 @@ export type AgentToolCallResponseDto = {
 export type AgentToolApprovalDto = {
     decision: AgentToolApprovalDecision;
     reason?: string;
-};
-export type AgentReadAssetMetadataToolRequestDto = {
-    assetIds?: string[];
-    toolCallId?: string;
 };
 export type AlbumUserResponseDto = {
     role: AlbumUserRole;
@@ -4749,6 +4787,102 @@ export function getUserStatisticsAdmin({ id, isFavorite, isTrashed, visibility }
     }));
 }
 /**
+ * Execute the runner listAlbums agent tool
+ */
+export function runnerListAlbums({ id, agentListAlbumsToolRequestDto }: {
+    id: string;
+    agentListAlbumsToolRequestDto: AgentListAlbumsToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: object;
+    }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/list-albums`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentListAlbumsToolRequestDto
+    })));
+}
+/**
+ * Execute the runner readAlbum agent tool
+ */
+export function runnerReadAlbum({ id, agentReadAlbumToolRequestDto }: {
+    id: string;
+    agentReadAlbumToolRequestDto: AgentReadAlbumToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: object;
+    }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/read-album`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentReadAlbumToolRequestDto
+    })));
+}
+/**
+ * Execute the runner readAssetMetadata agent tool
+ */
+export function runnerReadAssetMetadata({ id, agentReadAssetMetadataToolRequestDto }: {
+    id: string;
+    agentReadAssetMetadataToolRequestDto: AgentReadAssetMetadataToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: object;
+    }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/read-asset-metadata`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentReadAssetMetadataToolRequestDto
+    })));
+}
+/**
+ * Execute the runner readAssetOriginals agent tool
+ */
+export function runnerReadAssetOriginals({ id, agentReadAssetOriginalsToolRequestDto }: {
+    id: string;
+    agentReadAssetOriginalsToolRequestDto: AgentReadAssetOriginalsToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: object;
+    }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/read-asset-originals`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentReadAssetOriginalsToolRequestDto
+    })));
+}
+/**
+ * Execute the runner readAssetPreviews agent tool
+ */
+export function runnerReadAssetPreviews({ id, agentReadAssetPreviewsToolRequestDto }: {
+    id: string;
+    agentReadAssetPreviewsToolRequestDto: AgentReadAssetPreviewsToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: object;
+    }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/read-asset-previews`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentReadAssetPreviewsToolRequestDto
+    })));
+}
+/**
+ * Execute the runner searchAssets agent tool
+ */
+export function runnerSearchAssets({ id, agentSearchAssetsToolRequestDto }: {
+    id: string;
+    agentSearchAssetsToolRequestDto: AgentSearchAssetsToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: object;
+    }>(`/agent/internal/tools/sessions/${encodeURIComponent(id)}/search-assets`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentSearchAssetsToolRequestDto
+    })));
+}
+/**
  * List agent provider credentials
  */
 export function getAgentProviderCredentials(opts?: Oazapfts.RequestOpts) {
@@ -4938,6 +5072,38 @@ export function approveToolCall({ id, toolCallId, agentToolApprovalDto }: {
     })));
 }
 /**
+ * Execute the internal listAlbums agent tool
+ */
+export function listAlbums({ id, agentListAlbumsToolRequestDto }: {
+    id: string;
+    agentListAlbumsToolRequestDto: AgentListAlbumsToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: object;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/list-albums`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentListAlbumsToolRequestDto
+    })));
+}
+/**
+ * Execute the internal readAlbum agent tool
+ */
+export function readAlbum({ id, agentReadAlbumToolRequestDto }: {
+    id: string;
+    agentReadAlbumToolRequestDto: AgentReadAlbumToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: object;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/read-album`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentReadAlbumToolRequestDto
+    })));
+}
+/**
  * Execute the internal readAssetMetadata agent tool
  */
 export function readAssetMetadata({ id, agentReadAssetMetadataToolRequestDto }: {
@@ -4951,6 +5117,54 @@ export function readAssetMetadata({ id, agentReadAssetMetadataToolRequestDto }: 
         ...opts,
         method: "POST",
         body: agentReadAssetMetadataToolRequestDto
+    })));
+}
+/**
+ * Execute the internal readAssetOriginals agent tool
+ */
+export function readAssetOriginals({ id, agentReadAssetOriginalsToolRequestDto }: {
+    id: string;
+    agentReadAssetOriginalsToolRequestDto: AgentReadAssetOriginalsToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: object;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/read-asset-originals`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentReadAssetOriginalsToolRequestDto
+    })));
+}
+/**
+ * Execute the internal readAssetPreviews agent tool
+ */
+export function readAssetPreviews({ id, agentReadAssetPreviewsToolRequestDto }: {
+    id: string;
+    agentReadAssetPreviewsToolRequestDto: AgentReadAssetPreviewsToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: object;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/read-asset-previews`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentReadAssetPreviewsToolRequestDto
+    })));
+}
+/**
+ * Execute the internal searchAssets agent tool
+ */
+export function executeAgentSearchAssets({ id, agentSearchAssetsToolRequestDto }: {
+    id: string;
+    agentSearchAssetsToolRequestDto: AgentSearchAssetsToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: object;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/search-assets`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentSearchAssetsToolRequestDto
     })));
 }
 /**
@@ -9403,6 +9617,12 @@ export enum AssetVisibility {
     Hidden = "hidden",
     Locked = "locked"
 }
+export enum AssetTypeEnum {
+    Image = "IMAGE",
+    Video = "VIDEO",
+    Audio = "AUDIO",
+    Other = "OTHER"
+}
 export enum ProviderType {
     Openai = "openai",
     Anthropic = "anthropic",
@@ -9466,7 +9686,9 @@ export enum AgentToolApprovalDecision {
     Denied = "denied"
 }
 export enum AgentToolDataClass {
-    Metadata = "metadata"
+    Metadata = "metadata",
+    Previews = "previews",
+    Originals = "originals"
 }
 export enum AgentToolCallStatus {
     PendingApproval = "pending_approval",
@@ -9477,7 +9699,12 @@ export enum AgentToolCallStatus {
     Failed = "failed"
 }
 export enum AgentToolName {
-    ReadAssetMetadata = "readAssetMetadata"
+    SearchAssets = "searchAssets",
+    ReadAssetMetadata = "readAssetMetadata",
+    ReadAssetPreviews = "readAssetPreviews",
+    ReadAssetOriginals = "readAssetOriginals",
+    ListAlbums = "listAlbums",
+    ReadAlbum = "readAlbum"
 }
 export enum AlbumUserRole {
     Editor = "editor",
@@ -9693,12 +9920,6 @@ export enum AssetJobName {
 export enum Type {
     UserPerson = "user-person",
     SpacePerson = "space-person"
-}
-export enum AssetTypeEnum {
-    Image = "IMAGE",
-    Video = "VIDEO",
-    Audio = "AUDIO",
-    Other = "OTHER"
 }
 export enum AssetEditAction {
     Crop = "crop",
