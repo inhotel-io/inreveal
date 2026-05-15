@@ -1,7 +1,13 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { AgentMessage } from 'src/database';
 import { AgentRunnerStatusDto } from 'src/dtos/agent-runner.dto';
+import { AgentMessageRole, AgentSessionStatus } from 'src/enum';
+import { AgentMessageRepository } from 'src/repositories/agent-message.repository';
 import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository';
+import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { WebsocketRepository } from 'src/repositories/websocket.repository';
+import { AgentMessageContent } from 'src/types/agent-message.types';
 import { AgentRunnerCreateSessionRequest } from 'src/types/agent-runner.types';
 
 const RUNNER_STATUS_CACHE_MS = 15_000;
@@ -14,6 +20,9 @@ export class AgentRunnerService {
   constructor(
     private readonly configRepository: ConfigRepository,
     private readonly agentRunnerRepository: AgentRunnerRepository,
+    private readonly messageRepository: AgentMessageRepository,
+    private readonly sessionRepository: AgentSessionRepository,
+    private readonly websocketRepository: WebsocketRepository,
   ) {}
 
   async createSession(body: AgentRunnerCreateSessionRequest) {
@@ -83,5 +92,87 @@ export class AgentRunnerService {
       capabilities: null,
       checkedAt: new Date(),
     };
+  }
+
+  async sendMessage({
+    userId,
+    sessionId,
+    runnerSessionId,
+    messageId,
+    content,
+  }: {
+    userId: string;
+    sessionId: string;
+    runnerSessionId: string;
+    messageId: string;
+    content: AgentMessageContent;
+  }) {
+    const { runnerUrl, runnerHealthTimeoutMs } = this.configRepository.getEnv().agent;
+    if (!runnerUrl) {
+      throw new BadRequestException('Agent runner is not configured');
+    }
+
+    try {
+      for await (const event of this.agentRunnerRepository.streamMessage({
+        url: runnerUrl,
+        runnerSessionId,
+        timeoutMs: runnerHealthTimeoutMs,
+        body: { gallerySessionId: sessionId, messageId, content },
+      })) {
+        if (event.sessionId !== sessionId || event.runnerSessionId !== runnerSessionId) {
+          continue;
+        }
+
+        if (event.type === 'assistant-message-delta') {
+          this.websocketRepository.clientSend('on_agent_session_event', userId, {
+            type: 'assistant-message-delta',
+            sessionId,
+            delta: event.delta,
+            sequence: event.sequence,
+            createdAt: this.toIsoNow(),
+          });
+          continue;
+        }
+
+        const message = await this.messageRepository.create({
+          sessionId,
+          role: AgentMessageRole.Assistant,
+          content: event.content,
+          providerMessageId: event.providerMessageId,
+          toolCallId: null,
+        });
+        this.websocketRepository.clientSend('on_agent_session_event', userId, {
+          type: 'assistant-message-created',
+          sessionId,
+          message: this.mapMessage(message),
+          createdAt: this.toIsoNow(),
+        });
+      }
+    } catch (error) {
+      await this.sessionRepository.update(userId, sessionId, { status: AgentSessionStatus.Interrupted });
+      this.websocketRepository.clientSend('on_agent_session_event', userId, {
+        type: 'runner-error',
+        sessionId,
+        message: 'The assistant runner stopped while processing the message.',
+        createdAt: this.toIsoNow(),
+      });
+      throw error;
+    }
+  }
+
+  private mapMessage(message: AgentMessage) {
+    return {
+      id: message.id,
+      sessionId: message.sessionId,
+      role: message.role,
+      content: message.content,
+      providerMessageId: message.providerMessageId,
+      toolCallId: message.toolCallId,
+      createdAt: message.createdAt,
+    };
+  }
+
+  private toIsoNow() {
+    return new Date().toISOString();
   }
 }
