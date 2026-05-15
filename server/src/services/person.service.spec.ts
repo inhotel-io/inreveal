@@ -73,6 +73,8 @@ describe(PersonService.name, () => {
     (mocks.person as any).getPeopleFaceStatistics ??= vi.fn();
     (mocks.faceIdentity as any).getAccessiblePersonByProfileId.mockResolvedValue(void 0);
     (mocks.faceIdentity as any).getAccessibleProfileIdentityId.mockResolvedValue(void 0);
+    mocks.person.isPersonRepresentativeWithinDistance.mockResolvedValue(true);
+    mocks.faceIdentity.isRepresentativeWithinDistance.mockResolvedValue(true);
     mocks.sharedSpace.getSpaceIdsWithFaceRecognitionEnabled.mockResolvedValue([]);
   });
 
@@ -1051,9 +1053,13 @@ describe(PersonService.name, () => {
       mocks.person.getFaceById.mockResolvedValue(getForAssetFace(face));
       mocks.person.reassignFace.mockResolvedValue(1);
       mocks.person.getById.mockResolvedValue(person);
+      mocks.person.isPersonRepresentativeWithinDistance.mockResolvedValue(false);
+      mocks.faceIdentity.isRepresentativeWithinDistance.mockResolvedValue(false);
 
       await sut.reassignFacesById(AuthFactory.create(), person.id, { id: face.id });
 
+      expect(mocks.person.isPersonRepresentativeWithinDistance).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.isRepresentativeWithinDistance).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.ensurePersonIdentity).toHaveBeenCalledWith(person.id);
       expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
         assetFaceId: face.id,
@@ -2446,6 +2452,11 @@ describe(PersonService.name, () => {
       await sut.handleRecognizeFaces({ id: noPerson1.id });
 
       expect(mocks.person.create).not.toHaveBeenCalled();
+      expect(mocks.person.isPersonRepresentativeWithinDistance).toHaveBeenCalledWith({
+        personId: primaryFace.person!.id,
+        embedding: '[1, 2, 3, 4]',
+        maxDistance: 0.5,
+      });
       expect(mocks.person.reassignFaces).toHaveBeenCalledTimes(1);
       expect(mocks.person.reassignFaces).toHaveBeenCalledWith({
         faceIds: expect.arrayContaining([noPerson1.id]),
@@ -2454,6 +2465,41 @@ describe(PersonService.name, () => {
       expect(mocks.person.reassignFaces).toHaveBeenCalledWith({
         faceIds: expect.not.arrayContaining([face.id]),
         newPersonId: primaryFace.person!.id,
+      });
+    });
+
+    it('should not chain-match an existing person when the representative face is too far away', async () => {
+      const asset = AssetFactory.create();
+      const [noPerson, bridgeFace] = [
+        AssetFaceFactory.create({ assetId: asset.id }),
+        AssetFaceFactory.from().person().build(),
+      ];
+      const newPerson = PersonFactory.create({ ownerId: asset.ownerId });
+
+      mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
+      mocks.search.searchFaces.mockResolvedValue([{ ...bridgeFace, distance: 0.2 } as FaceSearchResult]);
+      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
+      mocks.person.isPersonRepresentativeWithinDistance.mockResolvedValue(false);
+      mocks.person.create.mockResolvedValue(newPerson);
+
+      await sut.handleRecognizeFaces({ id: noPerson.id });
+
+      expect(mocks.person.isPersonRepresentativeWithinDistance).toHaveBeenCalledWith({
+        personId: bridgeFace.person!.id,
+        embedding: '[1, 2, 3, 4]',
+        maxDistance: 0.5,
+      });
+      expect(mocks.person.create).toHaveBeenCalledWith({
+        ownerId: asset.ownerId,
+        faceAssetId: noPerson.id,
+      });
+      expect(mocks.person.reassignFaces).toHaveBeenCalledWith({
+        faceIds: [noPerson.id],
+        newPersonId: newPerson.id,
+      });
+      expect(mocks.person.reassignFaces).not.toHaveBeenCalledWith({
+        faceIds: [noPerson.id],
+        newPersonId: bridgeFace.person!.id,
       });
     });
 
@@ -2521,11 +2567,50 @@ describe(PersonService.name, () => {
         targetIdentityId,
         sourceIdentityIds: [sourceIdentityId],
       });
+      expect(mocks.faceIdentity.isRepresentativeWithinDistance).toHaveBeenCalledWith({
+        identityId: targetIdentityId,
+        embedding: '[1, 2, 3, 4]',
+        maxDistance: 0.5,
+      });
       expect(mocks.faceIdentity.mergeIdentities).toHaveBeenCalledWith({
         targetIdentityId,
         sourceIdentityIds: [sourceIdentityId],
         source: 'shared-space-evidence',
       });
+    });
+
+    it('should not merge an accessible shared identity when its representative face is too far away', async () => {
+      const asset = AssetFactory.create();
+      const [noPerson, matchedFace] = [
+        AssetFaceFactory.create({ assetId: asset.id }),
+        AssetFaceFactory.from().person().build(),
+      ];
+      const faces = [
+        { ...noPerson, distance: 0 },
+        { ...matchedFace, distance: 0.2 },
+      ] as FaceSearchResult[];
+      const sourceIdentityId = 'source-identity';
+      const targetIdentityId = 'target-identity';
+
+      mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
+      mocks.search.searchFaces.mockResolvedValue(faces);
+      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
+      mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: sourceIdentityId } as any);
+      (mocks.faceIdentity as any).findClosestAccessibleIdentityForFace.mockResolvedValue({
+        identityId: targetIdentityId,
+        distance: 0.2,
+      });
+      mocks.faceIdentity.isRepresentativeWithinDistance.mockResolvedValue(false);
+
+      await sut.handleRecognizeFaces({ id: noPerson.id });
+
+      expect(mocks.faceIdentity.isRepresentativeWithinDistance).toHaveBeenCalledWith({
+        identityId: targetIdentityId,
+        embedding: '[1, 2, 3, 4]',
+        maxDistance: 0.5,
+      });
+      expect(mocks.faceIdentity.getMergeConflicts).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
     });
 
     it('skips accessible shared identity merge when same-owner personal conflicts exist', async () => {
@@ -2899,6 +2984,35 @@ describe(PersonService.name, () => {
 
       expect(mocks.job.queue).not.toHaveBeenCalled();
       expect(mocks.search.searchFaces).toHaveBeenCalledTimes(2);
+      expect(mocks.person.create).not.toHaveBeenCalled();
+      expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
+    });
+
+    it('should not chain-match a deferred non-core face when the representative face is too far away', async () => {
+      const asset = AssetFactory.create();
+      const [noPerson, otherUnassignedFace, bridgeFace] = [
+        AssetFaceFactory.create({ assetId: asset.id }),
+        AssetFaceFactory.create(),
+        AssetFaceFactory.from().person().build(),
+      ];
+
+      mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 3 } } });
+      mocks.search.searchFaces
+        .mockResolvedValueOnce([
+          { ...noPerson, distance: 0 },
+          { ...otherUnassignedFace, distance: 0.2 },
+        ] as FaceSearchResult[])
+        .mockResolvedValueOnce([{ ...bridgeFace, distance: 0.2 }] as FaceSearchResult[]);
+      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
+      mocks.person.isPersonRepresentativeWithinDistance.mockResolvedValue(false);
+
+      await sut.handleRecognizeFaces({ id: noPerson.id, deferred: true });
+
+      expect(mocks.person.isPersonRepresentativeWithinDistance).toHaveBeenCalledWith({
+        personId: bridgeFace.person!.id,
+        embedding: '[1, 2, 3, 4]',
+        maxDistance: 0.5,
+      });
       expect(mocks.person.create).not.toHaveBeenCalled();
       expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
     });

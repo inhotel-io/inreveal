@@ -50,6 +50,7 @@ import type {
 } from 'src/repositories/face-identity.repository';
 import { BoundingBox } from 'src/repositories/machine-learning.repository';
 import { UpdateFacesData } from 'src/repositories/person.repository';
+import type { FaceSearchResult } from 'src/repositories/search.repository';
 import { AssetFaceTable } from 'src/schema/tables/asset-face.table';
 import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import {
@@ -923,7 +924,11 @@ export class PersonService extends BaseService {
 
     this.logger.debug(`Face ${id} has ${matches.length} matches`);
 
-    let personId = matches.find((match) => match.personId)?.personId;
+    let personId = await this.findRepresentativeCompatiblePersonId(
+      matches,
+      face.faceSearch.embedding,
+      machineLearning.facialRecognition.maxDistance,
+    );
     const accessibleIdentityMatch = personId
       ? undefined
       : await this.findClosestAccessibleSharedIdentity({
@@ -971,9 +976,11 @@ export class PersonService extends BaseService {
         minBirthDate: new Date(face.asset.fileCreatedAt),
       });
 
-      if (matchWithPerson.length > 0) {
-        personId = matchWithPerson[0].personId;
-      }
+      personId = await this.findRepresentativeCompatiblePersonId(
+        matchWithPerson,
+        face.faceSearch.embedding,
+        machineLearning.facialRecognition.maxDistance,
+      );
     }
 
     let createdPersonId: string | undefined;
@@ -1024,6 +1031,32 @@ export class PersonService extends BaseService {
     return identity.id;
   }
 
+  private async findRepresentativeCompatiblePersonId(
+    matches: FaceSearchResult[],
+    embedding: string,
+    maxDistance: number,
+  ): Promise<string | undefined> {
+    for (const match of matches) {
+      if (!match.personId) {
+        continue;
+      }
+
+      if (
+        await this.personRepository.isPersonRepresentativeWithinDistance({
+          personId: match.personId,
+          embedding,
+          maxDistance,
+        })
+      ) {
+        return match.personId;
+      }
+
+      this.logger.debug(
+        `Skipping automatic person match ${match.personId} because its representative face is outside the distance threshold`,
+      );
+    }
+  }
+
   private async mergeWithAccessibleSharedIdentity(input: {
     userId: string;
     embedding: string;
@@ -1040,6 +1073,18 @@ export class PersonService extends BaseService {
         excludeIdentityId: input.sourceIdentityId,
       }));
     if (!match || match.identityId === input.sourceIdentityId) {
+      return;
+    }
+
+    const representativeCompatible = await this.faceIdentityRepository.isRepresentativeWithinDistance({
+      identityId: match.identityId,
+      embedding: input.embedding,
+      maxDistance: input.maxDistance,
+    });
+    if (!representativeCompatible) {
+      this.logger.debug(
+        `Skipping accessible identity merge ${input.sourceIdentityId} -> ${match.identityId} because the representative face is outside the distance threshold`,
+      );
       return;
     }
 

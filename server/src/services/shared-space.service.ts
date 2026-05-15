@@ -1439,6 +1439,15 @@ export class SharedSpaceService extends BaseService {
         continue;
       }
 
+      const representativeCompatible = await this.personRepository.isPersonRepresentativeWithinDistance({
+        personId: person.id,
+        embedding: input.spacePerson.embedding,
+        maxDistance: input.maxDistance,
+      });
+      if (!representativeCompatible) {
+        continue;
+      }
+
       const identity = await this.faceIdentityRepository.ensurePersonIdentity(person.id);
       if (identity.id === targetIdentityId) {
         return;

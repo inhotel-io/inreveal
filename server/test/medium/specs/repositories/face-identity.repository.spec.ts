@@ -35,6 +35,8 @@ beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
 
+const axisEmbedding = (index: number) => `[${Array.from({ length: 512 }, (_, i) => (i === index ? 1 : 0)).join(',')}]`;
+
 const newSpacePerson = async (ctx: ReturnType<typeof setup>['ctx'], spaceId: string) => {
   return ctx.database.insertInto('shared_space_person').values({ spaceId }).returningAll().executeTakeFirstOrThrow();
 };
@@ -179,6 +181,52 @@ const getPersonalIdentityMismatchRows = async (ctx: ReturnType<typeof setup>['ct
 };
 
 describe(FaceIdentityRepository.name, () => {
+  describe('isRepresentativeWithinDistance', () => {
+    it('returns true when the embedding is within distance of the identity representative face', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+      const embedding = axisEmbedding(0);
+
+      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding }).execute();
+      await ctx.database.updateTable('person').set({ faceAssetId: assetFace.id }).where('id', '=', person.id).execute();
+      const identity = await sut.ensurePersonIdentity(person.id);
+
+      await expect(
+        sut.isRepresentativeWithinDistance({
+          identityId: identity.id,
+          embedding,
+          maxDistance: 0.5,
+        }),
+      ).resolves.toBe(true);
+    });
+
+    it('returns false when the embedding is outside distance of the identity representative face', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding(0) })
+        .execute();
+      await ctx.database.updateTable('person').set({ faceAssetId: assetFace.id }).where('id', '=', person.id).execute();
+      const identity = await sut.ensurePersonIdentity(person.id);
+
+      await expect(
+        sut.isRepresentativeWithinDistance({
+          identityId: identity.id,
+          embedding: axisEmbedding(1),
+          maxDistance: 0.5,
+        }),
+      ).resolves.toBe(false);
+    });
+  });
+
   it('returns no accessible identity match when multiple shared identities are within threshold', async () => {
     const { ctx, sut } = setup();
     const { user: member } = await ctx.newUser();

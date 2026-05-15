@@ -91,6 +91,12 @@ export interface RepresentativeFaceUpdateOptions {
   assetFaceId: string;
 }
 
+export interface RepresentativeDistanceOptions {
+  personId: string;
+  embedding: string;
+  maxDistance: number;
+}
+
 export type UnassignFacesOptions = DeleteFacesOptions;
 
 export type SelectFaceOptions = (keyof Selectable<AssetFaceTable>)[];
@@ -121,6 +127,24 @@ export class PersonRepository {
       .executeTakeFirst();
 
     return Number(result.numChangedRows ?? 0);
+  }
+
+  @GenerateSql({
+    params: [{ personId: DummyValue.UUID, embedding: DummyValue.VECTOR, maxDistance: 0.6 }],
+  })
+  async isPersonRepresentativeWithinDistance({
+    personId,
+    embedding,
+    maxDistance,
+  }: RepresentativeDistanceOptions): Promise<boolean> {
+    const row = await this.db
+      .selectFrom('person')
+      .innerJoin('face_search', 'face_search.faceId', 'person.faceAssetId')
+      .select(sql<boolean>`(face_search.embedding <=> ${embedding}) <= ${maxDistance}`.as('withinDistance'))
+      .where('person.id', '=', personId)
+      .executeTakeFirst();
+
+    return row?.withinDistance === true;
   }
 
   async unassignFaces({ sourceType }: UnassignFacesOptions): Promise<void> {

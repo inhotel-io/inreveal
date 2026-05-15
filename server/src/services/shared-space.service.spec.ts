@@ -198,6 +198,8 @@ describe(SharedSpaceService.name, () => {
       personalProfileConflictCount: 0,
       spaceProfileConflictCount: 0,
     });
+    mocks.person.isPersonRepresentativeWithinDistance.mockResolvedValue(true);
+    mocks.faceIdentity.isRepresentativeWithinDistance.mockResolvedValue(true);
   });
 
   it('should work', () => {
@@ -2666,6 +2668,11 @@ describe(SharedSpaceService.name, () => {
           numResults: 2,
         }),
       );
+      expect(mocks.person.isPersonRepresentativeWithinDistance).toHaveBeenCalledWith({
+        personId: 'local-person-1',
+        embedding: '[1,2,3]',
+        maxDistance: 0.5,
+      });
       expect(mocks.faceIdentity.mergeIdentities).toHaveBeenCalledWith({
         targetIdentityId: 'space-identity',
         sourceIdentityIds: ['local-identity'],
@@ -2721,6 +2728,21 @@ describe(SharedSpaceService.name, () => {
 
       await sut.handleSharedSpaceIdentityReconciliation({ spaceId: 'space-1', userId: 'member-1' });
 
+      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+    });
+
+    it('should skip automatic merge when the local representative face is too far from the space person', async () => {
+      setupStrictReconciliationFixture(mocks);
+      mocks.person.isPersonRepresentativeWithinDistance.mockResolvedValue(false);
+
+      await sut.handleSharedSpaceIdentityReconciliation({ spaceId: 'space-1', userId: 'member-1' });
+
+      expect(mocks.person.isPersonRepresentativeWithinDistance).toHaveBeenCalledWith({
+        personId: 'local-person-1',
+        embedding: '[1,2,3]',
+        maxDistance: 0.5,
+      });
+      expect(mocks.faceIdentity.ensurePersonIdentity).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
     });
 

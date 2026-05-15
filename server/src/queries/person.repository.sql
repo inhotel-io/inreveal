@@ -7,6 +7,15 @@ set
 where
   "asset_face"."personId" = $2
 
+-- PersonRepository.isPersonRepresentativeWithinDistance
+select
+  (face_search.embedding <=> $1) <= $2 as "withinDistance"
+from
+  "person"
+  inner join "face_search" on "face_search"."faceId" = "person"."faceAssetId"
+where
+  "person"."id" = $3
+
 -- PersonRepository.delete
 delete from "person"
 where

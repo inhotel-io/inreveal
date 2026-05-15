@@ -70,6 +70,12 @@ export type AccessibleIdentityFaceMatch = {
   distance: number;
 };
 
+export type IdentityRepresentativeDistanceOptions = {
+  identityId: string;
+  embedding: string;
+  maxDistance: number;
+};
+
 type AccessiblePeopleOptions = {
   withHidden: boolean;
   page: number;
@@ -187,6 +193,24 @@ type HydratedAccessiblePersonRow = {
 @Injectable()
 export class FaceIdentityRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
+
+  @GenerateSql({
+    params: [{ identityId: DummyValue.UUID, embedding: DummyValue.VECTOR, maxDistance: 0.6 }],
+  })
+  async isRepresentativeWithinDistance({
+    identityId,
+    embedding,
+    maxDistance,
+  }: IdentityRepresentativeDistanceOptions): Promise<boolean> {
+    const row = await this.db
+      .selectFrom('face_identity')
+      .innerJoin('face_search', 'face_search.faceId', 'face_identity.representativeFaceId')
+      .select(sql<boolean>`(face_search.embedding <=> ${embedding}) <= ${maxDistance}`.as('withinDistance'))
+      .where('face_identity.id', '=', identityId)
+      .executeTakeFirst();
+
+    return row?.withinDistance === true;
+  }
 
   @GenerateSql({
     params: [
