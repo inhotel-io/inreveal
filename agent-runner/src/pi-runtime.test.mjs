@@ -638,6 +638,31 @@ describe('pi runtime adapter', () => {
     ]);
   });
 
+  it('returns a runner-error when Pi completes with an assistant error message', async () => {
+    const { sdk, ai, session } = createFakeDependencies();
+    session.prompt = async () => {
+      session.messages.push({
+        role: 'assistant',
+        content: [],
+        stopReason: 'error',
+        errorMessage: 'provider rejected tool schema',
+      });
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.deepEqual(events, [
+      {
+        type: 'runner-error',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        message: 'provider rejected tool schema',
+      },
+    ]);
+  });
+
   it('unsubscribes from Pi runtime events after a message stream completes', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
