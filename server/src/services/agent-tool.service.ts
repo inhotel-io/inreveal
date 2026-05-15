@@ -692,10 +692,6 @@ export class AgentToolService {
   }
 
   private getPolicyDenial(session: AgentSession, dataClass: AgentToolDataClass): string | null {
-    if (session.approvalMode === AgentApprovalMode.DangerouslySkipPermissions) {
-      return 'YOLO read mode is implemented in slice 10';
-    }
-
     const { read, providerExposure } = session.permissionPlanSnapshot;
 
     if (dataClass === AgentToolDataClass.Metadata && !read.metadata) {
@@ -771,6 +767,9 @@ export class AgentToolService {
         return dataClass !== AgentToolDataClass.Metadata;
       }
       case AgentApprovalMode.PlanOnly: {
+        return false;
+      }
+      case AgentApprovalMode.DangerouslySkipPermissions: {
         return false;
       }
       default: {

@@ -529,12 +529,12 @@ describe(AgentToolService.name, () => {
     expect(result.status).toBe(expectedStatus);
   });
 
-  it('denies original reads for external providers unless explicitly allowed and skips access checks', async () => {
+  it('denies YOLO original reads for external providers unless explicitly allowed and skips access checks', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid()];
     const session = makeSession({
       userId: auth.user.id,
-      approvalMode: AgentApprovalMode.PlanOnly,
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
       permissionPlanSnapshot: makePlan({
         read: { metadata: true, previews: true, originals: true },
         providerExposure: {
@@ -600,32 +600,7 @@ describe(AgentToolService.name, () => {
     });
   });
 
-  it.each([
-    {
-      name: 'searchAssets',
-      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
-        sut.searchAssets(auth, sessionId, { filters: {}, limit: assetIds.length }),
-      repositoryRead: () => assetRepository.searchAgentMetadata,
-    },
-    {
-      name: 'readAssetMetadata',
-      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
-        sut.readAssetMetadata(auth, sessionId, { assetIds }),
-      repositoryRead: () => assetRepository.getAgentMetadataByIds,
-    },
-    {
-      name: 'readAssetPreviews',
-      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
-        sut.readAssetPreviews(auth, sessionId, { assetIds }),
-      repositoryRead: () => assetRepository.getAgentPreviewReferencesByIds,
-    },
-    {
-      name: 'readAssetOriginals',
-      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
-        sut.readAssetOriginals(auth, sessionId, { assetIds }),
-      repositoryRead: () => assetRepository.getAgentOriginalReferencesByIds,
-    },
-  ])('denies YOLO mode for $name without executing repository reads', async ({ call, repositoryRead }) => {
+  it('auto-executes YOLO metadata reads with an executing audit row and completed transition', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid()];
     const session = makeSession({
@@ -642,23 +617,359 @@ describe(AgentToolService.name, () => {
         limits: { ...permissionPlanSnapshot.limits, maxPreviewsPerToolCall: 5, maxOriginalsPerToolCall: 5 },
       }),
     });
+    const executing = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.ReadAssetMetadata,
+      status: AgentToolCallStatus.Executing,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      redactedRequestMetadata: { assetIds },
+      dataClass: AgentToolDataClass.Metadata,
+      assetCount: 1,
+    });
+    const completed = makeToolCall({
+      ...executing,
+      status: AgentToolCallStatus.Completed,
+      responseSummary: 'Returned metadata for 1 asset',
+      redactedResponseMetadata: { assetIds },
+      completedAt,
+    });
 
     sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetIds[0])] as never);
+    toolCallRepository.createWithSessionLimit.mockResolvedValue({ status: 'created', toolCall: executing });
+    toolCallRepository.transition.mockResolvedValue(completed);
 
-    const result = await call(auth, session.id, assetIds);
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds });
 
     expect(result).toEqual({
-      status: 'denied',
-      reason: 'YOLO read mode is implemented in slice 10',
-      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+      status: 'success',
+      toolCall: expect.objectContaining({
+        id: executing.id,
+        status: AgentToolCallStatus.Completed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        dataClass: AgentToolDataClass.Metadata,
+        assetCount: 1,
+        albumCount: 0,
+      }),
+      assets: [expect.objectContaining({ id: assetIds[0] })],
     });
-    expect(repositoryRead()).not.toHaveBeenCalled();
+    expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: session.id,
+        toolName: AgentToolName.ReadAssetMetadata,
+        status: AgentToolCallStatus.Executing,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        redactedRequestMetadata: { assetIds },
+        dataClass: AgentToolDataClass.Metadata,
+        assetCount: 1,
+        albumCount: 0,
+      }),
+      expect.objectContaining({
+        sessionId: session.id,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        redactedRequestMetadata: { assetIds },
+        error: 'Session policy allows at most 1000 assets per session',
+      }),
+      AgentToolDataClass.Metadata,
+      session.permissionPlanSnapshot.limits.maxAssetsPerSession,
+    );
+    expect(toolCallRepository.create).not.toHaveBeenCalled();
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      session.id,
+      executing.id,
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        status: AgentToolCallStatus.Completed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: 'Returned metadata for 1 asset',
+        redactedResponseMetadata: { assetIds },
+        assetCount: 1,
+        albumCount: 0,
+      }),
+    );
+    expect(sessionRepository.update).not.toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.WaitingForToolApproval,
+    });
   });
 
-  it('denies inaccessible assets before pending approval', async () => {
+  it.each([
+    {
+      name: 'searchAssets',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetId: string) =>
+        sut.searchAssets(auth, sessionId, { filters: {}, limit: 1 }),
+      arrange: (assetId: string) => {
+        assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [makeMetadata(assetId)], nextPage: null });
+        accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+      },
+      resultKey: 'assets',
+      dataClass: AgentToolDataClass.Metadata,
+      assetCount: 1,
+      albumCount: 0,
+    },
+    {
+      name: 'readAssetMetadata',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetId: string) =>
+        sut.readAssetMetadata(auth, sessionId, { assetIds: [assetId] }),
+      arrange: (assetId: string) => {
+        assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+        accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+      },
+      resultKey: 'assets',
+      dataClass: AgentToolDataClass.Metadata,
+      assetCount: 1,
+      albumCount: 0,
+    },
+    {
+      name: 'readAssetPreviews',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetId: string) =>
+        sut.readAssetPreviews(auth, sessionId, { assetIds: [assetId] }),
+      arrange: (assetId: string) => {
+        assetRepository.getAgentPreviewReferencesByIds.mockResolvedValue([makeMediaReference(assetId)]);
+        accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+      },
+      resultKey: 'previews',
+      dataClass: AgentToolDataClass.Previews,
+      assetCount: 1,
+      albumCount: 0,
+    },
+    {
+      name: 'readAssetOriginals',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetId: string) =>
+        sut.readAssetOriginals(auth, sessionId, { assetIds: [assetId] }),
+      arrange: (assetId: string) => {
+        assetRepository.getAgentOriginalReferencesByIds.mockResolvedValue([makeMediaReference(assetId)]);
+        accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+      },
+      resultKey: 'originals',
+      dataClass: AgentToolDataClass.Originals,
+      assetCount: 1,
+      albumCount: 0,
+    },
+    {
+      name: 'listAlbums',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string) => sut.listAlbums(auth, sessionId, {}),
+      arrange: (_assetId: string, auth: ReturnType<typeof AuthFactory.create>) => {
+        albumRepository.getAgentAlbums.mockResolvedValue([makeAlbumSummary({ ownerId: auth.user.id })]);
+      },
+      resultKey: 'albums',
+      dataClass: AgentToolDataClass.Metadata,
+      assetCount: 0,
+      albumCount: 1,
+    },
+    {
+      name: 'readAlbum',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetId: string, albumId: string) =>
+        sut.readAlbum(auth, sessionId, { albumId }),
+      arrange: (assetId: string, _auth: ReturnType<typeof AuthFactory.create>, albumId: string) => {
+        accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+        albumRepository.getAgentAlbumById.mockResolvedValue(makeAlbumDetail({ id: albumId, assetIds: [assetId] }));
+      },
+      resultKey: 'album',
+      dataClass: AgentToolDataClass.Metadata,
+      assetCount: 1,
+      albumCount: 1,
+    },
+  ])(
+    '$name auto-executes in YOLO when policy allows without creating a pending approval row',
+    async ({ call, arrange, resultKey, dataClass, assetCount, albumCount }) => {
+      const auth = AuthFactory.create();
+      const assetId = newUuid();
+      const albumId = newUuid();
+      const session = makeSession({
+        userId: auth.user.id,
+        approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
+        credentialSnapshot: {
+          id: newUuid(),
+          providerType: AgentProviderType.OpenAICompatible,
+          label: 'Local compatible',
+          baseUrl: 'http://localhost:11434/v1',
+          models: ['local-model'],
+          defaultModel: 'local-model',
+        },
+        permissionPlanSnapshot: makePlan({
+          read: { metadata: true, previews: true, originals: true },
+          providerExposure: {
+            metadata: true,
+            previews: true,
+            originals: true,
+            allowOriginalsForExternalProviders: false,
+          },
+          limits: { ...permissionPlanSnapshot.limits, maxPreviewsPerToolCall: 5, maxOriginalsPerToolCall: 5 },
+        }),
+      });
+
+      sessionRepository.getById.mockResolvedValue(session);
+      arrange(assetId, auth, albumId);
+      toolCallRepository.transition.mockImplementation((_sessionId, _id, _expectedStatus, dto) =>
+        Promise.resolve(
+          makeToolCall({
+            ...(dto as Partial<AgentToolCall>),
+            id: _id,
+            sessionId: _sessionId,
+            dataClass,
+            assetCount,
+            albumCount,
+          }),
+        ),
+      );
+
+      const result = await call(auth, session.id, assetId, albumId);
+
+      expect(result.status).toBe('success');
+      expect(result.toolCall).toEqual(
+        expect.objectContaining({
+          status: AgentToolCallStatus.Completed,
+          approvalDecision: AgentToolApprovalDecision.Approved,
+          dataClass,
+          assetCount,
+          albumCount,
+        }),
+      );
+      expect(result).toHaveProperty(resultKey);
+      expect(toolCallRepository.create).not.toHaveBeenCalledWith(
+        expect.objectContaining({ status: AgentToolCallStatus.PendingApproval }),
+      );
+      expect(toolCallRepository.createWithSessionLimit).not.toHaveBeenCalledWith(
+        expect.objectContaining({ status: AgentToolCallStatus.PendingApproval }),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+      );
+      expect(sessionRepository.update).not.toHaveBeenCalledWith(auth.user.id, session.id, {
+        status: AgentSessionStatus.WaitingForToolApproval,
+      });
+    },
+  );
+
+  it.each([
+    {
+      name: 'metadata read disabled',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetMetadata(auth, sessionId, { assetIds }),
+      permissionPlanSnapshot: makePlan({ read: { metadata: false, previews: true, originals: true } }),
+      reason: 'Agent permission policy does not allow metadata reads',
+      repositoryRead: () => assetRepository.getAgentMetadataByIds,
+    },
+    {
+      name: 'metadata provider exposure disabled',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetMetadata(auth, sessionId, { assetIds }),
+      permissionPlanSnapshot: makePlan({
+        providerExposure: {
+          metadata: false,
+          previews: true,
+          originals: true,
+          allowOriginalsForExternalProviders: true,
+        },
+      }),
+      reason: 'Agent provider exposure policy does not allow metadata reads',
+      repositoryRead: () => assetRepository.getAgentMetadataByIds,
+    },
+    {
+      name: 'preview read disabled',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetPreviews(auth, sessionId, { assetIds }),
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: false, originals: true },
+        providerExposure: {
+          metadata: true,
+          previews: true,
+          originals: true,
+          allowOriginalsForExternalProviders: true,
+        },
+      }),
+      reason: 'Agent permission policy does not allow preview reads',
+      repositoryRead: () => assetRepository.getAgentPreviewReferencesByIds,
+    },
+    {
+      name: 'preview provider exposure disabled',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetPreviews(auth, sessionId, { assetIds }),
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: true, originals: true },
+        providerExposure: {
+          metadata: true,
+          previews: false,
+          originals: true,
+          allowOriginalsForExternalProviders: true,
+        },
+      }),
+      reason: 'Agent provider exposure policy does not allow preview reads',
+      repositoryRead: () => assetRepository.getAgentPreviewReferencesByIds,
+    },
+    {
+      name: 'original read disabled',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetOriginals(auth, sessionId, { assetIds }),
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: true, originals: false },
+        providerExposure: {
+          metadata: true,
+          previews: true,
+          originals: true,
+          allowOriginalsForExternalProviders: true,
+        },
+      }),
+      reason: 'Agent permission policy does not allow original reads',
+      repositoryRead: () => assetRepository.getAgentOriginalReferencesByIds,
+    },
+    {
+      name: 'original provider exposure disabled',
+      call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, assetIds: string[]) =>
+        sut.readAssetOriginals(auth, sessionId, { assetIds }),
+      permissionPlanSnapshot: makePlan({
+        read: { metadata: true, previews: true, originals: true },
+        providerExposure: {
+          metadata: true,
+          previews: true,
+          originals: false,
+          allowOriginalsForExternalProviders: true,
+        },
+      }),
+      reason: 'Agent provider exposure policy does not allow original reads',
+      repositoryRead: () => assetRepository.getAgentOriginalReferencesByIds,
+    },
+  ])(
+    'YOLO still denies policy/provider-exposure case: $name',
+    async ({ call, permissionPlanSnapshot, reason, repositoryRead }) => {
+      const auth = AuthFactory.create();
+      const assetIds = [newUuid()];
+      const session = makeSession({
+        userId: auth.user.id,
+        approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
+        permissionPlanSnapshot,
+      });
+
+      sessionRepository.getById.mockResolvedValue(session);
+
+      const result = await call(auth, session.id, assetIds);
+
+      expect(result).toEqual({
+        status: 'denied',
+        reason,
+        toolCall: expect.objectContaining({
+          status: AgentToolCallStatus.Denied,
+          approvalDecision: AgentToolApprovalDecision.Denied,
+          error: reason,
+        }),
+      });
+      expect(toolCallRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: AgentToolCallStatus.Denied,
+          approvalDecision: AgentToolApprovalDecision.Denied,
+          error: reason,
+        }),
+      );
+      expect(repositoryRead()).not.toHaveBeenCalled();
+    },
+  );
+
+  it('denies YOLO inaccessible assets before execution', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid(), newUuid()];
-    const session = makeSession({ userId: auth.user.id });
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.DangerouslySkipPermissions });
 
     sessionRepository.getById.mockResolvedValue(session);
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetIds[0]]));
@@ -673,11 +984,12 @@ describe(AgentToolService.name, () => {
     expect(sessionRepository.update).not.toHaveBeenCalled();
   });
 
-  it('denies per-tool asset limit before access checks', async () => {
+  it('denies YOLO per-tool asset limit before access checks', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid(), newUuid()];
     const session = makeSession({
       userId: auth.user.id,
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
       permissionPlanSnapshot: makePlan({ limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1 } }),
     });
 
@@ -693,11 +1005,12 @@ describe(AgentToolService.name, () => {
     expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
   });
 
-  it('denies per-session asset limit through atomic pending creation after access checks', async () => {
+  it('denies YOLO per-session asset limit through atomic executing creation after access checks', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid(), newUuid()];
     const session = makeSession({
       userId: auth.user.id,
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
       permissionPlanSnapshot: makePlan({ limits: { ...permissionPlanSnapshot.limits, maxAssetsPerSession: 2 } }),
     });
 
@@ -726,7 +1039,8 @@ describe(AgentToolService.name, () => {
     expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: session.id,
-        status: AgentToolCallStatus.PendingApproval,
+        status: AgentToolCallStatus.Executing,
+        approvalDecision: AgentToolApprovalDecision.Approved,
         redactedRequestMetadata: { assetIds },
       }),
       expect.objectContaining({
@@ -958,11 +1272,12 @@ describe(AgentToolService.name, () => {
     expect(assetRepository.getAgentLockedIds).toHaveBeenCalledWith(new Set(assetIds));
   });
 
-  it('denies locked shared-space assets without elevated locked access', async () => {
+  it('denies YOLO locked shared-space assets without elevated locked access', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid()];
     const session = makeSession({
       userId: auth.user.id,
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
       permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
     });
 
@@ -1044,6 +1359,29 @@ describe(AgentToolService.name, () => {
       new Set(assetIds),
       false,
     );
+  });
+
+  it('denies YOLO owned locked assets without elevated locked access', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: true } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'One or more assets are not accessible',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set(assetIds), false);
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
   });
 
   it('passes shared-space and locked scope to search only when permission plan and elevated auth allow it', async () => {
@@ -1221,12 +1559,12 @@ describe(AgentToolService.name, () => {
     });
   });
 
-  it('readAlbum denies an owned album when assetScope.owned is false', async () => {
+  it('YOLO readAlbum denies an owned album when assetScope.owned is false', async () => {
     const auth = AuthFactory.create();
     const albumId = newUuid();
     const session = makeSession({
       userId: auth.user.id,
-      approvalMode: AgentApprovalMode.PlanOnly,
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
       permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
     });
 
@@ -1245,12 +1583,12 @@ describe(AgentToolService.name, () => {
     expect(albumRepository.getAgentAlbumById).not.toHaveBeenCalled();
   });
 
-  it('readAlbum denies a shared album when assetScope.sharedSpaces is false', async () => {
+  it('YOLO readAlbum denies a shared album when assetScope.sharedSpaces is false', async () => {
     const auth = AuthFactory.create();
     const albumId = newUuid();
     const session = makeSession({
       userId: auth.user.id,
-      approvalMode: AgentApprovalMode.PlanOnly,
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
       permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
     });
 
@@ -1316,9 +1654,12 @@ describe(AgentToolService.name, () => {
     );
   });
 
-  it('visibility-constrains album and tag search filters without leaking inaccessible ids through errors', async () => {
+  it('YOLO visibility-constrains album and tag search filters without leaking inaccessible ids through errors', async () => {
     const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
+    });
 
     sessionRepository.getById.mockResolvedValue(session);
     accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set());
@@ -2187,6 +2528,25 @@ describe(AgentToolService.name, () => {
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
       status: AgentSessionStatus.Running,
     });
+  });
+
+  it('rejects YOLO reads for inactive sessions without creating audit rows', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
+      status: AgentSessionStatus.Completed,
+      endedAt: completedAt,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(sut.readAssetMetadata(auth, session.id, { assetIds: [newUuid()] })).rejects.toThrow(
+      'Agent session not found',
+    );
+    expect(toolCallRepository.create).not.toHaveBeenCalled();
+    expect(toolCallRepository.createWithSessionLimit).not.toHaveBeenCalled();
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
   });
 
   it('throws BadRequestException when the session is missing', async () => {
