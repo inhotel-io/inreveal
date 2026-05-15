@@ -197,6 +197,8 @@ class ApiClient {
           return AgentApprovalModeTypeTransformer().decode(value);
         case 'AgentCredentialSnapshot':
           return AgentCredentialSnapshot.fromJson(value);
+        case 'AgentListAlbumsToolRequestDto':
+          return AgentListAlbumsToolRequestDto.fromJson(value);
         case 'AgentMessageAssetBlock':
           return AgentMessageAssetBlock.fromJson(value);
         case 'AgentMessageAssetBlockType':
@@ -247,14 +249,24 @@ class ApiClient {
           return AgentProviderCredentialUpdateDto.fromJson(value);
         case 'AgentProviderType':
           return AgentProviderTypeTypeTransformer().decode(value);
+        case 'AgentReadAlbumToolRequestDto':
+          return AgentReadAlbumToolRequestDto.fromJson(value);
         case 'AgentReadAssetMetadataToolRequestDto':
           return AgentReadAssetMetadataToolRequestDto.fromJson(value);
+        case 'AgentReadAssetOriginalsToolRequestDto':
+          return AgentReadAssetOriginalsToolRequestDto.fromJson(value);
+        case 'AgentReadAssetPreviewsToolRequestDto':
+          return AgentReadAssetPreviewsToolRequestDto.fromJson(value);
         case 'AgentRunnerCapabilitiesDto':
           return AgentRunnerCapabilitiesDto.fromJson(value);
         case 'AgentRunnerStatusDto':
           return AgentRunnerStatusDto.fromJson(value);
         case 'AgentRunnerStatusReason':
           return AgentRunnerStatusReasonTypeTransformer().decode(value);
+        case 'AgentSearchAssetsFilters':
+          return AgentSearchAssetsFilters.fromJson(value);
+        case 'AgentSearchAssetsToolRequestDto':
+          return AgentSearchAssetsToolRequestDto.fromJson(value);
         case 'AgentSessionCreateDto':
           return AgentSessionCreateDto.fromJson(value);
         case 'AgentSessionResponseDto':
