@@ -193,12 +193,32 @@ class ApiClient {
           return AddUsersDto.fromJson(value);
         case 'AdminOnboardingUpdateDto':
           return AdminOnboardingUpdateDto.fromJson(value);
+        case 'AgentAlbumDetail':
+          return AgentAlbumDetail.fromJson(value);
+        case 'AgentAlbumSummary':
+          return AgentAlbumSummary.fromJson(value);
         case 'AgentApprovalMode':
           return AgentApprovalModeTypeTransformer().decode(value);
+        case 'AgentAssetMediaReference':
+          return AgentAssetMediaReference.fromJson(value);
+        case 'AgentAssetMetadata':
+          return AgentAssetMetadata.fromJson(value);
+        case 'AgentAssetMetadataExif':
+          return AgentAssetMetadataExif.fromJson(value);
+        case 'AgentAssetMetadataTag':
+          return AgentAssetMetadataTag.fromJson(value);
         case 'AgentCredentialSnapshot':
           return AgentCredentialSnapshot.fromJson(value);
+        case 'AgentListAlbumsToolApprovalRequiredResponse':
+          return AgentListAlbumsToolApprovalRequiredResponse.fromJson(value);
+        case 'AgentListAlbumsToolDeniedResponse':
+          return AgentListAlbumsToolDeniedResponse.fromJson(value);
         case 'AgentListAlbumsToolRequestDto':
           return AgentListAlbumsToolRequestDto.fromJson(value);
+        case 'AgentListAlbumsToolResponseDto':
+          return AgentListAlbumsToolResponseDto.fromJson(value);
+        case 'AgentListAlbumsToolSuccessResponse':
+          return AgentListAlbumsToolSuccessResponse.fromJson(value);
         case 'AgentMessageAssetBlock':
           return AgentMessageAssetBlock.fromJson(value);
         case 'AgentMessageAssetBlockType':
@@ -249,14 +269,46 @@ class ApiClient {
           return AgentProviderCredentialUpdateDto.fromJson(value);
         case 'AgentProviderType':
           return AgentProviderTypeTypeTransformer().decode(value);
+        case 'AgentReadAlbumToolApprovalRequiredResponse':
+          return AgentReadAlbumToolApprovalRequiredResponse.fromJson(value);
+        case 'AgentReadAlbumToolDeniedResponse':
+          return AgentReadAlbumToolDeniedResponse.fromJson(value);
         case 'AgentReadAlbumToolRequestDto':
           return AgentReadAlbumToolRequestDto.fromJson(value);
+        case 'AgentReadAlbumToolResponseDto':
+          return AgentReadAlbumToolResponseDto.fromJson(value);
+        case 'AgentReadAlbumToolSuccessResponse':
+          return AgentReadAlbumToolSuccessResponse.fromJson(value);
+        case 'AgentReadAssetMetadataToolApprovalRequiredResponse':
+          return AgentReadAssetMetadataToolApprovalRequiredResponse.fromJson(value);
+        case 'AgentReadAssetMetadataToolDeniedResponse':
+          return AgentReadAssetMetadataToolDeniedResponse.fromJson(value);
         case 'AgentReadAssetMetadataToolRequestDto':
           return AgentReadAssetMetadataToolRequestDto.fromJson(value);
+        case 'AgentReadAssetMetadataToolResponseDto':
+          return AgentReadAssetMetadataToolResponseDto.fromJson(value);
+        case 'AgentReadAssetMetadataToolSuccessResponse':
+          return AgentReadAssetMetadataToolSuccessResponse.fromJson(value);
+        case 'AgentReadAssetOriginalsToolApprovalRequiredResponse':
+          return AgentReadAssetOriginalsToolApprovalRequiredResponse.fromJson(value);
+        case 'AgentReadAssetOriginalsToolDeniedResponse':
+          return AgentReadAssetOriginalsToolDeniedResponse.fromJson(value);
         case 'AgentReadAssetOriginalsToolRequestDto':
           return AgentReadAssetOriginalsToolRequestDto.fromJson(value);
+        case 'AgentReadAssetOriginalsToolResponseDto':
+          return AgentReadAssetOriginalsToolResponseDto.fromJson(value);
+        case 'AgentReadAssetOriginalsToolSuccessResponse':
+          return AgentReadAssetOriginalsToolSuccessResponse.fromJson(value);
+        case 'AgentReadAssetPreviewsToolApprovalRequiredResponse':
+          return AgentReadAssetPreviewsToolApprovalRequiredResponse.fromJson(value);
+        case 'AgentReadAssetPreviewsToolDeniedResponse':
+          return AgentReadAssetPreviewsToolDeniedResponse.fromJson(value);
         case 'AgentReadAssetPreviewsToolRequestDto':
           return AgentReadAssetPreviewsToolRequestDto.fromJson(value);
+        case 'AgentReadAssetPreviewsToolResponseDto':
+          return AgentReadAssetPreviewsToolResponseDto.fromJson(value);
+        case 'AgentReadAssetPreviewsToolSuccessResponse':
+          return AgentReadAssetPreviewsToolSuccessResponse.fromJson(value);
         case 'AgentRunnerCapabilitiesDto':
           return AgentRunnerCapabilitiesDto.fromJson(value);
         case 'AgentRunnerStatusDto':
@@ -265,8 +317,16 @@ class ApiClient {
           return AgentRunnerStatusReasonTypeTransformer().decode(value);
         case 'AgentSearchAssetsFilters':
           return AgentSearchAssetsFilters.fromJson(value);
+        case 'AgentSearchAssetsToolApprovalRequiredResponse':
+          return AgentSearchAssetsToolApprovalRequiredResponse.fromJson(value);
+        case 'AgentSearchAssetsToolDeniedResponse':
+          return AgentSearchAssetsToolDeniedResponse.fromJson(value);
         case 'AgentSearchAssetsToolRequestDto':
           return AgentSearchAssetsToolRequestDto.fromJson(value);
+        case 'AgentSearchAssetsToolResponseDto':
+          return AgentSearchAssetsToolResponseDto.fromJson(value);
+        case 'AgentSearchAssetsToolSuccessResponse':
+          return AgentSearchAssetsToolSuccessResponse.fromJson(value);
         case 'AgentSessionCreateDto':
           return AgentSessionCreateDto.fromJson(value);
         case 'AgentSessionResponseDto':
