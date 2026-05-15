@@ -316,8 +316,8 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       let promptPromise;
 
       try {
-        promptPromise = entry.session
-          .prompt(textPromptFromContent(content))
+        promptPromise = Promise.resolve()
+          .then(() => entry.session.prompt(textPromptFromContent(content)))
           .then(() => {
             if (aborted) {
               return;
