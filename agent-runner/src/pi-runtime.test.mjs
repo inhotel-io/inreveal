@@ -748,6 +748,47 @@ describe('pi runtime adapter', () => {
     assert.equal(retryEvents[0].type, 'assistant-message-delta');
   });
 
+  it('cleans up and redacts the error when unsubscribe fails during stream cleanup', async () => {
+    const promptGate = createDeferred();
+    const { sdk, ai, calls, session } = createFakeDependencies({ promptGate });
+    const originalSubscribe = session.subscribe.bind(session);
+    let subscribeAttempts = 0;
+    session.subscribe = (next) => {
+      subscribeAttempts += 1;
+      const unsubscribe = originalSubscribe(next);
+      if (subscribeAttempts === 1) {
+        return () => {
+          unsubscribe();
+          throw new Error('unsubscribe failed sk-openai-secret');
+        };
+      }
+
+      return unsubscribe;
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+    const first = runtime.sendMessage(createMessageRequest())[Symbol.asyncIterator]();
+
+    assert.equal((await first.next()).value.type, 'assistant-message-delta');
+
+    const returnPromise = first.return();
+    promptGate.resolve();
+    await assert.rejects(
+      () => returnPromise,
+      (error) => {
+        assert.equal(error.message, 'unsubscribe failed [redacted]');
+        assert.equal(error.message.includes('sk-openai-secret'), false);
+        return true;
+      },
+    );
+
+    const retryEvents = await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.equal(subscribeAttempts, 2);
+    assert.equal(calls.unsubscribed, 2);
+    assert.equal(retryEvents[0].type, 'assistant-message-delta');
+  });
+
   it('sanitizes public dispose abort failures and removes the runner session', async () => {
     const promptGate = createDeferred();
     const { sdk, ai, calls, session } = createFakeDependencies({ promptGate });

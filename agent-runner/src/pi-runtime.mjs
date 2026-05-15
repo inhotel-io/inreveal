@@ -376,7 +376,11 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             cleanupError ??= error;
           }
         }
-        releaseSubscription();
+        try {
+          releaseSubscription();
+        } catch (error) {
+          cleanupError ??= error;
+        }
         entry.inFlight = false;
         if (entry.abortActiveStream === abortActiveStream) {
           entry.abortActiveStream = undefined;
