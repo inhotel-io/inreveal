@@ -483,7 +483,9 @@ describe(AgentSessionService.name, () => {
     credentialService.getById.mockResolvedValue(credential);
     repository.create.mockResolvedValue(createdSession);
     agentRunnerService.createSession.mockResolvedValue(runnerSession);
-    repository.markRunningFromCreated.mockResolvedValue();
+    repository.markRunningFromCreated.mockResolvedValue(
+      void 0 as Awaited<ReturnType<typeof repository.markRunningFromCreated>>,
+    );
     repository.getById.mockResolvedValue(cancelledSession);
 
     await expect(sut.create(auth, makeCreateDto({ providerCredentialId: credential.id }))).resolves.toMatchObject({
@@ -552,7 +554,9 @@ describe(AgentSessionService.name, () => {
     credentialService.getById.mockResolvedValue(credential);
     repository.create.mockResolvedValue(createdSession);
     agentRunnerService.createSession.mockRejectedValue(runnerError);
-    repository.markFailedFromCreated.mockResolvedValue();
+    repository.markFailedFromCreated.mockResolvedValue(
+      void 0 as Awaited<ReturnType<typeof repository.markFailedFromCreated>>,
+    );
 
     await expect(sut.create(auth, makeCreateDto({ providerCredentialId: credential.id }))).rejects.toBe(runnerError);
     expect(repository.markFailedFromCreated).toHaveBeenCalledWith(auth.user.id, createdSession.id, expect.any(Date));
