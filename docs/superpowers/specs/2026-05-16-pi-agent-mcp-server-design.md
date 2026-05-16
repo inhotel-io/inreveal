@@ -97,7 +97,8 @@ Content-Type: application/json
 Accept: application/json, text/event-stream
 ```
 
-The first slice should implement Streamable HTTP MCP. It must support at least:
+The MCP replacement should implement Streamable HTTP MCP. Across the vertical
+slices it must support at least:
 
 - `initialize`;
 - `tools/list`;
