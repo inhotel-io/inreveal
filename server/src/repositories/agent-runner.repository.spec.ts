@@ -477,6 +477,31 @@ describe(AgentRunnerRepository.name, () => {
     ).resolves.toEqual([runnerErrorEvent]);
   });
 
+  it('streams tool approval-needed SSE events', async () => {
+    const approvalEvent = {
+      type: 'tool-approval-needed',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      toolCallId: '00000000-0000-4000-8000-000000000333',
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`event: tool-approval-needed\ndata: ${JSON.stringify(approvalEvent)}\n\n`),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).resolves.toEqual([approvalEvent]);
+  });
+
   it('throws when runner-reported error events are missing a non-empty message', async () => {
     const runnerErrorEvent = {
       type: 'runner-error',
