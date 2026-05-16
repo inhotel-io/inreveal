@@ -138,18 +138,14 @@ it('should parse MCP gateway URL', () => {
 it('should reject the retired tool gateway env name', () => {
   process.env.IMMICH_AGENT_TOOL_GATEWAY_URL = 'http://immich-server:2283/api/agent/internal/tools';
 
-  expect(() => getEnv()).toThrowError(
-    '[IMMICH_AGENT_TOOL_GATEWAY_URL] Use IMMICH_AGENT_MCP_GATEWAY_URL instead',
-  );
+  expect(() => getEnv()).toThrowError('[IMMICH_AGENT_TOOL_GATEWAY_URL] Use IMMICH_AGENT_MCP_GATEWAY_URL instead');
 });
 
 it('should reject the retired tool gateway env name even when the MCP gateway is also set', () => {
   process.env.IMMICH_AGENT_TOOL_GATEWAY_URL = 'http://immich-server:2283/api/agent/internal/tools';
   process.env.IMMICH_AGENT_MCP_GATEWAY_URL = 'http://immich-server:2283/api/agent/internal/mcp';
 
-  expect(() => getEnv()).toThrowError(
-    '[IMMICH_AGENT_TOOL_GATEWAY_URL] Use IMMICH_AGENT_MCP_GATEWAY_URL instead',
-  );
+  expect(() => getEnv()).toThrowError('[IMMICH_AGENT_TOOL_GATEWAY_URL] Use IMMICH_AGENT_MCP_GATEWAY_URL instead');
 });
 
 it('should reject non-http MCP gateway URLs', () => {
@@ -334,24 +330,24 @@ Expected: FAIL because `AgentRunnerService` still reads `toolGatewayUrl` and sti
 In `server/src/services/agent-runner.service.ts`, replace the config destructuring and gateway setup with:
 
 ```ts
-    const { runnerUrl, runnerHealthTimeoutMs, mcpGatewayUrl } = this.configRepository.getEnv().agent;
-    if (!runnerUrl) {
-      throw new BadRequestException('Agent runner is not configured');
-    }
-    if (!mcpGatewayUrl) {
-      throw new BadRequestException('Agent MCP gateway is not configured');
-    }
+const { runnerUrl, runnerHealthTimeoutMs, mcpGatewayUrl } = this.configRepository.getEnv().agent;
+if (!runnerUrl) {
+  throw new BadRequestException('Agent runner is not configured');
+}
+if (!mcpGatewayUrl) {
+  throw new BadRequestException('Agent MCP gateway is not configured');
+}
 
-    const mcpGateway = {
-      url: buildMcpSessionUrl(mcpGatewayUrl, body.gallerySessionId),
-      token: this.toolTokenService.create({
-        sessionId: body.gallerySessionId,
-        userId,
-        expiresAt: body.permissionPlan.limits.expiresInMinutes
-          ? new Date(Date.now() + body.permissionPlan.limits.expiresInMinutes * 60_000)
-          : new Date(Date.now() + 2 * 60 * 60_000),
-      }),
-    };
+const mcpGateway = {
+  url: buildMcpSessionUrl(mcpGatewayUrl, body.gallerySessionId),
+  token: this.toolTokenService.create({
+    sessionId: body.gallerySessionId,
+    userId,
+    expiresAt: body.permissionPlan.limits.expiresInMinutes
+      ? new Date(Date.now() + body.permissionPlan.limits.expiresInMinutes * 60_000)
+      : new Date(Date.now() + 2 * 60 * 60_000),
+  }),
+};
 ```
 
 Leave the runner request body as:
@@ -363,10 +359,10 @@ Leave the runner request body as:
 In `getStatus()`, require both `runnerUrl` and `mcpGatewayUrl` before probing the runner:
 
 ```ts
-    const { runnerUrl, runnerHealthTimeoutMs, mcpGatewayUrl } = this.configRepository.getEnv().agent;
-    if (!runnerUrl || !mcpGatewayUrl) {
-      return this.notConfigured();
-    }
+const { runnerUrl, runnerHealthTimeoutMs, mcpGatewayUrl } = this.configRepository.getEnv().agent;
+if (!runnerUrl || !mcpGatewayUrl) {
+  return this.notConfigured();
+}
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -467,9 +463,7 @@ describe('agent runner deployment config', () => {
     const exampleEnv = readRepo('docker/example.env');
 
     expect(exampleEnv).toContain('IMMICH_AGENT_RUNNER_URL=http://agent-runner:4477');
-    expect(exampleEnv).toContain(
-      'IMMICH_AGENT_MCP_GATEWAY_URL=http://immich-server:2283/api/agent/internal/mcp',
-    );
+    expect(exampleEnv).toContain('IMMICH_AGENT_MCP_GATEWAY_URL=http://immich-server:2283/api/agent/internal/mcp');
     expect(exampleEnv).toContain('IMMICH_AGENT_SECRET_KEY=');
     expect(exampleEnv).not.toContain('dev-agent-secret-key-change-me');
   });
@@ -576,23 +570,23 @@ EOF
 In `docker/docker-compose.yml`, add `agent-runner` to `immich-server.depends_on`:
 
 ```yaml
-    depends_on:
-      - redis
-      - database
-      - agent-runner
+depends_on:
+  - redis
+  - database
+  - agent-runner
 ```
 
 Add this service next to `immich-server`:
 
 ```yaml
-  agent-runner:
-    container_name: gallery_agent_runner
-    image: ghcr.io/open-noodle/gallery-server:${IMMICH_VERSION:-release}
-    command: ['agent-runner']
-    environment:
-      HOST: 0.0.0.0
-      PORT: 4477
-    restart: always
+agent-runner:
+  container_name: gallery_agent_runner
+  image: ghcr.io/open-noodle/gallery-server:${IMMICH_VERSION:-release}
+  command: ['agent-runner']
+  environment:
+    HOST: 0.0.0.0
+    PORT: 4477
+  restart: always
 ```
 
 Do not add a `ports:` block to the runner service.
@@ -602,26 +596,26 @@ Do not add a `ports:` block to the runner service.
 In `docker/docker-compose.prod.yml`, add `agent-runner` to `immich-server.depends_on`:
 
 ```yaml
-    depends_on:
-      - redis
-      - database
-      - agent-runner
+depends_on:
+  - redis
+  - database
+  - agent-runner
 ```
 
 Add this service:
 
 ```yaml
-  agent-runner:
-    container_name: gallery_agent_runner
-    image: immich-server:latest
-    build:
-      context: ../
-      dockerfile: server/Dockerfile
-    command: ['agent-runner']
-    environment:
-      HOST: 0.0.0.0
-      PORT: 4477
-    restart: always
+agent-runner:
+  container_name: gallery_agent_runner
+  image: immich-server:latest
+  build:
+    context: ../
+    dockerfile: server/Dockerfile
+  command: ['agent-runner']
+  environment:
+    HOST: 0.0.0.0
+    PORT: 4477
+  restart: always
 ```
 
 - [ ] **Step 3: Implement rootless compose service**
@@ -629,34 +623,34 @@ Add this service:
 In `docker/docker-compose.rootless.yml`, first replace the upstream server image:
 
 ```yaml
-    image: ghcr.io/open-noodle/gallery-server:${IMMICH_VERSION:-release}
+image: ghcr.io/open-noodle/gallery-server:${IMMICH_VERSION:-release}
 ```
 
 Then add `agent-runner` to `immich-server.depends_on`:
 
 ```yaml
-    depends_on:
-      - redis
-      - database
-      - agent-runner
+depends_on:
+  - redis
+  - database
+  - agent-runner
 ```
 
 Add this service:
 
 ```yaml
-  agent-runner:
-    container_name: gallery_agent_runner
-    image: ghcr.io/open-noodle/gallery-server:${IMMICH_VERSION:-release}
-    command: ['agent-runner']
-    user: '1000:1000'
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - NET_RAW
-    environment:
-      HOST: 0.0.0.0
-      PORT: 4477
-    restart: always
+agent-runner:
+  container_name: gallery_agent_runner
+  image: ghcr.io/open-noodle/gallery-server:${IMMICH_VERSION:-release}
+  command: ['agent-runner']
+  user: '1000:1000'
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - NET_RAW
+  environment:
+    HOST: 0.0.0.0
+    PORT: 4477
+  restart: always
 ```
 
 - [ ] **Step 4: Rename dev and e2e server env and remove runner published ports**
@@ -664,39 +658,39 @@ Add this service:
 In `docker/docker-compose.dev.yml`, replace:
 
 ```yaml
-      IMMICH_AGENT_TOOL_GATEWAY_URL: http://immich-server:2283/api/agent/internal/tools
+IMMICH_AGENT_TOOL_GATEWAY_URL: http://immich-server:2283/api/agent/internal/tools
 ```
 
 with:
 
 ```yaml
-      IMMICH_AGENT_MCP_GATEWAY_URL: http://immich-server:2283/api/agent/internal/mcp
+IMMICH_AGENT_MCP_GATEWAY_URL: http://immich-server:2283/api/agent/internal/mcp
 ```
 
 Remove this block from the `agent-runner` service:
 
 ```yaml
-    ports:
-      - 4477:4477
+ports:
+  - 4477:4477
 ```
 
 In `e2e/docker-compose.yml`, replace:
 
 ```yaml
-      IMMICH_AGENT_TOOL_GATEWAY_URL: http://immich-server:2285/api/agent/internal/mcp
+IMMICH_AGENT_TOOL_GATEWAY_URL: http://immich-server:2285/api/agent/internal/mcp
 ```
 
 with:
 
 ```yaml
-      IMMICH_AGENT_MCP_GATEWAY_URL: http://immich-server:2285/api/agent/internal/mcp
+IMMICH_AGENT_MCP_GATEWAY_URL: http://immich-server:2285/api/agent/internal/mcp
 ```
 
 Remove this block from the `agent-runner` service:
 
 ```yaml
-    ports:
-      - 4477:4477
+ports:
+  - 4477:4477
 ```
 
 - [ ] **Step 5: Add self-hosted env examples**
@@ -859,56 +853,43 @@ Expected: branch created from current `main`.
 In `apps/dashboard/app/lib/provisioning/__tests__/templates.test.ts`, add tests under `describe("galleryApplicationYaml", ...)`:
 
 ```ts
-  it("renders agent MCP env using a tenant callback URL and secret reference", () => {
-    const yaml = galleryApplicationYaml(
-      "abc123",
-      "eu-west-par",
-      "0.9.3",
-      "release",
-      true,
-      {
-        runnerUrl: "http://gallery-agent-runner.shared-infra.svc.cluster.local:4477",
-        mcpGatewayUrl: "http://gallery-server.user-abc123.svc.cluster.local:2283/api/agent/internal/mcp",
-      },
-    );
-
-    expect(yaml).toContain("IMMICH_AGENT_RUNNER_URL: http://gallery-agent-runner.shared-infra.svc.cluster.local:4477");
-    expect(yaml).toContain(
-      "IMMICH_AGENT_MCP_GATEWAY_URL: http://gallery-server.user-abc123.svc.cluster.local:2283/api/agent/internal/mcp",
-    );
-    expect(yaml).toContain("IMMICH_AGENT_SECRET_KEY:");
-    expect(yaml).toContain("name: gallery-agent");
-    expect(yaml).toContain("key: IMMICH_AGENT_SECRET_KEY");
-    expect(yaml).not.toContain("IMMICH_AGENT_TOOL_GATEWAY_URL");
-    expect(yaml).not.toContain("agent-secret-key-change-me");
+it('renders agent MCP env using a tenant callback URL and secret reference', () => {
+  const yaml = galleryApplicationYaml('abc123', 'eu-west-par', '0.9.3', 'release', true, {
+    runnerUrl: 'http://gallery-agent-runner.shared-infra.svc.cluster.local:4477',
+    mcpGatewayUrl: 'http://gallery-server.user-abc123.svc.cluster.local:2283/api/agent/internal/mcp',
   });
+
+  expect(yaml).toContain('IMMICH_AGENT_RUNNER_URL: http://gallery-agent-runner.shared-infra.svc.cluster.local:4477');
+  expect(yaml).toContain(
+    'IMMICH_AGENT_MCP_GATEWAY_URL: http://gallery-server.user-abc123.svc.cluster.local:2283/api/agent/internal/mcp',
+  );
+  expect(yaml).toContain('IMMICH_AGENT_SECRET_KEY:');
+  expect(yaml).toContain('name: gallery-agent');
+  expect(yaml).toContain('key: IMMICH_AGENT_SECRET_KEY');
+  expect(yaml).not.toContain('IMMICH_AGENT_TOOL_GATEWAY_URL');
+  expect(yaml).not.toContain('agent-secret-key-change-me');
+});
 ```
 
 Add tests under `describe("elasticGalleryManifests", ...)`:
 
 ```ts
-  it("renders agent env only on gallery-serve and never on gallery-compute", () => {
-    const manifests = elasticGalleryManifests(
-      "abc123",
-      "eu-west-par",
-      "0.9.3",
-      "release",
-      {
-        runnerUrl: "http://gallery-agent-runner.shared-infra.svc.cluster.local:4477",
-        mcpGatewayUrl: "http://gallery-server.user-abc123.svc.cluster.local:2283/api/agent/internal/mcp",
-      },
-    );
-
-    expect(manifests.galleryServeDeployment).toContain("IMMICH_AGENT_RUNNER_URL");
-    expect(manifests.galleryServeDeployment).toContain("IMMICH_AGENT_MCP_GATEWAY_URL");
-    expect(manifests.galleryServeDeployment).toContain("name: gallery-agent");
-    expect(manifests.galleryApplication).not.toContain("IMMICH_AGENT_RUNNER_URL");
-    expect(manifests.galleryApplication).not.toContain("IMMICH_AGENT_MCP_GATEWAY_URL");
-    expect(manifests.galleryApplication).not.toContain("IMMICH_AGENT_SECRET_KEY");
-    expect(manifests.galleryComputeDeployment).not.toContain("IMMICH_AGENT_RUNNER_URL");
-    expect(manifests.galleryComputeDeployment).not.toContain("IMMICH_AGENT_MCP_GATEWAY_URL");
-    expect(manifests.galleryComputeDeployment).not.toContain("IMMICH_AGENT_SECRET_KEY");
+it('renders agent env only on gallery-serve and never on gallery-compute', () => {
+  const manifests = elasticGalleryManifests('abc123', 'eu-west-par', '0.9.3', 'release', {
+    runnerUrl: 'http://gallery-agent-runner.shared-infra.svc.cluster.local:4477',
+    mcpGatewayUrl: 'http://gallery-server.user-abc123.svc.cluster.local:2283/api/agent/internal/mcp',
   });
+
+  expect(manifests.galleryServeDeployment).toContain('IMMICH_AGENT_RUNNER_URL');
+  expect(manifests.galleryServeDeployment).toContain('IMMICH_AGENT_MCP_GATEWAY_URL');
+  expect(manifests.galleryServeDeployment).toContain('name: gallery-agent');
+  expect(manifests.galleryApplication).not.toContain('IMMICH_AGENT_RUNNER_URL');
+  expect(manifests.galleryApplication).not.toContain('IMMICH_AGENT_MCP_GATEWAY_URL');
+  expect(manifests.galleryApplication).not.toContain('IMMICH_AGENT_SECRET_KEY');
+  expect(manifests.galleryComputeDeployment).not.toContain('IMMICH_AGENT_RUNNER_URL');
+  expect(manifests.galleryComputeDeployment).not.toContain('IMMICH_AGENT_MCP_GATEWAY_URL');
+  expect(manifests.galleryComputeDeployment).not.toContain('IMMICH_AGENT_SECRET_KEY');
+});
 ```
 
 - [ ] **Step 3: Run template tests to verify they fail**
@@ -934,8 +915,7 @@ export type GalleryAgentConfig = {
 export function defaultGalleryAgentConfig(uid: string): GalleryAgentConfig {
   return {
     runnerUrl:
-      process.env.GALLERY_AGENT_RUNNER_URL ??
-      "http://gallery-agent-runner.shared-infra.svc.cluster.local:4477",
+      process.env.GALLERY_AGENT_RUNNER_URL ?? 'http://gallery-agent-runner.shared-infra.svc.cluster.local:4477',
     mcpGatewayUrl: `http://gallery-server.user-${uid}.svc.cluster.local:2283/api/agent/internal/mcp`,
   };
 }
@@ -1071,73 +1051,70 @@ Update `subscription()` to include:
 Add these tests near the existing manifest tests:
 
 ```ts
-  it("persists a stable Gallery agent secret before applying tenant manifests", async () => {
-    mockRunStep.mockImplementation(executeProvisioningSteps);
-    selectRows = [
-      subscription({
-        galleryAgentSecretKey: null,
-        s3AccessKeyId: "access",
-        s3SecretAccessKey: "secret",
-      }),
-    ];
-    const { resumeProvisioning } = await import("../provision.server");
+it('persists a stable Gallery agent secret before applying tenant manifests', async () => {
+  mockRunStep.mockImplementation(executeProvisioningSteps);
+  selectRows = [
+    subscription({
+      galleryAgentSecretKey: null,
+      s3AccessKeyId: 'access',
+      s3SecretAccessKey: 'secret',
+    }),
+  ];
+  const { resumeProvisioning } = await import('../provision.server');
 
-    await resumeProvisioning("sub-1");
+  await resumeProvisioning('sub-1');
 
-    const generatedSecretUpdate = updateSetCalls.find(
-      (values) =>
-        typeof values === "object" &&
-        values !== null &&
-        "galleryAgentSecretKey" in values,
-    ) as { galleryAgentSecretKey: string } | undefined;
-    expect(generatedSecretUpdate?.galleryAgentSecretKey).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(mockApplySecret).toHaveBeenCalledWith("user-uid123", "gallery-agent", {
-      IMMICH_AGENT_SECRET_KEY: generatedSecretUpdate?.galleryAgentSecretKey,
-    });
+  const generatedSecretUpdate = updateSetCalls.find(
+    (values) => typeof values === 'object' && values !== null && 'galleryAgentSecretKey' in values,
+  ) as { galleryAgentSecretKey: string } | undefined;
+  expect(generatedSecretUpdate?.galleryAgentSecretKey).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  expect(mockApplySecret).toHaveBeenCalledWith('user-uid123', 'gallery-agent', {
+    IMMICH_AGENT_SECRET_KEY: generatedSecretUpdate?.galleryAgentSecretKey,
   });
+});
 
-  it("reuses an existing Gallery agent secret across provisioning retries", async () => {
-    mockRunStep.mockImplementation(executeProvisioningSteps);
-    selectRows = [
-      subscription({
-        galleryAgentSecretKey: "stable-agent-secret",
-        s3AccessKeyId: "access",
-        s3SecretAccessKey: "secret",
-      }),
-    ];
-    const { resumeProvisioning } = await import("../provision.server");
+it('reuses an existing Gallery agent secret across provisioning retries', async () => {
+  mockRunStep.mockImplementation(executeProvisioningSteps);
+  selectRows = [
+    subscription({
+      galleryAgentSecretKey: 'stable-agent-secret',
+      s3AccessKeyId: 'access',
+      s3SecretAccessKey: 'secret',
+    }),
+  ];
+  const { resumeProvisioning } = await import('../provision.server');
 
-    await resumeProvisioning("sub-1");
+  await resumeProvisioning('sub-1');
 
-    expect(updateSetCalls).not.toContainEqual(expect.objectContaining({ galleryAgentSecretKey: expect.any(String) }));
-    expect(mockApplySecret).toHaveBeenCalledWith("user-uid123", "gallery-agent", {
-      IMMICH_AGENT_SECRET_KEY: "stable-agent-secret",
-    });
+  expect(updateSetCalls).not.toContainEqual(expect.objectContaining({ galleryAgentSecretKey: expect.any(String) }));
+  expect(mockApplySecret).toHaveBeenCalledWith('user-uid123', 'gallery-agent', {
+    IMMICH_AGENT_SECRET_KEY: 'stable-agent-secret',
   });
+});
 
-  it("commits manifests with shared-runner URL and tenant MCP callback URL", async () => {
-    vi.stubEnv("GALLERY_AGENT_RUNNER_URL", "http://shared-agent-runner.shared-infra.svc.cluster.local:4477");
-    mockRunStep.mockImplementation(executeProvisioningSteps);
-    selectRows = [
-      subscription({
-        galleryAgentSecretKey: "stable-agent-secret",
-        s3AccessKeyId: "access",
-        s3SecretAccessKey: "secret",
-      }),
-    ];
-    const { resumeProvisioning } = await import("../provision.server");
+it('commits manifests with shared-runner URL and tenant MCP callback URL', async () => {
+  vi.stubEnv('GALLERY_AGENT_RUNNER_URL', 'http://shared-agent-runner.shared-infra.svc.cluster.local:4477');
+  mockRunStep.mockImplementation(executeProvisioningSteps);
+  selectRows = [
+    subscription({
+      galleryAgentSecretKey: 'stable-agent-secret',
+      s3AccessKeyId: 'access',
+      s3SecretAccessKey: 'secret',
+    }),
+  ];
+  const { resumeProvisioning } = await import('../provision.server');
 
-    await resumeProvisioning("sub-1");
+  await resumeProvisioning('sub-1');
 
-    const manifests = mockCommitUserManifests.mock.calls[0][1];
-    expect(manifests.galleryApplication).toContain(
-      "IMMICH_AGENT_RUNNER_URL: http://shared-agent-runner.shared-infra.svc.cluster.local:4477",
-    );
-    expect(manifests.galleryApplication).toContain(
-      "IMMICH_AGENT_MCP_GATEWAY_URL: http://gallery-server.user-uid123.svc.cluster.local:2283/api/agent/internal/mcp",
-    );
-    expect(manifests.galleryApplication).not.toContain("stable-agent-secret");
-  });
+  const manifests = mockCommitUserManifests.mock.calls[0][1];
+  expect(manifests.galleryApplication).toContain(
+    'IMMICH_AGENT_RUNNER_URL: http://shared-agent-runner.shared-infra.svc.cluster.local:4477',
+  );
+  expect(manifests.galleryApplication).toContain(
+    'IMMICH_AGENT_MCP_GATEWAY_URL: http://gallery-server.user-uid123.svc.cluster.local:2283/api/agent/internal/mcp',
+  );
+  expect(manifests.galleryApplication).not.toContain('stable-agent-secret');
+});
 ```
 
 - [ ] **Step 7: Run provisioning tests to verify they fail**
@@ -1155,20 +1132,17 @@ Expected: FAIL because no secret is generated/applied and manifests do not inclu
 In `apps/dashboard/app/lib/provisioning/provision.server.ts`, add imports:
 
 ```ts
-import { defaultGalleryAgentConfig } from "./templates";
+import { defaultGalleryAgentConfig } from './templates';
 ```
 
 Add helper functions near `ensureUid`:
 
 ```ts
 function generateGalleryAgentSecretKey(): string {
-  return randomBytes(32).toString("base64url");
+  return randomBytes(32).toString('base64url');
 }
 
-async function ensureGalleryAgentSecretKey(
-  subscriptionId: string,
-  existingSecret: string | null,
-): Promise<string> {
+async function ensureGalleryAgentSecretKey(subscriptionId: string, existingSecret: string | null): Promise<string> {
   if (existingSecret) return existingSecret;
   const secret = generateGalleryAgentSecretKey();
   await db
@@ -1182,32 +1156,26 @@ async function ensureGalleryAgentSecretKey(
 After `const ns = \`user-${uid}\`;`, load or create the secret:
 
 ```ts
-    const agentSecretKey = await ensureGalleryAgentSecretKey(
-      subscriptionId,
-      refreshed.galleryAgentSecretKey,
-    );
-    const galleryAgentConfig = defaultGalleryAgentConfig(uid);
+const agentSecretKey = await ensureGalleryAgentSecretKey(subscriptionId, refreshed.galleryAgentSecretKey);
+const galleryAgentConfig = defaultGalleryAgentConfig(uid);
 ```
 
 In the `k8s_secrets` step, after applying `s3-credentials`, apply the agent secret:
 
 ```ts
-      await withProvisioningTimeout(
-        "apply Gallery agent secret",
-        EXTERNAL_CALL_TIMEOUT_MS,
-        () =>
-          applySecret(ns, "gallery-agent", {
-            IMMICH_AGENT_SECRET_KEY: agentSecretKey,
-          }),
-      );
+await withProvisioningTimeout('apply Gallery agent secret', EXTERNAL_CALL_TIMEOUT_MS, () =>
+  applySecret(ns, 'gallery-agent', {
+    IMMICH_AGENT_SECRET_KEY: agentSecretKey,
+  }),
+);
 ```
 
 In the `gitops_manifests` step, pass `galleryAgentConfig`:
 
 ```ts
-      const galleryManifests = ELASTIC_GALLERY_COMPUTE_ENABLED
-        ? elasticGalleryManifests(uid, s3Region, undefined, undefined, galleryAgentConfig)
-        : { galleryApplication: galleryApplicationYaml(uid, s3Region, undefined, undefined, true, galleryAgentConfig) };
+const galleryManifests = ELASTIC_GALLERY_COMPUTE_ENABLED
+  ? elasticGalleryManifests(uid, s3Region, undefined, undefined, galleryAgentConfig)
+  : { galleryApplication: galleryApplicationYaml(uid, s3Region, undefined, undefined, true, galleryAgentConfig) };
 ```
 
 - [ ] **Step 9: Run open-noodle focused tests**
@@ -1245,11 +1213,11 @@ In `docs/docs/install/environment-variables.md`, add a section after the worker 
 ```md
 ## Agent Assistant
 
-| Variable | Description | Default | Services | Workers |
-| :-- | :-- | :-- | :-- | :-- |
-| `IMMICH_AGENT_SECRET_KEY` | Stable secret used by Gallery to encrypt assistant provider credentials and sign session-scoped MCP runner tokens. Generate once and keep unchanged across restarts. |  | server | api |
-| `IMMICH_AGENT_RUNNER_URL` | Internal HTTP URL of the first-party agent runner. In Docker Compose this is `http://agent-runner:4477`. |  | server | api |
-| `IMMICH_AGENT_MCP_GATEWAY_URL` | Internal HTTP base URL the runner uses to call back into Gallery's MCP endpoint. In Docker Compose this is `http://immich-server:2283/api/agent/internal/mcp`. Gallery appends `/sessions/<sessionId>` for each runner session. |  | server | api |
+| Variable                       | Description                                                                                                                                                                                                                     | Default | Services | Workers |
+| :----------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :------ | :------- | :------ |
+| `IMMICH_AGENT_SECRET_KEY`      | Stable secret used by Gallery to encrypt assistant provider credentials and sign session-scoped MCP runner tokens. Generate once and keep unchanged across restarts.                                                            |         | server   | api     |
+| `IMMICH_AGENT_RUNNER_URL`      | Internal HTTP URL of the first-party agent runner. In Docker Compose this is `http://agent-runner:4477`.                                                                                                                        |         | server   | api     |
+| `IMMICH_AGENT_MCP_GATEWAY_URL` | Internal HTTP base URL the runner uses to call back into Gallery's MCP endpoint. In Docker Compose this is `http://immich-server:2283/api/agent/internal/mcp`. Gallery appends `/sessions/<sessionId>` for each runner session. |         | server   | api     |
 
 `IMMICH_AGENT_TOOL_GATEWAY_URL` is retired. Use `IMMICH_AGENT_MCP_GATEWAY_URL`.
 Do not pass `IMMICH_AGENT_SECRET_KEY`, database credentials, Redis credentials, or S3 credentials to the `agent-runner` service.

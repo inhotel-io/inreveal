@@ -28,7 +28,7 @@ class AgentRunnerCapabilitiesDto {
   /// Whether the runner can stream events
   bool streaming;
 
-  /// Tool names reported by the runner
+  /// MCP tool or capability identifiers reported by the runner
   List<String> tools;
 
   @override
