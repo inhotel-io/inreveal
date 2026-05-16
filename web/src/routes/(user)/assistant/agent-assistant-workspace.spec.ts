@@ -32,10 +32,16 @@ vi.mock('svelte-i18n', () => {
     assistant_approval_mode_strict: 'Strict',
     assistant_approval_request: 'Approval request',
     assistant_approval_tool_calls_error: 'Unable to load approval requests',
+    assistant_cancel: 'Cancel',
     assistant_chat: 'Chat',
     assistant_configured: 'Configured',
     assistant_healthy: 'Healthy',
     assistant_message: 'Message',
+    assistant_message_disabled_placeholder: 'This session is read-only.',
+    assistant_message_disabled_terminal: 'This session has ended. Start a new chat to continue.',
+    assistant_message_placeholder: 'Ask the assistant to organize your albums.',
+    assistant_message_refresh_error: 'Message was sent, but the latest session state could not be refreshed.',
+    assistant_message_resume_placeholder: 'Describe what changed or what the assistant should try next.',
     assistant_model: 'Model',
     assistant_new_chat: 'New chat',
     assistant_details: 'Details',
@@ -51,15 +57,20 @@ vi.mock('svelte-i18n', () => {
     assistant_runner_healthy: 'Runner healthy',
     assistant_search_chats: 'Search chats',
     assistant_selected_session: 'Selected session',
+    assistant_resume: 'Resume',
     assistant_send: 'Send',
+    assistant_session_cancel_error: 'Unable to cancel assistant session',
     assistant_session_created: 'Assistant session started',
     assistant_session_setup: 'Session setup',
     assistant_session_status_completed: 'Completed',
     assistant_session_status_created: 'Created',
+    assistant_session_status_cancelled: 'Cancelled',
+    assistant_session_status_interrupted: 'Interrupted',
     assistant_session_status_running: 'Running',
     assistant_session_status_waiting_for_plan_review: 'Waiting for plan review',
     assistant_sessions: 'Sessions',
     assistant_start_session: 'Start session',
+    assistant_start_new_chat: 'Start new chat',
     assistant_streaming: 'Streaming',
     assistant_subtitle: 'Album organization assistant',
     assistant_yes: 'yes',
@@ -200,7 +211,7 @@ describe(AgentAssistantWorkspace.name, () => {
 
     expect(screen.queryByRole('heading', { name: 'Selected session' })).not.toBeInTheDocument();
     expect(await screen.findByText('Existing transcript')).toBeInTheDocument();
-    expect(await screen.findByText('No proposed album plan yet.')).toBeInTheDocument();
+    expect(screen.queryByText('No proposed album plan yet.')).not.toBeInTheDocument();
     expect(gotoMock).not.toHaveBeenCalled();
     expect(sdkMock.getAgentSessionMessages).toHaveBeenCalledWith({ id: requestedSession.id });
     expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: requestedSession.id });
@@ -406,5 +417,70 @@ describe(AgentAssistantWorkspace.name, () => {
 
     await waitFor(() => expect(sdkMock.getAgentSessionMessages).toHaveBeenCalled());
     expect(sdkMock.getAgentSessionMessages).not.toHaveBeenCalledWith({ id: actionableSession.id });
+  });
+
+  it('updates the selected header and matching sidebar row after cancel success', async () => {
+    const cancelledSession = makeSession({ id: actionableSession.id, status: AgentSessionStatus.Cancelled });
+    sdkMock.cancelAgentSession.mockResolvedValue(cancelledSession);
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession, requestedSession],
+        requestedSessionId: actionableSession.id,
+      },
+    });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(sdkMock.cancelAgentSession).toHaveBeenCalledWith({ id: actionableSession.id }));
+    await waitFor(() => expect(screen.getAllByText('Cancelled')).not.toHaveLength(0));
+    expect(screen.getByTestId(`agent-session-row-${actionableSession.id}`)).toHaveTextContent('Cancelled');
+    expect(gotoMock).not.toHaveBeenCalledWith('/assistant', expect.anything());
+  });
+
+  it('refreshes the selected header and sidebar row after an interrupted resume send', async () => {
+    const interruptedSession = makeSession({
+      id: '00000000-0000-4000-8000-000000000500',
+      status: AgentSessionStatus.Interrupted,
+    });
+    const refreshedSession = makeSession({ id: interruptedSession.id, status: AgentSessionStatus.Running });
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(makeUserMessage(interruptedSession.id, 'Resume organizing'));
+    sdkMock.getAgentSession.mockResolvedValue(refreshedSession);
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [interruptedSession, requestedSession],
+        requestedSessionId: interruptedSession.id,
+      },
+    });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Resume organizing' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+
+    await waitFor(() => expect(sdkMock.getAgentSession).toHaveBeenCalledWith({ id: interruptedSession.id }));
+    expect(screen.getByTestId(`agent-session-row-${interruptedSession.id}`)).toHaveTextContent('Running');
+    expect(screen.queryByText('Interrupted')).not.toBeInTheDocument();
+  });
+
+  it('terminal composer Start new chat clears selection and URL query', async () => {
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [requestedSession],
+        requestedSessionId: requestedSession.id,
+      },
+    });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Start new chat' }));
+
+    expect(screen.getByRole('heading', { name: 'Session setup' })).toBeInTheDocument();
+    expect(gotoMock).toHaveBeenCalledWith('/assistant', expect.objectContaining({ replaceState: false }));
+    expect(screen.getByTestId(`agent-session-row-${requestedSession.id}`)).not.toHaveAttribute('aria-current');
   });
 });

@@ -1,6 +1,11 @@
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import {
   AgentApprovalMode,
+  AgentOperationPlanStatus,
+  AgentOperationRiskLevel,
+  AgentOperationStatus,
+  AgentOperationTargetKind,
+  AgentOperationType,
   AgentPermissionPreset,
   AgentProviderType,
   AgentSessionStatus,
@@ -8,6 +13,8 @@ import {
   AgentToolCallStatus,
   AgentToolDataClass,
   AgentToolName,
+  type AgentOperationPlanResponseDto,
+  type AgentOperationResponseDto,
   type AgentSessionResponseDto,
   type AgentToolCallResponseDto,
 } from '@immich/sdk';
@@ -37,6 +44,16 @@ vi.mock('svelte-i18n', () => {
     assistant_agent_tool_status_denied: 'Denied',
     assistant_agent_tool_status_failed: 'Failed',
     assistant_created_at: 'Created',
+    assistant_operation_apply_applying: 'Applying operations',
+    assistant_operation_apply_selected: 'Apply {count} selected',
+    assistant_operation_asset_count: '{count} assets',
+    assistant_operation_blocked_by: 'Blocked by {dependencies}',
+    assistant_operation_plan_error: 'Unable to load proposed album plan',
+    assistant_operation_plan_loading: 'Loading proposed album plan',
+    assistant_operation_plan_review: 'Plan review',
+    assistant_operation_risk_low: 'Low risk',
+    assistant_operation_selected_count: '{count} selected',
+    assistant_operation_type_album_create: 'Create album',
     assistant_provider_credential: 'Provider credential',
     loading: 'Loading',
   };
@@ -46,6 +63,37 @@ vi.mock('svelte-i18n', () => {
       (messages[key] ?? key).replace('{count}', String(options?.values?.count ?? '')),
     ),
   };
+});
+
+const operation = (overrides: Partial<AgentOperationResponseDto> = {}): AgentOperationResponseDto => ({
+  id: overrides.id ?? 'operation-1',
+  planId: overrides.planId ?? 'plan-1',
+  type: overrides.type ?? AgentOperationType.AlbumCreate,
+  summary: overrides.summary ?? 'Create Portugal album',
+  targetKind: overrides.targetKind ?? AgentOperationTargetKind.NewAlbum,
+  targetId: overrides.targetId ?? null,
+  temporaryTargetId: overrides.temporaryTargetId ?? 'album-portugal',
+  assetIds: overrides.assetIds ?? [],
+  dependencyIds: overrides.dependencyIds ?? [],
+  riskLevel: overrides.riskLevel ?? AgentOperationRiskLevel.Low,
+  enabled: overrides.enabled ?? true,
+  status: overrides.status ?? AgentOperationStatus.Proposed,
+  payload: overrides.payload ?? { albumName: 'Portugal' },
+  result: overrides.result ?? null,
+  error: overrides.error ?? null,
+  createdAt: overrides.createdAt ?? '2026-05-15T00:00:00.000Z',
+  updatedAt: overrides.updatedAt ?? '2026-05-15T00:00:00.000Z',
+});
+
+const plan = (overrides: Partial<AgentOperationPlanResponseDto> = {}): AgentOperationPlanResponseDto => ({
+  id: overrides.id ?? 'plan-1',
+  sessionId: overrides.sessionId ?? 'session-1',
+  revision: overrides.revision ?? 1,
+  status: overrides.status ?? AgentOperationPlanStatus.Proposed,
+  summary: overrides.summary ?? 'Organize Portugal holiday',
+  operations: overrides.operations ?? [operation()],
+  createdAt: overrides.createdAt ?? '2026-05-15T00:00:00.000Z',
+  updatedAt: overrides.updatedAt ?? '2026-05-15T00:00:00.000Z',
 });
 
 const makeSession = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSessionResponseDto => ({
@@ -109,6 +157,7 @@ describe(AgentSessionActionDock.name, () => {
     websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
     sdkMock.getToolCalls.mockResolvedValue([]);
     sdkMock.getAgentSession.mockResolvedValue(makeSession({ status: AgentSessionStatus.Running }));
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(null);
   });
 
   it('loads pending approvals for the selected session and reports count', async () => {
@@ -183,22 +232,120 @@ describe(AgentSessionActionDock.name, () => {
     expect(screen.queryByText('Found matching photos')).not.toBeVisible();
   });
 
+  it('renders plan review inside the dock when there are no pending approvals', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(plan());
+
+    render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.WaitingForPlanReview }) },
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Plan review' })).toBeInTheDocument();
+    expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apply 1 selected' })).toBeInTheDocument();
+    expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: 'session-1' });
+  });
+
+  it('keeps pending approvals as the active dock work before plan review', async () => {
+    sdkMock.getToolCalls.mockResolvedValue([toolCall()]);
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(plan());
+
+    render(AgentSessionActionDock, { props: { session: makeSession() } });
+
+    expect(await screen.findByText('Search photos')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Plan review' })).not.toBeInTheDocument();
+    expect(sdkMock.getCurrentOperationPlan).not.toHaveBeenCalled();
+  });
+
+  it('waits for the initial approval load before showing plan review', async () => {
+    let resolveToolCalls: (toolCalls: AgentToolCallResponseDto[]) => void;
+    sdkMock.getToolCalls.mockReturnValue(
+      new Promise<AgentToolCallResponseDto[]>((resolve) => {
+        resolveToolCalls = resolve;
+      }),
+    );
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(plan());
+
+    render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.WaitingForPlanReview }) },
+    });
+
+    expect(screen.queryByRole('heading', { name: 'Plan review' })).not.toBeInTheDocument();
+    expect(sdkMock.getCurrentOperationPlan).not.toHaveBeenCalled();
+
+    resolveToolCalls!([]);
+
+    expect(await screen.findByRole('heading', { name: 'Plan review' })).toBeInTheDocument();
+  });
+
+  it('shows plan review after pending approvals refresh away', async () => {
+    sdkMock.getToolCalls.mockResolvedValueOnce([toolCall()]).mockResolvedValue([]);
+    sdkMock.approveToolCall.mockResolvedValue(toolCall({ status: AgentToolCallStatus.Approved }));
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(plan());
+
+    render(AgentSessionActionDock, { props: { session: makeSession() } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+
+    expect(await screen.findByRole('heading', { name: 'Plan review' })).toBeInTheDocument();
+  });
+
+  it('allows plan review to render when approval loading fails', async () => {
+    sdkMock.getToolCalls.mockRejectedValue(new Error('failed'));
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(plan());
+
+    render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.WaitingForPlanReview }) },
+    });
+
+    expect(await screen.findByText('Unable to load approval requests')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Plan review' })).toBeInTheDocument();
+  });
+
+  it('keeps recent approval activity visible when plan loading fails', async () => {
+    sdkMock.getToolCalls.mockResolvedValue([
+      toolCall({
+        id: 'recent',
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Found matching photos',
+        completedAt: '2026-05-16T11:00:00.000Z',
+      }),
+    ]);
+    sdkMock.getCurrentOperationPlan.mockRejectedValue(new Error('failed'));
+
+    render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.WaitingForPlanReview }) },
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load proposed album plan');
+    expect(screen.getByText('Recent activity (1)')).toBeInTheDocument();
+    expect(screen.queryByText('Found matching photos')).not.toBeVisible();
+  });
+
   it('refreshes on selected websocket events and polls active sessions', async () => {
     vi.useFakeTimers();
-    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    const handlers: Array<Parameters<typeof websocketMock.websocketEvents.on>[1]> = [];
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
-      handler = nextHandler;
+      handlers.push(nextHandler);
       return vi.fn();
     });
 
     render(AgentSessionActionDock, { props: { session: makeSession({ status: AgentSessionStatus.Running }) } });
     await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1));
 
-    handler?.({ type: 'runner-error', sessionId: 'other-session', message: 'ignored', createdAt: '2026-05-16T10:00:00Z' });
+    handlers.forEach((handler) =>
+      handler({
+        type: 'runner-error',
+        sessionId: 'other-session',
+        message: 'ignored',
+        createdAt: '2026-05-16T10:00:00Z',
+      }),
+    );
     await Promise.resolve();
     expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1);
 
-    handler?.({ type: 'runner-error', sessionId: 'session-1', message: 'refresh', createdAt: '2026-05-16T10:00:00Z' });
+    handlers.forEach((handler) =>
+      handler({ type: 'runner-error', sessionId: 'session-1', message: 'refresh', createdAt: '2026-05-16T10:00:00Z' }),
+    );
     await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(2));
 
     await vi.advanceTimersByTimeAsync(3_000);
