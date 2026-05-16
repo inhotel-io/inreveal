@@ -39,24 +39,24 @@ export class AgentRunnerService {
 
   async createSession(input: AgentRunnerCreateSessionInput) {
     const { userId, ...body } = input;
-    const { runnerUrl, runnerHealthTimeoutMs, toolGatewayUrl } = this.configRepository.getEnv().agent;
+    const { runnerUrl, runnerHealthTimeoutMs, mcpGatewayUrl } = this.configRepository.getEnv().agent;
     if (!runnerUrl) {
       throw new BadRequestException('Agent runner is not configured');
     }
+    if (!mcpGatewayUrl) {
+      throw new BadRequestException('Agent MCP gateway is not configured');
+    }
 
-    const mcpGatewayBaseUrl = toolGatewayUrl;
-    const mcpGateway = mcpGatewayBaseUrl
-      ? {
-          url: buildMcpSessionUrl(mcpGatewayBaseUrl, body.gallerySessionId),
-          token: this.toolTokenService.create({
-            sessionId: body.gallerySessionId,
-            userId,
-            expiresAt: body.permissionPlan.limits.expiresInMinutes
-              ? new Date(Date.now() + body.permissionPlan.limits.expiresInMinutes * 60_000)
-              : new Date(Date.now() + 2 * 60 * 60_000),
-          }),
-        }
-      : null;
+    const mcpGateway = {
+      url: buildMcpSessionUrl(mcpGatewayUrl, body.gallerySessionId),
+      token: this.toolTokenService.create({
+        sessionId: body.gallerySessionId,
+        userId,
+        expiresAt: body.permissionPlan.limits.expiresInMinutes
+          ? new Date(Date.now() + body.permissionPlan.limits.expiresInMinutes * 60_000)
+          : new Date(Date.now() + 2 * 60 * 60_000),
+      }),
+    };
 
     const result = await this.agentRunnerRepository.createSession({
       url: runnerUrl,
@@ -72,8 +72,8 @@ export class AgentRunnerService {
   }
 
   async getStatus(): Promise<AgentRunnerStatusDto> {
-    const { runnerUrl, runnerHealthTimeoutMs } = this.configRepository.getEnv().agent;
-    if (!runnerUrl) {
+    const { runnerUrl, runnerHealthTimeoutMs, mcpGatewayUrl } = this.configRepository.getEnv().agent;
+    if (!runnerUrl || !mcpGatewayUrl) {
       return this.notConfigured();
     }
 
