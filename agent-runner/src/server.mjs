@@ -96,10 +96,6 @@ const validateCreateSessionBody = (body) => {
     return 'model is required';
   }
 
-  if (body.toolGateway !== undefined) {
-    return 'toolGateway is no longer supported; use mcpGateway';
-  }
-
   if (body.mcpGateway !== undefined && body.mcpGateway !== null) {
     if (typeof body.mcpGateway !== 'object') {
       return 'mcpGateway is required';
@@ -116,6 +112,17 @@ const validateCreateSessionBody = (body) => {
 
   return undefined;
 };
+
+const createSessionProtocolBody = (body) => ({
+  gallerySessionId: body.gallerySessionId,
+  credential: body.credential,
+  model: body.model,
+  permissionPreset: body.permissionPreset,
+  permissionPlan: body.permissionPlan,
+  approvalMode: body.approvalMode,
+  initialContext: body.initialContext,
+  ...('mcpGateway' in body ? { mcpGateway: body.mcpGateway } : {}),
+});
 
 const normalizeRuntimeCreateSessionResponse = (runnerSession) => {
   if (typeof runnerSession?.runnerSessionId !== 'string') {
@@ -172,8 +179,9 @@ export const startServer = ({
       }
 
       try {
-        const runnerSession = normalizeRuntimeCreateSessionResponse(await runtime.createSession(result.body));
-        runnerSessions.set(runnerSession.runnerSessionId, result.body.gallerySessionId);
+        const sessionBody = createSessionProtocolBody(result.body);
+        const runnerSession = normalizeRuntimeCreateSessionResponse(await runtime.createSession(sessionBody));
+        runnerSessions.set(runnerSession.runnerSessionId, sessionBody.gallerySessionId);
         sendJson(response, 201, runnerSession);
       } catch {
         sendJson(response, 502, { error: 'runner session creation failed' });

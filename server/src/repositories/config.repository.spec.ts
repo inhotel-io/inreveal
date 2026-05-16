@@ -17,6 +17,7 @@ const resetEnv = () => {
     'IMMICH_API_METRICS_PORT',
     'IMMICH_AGENT_RUNNER_URL',
     'IMMICH_AGENT_TOOL_GATEWAY_URL',
+    'IMMICH_AGENT_MCP_GATEWAY_URL',
     'IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS',
     'IMMICH_AGENT_RUNNER_MESSAGE_STREAM_TIMEOUT_MS',
     'IMMICH_MEDIA_LOCATION',
@@ -153,12 +154,30 @@ describe('getEnv', () => {
       });
     });
 
-    it('should parse tool gateway URL', () => {
-      process.env.IMMICH_AGENT_TOOL_GATEWAY_URL = 'http://immich-server:2283/api/agent/internal/tools';
+    it('should parse MCP gateway URL', () => {
+      process.env.IMMICH_AGENT_MCP_GATEWAY_URL = 'http://immich-server:2283/api/agent/internal/mcp';
 
       const { agent } = getEnv();
 
-      expect(agent.toolGatewayUrl).toBe('http://immich-server:2283/api/agent/internal/tools');
+      expect(agent.mcpGatewayUrl).toBe('http://immich-server:2283/api/agent/internal/mcp');
+      expect(agent).not.toHaveProperty('toolGatewayUrl');
+    });
+
+    it('should reject the retired tool gateway env name', () => {
+      process.env.IMMICH_AGENT_TOOL_GATEWAY_URL = 'http://immich-server:2283/api/agent/internal/tools';
+
+      expect(() => getEnv()).toThrowError(
+        '[IMMICH_AGENT_TOOL_GATEWAY_URL] Use IMMICH_AGENT_MCP_GATEWAY_URL instead',
+      );
+    });
+
+    it('should reject the retired tool gateway env name even when the MCP gateway is also set', () => {
+      process.env.IMMICH_AGENT_TOOL_GATEWAY_URL = 'http://immich-server:2283/api/agent/internal/tools';
+      process.env.IMMICH_AGENT_MCP_GATEWAY_URL = 'http://immich-server:2283/api/agent/internal/mcp';
+
+      expect(() => getEnv()).toThrowError(
+        '[IMMICH_AGENT_TOOL_GATEWAY_URL] Use IMMICH_AGENT_MCP_GATEWAY_URL instead',
+      );
     });
 
     it('should reject invalid runner URLs', () => {
@@ -173,10 +192,10 @@ describe('getEnv', () => {
       expect(() => getEnv()).toThrowError('[IMMICH_AGENT_RUNNER_URL] Runner URL must use http or https');
     });
 
-    it('should reject non-http tool gateway URLs', () => {
-      process.env.IMMICH_AGENT_TOOL_GATEWAY_URL = 'ftp://immich-server.local';
+    it('should reject non-http MCP gateway URLs', () => {
+      process.env.IMMICH_AGENT_MCP_GATEWAY_URL = 'ftp://immich-server.local';
 
-      expect(() => getEnv()).toThrowError('[IMMICH_AGENT_TOOL_GATEWAY_URL] Tool gateway URL must use http or https');
+      expect(() => getEnv()).toThrowError('[IMMICH_AGENT_MCP_GATEWAY_URL] MCP gateway URL must use http or https');
     });
 
     it('should reject non-positive runner health timeouts', () => {
