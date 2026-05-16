@@ -1,4 +1,27 @@
+import type { AgentToolName } from 'src/enum';
+
 export type AgentMcpRequestId = string | number;
+
+export type AgentMcpJsonObject = Record<string, unknown>;
+
+export type AgentMcpToolAnnotations = {
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+};
+
+export type AgentMcpToolDefinition = {
+  name: AgentToolName;
+  title: string;
+  description: string;
+  inputSchema: AgentMcpJsonObject;
+  annotations: AgentMcpToolAnnotations;
+};
+
+export type AgentMcpToolsListResult = {
+  tools: AgentMcpToolDefinition[];
+};
 
 export type AgentMcpError = {
   code: number;

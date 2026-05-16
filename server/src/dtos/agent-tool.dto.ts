@@ -131,6 +131,15 @@ const AgentReadAlbumToolRequestSchema = z
   })
   .meta({ id: 'AgentReadAlbumToolRequestDto' });
 
+export const AgentReadToolRequestSchemas = {
+  [AgentToolName.SearchAssets]: AgentSearchAssetsToolRequestSchema,
+  [AgentToolName.ReadAssetMetadata]: AgentReadAssetMetadataToolRequestSchema,
+  [AgentToolName.ReadAssetPreviews]: AgentReadAssetPreviewsToolRequestSchema,
+  [AgentToolName.ReadAssetOriginals]: AgentReadAssetOriginalsToolRequestSchema,
+  [AgentToolName.ListAlbums]: AgentListAlbumsToolRequestSchema,
+  [AgentToolName.ReadAlbum]: AgentReadAlbumToolRequestSchema,
+} as const;
+
 const AgentToolApprovalSchema = z
   .object({
     decision: AgentToolApprovalDecisionSchema,
