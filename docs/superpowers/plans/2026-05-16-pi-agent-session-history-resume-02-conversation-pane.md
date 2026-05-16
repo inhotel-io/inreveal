@@ -100,7 +100,7 @@ Rules:
 2. Join text blocks in that message in display order.
 3. Trim leading/trailing whitespace.
 4. Collapse internal whitespace to single spaces for sidebar/header display.
-5. Truncate to about 60 visible characters without splitting behavior depending on viewport.
+5. Truncate deterministically to 60 characters after whitespace collapse, using a single trailing ellipsis when truncated.
 6. If no valid user text exists, do not update the cache and keep `New chat`.
 
 Do not derive titles from assistant messages, tool-call blocks, asset blocks, plan blocks, provider message IDs, tool call IDs, or raw metadata.
@@ -141,9 +141,8 @@ It should show:
 - status;
 - permission preset;
 - approval mode;
-- runner endpoint if present;
-- runner session ID if present;
 - protocol version and streaming capability if present;
+- runner tools/model capability counts if present;
 - created/updated/ended timestamps in raw or locally formatted text.
 
 The details UI should be closed by default, keyboard reachable, and dismissible.
@@ -194,10 +193,10 @@ Temporary titles:
 - The first valid user text wins even if later user messages are clearer.
 - Multiple text blocks in the first user message are joined in order.
 - Non-text blocks in the first user message are ignored.
-- Long user text is truncated deterministically.
+- Long user text is truncated deterministically to 60 characters after whitespace collapse.
 - Newlines and repeated spaces collapse to single spaces.
-- A title discovered from a websocket-created user message works before the transcript load resolves.
-- Duplicate transcript/websocket messages do not publish duplicate title updates.
+- A title discovered from a successful send works even if the initial transcript load is still pending.
+- Duplicate transcript/send/websocket merges do not publish duplicate title updates.
 - Title cache updates only the matching session ID.
 - Sidebar search matches a newly discovered temporary title.
 - Page load still does not call `getAgentSessionMessages()` for every session.
@@ -209,7 +208,7 @@ Conversation pane:
 - `New chat` action calls back to the workspace and clears selection through existing workspace behavior.
 - Details UI is closed by default.
 - Details UI opens and closes with stable accessible names.
-- Details UI displays snapshot values without exposing bearer tokens, gateway URLs, or raw request metadata.
+- Details UI displays snapshot values without exposing bearer tokens, runner/internal gateway URLs, runner session IDs, or raw request metadata.
 - Selected session no longer shows a persistent full metadata summary card above the chat.
 - Chat and plan components receive the selected session and remount on session ID change.
 - Switching sessions clears draft text and streaming text through the keyed remount.
@@ -379,11 +378,11 @@ Run the focused header test. Expected: PASS.
 Test:
 
 - closed state renders no details content;
-- opening shows provider, model, status, permission preset, approval mode, runner endpoint, runner session ID, created/updated/ended timestamps;
+- opening shows provider, model, status, permission preset, approval mode, runner capability summary, and created/updated/ended timestamps;
 - missing nullable fields render gracefully;
 - close action hides details;
 - accessible label/name is stable;
-- does not render raw internal metadata objects.
+- does not render runner/internal URLs, runner session IDs, bearer tokens, or raw internal metadata objects.
 
 Run:
 

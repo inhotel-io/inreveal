@@ -1,7 +1,7 @@
 <script lang="ts">
   import UserPageLayout from '$lib/components/layouts/user-page-layout.svelte';
   import type { PageData } from './$types';
-  import AgentSessionPageContent from './agent-session-page-content.svelte';
+  import AgentAssistantWorkspace from './agent-assistant-workspace.svelte';
 
   interface Props {
     data: PageData;
@@ -11,5 +11,10 @@
 </script>
 
 <UserPageLayout title={data.meta.title}>
-  <AgentSessionPageContent runnerStatus={data.runnerStatus} credentials={data.credentials} />
+  <AgentAssistantWorkspace
+    runnerStatus={data.runnerStatus}
+    credentials={data.credentials}
+    sessions={data.sessions}
+    requestedSessionId={data.requestedSessionId}
+  />
 </UserPageLayout>
