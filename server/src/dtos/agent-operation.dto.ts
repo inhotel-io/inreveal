@@ -180,10 +180,23 @@ const AgentOperationPlanSummaryRequestSchema = z
   })
   .meta({ id: 'AgentOperationPlanSummaryRequestDto' });
 
+const planId = uuid;
+
+const AgentReviseProposedOperationsToolRequestSchema = operationRequest('AgentReviseProposedOperationsToolRequestDto')
+  .extend({
+    planId,
+    feedback: z.string().trim().min(1).max(2000).optional(),
+  })
+  .meta({ id: 'AgentReviseProposedOperationsToolRequestDto' });
+
+const AgentSummarizePlanToolRequestSchema = AgentOperationPlanSummaryRequestSchema.extend({
+  planId,
+}).meta({ id: 'AgentSummarizePlanToolRequestDto' });
+
 export const AgentOperationPlanToolRequestSchemas = {
   [AgentToolName.ProposeAlbumOperations]: AgentProposeAlbumOperationsSchema,
-  [AgentToolName.ReviseProposedOperations]: AgentReviseAlbumOperationsSchema,
-  [AgentToolName.SummarizePlan]: AgentOperationPlanSummaryRequestSchema,
+  [AgentToolName.ReviseProposedOperations]: AgentReviseProposedOperationsToolRequestSchema,
+  [AgentToolName.SummarizePlan]: AgentSummarizePlanToolRequestSchema,
 } as const;
 
 const AgentOperationResponseSchema = z
