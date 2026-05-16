@@ -123,7 +123,7 @@ describe('agent runner server', () => {
   it('selects the e2e runtime from environment', async () => {
     const runtime = createRuntimeFromEnv({ GALLERY_AGENT_RUNNER_RUNTIME: 'e2e' });
 
-    const session = await runtime.createSession(createSessionBody({ toolGateway: null }));
+    const session = await runtime.createSession(createSessionBody({ mcpGateway: null }));
 
     assert.equal(session.runnerSessionId, 'e2e-00000000-0000-4000-8000-000000000100');
     assert.equal(session.capabilities.runtime, 'e2e');
@@ -205,23 +205,23 @@ describe('agent runner server', () => {
     });
   });
 
-  it('accepts a null Gallery tool gateway and passes it to the runtime', async () => {
+  it('accepts a null Gallery MCP gateway and passes it to the runtime', async () => {
     const runtime = createRuntime();
 
     await withServer(runtime, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createSessionBody({ toolGateway: null })),
+        body: JSON.stringify(createSessionBody({ mcpGateway: null })),
       });
 
       assert.equal(response.status, 201);
       assert.equal(runtime.calls.createSession.length, 1);
-      assert.equal(runtime.calls.createSession[0].toolGateway, null);
+      assert.equal(runtime.calls.createSession[0].mcpGateway, null);
     });
   });
 
-  it('accepts a Gallery tool gateway without returning the gateway token', async () => {
+  it('accepts a Gallery MCP gateway without returning the gateway token', async () => {
     const runtime = createRuntime({
       createSession: async (body) => ({
         runnerSessionId: `pi-${body.gallerySessionId}`,
@@ -241,8 +241,8 @@ describe('agent runner server', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
           createSessionBody({
-            toolGateway: {
-              url: 'https://gallery.example.test/tools',
+            mcpGateway: {
+              url: 'https://gallery.example.test/mcp/sessions/00000000-0000-4000-8000-000000000100',
               token: 'gateway-token-secret',
             },
           }),
@@ -253,14 +253,65 @@ describe('agent runner server', () => {
       const responseBody = await response.text();
       assert.equal(responseBody.includes('gateway-token-secret'), false);
       assert.deepEqual(JSON.parse(responseBody).capabilities.tools, ['searchAssets', 'readAssetMetadata']);
-      assert.deepEqual(runtime.calls.createSession[0].toolGateway, {
-        url: 'https://gallery.example.test/tools',
+      assert.deepEqual(runtime.calls.createSession[0].mcpGateway, {
+        url: 'https://gallery.example.test/mcp/sessions/00000000-0000-4000-8000-000000000100',
         token: 'gateway-token-secret',
       });
     });
   });
 
-  it('rejects a Gallery tool gateway without a token', async () => {
+  it('rejects a Gallery MCP gateway without a token', async () => {
+    await withServer(createRuntime(), async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          createSessionBody({
+            mcpGateway: {
+              url: 'https://gallery.example.test/mcp/sessions/00000000-0000-4000-8000-000000000100',
+            },
+          }),
+        ),
+      });
+
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: 'mcpGateway.token is required' });
+    });
+  });
+
+  it('rejects a Gallery MCP gateway without a URL', async () => {
+    await withServer(createRuntime(), async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          createSessionBody({
+            mcpGateway: {
+              token: 'gateway-token-secret',
+            },
+          }),
+        ),
+      });
+
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: 'mcpGateway.url is required' });
+    });
+  });
+
+  it('rejects a non-object Gallery MCP gateway', async () => {
+    await withServer(createRuntime(), async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody({ mcpGateway: 'https://gallery.example.test/mcp' })),
+      });
+
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: 'mcpGateway is required' });
+    });
+  });
+
+  it('rejects legacy Gallery toolGateway', async () => {
     await withServer(createRuntime(), async (baseUrl) => {
       const response = await fetch(`${baseUrl}/sessions`, {
         method: 'POST',
@@ -269,13 +320,14 @@ describe('agent runner server', () => {
           createSessionBody({
             toolGateway: {
               url: 'https://gallery.example.test/tools',
+              token: 'gateway-token-secret',
             },
           }),
         ),
       });
 
       assert.equal(response.status, 400);
-      assert.deepEqual(await response.json(), { error: 'toolGateway.token is required' });
+      assert.deepEqual(await response.json(), { error: 'toolGateway is no longer supported; use mcpGateway' });
     });
   });
 
