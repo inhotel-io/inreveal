@@ -106,6 +106,34 @@ describe(AgentSessionChatPanel.name, () => {
     expect(sdkMock.getAgentSessionMessages).toHaveBeenCalledWith({ id: session.id });
   });
 
+  it('reports a discovered title after transcript load', async () => {
+    const onTitleDiscovered = vi.fn();
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      makeMessage('message-assistant', AgentMessageRole.Assistant, 'I can help with that.'),
+      makeMessage('message-user', AgentMessageRole.User, '  Show   me\nmy albums  '),
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session, onTitleDiscovered } });
+
+    await screen.findByText(/Show\s+me\s+my albums/);
+    expect(onTitleDiscovered).toHaveBeenCalledTimes(1);
+    expect(onTitleDiscovered).toHaveBeenCalledWith(session.id, 'Show me my albums');
+  });
+
+  it('does not report a title for assistant-only or blank transcripts', async () => {
+    const onTitleDiscovered = vi.fn();
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      makeMessage('message-assistant', AgentMessageRole.Assistant, 'Assistant title'),
+      makeMessage('message-blank', AgentMessageRole.User, '   \n\t '),
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session, onTitleDiscovered } });
+
+    await screen.findByText('Assistant title');
+    await tick();
+    expect(onTitleDiscovered).not.toHaveBeenCalled();
+  });
+
   it('keeps messages received before the initial transcript load resolves', async () => {
     let resolveMessages: (messages: AgentMessageResponseDto[]) => void;
     sdkMock.getAgentSessionMessages.mockReturnValue(
@@ -134,6 +162,54 @@ describe(AgentSessionChatPanel.name, () => {
 
     expect(await screen.findByText('Loaded prompt')).toBeInTheDocument();
     expect(screen.getByText('Live response')).toBeInTheDocument();
+  });
+
+  it('reports a title from a successful send before transcript load resolves', async () => {
+    const onTitleDiscovered = vi.fn();
+    let resolveMessages: (messages: AgentMessageResponseDto[]) => void;
+    sdkMock.getAgentSessionMessages.mockReturnValue(
+      new Promise<AgentMessageResponseDto[]>((resolve) => {
+        resolveMessages = resolve;
+      }),
+    );
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(
+      makeMessage('message-created', AgentMessageRole.User, 'Organize favorites'),
+    );
+
+    render(AgentSessionChatPanel, { props: { session, onTitleDiscovered } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Organize favorites' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(onTitleDiscovered).toHaveBeenCalledWith(session.id, 'Organize favorites'));
+    expect(onTitleDiscovered).toHaveBeenCalledTimes(1);
+
+    resolveMessages!([]);
+  });
+
+  it('does not publish duplicate title discoveries when merged messages repeat', async () => {
+    const onTitleDiscovered = vi.fn();
+    const sentMessage = makeMessage('message-created', AgentMessageRole.User, 'Organize favorites');
+    let resolveMessages: (messages: AgentMessageResponseDto[]) => void;
+    sdkMock.getAgentSessionMessages.mockReturnValue(
+      new Promise<AgentMessageResponseDto[]>((resolve) => {
+        resolveMessages = resolve;
+      }),
+    );
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(sentMessage);
+
+    render(AgentSessionChatPanel, { props: { session, onTitleDiscovered } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Organize favorites' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(onTitleDiscovered).toHaveBeenCalledTimes(1));
+
+    resolveMessages!([sentMessage]);
+    await tick();
+
+    expect(onTitleDiscovered).toHaveBeenCalledTimes(1);
   });
 
   it('shows error when transcript loading fails', async () => {

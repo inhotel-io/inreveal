@@ -6,13 +6,12 @@
     type AgentSessionResponseDto,
   } from '@immich/sdk';
   import { t } from 'svelte-i18n';
-  import AgentOperationPlanReviewPanel from './agent-operation-plan-review-panel.svelte';
+  import AgentConversationPane from './agent-conversation-pane.svelte';
   import AgentRunnerStatusPanel from './agent-runner-status-panel.svelte';
-  import AgentSessionChatPanel from './agent-session-chat-panel.svelte';
   import AgentSessionSetupPanel from './agent-session-setup-panel.svelte';
   import AgentSessionSidebar from './agent-session-sidebar.svelte';
-  import { getApprovalModeLabelKey, getPermissionPresetLabelKey } from './agent-session-ui';
   import {
+    type AgentSessionTitleCache,
     getAgentSessionStatusLabelKey,
     getAgentSessionTitle,
     selectInitialAgentSessionId,
@@ -41,9 +40,12 @@
   let lastRequestedSessionId = $state(getInitialRequestedSessionId());
   let syncedFallbackSessionId = $state<string | null>(null);
   let shouldReplaceSelectedSessionUrl = $state(getInitialShouldReplaceSessionUrl());
+  let titleBySessionId = $state<AgentSessionTitleCache>({});
 
   const selectedSession = $derived(localSessions.find((session) => session.id === selectedSessionId) ?? null);
-  const selectedTitle = $derived(selectedSession ? getAgentSessionTitle(selectedSession) : $t('assistant_new_chat'));
+  const selectedTitle = $derived(
+    selectedSession ? getAgentSessionTitle(selectedSession, titleBySessionId) : $t('assistant_new_chat'),
+  );
 
   const buildAssistantPath = (sessionId: string | null) => {
     const url = new URL(globalThis.location.href);
@@ -82,6 +84,14 @@
     void updateSessionUrl(session.id);
   };
 
+  const handleTitleDiscovered = (sessionId: string, title: string) => {
+    if (sessionId !== selectedSessionId || !localSessions.some((session) => session.id === sessionId)) {
+      return;
+    }
+
+    titleBySessionId = { ...titleBySessionId, [sessionId]: title };
+  };
+
   $effect(() => {
     if (requestedSessionId === lastRequestedSessionId) {
       return;
@@ -108,6 +118,7 @@
     <AgentSessionSidebar
       sessions={localSessions}
       {selectedSessionId}
+      {titleBySessionId}
       onSelectSession={selectSession}
       onNewChat={startNewChat}
     />
@@ -123,6 +134,7 @@
       <AgentSessionSidebar
         sessions={localSessions}
         {selectedSessionId}
+        {titleBySessionId}
         onSelectSession={selectSession}
         onNewChat={startNewChat}
       />
@@ -153,43 +165,12 @@
 
     <div class="min-h-0 flex-1 overflow-y-auto">
       {#if selectedSession}
-        <section
-          class="mx-auto w-full max-w-3xl px-4 py-6 text-black dark:text-white md:px-8"
-          aria-labelledby="assistant-selected-session-title"
-        >
-          <div class="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-immich-dark-gray">
-            <h2 id="assistant-selected-session-title" class="text-lg font-semibold">
-              {$t('assistant_selected_session')}
-            </h2>
-            <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-              <div>
-                <dt class="text-gray-500 dark:text-gray-400">{$t('assistant_provider_credential')}</dt>
-                <dd class="font-medium">{selectedSession.credentialSnapshot.label}</dd>
-              </div>
-              <div>
-                <dt class="text-gray-500 dark:text-gray-400">{$t('assistant_model')}</dt>
-                <dd class="font-medium">{selectedSession.modelSnapshot.model}</dd>
-              </div>
-              <div>
-                <dt class="text-gray-500 dark:text-gray-400">{$t('status')}</dt>
-                <dd class="font-medium">{$t(getAgentSessionStatusLabelKey(selectedSession.status))}</dd>
-              </div>
-              <div>
-                <dt class="text-gray-500 dark:text-gray-400">{$t('assistant_permission_preset')}</dt>
-                <dd class="font-medium">{$t(getPermissionPresetLabelKey(selectedSession.permissionPreset))}</dd>
-              </div>
-              <div>
-                <dt class="text-gray-500 dark:text-gray-400">{$t('assistant_approval_mode')}</dt>
-                <dd class="font-medium">{$t(getApprovalModeLabelKey(selectedSession.approvalMode))}</dd>
-              </div>
-            </dl>
-          </div>
-        </section>
-
-        {#key selectedSession.id}
-          <AgentSessionChatPanel session={selectedSession} />
-          <AgentOperationPlanReviewPanel session={selectedSession} />
-        {/key}
+        <AgentConversationPane
+          session={selectedSession}
+          title={selectedTitle}
+          onNewChat={startNewChat}
+          onTitleDiscovered={handleTitleDiscovered}
+        />
       {:else}
         <AgentRunnerStatusPanel status={runnerStatus} />
         <AgentSessionSetupPanel {runnerStatus} {credentials} onSessionCreated={handleSessionCreated} />

@@ -12,12 +12,14 @@
   import { onDestroy, onMount } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
+  import { deriveAgentSessionTitleFromMessages } from './agent-session-workspace-ui';
 
   interface Props {
     session: AgentSessionResponseDto;
+    onTitleDiscovered?: (sessionId: string, title: string) => void;
   }
 
-  let { session }: Props = $props();
+  let { session, onTitleDiscovered }: Props = $props();
 
   let messages = $state<AgentMessageResponseDto[]>([]);
   let draft = $state('');
@@ -25,6 +27,7 @@
   let isAssistantActive = $state(false);
   let errorMessage = $state<string | null>(null);
   let streamingText = $state('');
+  let lastPublishedTitle: string | null = null;
   let cleanupWebsocketListener: (() => void) | undefined;
 
   const canSend = $derived(draft.trim().length > 0 && !isSending && !isAssistantActive);
@@ -51,8 +54,21 @@
     return mergedMessages;
   };
 
+  const publishDiscoveredTitle = (nextMessages: AgentMessageResponseDto[]) => {
+    const title = deriveAgentSessionTitleFromMessages(nextMessages);
+
+    if (!title || title === lastPublishedTitle) {
+      return;
+    }
+
+    lastPublishedTitle = title;
+    onTitleDiscovered?.(session.id, title);
+  };
+
   const appendIfNew = (message: AgentMessageResponseDto) => {
-    messages = mergeMessages(messages, [message]);
+    const nextMessages = mergeMessages(messages, [message]);
+    messages = nextMessages;
+    publishDiscoveredTitle(nextMessages);
   };
 
   const handleSessionEvent = (event: AgentSessionClientEvent) => {
@@ -85,7 +101,9 @@
   const loadMessages = async () => {
     try {
       const loadedMessages = await getAgentSessionMessages({ id: session.id });
-      messages = mergeMessages(loadedMessages, messages);
+      const nextMessages = mergeMessages(loadedMessages, messages);
+      messages = nextMessages;
+      publishDiscoveredTitle(nextMessages);
     } catch (error) {
       errorMessage = $t('assistant_message_load_error');
       handleError(error, errorMessage);
