@@ -1,4 +1,10 @@
-import { AgentSessionStatus, type AgentSessionResponseDto } from '@immich/sdk';
+import {
+  AgentMessageRole,
+  AgentMessageTextBlockType,
+  AgentSessionStatus,
+  type AgentMessageResponseDto,
+  type AgentSessionResponseDto,
+} from '@immich/sdk';
 import type { Translations } from 'svelte-i18n';
 
 export type AgentSessionTitleCache = Record<string, string | null | undefined>;
@@ -10,6 +16,7 @@ export type AgentSessionStatusBadge = {
 };
 
 export const ASSISTANT_SESSION_QUERY_PARAM = 'session';
+const AGENT_SESSION_TITLE_MAX_LENGTH = 60;
 
 const actionableStatusPriority = [
   AgentSessionStatus.WaitingForToolApproval,
@@ -70,6 +77,33 @@ export const getAgentSessionTitle = (
 ): string => {
   const title = titleCache[session.id]?.trim();
   return title || 'New chat';
+};
+
+export const deriveAgentSessionTitleFromMessages = (messages: AgentMessageResponseDto[]): string | null => {
+  for (const message of messages) {
+    if (message.role !== AgentMessageRole.User) {
+      continue;
+    }
+
+    const title = message.content.blocks
+      .filter((block) => block.type === AgentMessageTextBlockType.Text)
+      .map((block) => block.text)
+      .join(' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+
+    if (!title) {
+      continue;
+    }
+
+    if (title.length <= AGENT_SESSION_TITLE_MAX_LENGTH) {
+      return title;
+    }
+
+    return `${title.slice(0, AGENT_SESSION_TITLE_MAX_LENGTH - 1)}…`;
+  }
+
+  return null;
 };
 
 export const sortAgentSessionsForSidebar = (sessions: AgentSessionResponseDto[]) =>
