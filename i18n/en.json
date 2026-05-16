@@ -681,7 +681,7 @@
   "assistant_operation_apply_applying": "Applying operations",
   "assistant_operation_apply_error": "Unable to apply proposed operations",
   "assistant_operation_apply_selected": "Apply {count, plural, one {# selected} other {# selected}}",
-  "assistant_operation_apply_success": "Applied {applied, number} operations. {failed, number} failed.",
+  "assistant_operation_apply_success": "Applied {applied, plural, one {# operation} other {{applied, number} operations}}. {failed, plural, one {# failed} other {{failed, number} failed}}.",
   "assistant_operation_blocked_by": "Blocked by {dependencies}",
   "assistant_operation_plan_empty": "No proposed album plan yet.",
   "assistant_operation_plan_error": "Unable to load proposed album plan",
