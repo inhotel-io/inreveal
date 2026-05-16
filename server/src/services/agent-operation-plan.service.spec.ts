@@ -1009,6 +1009,53 @@ describe(AgentOperationPlanService.name, () => {
     );
   });
 
+  it('summarizes an already-applied current plan and writes a completed planning audit row', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Completed });
+    const plan = makePlan({ sessionId: session.id, status: AgentOperationPlanStatus.Applied });
+    const executingToolCall = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.SummarizePlan,
+      status: AgentToolCallStatus.Executing,
+    });
+    const completedToolCall = makeToolCall({ sessionId: session.id, toolName: AgentToolName.SummarizePlan });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    toolCallRepository.create.mockResolvedValue(executingToolCall);
+    toolCallRepository.transition.mockResolvedValue(completedToolCall);
+
+    const result = await sut.summarizePlan(auth, session.id, plan.id, { focus: 'applied operations' });
+
+    expect(result).toMatchObject({
+      status: 'success',
+      plan: { id: plan.id, status: AgentOperationPlanStatus.Applied },
+      toolCall: { id: completedToolCall.id },
+    });
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: session.id,
+        toolName: AgentToolName.SummarizePlan,
+        status: AgentToolCallStatus.Executing,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        dataClass: AgentToolDataClass.Plan,
+        redactedRequestMetadata: { planId: plan.id, operationCount: 0, operationTypes: [], albumIds: [], assetIds: [] },
+        redactedResponseMetadata: null,
+      }),
+    );
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      session.id,
+      executingToolCall.id,
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        status: AgentToolCallStatus.Completed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        redactedResponseMetadata: { planId: plan.id, operationIds: plan.operations.map((operation) => operation.id) },
+        error: null,
+      }),
+    );
+  });
+
   it('applies selected album operations in stored order and marks the session completed', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
@@ -1191,9 +1238,9 @@ describe(AgentOperationPlanService.name, () => {
     planRepository.completeApply.mockRejectedValue(error);
     albumService.create.mockResolvedValue({ id: newUuid() } as never);
 
-    await expect(
-      sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] }),
-    ).rejects.toBe(error);
+    await expect(sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] })).rejects.toBe(
+      error,
+    );
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
       status: AgentSessionStatus.Failed,
       endedAt: expect.any(Date),
