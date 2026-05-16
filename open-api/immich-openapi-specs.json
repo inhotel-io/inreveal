@@ -2573,7 +2573,104 @@
         "x-immich-state": "Alpha"
       }
     },
+    "/agent/sessions/validate": {
+      "post": {
+        "description": "Validate the selected provider credential and model with the configured runner before creating a persisted AI agent session.",
+        "operationId": "validateAgentSession",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentSessionCreateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Validate an agent session setup",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentSession.create",
+        "x-immich-state": "Alpha"
+      }
+    },
     "/agent/sessions/{id}": {
+      "delete": {
+        "description": "Delete an AI agent session owned by the current user.",
+        "operationId": "deleteAgentSession",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Delete an agent session",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentSession.update",
+        "x-immich-state": "Alpha"
+      },
       "get": {
         "description": "Retrieve an AI agent session by ID. The current user must own this session.",
         "operationId": "getAgentSession",
@@ -2627,6 +2724,71 @@
           }
         ],
         "x-immich-permission": "agentSession.read",
+        "x-immich-state": "Alpha"
+      },
+      "put": {
+        "description": "Update mutable metadata for an AI agent session owned by the current user.",
+        "operationId": "updateAgentSession",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentSessionUpdateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSessionResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Update an agent session",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentSession.update",
         "x-immich-state": "Alpha"
       }
     },
@@ -24642,6 +24804,10 @@
           "status": {
             "$ref": "#/components/schemas/AgentSessionStatus"
           },
+          "title": {
+            "nullable": true,
+            "type": "string"
+          },
           "updatedAt": {
             "example": "2024-01-01T00:00:00.000Z",
             "format": "date-time",
@@ -24681,6 +24847,20 @@
           "failed"
         ],
         "type": "string"
+      },
+      "AgentSessionUpdateDto": {
+        "properties": {
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
       },
       "AgentToolApprovalDecision": {
         "enum": [
