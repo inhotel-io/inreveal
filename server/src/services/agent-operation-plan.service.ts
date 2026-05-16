@@ -106,6 +106,9 @@ export class AgentOperationPlanService {
         },
         operations,
       });
+      if (!plan) {
+        throw new BadRequestException('Agent session is not accepting plan revisions');
+      }
 
       await this.markWaitingForPlanReview(auth, session, plan);
       return { plan, summary: this.summarize(plan) };
@@ -132,6 +135,9 @@ export class AgentOperationPlanService {
         },
         operations,
       });
+      if (!replacement) {
+        throw new BadRequestException('Agent session is not accepting plan revisions');
+      }
 
       await this.markWaitingForPlanReview(auth, session, replacement);
       return { plan: replacement, summary: this.summarize(replacement) };
@@ -172,8 +178,6 @@ export class AgentOperationPlanService {
     }
 
     try {
-      await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Applying });
-
       const selectedOperationIds = new Set(dto.operationIds);
       const applyUpdates = await this.applyClaimedPlan(auth, session, claimedPlan, selectedOperationIds);
       const appliedPlan = await this.planRepository.completeApply(claimedPlan.id, applyUpdates);
