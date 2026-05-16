@@ -522,6 +522,13 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_searchAssets'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_readAssetMetadata'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_proposeAlbumOperations'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only trip album requests'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_searchAssets with location and taken-date metadata'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_readAssetMetadata for candidate assets'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('do not call mcp_gallery_readAssetPreviews or mcp_gallery_readAssetOriginals'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('If a metadata-only trip search returns more than 250 candidate assets'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('ask one concise follow-up question to narrow the date range or location'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('A chat-only answer is not enough for album creation requests'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('factual questions about albums, photo counts'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('use Gallery MCP read tools before answering'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('status "approval-required"'), true);
