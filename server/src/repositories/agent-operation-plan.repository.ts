@@ -3,7 +3,13 @@ import { Insertable, Kysely, sql, Transaction } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { columns } from 'src/database';
 import { DummyValue, GenerateSql } from 'src/decorators';
-import { AgentOperationPlanStatus, AgentOperationStatus, AgentOperationTargetKind, AgentOperationType } from 'src/enum';
+import {
+  AgentOperationPlanStatus,
+  AgentOperationStatus,
+  AgentOperationTargetKind,
+  AgentOperationType,
+  AgentSessionStatus,
+} from 'src/enum';
 import { DB } from 'src/schema';
 import { AgentOperationPlanTable } from 'src/schema/tables/agent-operation-plan.table';
 import { AgentOperationTable } from 'src/schema/tables/agent-operation.table';
@@ -49,7 +55,19 @@ export class AgentOperationPlanRepository {
 
   async createReplacementRevision(sessionId: string, dto: AgentOperationPlanCreateReplacement) {
     return this.db.transaction().execute(async (trx) => {
-      await this.lockSession(trx, sessionId);
+      const session = await this.lockSession(trx, sessionId);
+      if (
+        [
+          AgentSessionStatus.Applying,
+          AgentSessionStatus.Completed,
+          AgentSessionStatus.Cancelled,
+          AgentSessionStatus.Interrupted,
+          AgentSessionStatus.Failed,
+        ].includes(session.status)
+      ) {
+        return undefined;
+      }
+
       const revision = await this.getNextRevisionInTransaction(trx, sessionId);
 
       await trx
@@ -98,7 +116,11 @@ export class AgentOperationPlanRepository {
     planId: string,
   ): Promise<AgentOperationPlanWithOperations | undefined> {
     return this.db.transaction().execute(async (trx) => {
-      await this.lockSession(trx, sessionId);
+      const session = await this.lockSession(trx, sessionId);
+      if (session.status !== AgentSessionStatus.WaitingForPlanReview) {
+        return undefined;
+      }
+
       const plan = await trx
         .selectFrom('agent_operation_plan')
         .select(columns.agentOperationPlan)
@@ -111,6 +133,12 @@ export class AgentOperationPlanRepository {
       if (!plan) {
         return undefined;
       }
+
+      await trx
+        .updateTable('agent_session')
+        .set({ status: AgentSessionStatus.Applying })
+        .where('id', '=', asUuid(sessionId))
+        .execute();
 
       const appliedPlan = await trx
         .updateTable('agent_operation_plan')
@@ -277,7 +305,7 @@ export class AgentOperationPlanRepository {
   private lockSession(trx: Transaction<DB>, sessionId: string) {
     return trx
       .selectFrom('agent_session')
-      .select('id')
+      .select(['id', 'status'])
       .where('id', '=', asUuid(sessionId))
       .forUpdate()
       .executeTakeFirstOrThrow();

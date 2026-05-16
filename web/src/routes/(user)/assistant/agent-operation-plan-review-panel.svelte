@@ -36,6 +36,9 @@
   let applyMessage = $state<string | null>(null);
   let applyErrorMessage = $state<string | null>(null);
   let locallyApplyingPlanId = $state<string | null>(null);
+  let pendingLocalApplyEvent = $state<Extract<AgentSessionClientEvent, { type: 'operation-plan-applied' }> | null>(
+    null,
+  );
   let cleanupWebsocketListener: (() => void) | undefined;
   let loadSequence = 0;
   let destroyed = false;
@@ -125,8 +128,13 @@
     if (
       event.type === 'operation-plan-applied' &&
       model?.plan.id === event.planId &&
-      (model.plan.status === AgentOperationPlanStatus.Applied || locallyApplyingPlanId === event.planId)
+      model.plan.status === AgentOperationPlanStatus.Applied
     ) {
+      return;
+    }
+
+    if (event.type === 'operation-plan-applied' && locallyApplyingPlanId === event.planId) {
+      pendingLocalApplyEvent = event;
       return;
     }
 
@@ -160,11 +168,22 @@
         },
       });
     } catch (error) {
-      applyErrorMessage = $t('assistant_operation_apply_error');
-      handleError(error, applyErrorMessage);
+      if (pendingLocalApplyEvent?.planId === applyingPlanId) {
+        await loadPlan();
+        applyMessage = $t('assistant_operation_apply_success', {
+          values: {
+            applied: pendingLocalApplyEvent.appliedCount,
+            failed: pendingLocalApplyEvent.failedCount,
+          },
+        });
+      } else {
+        applyErrorMessage = $t('assistant_operation_apply_error');
+        handleError(error, applyErrorMessage);
+      }
     } finally {
       applying = false;
       locallyApplyingPlanId = null;
+      pendingLocalApplyEvent = null;
     }
   };
 
@@ -214,8 +233,17 @@
     </div>
   </section>
 {:else if !model}
-  <section class="mx-auto w-full max-w-3xl px-4 pb-10 text-sm text-gray-500 md:px-8">
-    {$t('assistant_operation_plan_empty')}
+  <section class="mx-auto w-full max-w-3xl px-4 pb-10 text-sm md:px-8">
+    {#if applyMessage}
+      <p
+        class="rounded-lg border border-green-200 bg-green-50 p-3 text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-200"
+        role="status"
+      >
+        {applyMessage}
+      </p>
+    {:else}
+      <p class="text-gray-500">{$t('assistant_operation_plan_empty')}</p>
+    {/if}
   </section>
 {:else}
   <section
