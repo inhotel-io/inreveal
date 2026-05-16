@@ -59,9 +59,7 @@ describe('agent runner deployment config', () => {
     const exampleEnv = readRepo('docker/example.env');
 
     expect(exampleEnv).toContain('IMMICH_AGENT_RUNNER_URL=http://agent-runner:4477');
-    expect(exampleEnv).toContain(
-      'IMMICH_AGENT_MCP_GATEWAY_URL=http://immich-server:2283/api/agent/internal/mcp',
-    );
+    expect(exampleEnv).toContain('IMMICH_AGENT_MCP_GATEWAY_URL=http://immich-server:2283/api/agent/internal/mcp');
     expect(exampleEnv).toContain('IMMICH_AGENT_SECRET_KEY=');
     expect(exampleEnv).not.toContain('dev-agent-secret-key-change-me');
   });

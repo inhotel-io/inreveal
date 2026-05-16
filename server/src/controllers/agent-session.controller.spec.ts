@@ -331,7 +331,9 @@ describe(AgentSessionController.name, () => {
         .send({ title: '   ' });
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest(['[title] Too small: expected string to have >=1 characters']));
+      expect(result).toEqual(
+        factory.responses.badRequest(['[title] Too small: expected string to have >=1 characters']),
+      );
     });
   });
 

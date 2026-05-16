@@ -123,7 +123,7 @@
       return;
     }
 
-    if (event.type === 'operation-plan-ready') {
+    if (event.type === 'operation-plan-ready' || event.type === 'operation-plan-applied') {
       return;
     }
 

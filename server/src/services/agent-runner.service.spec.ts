@@ -134,7 +134,12 @@ describe(AgentRunnerService.name, () => {
     await expect(sut.createSession(makeCreateSessionBody())).resolves.toEqual({
       runnerEndpoint: 'http://agent-runner:4477',
       runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
-      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['mcp:gallery'], models: [] },
+      runnerCapabilitiesSnapshot: {
+        protocolVersion: '2026-05-14',
+        streaming: true,
+        tools: ['mcp:gallery'],
+        models: [],
+      },
     });
     expect(agentRunnerRepository.createSession).toHaveBeenCalledWith({
       url: 'http://agent-runner:4477',
@@ -172,7 +177,12 @@ describe(AgentRunnerService.name, () => {
     await expect(sut.createSession(body)).resolves.toEqual({
       runnerEndpoint: 'http://agent-runner:4477',
       runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
-      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['mcp:gallery'], models: [] },
+      runnerCapabilitiesSnapshot: {
+        protocolVersion: '2026-05-14',
+        streaming: true,
+        tools: ['mcp:gallery'],
+        models: [],
+      },
     });
 
     expect(toolTokenService.create).toHaveBeenCalledWith({
@@ -284,7 +294,7 @@ describe(AgentRunnerService.name, () => {
         runnerMessageStreamTimeoutMs: 120_000,
       },
     } as never);
-    agentRunnerRepository.validateSession.mockResolvedValue();
+    agentRunnerRepository.validateSession.mockResolvedValue({ ok: true, capabilities: {} });
 
     await sut.validateSession(makeCreateSessionBody());
 

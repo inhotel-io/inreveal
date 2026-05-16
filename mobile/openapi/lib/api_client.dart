@@ -387,6 +387,8 @@ class ApiClient {
           return AgentSessionResponseDto.fromJson(value);
         case 'AgentSessionStatus':
           return AgentSessionStatusTypeTransformer().decode(value);
+        case 'AgentSessionUpdateDto':
+          return AgentSessionUpdateDto.fromJson(value);
         case 'AgentToolApprovalDecision':
           return AgentToolApprovalDecisionTypeTransformer().decode(value);
         case 'AgentToolApprovalDto':

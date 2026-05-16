@@ -18,7 +18,7 @@ flow, but it does not yet feel like a durable chat product:
 - refreshing the page loses the selected session context in the UI;
 - interrupted or waiting sessions are not easy to resume;
 - tool approvals and operation-plan review are rendered as separate page blocks
-instead of a single chat workspace;
+  instead of a single chat workspace;
 - the user cannot scan which sessions need approval, plan review, or follow-up.
 
 The next product step should make Assistant feel closer to Claude's chat
