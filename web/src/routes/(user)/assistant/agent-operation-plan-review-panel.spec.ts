@@ -163,6 +163,16 @@ const samplePlan = () =>
     }),
   ]);
 
+const appliedPlan = (): AgentOperationPlanResponseDto => ({
+  ...samplePlan(),
+  status: AgentOperationPlanStatus.Applied,
+  operations: samplePlan().operations.map((operation) => ({
+    ...operation,
+    status: AgentOperationStatus.Applied,
+    result: { albumId: '00000000-0000-4000-8000-000000000400' },
+  })),
+});
+
 describe('AgentOperationPlanReviewPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -272,15 +282,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
     sdkMock.applyApprovedOperations.mockResolvedValue({
       status: AgentOperationApplyStatus.Applied,
-      plan: {
-        ...samplePlan(),
-        status: AgentOperationPlanStatus.Applied,
-        operations: samplePlan().operations.map((operation) => ({
-          ...operation,
-          status: AgentOperationStatus.Applied,
-          result: { albumId: '00000000-0000-4000-8000-000000000400' },
-        })),
-      },
+      plan: appliedPlan(),
       appliedOperationIds: [createId, addId, existingId],
       skippedOperationIds: [],
       failedOperationIds: [],
@@ -298,6 +300,43 @@ describe('AgentOperationPlanReviewPanel', () => {
     });
     expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
     expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeDisabled();
+  });
+
+  it('keeps local apply success visible when the same plan-applied event arrives', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+    sdkMock.applyApprovedOperations.mockResolvedValue({
+      status: AgentOperationApplyStatus.Applied,
+      plan: appliedPlan(),
+      appliedOperationIds: [createId, addId, existingId],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 3 operation(s), skipped 0, failed 0.',
+    });
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
+
+    handler?.({
+      type: 'operation-plan-applied',
+      sessionId: session.id,
+      planId,
+      status: AgentOperationApplyStatus.Applied,
+      appliedCount: 3,
+      skippedCount: 0,
+      failedCount: 0,
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
+    expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
+    expect(screen.queryByText('No proposed album plan yet.')).not.toBeInTheDocument();
+    expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledTimes(1);
   });
 
   it('sends only enabled and unblocked operation ids when applying', async () => {
@@ -447,6 +486,52 @@ describe('AgentOperationPlanReviewPanel', () => {
     });
 
     await waitFor(() => expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledTimes(1));
+  });
+
+  it('ignores plan-applied events for another session', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+    expect(await screen.findByText('Organize Portugal holiday')).toBeInTheDocument();
+
+    handler?.({
+      type: 'operation-plan-applied',
+      sessionId: '00000000-0000-4000-8000-000000000999',
+      planId,
+      status: AgentOperationApplyStatus.Applied,
+      appliedCount: 3,
+      skippedCount: 0,
+      failedCount: 0,
+    });
+
+    await waitFor(() => expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledTimes(1));
+  });
+
+  it('shows a refresh error without clearing an already loaded plan', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    sdkMock.getCurrentOperationPlan.mockResolvedValueOnce(samplePlan()).mockRejectedValueOnce(new Error('failed'));
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+    expect(await screen.findByText('Organize Portugal holiday')).toBeInTheDocument();
+
+    handler?.({
+      type: 'operation-plan-ready',
+      sessionId: session.id,
+      planId,
+      revision: 2,
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load proposed album plan');
+    expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
   });
 
   it('shows a load error when the plan request fails', async () => {
