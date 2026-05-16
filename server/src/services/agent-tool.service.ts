@@ -266,7 +266,7 @@ export class AgentToolService {
         return this.readAlbum(auth, session.id, { toolCallId: toolCall.id });
       }
       default: {
-        return Promise.resolve(undefined);
+        return Promise.resolve();
       }
     }
   }
