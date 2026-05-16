@@ -373,7 +373,12 @@ describe(AgentSessionActionDock.name, () => {
     expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1);
 
     for (const handler of handlers) {
-      handler({ type: 'runner-error', sessionId: 'session-1', message: 'refresh', createdAt: '2026-05-16T10:00:00Z' });
+      handler({
+        type: 'tool-approval-needed',
+        sessionId: 'session-1',
+        toolCallId: 'tool-call-1',
+        createdAt: '2026-05-16T10:00:00Z',
+      });
     }
     await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(2));
 

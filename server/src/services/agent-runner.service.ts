@@ -333,6 +333,12 @@ export class AgentRunnerService {
       }
 
       if (event.type === 'tool-approval-needed') {
+        this.websocketRepository.clientSend('on_agent_session_event', userId, {
+          type: 'tool-approval-needed',
+          sessionId,
+          toolCallId: event.toolCallId,
+          createdAt: this.toIsoNow(),
+        });
         return;
       }
 
