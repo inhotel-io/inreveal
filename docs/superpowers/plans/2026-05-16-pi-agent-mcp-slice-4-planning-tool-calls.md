@@ -66,7 +66,7 @@ Slice 4 must fix that MCP input contract before enabling planning delegation.
   Add MCP-specific request schemas for plan-aware planning tools:
   - `reviseProposedOperations`: `{ planId, summary, operations, feedback? }`;
   - `summarizePlan`: `{ planId, focus? }`.
-  Keep HTTP DTO classes unchanged.
+    Keep HTTP DTO classes unchanged.
 
 - Modify `server/src/dtos/agent-operation.dto.spec.ts`
   Add DTO tests proving MCP planning schemas require `planId` for plan-aware tools, reject invalid `planId`, preserve existing operation validation, and keep proposal schema independent of `planId`.
@@ -91,11 +91,7 @@ Slice 4 must fix that MCP input contract before enabling planning delegation.
 Slice 4 supports these additional MCP `tools/call` names:
 
 ```ts
-[
-  AgentToolName.ProposeAlbumOperations,
-  AgentToolName.ReviseProposedOperations,
-  AgentToolName.SummarizePlan,
-]
+[AgentToolName.ProposeAlbumOperations, AgentToolName.ReviseProposedOperations, AgentToolName.SummarizePlan];
 ```
 
 Each supported planning tool delegates to the existing service method:
@@ -213,6 +209,7 @@ Each behavior bundle starts with failing tests. Do not edit production files for
 ### Task 1: Write Failing Planning Schema Tests
 
 **Files:**
+
 - Modify: `server/src/dtos/agent-operation.dto.spec.ts`
 - Modify: `server/src/services/agent-mcp-tool-registry.service.spec.ts`
 
@@ -247,114 +244,111 @@ const makePlanningToolRequest = () => ({
 Append these tests inside `describe('Agent operation DTOs', ...)`:
 
 ```ts
-  describe('MCP planning tool request schemas', () => {
-    it('does not require planId for proposeAlbumOperations', () => {
-      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse(
-        makePlanningToolRequest(),
-      );
+describe('MCP planning tool request schemas', () => {
+  it('does not require planId for proposeAlbumOperations', () => {
+    const result =
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse(makePlanningToolRequest());
 
-      expect(result.success).toBe(true);
+    expect(result.success).toBe(true);
+  });
+
+  it('requires planId for reviseProposedOperations MCP calls and keeps the body fields', () => {
+    const planId = factory.uuid();
+    const valid = AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse({
+      planId,
+      feedback: 'Use a shorter title.',
+      ...makePlanningToolRequest(),
     });
 
-    it('requires planId for reviseProposedOperations MCP calls and keeps the body fields', () => {
-      const planId = factory.uuid();
-      const valid = AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse({
+    expect(valid.success).toBe(true);
+    if (valid.success) {
+      expect(valid.data).toMatchObject({
         planId,
         feedback: 'Use a shorter title.',
+        summary: 'Create a Portugal highlights album.',
+        operations: expect.any(Array),
+      });
+    }
+
+    expectIssue(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse(makePlanningToolRequest()),
+      ['planId'],
+      'Invalid input',
+    );
+    expectIssue(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse({
+        planId: 'not-a-uuid',
         ...makePlanningToolRequest(),
-      });
-
-      expect(valid.success).toBe(true);
-      if (valid.success) {
-        expect(valid.data).toMatchObject({
-          planId,
-          feedback: 'Use a shorter title.',
-          summary: 'Create a Portugal highlights album.',
-          operations: expect.any(Array),
-        });
-      }
-
-      expectIssue(
-        AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse(
-          makePlanningToolRequest(),
-        ),
-        ['planId'],
-        'Invalid input',
-      );
-      expectIssue(
-        AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse({
-          planId: 'not-a-uuid',
-          ...makePlanningToolRequest(),
-        }),
-        ['planId'],
-        'Invalid UUID',
-      );
-    });
-
-    it('requires planId for summarizePlan MCP calls and validates focus', () => {
-      const planId = factory.uuid();
-      const valid = AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({
-        planId,
-        focus: 'risk',
-      });
-
-      expect(valid.success).toBe(true);
-      if (valid.success) {
-        expect(valid.data).toEqual({ planId, focus: 'risk' });
-      }
-
-      expectIssue(
-        AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({ focus: 'risk' }),
-        ['planId'],
-        'Invalid input',
-      );
-      expectIssue(
-        AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({
-          planId: 'not-a-uuid',
-          focus: 'risk',
-        }),
-        ['planId'],
-        'Invalid UUID',
-      );
-      expectIssue(
-        AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({
-          planId,
-          focus: '',
-        }),
-        ['focus'],
-        'Too small',
-      );
-    });
-
-    it('keeps strict object validation for planning MCP tool arguments', () => {
-      expectIssue(
-        AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse({
-          ...makePlanningToolRequest(),
-          unexpected: true,
-        }),
-        [],
-        'Unrecognized key',
-      );
-      expectIssue(
-        AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse({
-          planId: factory.uuid(),
-          ...makePlanningToolRequest(),
-          unexpected: true,
-        }),
-        [],
-        'Unrecognized key',
-      );
-      expectIssue(
-        AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({
-          planId: factory.uuid(),
-          focus: 'risk',
-          unexpected: true,
-        }),
-        [],
-        'Unrecognized key',
-      );
-    });
+      }),
+      ['planId'],
+      'Invalid UUID',
+    );
   });
+
+  it('requires planId for summarizePlan MCP calls and validates focus', () => {
+    const planId = factory.uuid();
+    const valid = AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({
+      planId,
+      focus: 'risk',
+    });
+
+    expect(valid.success).toBe(true);
+    if (valid.success) {
+      expect(valid.data).toEqual({ planId, focus: 'risk' });
+    }
+
+    expectIssue(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({ focus: 'risk' }),
+      ['planId'],
+      'Invalid input',
+    );
+    expectIssue(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({
+        planId: 'not-a-uuid',
+        focus: 'risk',
+      }),
+      ['planId'],
+      'Invalid UUID',
+    );
+    expectIssue(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({
+        planId,
+        focus: '',
+      }),
+      ['focus'],
+      'Too small',
+    );
+  });
+
+  it('keeps strict object validation for planning MCP tool arguments', () => {
+    expectIssue(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse({
+        ...makePlanningToolRequest(),
+        unexpected: true,
+      }),
+      [],
+      'Unrecognized key',
+    );
+    expectIssue(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse({
+        planId: factory.uuid(),
+        ...makePlanningToolRequest(),
+        unexpected: true,
+      }),
+      [],
+      'Unrecognized key',
+    );
+    expectIssue(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({
+        planId: factory.uuid(),
+        focus: 'risk',
+        unexpected: true,
+      }),
+      [],
+      'Unrecognized key',
+    );
+  });
+});
 ```
 
 - [ ] **Step 3: Add failing registry schema tests**
@@ -362,38 +356,38 @@ Append these tests inside `describe('Agent operation DTOs', ...)`:
 In `server/src/services/agent-mcp-tool-registry.service.spec.ts`, append these tests inside `describe(AgentMcpToolRegistryService.name, ...)`:
 
 ```ts
-  it('exposes planId in plan-aware planning tool input schemas', () => {
-    const tools = sut.listTools();
-    const revise = tools.find((tool) => tool.name === AgentToolName.ReviseProposedOperations);
-    const summarize = tools.find((tool) => tool.name === AgentToolName.SummarizePlan);
+it('exposes planId in plan-aware planning tool input schemas', () => {
+  const tools = sut.listTools();
+  const revise = tools.find((tool) => tool.name === AgentToolName.ReviseProposedOperations);
+  const summarize = tools.find((tool) => tool.name === AgentToolName.SummarizePlan);
 
-    expect(revise?.inputSchema).toMatchObject({
-      type: 'object',
-      required: expect.arrayContaining(['planId', 'summary', 'operations']),
-      properties: expect.objectContaining({
-        planId: expect.objectContaining({ type: 'string', format: 'uuid' }),
-      }),
-    });
-    expect(summarize?.inputSchema).toMatchObject({
-      type: 'object',
-      required: expect.arrayContaining(['planId']),
-      properties: expect.objectContaining({
-        planId: expect.objectContaining({ type: 'string', format: 'uuid' }),
-      }),
-    });
+  expect(revise?.inputSchema).toMatchObject({
+    type: 'object',
+    required: expect.arrayContaining(['planId', 'summary', 'operations']),
+    properties: expect.objectContaining({
+      planId: expect.objectContaining({ type: 'string', format: 'uuid' }),
+    }),
   });
-
-  it('does not require planId for proposal input schema', () => {
-    const proposal = sut.listTools().find((tool) => tool.name === AgentToolName.ProposeAlbumOperations);
-
-    expect(proposal?.inputSchema).toMatchObject({
-      type: 'object',
-      required: expect.not.arrayContaining(['planId']),
-      properties: expect.not.objectContaining({
-        planId: expect.anything(),
-      }),
-    });
+  expect(summarize?.inputSchema).toMatchObject({
+    type: 'object',
+    required: expect.arrayContaining(['planId']),
+    properties: expect.objectContaining({
+      planId: expect.objectContaining({ type: 'string', format: 'uuid' }),
+    }),
   });
+});
+
+it('does not require planId for proposal input schema', () => {
+  const proposal = sut.listTools().find((tool) => tool.name === AgentToolName.ProposeAlbumOperations);
+
+  expect(proposal?.inputSchema).toMatchObject({
+    type: 'object',
+    required: expect.not.arrayContaining(['planId']),
+    properties: expect.not.objectContaining({
+      planId: expect.anything(),
+    }),
+  });
+});
 ```
 
 - [ ] **Step 4: Run schema tests to verify they fail**
@@ -409,6 +403,7 @@ Expected: FAIL because revise and summarize MCP schemas do not include `planId` 
 ### Task 2: Implement Planning MCP Argument Schemas
 
 **Files:**
+
 - Modify: `server/src/dtos/agent-operation.dto.ts`
 
 - [ ] **Step 1: Add plan-aware MCP request schemas**
@@ -468,6 +463,7 @@ git commit -m "feat: expose mcp planning plan ids"
 ### Task 3: Write Failing MCP Service Tests For Planning Tool Calls And Edge Cases
 
 **Files:**
+
 - Modify: `server/src/services/agent-mcp.service.spec.ts`
 - Modify: `server/src/services/agent-operation-plan.service.spec.ts`
 
@@ -476,12 +472,7 @@ git commit -m "feat: expose mcp planning plan ids"
 In `server/src/services/agent-mcp.service.spec.ts`, replace the current `src/enum` import with:
 
 ```ts
-import {
-  AgentOperationRiskLevel,
-  AgentOperationTargetKind,
-  AgentOperationType,
-  AgentToolName,
-} from 'src/enum';
+import { AgentOperationRiskLevel, AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
 ```
 
 Add the operation-plan service import:
@@ -493,14 +484,14 @@ import { AgentOperationPlanService } from 'src/services/agent-operation-plan.ser
 Update setup:
 
 ```ts
-  let operationPlanService: AutoMocked<AgentOperationPlanService>;
+let operationPlanService: AutoMocked<AgentOperationPlanService>;
 
-  beforeEach(() => {
-    registry = new AgentMcpToolRegistryService();
-    toolService = automock(AgentToolService, { strict: false });
-    operationPlanService = automock(AgentOperationPlanService, { strict: false });
-    sut = new AgentMcpService(registry, toolService, operationPlanService);
-  });
+beforeEach(() => {
+  registry = new AgentMcpToolRegistryService();
+  toolService = automock(AgentToolService, { strict: false });
+  operationPlanService = automock(AgentOperationPlanService, { strict: false });
+  sut = new AgentMcpService(registry, toolService, operationPlanService);
+});
 ```
 
 - [ ] **Step 2: Add planning request helpers**
@@ -550,65 +541,69 @@ const makePlanningServiceResult = (planId = factory.uuid()) => ({
 Append these tests after the read-tool tests and before protocol-error tests:
 
 ```ts
-  it.each([
-    {
-      toolName: AgentToolName.ProposeAlbumOperations,
-      args: makePlanningRequest(),
-      serviceMethod: 'proposeAlbumOperations' as const,
-      expectedArguments: (authValue: AuthDto, sessionIdValue: string) => [
+it.each([
+  {
+    toolName: AgentToolName.ProposeAlbumOperations,
+    args: makePlanningRequest(),
+    serviceMethod: 'proposeAlbumOperations' as const,
+    expectedArguments: (authValue: AuthDto, sessionIdValue: string) => [
+      authValue,
+      sessionIdValue,
+      makeParsedPlanningRequest(),
+    ],
+  },
+  {
+    toolName: AgentToolName.ReviseProposedOperations,
+    args: {
+      planId: factory.uuid(),
+      feedback: 'Use a shorter title.',
+      ...makePlanningRequest(),
+    },
+    serviceMethod: 'reviseProposedOperations' as const,
+    expectedArguments: (authValue: AuthDto, sessionIdValue: string, args: Record<string, unknown>) => {
+      const { planId } = args;
+      return [
         authValue,
         sessionIdValue,
-        makeParsedPlanningRequest(),
-      ],
+        planId,
+        {
+          feedback: 'Use a shorter title.',
+          ...makeParsedPlanningRequest(),
+        },
+      ];
     },
-    {
-      toolName: AgentToolName.ReviseProposedOperations,
-      args: {
-        planId: factory.uuid(),
-        feedback: 'Use a shorter title.',
-        ...makePlanningRequest(),
-      },
-      serviceMethod: 'reviseProposedOperations' as const,
-      expectedArguments: (authValue: AuthDto, sessionIdValue: string, args: Record<string, unknown>) => {
-        const { planId } = args;
-        return [
-          authValue,
-          sessionIdValue,
-          planId,
-          {
-            feedback: 'Use a shorter title.',
-            ...makeParsedPlanningRequest(),
-          },
-        ];
-      },
+  },
+  {
+    toolName: AgentToolName.SummarizePlan,
+    args: {
+      planId: factory.uuid(),
+      focus: 'risk',
     },
-    {
-      toolName: AgentToolName.SummarizePlan,
-      args: {
-        planId: factory.uuid(),
-        focus: 'risk',
-      },
-      serviceMethod: 'summarizePlan' as const,
-      expectedArguments: (authValue: AuthDto, sessionIdValue: string, args: Record<string, unknown>) => {
-        const { planId, ...dto } = args;
-        return [authValue, sessionIdValue, planId, dto];
-      },
+    serviceMethod: 'summarizePlan' as const,
+    expectedArguments: (authValue: AuthDto, sessionIdValue: string, args: Record<string, unknown>) => {
+      const { planId, ...dto } = args;
+      return [authValue, sessionIdValue, planId, dto];
     },
-  ])(
-    'delegates planning tool $toolName to AgentOperationPlanService and wraps the result',
-    async ({ toolName, args, serviceMethod, expectedArguments }) => {
-      const serviceResult = makePlanningServiceResult();
-      operationPlanService[serviceMethod].mockResolvedValue(serviceResult as never);
+  },
+])(
+  'delegates planning tool $toolName to AgentOperationPlanService and wraps the result',
+  async ({ toolName, args, serviceMethod, expectedArguments }) => {
+    const serviceResult = makePlanningServiceResult();
+    operationPlanService[serviceMethod].mockResolvedValue(serviceResult as never);
 
-      const response = (await sut.handle(auth, sessionId, makeToolCallRequest(toolName, args))) as AgentMcpSuccessResponse;
+    const response = (await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(toolName, args),
+    )) as AgentMcpSuccessResponse;
 
-      expect(operationPlanService[serviceMethod]).toHaveBeenCalledTimes(1);
-      expect(operationPlanService[serviceMethod]).toHaveBeenCalledWith(
-        ...expectedArguments(auth, sessionId, args as Record<string, unknown>),
-      );
-      expectToolResult(response, `${toolName}-call`, serviceResult);
-    },
-  );
+    expect(operationPlanService[serviceMethod]).toHaveBeenCalledTimes(1);
+    expect(operationPlanService[serviceMethod]).toHaveBeenCalledWith(
+      ...expectedArguments(auth, sessionId, args as Record<string, unknown>),
+    );
+    expectToolResult(response, `${toolName}-call`, serviceResult);
+  },
+);
 ```
 
 - [ ] **Step 4: Add planning service error redaction tests**
@@ -616,23 +611,25 @@ Append these tests after the read-tool tests and before protocol-error tests:
 Append:
 
 ```ts
-  it.each([
-    {
-      toolName: AgentToolName.ProposeAlbumOperations,
-      args: makePlanningRequest(),
-      serviceMethod: 'proposeAlbumOperations' as const,
-    },
-    {
-      toolName: AgentToolName.ReviseProposedOperations,
-      args: { planId: factory.uuid(), ...makePlanningRequest() },
-      serviceMethod: 'reviseProposedOperations' as const,
-    },
-    {
-      toolName: AgentToolName.SummarizePlan,
-      args: { planId: factory.uuid(), focus: 'risk' },
-      serviceMethod: 'summarizePlan' as const,
-    },
-  ])('converts $toolName service failures to redacted JSON-RPC internal errors', async ({ toolName, args, serviceMethod }) => {
+it.each([
+  {
+    toolName: AgentToolName.ProposeAlbumOperations,
+    args: makePlanningRequest(),
+    serviceMethod: 'proposeAlbumOperations' as const,
+  },
+  {
+    toolName: AgentToolName.ReviseProposedOperations,
+    args: { planId: factory.uuid(), ...makePlanningRequest() },
+    serviceMethod: 'reviseProposedOperations' as const,
+  },
+  {
+    toolName: AgentToolName.SummarizePlan,
+    args: { planId: factory.uuid(), focus: 'risk' },
+    serviceMethod: 'summarizePlan' as const,
+  },
+])(
+  'converts $toolName service failures to redacted JSON-RPC internal errors',
+  async ({ toolName, args, serviceMethod }) => {
     operationPlanService[serviceMethod].mockRejectedValue(
       new Error('Agent operation plan not found /srv/gallery/provider-request.json bearer token abc'),
     );
@@ -645,7 +642,8 @@ Append:
         message: 'Internal error',
       },
     });
-  });
+  },
+);
 ```
 
 - [ ] **Step 5: Add no-apply MCP service test**
@@ -653,27 +651,27 @@ Append:
 Append:
 
 ```ts
-  it('does not expose an MCP apply tool call', async () => {
-    await expect(
-      sut.handle(auth, sessionId, {
-        jsonrpc: '2.0',
-        id: 'apply-tool',
-        method: 'tools/call',
-        params: { name: 'applyAlbumOperations', arguments: { planId: factory.uuid(), operationIds: [factory.uuid()] } },
-      }),
-    ).resolves.toEqual({
+it('does not expose an MCP apply tool call', async () => {
+  await expect(
+    sut.handle(auth, sessionId, {
       jsonrpc: '2.0',
       id: 'apply-tool',
-      error: {
-        code: -32_602,
-        message: 'Unknown tool',
-        data: { toolName: 'applyAlbumOperations' },
-      },
-    });
-    expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
-    expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
-    expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
+      method: 'tools/call',
+      params: { name: 'applyAlbumOperations', arguments: { planId: factory.uuid(), operationIds: [factory.uuid()] } },
+    }),
+  ).resolves.toEqual({
+    jsonrpc: '2.0',
+    id: 'apply-tool',
+    error: {
+      code: -32_602,
+      message: 'Unknown tool',
+      data: { toolName: 'applyAlbumOperations' },
+    },
   });
+  expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
+  expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
+  expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 6: Add malformed planning argument tests**
@@ -681,169 +679,176 @@ Append:
 Append these tests near the existing malformed argument tests:
 
 ```ts
-  describe('planning argument validation', () => {
-    const assetId = factory.uuid();
+describe('planning argument validation', () => {
+  const assetId = factory.uuid();
 
-    it.each([
-      {
-        name: 'planning missing arguments',
-        toolName: AgentToolName.ProposeAlbumOperations,
-        args: undefined,
-        expectedPath: 'arguments',
+  it.each([
+    {
+      name: 'planning missing arguments',
+      toolName: AgentToolName.ProposeAlbumOperations,
+      args: undefined,
+      expectedPath: 'arguments',
+    },
+    {
+      name: 'planning array arguments',
+      toolName: AgentToolName.ProposeAlbumOperations,
+      args: [makeAlbumCreateOperation()],
+      expectedPath: 'arguments',
+    },
+    {
+      name: 'proposal wrong primitive summary',
+      toolName: AgentToolName.ProposeAlbumOperations,
+      args: { summary: 12, operations: [makeAlbumCreateOperation()] },
+      expectedPath: 'summary',
+    },
+    {
+      name: 'proposal missing summary',
+      toolName: AgentToolName.ProposeAlbumOperations,
+      args: { operations: [makeAlbumCreateOperation()] },
+      expectedPath: 'summary',
+    },
+    {
+      name: 'proposal empty operations',
+      toolName: AgentToolName.ProposeAlbumOperations,
+      args: { summary: 'Empty operations.', operations: [] },
+      expectedPath: 'operations',
+    },
+    {
+      name: 'proposal too many operations',
+      toolName: AgentToolName.ProposeAlbumOperations,
+      args: {
+        summary: 'Too many operations.',
+        operations: Array.from({ length: 501 }, (_, index) => ({
+          ...makeAlbumCreateOperation(),
+          temporaryTargetId: `tmp-portugal-${index}`,
+          payload: { albumName: `Portugal ${index}` },
+        })),
       },
-      {
-        name: 'planning array arguments',
-        toolName: AgentToolName.ProposeAlbumOperations,
-        args: [makeAlbumCreateOperation()],
-        expectedPath: 'arguments',
+      expectedPath: 'operations',
+    },
+    {
+      name: 'proposal duplicate asset ids',
+      toolName: AgentToolName.ProposeAlbumOperations,
+      args: {
+        summary: 'Duplicate assets.',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add duplicate assets.',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: factory.uuid(),
+            assetIds: [assetId, assetId],
+          },
+        ],
       },
-      {
-        name: 'proposal wrong primitive summary',
-        toolName: AgentToolName.ProposeAlbumOperations,
-        args: { summary: 12, operations: [makeAlbumCreateOperation()] },
-        expectedPath: 'summary',
+      expectedPath: 'operations.0.assetIds',
+    },
+    {
+      name: 'proposal missing new album temporary target',
+      toolName: AgentToolName.ProposeAlbumOperations,
+      args: {
+        summary: 'Missing temp id.',
+        operations: [
+          {
+            type: AgentOperationType.AlbumCreate,
+            summary: 'Create missing temp id.',
+            targetKind: AgentOperationTargetKind.NewAlbum,
+            payload: { albumName: 'Portugal' },
+          },
+        ],
       },
-      {
-        name: 'proposal missing summary',
-        toolName: AgentToolName.ProposeAlbumOperations,
-        args: { operations: [makeAlbumCreateOperation()] },
-        expectedPath: 'summary',
-      },
-      {
-        name: 'proposal empty operations',
-        toolName: AgentToolName.ProposeAlbumOperations,
-        args: { summary: 'Empty operations.', operations: [] },
-        expectedPath: 'operations',
-      },
-      {
-        name: 'proposal too many operations',
-        toolName: AgentToolName.ProposeAlbumOperations,
-        args: {
-          summary: 'Too many operations.',
-          operations: Array.from({ length: 501 }, (_, index) => ({
+      expectedPath: 'operations.0.temporaryTargetId',
+    },
+    {
+      name: 'proposal excessive album name',
+      toolName: AgentToolName.ProposeAlbumOperations,
+      args: {
+        summary: 'Album name too long.',
+        operations: [
+          {
             ...makeAlbumCreateOperation(),
-            temporaryTargetId: `tmp-portugal-${index}`,
-            payload: { albumName: `Portugal ${index}` },
-          })),
-        },
-        expectedPath: 'operations',
+            payload: { albumName: 'a'.repeat(201) },
+          },
+        ],
       },
-      {
-        name: 'proposal duplicate asset ids',
-        toolName: AgentToolName.ProposeAlbumOperations,
-        args: {
-          summary: 'Duplicate assets.',
-          operations: [
-            {
-              type: AgentOperationType.AlbumAddAssets,
-              summary: 'Add duplicate assets.',
-              targetKind: AgentOperationTargetKind.ExistingAlbum,
-              targetId: factory.uuid(),
-              assetIds: [assetId, assetId],
-            },
-          ],
-        },
-        expectedPath: 'operations.0.assetIds',
-      },
-      {
-        name: 'proposal missing new album temporary target',
-        toolName: AgentToolName.ProposeAlbumOperations,
-        args: {
-          summary: 'Missing temp id.',
-          operations: [
-            {
-              type: AgentOperationType.AlbumCreate,
-              summary: 'Create missing temp id.',
-              targetKind: AgentOperationTargetKind.NewAlbum,
-              payload: { albumName: 'Portugal' },
-            },
-          ],
-        },
-        expectedPath: 'operations.0.temporaryTargetId',
-      },
-      {
-        name: 'proposal excessive album name',
-        toolName: AgentToolName.ProposeAlbumOperations,
-        args: {
-          summary: 'Album name too long.',
-          operations: [
-            {
-              ...makeAlbumCreateOperation(),
-              payload: { albumName: 'a'.repeat(201) },
-            },
-          ],
-        },
-        expectedPath: 'operations.0.payload.albumName',
-      },
-      {
-        name: 'revision missing planId',
-        toolName: AgentToolName.ReviseProposedOperations,
-        args: makePlanningRequest(),
-        expectedPath: 'planId',
-      },
-      {
-        name: 'revision numeric planId',
-        toolName: AgentToolName.ReviseProposedOperations,
-        args: { planId: 12, ...makePlanningRequest() },
-        expectedPath: 'planId',
-      },
-      {
-        name: 'revision invalid planId',
-        toolName: AgentToolName.ReviseProposedOperations,
-        args: { planId: 'not-a-uuid', ...makePlanningRequest() },
-        expectedPath: 'planId',
-      },
-      {
-        name: 'revision excessive feedback',
-        toolName: AgentToolName.ReviseProposedOperations,
-        args: { planId: factory.uuid(), feedback: 'a'.repeat(2001), ...makePlanningRequest() },
-        expectedPath: 'feedback',
-      },
-      {
-        name: 'summary missing planId',
-        toolName: AgentToolName.SummarizePlan,
-        args: { focus: 'risk' },
-        expectedPath: 'planId',
-      },
-      {
-        name: 'summary numeric planId',
-        toolName: AgentToolName.SummarizePlan,
-        args: { planId: 12, focus: 'risk' },
-        expectedPath: 'planId',
-      },
-      {
-        name: 'summary wrong primitive focus',
-        toolName: AgentToolName.SummarizePlan,
-        args: { planId: factory.uuid(), focus: 12 },
-        expectedPath: 'focus',
-      },
-      {
-        name: 'summary invalid focus',
-        toolName: AgentToolName.SummarizePlan,
-        args: { planId: factory.uuid(), focus: '' },
-        expectedPath: 'focus',
-      },
-      {
-        name: 'summary excessive focus',
-        toolName: AgentToolName.SummarizePlan,
-        args: { planId: factory.uuid(), focus: 'a'.repeat(1001) },
-        expectedPath: 'focus',
-      },
-      {
-        name: 'summary unknown strict field',
-        toolName: AgentToolName.SummarizePlan,
-        args: { planId: factory.uuid(), focus: 'risk', unexpected: true },
-        expectedPath: '',
-      },
-    ])('returns isError tool result for malformed planning arguments: $name', async ({ toolName, args, expectedPath }) => {
-      const response = (await sut.handle(auth, sessionId, makeToolCallRequest(toolName, args))) as AgentMcpSuccessResponse;
+      expectedPath: 'operations.0.payload.albumName',
+    },
+    {
+      name: 'revision missing planId',
+      toolName: AgentToolName.ReviseProposedOperations,
+      args: makePlanningRequest(),
+      expectedPath: 'planId',
+    },
+    {
+      name: 'revision numeric planId',
+      toolName: AgentToolName.ReviseProposedOperations,
+      args: { planId: 12, ...makePlanningRequest() },
+      expectedPath: 'planId',
+    },
+    {
+      name: 'revision invalid planId',
+      toolName: AgentToolName.ReviseProposedOperations,
+      args: { planId: 'not-a-uuid', ...makePlanningRequest() },
+      expectedPath: 'planId',
+    },
+    {
+      name: 'revision excessive feedback',
+      toolName: AgentToolName.ReviseProposedOperations,
+      args: { planId: factory.uuid(), feedback: 'a'.repeat(2001), ...makePlanningRequest() },
+      expectedPath: 'feedback',
+    },
+    {
+      name: 'summary missing planId',
+      toolName: AgentToolName.SummarizePlan,
+      args: { focus: 'risk' },
+      expectedPath: 'planId',
+    },
+    {
+      name: 'summary numeric planId',
+      toolName: AgentToolName.SummarizePlan,
+      args: { planId: 12, focus: 'risk' },
+      expectedPath: 'planId',
+    },
+    {
+      name: 'summary wrong primitive focus',
+      toolName: AgentToolName.SummarizePlan,
+      args: { planId: factory.uuid(), focus: 12 },
+      expectedPath: 'focus',
+    },
+    {
+      name: 'summary invalid focus',
+      toolName: AgentToolName.SummarizePlan,
+      args: { planId: factory.uuid(), focus: '' },
+      expectedPath: 'focus',
+    },
+    {
+      name: 'summary excessive focus',
+      toolName: AgentToolName.SummarizePlan,
+      args: { planId: factory.uuid(), focus: 'a'.repeat(1001) },
+      expectedPath: 'focus',
+    },
+    {
+      name: 'summary unknown strict field',
+      toolName: AgentToolName.SummarizePlan,
+      args: { planId: factory.uuid(), focus: 'risk', unexpected: true },
+      expectedPath: '',
+    },
+  ])(
+    'returns isError tool result for malformed planning arguments: $name',
+    async ({ toolName, args, expectedPath }) => {
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(toolName, args),
+      )) as AgentMcpSuccessResponse;
 
       expectToolValidationError(response, expectedPath);
       expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
       expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
       expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
-    });
-  });
+    },
+  );
+});
 ```
 
 - [ ] **Step 7: Add already-applied summarize characterization coverage**
@@ -851,52 +856,52 @@ Append these tests near the existing malformed argument tests:
 In `server/src/services/agent-operation-plan.service.spec.ts`, append this test immediately after the existing `summarizes the current plan and writes a completed planning audit row` test:
 
 ```ts
-  it('summarizes an already-applied current plan and writes a completed planning audit row', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Completed });
-    const plan = makePlan({ sessionId: session.id, status: AgentOperationPlanStatus.Applied });
-    const executingToolCall = makeToolCall({
+it('summarizes an already-applied current plan and writes a completed planning audit row', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Completed });
+  const plan = makePlan({ sessionId: session.id, status: AgentOperationPlanStatus.Applied });
+  const executingToolCall = makeToolCall({
+    sessionId: session.id,
+    toolName: AgentToolName.SummarizePlan,
+    status: AgentToolCallStatus.Executing,
+  });
+  const completedToolCall = makeToolCall({ sessionId: session.id, toolName: AgentToolName.SummarizePlan });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+  toolCallRepository.create.mockResolvedValue(executingToolCall);
+  toolCallRepository.transition.mockResolvedValue(completedToolCall);
+
+  const result = await sut.summarizePlan(auth, session.id, plan.id, { focus: 'applied operations' });
+
+  expect(result).toMatchObject({
+    status: 'success',
+    plan: { id: plan.id, status: AgentOperationPlanStatus.Applied },
+    toolCall: { id: completedToolCall.id },
+  });
+  expect(toolCallRepository.create).toHaveBeenCalledWith(
+    expect.objectContaining({
       sessionId: session.id,
       toolName: AgentToolName.SummarizePlan,
       status: AgentToolCallStatus.Executing,
-    });
-    const completedToolCall = makeToolCall({ sessionId: session.id, toolName: AgentToolName.SummarizePlan });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-    toolCallRepository.create.mockResolvedValue(executingToolCall);
-    toolCallRepository.transition.mockResolvedValue(completedToolCall);
-
-    const result = await sut.summarizePlan(auth, session.id, plan.id, { focus: 'applied operations' });
-
-    expect(result).toMatchObject({
-      status: 'success',
-      plan: { id: plan.id, status: AgentOperationPlanStatus.Applied },
-      toolCall: { id: completedToolCall.id },
-    });
-    expect(toolCallRepository.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: session.id,
-        toolName: AgentToolName.SummarizePlan,
-        status: AgentToolCallStatus.Executing,
-        approvalDecision: AgentToolApprovalDecision.Approved,
-        dataClass: AgentToolDataClass.Plan,
-        redactedRequestMetadata: { planId: plan.id, operationCount: 0, operationTypes: [], albumIds: [], assetIds: [] },
-        redactedResponseMetadata: null,
-      }),
-    );
-    expect(toolCallRepository.transition).toHaveBeenCalledWith(
-      session.id,
-      executingToolCall.id,
-      AgentToolCallStatus.Executing,
-      expect.objectContaining({
-        status: AgentToolCallStatus.Completed,
-        approvalDecision: AgentToolApprovalDecision.Approved,
-        redactedResponseMetadata: { planId: plan.id, operationIds: plan.operations.map((operation) => operation.id) },
-        error: null,
-      }),
-    );
-  });
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      dataClass: AgentToolDataClass.Plan,
+      redactedRequestMetadata: { planId: plan.id, operationCount: 0, operationTypes: [], albumIds: [], assetIds: [] },
+      redactedResponseMetadata: null,
+    }),
+  );
+  expect(toolCallRepository.transition).toHaveBeenCalledWith(
+    session.id,
+    executingToolCall.id,
+    AgentToolCallStatus.Executing,
+    expect.objectContaining({
+      status: AgentToolCallStatus.Completed,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      redactedResponseMetadata: { planId: plan.id, operationIds: plan.operations.map((operation) => operation.id) },
+      error: null,
+    }),
+  );
+});
 ```
 
 This is a characterization test for behavior that already exists in `AgentOperationPlanService`. It protects the design requirement that `summarizePlan` handles already-applied current plans while Slice 4 routes MCP calls through that service unchanged.
@@ -914,6 +919,7 @@ Expected: FAIL because `AgentMcpService` does not accept `AgentOperationPlanServ
 ### Task 4: Implement Planning Tool Delegation
 
 **Files:**
+
 - Modify: `server/src/services/agent-mcp.service.ts`
 - Modify: `server/src/services/agent-mcp.service.spec.ts`
 - Modify: `server/src/services/agent-operation-plan.service.spec.ts`
@@ -942,25 +948,25 @@ Change the constructor:
 In `handleToolCall`, replace:
 
 ```ts
-    if (this.planningToolNames.has(name)) {
-      return this.error(request.id, -32_602, 'Tool not supported in this slice', { toolName: name });
-    }
+if (this.planningToolNames.has(name)) {
+  return this.error(request.id, -32_602, 'Tool not supported in this slice', { toolName: name });
+}
 
-    if (!this.isReadToolName(name)) {
-      return this.error(request.id, -32_602, 'Unknown tool', { toolName: name });
-    }
+if (!this.isReadToolName(name)) {
+  return this.error(request.id, -32_602, 'Unknown tool', { toolName: name });
+}
 ```
 
 with:
 
 ```ts
-    if (this.isPlanningToolName(name)) {
-      return this.handlePlanningToolCall(auth, sessionId, request.id, name, args);
-    }
+if (this.isPlanningToolName(name)) {
+  return this.handlePlanningToolCall(auth, sessionId, request.id, name, args);
+}
 
-    if (!this.isReadToolName(name)) {
-      return this.error(request.id, -32_602, 'Unknown tool', { toolName: name });
-    }
+if (!this.isReadToolName(name)) {
+  return this.error(request.id, -32_602, 'Unknown tool', { toolName: name });
+}
 ```
 
 Add this type guard next to `isReadToolName()`:
@@ -976,31 +982,31 @@ Add this type guard next to `isReadToolName()`:
 Replace read-only argument parsing in `handleToolCall`:
 
 ```ts
-    const schema = AgentReadToolRequestSchemas[name];
-    const argumentValidation = this.validateToolArguments(args);
-    if (!argumentValidation.valid) {
-      return this.success(request.id, this.argumentErrorResult(argumentValidation.path, argumentValidation.message));
-    }
+const schema = AgentReadToolRequestSchemas[name];
+const argumentValidation = this.validateToolArguments(args);
+if (!argumentValidation.valid) {
+  return this.success(request.id, this.argumentErrorResult(argumentValidation.path, argumentValidation.message));
+}
 
-    const parseResult = schema.safeParse(argumentValidation.value);
-    if (!parseResult.success) {
-      return this.success(request.id, this.validationErrorResult(parseResult.error));
-    }
+const parseResult = schema.safeParse(argumentValidation.value);
+if (!parseResult.success) {
+  return this.success(request.id, this.validationErrorResult(parseResult.error));
+}
 
-    try {
-      const result = await this.callReadTool(auth, sessionId, name, parseResult.data);
-      return this.success(request.id, this.toolResult(result));
-    } catch {
-      return this.error(request.id, -32_603, 'Internal error');
-    }
+try {
+  const result = await this.callReadTool(auth, sessionId, name, parseResult.data);
+  return this.success(request.id, this.toolResult(result));
+} catch {
+  return this.error(request.id, -32_603, 'Internal error');
+}
 ```
 
 with:
 
 ```ts
-    return this.invokeTool(request.id, args, AgentReadToolRequestSchemas[name], (dto) =>
-      this.callReadTool(auth, sessionId, name, dto),
-    );
+return this.invokeTool(request.id, args, AgentReadToolRequestSchemas[name], (dto) =>
+  this.callReadTool(auth, sessionId, name, dto),
+);
 ```
 
 Add this helper before `callReadTool()`:
@@ -1086,6 +1092,7 @@ git commit -m "feat: delegate mcp planning tool calls"
 ### Task 5: Write Failing Controller Coverage For Planning MCP Calls
 
 **Files:**
+
 - Modify: `server/src/controllers/agent-runner-mcp.controller.spec.ts`
 
 - [ ] **Step 1: Add controller planning imports**
@@ -1093,12 +1100,7 @@ git commit -m "feat: delegate mcp planning tool calls"
 In `server/src/controllers/agent-runner-mcp.controller.spec.ts`, replace the current `src/enum` import with:
 
 ```ts
-import {
-  AgentOperationRiskLevel,
-  AgentOperationTargetKind,
-  AgentOperationType,
-  AgentToolName,
-} from 'src/enum';
+import { AgentOperationRiskLevel, AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
 ```
 
 Add the operation-plan service import:
@@ -1112,65 +1114,65 @@ import { AgentOperationPlanService } from 'src/services/agent-operation-plan.ser
 Inside `describe('with the real MCP service', ...)`, add the operation-plan mock variable but do not add it to the test module providers yet:
 
 ```ts
-    const realOperationPlanService = automock(AgentOperationPlanService, { strict: false });
+const realOperationPlanService = automock(AgentOperationPlanService, { strict: false });
 ```
 
 Append inside `describe('with the real MCP service', ...)`:
 
 ```ts
-    it('passes runner auth and session id through for planning tools/call', async () => {
-      const serviceResult = {
-        status: 'success',
-        plan: { id: factory.uuid(), revision: 1, operations: [] },
-        toolCall: null,
-        summary: 'Plan revision 1 is ready for review.',
-      };
-      const body = {
+it('passes runner auth and session id through for planning tools/call', async () => {
+  const serviceResult = {
+    status: 'success',
+    plan: { id: factory.uuid(), revision: 1, operations: [] },
+    toolCall: null,
+    summary: 'Plan revision 1 is ready for review.',
+  };
+  const body = {
+    summary: 'Create Portugal highlights.',
+    operations: [
+      {
+        type: AgentOperationType.AlbumCreate,
         summary: 'Create Portugal highlights.',
-        operations: [
-          {
-            type: AgentOperationType.AlbumCreate,
-            summary: 'Create Portugal highlights.',
-            targetKind: AgentOperationTargetKind.NewAlbum,
-            temporaryTargetId: 'tmp-portugal',
-            riskLevel: AgentOperationRiskLevel.Low,
-            enabled: true,
-            payload: { albumName: 'Portugal highlights', description: '' },
-          },
-        ],
-      };
-      realOperationPlanService.proposeAlbumOperations.mockResolvedValue(serviceResult as never);
+        targetKind: AgentOperationTargetKind.NewAlbum,
+        temporaryTargetId: 'tmp-portugal',
+        riskLevel: AgentOperationRiskLevel.Low,
+        enabled: true,
+        payload: { albumName: 'Portugal highlights', description: '' },
+      },
+    ],
+  };
+  realOperationPlanService.proposeAlbumOperations.mockResolvedValue(serviceResult as never);
 
-      const { status, body: responseBody } = await request(realCtx.getHttpServer())
-        .post(`/agent/internal/mcp/sessions/${sessionId}`)
-        .set('Authorization', authorization)
-        .send({
-          jsonrpc: '2.0',
-          id: 'planning-call-1',
-          method: 'tools/call',
-          params: {
-            name: AgentToolName.ProposeAlbumOperations,
-            arguments: body,
-          },
-        });
-
-      expect(status).toBe(200);
-      expect(tokenService.verify).toHaveBeenCalledWith(token);
-      expect(realCtx.authenticate).not.toHaveBeenCalled();
-      expect(realOperationPlanService.proposeAlbumOperations).toHaveBeenCalledWith(
-        expect.objectContaining({ user: { id: userId } }),
-        sessionId,
-        body,
-      );
-      expect(responseBody).toEqual({
-        jsonrpc: '2.0',
-        id: 'planning-call-1',
-        result: {
-          content: [{ type: 'text', text: JSON.stringify(serviceResult) }],
-          structuredContent: serviceResult,
-        },
-      });
+  const { status, body: responseBody } = await request(realCtx.getHttpServer())
+    .post(`/agent/internal/mcp/sessions/${sessionId}`)
+    .set('Authorization', authorization)
+    .send({
+      jsonrpc: '2.0',
+      id: 'planning-call-1',
+      method: 'tools/call',
+      params: {
+        name: AgentToolName.ProposeAlbumOperations,
+        arguments: body,
+      },
     });
+
+  expect(status).toBe(200);
+  expect(tokenService.verify).toHaveBeenCalledWith(token);
+  expect(realCtx.authenticate).not.toHaveBeenCalled();
+  expect(realOperationPlanService.proposeAlbumOperations).toHaveBeenCalledWith(
+    expect.objectContaining({ user: { id: userId } }),
+    sessionId,
+    body,
+  );
+  expect(responseBody).toEqual({
+    jsonrpc: '2.0',
+    id: 'planning-call-1',
+    result: {
+      content: [{ type: 'text', text: JSON.stringify(serviceResult) }],
+      structuredContent: serviceResult,
+    },
+  });
+});
 ```
 
 - [ ] **Step 3: Run controller tests to verify the new test fails**
@@ -1186,6 +1188,7 @@ Expected: FAIL because the real MCP service test module cannot construct `AgentM
 ### Task 6: Implement Controller Planning Provider Wiring
 
 **Files:**
+
 - Modify: `server/src/controllers/agent-runner-mcp.controller.spec.ts`
 
 - [ ] **Step 1: Add operation plan service provider to the real-service controller test**
@@ -1199,7 +1202,7 @@ Inside `describe('with the real MCP service', ...)`, add the provider to the rea
 Reset it in `beforeEach()`:
 
 ```ts
-      realOperationPlanService.resetAllMocks();
+realOperationPlanService.resetAllMocks();
 ```
 
 - [ ] **Step 2: Run controller tests to verify they pass**
@@ -1224,6 +1227,7 @@ git commit -m "test: cover mcp planning controller auth"
 ### Task 7: Final Verification And Review
 
 **Files:**
+
 - Verify only
 
 - [ ] **Step 1: Run full Slice 4 focused server suite**

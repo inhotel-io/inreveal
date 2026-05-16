@@ -199,7 +199,7 @@ const makeToolCall = (sessionId: string): AgentToolCallResponseDto => ({
   approvalDecision: null,
   requestSummary: 'Search recent favorites',
   responseSummary: null,
-  dataClass: AgentToolDataClass.Metadata,
+  dataClass: 'metadata' as AgentToolDataClass,
   assetCount: 4,
   albumCount: 0,
   startedAt: '2026-05-16T10:00:00.000Z',
@@ -390,7 +390,9 @@ describe(AgentConversationPane.name, () => {
     });
 
     expect(await screen.findByRole('textbox', { name: 'Message' })).toBeDisabled();
-    expect(screen.getByText('Operations are being applied. You can review this session after it finishes.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Operations are being applied. You can review this session after it finishes.'),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Start new chat' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   });
@@ -439,7 +441,7 @@ describe(AgentConversationPane.name, () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
   });
 
-  it('does not offer or invoke cancel for non-cancellable sessions', async () => {
+  it('does not offer or invoke cancel for non-cancellable sessions', () => {
     const session = makeSession({ status: AgentSessionStatus.Completed });
 
     render(AgentConversationPane, {

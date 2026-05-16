@@ -25,13 +25,12 @@ describe('agent session lifecycle UI helpers', () => {
     expect(isAgentSessionCancellable(status)).toBe(false);
   });
 
-  it.each([
-    AgentSessionStatus.Completed,
-    AgentSessionStatus.Cancelled,
-    AgentSessionStatus.Failed,
-  ])('marks %s sessions as terminal', (status) => {
-    expect(isAgentSessionTerminal(status)).toBe(true);
-  });
+  it.each([AgentSessionStatus.Completed, AgentSessionStatus.Cancelled, AgentSessionStatus.Failed])(
+    'marks %s sessions as terminal',
+    (status) => {
+      expect(isAgentSessionTerminal(status)).toBe(true);
+    },
+  );
 
   it('returns enabled send state for created and running sessions', () => {
     expect(getAgentSessionComposerState(AgentSessionStatus.Created, { pendingApprovalCount: 0 })).toMatchObject({

@@ -27,6 +27,7 @@ class AgentSessionResponseDto {
     required this.runnerEndpoint,
     required this.runnerSessionId,
     required this.status,
+    this.title,
     required this.updatedAt,
   });
 
@@ -58,6 +59,8 @@ class AgentSessionResponseDto {
 
   AgentSessionStatus status;
 
+  String? title;
+
   DateTime updatedAt;
 
   @override
@@ -76,6 +79,7 @@ class AgentSessionResponseDto {
     other.runnerEndpoint == runnerEndpoint &&
     other.runnerSessionId == runnerSessionId &&
     other.status == status &&
+    other.title == title &&
     other.updatedAt == updatedAt;
 
   @override
@@ -95,10 +99,11 @@ class AgentSessionResponseDto {
     (runnerEndpoint == null ? 0 : runnerEndpoint!.hashCode) +
     (runnerSessionId == null ? 0 : runnerSessionId!.hashCode) +
     (status.hashCode) +
+    (title == null ? 0 : title!.hashCode) +
     (updatedAt.hashCode);
 
   @override
-  String toString() => 'AgentSessionResponseDto[approvalMode=$approvalMode, createdAt=$createdAt, credentialSnapshot=$credentialSnapshot, endedAt=$endedAt, id=$id, initialContextSnapshot=$initialContextSnapshot, modelSnapshot=$modelSnapshot, permissionPlanSnapshot=$permissionPlanSnapshot, permissionPreset=$permissionPreset, providerCredentialId=$providerCredentialId, runnerCapabilitiesSnapshot=$runnerCapabilitiesSnapshot, runnerEndpoint=$runnerEndpoint, runnerSessionId=$runnerSessionId, status=$status, updatedAt=$updatedAt]';
+  String toString() => 'AgentSessionResponseDto[approvalMode=$approvalMode, createdAt=$createdAt, credentialSnapshot=$credentialSnapshot, endedAt=$endedAt, id=$id, initialContextSnapshot=$initialContextSnapshot, modelSnapshot=$modelSnapshot, permissionPlanSnapshot=$permissionPlanSnapshot, permissionPreset=$permissionPreset, providerCredentialId=$providerCredentialId, runnerCapabilitiesSnapshot=$runnerCapabilitiesSnapshot, runnerEndpoint=$runnerEndpoint, runnerSessionId=$runnerSessionId, status=$status, title=$title, updatedAt=$updatedAt]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -140,6 +145,11 @@ class AgentSessionResponseDto {
     //  json[r'runnerSessionId'] = null;
     }
       json[r'status'] = this.status;
+    if (this.title != null) {
+      json[r'title'] = this.title;
+    } else {
+    //  json[r'title'] = null;
+    }
       json[r'updatedAt'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
         ? this.updatedAt.millisecondsSinceEpoch
         : this.updatedAt.toUtc().toIso8601String();
@@ -169,6 +179,7 @@ class AgentSessionResponseDto {
         runnerEndpoint: mapValueOfType<String>(json, r'runnerEndpoint'),
         runnerSessionId: mapValueOfType<String>(json, r'runnerSessionId'),
         status: AgentSessionStatus.fromJson(json[r'status'])!,
+        title: mapValueOfType<String>(json, r'title'),
         updatedAt: mapDateTime(json, r'updatedAt', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')!,
       );
     }

@@ -86,84 +86,82 @@ Extend the enum import from `src/enum`:
 Add these tests near the existing operation-plan response tests:
 
 ```ts
-  it('accepts a unique apply operation id list', () => {
-    const firstOperationId = factory.uuid();
-    const secondOperationId = factory.uuid();
+it('accepts a unique apply operation id list', () => {
+  const firstOperationId = factory.uuid();
+  const secondOperationId = factory.uuid();
 
-    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
-      operationIds: [firstOperationId, secondOperationId],
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.data).toEqual({ operationIds: [firstOperationId, secondOperationId] });
+  const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+    operationIds: [firstOperationId, secondOperationId],
   });
 
-  it('rejects duplicate apply operation ids', () => {
-    const operationId = factory.uuid();
+  expect(result.success).toBe(true);
+  expect(result.data).toEqual({ operationIds: [firstOperationId, secondOperationId] });
+});
 
-    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
-      operationIds: [operationId, operationId],
-    });
+it('rejects duplicate apply operation ids', () => {
+  const operationId = factory.uuid();
 
-    expect(result.success).toBe(false);
-    expect(result.error?.issues).toEqual([
-      expect.objectContaining({ message: 'operationIds must be unique' }),
-    ]);
+  const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+    operationIds: [operationId, operationId],
   });
 
-  it('rejects an empty apply operation id list', () => {
-    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({ operationIds: [] });
+  expect(result.success).toBe(false);
+  expect(result.error?.issues).toEqual([expect.objectContaining({ message: 'operationIds must be unique' })]);
+});
 
-    expect(result.success).toBe(false);
+it('rejects an empty apply operation id list', () => {
+  const result = AgentOperationPlanApplyRequestDto.schema.safeParse({ operationIds: [] });
+
+  expect(result.success).toBe(false);
+});
+
+it('accepts an apply response with per-operation result groups', () => {
+  const planId = factory.uuid();
+  const operationId = factory.uuid();
+  const createdAt = '2026-05-16T12:00:00.000Z';
+  const updatedAt = '2026-05-16T12:00:01.000Z';
+
+  const result = AgentOperationPlanApplyResponseDto.schema.safeParse({
+    status: AgentOperationApplyStatus.Applied,
+    plan: {
+      id: planId,
+      sessionId: factory.uuid(),
+      revision: 1,
+      status: AgentOperationPlanStatus.Applied,
+      summary: 'Portugal plan.',
+      operations: [
+        {
+          id: operationId,
+          planId,
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Portugal.',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          targetId: null,
+          temporaryTargetId: 'tmp-portugal',
+          assetIds: [],
+          payload: { albumName: 'Portugal' },
+          dependencyIds: [],
+          riskLevel: AgentOperationRiskLevel.Low,
+          enabled: true,
+          status: AgentOperationStatus.Applied,
+          result: { albumId: factory.uuid() },
+          error: null,
+          createdAt,
+          updatedAt,
+        },
+      ],
+      createdAt,
+      updatedAt,
+    },
+    appliedOperationIds: [operationId],
+    skippedOperationIds: [],
+    failedOperationIds: [],
+    summary: 'Applied 1 operation.',
   });
 
-  it('accepts an apply response with per-operation result groups', () => {
-    const planId = factory.uuid();
-    const operationId = factory.uuid();
-    const createdAt = '2026-05-16T12:00:00.000Z';
-    const updatedAt = '2026-05-16T12:00:01.000Z';
-
-    const result = AgentOperationPlanApplyResponseDto.schema.safeParse({
-      status: AgentOperationApplyStatus.Applied,
-      plan: {
-        id: planId,
-        sessionId: factory.uuid(),
-        revision: 1,
-        status: AgentOperationPlanStatus.Applied,
-        summary: 'Portugal plan.',
-        operations: [
-          {
-            id: operationId,
-            planId,
-            type: AgentOperationType.AlbumCreate,
-            summary: 'Create Portugal.',
-            targetKind: AgentOperationTargetKind.NewAlbum,
-            targetId: null,
-            temporaryTargetId: 'tmp-portugal',
-            assetIds: [],
-            payload: { albumName: 'Portugal' },
-            dependencyIds: [],
-            riskLevel: AgentOperationRiskLevel.Low,
-            enabled: true,
-            status: AgentOperationStatus.Applied,
-            result: { albumId: factory.uuid() },
-            error: null,
-            createdAt,
-            updatedAt,
-          },
-        ],
-        createdAt,
-        updatedAt,
-      },
-      appliedOperationIds: [operationId],
-      skippedOperationIds: [],
-      failedOperationIds: [],
-      summary: 'Applied 1 operation.',
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.data?.plan.operations[0].createdAt).toEqual(new Date(createdAt));
-  });
+  expect(result.success).toBe(true);
+  expect(result.data?.plan.operations[0].createdAt).toEqual(new Date(createdAt));
+});
 ```
 
 - [ ] **Step 2: Run DTO tests and verify they fail**
@@ -215,9 +213,7 @@ In `server/src/dtos/agent-operation.dto.ts`, import `AgentOperationApplyStatus` 
 Add the apply status schema next to the existing plan status schema:
 
 ```ts
-const AgentOperationApplyStatusSchema = z
-  .enum(AgentOperationApplyStatus)
-  .meta({ id: 'AgentOperationApplyStatus' });
+const AgentOperationApplyStatusSchema = z.enum(AgentOperationApplyStatus).meta({ id: 'AgentOperationApplyStatus' });
 ```
 
 Add the unique operation ID schema after `uniqueAssetIds`:
@@ -296,83 +292,83 @@ git commit -m "feat(server): add agent operation apply dto contracts"
 Add these tests to `server/test/medium/specs/repositories/agent-operation-plan.repository.spec.ts`:
 
 ```ts
-  it('claims a current proposed plan for apply by marking it applied', async () => {
-    const { ctx, credentialRepository, sessionRepository, sut } = setup();
-    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
-    const plan = await sut.createRevision(
-      planRevisionInput(session.id, {
-        revision: 1,
-        summary: 'Apply me',
-        operations: [createAlbumOperation('apply-album'), addAssetsOperation('apply-album')],
-      }),
-    );
+it('claims a current proposed plan for apply by marking it applied', async () => {
+  const { ctx, credentialRepository, sessionRepository, sut } = setup();
+  const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+  const plan = await sut.createRevision(
+    planRevisionInput(session.id, {
+      revision: 1,
+      summary: 'Apply me',
+      operations: [createAlbumOperation('apply-album'), addAssetsOperation('apply-album')],
+    }),
+  );
 
-    const claimed = await sut.claimCurrentForApply(session.id, plan.id);
+  const claimed = await sut.claimCurrentForApply(session.id, plan.id);
 
-    expect(claimed).toMatchObject({
-      id: plan.id,
-      sessionId: session.id,
-      status: AgentOperationPlanStatus.Applied,
-    });
-    expect(claimed?.operations.map((operation) => operation.id)).toEqual(
-      plan.operations.map((operation) => operation.id),
-    );
-    await expect(sut.getCurrentBySessionId(session.id)).resolves.toBeUndefined();
+  expect(claimed).toMatchObject({
+    id: plan.id,
+    sessionId: session.id,
+    status: AgentOperationPlanStatus.Applied,
   });
+  expect(claimed?.operations.map((operation) => operation.id)).toEqual(
+    plan.operations.map((operation) => operation.id),
+  );
+  await expect(sut.getCurrentBySessionId(session.id)).resolves.toBeUndefined();
+});
 
-  it('does not claim an already applied plan twice', async () => {
-    const { ctx, credentialRepository, sessionRepository, sut } = setup();
-    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
-    const plan = await sut.createRevision(
-      planRevisionInput(session.id, {
-        revision: 1,
-        summary: 'Apply once',
-        operations: [createAlbumOperation('once-album')],
-      }),
-    );
+it('does not claim an already applied plan twice', async () => {
+  const { ctx, credentialRepository, sessionRepository, sut } = setup();
+  const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+  const plan = await sut.createRevision(
+    planRevisionInput(session.id, {
+      revision: 1,
+      summary: 'Apply once',
+      operations: [createAlbumOperation('once-album')],
+    }),
+  );
 
-    await expect(sut.claimCurrentForApply(session.id, plan.id)).resolves.toMatchObject({ id: plan.id });
-    await expect(sut.claimCurrentForApply(session.id, plan.id)).resolves.toBeUndefined();
-  });
+  await expect(sut.claimCurrentForApply(session.id, plan.id)).resolves.toMatchObject({ id: plan.id });
+  await expect(sut.claimCurrentForApply(session.id, plan.id)).resolves.toBeUndefined();
+});
 
-  it('persists operation apply statuses, results, and errors', async () => {
-    const { ctx, credentialRepository, sessionRepository, sut } = setup();
-    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
-    const plan = await sut.createRevision(
-      planRevisionInput(session.id, {
-        revision: 1,
-        summary: 'Persist results',
-        operations: [createAlbumOperation('result-album'), addAssetsOperation('result-album')],
-      }),
-    );
-    const [createOperation, addOperation] = plan.operations;
-    await sut.claimCurrentForApply(session.id, plan.id);
+it('persists operation apply statuses, results, and errors', async () => {
+  const { ctx, credentialRepository, sessionRepository, sut } = setup();
+  const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+  const plan = await sut.createRevision(
+    planRevisionInput(session.id, {
+      revision: 1,
+      summary: 'Persist results',
+      operations: [createAlbumOperation('result-album'), addAssetsOperation('result-album')],
+    }),
+  );
+  const [createOperation, addOperation] = plan.operations;
+  await sut.claimCurrentForApply(session.id, plan.id);
 
-    const updated = await sut.completeApply(plan.id, [
-      {
-        id: createOperation.id,
-        status: AgentOperationStatus.Applied,
-        result: { albumId: factory.uuid() },
-        error: null,
-      },
-      {
-        id: addOperation.id,
-        status: AgentOperationStatus.Skipped,
-        result: { skippedReason: 'Dependency was not applied' },
-        error: null,
-      },
-    ]);
+  const updated = await sut.completeApply(plan.id, [
+    {
+      id: createOperation.id,
+      status: AgentOperationStatus.Applied,
+      result: { albumId: factory.uuid() },
+      error: null,
+    },
+    {
+      id: addOperation.id,
+      status: AgentOperationStatus.Skipped,
+      result: { skippedReason: 'Dependency was not applied' },
+      error: null,
+    },
+  ]);
 
-    expect(updated.status).toBe(AgentOperationPlanStatus.Applied);
-    expect(updated.operations).toEqual([
-      expect.objectContaining({ id: createOperation.id, status: AgentOperationStatus.Applied, error: null }),
-      expect.objectContaining({
-        id: addOperation.id,
-        status: AgentOperationStatus.Skipped,
-        result: { skippedReason: 'Dependency was not applied' },
-      }),
-    ]);
-  });
+  expect(updated.status).toBe(AgentOperationPlanStatus.Applied);
+  expect(updated.operations).toEqual([
+    expect.objectContaining({ id: createOperation.id, status: AgentOperationStatus.Applied, error: null }),
+    expect.objectContaining({
+      id: addOperation.id,
+      status: AgentOperationStatus.Skipped,
+      result: { skippedReason: 'Dependency was not applied' },
+    }),
+  ]);
+});
 ```
 
 - [ ] **Step 2: Run repository medium tests and verify they fail**
@@ -544,13 +540,13 @@ import { automock, mockBaseService } from 'test/utils';
 Add an `albumService` mock in the `describe` block:
 
 ```ts
-  let albumService: ReturnType<typeof automock<AlbumService>>;
+let albumService: ReturnType<typeof automock<AlbumService>>;
 ```
 
 Create it in `beforeEach()` before `sut`:
 
 ```ts
-    albumService = mockBaseService(AlbumService);
+albumService = mockBaseService(AlbumService);
 ```
 
 Pass it to the service constructor immediately after `assetRepository`:
@@ -562,537 +558,549 @@ Pass it to the service constructor immediately after `assetRepository`:
 Add these tests after the existing `summarizes the current plan` test:
 
 ```ts
-  it('applies selected album operations in stored order and marks the session completed', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
-    const albumId = newUuid();
-    const assetId = newUuid();
-    const createOperation = makeOperation({
-      id: newUuid(),
-      planId: 'plan-id',
-      position: 0,
-      type: AgentOperationType.AlbumCreate,
-      temporaryTargetId: 'tmp-portugal',
-      payload: { albumName: 'Portugal', description: 'Lisbon and Porto' },
-    });
-    const addOperation = makeOperation({
-      id: newUuid(),
-      planId: 'plan-id',
-      position: 1,
-      type: AgentOperationType.AlbumAddAssets,
-      targetKind: AgentOperationTargetKind.NewAlbum,
-      temporaryTargetId: 'tmp-portugal',
-      assetIds: [assetId],
-      payload: {},
-      dependencyIds: [createOperation.id],
-    });
-    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [createOperation, addOperation] });
-    const appliedPlan = makePlan({
-      ...plan,
-      status: AgentOperationPlanStatus.Applied,
-      operations: [
-        { ...createOperation, status: AgentOperationStatus.Applied, result: { albumId } },
-        { ...addOperation, status: AgentOperationStatus.Applied, result: { albumId, assetIds: [assetId] } },
-      ],
-    });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
-    planRepository.completeApply.mockResolvedValue(appliedPlan);
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
-    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
-    albumService.create.mockResolvedValue({ id: albumId } as never);
-    albumService.addAssets.mockResolvedValue([{ id: assetId, success: true }]);
+it('applies selected album operations in stored order and marks the session completed', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+  const albumId = newUuid();
+  const assetId = newUuid();
+  const createOperation = makeOperation({
+    id: newUuid(),
+    planId: 'plan-id',
+    position: 0,
+    type: AgentOperationType.AlbumCreate,
+    temporaryTargetId: 'tmp-portugal',
+    payload: { albumName: 'Portugal', description: 'Lisbon and Porto' },
+  });
+  const addOperation = makeOperation({
+    id: newUuid(),
+    planId: 'plan-id',
+    position: 1,
+    type: AgentOperationType.AlbumAddAssets,
+    targetKind: AgentOperationTargetKind.NewAlbum,
+    temporaryTargetId: 'tmp-portugal',
+    assetIds: [assetId],
+    payload: {},
+    dependencyIds: [createOperation.id],
+  });
+  const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [createOperation, addOperation] });
+  const appliedPlan = makePlan({
+    ...plan,
+    status: AgentOperationPlanStatus.Applied,
+    operations: [
+      { ...createOperation, status: AgentOperationStatus.Applied, result: { albumId } },
+      { ...addOperation, status: AgentOperationStatus.Applied, result: { albumId, assetIds: [assetId] } },
+    ],
+  });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+  planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+  planRepository.completeApply.mockResolvedValue(appliedPlan);
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+  assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+  albumService.create.mockResolvedValue({ id: albumId } as never);
+  albumService.addAssets.mockResolvedValue([{ id: assetId, success: true }]);
 
-    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
-      operationIds: [createOperation.id, addOperation.id],
-    });
-
-    expect(result).toMatchObject({
-      status: AgentOperationApplyStatus.Applied,
-      appliedOperationIds: [createOperation.id, addOperation.id],
-      skippedOperationIds: [],
-      failedOperationIds: [],
-      plan: { id: plan.id, status: AgentOperationPlanStatus.Applied },
-    });
-    expect(sessionRepository.update).toHaveBeenNthCalledWith(1, auth.user.id, session.id, {
-      status: AgentSessionStatus.Applying,
-    });
-    expect(albumService.create).toHaveBeenCalledWith(auth, {
-      albumName: 'Portugal',
-      description: 'Lisbon and Porto',
-      assetIds: [],
-    });
-    expect(albumService.addAssets).toHaveBeenCalledWith(auth, albumId, { ids: [assetId] });
-    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
-      expect.objectContaining({ id: createOperation.id, status: AgentOperationStatus.Applied }),
-      expect.objectContaining({ id: addOperation.id, status: AgentOperationStatus.Applied }),
-    ]);
-    expect(sessionRepository.update).toHaveBeenLastCalledWith(auth.user.id, session.id, {
-      status: AgentSessionStatus.Completed,
-      endedAt: expect.any(Date),
-    });
-    expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', auth.user.id, {
-      type: 'operation-plan-applied',
-      sessionId: session.id,
-      planId: plan.id,
-      status: AgentOperationApplyStatus.Applied,
-      appliedCount: 2,
-      skippedCount: 0,
-      failedCount: 0,
-    });
+  const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+    operationIds: [createOperation.id, addOperation.id],
   });
 
-  it('skips unselected operations and selected dependents whose dependency was not applied', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
-    const createOperation = makeOperation({ id: newUuid(), planId: 'plan-id', temporaryTargetId: 'tmp-portugal' });
-    const addOperation = makeOperation({
-      id: newUuid(),
-      planId: 'plan-id',
-      position: 1,
-      type: AgentOperationType.AlbumAddAssets,
-      targetKind: AgentOperationTargetKind.NewAlbum,
-      temporaryTargetId: 'tmp-portugal',
-      assetIds: [newUuid()],
-      payload: {},
-      dependencyIds: [createOperation.id],
-    });
-    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [createOperation, addOperation] });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
-    planRepository.completeApply.mockResolvedValue({
-      ...plan,
-      status: AgentOperationPlanStatus.Applied,
-      operations: [
-        {
-          ...createOperation,
-          status: AgentOperationStatus.Skipped,
-          result: { skippedReason: 'Operation was not selected for apply' },
-        },
-        {
-          ...addOperation,
-          status: AgentOperationStatus.Skipped,
-          result: { skippedReason: 'Dependency was not applied' },
-        },
-      ],
-    });
-
-    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [addOperation.id] });
-
-    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
-    expect(result.appliedOperationIds).toEqual([]);
-    expect(result.skippedOperationIds).toEqual([createOperation.id, addOperation.id]);
-    expect(albumService.create).not.toHaveBeenCalled();
-    expect(albumService.addAssets).not.toHaveBeenCalled();
+  expect(result).toMatchObject({
+    status: AgentOperationApplyStatus.Applied,
+    appliedOperationIds: [createOperation.id, addOperation.id],
+    skippedOperationIds: [],
+    failedOperationIds: [],
+    plan: { id: plan.id, status: AgentOperationPlanStatus.Applied },
   });
-
-  it('rejects unknown operation ids before claiming the plan', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
-    const plan = makePlan({ sessionId: session.id });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-
-    await expect(
-      sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [newUuid()] }),
-    ).rejects.toThrow('One or more operation ids are not in the current plan');
-    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
-    expect(albumService.create).not.toHaveBeenCalled();
+  expect(sessionRepository.update).toHaveBeenNthCalledWith(1, auth.user.id, session.id, {
+    status: AgentSessionStatus.Applying,
   });
-
-  it('rejects non-current plans before claiming the plan', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
-    const staleOperation = makeOperation();
-    const stalePlan = makePlan({ id: newUuid(), sessionId: session.id, operations: [staleOperation] });
-    const currentPlan = makePlan({ id: newUuid(), sessionId: session.id, revision: 2 });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(stalePlan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(currentPlan);
-
-    await expect(
-      sut.applyApprovedOperations(auth, session.id, stalePlan.id, { operationIds: [staleOperation.id] }),
-    ).rejects.toBeInstanceOf(NotFoundException);
-    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
-    expect(albumService.create).not.toHaveBeenCalled();
+  expect(albumService.create).toHaveBeenCalledWith(auth, {
+    albumName: 'Portugal',
+    description: 'Lisbon and Porto',
+    assetIds: [],
   });
-
-  it('rejects stored-disabled operation ids before claiming the plan', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
-    const disabledOperation = makeOperation({ enabled: false });
-    const plan = makePlan({ sessionId: session.id, operations: [disabledOperation] });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-
-    await expect(
-      sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [disabledOperation.id] }),
-    ).rejects.toThrow('One or more operation ids are disabled in the current plan');
-    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
-    expect(albumService.create).not.toHaveBeenCalled();
+  expect(albumService.addAssets).toHaveBeenCalledWith(auth, albumId, { ids: [assetId] });
+  expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+    expect.objectContaining({ id: createOperation.id, status: AgentOperationStatus.Applied }),
+    expect.objectContaining({ id: addOperation.id, status: AgentOperationStatus.Applied }),
+  ]);
+  expect(sessionRepository.update).toHaveBeenLastCalledWith(auth.user.id, session.id, {
+    status: AgentSessionStatus.Completed,
+    endedAt: expect.any(Date),
   });
-
-  it('rejects apply requests unless the session is waiting for plan review', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Running });
-    const operation = makeOperation();
-    const plan = makePlan({ sessionId: session.id, operations: [operation] });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-
-    await expect(
-      sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] }),
-    ).rejects.toThrow('Agent session is not waiting for plan review');
-    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
-    expect(albumService.create).not.toHaveBeenCalled();
+  expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', auth.user.id, {
+    type: 'operation-plan-applied',
+    sessionId: session.id,
+    planId: plan.id,
+    status: AgentOperationApplyStatus.Applied,
+    appliedCount: 2,
+    skippedCount: 0,
+    failedCount: 0,
   });
+});
 
-  it('does not mutate albums when the apply claim loses a race after validation', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
-    const operation = makeOperation();
-    const plan = makePlan({ sessionId: session.id, operations: [operation] });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-    planRepository.claimCurrentForApply.mockResolvedValue(void 0);
-
-    await expect(
-      sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] }),
-    ).rejects.toBeInstanceOf(NotFoundException);
-    expect(sessionRepository.update).not.toHaveBeenCalledWith(auth.user.id, session.id, {
-      status: AgentSessionStatus.Applying,
-    });
-    expect(albumService.create).not.toHaveBeenCalled();
-    expect(planRepository.completeApply).not.toHaveBeenCalled();
+it('skips unselected operations and selected dependents whose dependency was not applied', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+  const createOperation = makeOperation({ id: newUuid(), planId: 'plan-id', temporaryTargetId: 'tmp-portugal' });
+  const addOperation = makeOperation({
+    id: newUuid(),
+    planId: 'plan-id',
+    position: 1,
+    type: AgentOperationType.AlbumAddAssets,
+    targetKind: AgentOperationTargetKind.NewAlbum,
+    temporaryTargetId: 'tmp-portugal',
+    assetIds: [newUuid()],
+    payload: {},
+    dependencyIds: [createOperation.id],
   });
-
-  it('applies existing-album detail and cover operations through AlbumService.update', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
-    const albumId = newUuid();
-    const coverAssetId = newUuid();
-    const updateOperation = makeOperation({
-      id: newUuid(),
-      planId: 'plan-id',
-      type: AgentOperationType.AlbumUpdateDetails,
-      targetKind: AgentOperationTargetKind.ExistingAlbum,
-      targetId: albumId,
-      temporaryTargetId: null,
-      payload: { albumName: 'Portugal highlights', description: 'Edited description' },
-    });
-    const coverOperation = makeOperation({
-      id: newUuid(),
-      planId: 'plan-id',
-      position: 1,
-      type: AgentOperationType.AlbumSetCover,
-      targetKind: AgentOperationTargetKind.ExistingAlbum,
-      targetId: albumId,
-      temporaryTargetId: null,
-      assetIds: [coverAssetId],
-      payload: {},
-    });
-    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [updateOperation, coverOperation] });
-    const appliedPlan = makePlan({
-      ...plan,
-      status: AgentOperationPlanStatus.Applied,
-      operations: [
-        { ...updateOperation, status: AgentOperationStatus.Applied, result: { albumId } },
-        { ...coverOperation, status: AgentOperationStatus.Applied, result: { albumId, assetIds: [coverAssetId] } },
-      ],
-    });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
-    planRepository.completeApply.mockResolvedValue(appliedPlan);
-    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([coverAssetId]));
-    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([coverAssetId]));
-    albumService.update.mockResolvedValue({ id: albumId } as never);
-
-    await expect(
-      sut.applyApprovedOperations(auth, session.id, plan.id, {
-        operationIds: [updateOperation.id, coverOperation.id],
-      }),
-    ).resolves.toMatchObject({ status: AgentOperationApplyStatus.Applied });
-    expect(albumService.update).toHaveBeenNthCalledWith(1, auth, albumId, {
-      albumName: 'Portugal highlights',
-      description: 'Edited description',
-    });
-    expect(albumService.update).toHaveBeenNthCalledWith(2, auth, albumId, { albumThumbnailAssetId: coverAssetId });
-  });
-
-  it('reports partial success when one independent selected operation applies and another fails', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
-    const albumId = newUuid();
-    const createOperation = makeOperation({ id: newUuid(), planId: 'plan-id', temporaryTargetId: 'tmp-portugal' });
-    const updateOperation = makeOperation({
-      id: newUuid(),
-      planId: 'plan-id',
-      position: 1,
-      type: AgentOperationType.AlbumUpdateDetails,
-      targetKind: AgentOperationTargetKind.ExistingAlbum,
-      targetId: albumId,
-      temporaryTargetId: null,
-      payload: { albumName: 'Existing renamed' },
-    });
-    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [createOperation, updateOperation] });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
-    planRepository.completeApply.mockResolvedValue({
-      ...plan,
-      status: AgentOperationPlanStatus.Applied,
-      operations: [
-        { ...createOperation, status: AgentOperationStatus.Applied, result: { albumId: newUuid() } },
-        { ...updateOperation, status: AgentOperationStatus.Failed, error: 'album update failed' },
-      ],
-    });
-    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
-    albumService.create.mockResolvedValue({ id: newUuid() } as never);
-    albumService.update.mockRejectedValue(new Error('album update failed'));
-
-    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
-      operationIds: [createOperation.id, updateOperation.id],
-    });
-
-    expect(result.status).toBe(AgentOperationApplyStatus.PartiallyApplied);
-    expect(result.appliedOperationIds).toEqual([createOperation.id]);
-    expect(result.failedOperationIds).toEqual([updateOperation.id]);
-  });
-
-  it('records album add-asset bulk failures without treating failed assets as applied', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
-    const albumId = newUuid();
-    const successfulAssetId = newUuid();
-    const failedAssetId = newUuid();
-    const addOperation = makeOperation({
-      id: newUuid(),
-      planId: 'plan-id',
-      type: AgentOperationType.AlbumAddAssets,
-      targetKind: AgentOperationTargetKind.ExistingAlbum,
-      targetId: albumId,
-      temporaryTargetId: null,
-      assetIds: [successfulAssetId, failedAssetId],
-      payload: {},
-    });
-    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [addOperation] });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
-    planRepository.completeApply.mockResolvedValue({
-      ...plan,
-      status: AgentOperationPlanStatus.Applied,
-      operations: [
-        {
-          ...addOperation,
-          status: AgentOperationStatus.Failed,
-          result: {
-            albumId,
-            assetIds: [successfulAssetId],
-            assetResults: [
-              { id: successfulAssetId, success: true },
-              { id: failedAssetId, success: false, error: BulkIdErrorReason.DUPLICATE },
-            ],
-          },
-          error: 'Failed to add 1 asset(s)',
-        },
-      ],
-    });
-    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([successfulAssetId, failedAssetId]));
-    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([successfulAssetId, failedAssetId]));
-    albumService.addAssets.mockResolvedValue([
-      { id: successfulAssetId, success: true },
-      { id: failedAssetId, success: false, error: BulkIdErrorReason.DUPLICATE },
-    ]);
-
-    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [addOperation.id] });
-
-    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
-    expect(result.failedOperationIds).toEqual([addOperation.id]);
-    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
-      expect.objectContaining({
-        id: addOperation.id,
-        status: AgentOperationStatus.Failed,
-        result: expect.objectContaining({ assetIds: [successfulAssetId] }),
-        error: 'Failed to add 1 asset(s)',
-      }),
-    ]);
-  });
-
-  it('persists a partial failure and skips dependents when an album mutation fails', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
-    const createOperation = makeOperation({ id: newUuid(), planId: 'plan-id', temporaryTargetId: 'tmp-portugal' });
-    const addOperation = makeOperation({
-      id: newUuid(),
-      planId: 'plan-id',
-      position: 1,
-      type: AgentOperationType.AlbumAddAssets,
-      targetKind: AgentOperationTargetKind.NewAlbum,
-      temporaryTargetId: 'tmp-portugal',
-      assetIds: [newUuid()],
-      payload: {},
-      dependencyIds: [createOperation.id],
-    });
-    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [createOperation, addOperation] });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
-    planRepository.completeApply.mockResolvedValue({
-      ...plan,
-      status: AgentOperationPlanStatus.Applied,
-      operations: [
-        { ...createOperation, status: AgentOperationStatus.Failed, error: 'album create failed' },
-        {
-          ...addOperation,
-          status: AgentOperationStatus.Skipped,
-          result: { skippedReason: 'Dependency was not applied' },
-        },
-      ],
-    });
-    albumService.create.mockRejectedValue(new Error('album create failed'));
-
-    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
-      operationIds: [createOperation.id, addOperation.id],
-    });
-
-    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
-    expect(result.failedOperationIds).toEqual([createOperation.id]);
-    expect(result.skippedOperationIds).toEqual([addOperation.id]);
-    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
-      expect.objectContaining({ id: createOperation.id, status: AgentOperationStatus.Failed, error: 'album create failed' }),
-      expect.objectContaining({ id: addOperation.id, status: AgentOperationStatus.Skipped }),
-    ]);
-  });
-
-  it('fails only the drifted operation when apply-time asset access no longer passes', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
-    const assetId = newUuid();
-    const albumId = newUuid();
-    const addOperation = makeOperation({
-      id: newUuid(),
-      planId: 'plan-id',
-      type: AgentOperationType.AlbumAddAssets,
-      targetKind: AgentOperationTargetKind.ExistingAlbum,
-      targetId: albumId,
-      assetIds: [assetId],
-      payload: {},
-    });
-    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [addOperation] });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
-    planRepository.completeApply.mockResolvedValue({
-      ...plan,
-      status: AgentOperationPlanStatus.Applied,
-      operations: [{ ...addOperation, status: AgentOperationStatus.Failed, error: 'One or more assets are not accessible' }],
-    });
-    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
-
-    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [addOperation.id] });
-
-    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
-    expect(albumService.addAssets).not.toHaveBeenCalled();
-  });
-
-  it('fails an apply-time asset check when a shared-space asset is locked by current policy', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({
-      userId: auth.user.id,
-      status: AgentSessionStatus.WaitingForPlanReview,
-      permissionPlanSnapshot: {
-        ...permissionPlanSnapshot,
-        assetScope: { owned: false, sharedSpaces: true, locked: false },
+  const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [createOperation, addOperation] });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+  planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+  planRepository.completeApply.mockResolvedValue({
+    ...plan,
+    status: AgentOperationPlanStatus.Applied,
+    operations: [
+      {
+        ...createOperation,
+        status: AgentOperationStatus.Skipped,
+        result: { skippedReason: 'Operation was not selected for apply' },
       },
-    });
-    const assetId = newUuid();
-    const albumId = newUuid();
-    const addOperation = makeOperation({
-      id: newUuid(),
-      planId: 'plan-id',
-      type: AgentOperationType.AlbumAddAssets,
-      targetKind: AgentOperationTargetKind.ExistingAlbum,
-      targetId: albumId,
-      assetIds: [assetId],
-      payload: {},
-    });
-    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [addOperation] });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
-    planRepository.completeApply.mockResolvedValue({
-      ...plan,
-      status: AgentOperationPlanStatus.Applied,
-      operations: [{ ...addOperation, status: AgentOperationStatus.Failed, error: 'One or more assets are not accessible' }],
-    });
-    accessRepository.album.checkSharedAlbumAccess.mockResolvedValue(new Set([albumId]));
-    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set([assetId]));
-    assetRepository.getAgentLockedIds.mockResolvedValue(new Set([assetId]));
-    assetRepository.getAgentReadableIds.mockResolvedValue(new Set());
-
-    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [addOperation.id] });
-
-    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
-    expect(albumService.addAssets).not.toHaveBeenCalled();
+      {
+        ...addOperation,
+        status: AgentOperationStatus.Skipped,
+        result: { skippedReason: 'Dependency was not applied' },
+      },
+    ],
   });
 
-  it('fails an existing-album operation when apply-time album access no longer passes', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
-    const albumId = newUuid();
-    const updateOperation = makeOperation({
-      id: newUuid(),
-      planId: 'plan-id',
-      type: AgentOperationType.AlbumUpdateDetails,
-      targetKind: AgentOperationTargetKind.ExistingAlbum,
-      targetId: albumId,
-      temporaryTargetId: null,
-      payload: { description: 'Should not apply' },
-    });
-    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [updateOperation] });
-    sessionRepository.getById.mockResolvedValue(session);
-    planRepository.getByIdForSession.mockResolvedValue(plan);
-    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
-    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
-    planRepository.completeApply.mockResolvedValue({
-      ...plan,
-      status: AgentOperationPlanStatus.Applied,
-      operations: [
-        { ...updateOperation, status: AgentOperationStatus.Failed, error: 'One or more target albums are not accessible' },
-      ],
-    });
-    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set());
+  const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [addOperation.id] });
 
-    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
-      operationIds: [updateOperation.id],
-    });
+  expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+  expect(result.appliedOperationIds).toEqual([]);
+  expect(result.skippedOperationIds).toEqual([createOperation.id, addOperation.id]);
+  expect(albumService.create).not.toHaveBeenCalled();
+  expect(albumService.addAssets).not.toHaveBeenCalled();
+});
 
-    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
-    expect(albumService.update).not.toHaveBeenCalled();
+it('rejects unknown operation ids before claiming the plan', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+  const plan = makePlan({ sessionId: session.id });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+  await expect(sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [newUuid()] })).rejects.toThrow(
+    'One or more operation ids are not in the current plan',
+  );
+  expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+  expect(albumService.create).not.toHaveBeenCalled();
+});
+
+it('rejects non-current plans before claiming the plan', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+  const staleOperation = makeOperation();
+  const stalePlan = makePlan({ id: newUuid(), sessionId: session.id, operations: [staleOperation] });
+  const currentPlan = makePlan({ id: newUuid(), sessionId: session.id, revision: 2 });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(stalePlan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(currentPlan);
+
+  await expect(
+    sut.applyApprovedOperations(auth, session.id, stalePlan.id, { operationIds: [staleOperation.id] }),
+  ).rejects.toBeInstanceOf(NotFoundException);
+  expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+  expect(albumService.create).not.toHaveBeenCalled();
+});
+
+it('rejects stored-disabled operation ids before claiming the plan', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+  const disabledOperation = makeOperation({ enabled: false });
+  const plan = makePlan({ sessionId: session.id, operations: [disabledOperation] });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+  await expect(
+    sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [disabledOperation.id] }),
+  ).rejects.toThrow('One or more operation ids are disabled in the current plan');
+  expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+  expect(albumService.create).not.toHaveBeenCalled();
+});
+
+it('rejects apply requests unless the session is waiting for plan review', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Running });
+  const operation = makeOperation();
+  const plan = makePlan({ sessionId: session.id, operations: [operation] });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+  await expect(
+    sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] }),
+  ).rejects.toThrow('Agent session is not waiting for plan review');
+  expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+  expect(albumService.create).not.toHaveBeenCalled();
+});
+
+it('does not mutate albums when the apply claim loses a race after validation', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+  const operation = makeOperation();
+  const plan = makePlan({ sessionId: session.id, operations: [operation] });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+  planRepository.claimCurrentForApply.mockResolvedValue(void 0);
+
+  await expect(
+    sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] }),
+  ).rejects.toBeInstanceOf(NotFoundException);
+  expect(sessionRepository.update).not.toHaveBeenCalledWith(auth.user.id, session.id, {
+    status: AgentSessionStatus.Applying,
+  });
+  expect(albumService.create).not.toHaveBeenCalled();
+  expect(planRepository.completeApply).not.toHaveBeenCalled();
+});
+
+it('applies existing-album detail and cover operations through AlbumService.update', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+  const albumId = newUuid();
+  const coverAssetId = newUuid();
+  const updateOperation = makeOperation({
+    id: newUuid(),
+    planId: 'plan-id',
+    type: AgentOperationType.AlbumUpdateDetails,
+    targetKind: AgentOperationTargetKind.ExistingAlbum,
+    targetId: albumId,
+    temporaryTargetId: null,
+    payload: { albumName: 'Portugal highlights', description: 'Edited description' },
+  });
+  const coverOperation = makeOperation({
+    id: newUuid(),
+    planId: 'plan-id',
+    position: 1,
+    type: AgentOperationType.AlbumSetCover,
+    targetKind: AgentOperationTargetKind.ExistingAlbum,
+    targetId: albumId,
+    temporaryTargetId: null,
+    assetIds: [coverAssetId],
+    payload: {},
+  });
+  const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [updateOperation, coverOperation] });
+  const appliedPlan = makePlan({
+    ...plan,
+    status: AgentOperationPlanStatus.Applied,
+    operations: [
+      { ...updateOperation, status: AgentOperationStatus.Applied, result: { albumId } },
+      { ...coverOperation, status: AgentOperationStatus.Applied, result: { albumId, assetIds: [coverAssetId] } },
+    ],
+  });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+  planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+  planRepository.completeApply.mockResolvedValue(appliedPlan);
+  accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([coverAssetId]));
+  assetRepository.getAgentReadableIds.mockResolvedValue(new Set([coverAssetId]));
+  albumService.update.mockResolvedValue({ id: albumId } as never);
+
+  await expect(
+    sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [updateOperation.id, coverOperation.id],
+    }),
+  ).resolves.toMatchObject({ status: AgentOperationApplyStatus.Applied });
+  expect(albumService.update).toHaveBeenNthCalledWith(1, auth, albumId, {
+    albumName: 'Portugal highlights',
+    description: 'Edited description',
+  });
+  expect(albumService.update).toHaveBeenNthCalledWith(2, auth, albumId, { albumThumbnailAssetId: coverAssetId });
+});
+
+it('reports partial success when one independent selected operation applies and another fails', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+  const albumId = newUuid();
+  const createOperation = makeOperation({ id: newUuid(), planId: 'plan-id', temporaryTargetId: 'tmp-portugal' });
+  const updateOperation = makeOperation({
+    id: newUuid(),
+    planId: 'plan-id',
+    position: 1,
+    type: AgentOperationType.AlbumUpdateDetails,
+    targetKind: AgentOperationTargetKind.ExistingAlbum,
+    targetId: albumId,
+    temporaryTargetId: null,
+    payload: { albumName: 'Existing renamed' },
+  });
+  const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [createOperation, updateOperation] });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+  planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+  planRepository.completeApply.mockResolvedValue({
+    ...plan,
+    status: AgentOperationPlanStatus.Applied,
+    operations: [
+      { ...createOperation, status: AgentOperationStatus.Applied, result: { albumId: newUuid() } },
+      { ...updateOperation, status: AgentOperationStatus.Failed, error: 'album update failed' },
+    ],
+  });
+  accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+  albumService.create.mockResolvedValue({ id: newUuid() } as never);
+  albumService.update.mockRejectedValue(new Error('album update failed'));
+
+  const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+    operationIds: [createOperation.id, updateOperation.id],
   });
 
-  it('does not expose an apply path to the runner planning tools', () => {
-    expect(Object.values(AgentToolName)).not.toContain('applyAlbumOperations');
+  expect(result.status).toBe(AgentOperationApplyStatus.PartiallyApplied);
+  expect(result.appliedOperationIds).toEqual([createOperation.id]);
+  expect(result.failedOperationIds).toEqual([updateOperation.id]);
+});
+
+it('records album add-asset bulk failures without treating failed assets as applied', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+  const albumId = newUuid();
+  const successfulAssetId = newUuid();
+  const failedAssetId = newUuid();
+  const addOperation = makeOperation({
+    id: newUuid(),
+    planId: 'plan-id',
+    type: AgentOperationType.AlbumAddAssets,
+    targetKind: AgentOperationTargetKind.ExistingAlbum,
+    targetId: albumId,
+    temporaryTargetId: null,
+    assetIds: [successfulAssetId, failedAssetId],
+    payload: {},
   });
+  const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [addOperation] });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+  planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+  planRepository.completeApply.mockResolvedValue({
+    ...plan,
+    status: AgentOperationPlanStatus.Applied,
+    operations: [
+      {
+        ...addOperation,
+        status: AgentOperationStatus.Failed,
+        result: {
+          albumId,
+          assetIds: [successfulAssetId],
+          assetResults: [
+            { id: successfulAssetId, success: true },
+            { id: failedAssetId, success: false, error: BulkIdErrorReason.DUPLICATE },
+          ],
+        },
+        error: 'Failed to add 1 asset(s)',
+      },
+    ],
+  });
+  accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([successfulAssetId, failedAssetId]));
+  assetRepository.getAgentReadableIds.mockResolvedValue(new Set([successfulAssetId, failedAssetId]));
+  albumService.addAssets.mockResolvedValue([
+    { id: successfulAssetId, success: true },
+    { id: failedAssetId, success: false, error: BulkIdErrorReason.DUPLICATE },
+  ]);
+
+  const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [addOperation.id] });
+
+  expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+  expect(result.failedOperationIds).toEqual([addOperation.id]);
+  expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+    expect.objectContaining({
+      id: addOperation.id,
+      status: AgentOperationStatus.Failed,
+      result: expect.objectContaining({ assetIds: [successfulAssetId] }),
+      error: 'Failed to add 1 asset(s)',
+    }),
+  ]);
+});
+
+it('persists a partial failure and skips dependents when an album mutation fails', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+  const createOperation = makeOperation({ id: newUuid(), planId: 'plan-id', temporaryTargetId: 'tmp-portugal' });
+  const addOperation = makeOperation({
+    id: newUuid(),
+    planId: 'plan-id',
+    position: 1,
+    type: AgentOperationType.AlbumAddAssets,
+    targetKind: AgentOperationTargetKind.NewAlbum,
+    temporaryTargetId: 'tmp-portugal',
+    assetIds: [newUuid()],
+    payload: {},
+    dependencyIds: [createOperation.id],
+  });
+  const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [createOperation, addOperation] });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+  planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+  planRepository.completeApply.mockResolvedValue({
+    ...plan,
+    status: AgentOperationPlanStatus.Applied,
+    operations: [
+      { ...createOperation, status: AgentOperationStatus.Failed, error: 'album create failed' },
+      {
+        ...addOperation,
+        status: AgentOperationStatus.Skipped,
+        result: { skippedReason: 'Dependency was not applied' },
+      },
+    ],
+  });
+  albumService.create.mockRejectedValue(new Error('album create failed'));
+
+  const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+    operationIds: [createOperation.id, addOperation.id],
+  });
+
+  expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+  expect(result.failedOperationIds).toEqual([createOperation.id]);
+  expect(result.skippedOperationIds).toEqual([addOperation.id]);
+  expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+    expect.objectContaining({
+      id: createOperation.id,
+      status: AgentOperationStatus.Failed,
+      error: 'album create failed',
+    }),
+    expect.objectContaining({ id: addOperation.id, status: AgentOperationStatus.Skipped }),
+  ]);
+});
+
+it('fails only the drifted operation when apply-time asset access no longer passes', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+  const assetId = newUuid();
+  const albumId = newUuid();
+  const addOperation = makeOperation({
+    id: newUuid(),
+    planId: 'plan-id',
+    type: AgentOperationType.AlbumAddAssets,
+    targetKind: AgentOperationTargetKind.ExistingAlbum,
+    targetId: albumId,
+    assetIds: [assetId],
+    payload: {},
+  });
+  const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [addOperation] });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+  planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+  planRepository.completeApply.mockResolvedValue({
+    ...plan,
+    status: AgentOperationPlanStatus.Applied,
+    operations: [
+      { ...addOperation, status: AgentOperationStatus.Failed, error: 'One or more assets are not accessible' },
+    ],
+  });
+  accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+
+  const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [addOperation.id] });
+
+  expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+  expect(albumService.addAssets).not.toHaveBeenCalled();
+});
+
+it('fails an apply-time asset check when a shared-space asset is locked by current policy', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({
+    userId: auth.user.id,
+    status: AgentSessionStatus.WaitingForPlanReview,
+    permissionPlanSnapshot: {
+      ...permissionPlanSnapshot,
+      assetScope: { owned: false, sharedSpaces: true, locked: false },
+    },
+  });
+  const assetId = newUuid();
+  const albumId = newUuid();
+  const addOperation = makeOperation({
+    id: newUuid(),
+    planId: 'plan-id',
+    type: AgentOperationType.AlbumAddAssets,
+    targetKind: AgentOperationTargetKind.ExistingAlbum,
+    targetId: albumId,
+    assetIds: [assetId],
+    payload: {},
+  });
+  const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [addOperation] });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+  planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+  planRepository.completeApply.mockResolvedValue({
+    ...plan,
+    status: AgentOperationPlanStatus.Applied,
+    operations: [
+      { ...addOperation, status: AgentOperationStatus.Failed, error: 'One or more assets are not accessible' },
+    ],
+  });
+  accessRepository.album.checkSharedAlbumAccess.mockResolvedValue(new Set([albumId]));
+  accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set([assetId]));
+  assetRepository.getAgentLockedIds.mockResolvedValue(new Set([assetId]));
+  assetRepository.getAgentReadableIds.mockResolvedValue(new Set());
+
+  const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [addOperation.id] });
+
+  expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+  expect(albumService.addAssets).not.toHaveBeenCalled();
+});
+
+it('fails an existing-album operation when apply-time album access no longer passes', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+  const albumId = newUuid();
+  const updateOperation = makeOperation({
+    id: newUuid(),
+    planId: 'plan-id',
+    type: AgentOperationType.AlbumUpdateDetails,
+    targetKind: AgentOperationTargetKind.ExistingAlbum,
+    targetId: albumId,
+    temporaryTargetId: null,
+    payload: { description: 'Should not apply' },
+  });
+  const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [updateOperation] });
+  sessionRepository.getById.mockResolvedValue(session);
+  planRepository.getByIdForSession.mockResolvedValue(plan);
+  planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+  planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+  planRepository.completeApply.mockResolvedValue({
+    ...plan,
+    status: AgentOperationPlanStatus.Applied,
+    operations: [
+      {
+        ...updateOperation,
+        status: AgentOperationStatus.Failed,
+        error: 'One or more target albums are not accessible',
+      },
+    ],
+  });
+  accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+  const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+    operationIds: [updateOperation.id],
+  });
+
+  expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+  expect(albumService.update).not.toHaveBeenCalled();
+});
+
+it('does not expose an apply path to the runner planning tools', () => {
+  expect(Object.values(AgentToolName)).not.toContain('applyAlbumOperations');
+});
 ```
 
 - [ ] **Step 2: Run service tests and verify they fail**
@@ -1493,58 +1501,60 @@ Update the `automock(AgentOperationPlanService, { args: [...] })` setup at the t
 Add this route test after the summary route tests:
 
 ```ts
-  describe('POST /agent/sessions/:id/operation-plan/:planId/apply', () => {
-    const dto: AgentOperationPlanApplyRequestDto = { operationIds: [operationId] };
+describe('POST /agent/sessions/:id/operation-plan/:planId/apply', () => {
+  const dto: AgentOperationPlanApplyRequestDto = { operationIds: [operationId] };
 
-    it('applies approved operations with update permission and serializes dates', async () => {
-      service.applyApprovedOperations.mockResolvedValue({
-        status: AgentOperationApplyStatus.Applied,
-        plan: {
-          ...plan,
-          status: AgentOperationPlanStatus.Applied,
-          operations: [{ ...plan.operations[0], status: AgentOperationStatus.Applied, result: { albumId: factory.uuid() } }],
-        },
-        appliedOperationIds: [operationId],
-        skippedOperationIds: [],
-        failedOperationIds: [],
-        summary: 'Applied 1 operation(s), skipped 0, failed 0.',
-      });
-
-      const { status, body } = await request(ctx.getHttpServer())
-        .post(`/agent/sessions/${sessionId}/operation-plan/${planId}/apply`)
-        .send(dto);
-
-      expect(status).toBe(201);
-      expectPermission(Permission.AgentSessionUpdate);
-      expect(service.applyApprovedOperations).toHaveBeenCalledWith(auth, sessionId, planId, dto);
-      expect(body.plan.createdAt).toBe(createdAt.toISOString());
-      expect(body.plan.operations[0].createdAt).toBe(createdAt.toISOString());
+  it('applies approved operations with update permission and serializes dates', async () => {
+    service.applyApprovedOperations.mockResolvedValue({
+      status: AgentOperationApplyStatus.Applied,
+      plan: {
+        ...plan,
+        status: AgentOperationPlanStatus.Applied,
+        operations: [
+          { ...plan.operations[0], status: AgentOperationStatus.Applied, result: { albumId: factory.uuid() } },
+        ],
+      },
+      appliedOperationIds: [operationId],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 1 operation(s), skipped 0, failed 0.',
     });
 
-    it('validates apply params and body before calling the service', async () => {
-      const { status } = await request(ctx.getHttpServer())
-        .post(`/agent/sessions/${sessionId}/operation-plan/not-a-uuid/apply`)
-        .send({ operationIds: [] });
+    const { status, body } = await request(ctx.getHttpServer())
+      .post(`/agent/sessions/${sessionId}/operation-plan/${planId}/apply`)
+      .send(dto);
 
-      expect(status).toBe(400);
-      expect(service.applyApprovedOperations).not.toHaveBeenCalled();
-    });
-
-    it('returns the apply response directly from the controller method', async () => {
-      const response = {
-        status: AgentOperationApplyStatus.Applied,
-        plan: { ...plan, status: AgentOperationPlanStatus.Applied },
-        appliedOperationIds: [operationId],
-        skippedOperationIds: [],
-        failedOperationIds: [],
-        summary: 'Applied 1 operation(s), skipped 0, failed 0.',
-      };
-      service.applyApprovedOperations.mockResolvedValue(response);
-      const controller = new AgentOperationPlanController(service);
-
-      await expect(controller.applyApprovedOperations(auth, { id: sessionId, planId }, dto)).resolves.toBe(response);
-    });
+    expect(status).toBe(201);
+    expectPermission(Permission.AgentSessionUpdate);
+    expect(service.applyApprovedOperations).toHaveBeenCalledWith(auth, sessionId, planId, dto);
+    expect(body.plan.createdAt).toBe(createdAt.toISOString());
+    expect(body.plan.operations[0].createdAt).toBe(createdAt.toISOString());
   });
+
+  it('validates apply params and body before calling the service', async () => {
+    const { status } = await request(ctx.getHttpServer())
+      .post(`/agent/sessions/${sessionId}/operation-plan/not-a-uuid/apply`)
+      .send({ operationIds: [] });
+
+    expect(status).toBe(400);
+    expect(service.applyApprovedOperations).not.toHaveBeenCalled();
+  });
+
+  it('returns the apply response directly from the controller method', async () => {
+    const response = {
+      status: AgentOperationApplyStatus.Applied,
+      plan: { ...plan, status: AgentOperationPlanStatus.Applied },
+      appliedOperationIds: [operationId],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 1 operation(s), skipped 0, failed 0.',
+    };
+    service.applyApprovedOperations.mockResolvedValue(response);
+    const controller = new AgentOperationPlanController(service);
+
+    await expect(controller.applyApprovedOperations(auth, { id: sessionId, planId }, dto)).resolves.toBe(response);
+  });
+});
 ```
 
 - [ ] **Step 2: Run controller tests and verify they fail**
@@ -1688,109 +1698,109 @@ Update the mock formatter to replace `{applied}` and `{failed}`.
 Add these tests before the websocket tests:
 
 ```ts
-  it('applies the current approved operation selection', async () => {
-    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
-    sdkMock.applyApprovedOperations.mockResolvedValue({
-      status: AgentOperationApplyStatus.Applied,
-      plan: {
-        ...samplePlan(),
-        status: AgentOperationPlanStatus.Applied,
-        operations: samplePlan().operations.map((operation) => ({
-          ...operation,
-          status: AgentOperationStatus.Applied,
-          result: { albumId: '00000000-0000-4000-8000-000000000400' },
-        })),
-      },
-      appliedOperationIds: [createId, addId, existingId],
-      skippedOperationIds: [],
-      failedOperationIds: [],
-      summary: 'Applied 3 operation(s), skipped 0, failed 0.',
-    });
-
-    render(AgentOperationPlanReviewPanel, { props: { session } });
-
-    await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
-
-    expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith({
-      id: session.id,
-      planId,
-      agentOperationPlanApplyRequestDto: { operationIds: [createId, addId, existingId] },
-    });
-    expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
-    expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeDisabled();
+it('applies the current approved operation selection', async () => {
+  sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+  sdkMock.applyApprovedOperations.mockResolvedValue({
+    status: AgentOperationApplyStatus.Applied,
+    plan: {
+      ...samplePlan(),
+      status: AgentOperationPlanStatus.Applied,
+      operations: samplePlan().operations.map((operation) => ({
+        ...operation,
+        status: AgentOperationStatus.Applied,
+        result: { albumId: '00000000-0000-4000-8000-000000000400' },
+      })),
+    },
+    appliedOperationIds: [createId, addId, existingId],
+    skippedOperationIds: [],
+    failedOperationIds: [],
+    summary: 'Applied 3 operation(s), skipped 0, failed 0.',
   });
 
-  it('sends only enabled and unblocked operation ids when applying', async () => {
-    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
-    sdkMock.applyApprovedOperations.mockResolvedValue({
-      status: AgentOperationApplyStatus.PartiallyApplied,
-      plan: samplePlan(),
-      appliedOperationIds: [existingId],
-      skippedOperationIds: [createId, addId],
-      failedOperationIds: [],
-      summary: 'Applied 1 operation(s), skipped 2, failed 0.',
-    });
+  render(AgentOperationPlanReviewPanel, { props: { session } });
 
-    render(AgentOperationPlanReviewPanel, { props: { session } });
+  await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
 
-    await fireEvent.click(await screen.findByRole('checkbox', { name: 'New album "Portugal"' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply 1 selected' }));
+  expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith({
+    id: session.id,
+    planId,
+    agentOperationPlanApplyRequestDto: { operationIds: [createId, addId, existingId] },
+  });
+  expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
+  expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeDisabled();
+});
 
-    expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agentOperationPlanApplyRequestDto: { operationIds: [existingId] },
-      }),
-    );
+it('sends only enabled and unblocked operation ids when applying', async () => {
+  sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+  sdkMock.applyApprovedOperations.mockResolvedValue({
+    status: AgentOperationApplyStatus.PartiallyApplied,
+    plan: samplePlan(),
+    appliedOperationIds: [existingId],
+    skippedOperationIds: [createId, addId],
+    failedOperationIds: [],
+    summary: 'Applied 1 operation(s), skipped 2, failed 0.',
   });
 
-  it('disables apply when no operations are selected', async () => {
-    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+  render(AgentOperationPlanReviewPanel, { props: { session } });
 
-    render(AgentOperationPlanReviewPanel, { props: { session } });
+  await fireEvent.click(await screen.findByRole('checkbox', { name: 'New album "Portugal"' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Apply 1 selected' }));
 
-    await fireEvent.click(await screen.findByRole('checkbox', { name: 'New album "Portugal"' }));
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Update existing album description' }));
+  expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith(
+    expect.objectContaining({
+      agentOperationPlanApplyRequestDto: { operationIds: [existingId] },
+    }),
+  );
+});
 
-    expect(screen.getByRole('button', { name: 'Apply 0 selected' })).toBeDisabled();
-    expect(sdkMock.applyApprovedOperations).not.toHaveBeenCalled();
+it('disables apply when no operations are selected', async () => {
+  sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+
+  render(AgentOperationPlanReviewPanel, { props: { session } });
+
+  await fireEvent.click(await screen.findByRole('checkbox', { name: 'New album "Portugal"' }));
+  await fireEvent.click(screen.getByRole('checkbox', { name: 'Update existing album description' }));
+
+  expect(screen.getByRole('button', { name: 'Apply 0 selected' })).toBeDisabled();
+  expect(sdkMock.applyApprovedOperations).not.toHaveBeenCalled();
+});
+
+it('shows an apply error without clearing the loaded plan', async () => {
+  sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+  sdkMock.applyApprovedOperations.mockRejectedValue(new Error('failed'));
+
+  render(AgentOperationPlanReviewPanel, { props: { session } });
+
+  await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Unable to apply proposed operations');
+  expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
+});
+
+it('refetches the current plan for same-session plan-applied events from another client', async () => {
+  let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+  websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+    handler = nextHandler;
+    return vi.fn();
+  });
+  sdkMock.getCurrentOperationPlan.mockResolvedValueOnce(samplePlan()).mockResolvedValueOnce(null);
+
+  render(AgentOperationPlanReviewPanel, { props: { session } });
+  expect(await screen.findByText('Organize Portugal holiday')).toBeInTheDocument();
+
+  handler?.({
+    type: 'operation-plan-applied',
+    sessionId: session.id,
+    planId,
+    status: AgentOperationApplyStatus.Applied,
+    appliedCount: 3,
+    skippedCount: 0,
+    failedCount: 0,
   });
 
-  it('shows an apply error without clearing the loaded plan', async () => {
-    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
-    sdkMock.applyApprovedOperations.mockRejectedValue(new Error('failed'));
-
-    render(AgentOperationPlanReviewPanel, { props: { session } });
-
-    await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to apply proposed operations');
-    expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
-  });
-
-  it('refetches the current plan for same-session plan-applied events from another client', async () => {
-    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
-    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
-      handler = nextHandler;
-      return vi.fn();
-    });
-    sdkMock.getCurrentOperationPlan.mockResolvedValueOnce(samplePlan()).mockResolvedValueOnce(null);
-
-    render(AgentOperationPlanReviewPanel, { props: { session } });
-    expect(await screen.findByText('Organize Portugal holiday')).toBeInTheDocument();
-
-    handler?.({
-      type: 'operation-plan-applied',
-      sessionId: session.id,
-      planId,
-      status: AgentOperationApplyStatus.Applied,
-      appliedCount: 3,
-      skippedCount: 0,
-      failedCount: 0,
-    });
-
-    expect(await screen.findByText('No proposed album plan yet.')).toBeInTheDocument();
-    expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledTimes(2);
-  });
+  expect(await screen.findByText('No proposed album plan yet.')).toBeInTheDocument();
+  expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledTimes(2);
+});
 ```
 
 - [ ] **Step 2: Run component tests and verify they fail**
@@ -1837,78 +1847,78 @@ In `web/src/routes/(user)/assistant/agent-operation-plan-review-panel.svelte`, e
 Add state:
 
 ```ts
-  let applying = $state(false);
-  let applyMessage = $state<string | null>(null);
-  let applyErrorMessage = $state<string | null>(null);
+let applying = $state(false);
+let applyMessage = $state<string | null>(null);
+let applyErrorMessage = $state<string | null>(null);
 ```
 
 Add a derived apply guard:
 
 ```ts
-  const canApply = $derived(
-    model !== null &&
-      model.plan.status === AgentOperationPlanStatus.Proposed &&
-      selectedOperationIds.length > 0 &&
-      !applying,
-  );
+const canApply = $derived(
+  model !== null &&
+    model.plan.status === AgentOperationPlanStatus.Proposed &&
+    selectedOperationIds.length > 0 &&
+    !applying,
+);
 ```
 
 Clear apply state in `loadPlan()` before calling `getCurrentOperationPlan()`:
 
 ```ts
-    applyMessage = null;
-    applyErrorMessage = null;
+applyMessage = null;
+applyErrorMessage = null;
 ```
 
 Add this function before `toggleOperation()`:
 
 ```ts
-  const applySelectedOperations = async () => {
-    if (!model || !canApply) {
-      return;
-    }
+const applySelectedOperations = async () => {
+  if (!model || !canApply) {
+    return;
+  }
 
-    applying = true;
-    errorMessage = null;
-    applyMessage = null;
-    applyErrorMessage = null;
+  applying = true;
+  errorMessage = null;
+  applyMessage = null;
+  applyErrorMessage = null;
 
-    try {
-      const response = await applyApprovedOperations({
-        id: session.id,
-        planId: model.plan.id,
-        agentOperationPlanApplyRequestDto: { operationIds: selectedOperationIds },
-      });
-      plan = response.plan;
-      enabledByOperationId = createInitialOperationEnabledState(response.plan);
-      applyMessage = $t('assistant_operation_apply_success', {
-        values: {
-          applied: response.appliedOperationIds.length,
-          failed: response.failedOperationIds.length,
-        },
-      });
-    } catch (error) {
-      applyErrorMessage = $t('assistant_operation_apply_error');
-      handleError(error, applyErrorMessage);
-    } finally {
-      applying = false;
-    }
-  };
+  try {
+    const response = await applyApprovedOperations({
+      id: session.id,
+      planId: model.plan.id,
+      agentOperationPlanApplyRequestDto: { operationIds: selectedOperationIds },
+    });
+    plan = response.plan;
+    enabledByOperationId = createInitialOperationEnabledState(response.plan);
+    applyMessage = $t('assistant_operation_apply_success', {
+      values: {
+        applied: response.appliedOperationIds.length,
+        failed: response.failedOperationIds.length,
+      },
+    });
+  } catch (error) {
+    applyErrorMessage = $t('assistant_operation_apply_error');
+    handleError(error, applyErrorMessage);
+  } finally {
+    applying = false;
+  }
+};
 ```
 
 Update `handleSessionEvent` so the panel refreshes for direct plan-ready events and for an apply event emitted by another browser tab:
 
 ```ts
-  const handleSessionEvent = (event: AgentSessionClientEvent) => {
-    if (
-      (event.type !== 'operation-plan-ready' && event.type !== 'operation-plan-applied') ||
-      event.sessionId !== session.id
-    ) {
-      return;
-    }
+const handleSessionEvent = (event: AgentSessionClientEvent) => {
+  if (
+    (event.type !== 'operation-plan-ready' && event.type !== 'operation-plan-applied') ||
+    event.sessionId !== session.id
+  ) {
+    return;
+  }
 
-    void loadPlan();
-  };
+  void loadPlan();
+};
 ```
 
 Replace the disabled footer button with:
@@ -2143,26 +2153,26 @@ Spec coverage:
 
 Edge-case coverage:
 
-| Edge Case | Covered By |
-| --- | --- |
-| Empty apply payload | DTO and controller validation tests in Tasks 1 and 4 |
-| Duplicate operation IDs | DTO validation test in Task 1 |
-| Operation ID not in current plan | Service validation test in Task 3 |
-| Stored-disabled operation ID submitted by a tampered client | Service validation test in Task 3 |
-| Stale/non-current plan ID | Service current-plan validation test in Task 3 |
-| Session not waiting for plan review | Service status validation test in Task 3 |
-| Current plan changes between validation and claim | Service claim-race test in Task 3 and repository no-double-claim test in Task 2 |
-| Already-applied plan is applied again | Repository no-double-claim test in Task 2 |
-| Unselected operations | Service skip test in Task 3 |
-| Selected dependent whose dependency was not applied | Service dependency skip test in Task 3 |
-| Independent selected operation partially fails | Service partial-success test in Task 3 |
-| Bulk add-assets returns per-asset failure | Service bulk-result test in Task 3 |
-| Existing album access drift or album deletion | Service album-access drift test in Task 3 |
-| Asset access drift | Service asset-access drift test in Task 3 |
-| Locked-asset policy change | Service locked shared-space asset test in Task 3 |
-| Runner accidentally gains write/apply tool | Service enum assertion in Task 3 plus runner/controller verification in Task 8 |
-| User clicks apply with zero selected operations | Web component test in Task 6 |
-| Another tab applies the plan | Web websocket refresh test in Task 6 |
+| Edge Case                                                   | Covered By                                                                      |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Empty apply payload                                         | DTO and controller validation tests in Tasks 1 and 4                            |
+| Duplicate operation IDs                                     | DTO validation test in Task 1                                                   |
+| Operation ID not in current plan                            | Service validation test in Task 3                                               |
+| Stored-disabled operation ID submitted by a tampered client | Service validation test in Task 3                                               |
+| Stale/non-current plan ID                                   | Service current-plan validation test in Task 3                                  |
+| Session not waiting for plan review                         | Service status validation test in Task 3                                        |
+| Current plan changes between validation and claim           | Service claim-race test in Task 3 and repository no-double-claim test in Task 2 |
+| Already-applied plan is applied again                       | Repository no-double-claim test in Task 2                                       |
+| Unselected operations                                       | Service skip test in Task 3                                                     |
+| Selected dependent whose dependency was not applied         | Service dependency skip test in Task 3                                          |
+| Independent selected operation partially fails              | Service partial-success test in Task 3                                          |
+| Bulk add-assets returns per-asset failure                   | Service bulk-result test in Task 3                                              |
+| Existing album access drift or album deletion               | Service album-access drift test in Task 3                                       |
+| Asset access drift                                          | Service asset-access drift test in Task 3                                       |
+| Locked-asset policy change                                  | Service locked shared-space asset test in Task 3                                |
+| Runner accidentally gains write/apply tool                  | Service enum assertion in Task 3 plus runner/controller verification in Task 8  |
+| User clicks apply with zero selected operations             | Web component test in Task 6                                                    |
+| Another tab applies the plan                                | Web websocket refresh test in Task 6                                            |
 
 Placeholder scan:
 

@@ -142,7 +142,7 @@ const toolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentToolC
   approvalDecision: overrides.approvalDecision ?? null,
   requestSummary: overrides.requestSummary ?? 'Search recent favorites',
   responseSummary: overrides.responseSummary ?? null,
-  dataClass: overrides.dataClass ?? AgentToolDataClass.Metadata,
+  dataClass: overrides.dataClass ?? ('metadata' as AgentToolDataClass),
   assetCount: overrides.assetCount ?? 4,
   albumCount: overrides.albumCount ?? 0,
   startedAt: overrides.startedAt ?? '2026-05-16T10:00:00.000Z',
@@ -332,23 +332,23 @@ describe(AgentSessionActionDock.name, () => {
     render(AgentSessionActionDock, { props: { session: makeSession({ status: AgentSessionStatus.Running }) } });
     await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1));
 
-    handlers.forEach((handler) =>
+    for (const handler of handlers) {
       handler({
         type: 'runner-error',
         sessionId: 'other-session',
         message: 'ignored',
         createdAt: '2026-05-16T10:00:00Z',
-      }),
-    );
+      });
+    }
     await Promise.resolve();
     expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1);
 
-    handlers.forEach((handler) =>
-      handler({ type: 'runner-error', sessionId: 'session-1', message: 'refresh', createdAt: '2026-05-16T10:00:00Z' }),
-    );
+    for (const handler of handlers) {
+      handler({ type: 'runner-error', sessionId: 'session-1', message: 'refresh', createdAt: '2026-05-16T10:00:00Z' });
+    }
     await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(2));
 
-    await vi.advanceTimersByTimeAsync(3_000);
+    await vi.advanceTimersByTimeAsync(3000);
     expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(3);
     vi.useRealTimers();
   });

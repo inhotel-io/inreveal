@@ -393,7 +393,11 @@ describe('AgentSessionUpdateDto', () => {
   it.each([
     { name: 'missing', input: {}, message: 'Invalid input: expected string, received undefined' },
     { name: 'blank', input: { title: '   ' }, message: 'Too small: expected string to have >=1 characters' },
-    { name: 'too long', input: { title: 'x'.repeat(121) }, message: 'Too big: expected string to have <=120 characters' },
+    {
+      name: 'too long',
+      input: { title: 'x'.repeat(121) },
+      message: 'Too big: expected string to have <=120 characters',
+    },
   ])('rejects $name title updates', ({ input, message }) => {
     const result = AgentSessionUpdateDto.schema.safeParse(input);
 

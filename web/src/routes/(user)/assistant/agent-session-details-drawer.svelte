@@ -18,11 +18,7 @@
   }
 
   let { session, open = false, onClose }: Props = $props();
-  let visible = $state(false);
-
-  $effect(() => {
-    visible = open;
-  });
+  let visible = $derived(open);
 
   const capabilities = $derived((session.runnerCapabilitiesSnapshot ?? null) as RunnerCapabilitiesSummary | null);
   const protocolVersion = $derived(

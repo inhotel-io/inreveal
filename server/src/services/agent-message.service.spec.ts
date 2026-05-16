@@ -60,6 +60,7 @@ const makeSession = (overrides: Partial<AgentSession> = {}): AgentSession => {
     runnerCapabilitiesSnapshot: null,
     status: AgentSessionStatus.Running,
     initialContextSnapshot: {},
+    title: null,
     createdAt: now,
     updatedAt: now,
     endedAt: null,

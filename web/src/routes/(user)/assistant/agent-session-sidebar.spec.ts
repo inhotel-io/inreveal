@@ -217,7 +217,9 @@ describe(AgentSessionSidebar.name, () => {
     expect(
       within(screen.getByTestId('agent-session-row-approval')).queryByText('Waiting for tool approval'),
     ).not.toBeInTheDocument();
-    expect(within(screen.getByTestId('agent-session-row-plan')).queryByText('Waiting for plan review')).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('agent-session-row-plan')).queryByText('Waiting for plan review'),
+    ).not.toBeInTheDocument();
     expect(within(screen.getByTestId('agent-session-row-running-z')).queryByText('Running')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('agent-session-row-completed')).queryByText('Completed')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('agent-session-row-failed')).queryByText('Failed')).not.toBeInTheDocument();
