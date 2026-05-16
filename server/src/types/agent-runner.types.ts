@@ -44,6 +44,9 @@ export type AgentRunnerMessageRequest = {
 
 export type AgentRunnerResumeRequest = {
   gallerySessionId: string;
+  toolCallId?: string;
+  approvalDecision?: 'approved' | 'denied';
+  toolResult?: unknown;
 };
 
 export type AgentRunnerStreamEvent =
