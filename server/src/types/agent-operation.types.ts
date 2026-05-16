@@ -11,9 +11,17 @@ export type AgentOperationPayload =
   | { albumName?: string; description?: string }
   | Record<string, never>;
 
+export type AgentOperationAssetResult = {
+  id: string;
+  success: boolean;
+  error?: string;
+  errorMessage?: string;
+};
+
 export type AgentOperationResult = {
   albumId?: string;
   assetIds?: string[];
+  assetResults?: AgentOperationAssetResult[];
   skippedReason?: string;
 };
 
