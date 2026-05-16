@@ -204,6 +204,27 @@ describe(AgentSessionActionDock.name, () => {
     expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(2);
   });
 
+  it('prevents duplicate approval submissions while a decision is busy', async () => {
+    let resolveApproval: (toolCall: AgentToolCallResponseDto) => void;
+    sdkMock.getToolCalls.mockResolvedValue([toolCall()]);
+    sdkMock.approveToolCall.mockReturnValue(
+      new Promise<AgentToolCallResponseDto>((resolve) => {
+        resolveApproval = resolve;
+      }),
+    );
+
+    render(AgentSessionActionDock, { props: { session: makeSession() } });
+
+    const approveButton = await screen.findByRole('button', { name: 'Approve' });
+    await fireEvent.click(approveButton);
+    await fireEvent.click(approveButton);
+
+    expect(sdkMock.approveToolCall).toHaveBeenCalledTimes(1);
+    expect(approveButton).toBeDisabled();
+
+    resolveApproval!(toolCall({ status: AgentToolCallStatus.Approved }));
+  });
+
   it('keeps cards actionable when approval fails', async () => {
     sdkMock.getToolCalls.mockResolvedValue([toolCall()]);
     sdkMock.approveToolCall.mockRejectedValue(new Error('already handled'));
