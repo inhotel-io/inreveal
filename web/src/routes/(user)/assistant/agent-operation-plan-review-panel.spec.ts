@@ -339,6 +339,84 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores same-plan plan-applied events while local apply is pending', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    let resolveApply: (response: Awaited<ReturnType<typeof sdkMock.applyApprovedOperations>>) => void;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    sdkMock.getCurrentOperationPlan.mockImplementation(() =>
+      Promise.resolve(sdkMock.getCurrentOperationPlan.mock.calls.length === 1 ? samplePlan() : null),
+    );
+    sdkMock.applyApprovedOperations.mockReturnValue(
+      new Promise((resolve) => {
+        resolveApply = resolve;
+      }),
+    );
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
+
+    handler?.({
+      type: 'operation-plan-applied',
+      sessionId: session.id,
+      planId,
+      status: AgentOperationApplyStatus.Applied,
+      appliedCount: 3,
+      skippedCount: 0,
+      failedCount: 0,
+    });
+
+    expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledTimes(1);
+
+    resolveApply!({
+      status: AgentOperationApplyStatus.Applied,
+      plan: appliedPlan(),
+      appliedOperationIds: [createId, addId, existingId],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 3 operation(s), skipped 0, failed 0.',
+    });
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
+    expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
+    expect(screen.queryByText('No proposed album plan yet.')).not.toBeInTheDocument();
+  });
+
+  it('disables operation selection while applying and after the plan is applied', async () => {
+    let resolveApply: (response: Awaited<ReturnType<typeof sdkMock.applyApprovedOperations>>) => void;
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+    sdkMock.applyApprovedOperations.mockReturnValue(
+      new Promise((resolve) => {
+        resolveApply = resolve;
+      }),
+    );
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
+
+    expect(screen.getByRole('checkbox', { name: 'New album "Portugal"' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Create Portugal album' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Update existing album description' })).toBeDisabled();
+
+    resolveApply!({
+      status: AgentOperationApplyStatus.Applied,
+      plan: appliedPlan(),
+      appliedOperationIds: [createId, addId, existingId],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 3 operation(s), skipped 0, failed 0.',
+    });
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
+    expect(screen.getByRole('checkbox', { name: 'New album "Portugal"' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Create Portugal album' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Update existing album description' })).toBeDisabled();
+  });
+
   it('sends only enabled and unblocked operation ids when applying', async () => {
     sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
     sdkMock.applyApprovedOperations.mockResolvedValue({
