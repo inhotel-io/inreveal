@@ -38,6 +38,10 @@ vi.mock('svelte-i18n', () => {
     assistant_model: 'Model',
     assistant_no: 'no',
     assistant_no_credentials: 'Add an agent provider credential before starting a session.',
+    assistant_operation_apply_applying: 'Applying operations',
+    assistant_operation_apply_error: 'Unable to apply proposed operations',
+    assistant_operation_apply_selected: 'Apply {count} selected',
+    assistant_operation_apply_success: 'Applied {applied} operations. {failed} failed.',
     assistant_operation_plan_empty: 'No proposed album plan yet.',
     assistant_permission_preset: 'Permission preset',
     assistant_permission_preset_careful: 'Careful',
@@ -62,10 +66,13 @@ vi.mock('svelte-i18n', () => {
   };
 
   return {
-    t: readable((key: string, options?: { values?: Record<string, string> }) =>
+    t: readable((key: string, options?: { values?: Record<string, string | number> }) =>
       (messages[key] ?? key)
-        .replace('{protocol}', options?.values?.protocol ?? '')
-        .replace('{version}', options?.values?.version ?? ''),
+        .replace('{count}', String(options?.values?.count ?? ''))
+        .replace('{applied}', String(options?.values?.applied ?? ''))
+        .replace('{failed}', String(options?.values?.failed ?? ''))
+        .replace('{protocol}', String(options?.values?.protocol ?? ''))
+        .replace('{version}', String(options?.values?.version ?? '')),
     ),
   };
 });
