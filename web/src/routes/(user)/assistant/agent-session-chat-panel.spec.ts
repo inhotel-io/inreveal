@@ -15,7 +15,7 @@ import {
   type AgentToolCallResponseDto,
 } from '@immich/sdk';
 import { websocketMock } from '@test-data/mocks/websocket.mock';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { readable } from 'svelte/store';
 import AgentSessionChatPanel from './agent-session-chat-panel.svelte';
@@ -190,6 +190,49 @@ describe(AgentSessionChatPanel.name, () => {
     const activity = await screen.findByRole('article', { name: 'Pi checked your albums: Approved' });
     expect(activity).toHaveTextContent('Pi checked your albums.');
     expect(activity).toHaveTextContent('Approved');
+  });
+
+  it('renders denied and failed handled tool call details with request and error context', async () => {
+    render(AgentSessionChatPanel, {
+      props: {
+        session,
+        toolCalls: [
+          makeToolCall({
+            id: 'denied-tool-call',
+            status: AgentToolCallStatus.Denied,
+            approvalDecision: AgentToolApprovalDecision.Denied,
+            requestSummary: 'Read private screenshots',
+            responseSummary: '',
+            error: 'You denied access.',
+            completedAt: '2026-05-16T11:57:00.000Z',
+          }),
+          makeToolCall({
+            id: 'failed-tool-call',
+            status: AgentToolCallStatus.Failed,
+            requestSummary: 'List albums before organizing',
+            responseSummary: '',
+            error: 'Album service timed out.',
+            completedAt: '2026-05-16T11:58:00.000Z',
+          }),
+        ],
+      },
+    });
+
+    const deniedActivity = await screen.findByRole('article', { name: 'Pi checked your albums: Not allowed' });
+    expect(deniedActivity).toHaveTextContent('Pi checked your albums.');
+    expect(deniedActivity).not.toHaveTextContent('Read private screenshots');
+    expect(deniedActivity).not.toHaveTextContent('You denied access.');
+
+    await fireEvent.click(within(deniedActivity).getByRole('button', { name: 'Details' }));
+
+    expect(deniedActivity).toHaveTextContent('Read private screenshots');
+    expect(deniedActivity).toHaveTextContent('You denied access.');
+
+    const failedActivity = screen.getByRole('article', { name: 'Pi checked your albums: Failed' });
+    await fireEvent.click(within(failedActivity).getByRole('button', { name: 'Details' }));
+
+    expect(failedActivity).toHaveTextContent('List albums before organizing');
+    expect(failedActivity).toHaveTextContent('Album service timed out.');
   });
 
   it('renders assistant markdown headings and inline code as formatted content', async () => {
@@ -546,6 +589,85 @@ describe(AgentSessionChatPanel.name, () => {
     );
     expect(await screen.findByText('Organize favorites')).toBeInTheDocument();
     expect(input).toHaveValue('');
+  });
+
+  it('shows the submitted user message immediately and blocks composer while append is active', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    let resolveAppend: (message: AgentMessageResponseDto) => void;
+    sdkMock.appendAgentSessionMessage.mockReturnValue(
+      new Promise<AgentMessageResponseDto>((resolve) => {
+        resolveAppend = resolve;
+      }),
+    );
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: '  Organize favorites  ' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(await screen.findByText('Organize favorites')).toBeInTheDocument();
+    expect(input).toHaveValue('');
+    expect(input).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+
+    resolveAppend!(makeMessage('message-created', AgentMessageRole.User, 'Organize favorites'));
+    handler?.({
+      type: 'assistant-message-created',
+      sessionId: session.id,
+      message: makeMessage('message-assistant-created', AgentMessageRole.Assistant, 'Done.'),
+      createdAt: '2026-05-14T00:00:01.000Z',
+    });
+
+    await waitFor(() => expect(input).toBeEnabled());
+    expect(screen.getByText('Organize favorites')).toBeInTheDocument();
+  });
+
+  it('sorts messages and handled tool calls deterministically by timestamp and id', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-b', AgentMessageRole.User, 'Second same-time message'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+      {
+        ...makeMessage('message-a', AgentMessageRole.Assistant, 'First same-time message'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+      {
+        ...makeMessage('message-later', AgentMessageRole.Assistant, 'Later assistant response'),
+        createdAt: '2026-05-16T10:02:00.000Z',
+      },
+    ]);
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session,
+        toolCalls: [
+          makeToolCall({
+            id: 'middle-tool',
+            status: AgentToolCallStatus.Completed,
+            requestSummary: 'Check albums between messages',
+            responseSummary: 'Returned 1 album(s)',
+            startedAt: '2026-05-16T10:01:00.000Z',
+            completedAt: '2026-05-16T10:01:05.000Z',
+          }),
+        ],
+      },
+    });
+
+    const transcript = await screen.findByTestId('agent-session-chat-transcript');
+    await screen.findByText('Later assistant response');
+
+    expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
+      expect.stringContaining('First same-time message'),
+      expect.stringContaining('Second same-time message'),
+      expect.stringContaining('Pi checked your albums.'),
+      expect.stringContaining('Later assistant response'),
+    ]);
   });
 
   it('submits a user message from the composer when Enter is pressed', async () => {
