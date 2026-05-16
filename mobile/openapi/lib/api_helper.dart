@@ -85,6 +85,9 @@ String parameterToString(dynamic value) {
   if (value is AgentMessageToolCallBlockType) {
     return AgentMessageToolCallBlockTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentOperationApplyStatus) {
+    return AgentOperationApplyStatusTypeTransformer().encode(value).toString();
+  }
   if (value is AgentOperationExistingAlbumTargetKind) {
     return AgentOperationExistingAlbumTargetKindTypeTransformer().encode(value).toString();
   }

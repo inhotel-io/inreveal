@@ -77,6 +77,72 @@ class AgentSessionsApi {
     return null;
   }
 
+  /// Apply approved agent album operations
+  ///
+  /// Apply selected album operations from the current proposed agent operation plan.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [String] planId (required):
+  ///
+  /// * [AgentOperationPlanApplyRequestDto] agentOperationPlanApplyRequestDto (required):
+  Future<Response> applyApprovedOperationsWithHttpInfo(String id, String planId, AgentOperationPlanApplyRequestDto agentOperationPlanApplyRequestDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/{id}/operation-plan/{planId}/apply'
+      .replaceAll('{id}', id)
+      .replaceAll('{planId}', planId);
+
+    // ignore: prefer_final_locals
+    Object? postBody = agentOperationPlanApplyRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Apply approved agent album operations
+  ///
+  /// Apply selected album operations from the current proposed agent operation plan.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [String] planId (required):
+  ///
+  /// * [AgentOperationPlanApplyRequestDto] agentOperationPlanApplyRequestDto (required):
+  Future<AgentOperationPlanApplyResponseDto?> applyApprovedOperations(String id, String planId, AgentOperationPlanApplyRequestDto agentOperationPlanApplyRequestDto,) async {
+    final response = await applyApprovedOperationsWithHttpInfo(id, planId, agentOperationPlanApplyRequestDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentOperationPlanApplyResponseDto',) as AgentOperationPlanApplyResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Approve or deny an agent tool call
   ///
   /// Record an explicit user approval decision for a pending internal agent tool call.
