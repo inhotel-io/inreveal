@@ -277,6 +277,31 @@ describe(AgentRunnerService.name, () => {
     expect(toolTokenService.create).not.toHaveBeenCalled();
   });
 
+  it('validates runner session setup with MCP disabled and without legacy gateway fields', async () => {
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.validateSession.mockResolvedValue();
+
+    await sut.validateSession(makeCreateSessionBody());
+
+    expect(agentRunnerRepository.validateSession).toHaveBeenCalledWith({
+      url: 'http://agent-runner:4477',
+      timeoutMs: 120_000,
+      body: expect.objectContaining({
+        gallerySessionId: '00000000-0000-4000-8000-000000000100',
+        model: 'gpt-5.1',
+        mcpGateway: null,
+      }),
+    });
+    expect(agentRunnerRepository.validateSession.mock.calls[0][0].body).not.toHaveProperty('userId');
+    expect(agentRunnerRepository.validateSession.mock.calls[0][0].body).not.toHaveProperty('toolGateway');
+    expect(toolTokenService.create).not.toHaveBeenCalled();
+  });
+
   it('streams a user message to the runner, emits deltas, and persists the completed assistant message', async () => {
     const userId = '00000000-0000-4000-8000-000000000001';
     const sessionId = '00000000-0000-4000-8000-000000000100';
