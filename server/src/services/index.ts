@@ -1,6 +1,7 @@
 import { AgentRunnerToolGuard } from 'src/controllers/agent-runner-tool.controller';
 import { ActivityService } from 'src/services/activity.service';
 import { AgentMessageService } from 'src/services/agent-message.service';
+import { AgentMcpService } from 'src/services/agent-mcp.service';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
@@ -66,6 +67,7 @@ export const services = [
   ActivityService,
   AgentRunnerToolGuard,
   AgentMessageService,
+  AgentMcpService,
   AgentOperationPlanService,
   AgentProviderCredentialService,
   AgentRunnerService,
