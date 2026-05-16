@@ -1,5 +1,10 @@
 <script lang="ts">
-  import { cancelAgentSession, getAgentSession, type AgentSessionResponseDto } from '@immich/sdk';
+  import {
+    cancelAgentSession,
+    getAgentSession,
+    type AgentSessionResponseDto,
+    type AgentToolCallResponseDto,
+  } from '@immich/sdk';
   import { onDestroy } from 'svelte';
   import { t } from 'svelte-i18n';
   import AgentSessionActionDock from './agent-session-action-dock.svelte';
@@ -23,6 +28,7 @@
     return false;
   });
   let pendingApprovalCount = $state(0);
+  let recentToolCalls = $state<AgentToolCallResponseDto[]>([]);
   let cancelBusy = $state(false);
   let lifecycleError = $state<string | null>(null);
   let refreshSequence = 0;
@@ -94,6 +100,7 @@
 
   $effect(() => {
     pendingApprovalCount = 0;
+    recentToolCalls = [];
     lifecycleError = null;
     cancelBusy = false;
     refreshSequence += 1;
@@ -134,12 +141,14 @@
           {session}
           {onSessionUpdated}
           onPendingApprovalCountChange={(count) => (pendingApprovalCount = count)}
+          onRecentToolCallsChange={(toolCalls) => (recentToolCalls = toolCalls)}
         />
       {/snippet}
 
       <AgentSessionChatPanel
         {session}
         {actionDock}
+        toolCalls={recentToolCalls}
         composerDisabled={composerState.disabled}
         {composerDisabledReason}
         composerPlaceholder={$t(composerState.placeholderKey)}

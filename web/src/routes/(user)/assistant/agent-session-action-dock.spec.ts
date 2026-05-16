@@ -216,7 +216,8 @@ describe(AgentSessionActionDock.name, () => {
     expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
   });
 
-  it('renders recent activity collapsed by default', async () => {
+  it('publishes recent activity without rendering it in the dock', async () => {
+    const onRecentToolCallsChange = vi.fn();
     sdkMock.getToolCalls.mockResolvedValue([
       toolCall({
         id: 'recent',
@@ -226,10 +227,13 @@ describe(AgentSessionActionDock.name, () => {
       }),
     ]);
 
-    render(AgentSessionActionDock, { props: { session: makeSession() } });
+    render(AgentSessionActionDock, { props: { session: makeSession(), onRecentToolCallsChange } });
 
-    expect(await screen.findByText('Recent activity (1)')).toBeInTheDocument();
-    expect(screen.queryByText('Found matching photos')).not.toBeVisible();
+    await waitFor(() =>
+      expect(onRecentToolCallsChange).toHaveBeenCalledWith([expect.objectContaining({ id: 'recent' })]),
+    );
+    expect(screen.queryByText('Recent activity (1)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Found matching photos')).not.toBeInTheDocument();
   });
 
   it('renders plan review inside the dock when there are no pending approvals', async () => {
@@ -301,7 +305,8 @@ describe(AgentSessionActionDock.name, () => {
     expect(await screen.findByRole('heading', { name: 'Plan review' })).toBeInTheDocument();
   });
 
-  it('keeps recent approval activity visible when plan loading fails', async () => {
+  it('keeps recent approval activity published when plan loading fails', async () => {
+    const onRecentToolCallsChange = vi.fn();
     sdkMock.getToolCalls.mockResolvedValue([
       toolCall({
         id: 'recent',
@@ -313,12 +318,15 @@ describe(AgentSessionActionDock.name, () => {
     sdkMock.getCurrentOperationPlan.mockRejectedValue(new Error('failed'));
 
     render(AgentSessionActionDock, {
-      props: { session: makeSession({ status: AgentSessionStatus.WaitingForPlanReview }) },
+      props: { session: makeSession({ status: AgentSessionStatus.WaitingForPlanReview }), onRecentToolCallsChange },
     });
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load proposed album plan');
-    expect(screen.getByText('Recent activity (1)')).toBeInTheDocument();
-    expect(screen.queryByText('Found matching photos')).not.toBeVisible();
+    await waitFor(() =>
+      expect(onRecentToolCallsChange).toHaveBeenCalledWith([expect.objectContaining({ id: 'recent' })]),
+    );
+    expect(screen.queryByText('Recent activity (1)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Found matching photos')).not.toBeInTheDocument();
   });
 
   it('refreshes on selected websocket events and polls active sessions', async () => {
