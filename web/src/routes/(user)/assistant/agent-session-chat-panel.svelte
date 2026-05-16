@@ -27,6 +27,7 @@
     session: AgentSessionResponseDto;
     actionDock?: Snippet;
     toolCalls?: AgentToolCallResponseDto[];
+    assistantResponsePending?: boolean;
     composerDisabled?: boolean;
     composerDisabledReason?: string | null;
     composerPlaceholder?: string;
@@ -70,6 +71,7 @@
     session,
     actionDock,
     toolCalls = [],
+    assistantResponsePending = false,
     composerDisabled = false,
     composerDisabledReason = null,
     composerPlaceholder,
@@ -91,8 +93,9 @@
   let lastPublishedTitle: string | null = null;
   let cleanupWebsocketListener: (() => void) | undefined;
 
-  const canSend = $derived(draft.trim().length > 0 && !isSending && !isAssistantActive && !composerDisabled);
-  const showAssistantBusyIndicator = $derived((isSending || isAssistantActive) && streamingText.length === 0);
+  const isResponsePending = $derived(isSending || isAssistantActive || assistantResponsePending);
+  const canSend = $derived(draft.trim().length > 0 && !isResponsePending && !composerDisabled);
+  const showAssistantBusyIndicator = $derived(isResponsePending && streamingText.length === 0 && !composerDisabled);
   const busyFrames = ['-', '\\', '|', '/'];
   const busyFrame = $derived(busyFrames[busyFrameIndex]);
   const chatTimelineItems = $derived(buildChatTimelineItems(messages, toolCalls));
@@ -459,6 +462,23 @@
   });
 
   $effect(() => {
+    if (!assistantResponsePending) {
+      return;
+    }
+
+    isAssistantActive = true;
+  });
+
+  $effect(() => {
+    if (!composerDisabled) {
+      return;
+    }
+
+    isAssistantActive = false;
+    streamingText = '';
+  });
+
+  $effect(() => {
     if (!showAssistantBusyIndicator) {
       busyFrameIndex = 0;
       return;
@@ -706,7 +726,7 @@
         class="min-h-14 flex-1 resize-none rounded-2xl border border-gray-300 bg-white px-4 py-3 text-sm shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
         bind:value={draft}
         placeholder={composerPlaceholder ?? $t('assistant_message_placeholder')}
-        disabled={isSending || isAssistantActive || composerDisabled}
+        disabled={isResponsePending || composerDisabled}
         onkeydown={handleComposerKeydown}
       ></textarea>
 

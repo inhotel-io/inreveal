@@ -16,12 +16,20 @@
   interface Props {
     session: AgentSessionResponseDto;
     title?: string | null;
+    assistantResponsePending?: boolean;
     onNewChat: () => void;
     onTitleDiscovered?: (sessionId: string, title: string) => void;
     onSessionUpdated?: (session: AgentSessionResponseDto) => void;
   }
 
-  let { session, title = null, onNewChat, onTitleDiscovered, onSessionUpdated }: Props = $props();
+  let {
+    session,
+    title = null,
+    assistantResponsePending = false,
+    onNewChat,
+    onTitleDiscovered,
+    onSessionUpdated,
+  }: Props = $props();
 
   let detailsOpen = $derived.by(() => {
     void session.id;
@@ -149,6 +157,7 @@
         {session}
         {actionDock}
         toolCalls={recentToolCalls}
+        {assistantResponsePending}
         composerDisabled={composerState.disabled}
         {composerDisabledReason}
         composerPlaceholder={$t(composerState.placeholderKey)}

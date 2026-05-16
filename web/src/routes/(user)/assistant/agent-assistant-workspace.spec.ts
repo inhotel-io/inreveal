@@ -68,6 +68,7 @@ vi.mock('svelte-i18n', () => {
     assistant_api_keys: 'API keys',
     assistant_api_keys_description: 'Save one key per provider account, then add all model IDs available for that key.',
     assistant_api_keys_menu: 'Manage API keys',
+    assistant_busy_ascii: 'pi is working...',
     assistant_existing_api_keys: 'Existing API keys',
     assistant_healthy: 'Healthy',
     assistant_hide_api_key: 'Hide API key',
@@ -427,6 +428,38 @@ describe(AgentAssistantWorkspace.name, () => {
       `/assistant?session=${createdSession.id}`,
       expect.objectContaining({ replaceState: false }),
     );
+  });
+
+  it('shows Pi working in the selected chat while the first message is waiting for approval', async () => {
+    const user = userEvent.setup();
+    const createdSession = makeSession({
+      id: '00000000-0000-4000-8000-000000000400',
+      status: AgentSessionStatus.Running,
+    });
+    let resolveAppend: (message: AgentMessageResponseDto) => void;
+    sdkMock.createAgentSession.mockResolvedValue(createdSession);
+    sdkMock.appendAgentSessionMessage.mockReturnValue(
+      new Promise<AgentMessageResponseDto>((resolve) => {
+        resolveAppend = resolve;
+      }),
+    );
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Make an album from last weekend');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(await screen.findByTestId(`agent-session-row-${createdSession.id}`)).toHaveAttribute('aria-current', 'true');
+    expect(await screen.findByText('pi is working...')).toBeInTheDocument();
+
+    resolveAppend!(makeUserMessage(createdSession.id, 'Make an album from last weekend'));
   });
 
   it('uses permissions selected from the three-dot menu when creating the next session', async () => {
