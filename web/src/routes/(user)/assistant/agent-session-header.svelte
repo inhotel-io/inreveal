@@ -7,11 +7,13 @@
   interface Props {
     session: AgentSessionResponseDto;
     title?: string | null;
+    cancelDisabled?: boolean;
+    onCancel?: (() => void) | null;
     onNewChat: () => void;
     onOpenDetails: () => void;
   }
 
-  let { session, title = null, onNewChat, onOpenDetails }: Props = $props();
+  let { session, title = null, cancelDisabled = false, onCancel = null, onNewChat, onOpenDetails }: Props = $props();
 
   const displayTitle = $derived(title?.trim() || $t('assistant_new_chat'));
   const statusBadge = $derived(getAgentSessionStatusBadge(session.status));
@@ -73,6 +75,16 @@
   </div>
 
   <div class="flex shrink-0 items-center gap-2">
+    {#if onCancel}
+      <button
+        type="button"
+        class="rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
+        disabled={cancelDisabled}
+        onclick={onCancel}
+      >
+        {$t('assistant_cancel')}
+      </button>
+    {/if}
     <button
       type="button"
       class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-black hover:bg-gray-50 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
