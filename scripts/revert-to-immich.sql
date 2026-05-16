@@ -120,6 +120,7 @@ DROP TABLE IF EXISTS "shared_space_person" CASCADE;
 DROP TABLE IF EXISTS "shared_space_face_match_backfill_target" CASCADE;
 DROP TABLE IF EXISTS "shared_space_library_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_album_asset_audit" CASCADE;
+DROP TABLE IF EXISTS "person_face_suggestion" CASCADE;
 DROP TABLE IF EXISTS "shared_space_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_member_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_audit" CASCADE;
@@ -381,6 +382,7 @@ DELETE FROM "kysely_migrations"
    '1778500000000-AddSpacePersonRepresentativeFaceSource',
    '1778600000000-SortSpacePeopleByNameIndex',
    '1778700000000-AddSharedSpaceFaceMatchBackfillTarget',
+   '1778800000000-AddPersonFaceSuggestion',
    '1778800000000-ReconcileFaceIdentityIndexOverrides',
    '1778800000000-TrimSpacePersonNameIndex',
    '1779000000000-AddSharedSpaceAlbumUserTables',
@@ -454,7 +456,8 @@ BEGIN
       OR "name" LIKE '%AddSpacePersonRepresentativeFaceSource%'
       OR "name" LIKE '%SortSpacePeopleByNameIndex%'
       OR "name" LIKE '%ReconcileFaceIdentityIndexOverrides%'
-      OR "name" LIKE '%TrimSpacePersonNameIndex%';
+      OR "name" LIKE '%TrimSpacePersonNameIndex%'
+      OR "name" LIKE '%AddPersonFaceSuggestion%';
   IF fork_rows_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery row(s) still present in kysely_migrations after cleanup — aborting.', fork_rows_left;
   END IF;
@@ -478,7 +481,8 @@ BEGIN
        'face_identity_face', 'face_identity',
        'shared_space', 'user_group_member', 'user_group',
        'classification_prompt_embedding', 'classification_category',
-       'storage_migration_log', 'asset_duplicate_checksum'
+       'storage_migration_log', 'asset_duplicate_checksum',
+       'person_face_suggestion'
      );
   IF fork_tables_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery table(s) still present after cleanup — aborting.', fork_tables_left;
