@@ -1,15 +1,20 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AgentSession, AgentToolCall } from 'src/database';
 import {
+  AgentOperationPlanApplyRequestDto,
+  AgentOperationPlanApplyResponseDto,
   AgentOperationPlanResponseDto,
   AgentOperationPlanSummaryRequestDto,
   AgentOperationPlanToolResponseDto,
   AgentProposeAlbumOperationsDto,
   AgentReviseAlbumOperationsDto,
 } from 'src/dtos/agent-operation.dto';
+import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
+  AgentOperationApplyStatus,
   AgentOperationPlanStatus,
+  AgentOperationStatus,
   AgentOperationTargetKind,
   AgentOperationType,
   AgentSessionStatus,
@@ -21,6 +26,7 @@ import {
 } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import {
+  AgentOperationApplyUpdate,
   AgentOperationPlanRepository,
   AgentOperationPlanWithOperations,
 } from 'src/repositories/agent-operation-plan.repository';
@@ -28,7 +34,8 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
-import { AgentAlbumOperationInput } from 'src/types/agent-operation.types';
+import { AlbumService } from 'src/services/album.service';
+import { AgentAlbumOperationInput, AgentOperationResult } from 'src/types/agent-operation.types';
 import { AgentToolOperationPlanRequestMetadata } from 'src/types/agent-tool.types';
 
 type PlanningRequest = {
@@ -67,6 +74,7 @@ export class AgentOperationPlanService {
   constructor(
     private readonly accessRepository: AccessRepository,
     private readonly assetRepository: AssetRepository,
+    private readonly albumService: AlbumService,
     private readonly sessionRepository: AgentSessionRepository,
     private readonly planRepository: AgentOperationPlanRepository,
     private readonly toolCallRepository: AgentToolCallRepository,
@@ -142,6 +150,49 @@ export class AgentOperationPlanService {
       const plan = await this.requireCurrentPlan(session.id, planId);
       return { plan, summary: this.summarize(plan) };
     });
+  }
+
+  async applyApprovedOperations(
+    auth: AuthDto,
+    sessionId: string,
+    planId: string,
+    dto: AgentOperationPlanApplyRequestDto,
+  ): Promise<AgentOperationPlanApplyResponseDto> {
+    const session = await this.getOwnedSession(auth, sessionId, { requireActive: true });
+    if (session.status !== AgentSessionStatus.WaitingForPlanReview) {
+      throw new BadRequestException('Agent session is not waiting for plan review');
+    }
+
+    const currentPlan = await this.requireCurrentProposedPlan(session.id, planId);
+    this.validateApplyOperationIds(currentPlan, dto.operationIds);
+
+    const claimedPlan = await this.planRepository.claimCurrentForApply(session.id, planId);
+    if (!claimedPlan) {
+      throw new NotFoundException('Agent operation plan not found');
+    }
+
+    await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Applying });
+
+    const selectedOperationIds = new Set(dto.operationIds);
+    const applyUpdates = await this.applyClaimedPlan(auth, session, claimedPlan, selectedOperationIds);
+    const appliedPlan = await this.planRepository.completeApply(claimedPlan.id, applyUpdates);
+    const response = this.buildApplyResponse(this.mapPlan(appliedPlan), selectedOperationIds);
+
+    await this.sessionRepository.update(auth.user.id, session.id, {
+      status: AgentSessionStatus.Completed,
+      endedAt: new Date(),
+    });
+    this.websocketRepository.clientSend('on_agent_session_event', auth.user.id, {
+      type: 'operation-plan-applied',
+      sessionId: session.id,
+      planId: appliedPlan.id,
+      status: response.status,
+      appliedCount: response.appliedOperationIds.length,
+      skippedCount: response.skippedOperationIds.length,
+      failedCount: response.failedOperationIds.length,
+    });
+
+    return response;
   }
 
   private async runPlanningTool(
@@ -397,6 +448,203 @@ export class AgentOperationPlanService {
     });
   }
 
+  private validateApplyOperationIds(plan: AgentOperationPlanWithOperations, operationIds: string[]) {
+    const operationById = new Map(plan.operations.map((operation) => [operation.id, operation]));
+
+    if (operationIds.some((operationId) => !operationById.has(operationId))) {
+      throw new BadRequestException('One or more operation ids are not in the current plan');
+    }
+
+    if (operationIds.some((operationId) => operationById.get(operationId)?.enabled === false)) {
+      throw new BadRequestException('One or more operation ids are disabled in the current plan');
+    }
+  }
+
+  private async applyClaimedPlan(
+    auth: AuthDto,
+    session: AgentSession,
+    plan: AgentOperationPlanWithOperations,
+    selectedOperationIds: Set<string>,
+  ): Promise<AgentOperationApplyUpdate[]> {
+    const appliedOperationIds = new Set<string>();
+    const createdAlbumIdByTemporaryTargetId = new Map<string, string>();
+    const updates: AgentOperationApplyUpdate[] = [];
+
+    for (const operation of plan.operations) {
+      if (!selectedOperationIds.has(operation.id)) {
+        updates.push(this.skippedOperation(operation.id, 'Operation was not selected for apply'));
+        continue;
+      }
+
+      const dependencyApplied = operation.dependencyIds.every((dependencyId) => appliedOperationIds.has(dependencyId));
+      if (!dependencyApplied) {
+        updates.push(this.skippedOperation(operation.id, 'Dependency was not applied'));
+        continue;
+      }
+
+      try {
+        await this.validateApplyAccess(auth, session, operation);
+        const update = await this.applySingleOperation(auth, operation, createdAlbumIdByTemporaryTargetId);
+        updates.push(update);
+        if (update.status === AgentOperationStatus.Applied) {
+          appliedOperationIds.add(operation.id);
+        }
+      } catch (error) {
+        updates.push({
+          id: operation.id,
+          status: AgentOperationStatus.Failed,
+          result: null,
+          error: error instanceof Error ? error.message : 'Agent operation apply failed',
+        });
+      }
+    }
+
+    return updates;
+  }
+
+  private async validateApplyAccess(
+    auth: AuthDto,
+    session: AgentSession,
+    operation: AgentOperationPlanWithOperations['operations'][number],
+  ) {
+    this.validateWriteScope(session, operation.type);
+    await this.validateNormalAccess(auth, session, [
+      {
+        type: operation.type,
+        summary: operation.summary,
+        targetKind: operation.targetKind,
+        targetId: operation.targetId ?? undefined,
+        temporaryTargetId: operation.temporaryTargetId ?? undefined,
+        assetIds: operation.assetIds,
+        payload: operation.payload,
+        riskLevel: operation.riskLevel,
+        enabled: operation.enabled,
+      },
+    ]);
+  }
+
+  private async applySingleOperation(
+    auth: AuthDto,
+    operation: AgentOperationPlanWithOperations['operations'][number],
+    createdAlbumIdByTemporaryTargetId: Map<string, string>,
+  ): Promise<AgentOperationApplyUpdate> {
+    switch (operation.type) {
+      case AgentOperationType.AlbumCreate: {
+        const payload = this.requireAlbumPayload(operation.payload, operation.summary);
+        if (!payload.albumName) {
+          throw new BadRequestException('album.create requires albumName');
+        }
+
+        const album = await this.albumService.create(auth, {
+          albumName: payload.albumName,
+          description: payload.description ?? '',
+          assetIds: [],
+        });
+        if (operation.temporaryTargetId) {
+          createdAlbumIdByTemporaryTargetId.set(operation.temporaryTargetId, album.id);
+        }
+
+        return this.appliedOperation(operation.id, { albumId: album.id });
+      }
+
+      case AgentOperationType.AlbumAddAssets: {
+        const albumId = this.resolveTargetAlbumId(operation, createdAlbumIdByTemporaryTargetId);
+        const results = await this.albumService.addAssets(auth, albumId, { ids: operation.assetIds });
+        const successfulAssetIds = results.filter((result) => result.success).map((result) => result.id);
+        const failedAssetCount = results.length - successfulAssetIds.length;
+
+        if (failedAssetCount > 0) {
+          return {
+            id: operation.id,
+            status: AgentOperationStatus.Failed,
+            result: this.assetResult(albumId, successfulAssetIds, results),
+            error: `Failed to add ${failedAssetCount} asset(s)`,
+          };
+        }
+
+        return this.appliedOperation(operation.id, this.assetResult(albumId, successfulAssetIds, results));
+      }
+
+      case AgentOperationType.AlbumUpdateDetails: {
+        const payload = this.requireAlbumPayload(operation.payload, operation.summary);
+        const albumId = this.resolveTargetAlbumId(operation, createdAlbumIdByTemporaryTargetId);
+        const album = await this.albumService.update(auth, albumId, {
+          albumName: payload.albumName,
+          description: payload.description,
+        });
+
+        return this.appliedOperation(operation.id, { albumId: album.id });
+      }
+
+      case AgentOperationType.AlbumSetCover: {
+        const albumId = this.resolveTargetAlbumId(operation, createdAlbumIdByTemporaryTargetId);
+        const [albumThumbnailAssetId] = operation.assetIds;
+        if (!albumThumbnailAssetId) {
+          throw new BadRequestException('album.setCover requires one asset id');
+        }
+
+        const album = await this.albumService.update(auth, albumId, { albumThumbnailAssetId });
+        return this.appliedOperation(operation.id, { albumId: album.id, assetIds: [albumThumbnailAssetId] });
+      }
+    }
+  }
+
+  private skippedOperation(id: string, skippedReason: string): AgentOperationApplyUpdate {
+    return {
+      id,
+      status: AgentOperationStatus.Skipped,
+      result: { skippedReason },
+      error: null,
+    };
+  }
+
+  private appliedOperation(id: string, result: AgentOperationResult): AgentOperationApplyUpdate {
+    return {
+      id,
+      status: AgentOperationStatus.Applied,
+      result,
+      error: null,
+    };
+  }
+
+  private assetResult(albumId: string, assetIds: string[], assetResults: BulkIdResponseDto[]): AgentOperationResult {
+    return {
+      albumId,
+      assetIds,
+      assetResults: assetResults.map(({ id, success, error, errorMessage }) => ({ id, success, error, errorMessage })),
+    };
+  }
+
+  private resolveTargetAlbumId(
+    operation: AgentOperationPlanWithOperations['operations'][number],
+    createdAlbumIdByTemporaryTargetId: Map<string, string>,
+  ) {
+    if (operation.targetId) {
+      return operation.targetId;
+    }
+
+    if (operation.temporaryTargetId) {
+      const albumId = createdAlbumIdByTemporaryTargetId.get(operation.temporaryTargetId);
+      if (albumId) {
+        return albumId;
+      }
+    }
+
+    throw new BadRequestException(`No applied album exists for operation ${operation.id}`);
+  }
+
+  private requireAlbumPayload(payload: unknown, summary: string): { albumName?: string; description?: string } {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new BadRequestException(`Invalid album payload for ${summary}`);
+    }
+
+    const { albumName, description } = payload as { albumName?: unknown; description?: unknown };
+    return {
+      albumName: typeof albumName === 'string' ? albumName : undefined,
+      description: typeof description === 'string' ? description : undefined,
+    };
+  }
+
   private createPlanningAudit(
     session: AgentSession,
     toolName: AgentToolName,
@@ -495,6 +743,39 @@ export class AgentOperationPlanService {
       operations: plan.operations.map((operation) => this.mapOperation(operation)),
       createdAt: plan.createdAt,
       updatedAt: plan.updatedAt,
+    };
+  }
+
+  private buildApplyResponse(
+    plan: AgentOperationPlanResponseDto,
+    selectedOperationIds: Set<string>,
+  ): AgentOperationPlanApplyResponseDto {
+    const appliedOperationIds = plan.operations
+      .filter((operation) => operation.status === AgentOperationStatus.Applied)
+      .map((operation) => operation.id);
+    const skippedOperationIds = plan.operations
+      .filter((operation) => operation.status === AgentOperationStatus.Skipped)
+      .map((operation) => operation.id);
+    const failedOperationIds = plan.operations
+      .filter((operation) => operation.status === AgentOperationStatus.Failed)
+      .map((operation) => operation.id);
+    const selectedSkippedOperationIds = skippedOperationIds.filter((operationId) =>
+      selectedOperationIds.has(operationId),
+    );
+    const status =
+      appliedOperationIds.length === 0
+        ? AgentOperationApplyStatus.Failed
+        : failedOperationIds.length > 0 || selectedSkippedOperationIds.length > 0
+          ? AgentOperationApplyStatus.PartiallyApplied
+          : AgentOperationApplyStatus.Applied;
+
+    return {
+      status,
+      plan,
+      appliedOperationIds,
+      skippedOperationIds,
+      failedOperationIds,
+      summary: `Applied ${appliedOperationIds.length} operation(s), skipped ${skippedOperationIds.length}, failed ${failedOperationIds.length}.`,
     };
   }
 
