@@ -183,6 +183,10 @@ export class AgentRunnerService {
   }) {
     const activeDispatch = this.sessionDispatches.get(sessionId);
     if (activeDispatch) {
+      await activeDispatch;
+    }
+
+    if (this.sessionDispatches.has(sessionId)) {
       throw new BadRequestException('Agent session already has a message in progress');
     }
 
