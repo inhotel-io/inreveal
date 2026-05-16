@@ -70,7 +70,6 @@ const makeSession = (overrides: Partial<AgentSession> = {}): AgentSession => {
 
   return {
     id: newUuid(),
-    title: null,
     userId: newUuid(),
     providerCredentialId,
     credentialSnapshot: {
@@ -254,7 +253,7 @@ describe(AgentToolService.name, () => {
     toolCallRepository.getCountedAssetCountBySessionAndDataClass.mockResolvedValue(0);
     albumRepository.getAgentAlbums.mockResolvedValue([]);
     albumRepository.getAgentAlbumById.mockResolvedValue(null);
-    agentRunnerService.resumeAfterToolApproval.mockResolvedValue(undefined);
+    agentRunnerService.resumeAfterToolApproval.mockResolvedValue();
   });
 
   it('returns approval-required and creates a pending audit row for strict metadata reads', async () => {
