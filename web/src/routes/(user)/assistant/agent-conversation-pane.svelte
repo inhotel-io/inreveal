@@ -2,6 +2,7 @@
   import {
     cancelAgentSession,
     getAgentSession,
+    type AgentMessageResponseDto,
     type AgentSessionResponseDto,
     type AgentToolCallResponseDto,
   } from '@immich/sdk';
@@ -16,6 +17,7 @@
   interface Props {
     session: AgentSessionResponseDto;
     title?: string | null;
+    seedMessages?: AgentMessageResponseDto[];
     assistantResponsePending?: boolean;
     onNewChat: () => void;
     onTitleDiscovered?: (sessionId: string, title: string) => void;
@@ -25,6 +27,7 @@
   let {
     session,
     title = null,
+    seedMessages = [],
     assistantResponsePending = false,
     onNewChat,
     onTitleDiscovered,
@@ -157,6 +160,7 @@
         {session}
         {actionDock}
         toolCalls={recentToolCalls}
+        {seedMessages}
         {assistantResponsePending}
         composerDisabled={composerState.disabled}
         {composerDisabledReason}
