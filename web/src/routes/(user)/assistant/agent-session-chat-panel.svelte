@@ -361,6 +361,10 @@
     publishDiscoveredTitle(nextMessages);
   };
 
+  const removeMessageById = (messageId: string) => {
+    messages = messages.filter((message) => message.id !== messageId);
+  };
+
   const handleSessionEvent = (event: AgentSessionClientEvent) => {
     if (event.sessionId !== session.id) {
       return;
@@ -410,6 +414,20 @@
     isSending = true;
     errorMessage = null;
     isAssistantActive = true;
+    draft = '';
+    const pendingMessageId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const pendingMessage: AgentMessageResponseDto = {
+      id: pendingMessageId,
+      sessionId: session.id,
+      role: AgentMessageRole.User,
+      providerMessageId: null,
+      toolCallId: null,
+      content: {
+        blocks: [{ type: AgentMessageTextBlockType.Text, text }],
+      },
+      createdAt: new Date().toISOString(),
+    };
+    appendIfNew(pendingMessage);
 
     try {
       const message = await appendAgentSessionMessage({
@@ -421,10 +439,12 @@
         },
       });
 
+      removeMessageById(pendingMessageId);
       appendIfNew(message);
-      draft = '';
       notifyMessageSent();
     } catch (error) {
+      removeMessageById(pendingMessageId);
+      draft = text;
       errorMessage = $t('assistant_message_send_error');
       handleError(error, errorMessage);
       isAssistantActive = false;
@@ -680,7 +700,7 @@
                   {#if toolCall.responseSummary || toolCall.error}
                     <div>
                       <dt class="font-medium text-gray-500 dark:text-gray-400">Result</dt>
-                      <dd class="break-words">{toolCall.responseSummary ?? toolCall.error}</dd>
+                      <dd class="break-words">{toolCall.responseSummary || toolCall.error}</dd>
                     </div>
                   {/if}
                   <div>
