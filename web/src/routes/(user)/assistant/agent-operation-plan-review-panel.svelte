@@ -121,6 +121,14 @@
       return;
     }
 
+    if (
+      event.type === 'operation-plan-applied' &&
+      model?.plan.id === event.planId &&
+      model.plan.status === AgentOperationPlanStatus.Applied
+    ) {
+      return;
+    }
+
     void loadPlan();
   };
 
@@ -188,11 +196,11 @@
   });
 </script>
 
-{#if loading}
+{#if loading && !model}
   <section class="mx-auto w-full max-w-3xl px-4 pb-10 text-sm text-gray-500 md:px-8">
     {$t('assistant_operation_plan_loading')}
   </section>
-{:else if errorMessage}
+{:else if errorMessage && !model}
   <section class="mx-auto w-full max-w-3xl px-4 pb-10 md:px-8">
     <div
       class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
@@ -279,6 +287,15 @@
           </section>
         {/each}
       </div>
+
+      {#if errorMessage}
+        <p
+          class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+          role="alert"
+        >
+          {errorMessage}
+        </p>
+      {/if}
 
       {#if applyErrorMessage}
         <p
