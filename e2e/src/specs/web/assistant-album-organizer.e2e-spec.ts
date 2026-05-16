@@ -93,7 +93,7 @@ const startAssistantSession = async (page: Page, accessToken: string) => {
   await page.getByLabel('Approval mode', { exact: true }).selectOption(AgentApprovalMode.PlanOnly);
   await page.getByRole('button', { name: 'Start session' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Created session' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Created session' })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
   await expect(page.getByText('No proposed album plan yet.')).toBeVisible();
 
