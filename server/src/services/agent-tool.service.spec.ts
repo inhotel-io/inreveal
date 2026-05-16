@@ -18,6 +18,7 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import {
@@ -69,6 +70,7 @@ const makeSession = (overrides: Partial<AgentSession> = {}): AgentSession => {
 
   return {
     id: newUuid(),
+    title: null,
     userId: newUuid(),
     providerCredentialId,
     credentialSnapshot: {
@@ -197,6 +199,7 @@ describe(AgentToolService.name, () => {
   let albumRepository: ReturnType<typeof automock<AlbumRepository>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
   let toolCallRepository: ReturnType<typeof automock<AgentToolCallRepository>>;
+  let agentRunnerService: ReturnType<typeof automock<AgentRunnerService>>;
 
   beforeEach(() => {
     accessRepository = newAccessRepositoryMock();
@@ -204,12 +207,14 @@ describe(AgentToolService.name, () => {
     albumRepository = automock(AlbumRepository, { args: [{} as never] });
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
     toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
+    agentRunnerService = automock(AgentRunnerService, { args: [] as never });
     sut = new AgentToolService(
       accessRepository as unknown as AccessRepository,
       assetRepository as unknown as AssetRepository,
       albumRepository,
       sessionRepository,
       toolCallRepository,
+      agentRunnerService,
     );
 
     sessionRepository.update.mockImplementation((_userId, _id, dto) =>
@@ -249,6 +254,7 @@ describe(AgentToolService.name, () => {
     toolCallRepository.getCountedAssetCountBySessionAndDataClass.mockResolvedValue(0);
     albumRepository.getAgentAlbums.mockResolvedValue([]);
     albumRepository.getAgentAlbumById.mockResolvedValue(null);
+    agentRunnerService.resumeAfterToolApproval.mockResolvedValue(undefined);
   });
 
   it('returns approval-required and creates a pending audit row for strict metadata reads', async () => {
@@ -2045,6 +2051,58 @@ describe(AgentToolService.name, () => {
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
       status: AgentSessionStatus.Running,
     });
+  });
+
+  it('resumes the runner after a pending approval decision for a runner-backed session', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForToolApproval,
+      runnerSessionId: 'runner-session-1',
+    });
+    const pending = makeToolCall({ sessionId: session.id });
+    const transitioned = makeToolCall({
+      ...pending,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      responseSummary: 'Tool call approved by user',
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(pending);
+    toolCallRepository.transition.mockResolvedValue(transitioned);
+
+    await sut.approveToolCall(auth, session.id, pending.id, { decision: AgentToolApprovalDecision.Approved });
+
+    expect(agentRunnerService.resumeAfterToolApproval).toHaveBeenCalledWith({
+      userId: auth.user.id,
+      sessionId: session.id,
+      runnerSessionId: 'runner-session-1',
+    });
+  });
+
+  it('does not try to resume a runner when approving a session without a runner session id', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForToolApproval,
+      runnerSessionId: null,
+    });
+    const pending = makeToolCall({ sessionId: session.id });
+    const transitioned = makeToolCall({
+      ...pending,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      responseSummary: 'Tool call approved by user',
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(pending);
+    toolCallRepository.transition.mockResolvedValue(transitioned);
+
+    await sut.approveToolCall(auth, session.id, pending.id, { decision: AgentToolApprovalDecision.Approved });
+
+    expect(agentRunnerService.resumeAfterToolApproval).not.toHaveBeenCalled();
   });
 
   it('rejects non-pending approval without transition', async () => {

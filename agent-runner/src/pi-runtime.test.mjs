@@ -94,6 +94,7 @@ const createFakeDependencies = ({ promptGate, sessionAbortGate, mcpToolNames = [
     activeToolNames: [],
     bindExtensions: [],
     prompts: [],
+    continues: 0,
     authCreate: 0,
     authInMemory: 0,
     modelRegistryCreate: 0,
@@ -112,6 +113,16 @@ const createFakeDependencies = ({ promptGate, sessionAbortGate, mcpToolNames = [
   const session = {
     sessionId: 'pi-sdk-session-1',
     agent: {
+      async continue() {
+        calls.continues += 1;
+        listener?.({
+          type: 'message_update',
+          assistantMessageEvent: { type: 'text_delta', delta: 'Approved. Continuing.' },
+        });
+        this.messages?.push?.({ role: 'assistant', content: [{ type: 'text', text: 'Approved. Continuing.' }] });
+        session.messages.push({ role: 'assistant', content: [{ type: 'text', text: 'Approved. Continuing.' }] });
+        listener?.({ type: 'message_end' });
+      },
       abort() {
         calls.agentAborted += 1;
         abortGate.resolve();
@@ -789,6 +800,37 @@ describe('pi runtime adapter', () => {
         runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
         providerMessageId: null,
         content: { blocks: [{ type: 'text', text: 'I can help.' }] },
+      },
+    ]);
+  });
+
+  it('resumes the Pi agent after tool approval and streams the continued response', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collect(
+      runtime.resumeSession({
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        gallerySessionId: '00000000-0000-4000-8000-000000000100',
+      }),
+    );
+
+    assert.equal(calls.continues, 1);
+    assert.deepEqual(events, [
+      {
+        type: 'assistant-message-delta',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        delta: 'Approved. Continuing.',
+        sequence: 1,
+      },
+      {
+        type: 'assistant-message-completed',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        providerMessageId: null,
+        content: { blocks: [{ type: 'text', text: 'Approved. Continuing.' }] },
       },
     ]);
   });

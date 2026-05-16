@@ -20,6 +20,7 @@ vi.mock('$lib/stores/websocket');
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_chat: 'Chat',
+    assistant_busy_ascii: 'pi is working...',
     assistant_message: 'Message',
     assistant_message_load_error: 'Unable to load messages',
     assistant_message_send_error: 'Unable to send message',
@@ -106,6 +107,59 @@ describe(AgentSessionChatPanel.name, () => {
     expect(await screen.findByText('Show me my albums')).toBeInTheDocument();
     expect(screen.getByText('I can help with that.')).toBeInTheDocument();
     expect(sdkMock.getAgentSessionMessages).toHaveBeenCalledWith({ id: session.id });
+  });
+
+  it('renders assistant markdown emphasis and bullet lists as formatted content', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      makeMessage(
+        'message-assistant',
+        AgentMessageRole.Assistant,
+        'Here are **Family picks**:\n- Beach day\n- Birthday cake\n\nUse *favorites* first.',
+      ),
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const boldText = await screen.findByText('Family picks');
+    expect(boldText.tagName).toBe('STRONG');
+    expect(screen.getByText('favorites').tagName).toBe('EM');
+    expect(screen.getByRole('list')).toBeInTheDocument();
+    expect(screen.getByText('Beach day').closest('li')).toBeInTheDocument();
+    expect(screen.getByText('Birthday cake').closest('li')).toBeInTheDocument();
+  });
+
+  it('renders streamed assistant markdown as formatted content', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+
+    render(AgentSessionChatPanel, { props: { session } });
+    await screen.findByRole('textbox', { name: 'Message' });
+
+    handler?.({
+      type: 'assistant-message-delta',
+      sessionId: session.id,
+      delta: 'Try **Albums**:\n- Travel\n- Family',
+      sequence: 1,
+      createdAt: '2026-05-14T00:00:01.000Z',
+    });
+
+    expect((await screen.findByText('Albums')).tagName).toBe('STRONG');
+    expect(screen.getByText('Travel').closest('li')).toBeInTheDocument();
+    expect(screen.getByText('Family').closest('li')).toBeInTheDocument();
+  });
+
+  it('renders assistant markdown without interpreting raw HTML', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      makeMessage('message-assistant', AgentMessageRole.Assistant, 'Keep <script>alert("x")</script> as text.'),
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    expect(await screen.findByText(/<script>alert\("x"\)<\/script>/)).toBeInTheDocument();
+    expect(document.querySelector('script')).not.toBeInTheDocument();
   });
 
   it('reports a discovered title after transcript load', async () => {
@@ -246,6 +300,30 @@ describe(AgentSessionChatPanel.name, () => {
     expect(input).toHaveValue('');
   });
 
+  it('submits a user message from the composer when Enter is pressed', async () => {
+    const returnedMessage = makeMessage('message-created', AgentMessageRole.User, 'Organize favorites');
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(returnedMessage);
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: '  Organize favorites  ' } });
+    const wasNotCancelled = await fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+
+    expect(wasNotCancelled).toBe(false);
+    await waitFor(() =>
+      expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledWith({
+        id: session.id,
+        agentMessageCreateDto: {
+          content: {
+            blocks: [{ type: AgentMessageTextBlockType.Text, text: 'Organize favorites' }],
+          },
+        },
+      }),
+    );
+    expect(input).toHaveValue('');
+  });
+
   it('uses caller-provided placeholder and submit label for lifecycle composer states', async () => {
     sdkMock.appendAgentSessionMessage.mockResolvedValue(
       makeMessage('message-created', AgentMessageRole.User, 'Use revision feedback'),
@@ -345,6 +423,150 @@ describe(AgentSessionChatPanel.name, () => {
     await fireEvent.click(sendButton);
 
     expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows an ASCII busy indicator immediately while sending the user message', async () => {
+    sdkMock.appendAgentSessionMessage.mockReturnValue(new Promise(() => undefined));
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Organize this album' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('pi is working...');
+    expect(input).toBeDisabled();
+  });
+
+  it('animates the ASCII busy indicator through terminal-style frames', async () => {
+    vi.useFakeTimers();
+    sdkMock.appendAgentSessionMessage.mockReturnValue(new Promise(() => undefined));
+
+    try {
+      render(AgentSessionChatPanel, { props: { session } });
+
+      const input = await screen.findByRole('textbox', { name: 'Message' });
+      await fireEvent.input(input, { target: { value: 'Organize this album' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+      const status = screen.getByRole('status');
+      expect(status).toHaveTextContent('pi is working... -');
+
+      vi.advanceTimersByTime(160);
+      await tick();
+      expect(status).toHaveTextContent('pi is working... \\');
+
+      vi.advanceTimersByTime(160);
+      await tick();
+      expect(status).toHaveTextContent('pi is working... |');
+
+      vi.advanceTimersByTime(160);
+      await tick();
+      expect(status).toHaveTextContent('pi is working... /');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the ASCII busy indicator after send succeeds while waiting for the first assistant delta', async () => {
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(
+      makeMessage('message-created', AgentMessageRole.User, 'Organize screenshots'),
+    );
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Organize screenshots' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(await screen.findByText('Organize screenshots')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('pi is working...');
+  });
+
+  it('replaces the ASCII busy indicator with streamed assistant text on the first delta', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(
+      makeMessage('message-created', AgentMessageRole.User, 'Start organizing'),
+    );
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Start organizing' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('pi is working...');
+
+    handler?.({
+      type: 'assistant-message-delta',
+      sessionId: session.id,
+      delta: 'I found',
+      sequence: 1,
+      createdAt: '2026-05-14T00:00:01.000Z',
+    });
+
+    expect(await screen.findByText('I found')).toBeInTheDocument();
+    expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
+  });
+
+  it('clears the ASCII busy indicator when the assistant message completes before any delta', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(
+      makeMessage('message-created', AgentMessageRole.User, 'Make an album'),
+    );
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Make an album' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('pi is working...');
+
+    handler?.({
+      type: 'assistant-message-created',
+      sessionId: session.id,
+      message: makeMessage('message-assistant-created', AgentMessageRole.Assistant, 'Done.'),
+      createdAt: '2026-05-14T00:00:02.000Z',
+    });
+
+    expect(await screen.findByText('Done.')).toBeInTheDocument();
+    expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
+  });
+
+  it('clears the ASCII busy indicator when the runner reports an error before any delta', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(
+      makeMessage('message-created', AgentMessageRole.User, 'Make an album'),
+    );
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Make an album' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('pi is working...');
+
+    handler?.({
+      type: 'runner-error',
+      sessionId: session.id,
+      message: 'Runner failed',
+      createdAt: '2026-05-14T00:00:02.000Z',
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Runner failed');
+    expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
   });
 
   it('does not allow another message while an assistant response is active', async () => {
@@ -499,6 +721,44 @@ describe(AgentSessionChatPanel.name, () => {
 
     await waitFor(() => expect(screen.queryByText('Partial lifecycle response')).not.toBeInTheDocument());
     expect(input).not.toBeDisabled();
+  });
+
+  it('clears the ASCII busy indicator when the session becomes terminal before any assistant text streams', async () => {
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(makeMessage('message-created', AgentMessageRole.User, 'Start task'));
+
+    const { rerender } = render(AgentSessionChatPanel, { props: { session } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Start task' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('pi is working...');
+
+    await rerender({ session: { ...session, status: AgentSessionStatus.Cancelled } });
+
+    await waitFor(() => expect(screen.queryByText('pi is working...')).not.toBeInTheDocument());
+    expect(input).not.toBeDisabled();
+  });
+
+  it('renders only one ASCII busy indicator while send and assistant activity overlap', async () => {
+    let resolveSend: (message: AgentMessageResponseDto) => void;
+    sdkMock.appendAgentSessionMessage.mockReturnValue(
+      new Promise<AgentMessageResponseDto>((resolve) => {
+        resolveSend = resolve;
+      }),
+    );
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Start task' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(screen.getAllByText('pi is working...')).toHaveLength(1);
+
+    resolveSend!(makeMessage('message-created', AgentMessageRole.User, 'Start task'));
+    await tick();
+
+    expect(screen.getAllByText('pi is working...')).toHaveLength(1);
   });
 
   it('renders a visible label for the message draft', async () => {
