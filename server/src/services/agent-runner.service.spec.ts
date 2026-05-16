@@ -434,6 +434,43 @@ describe(AgentRunnerService.name, () => {
     expect(messageRepository.create).not.toHaveBeenCalled();
   });
 
+  it('finishes the active dispatch without runner error when a tool pauses for approval', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'How many photos are in this album?' }] };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'tool-approval-needed',
+          sessionId,
+          runnerSessionId,
+          toolCallId: '00000000-0000-4000-8000-000000000333',
+        },
+      ]),
+    );
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(sessionRepository.markInterruptedFromActive).not.toHaveBeenCalled();
+    expect(websocketRepository.clientSend).not.toHaveBeenCalledWith(
+      'on_agent_session_event',
+      userId,
+      expect.objectContaining({ type: 'runner-error' }),
+    );
+    expect(messageRepository.create).not.toHaveBeenCalled();
+    expect(sut.isSessionDispatchActive(sessionId)).toBe(false);
+  });
+
   it('resumes a runner session after tool approval and streams the continued assistant message', async () => {
     const sessionId = '00000000-0000-4000-8000-000000000100';
     const runnerSessionId = 'runner-session-1';
