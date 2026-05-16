@@ -15,9 +15,10 @@
     titleBySessionId?: AgentSessionTitleCache;
     onSelectSession: (sessionId: string) => void;
     onNewChat: () => void;
+    onCollapse?: () => void;
   }
 
-  let { sessions, selectedSessionId, titleBySessionId = {}, onSelectSession, onNewChat }: Props = $props();
+  let { sessions, selectedSessionId, titleBySessionId = {}, onSelectSession, onNewChat, onCollapse }: Props = $props();
   let query = $state('');
 
   const sortedSessions = $derived(sortAgentSessionsForSidebar(sessions));
@@ -33,22 +34,35 @@
 </script>
 
 <aside
-  class="flex h-full min-h-0 w-full flex-col border-r border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950"
+  class="flex h-full min-h-0 w-full flex-col border-r border-gray-200 bg-slate-50 text-slate-950 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-50"
 >
-  <div class="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 p-3 dark:border-gray-800">
-    <h2 class="text-sm font-semibold text-black dark:text-white">{$t('assistant_sessions')}</h2>
+  <div class="shrink-0 border-b border-slate-200 p-2.5 dark:border-neutral-800">
+    <div class="mb-3 flex items-center justify-between gap-3 px-1">
+      <h2 class="text-base font-semibold text-slate-900 dark:text-neutral-50">{$t('assistant_sessions')}</h2>
+      {#if onCollapse}
+        <button
+          type="button"
+          class="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
+          aria-label={$t('assistant_collapse_sessions')}
+          onclick={onCollapse}
+        >
+          ‹
+        </button>
+      {/if}
+    </div>
     <button
       type="button"
-      class="rounded-lg bg-immich-primary px-3 py-2 text-sm font-medium text-white hover:bg-immich-primary/90"
+      data-testid="agent-session-sidebar-new-chat"
+      class="w-full rounded-md px-2.5 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:text-neutral-200 dark:hover:bg-neutral-900 dark:hover:text-neutral-50"
       onclick={onNewChat}
     >
       {$t('assistant_new_chat')}
     </button>
   </div>
 
-  <div class="shrink-0 p-3">
+  <div class="shrink-0 px-2.5 py-2">
     <input
-      class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-immich-primary dark:border-gray-700 dark:bg-immich-dark-gray dark:text-white"
+      class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-200 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-50 dark:placeholder:text-neutral-500 dark:focus:border-neutral-500 dark:focus:ring-neutral-800"
       type="search"
       aria-label={$t('assistant_search_chats')}
       placeholder={$t('assistant_search_chats')}
@@ -57,7 +71,8 @@
   </div>
 
   <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-    <div class="flex flex-col gap-1">
+    <div class="px-1 pb-1 pt-2 text-xs text-slate-500 dark:text-neutral-500">Recents</div>
+    <div class="flex flex-col gap-0.5">
       {#each visibleSessions as session (session.id)}
         <div data-testid="agent-session-row" data-session-id={session.id}>
           <AgentSessionRow {session} selected={session.id === selectedSessionId} {titleBySessionId} {onSelectSession} />
