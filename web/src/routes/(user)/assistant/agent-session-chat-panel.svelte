@@ -36,6 +36,7 @@
     terminalActionLabel?: string;
     onTerminalAction?: () => void;
     onMessageSent?: (sessionId: string) => void | Promise<void>;
+    onRunnerError?: (sessionId: string) => void | Promise<void>;
     onTitleDiscovered?: (sessionId: string, title: string) => void;
   }
 
@@ -81,6 +82,7 @@
     terminalActionLabel,
     onTerminalAction,
     onMessageSent,
+    onRunnerError,
     onTitleDiscovered,
   }: Props = $props();
 
@@ -355,6 +357,14 @@
     }
   };
 
+  const notifyRunnerError = () => {
+    try {
+      void onRunnerError?.(session.id)?.catch(() => undefined);
+    } catch {
+      // Follow-up refresh errors must not hide the runner error in chat.
+    }
+  };
+
   const appendIfNew = (message: AgentMessageResponseDto) => {
     const nextMessages = mergeMessages(messages, [message]);
     messages = nextMessages;
@@ -396,6 +406,7 @@
     isAssistantActive = false;
     streamingText = '';
     errorMessage = event.message;
+    notifyRunnerError();
   };
 
   const loadMessages = async () => {
