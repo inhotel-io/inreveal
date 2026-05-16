@@ -3182,6 +3182,8 @@ export type FacialRecognitionConfig = {
     minScore: number;
     /** Name of the model to use */
     modelName: string;
+    /** Maximum distance for face suggestions; 0 disables the suggestion feature */
+    suggestionMaxDistance: number;
 };
 export type OcrConfig = {
     /** Whether the task is enabled */
