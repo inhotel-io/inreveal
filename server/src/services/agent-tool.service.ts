@@ -201,7 +201,9 @@ export class AgentToolService {
 
     await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Running });
     if (session.runnerSessionId) {
-      void this.resumeRunnerAfterApprovalDecision(auth, session, transitioned, dto.decision).catch(() => {});
+      void this.resumeRunnerAfterApprovalDecision(auth, session, transitioned, dto.decision).catch(() =>
+        this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Interrupted }).catch(() => {}),
+      );
     }
 
     return this.mapToolCall(transitioned);
@@ -215,7 +217,7 @@ export class AgentToolService {
   ) {
     const toolResult =
       approvalDecision === AgentToolApprovalDecision.Approved
-        ? await this.executeApprovedToolCall(auth, session, toolCall)
+        ? await this.executeApprovedToolCallForRunner(auth, session, toolCall)
         : undefined;
 
     await this.agentRunnerService.resumeAfterToolApproval({
@@ -226,6 +228,21 @@ export class AgentToolService {
       approvalDecision,
       toolResult,
     });
+  }
+
+  private async executeApprovedToolCallForRunner(
+    auth: AuthDto,
+    session: AgentSession,
+    toolCall: AgentToolCall,
+  ): Promise<unknown> {
+    try {
+      return await this.executeApprovedToolCall(auth, session, toolCall);
+    } catch {
+      return {
+        status: 'error',
+        message: 'Approved tool call failed before returning a result.',
+      };
+    }
   }
 
   private executeApprovedToolCall(auth: AuthDto, session: AgentSession, toolCall: AgentToolCall): Promise<unknown> {
