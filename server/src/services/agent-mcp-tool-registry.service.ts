@@ -49,16 +49,14 @@ const buildTools = (): AgentMcpToolDefinition[] => [
   defineTool({
     name: AgentToolName.SearchAssets,
     title: 'Search assets',
-    description:
-      `Search the photo library by date, place, camera metadata, favorites, media type, rating, tags, albums, and result limit.${approvedRequestInstruction}`,
+    description: `Search the photo library by date, place, camera metadata, favorites, media type, rating, tags, albums, and result limit.${approvedRequestInstruction}`,
     schema: AgentReadToolRequestSchemas[AgentToolName.SearchAssets],
     annotations: readToolAnnotations,
   }),
   defineTool({
     name: AgentToolName.ReadAssetMetadata,
     title: 'Read asset metadata',
-    description:
-      `Read metadata for selected assets, including timestamps, location labels, camera fields, rating, favorites, visibility, and tags.${approvedRequestInstruction}`,
+    description: `Read metadata for selected assets, including timestamps, location labels, camera fields, rating, favorites, visibility, and tags.${approvedRequestInstruction}`,
     schema: AgentReadToolRequestSchemas[AgentToolName.ReadAssetMetadata],
     annotations: readToolAnnotations,
   }),
