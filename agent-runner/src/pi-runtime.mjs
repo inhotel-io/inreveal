@@ -1,4 +1,7 @@
 import { getModel } from '@earendil-works/pi-ai';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -9,16 +12,14 @@ import {
   SessionManager,
   SettingsManager,
 } from '@earendil-works/pi-coding-agent';
-import { createGalleryToolClient } from './gallery-tool-client.mjs';
-import { createGalleryTools, galleryToolNames } from './gallery-tools.mjs';
 
 const protocolVersion = '2026-05-14';
 const systemPrompt = [
   'You are Gallery Assistant, a personal photo organization assistant.',
   'Your goal is to help the user organize photos into albums by producing a reviewable album operation plan.',
-  'Use Gallery read tools to inspect the session-scoped library before planning: searchAssets, readAssetMetadata, readAssetPreviews, readAssetOriginals, listAlbums, and readAlbum.',
-  'When you have a concrete plan, call proposeAlbumOperations so Gallery can show the user a review panel.',
-  'If the user asks for changes to an existing plan, call reviseProposedOperations with the planId. Use summarizePlan when you need a compact summary of a proposed plan.',
+  'Use Gallery read tools to inspect the session-scoped library before planning: mcp_gallery_searchAssets, mcp_gallery_readAssetMetadata, mcp_gallery_readAssetPreviews, mcp_gallery_readAssetOriginals, mcp_gallery_listAlbums, and mcp_gallery_readAlbum.',
+  'When you have a concrete plan, call mcp_gallery_proposeAlbumOperations so Gallery can show the user a review panel.',
+  'If the user asks for changes to an existing plan, call mcp_gallery_reviseProposedOperations with the planId. Use mcp_gallery_summarizePlan when you need a compact summary of a proposed plan.',
   'Plan operations may include album.create, album.addAssets, album.updateDetails, and album.setCover.',
   'For new albums, use stable temporaryTargetId values on album.create and reference those same temporaryTargetId values from dependent album.addAssets or album.setCover operations.',
   'If a user asks for an empty album, propose a single album.create operation with payload.albumName and an empty description; do not add asset operations.',
@@ -30,6 +31,12 @@ const systemPrompt = [
 ].join('\n');
 const runtimePackageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const runtimeAgentDir = join(runtimePackageRoot, '.pi-runtime');
+const runtimeSessionRoot = join(runtimeAgentDir, 'sessions');
+const requireFromRuntime = createRequire(import.meta.url);
+let mcpEnvironmentQueue = Promise.resolve();
+
+const resolvePiMcpExtensionPath = () =>
+  join(dirname(requireFromRuntime.resolve('pi-mcp-extension/package.json')), 'src/index.ts');
 
 const defaultDependencies = {
   ai: { getModel },
@@ -66,6 +73,9 @@ export const redactSecret = (message, secret) => {
 
   return message.split(secret).join('[redacted]');
 };
+
+const redactSecrets = (message, secrets) =>
+  secrets.reduce((redacted, secret) => redactSecret(redacted, secret), message);
 
 const textPromptFromContent = (content) =>
   content?.blocks
@@ -110,6 +120,94 @@ const assistantErrorFromSession = (session) => {
 const sanitizedErrorMessage = (error, secret) => {
   const message = error instanceof Error ? error.message : String(error);
   return redactSecret(message || 'Provider request failed', secret);
+};
+
+const sanitizedErrorMessageWithSecrets = (error, secrets) => {
+  const message = error instanceof Error ? error.message : String(error);
+  return redactSecrets(message || 'Provider request failed', secrets);
+};
+
+const sanitizeSessionError = (error, entry) =>
+  sanitizedErrorMessageWithSecrets(error, [entry.credentialSecret, entry.mcpToken]);
+
+const createMcpSessionWorkspace = async (gallerySessionId) => {
+  const sessionHash = createHash('sha256').update(String(gallerySessionId)).digest('hex').slice(0, 24);
+  const workspace = join(runtimeSessionRoot, `${sessionHash}-${randomUUID()}`);
+  const homeDir = join(workspace, 'home');
+  await mkdir(join(workspace, '.pi'), { recursive: true });
+  await mkdir(join(homeDir, '.pi/agent'), { recursive: true });
+  return { workspace, homeDir };
+};
+
+const writeMcpConfig = async ({ workspace, gateway }) => {
+  const config = {
+    mcpServers: {
+      gallery: {
+        transport: 'streamable-http',
+        lifecycle: 'eager',
+        url: gateway.url,
+        headers: { Authorization: `Bearer ${gateway.token}` },
+      },
+    },
+  };
+  await writeFile(join(workspace, '.pi/mcp.json'), `${JSON.stringify(config, null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+};
+
+const readActiveToolNames = (session) => {
+  if (typeof session.getActiveToolNames === 'function') {
+    return session.getActiveToolNames();
+  }
+
+  if (typeof session.getActiveTools === 'function') {
+    return session.getActiveTools();
+  }
+
+  return [];
+};
+
+const galleryMcpToolNamesFromSession = (session) =>
+  readActiveToolNames(session).filter((toolName) => typeof toolName === 'string' && toolName.startsWith('mcp_gallery_'));
+
+const runWithMcpEnvironment = async (mcpRuntime, operation) => {
+  if (!mcpRuntime) {
+    return operation();
+  }
+
+  const previous = mcpEnvironmentQueue.catch(() => {});
+  let releaseQueue;
+  mcpEnvironmentQueue = previous.then(
+    () =>
+      new Promise((resolve) => {
+        releaseQueue = resolve;
+      }),
+  );
+  await previous;
+
+  const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
+  const originalCwd = process.cwd();
+  try {
+    process.env.HOME = mcpRuntime.homeDir;
+    process.env.USERPROFILE = mcpRuntime.homeDir;
+    process.chdir(mcpRuntime.workspace);
+    return await operation();
+  } finally {
+    process.chdir(originalCwd);
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    if (originalUserProfile === undefined) {
+      delete process.env.USERPROFILE;
+    } else {
+      process.env.USERPROFILE = originalUserProfile;
+    }
+    releaseQueue();
+  }
 };
 
 const createOpenAiCompatibleProviderFactories = ({ providerName, credential, model }) => {
@@ -190,6 +288,8 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
     async createSession(body) {
       const runnerSessionId = `pi-${body.gallerySessionId}`;
       return runSerializedCreateSession(runnerSessionId, async () => {
+        let sessionWorkspace;
+        let newSession;
         try {
           const providerName = mapProviderType(body.credential.providerType, body.gallerySessionId);
           const authStorage = sdk.AuthStorage.inMemory ? sdk.AuthStorage.inMemory() : sdk.AuthStorage.create();
@@ -206,9 +306,16 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             credential: body.credential,
             model: body.model,
           });
+          const mcpGateway = body.mcpGateway ?? null;
+          const mcpRuntime = mcpGateway ? await createMcpSessionWorkspace(body.gallerySessionId) : null;
+          if (mcpRuntime) {
+            sessionWorkspace = mcpRuntime.workspace;
+            await writeMcpConfig({ workspace: mcpRuntime.workspace, gateway: mcpGateway });
+          }
           const resourceLoader = new sdk.DefaultResourceLoader({
-            cwd: runtimePackageRoot,
+            cwd: mcpRuntime?.workspace ?? runtimePackageRoot,
             agentDir: runtimeAgentDir,
+            homeDir: mcpRuntime?.homeDir,
             settingsManager,
             systemPrompt,
             appendSystemPrompt: [],
@@ -217,26 +324,21 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             noPromptTemplates: true,
             noThemes: true,
             noExtensions: true,
+            additionalExtensionPaths: mcpGateway ? [resolvePiMcpExtensionPath()] : [],
             extensionFactories,
           });
 
-          await resourceLoader.reload();
+          await runWithMcpEnvironment(mcpRuntime, () => resourceLoader.reload());
           applyPendingProviderRegistrations(resourceLoader, modelRegistry);
 
           const model = ai.getModel(providerName, body.model) ?? modelRegistry.find(providerName, body.model);
           if (!model) {
             throw new Error(`Model ${body.model} is not available for provider ${providerName}`);
           }
-          const customTools = body.toolGateway
-            ? createGalleryTools({
-                client: createGalleryToolClient({
-                  gateway: body.toolGateway,
-                  gallerySessionId: body.gallerySessionId,
-                }),
-              })
-            : [];
 
           const { session } = await sdk.createAgentSession({
+            cwd: mcpRuntime?.workspace ?? runtimePackageRoot,
+            agentDir: runtimeAgentDir,
             model,
             authStorage,
             modelRegistry,
@@ -244,9 +346,18 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             settingsManager,
             resourceLoader,
             noTools: 'builtin',
-            ...(body.toolGateway ? {} : { tools: [] }),
-            customTools,
+            ...(mcpGateway ? {} : { tools: [] }),
           });
+          newSession = session;
+
+          const activeGalleryMcpToolNames = mcpGateway
+            ? await runWithMcpEnvironment(mcpRuntime, () =>
+                Promise.resolve(session.bindExtensions?.({})).then(() => galleryMcpToolNamesFromSession(session)),
+              )
+            : [];
+          if (mcpGateway && activeGalleryMcpToolNames.length === 0) {
+            throw new Error('No active Gallery MCP tools after extension startup');
+          }
 
           const existingEntry = sessions.get(runnerSessionId);
           try {
@@ -254,20 +365,25 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
           } catch (error) {
             try {
               await session.dispose?.();
+              newSession = undefined;
             } catch {
               // Preserve the replacement failure that prevented the new session from becoming owned by the runtime.
             }
 
             throw new Error(
-              redactSecret(
-                sanitizedErrorMessage(error, body.credential.secret),
+              sanitizedErrorMessageWithSecrets(error, [
+                body.credential.secret,
+                body.mcpGateway?.token,
                 existingEntry?.credentialSecret,
-              ),
+                existingEntry?.mcpToken,
+              ]),
             );
           }
           sessions.set(runnerSessionId, {
             gallerySessionId: body.gallerySessionId,
             credentialSecret: body.credential.secret,
+            mcpToken: mcpGateway?.token,
+            sessionWorkspace,
             model: body.model,
             session,
             inFlight: false,
@@ -280,13 +396,21 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             capabilities: {
               protocolVersion,
               streaming: true,
-              tools: body.toolGateway ? galleryToolNames : [],
+              tools: activeGalleryMcpToolNames,
               models: [body.model],
               runtime: 'pi',
             },
           };
         } catch (error) {
-          throw new Error(sanitizedErrorMessage(error, body?.credential?.secret));
+          try {
+            await newSession?.dispose?.();
+          } catch {
+            // Preserve the startup error that prevented session ownership.
+          }
+          if (sessionWorkspace) {
+            await rm(sessionWorkspace, { recursive: true, force: true });
+          }
+          throw new Error(sanitizedErrorMessageWithSecrets(error, [body?.credential?.secret, body?.mcpGateway?.token]));
         }
       });
     },
@@ -371,7 +495,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         subscribed = true;
       } catch (error) {
         entry.inFlight = false;
-        throw new Error(sanitizedErrorMessage(error, entry.credentialSecret));
+        throw new Error(sanitizeSessionError(error, entry));
       }
 
       entry.unsubscribe = releaseSubscription;
@@ -392,7 +516,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
                 type: 'runner-error',
                 sessionId: gallerySessionId,
                 runnerSessionId,
-                message: redactSecret(assistantError, entry.credentialSecret),
+                message: sanitizeSessionError(assistantError, entry),
               });
               return;
             }
@@ -414,7 +538,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
               type: 'runner-error',
               sessionId: gallerySessionId,
               runnerSessionId,
-              message: sanitizedErrorMessage(error, entry.credentialSecret),
+              message: sanitizeSessionError(error, entry),
             });
           })
           .finally(() => {
@@ -463,7 +587,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
           entry.unsubscribe = undefined;
         }
         if (cleanupError) {
-          throw new Error(sanitizedErrorMessage(cleanupError, entry.credentialSecret));
+          throw new Error(sanitizeSessionError(cleanupError, entry));
         }
       }
     },
@@ -492,9 +616,16 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       } catch (error) {
         cleanupError ??= error;
       }
+      if (entry.sessionWorkspace) {
+        try {
+          await rm(entry.sessionWorkspace, { recursive: true, force: true });
+        } catch (error) {
+          cleanupError ??= error;
+        }
+      }
       sessions.delete(runnerSessionId);
       if (cleanupError) {
-        throw new Error(sanitizedErrorMessage(cleanupError, entry.credentialSecret));
+        throw new Error(sanitizedErrorMessageWithSecrets(cleanupError, [entry.credentialSecret, entry.mcpToken]));
       }
     },
   };
