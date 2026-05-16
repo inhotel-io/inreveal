@@ -1,0 +1,198 @@
+import { UnauthorizedException } from '@nestjs/common';
+import { AgentRunnerMcpController } from 'src/controllers/agent-runner-mcp.controller';
+import { AgentRunnerToolGuard } from 'src/controllers/agent-runner-tool.controller';
+import { AgentMcpService } from 'src/services/agent-mcp.service';
+import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
+import type { AgentMcpHandleResponse } from 'src/types/agent-mcp.types';
+import request from 'supertest';
+import { factory } from 'test/small.factory';
+import type { ControllerContext } from 'test/utils';
+import { automock, controllerSetup } from 'test/utils';
+
+describe(AgentRunnerMcpController.name, () => {
+  let ctx: ControllerContext;
+
+  const service = automock(AgentMcpService, { strict: false });
+  const tokenService = automock(AgentRunnerToolTokenService, {
+    args: [{} as never],
+    strict: false,
+  });
+
+  const sessionId = factory.uuid();
+  const userId = factory.uuid();
+  const token = 'runner-mcp-token';
+  const authorization = `Bearer ${token}`;
+  const initializeRequest = {
+    jsonrpc: '2.0',
+    id: 'init-1',
+    method: 'initialize',
+    params: {
+      protocolVersion: '2025-11-25',
+      capabilities: {},
+      clientInfo: { name: 'pi-agent-runner', version: '0.1.0' },
+    },
+  };
+  const initializeResponse = {
+    jsonrpc: '2.0',
+    id: 'init-1',
+    result: {
+      protocolVersion: '2025-11-25',
+      serverInfo: { name: 'gallery-agent-mcp', version: '2.7.5' },
+      capabilities: {},
+    },
+  } satisfies AgentMcpHandleResponse;
+
+  beforeAll(async () => {
+    ctx = await controllerSetup(AgentRunnerMcpController, [
+      AgentRunnerToolGuard,
+      { provide: AgentRunnerToolTokenService, useValue: tokenService },
+      { provide: AgentMcpService, useValue: service },
+    ]);
+    return () => ctx.close();
+  });
+
+  beforeEach(() => {
+    service.resetAllMocks();
+    tokenService.resetAllMocks();
+    ctx.reset();
+    tokenService.verify.mockReturnValue({
+      sessionId,
+      userId,
+      expiresAt: new Date('2026-05-16T12:00:00.000Z'),
+    });
+    service.handle.mockReturnValue(initializeResponse);
+  });
+
+  it('verifies the bearer token and returns the MCP response without normal Gallery auth', async () => {
+    const { status, body } = await request(ctx.getHttpServer())
+      .post(`/agent/internal/mcp/sessions/${sessionId}`)
+      .set('Authorization', authorization)
+      .set('Accept', 'application/json, text/event-stream')
+      .send(initializeRequest);
+
+    expect(status).toBe(200);
+    expect(tokenService.verify).toHaveBeenCalledWith(token);
+    expect(service.handle).toHaveBeenCalledWith(initializeRequest);
+    expect(ctx.authenticate).not.toHaveBeenCalled();
+    expect(body).toEqual(initializeResponse);
+  });
+
+  it('allows repeated requests with the same valid session token', async () => {
+    const secondRequest = { ...initializeRequest, id: 'init-2' };
+    const secondResponse = {
+      jsonrpc: '2.0',
+      id: 'init-2',
+      result: {
+        protocolVersion: '2025-11-25',
+        serverInfo: { name: 'gallery-agent-mcp', version: '2.7.5' },
+        capabilities: {},
+      },
+    } satisfies AgentMcpHandleResponse;
+    service.handle.mockReturnValueOnce(initializeResponse).mockReturnValueOnce(secondResponse);
+
+    const first = await request(ctx.getHttpServer())
+      .post(`/agent/internal/mcp/sessions/${sessionId}`)
+      .set('Authorization', authorization)
+      .send(initializeRequest);
+    const second = await request(ctx.getHttpServer())
+      .post(`/agent/internal/mcp/sessions/${sessionId}`)
+      .set('Authorization', authorization)
+      .send(secondRequest);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(tokenService.verify).toHaveBeenCalledTimes(2);
+    expect(service.handle).toHaveBeenNthCalledWith(1, initializeRequest);
+    expect(service.handle).toHaveBeenNthCalledWith(2, secondRequest);
+    expect(ctx.authenticate).not.toHaveBeenCalled();
+  });
+
+  it('returns 202 with no body for MCP notifications', async () => {
+    const notification = {
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+    };
+    service.handle.mockImplementation(() => {});
+
+    const { status, body, text } = await request(ctx.getHttpServer())
+      .post(`/agent/internal/mcp/sessions/${sessionId}`)
+      .set('Authorization', authorization)
+      .send(notification);
+
+    expect(status).toBe(202);
+    expect(tokenService.verify).toHaveBeenCalledWith(token);
+    expect(service.handle).toHaveBeenCalledWith(notification);
+    expect(ctx.authenticate).not.toHaveBeenCalled();
+    expect(body).toEqual({});
+    expect(text).toBe('');
+  });
+
+  it('rejects a valid token for a different session without calling the MCP service', async () => {
+    tokenService.verify.mockReturnValue({
+      sessionId: factory.uuid(),
+      userId,
+      expiresAt: new Date('2026-05-16T12:00:00.000Z'),
+    });
+
+    const { status, body } = await request(ctx.getHttpServer())
+      .post(`/agent/internal/mcp/sessions/${sessionId}`)
+      .set('Authorization', authorization)
+      .send(initializeRequest);
+
+    expect(status).toBe(401);
+    expect(body).toMatchObject({
+      error: 'Unauthorized',
+      message: 'Invalid agent runner tool token',
+      statusCode: 401,
+    });
+    expect(service.handle).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, '', 'Basic abc', 'Bearer ', 'Bearer token extra'])(
+    'rejects missing or invalid bearer auth %s without verifying the token',
+    async (header) => {
+      const requestBuilder = request(ctx.getHttpServer())
+        .post(`/agent/internal/mcp/sessions/${sessionId}`)
+        .send(initializeRequest);
+      if (header !== undefined) {
+        requestBuilder.set('Authorization', header);
+      }
+
+      const { status } = await requestBuilder;
+
+      expect(status).toBe(401);
+      expect(tokenService.verify).not.toHaveBeenCalled();
+      expect(service.handle).not.toHaveBeenCalled();
+    },
+  );
+
+  it('returns 401 when token verification fails', async () => {
+    tokenService.verify.mockImplementation(() => {
+      throw new UnauthorizedException('Agent runner tool token expired');
+    });
+
+    const { status, body } = await request(ctx.getHttpServer())
+      .post(`/agent/internal/mcp/sessions/${sessionId}`)
+      .set('Authorization', authorization)
+      .send(initializeRequest);
+
+    expect(status).toBe(401);
+    expect(body).toMatchObject({
+      error: 'Unauthorized',
+      message: 'Agent runner tool token expired',
+      statusCode: 401,
+    });
+    expect(service.handle).not.toHaveBeenCalled();
+  });
+
+  it('rejects syntactically invalid JSON before the MCP service runs', async () => {
+    const { status } = await request(ctx.getHttpServer())
+      .post(`/agent/internal/mcp/sessions/${sessionId}`)
+      .set('Authorization', authorization)
+      .set('Content-Type', 'application/json')
+      .send('{"jsonrpc":');
+
+    expect(status).toBe(400);
+    expect(service.handle).not.toHaveBeenCalled();
+  });
+});
