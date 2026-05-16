@@ -139,6 +139,35 @@ describe(AgentMcpToolRegistryService.name, () => {
     }
   });
 
+  it('advertises trip-album metadata filters on searchAssets', () => {
+    const searchTool = sut.listTools().find((tool) => tool.name === AgentToolName.SearchAssets);
+    const searchFiltersSchema = searchTool?.inputSchema.$defs?.AgentSearchAssetsFilters;
+
+    expect(searchTool).toBeDefined();
+    expect(searchTool?.description).toContain('date');
+    expect(searchTool?.description).toContain('place');
+    expect(searchTool?.inputSchema).toEqual(
+      expect.objectContaining({
+        properties: expect.objectContaining({
+          filters: expect.objectContaining({ $ref: '#/$defs/AgentSearchAssetsFilters' }),
+          limit: expect.any(Object),
+        }),
+      }),
+    );
+    expect(searchFiltersSchema).toEqual(
+      expect.objectContaining({
+        properties: expect.objectContaining({
+          takenAfter: expect.any(Object),
+          takenBefore: expect.any(Object),
+          city: expect.any(Object),
+          state: expect.any(Object),
+          country: expect.any(Object),
+          isNotInAlbum: expect.any(Object),
+        }),
+      }),
+    );
+  });
+
   it('derives planning tool input schemas from the existing planning tool DTO schemas', () => {
     const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
 
