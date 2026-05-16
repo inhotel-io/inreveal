@@ -387,6 +387,12 @@
       return;
     }
 
+    if (event.type === 'tool-approval-needed') {
+      isAssistantActive = false;
+      streamingText = '';
+      return;
+    }
+
     isAssistantActive = false;
     streamingText = '';
     errorMessage = event.message;
@@ -687,7 +693,9 @@
               Details
             </button>
             {#if detailsOpen}
-              <div class="mt-2 rounded-md border border-gray-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+              <div
+                class="mt-2 rounded-md border border-gray-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900"
+              >
                 <dl class="grid gap-2">
                   <div>
                     <dt class="font-medium text-gray-500 dark:text-gray-400">Action</dt>
