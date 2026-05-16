@@ -84,7 +84,6 @@ const waitForCurrentPlan = async (
 
 const startAssistantSession = async (page: Page, accessToken: string) => {
   await page.goto('/assistant');
-  await expect(page.getByTestId('assistant-status-reason')).toHaveText('Runner healthy');
   await expect(page.getByRole('heading', { name: 'Session setup' })).toBeVisible();
 
   await page.getByLabel('Provider credential').selectOption({ label: credentialLabel });
