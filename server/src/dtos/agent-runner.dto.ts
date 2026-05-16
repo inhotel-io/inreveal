@@ -11,7 +11,7 @@ const AgentRunnerCapabilitiesSchema = z
   .object({
     protocolVersion: z.string().nullable().describe('Runner protocol version'),
     streaming: z.boolean().describe('Whether the runner can stream events'),
-    tools: z.array(z.string()).describe('Tool names reported by the runner'),
+    tools: z.array(z.string()).describe('MCP tool or capability identifiers reported by the runner'),
     models: z.array(z.string()).describe('Model IDs reported by the runner'),
   })
   .meta({ id: 'AgentRunnerCapabilitiesDto' });
