@@ -1614,6 +1614,31 @@ describe(AgentToolService.name, () => {
     expect(albumRepository.getAgentAlbumById).not.toHaveBeenCalled();
   });
 
+  it('YOLO readAlbum allows an owned album even when its album id is not an asset id', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const album = makeAlbumDetail({ id: albumId, ownerId: auth.user.id, assetIds: [newUuid()] });
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.DangerouslySkipPermissions,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set());
+    albumRepository.getAgentAlbumById.mockResolvedValue(album);
+
+    const result = await sut.readAlbum(auth, session.id, { albumId });
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+      album,
+    });
+    expect(assetRepository.getAgentReadableIds).not.toHaveBeenCalledWith(new Set([albumId]));
+  });
+
   it('counts per-session limits by data class and excludes the current approved strict call during re-execution', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid(), newUuid()];
