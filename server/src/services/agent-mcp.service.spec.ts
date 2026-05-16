@@ -8,6 +8,43 @@ import type { AgentMcpSuccessResponse, AgentMcpToolCallResult } from 'src/types/
 import { factory } from 'test/small.factory';
 import { automock, type AutoMocked } from 'test/utils';
 
+const makeToolCallRequest = (toolName: AgentToolName, args: unknown) => ({
+  jsonrpc: '2.0',
+  id: `${toolName}-call`,
+  method: 'tools/call',
+  params: {
+    name: toolName,
+    arguments: args,
+  },
+});
+
+const expectToolResult = (
+  response: AgentMcpSuccessResponse,
+  requestId: AgentMcpSuccessResponse['id'],
+  structuredContent: unknown,
+) => {
+  expect(response).toEqual({
+    jsonrpc: '2.0',
+    id: requestId,
+    result: {
+      content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
+      structuredContent,
+    },
+  });
+};
+
+const expectToolValidationError = (response: AgentMcpSuccessResponse, path: string) => {
+  const result = response.result as AgentMcpToolCallResult;
+
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent).toMatchObject({
+    status: 'error',
+    error: 'Invalid tool arguments',
+    issues: expect.arrayContaining([expect.objectContaining({ path })]),
+  });
+  expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+};
+
 describe(AgentMcpService.name, () => {
   let registry: AgentMcpToolRegistryService;
   let toolService: AutoMocked<AgentToolService>;
@@ -154,43 +191,6 @@ describe(AgentMcpService.name, () => {
       },
     });
   });
-
-  const makeToolCallRequest = (toolName: AgentToolName, args: unknown) => ({
-    jsonrpc: '2.0',
-    id: `${toolName}-call`,
-    method: 'tools/call',
-    params: {
-      name: toolName,
-      arguments: args,
-    },
-  });
-
-  const expectToolResult = (
-    response: AgentMcpSuccessResponse,
-    requestId: AgentMcpSuccessResponse['id'],
-    structuredContent: unknown,
-  ) => {
-    expect(response).toEqual({
-      jsonrpc: '2.0',
-      id: requestId,
-      result: {
-        content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
-        structuredContent,
-      },
-    });
-  };
-
-  const expectToolValidationError = (response: AgentMcpSuccessResponse, path: string) => {
-    const result = response.result as AgentMcpToolCallResult;
-
-    expect(result.isError).toBe(true);
-    expect(result.structuredContent).toMatchObject({
-      status: 'error',
-      error: 'Invalid tool arguments',
-      issues: expect.arrayContaining([expect.objectContaining({ path })]),
-    });
-    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
-  };
 
   it.each([
     {

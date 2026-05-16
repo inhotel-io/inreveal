@@ -155,18 +155,24 @@ export class AgentMcpService {
     dto: z.output<(typeof AgentReadToolRequestSchemas)[keyof typeof AgentReadToolRequestSchemas]>,
   ): Promise<unknown> {
     switch (toolName) {
-      case AgentToolName.SearchAssets:
+      case AgentToolName.SearchAssets: {
         return this.toolService.searchAssets(auth, sessionId, dto);
-      case AgentToolName.ReadAssetMetadata:
+      }
+      case AgentToolName.ReadAssetMetadata: {
         return this.toolService.readAssetMetadata(auth, sessionId, dto);
-      case AgentToolName.ReadAssetPreviews:
+      }
+      case AgentToolName.ReadAssetPreviews: {
         return this.toolService.readAssetPreviews(auth, sessionId, dto);
-      case AgentToolName.ReadAssetOriginals:
+      }
+      case AgentToolName.ReadAssetOriginals: {
         return this.toolService.readAssetOriginals(auth, sessionId, dto);
-      case AgentToolName.ListAlbums:
+      }
+      case AgentToolName.ListAlbums: {
         return this.toolService.listAlbums(auth, sessionId, dto);
-      case AgentToolName.ReadAlbum:
+      }
+      case AgentToolName.ReadAlbum: {
         return this.toolService.readAlbum(auth, sessionId, dto);
+      }
     }
   }
 
