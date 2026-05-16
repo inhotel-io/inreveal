@@ -1,13 +1,11 @@
-import { createGalleryToolClient, redactGatewayToken } from './gallery-tool-client.mjs';
-import { galleryToolNames } from './gallery-tools.mjs';
-
 const protocolVersion = '2026-05-14';
 const inaccessibleAssetId = '00000000-0000-4000-8000-000000000014';
+const e2eToolNames = ['mcp:gallery'];
 
 export const e2eCapabilities = {
   protocolVersion,
   streaming: true,
-  tools: galleryToolNames,
+  tools: e2eToolNames,
   models: ['e2e-album-organizer'],
   runtime: 'e2e',
 };
@@ -35,16 +33,101 @@ const deltaEvent = ({ gallerySessionId, runnerSessionId, text }) => ({
   sequence: 1,
 });
 
-const requireGateway = (entry) => {
-  if (!entry.toolGateway) {
-    throw new Error('The e2e runner requires a Gallery tool gateway');
+const redactGatewayToken = (message, gateway) => {
+  const token = gateway?.token;
+  if (!token) {
+    return String(message);
   }
 
-  return entry.toolGateway;
+  return String(message).split(token).join('[redacted]');
+};
+
+const requireMcpGateway = (entry) => {
+  if (!entry.mcpGateway) {
+    throw new Error('The e2e runner requires a Gallery MCP gateway');
+  }
+
+  return entry.mcpGateway;
+};
+
+const extractTextContent = (result) =>
+  result?.content
+    ?.filter((part) => part?.type === 'text' && typeof part.text === 'string')
+    .map((part) => part.text)
+    .join('\n')
+    .trim() ?? '';
+
+const parseMcpToolResult = (result, name, gateway) => {
+  if (result?.isError) {
+    const message = extractTextContent(result) || `MCP tool ${name} returned an error`;
+    throw new Error(redactGatewayToken(message, gateway));
+  }
+
+  if (result?.structuredContent !== undefined) {
+    return result.structuredContent;
+  }
+
+  const text = extractTextContent(result);
+  if (text.length === 0) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(redactGatewayToken(`Invalid MCP tool result JSON for ${name}: ${message}: ${text}`, gateway));
+  }
+};
+
+const createE2eMcpClient = ({ gateway, fetch: fetchImplementation = fetch }) => {
+  let nextId = 1;
+
+  return {
+    async call(name, args, { signal } = {}) {
+      const id = nextId++;
+      const response = await fetchImplementation(gateway.url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${gateway.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id,
+          method: 'tools/call',
+          params: { name, arguments: args ?? {} },
+        }),
+        signal,
+      });
+
+      const text = await response.text();
+      if (!response.ok) {
+        const bodyDetails = text.length === 0 ? '' : `: ${text}`;
+        throw new Error(redactGatewayToken(`Gallery MCP request failed with status ${response.status}${bodyDetails}`, gateway));
+      }
+
+      let envelope;
+      try {
+        envelope = text.length === 0 ? {} : JSON.parse(text);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(redactGatewayToken(`Invalid Gallery MCP JSON-RPC response: ${message}: ${text}`, gateway));
+      }
+
+      if (envelope?.error) {
+        const code = envelope.error.code === undefined ? 'unknown' : envelope.error.code;
+        const message = envelope.error.message ?? JSON.stringify(envelope.error);
+        throw new Error(redactGatewayToken(`Gallery MCP JSON-RPC error ${code}: ${message}`, gateway));
+      }
+
+      return parseMcpToolResult(envelope?.result, name, gateway);
+    },
+  };
 };
 
 const requireSearchAssets = async (client) => {
-  const result = await client.post('search-assets', { filters: { isNotInAlbum: true }, limit: 3 });
+  const result = await client.call('searchAssets', { filters: { isNotInAlbum: true }, limit: 3 });
   if (result.status !== 'success') {
     throw new Error(`Asset search did not complete successfully: ${result.status}`);
   }
@@ -60,7 +143,7 @@ const requireSearchAssets = async (client) => {
 const proposePortugalTrip = async (client) => {
   const assetIds = await requireSearchAssets(client);
   const [coverAssetId] = assetIds;
-  await client.post('propose-album-operations', {
+  await client.call('proposeAlbumOperations', {
     summary: 'Create Portugal Trip and add 2 loose assets.',
     operations: [
       {
@@ -100,7 +183,7 @@ const proposePortugalTrip = async (client) => {
 };
 
 const proposeDeniedTrip = async (client) => {
-  await client.post('propose-album-operations', {
+  await client.call('proposeAlbumOperations', {
     summary: 'Denied Trip would use inaccessible assets.',
     operations: [
       {
@@ -142,14 +225,14 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
       sessions.set(runnerSessionId, {
         gallerySessionId: body.gallerySessionId,
         model: body.model,
-        toolGateway: body.toolGateway,
+        mcpGateway: body.mcpGateway,
       });
 
       return {
         runnerSessionId,
         capabilities: {
           ...e2eCapabilities,
-          tools: body.toolGateway ? e2eCapabilities.tools : [],
+          tools: body.mcpGateway ? e2eCapabilities.tools : [],
           models: [body.model],
         },
       };
@@ -161,10 +244,9 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
         throw new Error('Runner session not found');
       }
 
-      const gateway = requireGateway(entry);
-      const client = createGalleryToolClient({
+      const gateway = requireMcpGateway(entry);
+      const client = createE2eMcpClient({
         gateway,
-        gallerySessionId,
         fetch: fetchImplementation,
       });
       const prompt = getPromptText(content);
