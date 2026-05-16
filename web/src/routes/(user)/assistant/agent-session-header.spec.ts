@@ -15,6 +15,7 @@ vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_approval_mode: 'Approval mode',
     assistant_approval_mode_strict: 'Strict',
+    assistant_cancel: 'Cancel',
     assistant_details: 'Details',
     assistant_model: 'Model',
     assistant_new_chat: 'New chat',
@@ -67,6 +68,7 @@ const makeSession = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSes
 const renderHeader = (props: Partial<ComponentProps<typeof AgentSessionHeader>> = {}) => {
   const onNewChat = vi.fn();
   const onOpenDetails = vi.fn();
+  const onCancel = vi.fn();
 
   render(AgentSessionHeader, {
     props: {
@@ -78,7 +80,7 @@ const renderHeader = (props: Partial<ComponentProps<typeof AgentSessionHeader>> 
     },
   });
 
-  return { onNewChat, onOpenDetails };
+  return { onCancel, onNewChat, onOpenDetails };
 };
 
 describe(AgentSessionHeader.name, () => {
@@ -133,6 +135,37 @@ describe(AgentSessionHeader.name, () => {
     await user.click(screen.getByRole('button', { name: 'New chat' }));
     await user.click(screen.getByRole('button', { name: 'Details' }));
 
+    expect(onNewChat).toHaveBeenCalledTimes(1);
+    expect(onOpenDetails).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not render Cancel without a cancel callback', () => {
+    renderHeader();
+
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+  });
+
+  it('fires Cancel from an accessible danger action when a callback is provided', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    renderHeader({ onCancel });
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables Cancel while cancellation is pending without disabling the other actions', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    const { onNewChat, onOpenDetails } = renderHeader({ cancelDisabled: true, onCancel });
+
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'New chat' }));
+    await user.click(screen.getByRole('button', { name: 'Details' }));
+
+    expect(onCancel).not.toHaveBeenCalled();
     expect(onNewChat).toHaveBeenCalledTimes(1);
     expect(onOpenDetails).toHaveBeenCalledTimes(1);
   });

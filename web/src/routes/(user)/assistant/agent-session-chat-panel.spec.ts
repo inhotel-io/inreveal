@@ -23,7 +23,9 @@ vi.mock('svelte-i18n', () => {
     assistant_message: 'Message',
     assistant_message_load_error: 'Unable to load messages',
     assistant_message_send_error: 'Unable to send message',
+    assistant_resume: 'Resume',
     assistant_send: 'Send',
+    assistant_start_new_chat: 'Start new chat',
     assistant_streaming_response: 'Assistant is responding',
   };
 
@@ -244,6 +246,79 @@ describe(AgentSessionChatPanel.name, () => {
     expect(input).toHaveValue('');
   });
 
+  it('uses caller-provided placeholder and submit label for lifecycle composer states', async () => {
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(
+      makeMessage('message-created', AgentMessageRole.User, 'Use revision feedback'),
+    );
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.WaitingForPlanReview },
+        composerPlaceholder: 'Tell the assistant what to revise',
+        submitLabel: 'Resume',
+      },
+    });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    expect(input).toHaveAttribute('placeholder', 'Tell the assistant what to revise');
+    expect(screen.getByRole('button', { name: 'Resume' })).toBeDisabled();
+
+    await fireEvent.input(input, { target: { value: 'Use revision feedback' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+
+    await waitFor(() => expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledTimes(1));
+    expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledWith({
+      id: session.id,
+      agentMessageCreateDto: {
+        content: {
+          blocks: [{ type: AgentMessageTextBlockType.Text, text: 'Use revision feedback' }],
+        },
+      },
+    });
+  });
+
+  it('calls onMessageSent after a successful append without blocking successful send cleanup', async () => {
+    const onMessageSent = vi.fn().mockRejectedValue(new Error('refresh failed'));
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(
+      makeMessage('message-created', AgentMessageRole.User, 'Refresh after this'),
+    );
+
+    render(AgentSessionChatPanel, { props: { session, onMessageSent } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Refresh after this' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(onMessageSent).toHaveBeenCalledWith(session.id));
+    expect(await screen.findByText('Refresh after this')).toBeInTheDocument();
+    expect(input).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('uses terminal action instead of appending when provided', async () => {
+    const onTerminalAction = vi.fn();
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.Completed },
+        composerDisabled: true,
+        composerDisabledReason: 'This session is complete.',
+        terminalActionLabel: 'Start new chat',
+        onTerminalAction,
+      },
+    });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    expect(input).toBeDisabled();
+    expect(screen.getByText('This session is complete.')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Start new chat' }));
+
+    expect(onTerminalAction).toHaveBeenCalledTimes(1);
+    expect(sdkMock.appendAgentSessionMessage).not.toHaveBeenCalled();
+  });
+
   it('shows send error and keeps draft when append fails', async () => {
     sdkMock.appendAgentSessionMessage.mockRejectedValue(new Error('failed'));
 
@@ -393,6 +468,37 @@ describe(AgentSessionChatPanel.name, () => {
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByText('Thinking...')).toBeInTheDocument();
+  });
+
+  it.each([
+    [AgentSessionStatus.Applying, 'applying'],
+    [AgentSessionStatus.Completed, 'completed'],
+    [AgentSessionStatus.Cancelled, 'cancelled'],
+    [AgentSessionStatus.Failed, 'failed'],
+  ])('clears active streaming when session status becomes %s', async (status) => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+
+    const { rerender } = render(AgentSessionChatPanel, { props: { session } });
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+
+    handler?.({
+      type: 'assistant-message-delta',
+      sessionId: session.id,
+      delta: 'Partial lifecycle response',
+      sequence: 1,
+      createdAt: '2026-05-14T00:00:01.000Z',
+    });
+    expect(await screen.findByText('Partial lifecycle response')).toBeInTheDocument();
+    expect(input).toBeDisabled();
+
+    await rerender({ session: { ...session, status } });
+
+    await waitFor(() => expect(screen.queryByText('Partial lifecycle response')).not.toBeInTheDocument());
+    expect(input).not.toBeDisabled();
   });
 
   it('renders a visible label for the message draft', async () => {

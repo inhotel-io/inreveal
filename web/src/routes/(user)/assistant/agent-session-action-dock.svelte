@@ -13,6 +13,7 @@
   } from '@immich/sdk';
   import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
+  import AgentOperationPlanReviewPanel from './agent-operation-plan-review-panel.svelte';
   import AgentToolApprovalCard from './agent-tool-approval-card.svelte';
   import {
     buildToolApprovalPayload,
@@ -45,6 +46,7 @@
   const shouldPoll = $derived(
     session.status === AgentSessionStatus.Running || session.status === AgentSessionStatus.WaitingForToolApproval,
   );
+  const canShowPlanReview = $derived((!loading || loadErrorMessage !== null) && pendingToolCalls.length === 0);
 
   const publishPendingCount = () => {
     onPendingApprovalCountChange?.(pendingToolCalls.length);
@@ -182,8 +184,14 @@
     />
   {/each}
 
+  {#if canShowPlanReview}
+    <AgentOperationPlanReviewPanel {session} variant="dock" hideEmpty />
+  {/if}
+
   {#if recentToolCalls.length > 0}
-    <details class="rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-gray-800 dark:bg-immich-dark-gray">
+    <details
+      class="rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-gray-800 dark:bg-immich-dark-gray"
+    >
       <summary class="cursor-pointer font-medium">
         {$t('assistant_approval_recent_activity', { values: { count: recentToolCalls.length } })}
       </summary>

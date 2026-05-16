@@ -3,6 +3,7 @@
   import { handleError } from '$lib/utils/handle-error';
   import {
     AgentOperationPlanStatus,
+    AgentOperationStatus,
     applyApprovedOperations,
     getCurrentOperationPlan,
     type AgentOperationPlanResponseDto,
@@ -24,9 +25,11 @@
   interface Props {
     session: AgentSessionResponseDto;
     onSelectionChange?: (payload: AgentOperationSelectionPayload) => void;
+    variant?: 'standalone' | 'dock';
+    hideEmpty?: boolean;
   }
 
-  let { session, onSelectionChange }: Props = $props();
+  let { session, onSelectionChange, variant = 'standalone', hideEmpty = false }: Props = $props();
 
   let plan = $state<AgentOperationPlanResponseDto | null>(null);
   let enabledByOperationId = $state<OperationEnabledState>({});
@@ -35,6 +38,7 @@
   let applying = $state(false);
   let applyMessage = $state<string | null>(null);
   let applyErrorMessage = $state<string | null>(null);
+  let planExpanded = $state(true);
   let locallyApplyingPlanId = $state<string | null>(null);
   let pendingLocalApplyEvent = $state<Extract<AgentSessionClientEvent, { type: 'operation-plan-applied' }> | null>(
     null,
@@ -48,9 +52,27 @@
   const canChangeSelection = $derived(
     model !== null && model.plan.status === AgentOperationPlanStatus.Proposed && !applying,
   );
-  const canApply = $derived(
-    canChangeSelection && selectedOperationIds.length > 0,
+  const canApply = $derived(canChangeSelection && selectedOperationIds.length > 0);
+  const rootClass = $derived(
+    variant === 'dock'
+      ? 'flex w-full flex-col gap-3 text-black dark:text-white'
+      : 'mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 pb-10 text-black dark:text-white md:px-8',
   );
+  const passiveRootClass = $derived(
+    variant === 'dock'
+      ? 'w-full text-sm text-gray-500'
+      : 'mx-auto w-full max-w-3xl px-4 pb-10 text-sm text-gray-500 md:px-8',
+  );
+  const passivePaddedRootClass = $derived(
+    variant === 'dock' ? 'w-full text-sm' : 'mx-auto w-full max-w-3xl px-4 pb-10 text-sm md:px-8',
+  );
+  const cardClass = $derived(
+    variant === 'dock'
+      ? 'rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-immich-dark-gray'
+      : 'rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-immich-dark-gray',
+  );
+  const cardBodyClass = $derived(variant === 'dock' ? 'px-4 pb-4' : '');
+  const headerClass = $derived(variant === 'dock' ? 'flex cursor-pointer list-none flex-col gap-2 p-4' : 'list-none');
 
   const publishSelection = (
     nextPlan: AgentOperationPlanResponseDto,
@@ -99,6 +121,7 @@
       const nextEnabledByOperationId = nextPlan ? createInitialOperationEnabledState(nextPlan) : {};
       plan = nextPlan;
       enabledByOperationId = nextEnabledByOperationId;
+      planExpanded = true;
 
       if (nextPlan) {
         publishSelection(nextPlan, nextEnabledByOperationId);
@@ -109,6 +132,7 @@
       }
 
       errorMessage = $t('assistant_operation_plan_error');
+      planExpanded = true;
       handleError(error, errorMessage);
     } finally {
       if (!destroyed && sequence === loadSequence) {
@@ -178,6 +202,7 @@
         });
       } else {
         applyErrorMessage = $t('assistant_operation_apply_error');
+        planExpanded = true;
         handleError(error, applyErrorMessage);
       }
     } finally {
@@ -220,11 +245,11 @@
 </script>
 
 {#if loading && !model}
-  <section class="mx-auto w-full max-w-3xl px-4 pb-10 text-sm text-gray-500 md:px-8">
+  <section class={passiveRootClass}>
     {$t('assistant_operation_plan_loading')}
   </section>
 {:else if errorMessage && !model}
-  <section class="mx-auto w-full max-w-3xl px-4 pb-10 md:px-8">
+  <section class={passivePaddedRootClass}>
     <div
       class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
       role="alert"
@@ -233,128 +258,150 @@
     </div>
   </section>
 {:else if !model}
-  <section class="mx-auto w-full max-w-3xl px-4 pb-10 text-sm md:px-8">
-    {#if applyMessage}
-      <p
-        class="rounded-lg border border-green-200 bg-green-50 p-3 text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-200"
-        role="status"
-      >
-        {applyMessage}
-      </p>
-    {:else}
-      <p class="text-gray-500">{$t('assistant_operation_plan_empty')}</p>
-    {/if}
-  </section>
-{:else}
-  <section
-    class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 pb-10 text-black dark:text-white md:px-8"
-    aria-labelledby="assistant-operation-plan-title"
-  >
-    <div class="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-immich-dark-gray">
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 id="assistant-operation-plan-title" class="text-lg font-semibold">
-            {$t('assistant_operation_plan_review')}
-          </h2>
-          <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">{model.plan.summary}</p>
-        </div>
-        <div class="text-sm font-medium text-gray-600 dark:text-gray-300">
-          {$t('assistant_operation_selected_count', { values: { count: selectedOperationIds.length } })}
-        </div>
-      </div>
-
-      <div class="mt-5 flex flex-col gap-4">
-        {#each model.groups as group (group.id)}
-          {@const groupSelectionState = getGroupSelectionState(group)}
-          <section class="rounded-lg border border-gray-200 p-4 dark:border-gray-700" aria-label={group.title}>
-            <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-              <div class="flex gap-3">
-                <input
-                  class="mt-1 size-4"
-                  type="checkbox"
-                  aria-label={group.title}
-                  checked={groupSelectionState.checked}
-                  disabled={!canChangeSelection}
-                  use:setMixedCheckbox={groupSelectionState}
-                  onchange={(event) => toggleGroup(group, event.currentTarget.checked)}
-                />
-                <div>
-                  <h3 class="font-medium">{group.title}</h3>
-                  <p class="text-sm text-gray-500 dark:text-gray-400">{group.subtitle}</p>
-                </div>
-              </div>
-              <div class="text-sm text-gray-500 dark:text-gray-400">
-                {$t('assistant_operation_asset_count', { values: { count: group.assetCount } })}
-              </div>
-            </div>
-
-            <div class="mt-3 flex flex-col divide-y divide-gray-200 dark:divide-gray-700">
-              {#each group.operations as item (item.id)}
-                <label class="flex gap-3 py-3">
-                  <input
-                    class="mt-1 size-4"
-                    type="checkbox"
-                    aria-label={item.operation.summary}
-                    checked={item.enabled}
-                    disabled={!canChangeSelection || item.blocked}
-                    onchange={(event) => toggleOperation(item.id, event.currentTarget.checked)}
-                  />
-                  <span class="min-w-0 flex-1">
-                    <span class="block font-medium">{item.operation.summary}</span>
-                    <span class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
-                      <span>{$t(item.typeLabelKey)}</span>
-                      <span>{$t(item.riskLabelKey)}</span>
-                      {#if item.assetCount > 0}
-                        <span>{$t('assistant_operation_asset_count', { values: { count: item.assetCount } })}</span>
-                      {/if}
-                    </span>
-                    {#if item.blocked}
-                      <span class="mt-1 block text-sm text-amber-700 dark:text-amber-300">
-                        {$t('assistant_operation_blocked_by', { values: { dependencies: item.blockedBy.join(', ') } })}
-                      </span>
-                    {/if}
-                  </span>
-                </label>
-              {/each}
-            </div>
-          </section>
-        {/each}
-      </div>
-
-      {#if errorMessage}
-        <p
-          class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-          role="alert"
-        >
-          {errorMessage}
-        </p>
-      {/if}
-
-      {#if applyErrorMessage}
-        <p
-          class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-          role="alert"
-        >
-          {applyErrorMessage}
-        </p>
-      {/if}
-
+  {#if applyMessage || !hideEmpty}
+    <section class={passivePaddedRootClass}>
       {#if applyMessage}
         <p
-          class="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-200"
+          class="rounded-lg border border-green-200 bg-green-50 p-3 text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-200"
           role="status"
         >
           {applyMessage}
         </p>
+      {:else}
+        <p class="text-gray-500">{$t('assistant_operation_plan_empty')}</p>
       {/if}
+    </section>
+  {/if}
+{:else}
+  <section class={rootClass} aria-labelledby="assistant-operation-plan-title">
+    <details class={cardClass} bind:open={planExpanded}>
+      <summary class={headerClass}>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 id="assistant-operation-plan-title" class="text-lg font-semibold">
+              {$t('assistant_operation_plan_review')}
+            </h2>
+            <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">{model.plan.summary}</p>
+          </div>
+          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">
+            {$t('assistant_operation_selected_count', { values: { count: selectedOperationIds.length } })}
+          </div>
+        </div>
+      </summary>
 
-      <div class="mt-5">
-        <Button type="button" disabled={!canApply} onclick={applySelectedOperations}>
-          {applying
-            ? $t('assistant_operation_apply_applying')
-            : $t('assistant_operation_apply_selected', { values: { count: selectedOperationIds.length } })}
-        </Button>
-      </div>
-    </div>
+      {#if planExpanded}
+        <div class={`${cardBodyClass} flex flex-col gap-4`}>
+          {#each model.groups as group (group.id)}
+            {@const groupSelectionState = getGroupSelectionState(group)}
+            <section class="rounded-lg border border-gray-200 p-4 dark:border-gray-700" aria-label={group.title}>
+              <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex gap-3">
+                  <input
+                    class="mt-1 size-4"
+                    type="checkbox"
+                    aria-label={group.title}
+                    checked={groupSelectionState.checked}
+                    disabled={!canChangeSelection}
+                    use:setMixedCheckbox={groupSelectionState}
+                    onchange={(event) => toggleGroup(group, event.currentTarget.checked)}
+                  />
+                  <div>
+                    <h3 class="font-medium">{group.title}</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{group.subtitle}</p>
+                  </div>
+                </div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">
+                  {$t('assistant_operation_asset_count', { values: { count: group.assetCount } })}
+                </div>
+              </div>
+
+              <div class="mt-3 flex flex-col divide-y divide-gray-200 dark:divide-gray-700">
+                {#each group.operations as item (item.id)}
+                  <label class="flex gap-3 py-3">
+                    <input
+                      class="mt-1 size-4"
+                      type="checkbox"
+                      aria-label={item.operation.summary}
+                      checked={item.enabled}
+                      disabled={!canChangeSelection || item.blocked}
+                      onchange={(event) => toggleOperation(item.id, event.currentTarget.checked)}
+                    />
+                    <span class="min-w-0 flex-1">
+                      <span class="block font-medium">{item.operation.summary}</span>
+                      <span class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
+                        <span>{$t(item.typeLabelKey)}</span>
+                        <span>{$t(item.riskLabelKey)}</span>
+                        {#if item.assetCount > 0}
+                          <span>{$t('assistant_operation_asset_count', { values: { count: item.assetCount } })}</span>
+                        {/if}
+                        {#if item.operation.status === AgentOperationStatus.Applied}
+                          <span>{$t('assistant_operation_status_applied')}</span>
+                        {:else if item.operation.status === AgentOperationStatus.Failed}
+                          <span>{$t('assistant_operation_status_failed')}</span>
+                        {:else if item.operation.status === AgentOperationStatus.Skipped}
+                          <span>{$t('assistant_operation_status_skipped')}</span>
+                        {/if}
+                      </span>
+                      {#if item.blocked}
+                        <span class="mt-1 block text-sm text-amber-700 dark:text-amber-300">
+                          {$t('assistant_operation_blocked_by', {
+                            values: { dependencies: item.blockedBy.join(', ') },
+                          })}
+                        </span>
+                      {/if}
+                      {#if item.operation.error}
+                        <span class="mt-1 block text-sm text-red-700 dark:text-red-300">
+                          {item.operation.error}
+                        </span>
+                      {/if}
+                    </span>
+                  </label>
+                {/each}
+              </div>
+            </section>
+          {/each}
+          {#if errorMessage}
+            <p
+              class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+              role="alert"
+            >
+              {errorMessage}
+            </p>
+          {/if}
+
+          {#if applyErrorMessage}
+            <p
+              class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+              role="alert"
+            >
+              {applyErrorMessage}
+            </p>
+          {/if}
+
+          {#if applyMessage}
+            <p
+              class="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-200"
+              role="status"
+            >
+              {applyMessage}
+            </p>
+          {/if}
+
+          <div
+            class="sticky bottom-0 -mx-4 mt-1 flex flex-col gap-3 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-immich-dark-gray sm:flex-row sm:items-center sm:justify-between"
+            data-testid="agent-operation-plan-sticky-actions"
+          >
+            <div class="text-sm font-medium text-gray-600 dark:text-gray-300">
+              {$t('assistant_operation_selected_count', { values: { count: selectedOperationIds.length } })}
+            </div>
+            <Button type="button" disabled={!canApply} onclick={applySelectedOperations}>
+              {applying
+                ? $t('assistant_operation_apply_applying')
+                : $t('assistant_operation_apply_selected', { values: { count: selectedOperationIds.length } })}
+            </Button>
+          </div>
+        </div>
+      {/if}
+    </details>
   </section>
 {/if}
