@@ -81,6 +81,7 @@ describe(AgentSessionController.name, () => {
   const response: AgentSessionResponseDto = {
     id,
     status: AgentSessionStatus.Running,
+    title: null,
     providerCredentialId,
     credentialSnapshot: {
       id: providerCredentialId,
@@ -289,6 +290,69 @@ describe(AgentSessionController.name, () => {
       expect(status).toBe(200);
       expect(service.getById).toHaveBeenCalledWith(auth, id);
       expectSerializedResponse(result);
+    });
+  });
+
+  describe('PUT /agent/sessions/:id', () => {
+    it('should be an authenticated route', async () => {
+      service.update.mockResolvedValue({ ...response, title: 'Renamed chat' });
+
+      await request(ctx.getHttpServer()).put(`/agent/sessions/${id}`).send({ title: 'Renamed chat' });
+
+      expect(ctx.authenticate).toHaveBeenCalled();
+      expectPermission(Permission.AgentSessionUpdate);
+    });
+
+    it('should validate and update mutable session metadata', async () => {
+      const updatedResponse = { ...response, title: 'Renamed chat' };
+      service.update.mockResolvedValue(updatedResponse);
+
+      const { status, body: result } = await request(ctx.getHttpServer())
+        .put(`/agent/sessions/${id}`)
+        .send({ title: '  Renamed chat  ' });
+
+      expect(status).toBe(200);
+      expect(service.update).toHaveBeenCalledWith(auth, id, { title: 'Renamed chat' });
+      expectSerializedResponse(result, { title: 'Renamed chat' });
+    });
+
+    it('should allow clearing the custom title', async () => {
+      service.update.mockResolvedValue(response);
+
+      const { status } = await request(ctx.getHttpServer()).put(`/agent/sessions/${id}`).send({ title: null });
+
+      expect(status).toBe(200);
+      expect(service.update).toHaveBeenCalledWith(auth, id, { title: null });
+    });
+
+    it('should reject blank titles', async () => {
+      const { status, body: result } = await request(ctx.getHttpServer())
+        .put(`/agent/sessions/${id}`)
+        .send({ title: '   ' });
+
+      expect(status).toBe(400);
+      expect(result).toEqual(factory.responses.badRequest(['[title] Too small: expected string to have >=1 characters']));
+    });
+  });
+
+  describe('DELETE /agent/sessions/:id', () => {
+    it('should be an authenticated route', async () => {
+      service.delete.mockResolvedValue();
+
+      await request(ctx.getHttpServer()).delete(`/agent/sessions/${id}`);
+
+      expect(ctx.authenticate).toHaveBeenCalled();
+      expectPermission(Permission.AgentSessionUpdate);
+    });
+
+    it('should call the service and return 204', async () => {
+      service.delete.mockResolvedValue();
+
+      const { status, text } = await request(ctx.getHttpServer()).delete(`/agent/sessions/${id}`);
+
+      expect(status).toBe(204);
+      expect(text).toBe('');
+      expect(service.delete).toHaveBeenCalledWith(auth, id);
     });
   });
 

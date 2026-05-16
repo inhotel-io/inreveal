@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { AgentSession } from 'src/database';
-import { AgentSessionCreateDto, AgentSessionResponseDto } from 'src/dtos/agent-session.dto';
+import { AgentSessionCreateDto, AgentSessionResponseDto, AgentSessionUpdateDto } from 'src/dtos/agent-session.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { AgentPermissionPreset, AgentSessionStatus } from 'src/enum';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
@@ -85,22 +86,7 @@ export class AgentSessionService {
 
   async create(auth: AuthDto, dto: AgentSessionCreateDto): Promise<AgentSessionResponseDto> {
     const permissionPlanSnapshot = this.resolvePermissionPlan(dto);
-    const credential = await this.credentialService.getById(auth, dto.providerCredentialId);
-
-    if (credential.models.length > 0 && !credential.models.includes(dto.model)) {
-      throw new BadRequestException('Model is not listed for the selected credential');
-    }
-
-    const credentialSecret = await this.credentialService.getSecret(auth, dto.providerCredentialId);
-
-    const credentialSnapshot: AgentCredentialSnapshot = {
-      id: credential.id,
-      providerType: credential.providerType,
-      label: credential.label,
-      baseUrl: credential.baseUrl,
-      models: credential.models,
-      defaultModel: credential.defaultModel,
-    };
+    const { credential, credentialSecret, credentialSnapshot } = await this.resolveCredential(auth, dto);
 
     const session = await this.repository.create({
       userId: auth.user.id,
@@ -118,6 +104,7 @@ export class AgentSessionService {
       runnerCapabilitiesSnapshot: null,
       status: AgentSessionStatus.Created,
       initialContextSnapshot: dto.initialContext ?? {},
+      title: null,
     });
 
     let runnerSession: Awaited<ReturnType<AgentRunnerService['createSession']>>;
@@ -160,6 +147,22 @@ export class AgentSessionService {
     return this.map(runningSession);
   }
 
+  async validateCreate(auth: AuthDto, dto: AgentSessionCreateDto): Promise<void> {
+    const permissionPlanSnapshot = this.resolvePermissionPlan(dto);
+    const { credentialSecret, credentialSnapshot } = await this.resolveCredential(auth, dto);
+
+    await this.agentRunnerService.validateSession({
+      userId: auth.user.id,
+      gallerySessionId: randomUUID(),
+      credential: { ...credentialSnapshot, secret: credentialSecret },
+      model: dto.model,
+      permissionPreset: dto.permissionPreset,
+      permissionPlan: permissionPlanSnapshot,
+      approvalMode: dto.approvalMode,
+      initialContext: dto.initialContext ?? {},
+    });
+  }
+
   async getAll(auth: AuthDto): Promise<AgentSessionResponseDto[]> {
     const sessions = await this.repository.getByUserId(auth.user.id);
     return sessions.map((session) => this.map(session));
@@ -168,6 +171,18 @@ export class AgentSessionService {
   async getById(auth: AuthDto, id: string): Promise<AgentSessionResponseDto> {
     const session = await this.getOwned(auth, id);
     return this.map(session);
+  }
+
+  async update(auth: AuthDto, id: string, dto: AgentSessionUpdateDto): Promise<AgentSessionResponseDto> {
+    await this.getOwned(auth, id);
+    return this.map(await this.repository.updateMetadata(auth.user.id, id, { title: dto.title?.trim() || null }));
+  }
+
+  async delete(auth: AuthDto, id: string): Promise<void> {
+    const deleted = await this.repository.delete(auth.user.id, id);
+    if (!deleted) {
+      throw new BadRequestException('Agent session not found');
+    }
   }
 
   async cancel(auth: AuthDto, id: string): Promise<AgentSessionResponseDto> {
@@ -215,6 +230,27 @@ export class AgentSessionService {
     return structuredClone(AgentSessionService.permissionPresets[dto.permissionPreset]);
   }
 
+  private async resolveCredential(auth: AuthDto, dto: AgentSessionCreateDto) {
+    const credential = await this.credentialService.getById(auth, dto.providerCredentialId);
+
+    if (credential.models.length > 0 && !credential.models.includes(dto.model)) {
+      throw new BadRequestException('Model is not listed for the selected credential');
+    }
+
+    const credentialSecret = await this.credentialService.getSecret(auth, dto.providerCredentialId);
+
+    const credentialSnapshot: AgentCredentialSnapshot = {
+      id: credential.id,
+      providerType: credential.providerType,
+      label: credential.label,
+      baseUrl: credential.baseUrl,
+      models: credential.models,
+      defaultModel: credential.defaultModel,
+    };
+
+    return { credential, credentialSecret, credentialSnapshot };
+  }
+
   private backfillPermissionPlan(permissionPlan: AgentPermissionPlanSnapshot): AgentPermissionPlanSnapshot {
     return {
       ...permissionPlan,
@@ -241,6 +277,7 @@ export class AgentSessionService {
     return {
       id: session.id,
       status: session.status,
+      title: session.title,
       providerCredentialId: session.providerCredentialId,
       credentialSnapshot: session.credentialSnapshot,
       modelSnapshot: session.modelSnapshot,

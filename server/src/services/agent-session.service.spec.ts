@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { AgentSession } from 'src/database';
-import { AgentSessionCreateDto } from 'src/dtos/agent-session.dto';
+import { AgentSessionCreateDto, AgentSessionUpdateDto } from 'src/dtos/agent-session.dto';
 import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType, AgentSessionStatus } from 'src/enum';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
@@ -122,6 +122,7 @@ const makeSession = (overrides: Partial<AgentSession> = {}): AgentSession => {
     runnerCapabilitiesSnapshot: { tools: ['album.create'] },
     status: AgentSessionStatus.Created,
     initialContextSnapshot,
+    title: null,
     createdAt: now,
     updatedAt: now,
     endedAt: null,
@@ -194,6 +195,7 @@ describe(AgentSessionService.name, () => {
       runnerSessionId: null,
       runnerCapabilitiesSnapshot: null,
       initialContextSnapshot: dto.initialContext,
+      title: null,
     });
 
     credentialService.getById.mockResolvedValue(credential);
@@ -223,6 +225,7 @@ describe(AgentSessionService.name, () => {
       runnerSessionId: null,
       runnerCapabilitiesSnapshot: null,
       initialContextSnapshot: dto.initialContext,
+      title: null,
     });
     expect(agentRunnerService.createSession).toHaveBeenCalledWith({
       userId: auth.user.id,
@@ -243,6 +246,7 @@ describe(AgentSessionService.name, () => {
     expect(result).toEqual({
       id: runningSession.id,
       status: AgentSessionStatus.Running,
+      title: runningSession.title,
       providerCredentialId,
       credentialSnapshot: runningSession.credentialSnapshot,
       modelSnapshot: runningSession.modelSnapshot,
@@ -844,6 +848,7 @@ describe(AgentSessionService.name, () => {
       },
       permissionPlanSnapshot: localPowerUserPermissionPlan,
       initialContextSnapshot: { originalPrompt: 'organize favorites' },
+      title: 'Renamed chat',
     });
 
     repository.getById.mockResolvedValue(session);
@@ -855,6 +860,57 @@ describe(AgentSessionService.name, () => {
     expect(result.credentialSnapshot).toEqual(session.credentialSnapshot);
     expect(result.permissionPlanSnapshot).toEqual(localPowerUserPermissionPlan);
     expect(result.initialContextSnapshot).toEqual({ originalPrompt: 'organize favorites' });
+    expect(result.title).toBe('Renamed chat');
+  });
+
+  it('renames an owned session with trimmed title metadata', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const updatedSession = makeSession({ ...session, title: 'Album cleanup' });
+    const dto: AgentSessionUpdateDto = { title: '  Album cleanup  ' };
+
+    repository.getById.mockResolvedValue(session);
+    repository.updateMetadata.mockResolvedValue(updatedSession);
+
+    const result = await sut.update(auth, session.id, dto);
+
+    expect(repository.getById).toHaveBeenCalledWith(auth.user.id, session.id);
+    expect(repository.updateMetadata).toHaveBeenCalledWith(auth.user.id, session.id, { title: 'Album cleanup' });
+    expect(result.title).toBe('Album cleanup');
+  });
+
+  it('clears an owned session title when update title is null', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, title: 'Existing title' });
+    const updatedSession = makeSession({ ...session, title: null });
+
+    repository.getById.mockResolvedValue(session);
+    repository.updateMetadata.mockResolvedValue(updatedSession);
+
+    const result = await sut.update(auth, session.id, { title: null });
+
+    expect(repository.updateMetadata).toHaveBeenCalledWith(auth.user.id, session.id, { title: null });
+    expect(result.title).toBeNull();
+  });
+
+  it('deletes an owned session', async () => {
+    const auth = AuthFactory.create();
+    const id = newUuid();
+
+    repository.delete.mockResolvedValue(true);
+
+    await expect(sut.delete(auth, id)).resolves.toBeUndefined();
+
+    expect(repository.delete).toHaveBeenCalledWith(auth.user.id, id);
+  });
+
+  it('throws when deleting a missing or cross-user session', async () => {
+    const auth = AuthFactory.create();
+    const id = newUuid();
+
+    repository.delete.mockResolvedValue(false);
+
+    await expect(sut.delete(auth, id)).rejects.toThrow('Agent session not found');
   });
 
   it("throws BadRequestException('Agent session not found') for missing session", async () => {

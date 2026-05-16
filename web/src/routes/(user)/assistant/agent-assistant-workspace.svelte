@@ -1,12 +1,17 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import {
+    deleteAgentSession,
     type AgentProviderCredentialResponseDto,
     type AgentRunnerStatusDto,
     type AgentSessionResponseDto,
+    updateAgentSession,
   } from '@immich/sdk';
+  import { Icon } from '@immich/ui';
+  import { mdiDotsHorizontal } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import AgentConversationPane from './agent-conversation-pane.svelte';
+  import AgentProviderCredentialsModal from './agent-provider-credentials-modal.svelte';
   import AgentRunnerStatusPanel from './agent-runner-status-panel.svelte';
   import AgentSessionSetupPanel from './agent-session-setup-panel.svelte';
   import AgentSessionSidebar from './agent-session-sidebar.svelte';
@@ -25,6 +30,7 @@
   }
 
   let { runnerStatus, credentials, sessions, requestedSessionId }: Props = $props();
+  const getInitialCredentials = () => credentials;
   const getInitialSessions = () => sessions;
   const getInitialRequestedSessionId = () => requestedSessionId;
   const getInitialSelectedSessionId = () =>
@@ -36,12 +42,14 @@
 
   let sidebarOpen = $state(false);
   let localSessions = $state<AgentSessionResponseDto[]>(getInitialSessions());
+  let localCredentials = $state<AgentProviderCredentialResponseDto[]>(getInitialCredentials());
   let selectedSessionId = $state<string | null>(getInitialSelectedSessionId());
   let lastRequestedSessionId = $state(getInitialRequestedSessionId());
   let syncedFallbackSessionId = $state<string | null>(null);
   let shouldReplaceSelectedSessionUrl = $state(getInitialShouldReplaceSessionUrl());
   let titleBySessionId = $state<AgentSessionTitleCache>({});
   let sidebarCollapsed = $state(false);
+  let credentialsModalOpen = $state(false);
   let explicitNewChatPending = false;
 
   const selectedSession = $derived(localSessions.find((session) => session.id === selectedSessionId) ?? null);
@@ -105,6 +113,22 @@
     localSessions = localSessions.map((existingSession) => (existingSession.id === session.id ? session : existingSession));
   };
 
+  const handleRenameSession = async (sessionId: string, title: string) => {
+    const session = await updateAgentSession({ id: sessionId, agentSessionUpdateDto: { title } });
+    localSessions = localSessions.map((existingSession) => (existingSession.id === session.id ? session : existingSession));
+    titleBySessionId = { ...titleBySessionId, [sessionId]: null };
+  };
+
+  const handleDeleteSession = async (sessionId: string) => {
+    await deleteAgentSession({ id: sessionId });
+    localSessions = localSessions.filter((session) => session.id !== sessionId);
+
+    if (selectedSessionId === sessionId) {
+      selectedSessionId = null;
+      void updateSessionUrl(null);
+    }
+  };
+
   $effect(() => {
     if (requestedSessionId === lastRequestedSessionId) {
       return;
@@ -135,7 +159,23 @@
   });
 </script>
 
-<div class="flex h-full min-h-0 overflow-hidden bg-white text-black dark:bg-black dark:text-white">
+<div class="relative flex h-full min-h-0 overflow-hidden bg-white text-black dark:bg-black dark:text-white">
+  <button
+    type="button"
+    class="absolute -top-14 right-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-black dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white"
+    aria-label={$t('assistant_api_keys_menu')}
+    onclick={() => (credentialsModalOpen = true)}
+  >
+    <Icon icon={mdiDotsHorizontal} size="20" />
+  </button>
+
+  <AgentProviderCredentialsModal
+    open={credentialsModalOpen}
+    credentials={localCredentials}
+    onClose={() => (credentialsModalOpen = false)}
+    onCredentialsChanged={(nextCredentials) => (localCredentials = nextCredentials)}
+  />
+
   <div class="hidden shrink-0 md:block">
     {#if sidebarCollapsed}
       <div
@@ -159,6 +199,8 @@
           {titleBySessionId}
           onSelectSession={selectSession}
           onNewChat={startNewChat}
+          onRenameSession={handleRenameSession}
+          onDeleteSession={handleDeleteSession}
           onCollapse={() => (sidebarCollapsed = true)}
         />
       </div>
@@ -178,6 +220,8 @@
         {titleBySessionId}
         onSelectSession={selectSession}
         onNewChat={startNewChat}
+        onRenameSession={handleRenameSession}
+        onDeleteSession={handleDeleteSession}
       />
     </div>
   {/if}
@@ -218,7 +262,12 @@
         />
       {:else}
         <AgentRunnerStatusPanel status={runnerStatus} />
-        <AgentSessionSetupPanel {runnerStatus} {credentials} onSessionCreated={handleSessionCreated} />
+        <AgentSessionSetupPanel
+          {runnerStatus}
+          credentials={localCredentials}
+          onSessionCreated={handleSessionCreated}
+          onAddCredentials={() => (credentialsModalOpen = true)}
+        />
       {/if}
     </div>
   </main>

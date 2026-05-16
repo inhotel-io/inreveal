@@ -15,10 +15,21 @@
     titleBySessionId?: AgentSessionTitleCache;
     onSelectSession: (sessionId: string) => void;
     onNewChat: () => void;
+    onRenameSession?: (sessionId: string, title: string) => Promise<void> | void;
+    onDeleteSession?: (sessionId: string) => Promise<void> | void;
     onCollapse?: () => void;
   }
 
-  let { sessions, selectedSessionId, titleBySessionId = {}, onSelectSession, onNewChat, onCollapse }: Props = $props();
+  let {
+    sessions,
+    selectedSessionId,
+    titleBySessionId = {},
+    onSelectSession,
+    onNewChat,
+    onRenameSession,
+    onDeleteSession,
+    onCollapse,
+  }: Props = $props();
   let query = $state('');
 
   const sortedSessions = $derived(sortAgentSessionsForSidebar(sessions));
@@ -75,7 +86,14 @@
     <div class="flex flex-col gap-0.5">
       {#each visibleSessions as session (session.id)}
         <div data-testid="agent-session-row" data-session-id={session.id}>
-          <AgentSessionRow {session} selected={session.id === selectedSessionId} {titleBySessionId} {onSelectSession} />
+          <AgentSessionRow
+            {session}
+            selected={session.id === selectedSessionId}
+            {titleBySessionId}
+            {onSelectSession}
+            {onRenameSession}
+            {onDeleteSession}
+          />
         </div>
       {/each}
     </div>

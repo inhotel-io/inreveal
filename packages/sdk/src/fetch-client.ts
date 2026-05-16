@@ -841,7 +841,11 @@ export type AgentSessionResponseDto = {
     runnerEndpoint: string | null;
     runnerSessionId: string | null;
     status: AgentSessionStatus;
+    title?: string | null;
     updatedAt: string;
+};
+export type AgentSessionUpdateDto = {
+    title: string | null;
 };
 export type AgentSessionCreateDto = {
     approvalMode: AgentApprovalMode;
@@ -5136,6 +5140,18 @@ export function createAgentSession({ agentSessionCreateDto }: {
     })));
 }
 /**
+ * Validate an agent session setup
+ */
+export function validateAgentSession({ agentSessionCreateDto }: {
+    agentSessionCreateDto: AgentSessionCreateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText("/agent/sessions/validate", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentSessionCreateDto
+    })));
+}
+/**
  * Retrieve an agent session
  */
 export function getAgentSession({ id }: {
@@ -5146,6 +5162,33 @@ export function getAgentSession({ id }: {
         data: AgentSessionResponseDto;
     }>(`/agent/sessions/${encodeURIComponent(id)}`, {
         ...opts
+    }));
+}
+/**
+ * Update an agent session
+ */
+export function updateAgentSession({ id, agentSessionUpdateDto }: {
+    id: string;
+    agentSessionUpdateDto: AgentSessionUpdateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AgentSessionResponseDto;
+    }>(`/agent/sessions/${encodeURIComponent(id)}`, oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: agentSessionUpdateDto
+    })));
+}
+/**
+ * Delete an agent session
+ */
+export function deleteAgentSession({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/agent/sessions/${encodeURIComponent(id)}`, {
+        ...opts,
+        method: "DELETE"
     }));
 }
 /**
