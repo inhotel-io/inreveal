@@ -49,5 +49,7 @@ export type AgentMcpInitializeResult = {
     name: string;
     version: string;
   };
-  capabilities: Record<string, never>;
+  capabilities: {
+    tools: Record<string, never>;
+  };
 };
