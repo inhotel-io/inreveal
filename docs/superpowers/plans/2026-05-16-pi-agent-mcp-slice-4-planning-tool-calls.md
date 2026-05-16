@@ -4,7 +4,7 @@
 
 **Goal:** Add MCP `tools/call` support for Gallery planning tools while preserving the existing operation-plan persistence, audit, websocket, validation, and UI-only apply behavior.
 
-**Architecture:** `AgentMcpService` continues to own JSON-RPC/MCP request validation and tool-result wrapping. Slice 4 adds `AgentOperationPlanService` delegation for the three planning tools, reuses the Slice 3 argument validation and MCP result helpers, and keeps final album mutation out of MCP by not adding or exposing any apply tool. Plan-aware MCP tools carry `planId` in tool arguments, matching the old first-party runner tool contract, while Gallery still passes `planId` to the existing service method separately from the DTO body.
+**Architecture:** `AgentMcpService` continues to own JSON-RPC/MCP request validation, tool-result wrapping, and service dispatch for Slice 4, matching the Slice 3 read-tool implementation. Slice 4 adds `AgentOperationPlanService` delegation for the three planning tools, reuses the Slice 3 argument validation and MCP result helpers, and keeps final album mutation out of MCP by not adding or exposing any apply tool. Plan-aware MCP tools carry `planId` in tool arguments, matching the old first-party runner tool contract, while Gallery still passes `planId` to the existing service method separately from the DTO body.
 
 **Tech Stack:** NestJS services/controllers, Vitest, Supertest, Zod v4, existing `AgentOperationPlanService`, existing operation-plan DTO schemas, JSON-RPC 2.0 over the internal runner-token MCP HTTP endpoint.
 
@@ -26,7 +26,13 @@ Slice 4 behavior:
 - return redacted JSON-RPC protocol errors for malformed `tools/call` params, unknown tools, and service-thrown planning failures;
 - keep apply/direct mutation tools absent from MCP.
 
-Slice 4 does not implement first-party Pi runner MCP configuration, compose/provisioning changes, shared-infra changes, production image packaging, or an MCP apply tool. Those remain later slices.
+Slice 4 does not implement first-party Pi runner MCP configuration, compose/provisioning changes, shared-infra changes, production image packaging, registry-owned service delegate descriptors, or an MCP apply tool. Those remain later slices.
+
+## Delegate Location Decision
+
+The design spec says the MCP registry should eventually own metadata, DTO schemas, and service delegates for each tool. Slice 2 and Slice 3 already established a narrower registry that owns metadata, annotations, and input schemas while `AgentMcpService` owns dispatch. Slice 4 keeps that boundary so planning calls land as a vertical behavior slice without refactoring all read-tool dispatch in the same change.
+
+This is still consistent with the Slice 4 behavior contract because the runner no longer owns Gallery tool names, routes, or schemas, and all delegation remains server-owned. A later registry-refactor slice should move read and planning delegate descriptors into `AgentMcpToolRegistryService` together, with tests proving `AgentMcpService` dispatches through the registry for all nine tools.
 
 ## Current Starting Point
 
@@ -70,6 +76,9 @@ Slice 4 must fix that MCP input contract before enabling planning delegation.
 
 - Modify `server/src/services/agent-mcp.service.spec.ts`
   Add planning delegation tests, validation tests, service-error redaction tests, and no-apply/no-direct-mutation MCP tests.
+
+- Modify `server/src/services/agent-operation-plan.service.spec.ts`
+  Add a characterization test proving `summarizePlan` can summarize an already-applied current plan without reopening apply behavior or mutating albums.
 
 - Modify `server/src/services/agent-mcp.service.ts`
   Inject `AgentOperationPlanService`, replace the Slice 3 unsupported-planning branch with validated delegation, split `planId` from plan-aware tool arguments before calling existing service methods, and keep apply absent.
@@ -189,11 +198,13 @@ This plan covers:
 - operation payload validation as `isError: true`;
 - service exceptions as redacted JSON-RPC internal errors;
 - missing/stale/unauthorized/current-plan failure behavior covered by existing `AgentOperationPlanService` tests and one MCP redaction test for each planning service method;
+- already-applied current-plan summary behavior covered by an `AgentOperationPlanService` characterization test;
 - controller auth/session propagation for a planning `tools/call`;
 - `tools/call` before `initialize` remains accepted because the MCP endpoint is stateless and runner-token scoped;
 - existing runner-token failure coverage remains green;
 - no apply/direct mutation tool is listed or callable;
 - no `applyApprovedOperations` path is imported, delegated, or reachable from MCP.
+- registry-owned service delegate descriptors intentionally deferred to a later refactor slice.
 
 ## TDD Rules For This Plan
 
@@ -458,6 +469,7 @@ git commit -m "feat: expose mcp planning plan ids"
 
 **Files:**
 - Modify: `server/src/services/agent-mcp.service.spec.ts`
+- Modify: `server/src/services/agent-operation-plan.service.spec.ts`
 
 - [ ] **Step 1: Add planning service imports and setup**
 
@@ -501,6 +513,11 @@ const makeAlbumCreateOperation = () => ({
   summary: 'Create Portugal highlights.',
   targetKind: AgentOperationTargetKind.NewAlbum,
   temporaryTargetId: 'tmp-portugal',
+  payload: { albumName: 'Portugal highlights' },
+});
+
+const makeParsedAlbumCreateOperation = () => ({
+  ...makeAlbumCreateOperation(),
   riskLevel: AgentOperationRiskLevel.Low,
   enabled: true,
   payload: { albumName: 'Portugal highlights', description: '' },
@@ -509,6 +526,11 @@ const makeAlbumCreateOperation = () => ({
 const makePlanningRequest = () => ({
   summary: 'Create a Portugal highlights album.',
   operations: [makeAlbumCreateOperation()],
+});
+
+const makeParsedPlanningRequest = () => ({
+  summary: 'Create a Portugal highlights album.',
+  operations: [makeParsedAlbumCreateOperation()],
 });
 
 const makePlanningServiceResult = (planId = factory.uuid()) => ({
@@ -536,7 +558,7 @@ Append these tests after the read-tool tests and before protocol-error tests:
       expectedArguments: (authValue: AuthDto, sessionIdValue: string) => [
         authValue,
         sessionIdValue,
-        makePlanningRequest(),
+        makeParsedPlanningRequest(),
       ],
     },
     {
@@ -548,8 +570,16 @@ Append these tests after the read-tool tests and before protocol-error tests:
       },
       serviceMethod: 'reviseProposedOperations' as const,
       expectedArguments: (authValue: AuthDto, sessionIdValue: string, args: Record<string, unknown>) => {
-        const { planId, ...dto } = args;
-        return [authValue, sessionIdValue, planId, dto];
+        const { planId } = args;
+        return [
+          authValue,
+          sessionIdValue,
+          planId,
+          {
+            feedback: 'Use a shorter title.',
+            ...makeParsedPlanningRequest(),
+          },
+        ];
       },
     },
     {
@@ -656,6 +686,24 @@ Append these tests near the existing malformed argument tests:
 
     it.each([
       {
+        name: 'planning missing arguments',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: undefined,
+        expectedPath: 'arguments',
+      },
+      {
+        name: 'planning array arguments',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: [makeAlbumCreateOperation()],
+        expectedPath: 'arguments',
+      },
+      {
+        name: 'proposal wrong primitive summary',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: { summary: 12, operations: [makeAlbumCreateOperation()] },
+        expectedPath: 'summary',
+      },
+      {
         name: 'proposal missing summary',
         toolName: AgentToolName.ProposeAlbumOperations,
         args: { operations: [makeAlbumCreateOperation()] },
@@ -665,6 +713,19 @@ Append these tests near the existing malformed argument tests:
         name: 'proposal empty operations',
         toolName: AgentToolName.ProposeAlbumOperations,
         args: { summary: 'Empty operations.', operations: [] },
+        expectedPath: 'operations',
+      },
+      {
+        name: 'proposal too many operations',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: {
+          summary: 'Too many operations.',
+          operations: Array.from({ length: 501 }, (_, index) => ({
+            ...makeAlbumCreateOperation(),
+            temporaryTargetId: `tmp-portugal-${index}`,
+            payload: { albumName: `Portugal ${index}` },
+          })),
+        },
         expectedPath: 'operations',
       },
       {
@@ -701,9 +762,29 @@ Append these tests near the existing malformed argument tests:
         expectedPath: 'operations.0.temporaryTargetId',
       },
       {
+        name: 'proposal excessive album name',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: {
+          summary: 'Album name too long.',
+          operations: [
+            {
+              ...makeAlbumCreateOperation(),
+              payload: { albumName: 'a'.repeat(201) },
+            },
+          ],
+        },
+        expectedPath: 'operations.0.payload.albumName',
+      },
+      {
         name: 'revision missing planId',
         toolName: AgentToolName.ReviseProposedOperations,
         args: makePlanningRequest(),
+        expectedPath: 'planId',
+      },
+      {
+        name: 'revision numeric planId',
+        toolName: AgentToolName.ReviseProposedOperations,
+        args: { planId: 12, ...makePlanningRequest() },
         expectedPath: 'planId',
       },
       {
@@ -713,15 +794,39 @@ Append these tests near the existing malformed argument tests:
         expectedPath: 'planId',
       },
       {
+        name: 'revision excessive feedback',
+        toolName: AgentToolName.ReviseProposedOperations,
+        args: { planId: factory.uuid(), feedback: 'a'.repeat(2001), ...makePlanningRequest() },
+        expectedPath: 'feedback',
+      },
+      {
         name: 'summary missing planId',
         toolName: AgentToolName.SummarizePlan,
         args: { focus: 'risk' },
         expectedPath: 'planId',
       },
       {
+        name: 'summary numeric planId',
+        toolName: AgentToolName.SummarizePlan,
+        args: { planId: 12, focus: 'risk' },
+        expectedPath: 'planId',
+      },
+      {
+        name: 'summary wrong primitive focus',
+        toolName: AgentToolName.SummarizePlan,
+        args: { planId: factory.uuid(), focus: 12 },
+        expectedPath: 'focus',
+      },
+      {
         name: 'summary invalid focus',
         toolName: AgentToolName.SummarizePlan,
         args: { planId: factory.uuid(), focus: '' },
+        expectedPath: 'focus',
+      },
+      {
+        name: 'summary excessive focus',
+        toolName: AgentToolName.SummarizePlan,
+        args: { planId: factory.uuid(), focus: 'a'.repeat(1001) },
         expectedPath: 'focus',
       },
       {
@@ -741,12 +846,67 @@ Append these tests near the existing malformed argument tests:
   });
 ```
 
-- [ ] **Step 7: Run service tests to verify planning tests fail**
+- [ ] **Step 7: Add already-applied summarize characterization coverage**
+
+In `server/src/services/agent-operation-plan.service.spec.ts`, append this test immediately after the existing `summarizes the current plan and writes a completed planning audit row` test:
+
+```ts
+  it('summarizes an already-applied current plan and writes a completed planning audit row', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Completed });
+    const plan = makePlan({ sessionId: session.id, status: AgentOperationPlanStatus.Applied });
+    const executingToolCall = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.SummarizePlan,
+      status: AgentToolCallStatus.Executing,
+    });
+    const completedToolCall = makeToolCall({ sessionId: session.id, toolName: AgentToolName.SummarizePlan });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    toolCallRepository.create.mockResolvedValue(executingToolCall);
+    toolCallRepository.transition.mockResolvedValue(completedToolCall);
+
+    const result = await sut.summarizePlan(auth, session.id, plan.id, { focus: 'applied operations' });
+
+    expect(result).toMatchObject({
+      status: 'success',
+      plan: { id: plan.id, status: AgentOperationPlanStatus.Applied },
+      toolCall: { id: completedToolCall.id },
+    });
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: session.id,
+        toolName: AgentToolName.SummarizePlan,
+        status: AgentToolCallStatus.Executing,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        dataClass: AgentToolDataClass.Plan,
+        redactedRequestMetadata: { planId: plan.id, operationCount: 0, operationTypes: [], albumIds: [], assetIds: [] },
+        redactedResponseMetadata: null,
+      }),
+    );
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      session.id,
+      executingToolCall.id,
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        status: AgentToolCallStatus.Completed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        redactedResponseMetadata: { planId: plan.id, operationIds: plan.operations.map((operation) => operation.id) },
+        error: null,
+      }),
+    );
+  });
+```
+
+This is a characterization test for behavior that already exists in `AgentOperationPlanService`. It protects the design requirement that `summarizePlan` handles already-applied current plans while Slice 4 routes MCP calls through that service unchanged.
+
+- [ ] **Step 8: Run service tests to verify planning tests fail**
 
 Run:
 
 ```bash
-pnpm --dir server test agent-mcp.service.spec.ts
+pnpm --dir server test agent-mcp.service.spec.ts agent-operation-plan.service.spec.ts
 ```
 
 Expected: FAIL because `AgentMcpService` does not accept `AgentOperationPlanService`, still returns `Tool not supported in this slice` for planning tools, and validates none of the planning DTO edge cases through MCP.
@@ -756,6 +916,7 @@ Expected: FAIL because `AgentMcpService` does not accept `AgentOperationPlanServ
 **Files:**
 - Modify: `server/src/services/agent-mcp.service.ts`
 - Modify: `server/src/services/agent-mcp.service.spec.ts`
+- Modify: `server/src/services/agent-operation-plan.service.spec.ts`
 
 - [ ] **Step 1: Inject `AgentOperationPlanService` and operation schemas**
 
@@ -908,7 +1069,7 @@ Add this method after `invokeTool()`:
 Run:
 
 ```bash
-pnpm --dir server test agent-mcp.service.spec.ts
+pnpm --dir server test agent-mcp.service.spec.ts agent-operation-plan.service.spec.ts
 ```
 
 Expected: PASS.
@@ -918,7 +1079,7 @@ Expected: PASS.
 Run:
 
 ```bash
-git add server/src/services/agent-mcp.service.ts server/src/services/agent-mcp.service.spec.ts
+git add server/src/services/agent-mcp.service.ts server/src/services/agent-mcp.service.spec.ts server/src/services/agent-operation-plan.service.spec.ts
 git commit -m "feat: delegate mcp planning tool calls"
 ```
 
@@ -1165,7 +1326,7 @@ Expected: working tree clean after commits, three Slice 4 implementation/test co
 - [ ] Text content equals `JSON.stringify(structuredContent)`.
 - [ ] Validation failures return MCP tool results with `isError: true`.
 - [ ] DTO validation covers missing fields, wrong primitive types, empty arrays, invalid plan IDs, invalid operation payloads, duplicate asset IDs, excessive limits, excessive text, and unknown strict-object fields.
-- [ ] Stale, missing, unauthorized, and already-invalid plan cases remain covered by `AgentOperationPlanService` tests.
+- [ ] Stale, missing, unauthorized, and already-applied plan cases remain covered by `AgentOperationPlanService` tests.
 - [ ] Planning service exceptions return redacted JSON-RPC internal errors from MCP.
 - [ ] Controller real-service test proves runner token auth and route session id reach planning service delegation.
 - [ ] Existing runner-token failure coverage remains green.
@@ -1176,3 +1337,5 @@ Expected: working tree clean after commits, three Slice 4 implementation/test co
 ## Notes For Later Slices
 
 Slice 5 should replace first-party runner custom Gallery tools with Pi MCP configuration. It should rely on this Slice 4 MCP planning surface instead of `agent-runner/src/gallery-tools.mjs`, keep built-in Pi tools disabled, pass the runner-token MCP gateway URL and Authorization header per session, and preserve one-click provisioning compatibility by accepting a configurable MCP gateway URL rather than assuming tenant-local networking.
+
+A later registry-refactor slice should move service delegate descriptors into `AgentMcpToolRegistryService` for all nine tools in one vertical change. That slice should keep `AgentMcpService` responsible for JSON-RPC validation and result wrapping, but make it resolve tool schemas and delegates through registry definitions instead of hardcoded read/planning dispatch tables.
