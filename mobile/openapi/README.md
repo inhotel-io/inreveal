@@ -90,6 +90,7 @@ Class | Method | HTTP request | Description
 *AgentCredentialsApi* | [**updateAgentProviderCredential**](doc//AgentCredentialsApi.md#updateagentprovidercredential) | **PUT** /agent/provider-credentials/{id} | Update an agent provider credential
 *AgentRunnerApi* | [**getAgentRunnerStatus**](doc//AgentRunnerApi.md#getagentrunnerstatus) | **GET** /agent/runner/status | Get agent runner status
 *AgentSessionsApi* | [**appendAgentSessionMessage**](doc//AgentSessionsApi.md#appendagentsessionmessage) | **POST** /agent/sessions/{id}/messages | Append an agent session message
+*AgentSessionsApi* | [**applyApprovedOperations**](doc//AgentSessionsApi.md#applyapprovedoperations) | **POST** /agent/sessions/{id}/operation-plan/{planId}/apply | Apply approved agent album operations
 *AgentSessionsApi* | [**approveToolCall**](doc//AgentSessionsApi.md#approvetoolcall) | **POST** /agent/sessions/{id}/tool-calls/{toolCallId}/approval | Approve or deny an agent tool call
 *AgentSessionsApi* | [**cancelAgentSession**](doc//AgentSessionsApi.md#cancelagentsession) | **POST** /agent/sessions/{id}/cancel | Cancel an agent session
 *AgentSessionsApi* | [**createAgentSession**](doc//AgentSessionsApi.md#createagentsession) | **POST** /agent/sessions | Create an agent session
@@ -449,8 +450,11 @@ Class | Method | HTTP request | Description
  - [AgentMessageToolCallBlock](doc//AgentMessageToolCallBlock.md)
  - [AgentMessageToolCallBlockType](doc//AgentMessageToolCallBlockType.md)
  - [AgentModelSnapshot](doc//AgentModelSnapshot.md)
+ - [AgentOperationApplyStatus](doc//AgentOperationApplyStatus.md)
  - [AgentOperationExistingAlbumTargetKind](doc//AgentOperationExistingAlbumTargetKind.md)
  - [AgentOperationNewAlbumTargetKind](doc//AgentOperationNewAlbumTargetKind.md)
+ - [AgentOperationPlanApplyRequestDto](doc//AgentOperationPlanApplyRequestDto.md)
+ - [AgentOperationPlanApplyResponseDto](doc//AgentOperationPlanApplyResponseDto.md)
  - [AgentOperationPlanResponseDto](doc//AgentOperationPlanResponseDto.md)
  - [AgentOperationPlanStatus](doc//AgentOperationPlanStatus.md)
  - [AgentOperationPlanSummaryRequestDto](doc//AgentOperationPlanSummaryRequestDto.md)
