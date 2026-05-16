@@ -120,6 +120,61 @@ const assistantErrorFromSession = (session) => {
     : 'Provider request failed';
 };
 
+const parseJsonObject = (value) => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const findApprovalRequiredToolCallId = (value) => {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  if (value.status === 'approval-required' && typeof value.toolCall?.id === 'string') {
+    return value.toolCall.id;
+  }
+
+  if (typeof value.text === 'string') {
+    const parsed = parseJsonObject(value.text);
+    const parsedToolCallId = findApprovalRequiredToolCallId(parsed);
+    if (parsedToolCallId) {
+      return parsedToolCallId;
+    }
+  }
+
+  for (const child of Object.values(value)) {
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        const itemToolCallId = findApprovalRequiredToolCallId(item);
+        if (itemToolCallId) {
+          return itemToolCallId;
+        }
+      }
+      continue;
+    }
+
+    const childToolCallId = findApprovalRequiredToolCallId(child);
+    if (childToolCallId) {
+      return childToolCallId;
+    }
+  }
+
+  return undefined;
+};
+
+const newMessagesSince = (session, startLength) => {
+  const messages = session.messages ?? [];
+  return Array.isArray(messages) ? messages.slice(startLength) : [];
+};
+
 const approvalResumePrompt = ({ toolCallId, approvalDecision, toolResult }) => {
   if (!toolCallId || !approvalDecision) {
     return undefined;
@@ -536,6 +591,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       entry.unsubscribe = releaseSubscription;
       entry.abortActiveStream = abortActiveStream;
       let promptPromise;
+      const messageStartLength = Array.isArray(entry.session.messages) ? entry.session.messages.length : 0;
 
       try {
         promptPromise = Promise.resolve()
@@ -552,6 +608,19 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
                 sessionId: gallerySessionId,
                 runnerSessionId,
                 message: sanitizeSessionError(assistantError, entry),
+              });
+              return;
+            }
+
+            const approvalRequiredToolCallId = findApprovalRequiredToolCallId(
+              newMessagesSince(entry.session, messageStartLength),
+            );
+            if (approvalRequiredToolCallId) {
+              enqueue({
+                type: 'tool-approval-needed',
+                sessionId: gallerySessionId,
+                runnerSessionId,
+                toolCallId: approvalRequiredToolCallId,
               });
               return;
             }
@@ -714,6 +783,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       entry.abortActiveStream = abortActiveStream;
       let promptPromise;
       const resumePrompt = approvalResumePrompt({ toolCallId, approvalDecision, toolResult });
+      const messageStartLength = Array.isArray(entry.session.messages) ? entry.session.messages.length : 0;
 
       try {
         promptPromise = Promise.resolve()
@@ -741,6 +811,19 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
                 sessionId: gallerySessionId,
                 runnerSessionId,
                 message: sanitizeSessionError(assistantError, entry),
+              });
+              return;
+            }
+
+            const approvalRequiredToolCallId = findApprovalRequiredToolCallId(
+              newMessagesSince(entry.session, messageStartLength),
+            );
+            if (approvalRequiredToolCallId) {
+              enqueue({
+                type: 'tool-approval-needed',
+                sessionId: gallerySessionId,
+                runnerSessionId,
+                toolCallId: approvalRequiredToolCallId,
               });
               return;
             }
