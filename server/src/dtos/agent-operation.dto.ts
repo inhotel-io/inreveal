@@ -7,6 +7,7 @@ import {
   AgentOperationStatus,
   AgentOperationTargetKind,
   AgentOperationType,
+  AgentToolName,
 } from 'src/enum';
 import { isoDatetimeToDate } from 'src/validation';
 import z from 'zod';
@@ -46,9 +47,7 @@ const uniqueOperationIds = z
   });
 
 const AgentOperationPlanStatusSchema = z.enum(AgentOperationPlanStatus).meta({ id: 'AgentOperationPlanStatus' });
-const AgentOperationApplyStatusSchema = z
-  .enum(AgentOperationApplyStatus)
-  .meta({ id: 'AgentOperationApplyStatus' });
+const AgentOperationApplyStatusSchema = z.enum(AgentOperationApplyStatus).meta({ id: 'AgentOperationApplyStatus' });
 const AgentOperationTypeSchema = z.enum(AgentOperationType).meta({ id: 'AgentOperationType' });
 const AgentOperationTargetKindSchema = z.enum(AgentOperationTargetKind).meta({ id: 'AgentOperationTargetKind' });
 const AgentOperationRiskLevelSchema = z.enum(AgentOperationRiskLevel).meta({ id: 'AgentOperationRiskLevel' });
@@ -180,6 +179,12 @@ const AgentOperationPlanSummaryRequestSchema = z
     focus: z.string().trim().min(1).max(1000).optional(),
   })
   .meta({ id: 'AgentOperationPlanSummaryRequestDto' });
+
+export const AgentOperationPlanToolRequestSchemas = {
+  [AgentToolName.ProposeAlbumOperations]: AgentProposeAlbumOperationsSchema,
+  [AgentToolName.ReviseProposedOperations]: AgentReviseAlbumOperationsSchema,
+  [AgentToolName.SummarizePlan]: AgentOperationPlanSummaryRequestSchema,
+} as const;
 
 const AgentOperationResponseSchema = z
   .object({
