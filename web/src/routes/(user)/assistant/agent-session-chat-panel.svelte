@@ -197,26 +197,31 @@
 </script>
 
 <section
-  class="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 pb-10 text-black dark:text-white md:px-8"
+  class="relative h-full min-h-0 w-full overflow-hidden text-black dark:text-white"
   aria-labelledby="assistant-chat-title"
 >
-  <div class="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-immich-dark-gray">
-    <h2 id="assistant-chat-title" class="text-lg font-semibold">{$t('assistant_chat')}</h2>
+  <h2 id="assistant-chat-title" class="sr-only">{$t('assistant_chat')}</h2>
 
-    {#if errorMessage}
-      <div class="mt-3 text-sm text-red-600 dark:text-red-400" role="alert">{errorMessage}</div>
-    {/if}
+  {#if errorMessage}
+    <div
+      class="mx-auto w-full max-w-3xl shrink-0 border-b border-red-100 px-4 py-3 text-sm text-red-600 dark:border-red-900 dark:text-red-400 md:px-0"
+      role="alert"
+    >
+      {errorMessage}
+    </div>
+  {/if}
 
-    <div class="mt-5 flex max-h-96 flex-col gap-3 overflow-y-auto" aria-live="polite">
+  <div class="h-full overflow-y-auto" aria-live="polite">
+    <div class="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 px-4 pb-36 pt-6 md:px-0">
       {#each messages as message (message.id)}
         {@const text = textForMessage(message)}
         {#if text}
           <article
             class={[
-              'max-w-[85%] rounded-lg border px-3 py-2 text-sm whitespace-pre-wrap',
+              'max-w-[80%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap',
               message.role === AgentMessageRole.User
-                ? 'ml-auto border-immich-primary/30 bg-immich-primary/10'
-                : 'mr-auto border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900',
+                ? 'ml-auto bg-slate-100 text-slate-950 dark:bg-neutral-800 dark:text-neutral-50'
+                : 'mr-auto text-slate-950 dark:text-neutral-100',
             ]}
           >
             {text}
@@ -225,52 +230,48 @@
       {/each}
 
       {#if streamingText}
-        <article
-          class="mr-auto max-w-[85%] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
-        >
+        <article class="mr-auto max-w-[80%] rounded-2xl px-4 py-3 text-sm text-slate-950 dark:text-neutral-100">
           <div class="text-xs font-medium text-gray-500 dark:text-gray-400">{$t('assistant_streaming_response')}</div>
           <div class="mt-1 whitespace-pre-wrap">{streamingText}</div>
         </article>
       {/if}
+
+      {#if actionDock}
+        <div class="mt-auto">
+          {@render actionDock()}
+        </div>
+      {/if}
     </div>
-
-    {#if actionDock}
-      <div class="mt-5">
-        {@render actionDock()}
-      </div>
-    {/if}
-
-    <form
-      class="mt-5 flex flex-col gap-3"
-      onsubmit={(event) => {
-        event.preventDefault();
-        void sendMessage();
-      }}
-    >
-      <div>
-        <label for="assistant-message" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-          {$t('assistant_message')}
-        </label>
-        <textarea
-          id="assistant-message"
-          aria-label={$t('assistant_message')}
-          class="min-h-24 w-full resize-y rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-immich-dark-gray"
-          bind:value={draft}
-          placeholder={composerPlaceholder ?? $t('assistant_message_placeholder')}
-          disabled={isSending || isAssistantActive || composerDisabled}
-        ></textarea>
-        {#if composerDisabled && composerDisabledReason}
-          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400" role="status">{composerDisabledReason}</p>
-        {/if}
-      </div>
-
-      <div>
-        {#if terminalActionLabel && onTerminalAction}
-          <Button type="button" onclick={onTerminalAction}>{terminalActionLabel}</Button>
-        {:else}
-          <Button type="submit" disabled={!canSend} loading={isSending}>{submitLabel ?? $t('assistant_send')}</Button>
-        {/if}
-      </div>
-    </form>
   </div>
+
+  <form
+    class="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-white via-white to-white/0 px-4 pb-4 pt-8 dark:from-black dark:via-black dark:to-black/0"
+    onsubmit={(event) => {
+      event.preventDefault();
+      void sendMessage();
+    }}
+  >
+    <label for="assistant-message" class="sr-only">{$t('assistant_message')}</label>
+    <div class="mx-auto flex w-full max-w-3xl items-end gap-3">
+      <textarea
+        id="assistant-message"
+        aria-label={$t('assistant_message')}
+        class="min-h-14 flex-1 resize-none rounded-2xl border border-gray-300 bg-white px-4 py-3 text-sm shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+        bind:value={draft}
+        placeholder={composerPlaceholder ?? $t('assistant_message_placeholder')}
+        disabled={isSending || isAssistantActive || composerDisabled}
+      ></textarea>
+
+      {#if terminalActionLabel && onTerminalAction}
+        <Button type="button" onclick={onTerminalAction}>{terminalActionLabel}</Button>
+      {:else}
+        <Button type="submit" disabled={!canSend} loading={isSending}>{submitLabel ?? $t('assistant_send')}</Button>
+      {/if}
+    </div>
+    <div class="mx-auto w-full max-w-3xl">
+      {#if composerDisabled && composerDisabledReason}
+        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400" role="status">{composerDisabledReason}</p>
+      {/if}
+    </div>
+  </form>
 </section>

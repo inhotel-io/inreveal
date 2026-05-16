@@ -34,6 +34,7 @@ vi.mock('svelte-i18n', () => {
     assistant_approval_tool_calls_error: 'Unable to load approval requests',
     assistant_cancel: 'Cancel',
     assistant_chat: 'Chat',
+    assistant_collapse_sessions: 'Collapse sessions',
     assistant_configured: 'Configured',
     assistant_healthy: 'Healthy',
     assistant_message: 'Message',
@@ -292,7 +293,7 @@ describe(AgentAssistantWorkspace.name, () => {
       },
     });
 
-    await user.click(screen.getAllByRole('button', { name: 'New chat' })[0]);
+    await user.click(screen.getByTestId('agent-session-sidebar-new-chat'));
     expect(screen.getByRole('heading', { name: 'Session setup' })).toBeInTheDocument();
     expect(gotoMock).toHaveBeenCalledWith('/assistant', expect.objectContaining({ replaceState: false }));
 
@@ -301,6 +302,53 @@ describe(AgentAssistantWorkspace.name, () => {
       expect.stringContaining(`session=${actionableSession.id}`),
       expect.objectContaining({ replaceState: false }),
     );
+  });
+
+  it('keeps the explicit new-chat state when the URL query is cleared', async () => {
+    const user = userEvent.setup();
+
+    const view = render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession, requestedSession],
+        requestedSessionId: actionableSession.id,
+      },
+    });
+
+    await user.click(screen.getByTestId('agent-session-sidebar-new-chat'));
+    expect(screen.getByRole('heading', { name: 'Session setup' })).toBeInTheDocument();
+
+    await view.rerender({
+      runnerStatus: healthyRunner,
+      credentials,
+      sessions: [actionableSession, requestedSession],
+      requestedSessionId: null,
+    });
+
+    expect(screen.getByRole('heading', { name: 'Session setup' })).toBeInTheDocument();
+    expect(screen.getByTestId(`agent-session-row-${actionableSession.id}`)).not.toHaveAttribute('aria-current');
+  });
+
+  it('collapses and restores the desktop sessions panel', async () => {
+    const user = userEvent.setup();
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession, requestedSession],
+        requestedSessionId: actionableSession.id,
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Collapse sessions' }));
+
+    expect(screen.queryByRole('searchbox', { name: 'Search chats' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('agent-session-sidebar-expand'));
+
+    expect(screen.getByRole('searchbox', { name: 'Search chats' })).toBeInTheDocument();
   });
 
   it('adds a newly created session to the sidebar, selects it, and opens the chat workspace', async () => {
@@ -436,7 +484,7 @@ describe(AgentAssistantWorkspace.name, () => {
 
     await waitFor(() => expect(sdkMock.cancelAgentSession).toHaveBeenCalledWith({ id: actionableSession.id }));
     await waitFor(() => expect(screen.getAllByText('Cancelled')).not.toHaveLength(0));
-    expect(screen.getByTestId(`agent-session-row-${actionableSession.id}`)).toHaveTextContent('Cancelled');
+    expect(screen.getByTestId(`agent-session-row-${actionableSession.id}`)).toHaveTextContent('New chat');
     expect(gotoMock).not.toHaveBeenCalledWith('/assistant', expect.anything());
   });
 
@@ -463,7 +511,8 @@ describe(AgentAssistantWorkspace.name, () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
 
     await waitFor(() => expect(sdkMock.getAgentSession).toHaveBeenCalledWith({ id: interruptedSession.id }));
-    expect(screen.getByTestId(`agent-session-row-${interruptedSession.id}`)).toHaveTextContent('Running');
+    expect(screen.getByTestId(`agent-session-row-${interruptedSession.id}`)).toHaveTextContent('Resume organizing');
+    expect(screen.getAllByText('Running')).not.toHaveLength(0);
     expect(screen.queryByText('Interrupted')).not.toBeInTheDocument();
   });
 
