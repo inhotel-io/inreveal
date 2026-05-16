@@ -1,0 +1,311 @@
+import { sdkMock } from '$lib/__mocks__/sdk.mock';
+import {
+  AgentApprovalMode,
+  AgentMessageRole,
+  AgentMessageTextBlockType,
+  AgentPermissionPreset,
+  AgentProviderType,
+  AgentRunnerStatusReason,
+  AgentSessionStatus,
+  ProviderType,
+  type AgentMessageResponseDto,
+  type AgentProviderCredentialResponseDto,
+  type AgentRunnerStatusDto,
+  type AgentSessionResponseDto,
+} from '@immich/sdk';
+import { websocketMock } from '@test-data/mocks/websocket.mock';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
+import { tick } from 'svelte';
+import { readable } from 'svelte/store';
+import AgentAssistantWorkspace from './agent-assistant-workspace.svelte';
+
+const { gotoMock } = vi.hoisted(() => ({ gotoMock: vi.fn() }));
+
+vi.mock('$app/navigation', () => ({ goto: gotoMock }));
+vi.mock('$lib/stores/websocket');
+
+vi.mock('svelte-i18n', () => {
+  const messages: Record<string, string> = {
+    assistant: 'Assistant',
+    assistant_approval_mode: 'Approval mode',
+    assistant_approval_mode_strict: 'Strict',
+    assistant_chat: 'Chat',
+    assistant_configured: 'Configured',
+    assistant_healthy: 'Healthy',
+    assistant_message: 'Message',
+    assistant_model: 'Model',
+    assistant_new_chat: 'New chat',
+    assistant_no: 'no',
+    assistant_operation_plan_empty: 'No proposed album plan yet.',
+    assistant_operation_plan_loading: 'Loading proposed album plan',
+    assistant_open_sessions: 'Open sessions',
+    assistant_permission_preset: 'Permission preset',
+    assistant_permission_preset_careful: 'Careful',
+    assistant_protocol: 'Protocol {protocol}',
+    assistant_provider_credential: 'Provider credential',
+    assistant_runner: 'Runner {version}',
+    assistant_runner_healthy: 'Runner healthy',
+    assistant_search_chats: 'Search chats',
+    assistant_selected_session: 'Selected session',
+    assistant_send: 'Send',
+    assistant_session_created: 'Assistant session started',
+    assistant_session_setup: 'Session setup',
+    assistant_session_status_completed: 'Completed',
+    assistant_session_status_created: 'Created',
+    assistant_session_status_running: 'Running',
+    assistant_session_status_waiting_for_plan_review: 'Waiting for plan review',
+    assistant_sessions: 'Sessions',
+    assistant_start_session: 'Start session',
+    assistant_streaming: 'Streaming',
+    assistant_subtitle: 'Album organization assistant',
+    assistant_yes: 'yes',
+    status: 'Status',
+  };
+
+  return {
+    t: readable((key: string, options?: { values?: Record<string, string | number> }) =>
+      (messages[key] ?? key)
+        .replace('{protocol}', String(options?.values?.protocol ?? ''))
+        .replace('{version}', String(options?.values?.version ?? '')),
+    ),
+  };
+});
+
+const healthyRunner: AgentRunnerStatusDto = {
+  configured: true,
+  healthy: true,
+  reason: AgentRunnerStatusReason.Healthy,
+  version: '0.1.0',
+  capabilities: {
+    protocolVersion: '2026-05-14',
+    streaming: true,
+    tools: [],
+    models: [],
+  },
+  checkedAt: '2026-05-14T00:00:00.000Z',
+};
+
+const credentials: AgentProviderCredentialResponseDto[] = [
+  {
+    id: '00000000-0000-4000-8000-000000000001',
+    providerType: ProviderType.Openai,
+    label: 'OpenAI personal',
+    baseUrl: null,
+    models: ['gpt-5.1'],
+    defaultModel: 'gpt-5.1',
+    createdAt: '2026-05-14T00:00:00.000Z',
+    updatedAt: '2026-05-14T00:00:00.000Z',
+    lastUsedAt: null,
+  },
+];
+
+const makeSession = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSessionResponseDto => {
+  const id = overrides.id ?? '00000000-0000-4000-8000-000000000100';
+
+  return {
+    id,
+    status: AgentSessionStatus.Created,
+    providerCredentialId: credentials[0].id,
+    credentialSnapshot: {
+      id: credentials[0].id,
+      providerType: AgentProviderType.Openai,
+      label: 'OpenAI personal',
+      baseUrl: null,
+      models: ['gpt-5.1'],
+      defaultModel: 'gpt-5.1',
+    },
+    modelSnapshot: { model: 'gpt-5.1', providerCredentialId: credentials[0].id },
+    initialContextSnapshot: {},
+    permissionPlanSnapshot: {
+      assetScope: { locked: true, owned: true, sharedSpaces: false },
+      limits: {
+        expiresInMinutes: null,
+        maxAssetsPerSession: 200,
+        maxAssetsPerToolCall: 50,
+        maxOriginalsPerToolCall: 10,
+        maxPreviewsPerToolCall: 50,
+      },
+      providerExposure: { allowOriginalsForExternalProviders: false, metadata: true, originals: false, previews: true },
+      read: { metadata: true, originals: false, previews: true },
+      writeScope: { addAssets: true, createAlbum: true, setCover: true, updateDetails: true },
+    },
+    permissionPreset: AgentPermissionPreset.Careful,
+    approvalMode: AgentApprovalMode.Strict,
+    runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+    runnerEndpoint: 'http://agent-runner:4477',
+    runnerSessionId: `stub-${id}`,
+    createdAt: '2026-05-14T00:00:00.000Z',
+    updatedAt: '2026-05-14T00:00:00.000Z',
+    endedAt: null,
+    ...overrides,
+  };
+};
+
+const makeMessage = (sessionId: string, text: string): AgentMessageResponseDto => ({
+  id: `${sessionId}-message`,
+  sessionId,
+  role: AgentMessageRole.Assistant,
+  providerMessageId: null,
+  toolCallId: null,
+  content: {
+    blocks: [{ type: AgentMessageTextBlockType.Text, text }],
+  },
+  createdAt: '2026-05-14T00:00:00.000Z',
+});
+
+const requestedSession = makeSession({
+  id: '00000000-0000-4000-8000-000000000200',
+  status: AgentSessionStatus.Completed,
+  createdAt: '2026-05-15T00:00:00.000Z',
+});
+
+const actionableSession = makeSession({
+  id: '00000000-0000-4000-8000-000000000300',
+  status: AgentSessionStatus.Running,
+  createdAt: '2026-05-16T00:00:00.000Z',
+});
+
+describe(AgentAssistantWorkspace.name, () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    history.replaceState(null, '', '/assistant');
+    gotoMock.mockResolvedValue(undefined);
+    websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
+    sdkMock.getAgentSessionMessages.mockResolvedValue([]);
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(null);
+    sdkMock.createAgentSession.mockResolvedValue(actionableSession);
+  });
+
+  it('selects a valid requested session and mounts chat and plan panels for it', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValueOnce([makeMessage(requestedSession.id, 'Existing transcript')]);
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession, requestedSession],
+        requestedSessionId: requestedSession.id,
+      },
+    });
+
+    expect(screen.getByRole('heading', { name: 'Selected session' })).toBeInTheDocument();
+    expect(await screen.findByText('Existing transcript')).toBeInTheDocument();
+    expect(await screen.findByText('No proposed album plan yet.')).toBeInTheDocument();
+    expect(gotoMock).not.toHaveBeenCalled();
+    expect(sdkMock.getAgentSessionMessages).toHaveBeenCalledWith({ id: requestedSession.id });
+    expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: requestedSession.id });
+  });
+
+  it('falls back to the newest actionable session and replaces the missing query param', async () => {
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [requestedSession, actionableSession],
+        requestedSessionId: null,
+      },
+    });
+
+    await waitFor(() =>
+      expect(gotoMock).toHaveBeenCalledWith(`/assistant?session=${actionableSession.id}`, {
+        keepFocus: true,
+        noScroll: true,
+        replaceState: true,
+      }),
+    );
+    expect(screen.getByRole('heading', { name: 'Selected session' })).toBeInTheDocument();
+  });
+
+  it('falls back from an unknown requested session and replaces the stale query param', async () => {
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [requestedSession, actionableSession],
+        requestedSessionId: '00000000-0000-4000-8000-00000000dead',
+      },
+    });
+
+    await waitFor(() =>
+      expect(gotoMock).toHaveBeenCalledWith(`/assistant?session=${actionableSession.id}`, {
+        keepFocus: true,
+        noScroll: true,
+        replaceState: true,
+      }),
+    );
+    expect(screen.getByRole('heading', { name: 'Selected session' })).toBeInTheDocument();
+  });
+
+  it('uses push-style navigation when a user selects a session from a no-query new-chat state', async () => {
+    const user = userEvent.setup();
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [requestedSession],
+        requestedSessionId: null,
+      },
+    });
+
+    await user.click(screen.getByTestId(`agent-session-row-${requestedSession.id}`));
+    await tick();
+    await tick();
+
+    expect(gotoMock).toHaveBeenCalledTimes(1);
+    expect(gotoMock).toHaveBeenCalledWith(
+      `/assistant?session=${requestedSession.id}`,
+      expect.objectContaining({ replaceState: false }),
+    );
+  });
+
+  it('switches selected sessions through the sidebar and syncs the URL query', async () => {
+    const user = userEvent.setup();
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession, requestedSession],
+        requestedSessionId: actionableSession.id,
+      },
+    });
+
+    await user.click(screen.getAllByRole('button', { name: 'New chat' })[0]);
+    expect(screen.getByRole('heading', { name: 'Session setup' })).toBeInTheDocument();
+    expect(gotoMock).toHaveBeenCalledWith('/assistant', expect.objectContaining({ replaceState: false }));
+
+    await user.click(screen.getByTestId(`agent-session-row-${actionableSession.id}`));
+    expect(gotoMock).toHaveBeenLastCalledWith(
+      expect.stringContaining(`session=${actionableSession.id}`),
+      expect.objectContaining({ replaceState: false }),
+    );
+  });
+
+  it('adds a newly created session to the sidebar, selects it, and opens the chat workspace', async () => {
+    const createdSession = makeSession({
+      id: '00000000-0000-4000-8000-000000000400',
+      status: AgentSessionStatus.Running,
+    });
+    sdkMock.createAgentSession.mockResolvedValue(createdSession);
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    expect(await screen.findByRole('heading', { name: 'Selected session' })).toBeInTheDocument();
+    expect(screen.getByTestId(`agent-session-row-${createdSession.id}`)).toHaveAttribute('aria-current', 'true');
+    expect(gotoMock).toHaveBeenCalledWith(
+      `/assistant?session=${createdSession.id}`,
+      expect.objectContaining({ replaceState: false }),
+    );
+  });
+});
