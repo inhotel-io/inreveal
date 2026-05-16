@@ -53,7 +53,7 @@ export interface EnvData {
   agent: {
     secretKey?: string;
     runnerUrl?: string;
-    toolGatewayUrl?: string;
+    mcpGatewayUrl?: string;
     runnerHealthTimeoutMs: number;
     runnerMessageStreamTimeoutMs: number;
   };
@@ -301,7 +301,7 @@ const getEnv = (): EnvData => {
     agent: {
       secretKey: dto.IMMICH_AGENT_SECRET_KEY,
       runnerUrl: dto.IMMICH_AGENT_RUNNER_URL,
-      toolGatewayUrl: dto.IMMICH_AGENT_TOOL_GATEWAY_URL,
+      mcpGatewayUrl: dto.IMMICH_AGENT_MCP_GATEWAY_URL,
       runnerHealthTimeoutMs: dto.IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS ?? 2000,
       runnerMessageStreamTimeoutMs: dto.IMMICH_AGENT_RUNNER_MESSAGE_STREAM_TIMEOUT_MS ?? 300_000,
     },
