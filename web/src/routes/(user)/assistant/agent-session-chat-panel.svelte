@@ -27,6 +27,7 @@
     session: AgentSessionResponseDto;
     actionDock?: Snippet;
     toolCalls?: AgentToolCallResponseDto[];
+    seedMessages?: AgentMessageResponseDto[];
     assistantResponsePending?: boolean;
     composerDisabled?: boolean;
     composerDisabledReason?: string | null;
@@ -71,6 +72,7 @@
     session,
     actionDock,
     toolCalls = [],
+    seedMessages = [],
     assistantResponsePending = false,
     composerDisabled = false,
     composerDisabledReason = null,
@@ -459,6 +461,21 @@
 
     isAssistantActive = false;
     streamingText = '';
+  });
+
+  $effect(() => {
+    if (seedMessages.length === 0) {
+      return;
+    }
+
+    const existingMessageIds = new SvelteSet(messages.map((message) => message.id));
+    if (seedMessages.every((message) => existingMessageIds.has(message.id))) {
+      return;
+    }
+
+    const nextMessages = mergeMessages(messages, seedMessages);
+    messages = nextMessages;
+    publishDiscoveredTitle(nextMessages);
   });
 
   $effect(() => {

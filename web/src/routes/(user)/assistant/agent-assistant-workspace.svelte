@@ -9,6 +9,7 @@
     createAgentSession,
     deleteAgentSession,
     validateAgentSession,
+    type AgentMessageResponseDto,
     type AgentProviderCredentialResponseDto,
     type AgentRunnerStatusDto,
     type AgentSessionResponseDto,
@@ -67,6 +68,7 @@
   let newChatError = $state<string | null>(null);
   let isStartingFromMessage = $state(false);
   let startingFromMessageSessionId = $state<string | null>(null);
+  let sentMessageBySessionId = $state<Record<string, AgentMessageResponseDto>>({});
   let assistantPermissionPreset = $state<AgentPermissionPreset>(DEFAULT_AGENT_PERMISSION_PRESET);
   let assistantApprovalMode = $state<AgentApprovalMode>(DEFAULT_AGENT_APPROVAL_MODE);
   let assistantDefaultsInitialized = false;
@@ -260,7 +262,7 @@
       const session = await createAgentSession({ agentSessionCreateDto });
       startingFromMessageSessionId = session.id;
       handleSessionCreated(session);
-      await appendAgentSessionMessage({
+      const message = await appendAgentSessionMessage({
         id: session.id,
         agentMessageCreateDto: {
           content: {
@@ -268,6 +270,7 @@
           },
         },
       });
+      sentMessageBySessionId = { ...sentMessageBySessionId, [session.id]: message };
       titleBySessionId = { ...titleBySessionId, [session.id]: text };
       newChatDraft = '';
     } catch (error) {
@@ -530,6 +533,7 @@
         <AgentConversationPane
           session={selectedSession}
           title={selectedTitle}
+          seedMessages={sentMessageBySessionId[selectedSession.id] ? [sentMessageBySessionId[selectedSession.id]] : []}
           assistantResponsePending={isStartingFromMessage && startingFromMessageSessionId === selectedSession.id}
           onNewChat={startNewChat}
           onTitleDiscovered={handleTitleDiscovered}
