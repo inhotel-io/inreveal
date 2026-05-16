@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { request as httpRequest } from 'node:http';
 import { describe, it } from 'node:test';
 import { createRuntimeFromEnv, startServer } from './server.mjs';
 
@@ -12,7 +13,8 @@ const parseSse = (body) =>
       const event = lines.find((line) => line.startsWith('event: '))?.slice('event: '.length);
       const data = lines.find((line) => line.startsWith('data: '))?.slice('data: '.length);
       return { event, data: data ? JSON.parse(data) : null };
-    });
+    })
+    .filter((frame) => frame.data !== null);
 
 const readSse = async (response) => parseSse(await response.text());
 
@@ -49,8 +51,8 @@ const createSessionBody = (overrides = {}) => ({
   ...overrides,
 });
 
-const createRuntime = ({ createSession, sendMessage, disposeSession } = {}) => {
-  const calls = { createSession: [], disposeSession: [], sendMessage: [] };
+const createRuntime = ({ createSession, sendMessage, resumeSession, disposeSession } = {}) => {
+  const calls = { createSession: [], disposeSession: [], sendMessage: [], resumeSession: [] };
 
   return {
     calls,
@@ -97,6 +99,28 @@ const createRuntime = ({ createSession, sendMessage, disposeSession } = {}) => {
         runnerSessionId: body.runnerSessionId,
         providerMessageId: 'provider-message-1',
         content: { blocks: [{ type: 'text', text: 'Runtime says hello' }] },
+      };
+    },
+    async *resumeSession(body) {
+      calls.resumeSession.push(body);
+      if (resumeSession) {
+        yield* resumeSession(body);
+        return;
+      }
+
+      yield {
+        type: 'assistant-message-delta',
+        sessionId: body.gallerySessionId,
+        runnerSessionId: body.runnerSessionId,
+        delta: 'Runtime continued',
+        sequence: 1,
+      };
+      yield {
+        type: 'assistant-message-completed',
+        sessionId: body.gallerySessionId,
+        runnerSessionId: body.runnerSessionId,
+        providerMessageId: 'provider-message-2',
+        content: { blocks: [{ type: 'text', text: 'Runtime continued' }] },
       };
     },
   };
@@ -686,6 +710,125 @@ describe('agent runner server', () => {
           gallerySessionId: '00000000-0000-4000-8000-000000000100',
           messageId: '00000000-0000-4000-8000-000000000200',
           content: { blocks: [{ type: 'text', text: 'Hello runner' }] },
+        },
+      ]);
+    });
+  });
+
+  it('sends message SSE chunks before the runtime stream completes', async () => {
+    let releaseCompletion;
+    const runtime = createRuntime({
+      async *sendMessage(body) {
+        yield {
+          type: 'assistant-message-delta',
+          sessionId: body.gallerySessionId,
+          runnerSessionId: body.runnerSessionId,
+          delta: 'first chunk',
+          sequence: 1,
+        };
+        await new Promise((resolve) => {
+          releaseCompletion = resolve;
+        });
+        yield {
+          type: 'assistant-message-completed',
+          sessionId: body.gallerySessionId,
+          runnerSessionId: body.runnerSessionId,
+          providerMessageId: null,
+          content: { blocks: [{ type: 'text', text: 'first chunk done' }] },
+        };
+      },
+    });
+
+    await withServer(runtime, async (baseUrl) => {
+      await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+
+      await new Promise((resolve, reject) => {
+        const request = httpRequest(
+          `${baseUrl}/sessions/pi-00000000-0000-4000-8000-000000000100/messages`,
+          {
+            method: 'POST',
+            headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+          },
+          (response) => {
+            assert.equal(response.statusCode, 200);
+            response.setEncoding('utf8');
+
+            let body = '';
+            let released = false;
+            const timeout = setTimeout(() => {
+              releaseCompletion?.();
+              reject(new Error('timed out waiting for streamed delta before completion'));
+            }, 250);
+
+            response.on('data', (chunk) => {
+              body += chunk;
+              if (!released && body.includes('event: assistant-message-delta') && body.includes('first chunk')) {
+                released = true;
+                assert.match(body, /first chunk/);
+                releaseCompletion();
+              }
+            });
+            response.on('end', () => {
+              clearTimeout(timeout);
+              assert.equal(released, true);
+              assert.match(body, /event: assistant-message-completed/);
+              resolve();
+            });
+          },
+        );
+        request.on('error', reject);
+        request.end(JSON.stringify(messageBody));
+      });
+    });
+  });
+
+  it('continues an existing runner session and streams resumed assistant events', async () => {
+    const runtime = createRuntime();
+
+    await withServer(runtime, async (baseUrl) => {
+      await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+
+      const response = await fetch(`${baseUrl}/sessions/pi-00000000-0000-4000-8000-000000000100/continue`, {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gallerySessionId: '00000000-0000-4000-8000-000000000100' }),
+      });
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await readSse(response), [
+        {
+          event: 'assistant-message-delta',
+          data: {
+            type: 'assistant-message-delta',
+            sessionId: '00000000-0000-4000-8000-000000000100',
+            runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+            delta: 'Runtime continued',
+            sequence: 1,
+          },
+        },
+        {
+          event: 'assistant-message-completed',
+          data: {
+            type: 'assistant-message-completed',
+            sessionId: '00000000-0000-4000-8000-000000000100',
+            runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+            providerMessageId: 'provider-message-2',
+            content: { blocks: [{ type: 'text', text: 'Runtime continued' }] },
+          },
+        },
+      ]);
+      assert.deepEqual(runtime.calls.resumeSession, [
+        {
+          runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+          gallerySessionId: '00000000-0000-4000-8000-000000000100',
         },
       ]);
     });

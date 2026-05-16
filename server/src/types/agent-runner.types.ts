@@ -42,6 +42,10 @@ export type AgentRunnerMessageRequest = {
   content: AgentMessageContent;
 };
 
+export type AgentRunnerResumeRequest = {
+  gallerySessionId: string;
+};
+
 export type AgentRunnerStreamEvent =
   | {
       type: 'assistant-message-delta';

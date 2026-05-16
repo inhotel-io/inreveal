@@ -4,6 +4,7 @@ import type {
   AgentRunnerCreateSessionRequest,
   AgentRunnerCreateSessionResult,
   AgentRunnerMessageRequest,
+  AgentRunnerResumeRequest,
   AgentRunnerStreamEvent,
   AgentRunnerValidateSessionResult,
 } from 'src/types/agent-runner.types';
@@ -315,6 +316,31 @@ export class AgentRunnerRepository {
 
     if (!response.ok || !response.body) {
       throw new Error(`Agent runner message stream failed with status ${response.status}`);
+    }
+
+    yield* parseSseStream(response.body);
+  }
+
+  async *streamResume({
+    url,
+    runnerSessionId,
+    timeoutMs,
+    body,
+  }: {
+    url: string;
+    runnerSessionId: string;
+    timeoutMs: number;
+    body: AgentRunnerResumeRequest;
+  }): AsyncGenerator<AgentRunnerStreamEvent> {
+    const response = await fetch(getRunnerUrl(url, `sessions/${encodeURIComponent(runnerSessionId)}/continue`), {
+      method: 'POST',
+      headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`Agent runner resume stream failed with status ${response.status}`);
     }
 
     yield* parseSseStream(response.body);

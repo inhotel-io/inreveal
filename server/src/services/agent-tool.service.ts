@@ -32,6 +32,7 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import {
   AgentAlbumDetail,
@@ -104,6 +105,7 @@ export class AgentToolService {
     private readonly albumRepository: AlbumRepository,
     private readonly sessionRepository: AgentSessionRepository,
     private readonly toolCallRepository: AgentToolCallRepository,
+    private readonly agentRunnerService: AgentRunnerService,
   ) {}
 
   async searchAssets(
@@ -198,6 +200,15 @@ export class AgentToolService {
     }
 
     await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+    if (session.runnerSessionId) {
+      void this.agentRunnerService
+        .resumeAfterToolApproval({
+          userId: auth.user.id,
+          sessionId: session.id,
+          runnerSessionId: session.runnerSessionId,
+        })
+        .catch(() => {});
+    }
 
     return this.mapToolCall(transitioned);
   }
