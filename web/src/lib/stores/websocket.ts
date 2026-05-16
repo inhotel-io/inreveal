@@ -1,4 +1,5 @@
 import {
+  AgentOperationApplyStatus,
   MaintenanceAction,
   type AgentMessageResponseDto,
   type AssetResponseDto,
@@ -48,6 +49,15 @@ export type AgentSessionClientEvent =
       sessionId: string;
       planId: string;
       revision: number;
+    }
+  | {
+      type: 'operation-plan-applied';
+      sessionId: string;
+      planId: string;
+      status: AgentOperationApplyStatus;
+      appliedCount: number;
+      skippedCount: number;
+      failedCount: number;
     };
 
 export interface Events {
