@@ -13,6 +13,7 @@ import {
   SystemMetadataKey,
 } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
+import { ConfigRepository } from 'src/repositories/config.repository';
 import { AssetEditRepository } from 'src/repositories/asset-edit.repository';
 import { AssetJobRepository } from 'src/repositories/asset-job.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
@@ -50,6 +51,7 @@ const setup = (db?: Kysely<DB>) => {
       AssetRepository,
       AssetEditRepository,
       SharedSpaceRepository,
+      SystemMetadataRepository,
     ],
     mock: [JobRepository, LoggingRepository, StorageRepository, SystemMetadataRepository],
   });
