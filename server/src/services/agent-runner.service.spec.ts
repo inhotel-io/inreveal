@@ -19,7 +19,7 @@ import { automock } from 'test/utils';
 
 const userId = '00000000-0000-4000-8000-000000000001';
 
-const makeCreateSessionBody = (): Omit<AgentRunnerCreateSessionRequest, 'toolGateway'> & { userId: string } => ({
+const makeCreateSessionBody = (): Omit<AgentRunnerCreateSessionRequest, 'mcpGateway'> & { userId: string } => ({
   userId,
   gallerySessionId: '00000000-0000-4000-8000-000000000100',
   credential: {
@@ -141,20 +141,20 @@ describe(AgentRunnerService.name, () => {
       body: expect.objectContaining({
         gallerySessionId: '00000000-0000-4000-8000-000000000100',
         model: 'gpt-5.1',
-        toolGateway: null,
+        mcpGateway: null,
       }),
     });
     expect(agentRunnerRepository.createSession.mock.calls[0][0].body).not.toHaveProperty('userId');
     expect(toolTokenService.create).not.toHaveBeenCalled();
   });
 
-  it('passes configured tool gateway URL and short-lived token to the runner without returning the token', async () => {
+  it('passes configured MCP gateway session URL and short-lived token to the runner without returning the token', async () => {
     configRepository.getEnv.mockReturnValue({
       agent: {
         runnerUrl: 'http://agent-runner:4477',
         runnerHealthTimeoutMs: 3000,
         runnerMessageStreamTimeoutMs: 120_000,
-        toolGatewayUrl: 'http://immich-server:2283/api/agent/internal/tools',
+        toolGatewayUrl: 'http://immich-server:2283/api/agent/mcp',
       },
     } as never);
     const body = makeCreateSessionBody();
@@ -181,16 +181,49 @@ describe(AgentRunnerService.name, () => {
       timeoutMs: 3000,
       body: expect.objectContaining({
         gallerySessionId: '00000000-0000-4000-8000-000000000100',
-        toolGateway: {
-          url: 'http://immich-server:2283/api/agent/internal/tools',
+        mcpGateway: {
+          url: 'http://immich-server:2283/api/agent/mcp/sessions/00000000-0000-4000-8000-000000000100',
           token: 'tool-token',
         },
       }),
     });
     expect(agentRunnerRepository.createSession.mock.calls[0][0].body).not.toHaveProperty('userId');
+    expect(agentRunnerRepository.createSession.mock.calls[0][0].body).not.toHaveProperty('toolGateway');
   });
 
-  it('uses the default two-hour tool token expiry when the permission plan has no explicit expiry', async () => {
+  it('builds the MCP session URL without duplicate slashes and encodes the session id', async () => {
+    const body = makeCreateSessionBody();
+    body.gallerySessionId = 'session/with spaces';
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+        toolGatewayUrl: 'http://immich-server:2283/api/agent/mcp/',
+      },
+    } as never);
+    toolTokenService.create.mockReturnValue('tool-token');
+    agentRunnerRepository.createSession.mockResolvedValue({
+      runnerSessionId: 'stub-session-with-spaces',
+      capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+    });
+
+    await sut.createSession(body);
+
+    expect(agentRunnerRepository.createSession).toHaveBeenCalledWith({
+      url: 'http://agent-runner:4477',
+      timeoutMs: 3000,
+      body: expect.objectContaining({
+        gallerySessionId: 'session/with spaces',
+        mcpGateway: {
+          url: 'http://immich-server:2283/api/agent/mcp/sessions/session%2Fwith%20spaces',
+          token: 'tool-token',
+        },
+      }),
+    });
+  });
+
+  it('uses the default two-hour MCP gateway token expiry when the permission plan has no explicit expiry', async () => {
     const body = makeCreateSessionBody();
     body.permissionPlan.limits.expiresInMinutes = null;
     configRepository.getEnv.mockReturnValue({
@@ -198,7 +231,7 @@ describe(AgentRunnerService.name, () => {
         runnerUrl: 'http://agent-runner:4477',
         runnerHealthTimeoutMs: 3000,
         runnerMessageStreamTimeoutMs: 120_000,
-        toolGatewayUrl: 'http://immich-server:2283/api/agent/internal/tools',
+        toolGatewayUrl: 'http://immich-server:2283/api/agent/mcp',
       },
     } as never);
     toolTokenService.create.mockReturnValue('tool-token');
