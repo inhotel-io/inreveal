@@ -1,12 +1,19 @@
 import {
   AgentApprovalMode,
+  AgentMessageAssetBlockType,
+  AgentMessagePlanBlockType,
+  AgentMessageRole,
+  AgentMessageTextBlockType,
   AgentPermissionPreset,
   AgentProviderType,
   AgentSessionStatus,
+  type AgentMessageBlock,
+  type AgentMessageResponseDto,
   type AgentSessionResponseDto,
 } from '@immich/sdk';
 import {
   ASSISTANT_SESSION_QUERY_PARAM,
+  deriveAgentSessionTitleFromMessages,
   filterAgentSessionsForSidebar,
   filterSidebarSessions,
   getAgentSessionStatusBadge,
@@ -63,6 +70,30 @@ const session = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSession
     ...overrides,
   };
 };
+
+const message = (id: string, role: AgentMessageRole, blocks: AgentMessageBlock[]): AgentMessageResponseDto => ({
+  id,
+  sessionId: 'session-1',
+  role,
+  providerMessageId: null,
+  toolCallId: null,
+  content: { blocks },
+  createdAt: '2026-05-14T00:00:00.000Z',
+});
+
+const textBlock = (text: string): AgentMessageBlock => ({ type: AgentMessageTextBlockType.Text, text });
+
+const assetBlock = (): AgentMessageBlock => ({
+  type: AgentMessageAssetBlockType.Asset,
+  assetId: 'asset-1',
+  label: 'IMG_0001',
+});
+
+const planBlock = (): AgentMessageBlock => ({
+  type: AgentMessagePlanBlockType.Plan,
+  planId: 'plan-1',
+  label: 'Review plan',
+});
 
 describe('agent session workspace UI helpers', () => {
   it('exposes stable task helper names for later workspace slices', () => {
@@ -192,6 +223,61 @@ describe('agent session workspace UI helpers', () => {
     expect(getAgentSessionTitle(current, { current: '  Organize screenshots  ' })).toBe('Organize screenshots');
     expect(getAgentSessionTitle(current, { current: '   ' })).toBe('New chat');
     expect(getAgentSessionTitle(current, {})).toBe('New chat');
+  });
+
+  describe(deriveAgentSessionTitleFromMessages.name, () => {
+    it('uses the first valid user text message', () => {
+      expect(
+        deriveAgentSessionTitleFromMessages([
+          message('assistant-first', AgentMessageRole.Assistant, [textBlock('Assistant title')]),
+          message('blank-user', AgentMessageRole.User, [textBlock('   ')]),
+          message('first-user', AgentMessageRole.User, [textBlock('Organize screenshots')]),
+          message('second-user', AgentMessageRole.User, [textBlock('Rename everything')]),
+        ]),
+      ).toBe('Organize screenshots');
+    });
+
+    it('ignores assistant, blank, and non-text blocks', () => {
+      expect(
+        deriveAgentSessionTitleFromMessages([
+          message('assistant', AgentMessageRole.Assistant, [textBlock('Assistant title')]),
+          message('blank', AgentMessageRole.User, [textBlock('\n\t  ')]),
+          message('non-text', AgentMessageRole.User, [assetBlock(), planBlock()]),
+        ]),
+      ).toBeNull();
+    });
+
+    it('joins multiple user text blocks in order and collapses whitespace', () => {
+      expect(
+        deriveAgentSessionTitleFromMessages([
+          message('multi-block', AgentMessageRole.User, [
+            assetBlock(),
+            textBlock('  Show   me\n'),
+            textBlock('\tmy screenshots  '),
+          ]),
+        ]),
+      ).toBe('Show me my screenshots');
+    });
+
+    it('truncates deterministically to 60 characters with a single ellipsis', () => {
+      expect(
+        deriveAgentSessionTitleFromMessages([
+          message('long', AgentMessageRole.User, [
+            textBlock('123456789 123456789 123456789 123456789 123456789 123456789 end'),
+          ]),
+        ]),
+      ).toBe('123456789 123456789 123456789 123456789 123456789 123456789…');
+    });
+
+    it('returns null when there is no valid user text title', () => {
+      expect(deriveAgentSessionTitleFromMessages([])).toBeNull();
+      expect(
+        deriveAgentSessionTitleFromMessages([
+          message('system', AgentMessageRole.System, [textBlock('System text')]),
+          message('tool', AgentMessageRole.Tool, [textBlock('Tool text')]),
+        ]),
+      ).toBeNull();
+    });
   });
 
   it('has label keys and badges for every status, hiding only created badges', () => {
