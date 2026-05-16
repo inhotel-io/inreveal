@@ -1,7 +1,9 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { AgentRunnerMcpController } from 'src/controllers/agent-runner-mcp.controller';
 import { AgentRunnerToolGuard } from 'src/controllers/agent-runner-tool.controller';
+import { AgentToolName } from 'src/enum';
 import { AgentMcpService } from 'src/services/agent-mcp.service';
+import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
 import type { AgentMcpHandleResponse } from 'src/types/agent-mcp.types';
 import request from 'supertest';
@@ -194,5 +196,64 @@ describe(AgentRunnerMcpController.name, () => {
 
     expect(status).toBe(400);
     expect(service.handle).not.toHaveBeenCalled();
+  });
+
+  describe('with the real MCP service', () => {
+    let realCtx: ControllerContext;
+
+    beforeAll(async () => {
+      realCtx = await controllerSetup(AgentRunnerMcpController, [
+        AgentRunnerToolGuard,
+        { provide: AgentRunnerToolTokenService, useValue: tokenService },
+        AgentMcpToolRegistryService,
+        AgentMcpService,
+      ]);
+      return () => realCtx.close();
+    });
+
+    beforeEach(() => {
+      tokenService.resetAllMocks();
+      realCtx.reset();
+      tokenService.verify.mockReturnValue({
+        sessionId,
+        userId,
+        expiresAt: new Date('2026-05-16T12:00:00.000Z'),
+      });
+    });
+
+    it('requires a valid runner token and returns tools/list from the real MCP service', async () => {
+      const toolsListRequest = {
+        jsonrpc: '2.0',
+        id: 'tools-1',
+        method: 'tools/list',
+      };
+
+      const { status, body } = await request(realCtx.getHttpServer())
+        .post(`/agent/internal/mcp/sessions/${sessionId}`)
+        .set('Authorization', authorization)
+        .send(toolsListRequest);
+
+      expect(status).toBe(200);
+      expect(tokenService.verify).toHaveBeenCalledWith(token);
+      expect(realCtx.authenticate).not.toHaveBeenCalled();
+      expect(body).toMatchObject({
+        jsonrpc: '2.0',
+        id: 'tools-1',
+        result: {
+          tools: expect.any(Array),
+        },
+      });
+      expect(body.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
+        AgentToolName.SearchAssets,
+        AgentToolName.ReadAssetMetadata,
+        AgentToolName.ReadAssetPreviews,
+        AgentToolName.ReadAssetOriginals,
+        AgentToolName.ListAlbums,
+        AgentToolName.ReadAlbum,
+        AgentToolName.ProposeAlbumOperations,
+        AgentToolName.ReviseProposedOperations,
+        AgentToolName.SummarizePlan,
+      ]);
+    });
   });
 });

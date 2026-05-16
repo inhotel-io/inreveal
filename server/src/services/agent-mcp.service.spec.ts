@@ -1,14 +1,17 @@
 import { serverVersion } from 'src/constants';
 import { AgentMcpService } from 'src/services/agent-mcp.service';
+import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 
 describe(AgentMcpService.name, () => {
+  let registry: AgentMcpToolRegistryService;
   let sut: AgentMcpService;
 
   beforeEach(() => {
-    sut = new AgentMcpService();
+    registry = new AgentMcpToolRegistryService();
+    sut = new AgentMcpService(registry);
   });
 
-  it('returns the MCP initialize result without advertising tools in slice 1', () => {
+  it('returns the MCP initialize result and advertises tools once tools/list exists', () => {
     expect(
       sut.handle({
         jsonrpc: '2.0',
@@ -29,7 +32,9 @@ describe(AgentMcpService.name, () => {
           name: 'gallery-agent-mcp',
           version: serverVersion.toString(),
         },
-        capabilities: {},
+        capabilities: {
+          tools: {},
+        },
       },
     });
   });
@@ -50,7 +55,9 @@ describe(AgentMcpService.name, () => {
           name: 'gallery-agent-mcp',
           version: serverVersion.toString(),
         },
-        capabilities: {},
+        capabilities: {
+          tools: {},
+        },
       },
     });
   });
@@ -104,7 +111,39 @@ describe(AgentMcpService.name, () => {
     });
   });
 
-  it.each(['tools/list', 'tools/call', 'resources/list'] as const)('returns method-not-found for %s', (method) => {
+  it('returns the registered Gallery MCP tools for tools/list', () => {
+    const response = sut.handle({
+      jsonrpc: '2.0',
+      id: 'tools-1',
+      method: 'tools/list',
+    });
+
+    expect(response).toEqual({
+      jsonrpc: '2.0',
+      id: 'tools-1',
+      result: {
+        tools: registry.listTools(),
+      },
+    });
+  });
+
+  it('preserves numeric JSON-RPC request ids for tools/list', () => {
+    expect(
+      sut.handle({
+        jsonrpc: '2.0',
+        id: 9,
+        method: 'tools/list',
+      }),
+    ).toEqual({
+      jsonrpc: '2.0',
+      id: 9,
+      result: {
+        tools: registry.listTools(),
+      },
+    });
+  });
+
+  it.each(['tools/call', 'resources/list'] as const)('returns method-not-found for %s', (method) => {
     expect(
       sut.handle({
         jsonrpc: '2.0',
