@@ -2,6 +2,8 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags, getSchemaPath } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import {
+  AgentOperationPlanApplyRequestDto,
+  AgentOperationPlanApplyResponseDto,
   AgentOperationPlanParamsDto,
   AgentOperationPlanResponseDto,
   AgentOperationPlanSummaryRequestDto,
@@ -85,5 +87,21 @@ export class AgentOperationPlanController {
     @Body() dto: AgentOperationPlanSummaryRequestDto,
   ): Promise<AgentOperationPlanToolResponseDto> {
     return this.service.summarizePlan(auth, id, planId, dto);
+  }
+
+  @Post(':planId/apply')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @ApiCreatedResponse({ type: AgentOperationPlanApplyResponseDto })
+  @Endpoint({
+    summary: 'Apply approved agent album operations',
+    description: 'Apply selected album operations from the current proposed agent operation plan.',
+    history: new HistoryBuilder().added('v2.7.5').alpha('v2.7.5'),
+  })
+  applyApprovedOperations(
+    @Auth() auth: AuthDto,
+    @Param() { id, planId }: AgentOperationPlanParamsDto,
+    @Body() dto: AgentOperationPlanApplyRequestDto,
+  ): Promise<AgentOperationPlanApplyResponseDto> {
+    return this.service.applyApprovedOperations(auth, id, planId, dto);
   }
 }
