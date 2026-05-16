@@ -95,6 +95,7 @@ describe('agent tool approval UI helpers', () => {
       'denied-a',
       'completed-b',
       'completed-a',
+      'approved',
     ]);
   });
 
