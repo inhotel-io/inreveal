@@ -18,6 +18,18 @@ const parseSse = (body) =>
 
 const readSse = async (response) => parseSse(await response.text());
 
+const waitForCondition = async (condition, milliseconds = 250) => {
+  const deadline = Date.now() + milliseconds;
+  while (!condition()) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out after ${milliseconds}ms`);
+    }
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1);
+    });
+  }
+};
+
 const withServer = async (runtime, test) => {
   const server = await startServer({ port: 0, runtime });
   const address = server.address();
@@ -839,6 +851,246 @@ describe('agent runner server', () => {
           toolResult: { status: 'success', albums: [{ id: 'album-1', albumName: 'Test Pierre' }] },
         },
       ]);
+    });
+  });
+
+  it('returns JSON 404 for unknown continuation runner sessions without invoking the runtime', async () => {
+    const runtime = createRuntime();
+
+    await withServer(runtime, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions/pi-missing/continue`, {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gallerySessionId: '00000000-0000-4000-8000-000000000100',
+          toolCallId: '00000000-0000-4000-8000-000000000333',
+          approvalDecision: 'approved',
+        }),
+      });
+
+      assert.equal(response.status, 404);
+      assert.equal(response.headers.get('content-type'), 'application/json');
+      assert.deepEqual(await response.json(), { error: 'runner session not found' });
+      assert.deepEqual(runtime.calls.resumeSession, []);
+    });
+  });
+
+  it('rejects invalid continuation bodies before calling the runtime', async () => {
+    const runtime = createRuntime();
+    const cases = [
+      {
+        body: { toolCallId: '00000000-0000-4000-8000-000000000333', approvalDecision: 'approved' },
+        error: 'gallerySessionId is required',
+      },
+      {
+        body: { gallerySessionId: messageBody.gallerySessionId, toolCallId: 123, approvalDecision: 'approved' },
+        error: 'toolCallId must be a string',
+      },
+      {
+        body: {
+          gallerySessionId: messageBody.gallerySessionId,
+          toolCallId: '00000000-0000-4000-8000-000000000333',
+          approvalDecision: 'maybe',
+        },
+        error: 'approvalDecision must be approved or denied',
+      },
+      {
+        body: {
+          gallerySessionId: messageBody.gallerySessionId,
+          toolCallId: '00000000-0000-4000-8000-000000000333',
+          approvalDecision: 'approved',
+          toolResult: 'not-object',
+        },
+        error: 'toolResult must be an object',
+      },
+    ];
+
+    await withServer(runtime, async (baseUrl) => {
+      const createResponse = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+      assert.equal(createResponse.status, 201);
+
+      for (const testCase of cases) {
+        const response = await fetch(`${baseUrl}/sessions/pi-00000000-0000-4000-8000-000000000100/continue`, {
+          method: 'POST',
+          headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+          body: JSON.stringify(testCase.body),
+        });
+
+        assert.equal(response.status, 400);
+        assert.equal(response.headers.get('content-type'), 'application/json');
+        assert.deepEqual(await response.json(), { error: testCase.error });
+      }
+
+      assert.deepEqual(runtime.calls.resumeSession, []);
+    });
+  });
+
+  it('rejects continuation requests whose Gallery session id does not match the runner session', async () => {
+    const runtime = createRuntime();
+
+    await withServer(runtime, async (baseUrl) => {
+      const createResponse = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+      assert.equal(createResponse.status, 201);
+
+      const response = await fetch(`${baseUrl}/sessions/pi-00000000-0000-4000-8000-000000000100/continue`, {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gallerySessionId: '00000000-0000-4000-8000-000000000999',
+          toolCallId: '00000000-0000-4000-8000-000000000333',
+          approvalDecision: 'approved',
+        }),
+      });
+
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: 'runner session not found' });
+      assert.deepEqual(runtime.calls.resumeSession, []);
+    });
+  });
+
+  it('streams a generic runner-error when runtime continuation throws without leaking secrets', async () => {
+    const runtime = createRuntime({
+      async *resumeSession() {
+        throw new Error('provider rejected sk-session-secret');
+      },
+    });
+
+    await withServer(runtime, async (baseUrl) => {
+      await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+
+      const response = await fetch(`${baseUrl}/sessions/pi-00000000-0000-4000-8000-000000000100/continue`, {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gallerySessionId: '00000000-0000-4000-8000-000000000100',
+          toolCallId: '00000000-0000-4000-8000-000000000333',
+          approvalDecision: 'approved',
+        }),
+      });
+
+      assert.equal(response.status, 200);
+      const responseBody = await response.text();
+      assert.equal(responseBody.includes('sk-session-secret'), false);
+      assert.deepEqual(parseSse(responseBody), [
+        {
+          event: 'runner-error',
+          data: {
+            type: 'runner-error',
+            sessionId: '00000000-0000-4000-8000-000000000100',
+            runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+            message: 'Runner session failed',
+          },
+        },
+      ]);
+    });
+  });
+
+  it('continues with default Accept headers and still returns an SSE stream', async () => {
+    const runtime = createRuntime();
+
+    await withServer(runtime, async (baseUrl) => {
+      await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+
+      const response = await fetch(`${baseUrl}/sessions/pi-00000000-0000-4000-8000-000000000100/continue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gallerySessionId: '00000000-0000-4000-8000-000000000100',
+          approvalDecision: 'denied',
+        }),
+      });
+
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('content-type'), 'text/event-stream');
+      assert.equal((await readSse(response)).at(-1).event, 'assistant-message-completed');
+    });
+  });
+
+  it('stops the runtime continuation stream when the client disconnects', async () => {
+    let continuationCancelled = false;
+    const runtime = createRuntime();
+    runtime.resumeSession = (body) => ({
+      [Symbol.asyncIterator]() {
+        let sentDelta = false;
+        return {
+          async next() {
+            if (sentDelta) {
+              return new Promise(() => {});
+            }
+
+            sentDelta = true;
+            return {
+              done: false,
+              value: {
+                type: 'assistant-message-delta',
+                sessionId: body.gallerySessionId,
+                runnerSessionId: body.runnerSessionId,
+                delta: 'first resumed chunk',
+                sequence: 1,
+              },
+            };
+          },
+          async return() {
+            continuationCancelled = true;
+            return { done: true };
+          },
+        };
+      },
+    });
+
+    await withServer(runtime, async (baseUrl) => {
+      await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+
+      await new Promise((resolve, reject) => {
+        const request = httpRequest(
+          `${baseUrl}/sessions/pi-00000000-0000-4000-8000-000000000100/continue`,
+          {
+            method: 'POST',
+            headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+          },
+          (response) => {
+            assert.equal(response.statusCode, 200);
+            response.setEncoding('utf8');
+
+            response.on('data', (chunk) => {
+              if (chunk.includes('event: assistant-message-delta')) {
+                response.destroy();
+                resolve();
+              }
+            });
+          },
+        );
+        request.on('error', reject);
+        request.end(
+          JSON.stringify({
+            gallerySessionId: '00000000-0000-4000-8000-000000000100',
+            toolCallId: '00000000-0000-4000-8000-000000000333',
+            approvalDecision: 'approved',
+          }),
+        );
+      });
+
+      await waitForCondition(() => continuationCancelled);
     });
   });
 
