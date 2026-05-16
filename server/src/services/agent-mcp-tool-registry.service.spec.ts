@@ -52,6 +52,11 @@ const toExpectedInputSchema = (schema: z.ZodType): Record<string, unknown> => {
   return inputSchema;
 };
 
+const getSchemaDefinition = (schema: Record<string, unknown>, name: string) => {
+  const definitions = schema.$defs as Record<string, unknown> | undefined;
+  return definitions?.[name];
+};
+
 describe(AgentMcpToolRegistryService.name, () => {
   let sut: AgentMcpToolRegistryService;
 
@@ -141,7 +146,9 @@ describe(AgentMcpToolRegistryService.name, () => {
 
   it('advertises trip-album metadata filters on searchAssets', () => {
     const searchTool = sut.listTools().find((tool) => tool.name === AgentToolName.SearchAssets);
-    const searchFiltersSchema = searchTool?.inputSchema.$defs?.AgentSearchAssetsFilters;
+    const searchFiltersSchema = searchTool
+      ? getSchemaDefinition(searchTool.inputSchema, 'AgentSearchAssetsFilters')
+      : undefined;
 
     expect(searchTool).toBeDefined();
     expect(searchTool?.description).toContain('date');
