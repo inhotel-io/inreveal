@@ -35,17 +35,18 @@
   let applying = $state(false);
   let applyMessage = $state<string | null>(null);
   let applyErrorMessage = $state<string | null>(null);
+  let locallyApplyingPlanId = $state<string | null>(null);
   let cleanupWebsocketListener: (() => void) | undefined;
   let loadSequence = 0;
   let destroyed = false;
 
   const model = $derived(plan ? buildOperationReviewModel(plan, enabledByOperationId) : null);
   const selectedOperationIds = $derived(model ? buildSelectionPayload(model).operationIds : []);
+  const canChangeSelection = $derived(
+    model !== null && model.plan.status === AgentOperationPlanStatus.Proposed && !applying,
+  );
   const canApply = $derived(
-    model !== null &&
-      model.plan.status === AgentOperationPlanStatus.Proposed &&
-      selectedOperationIds.length > 0 &&
-      !applying,
+    canChangeSelection && selectedOperationIds.length > 0,
   );
 
   const publishSelection = (
@@ -124,7 +125,7 @@
     if (
       event.type === 'operation-plan-applied' &&
       model?.plan.id === event.planId &&
-      model.plan.status === AgentOperationPlanStatus.Applied
+      (model.plan.status === AgentOperationPlanStatus.Applied || locallyApplyingPlanId === event.planId)
     ) {
       return;
     }
@@ -137,7 +138,9 @@
       return;
     }
 
+    const applyingPlanId = model.plan.id;
     applying = true;
+    locallyApplyingPlanId = applyingPlanId;
     errorMessage = null;
     applyMessage = null;
     applyErrorMessage = null;
@@ -145,7 +148,7 @@
     try {
       const response = await applyApprovedOperations({
         id: session.id,
-        planId: model.plan.id,
+        planId: applyingPlanId,
         agentOperationPlanApplyRequestDto: { operationIds: selectedOperationIds },
       });
       plan = response.plan;
@@ -161,11 +164,12 @@
       handleError(error, applyErrorMessage);
     } finally {
       applying = false;
+      locallyApplyingPlanId = null;
     }
   };
 
   const toggleOperation = (operationId: string, checked: boolean) => {
-    if (!plan) {
+    if (!plan || !canChangeSelection) {
       return;
     }
 
@@ -175,7 +179,7 @@
   };
 
   const toggleGroup = (group: OperationReviewGroup, checked: boolean) => {
-    if (!plan) {
+    if (!plan || !canChangeSelection) {
       return;
     }
 
@@ -242,6 +246,7 @@
                   type="checkbox"
                   aria-label={group.title}
                   checked={groupSelectionState.checked}
+                  disabled={!canChangeSelection}
                   use:setMixedCheckbox={groupSelectionState}
                   onchange={(event) => toggleGroup(group, event.currentTarget.checked)}
                 />
@@ -263,7 +268,7 @@
                     type="checkbox"
                     aria-label={item.operation.summary}
                     checked={item.enabled}
-                    disabled={item.blocked}
+                    disabled={!canChangeSelection || item.blocked}
                     onchange={(event) => toggleOperation(item.id, event.currentTarget.checked)}
                   />
                   <span class="min-w-0 flex-1">
