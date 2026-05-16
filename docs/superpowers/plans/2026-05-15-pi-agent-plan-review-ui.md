@@ -52,6 +52,7 @@ The server-side slice 11 contracts exist on this branch. The TypeScript SDK is s
 ### Task 1: Regenerate TypeScript SDK Operation-Plan Contracts
 
 **Files:**
+
 - Modify: `open-api/typescript-sdk/src/fetch-client.ts`
 - Modify: `open-api/typescript-sdk/build/fetch-client.js`
 - Modify: `open-api/typescript-sdk/build/fetch-client.d.ts`
@@ -100,6 +101,7 @@ git commit -m "chore: regenerate agent operation plan sdk"
 ### Task 2: Handle Plan-Ready Websocket Events Without Chat Errors
 
 **Files:**
+
 - Modify: `web/src/lib/stores/websocket.ts`
 - Modify: `web/src/routes/(user)/assistant/agent-session-chat-panel.spec.ts`
 - Modify: `web/src/routes/(user)/assistant/agent-session-chat-panel.svelte`
@@ -109,36 +111,36 @@ git commit -m "chore: regenerate agent operation plan sdk"
 Add this test near the other websocket-event tests in `web/src/routes/(user)/assistant/agent-session-chat-panel.spec.ts`:
 
 ```ts
-  it('ignores operation plan ready websocket events without interrupting an active response', async () => {
-    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
-    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
-      handler = nextHandler;
-      return vi.fn();
-    });
-
-    render(AgentSessionChatPanel, { props: { session } });
-    await screen.findByRole('textbox', { name: 'Message' });
-
-    handler?.({
-      type: 'assistant-message-delta',
-      sessionId: session.id,
-      delta: 'Thinking...',
-      sequence: 1,
-      createdAt: '2026-05-15T00:00:01.000Z',
-    });
-
-    expect(await screen.findByText('Thinking...')).toBeInTheDocument();
-
-    handler?.({
-      type: 'operation-plan-ready',
-      sessionId: session.id,
-      planId: '00000000-0000-4000-8000-000000000300',
-      revision: 2,
-    });
-
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getByText('Thinking...')).toBeInTheDocument();
+it('ignores operation plan ready websocket events without interrupting an active response', async () => {
+  let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+  websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+    handler = nextHandler;
+    return vi.fn();
   });
+
+  render(AgentSessionChatPanel, { props: { session } });
+  await screen.findByRole('textbox', { name: 'Message' });
+
+  handler?.({
+    type: 'assistant-message-delta',
+    sessionId: session.id,
+    delta: 'Thinking...',
+    sequence: 1,
+    createdAt: '2026-05-15T00:00:01.000Z',
+  });
+
+  expect(await screen.findByText('Thinking...')).toBeInTheDocument();
+
+  handler?.({
+    type: 'operation-plan-ready',
+    sessionId: session.id,
+    planId: '00000000-0000-4000-8000-000000000300',
+    revision: 2,
+  });
+
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByText('Thinking...')).toBeInTheDocument();
+});
 ```
 
 - [ ] **Step 2: Run the test and verify it fails**
@@ -169,13 +171,13 @@ In `web/src/lib/stores/websocket.ts`, extend `AgentSessionClientEvent`:
 In `web/src/routes/(user)/assistant/agent-session-chat-panel.svelte`, update `handleSessionEvent` so it exits before the generic error handling:
 
 ```ts
-    if (event.type === 'operation-plan-ready') {
-      return;
-    }
+if (event.type === 'operation-plan-ready') {
+  return;
+}
 
-    isAssistantActive = false;
-    streamingText = '';
-    errorMessage = event.message;
+isAssistantActive = false;
+streamingText = '';
+errorMessage = event.message;
 ```
 
 - [ ] **Step 5: Run the chat regression test**
@@ -200,6 +202,7 @@ git commit -m "fix(web): ignore agent plan ready chat events"
 ### Task 3: Add Pure Operation-Plan Review Helpers
 
 **Files:**
+
 - Create: `web/src/routes/(user)/assistant/agent-operation-plan-ui.spec.ts`
 - Create: `web/src/routes/(user)/assistant/agent-operation-plan-ui.ts`
 
@@ -249,7 +252,10 @@ const baseOperation = {
   updatedAt: '2026-05-15T00:00:00.000Z',
 } satisfies Omit<AgentOperationResponseDto, 'id' | 'type' | 'summary' | 'targetKind' | 'payload'>;
 
-const operation = (operation: Partial<AgentOperationResponseDto> & Pick<AgentOperationResponseDto, 'id' | 'type' | 'summary' | 'targetKind' | 'payload'>): AgentOperationResponseDto => ({
+const operation = (
+  operation: Partial<AgentOperationResponseDto> &
+    Pick<AgentOperationResponseDto, 'id' | 'type' | 'summary' | 'targetKind' | 'payload'>,
+): AgentOperationResponseDto => ({
   ...baseOperation,
   ...operation,
 });
@@ -775,6 +781,7 @@ git commit -m "feat(web): add agent operation plan review helpers"
 ### Task 4: Build the Plan Review Panel With Loading, Empty, Error, and Event Refresh States
 
 **Files:**
+
 - Create: `web/src/routes/(user)/assistant/agent-operation-plan-review-panel.spec.ts`
 - Create: `web/src/routes/(user)/assistant/agent-operation-plan-review-panel.svelte`
 
@@ -891,7 +898,10 @@ const baseOperation = {
   updatedAt: '2026-05-15T00:00:00.000Z',
 } satisfies Omit<AgentOperationResponseDto, 'id' | 'type' | 'summary' | 'targetKind' | 'payload'>;
 
-const operation = (operation: Partial<AgentOperationResponseDto> & Pick<AgentOperationResponseDto, 'id' | 'type' | 'summary' | 'targetKind' | 'payload'>): AgentOperationResponseDto => ({
+const operation = (
+  operation: Partial<AgentOperationResponseDto> &
+    Pick<AgentOperationResponseDto, 'id' | 'type' | 'summary' | 'targetKind' | 'payload'>,
+): AgentOperationResponseDto => ({
   ...baseOperation,
   ...operation,
 });
@@ -1345,6 +1355,7 @@ git commit -m "feat(web): show agent operation plan review"
 ### Task 5: Wire the Review Panel Into the Assistant Page
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-session-page-content.svelte`
 - Modify: `web/src/routes/(user)/assistant/agent-session-page-content.spec.ts`
 
@@ -1359,16 +1370,16 @@ In `web/src/routes/(user)/assistant/agent-session-page-content.spec.ts`, add the
 Add this integration test without mocking the review panel:
 
 ```ts
-  it('mounts the operation plan review panel after a session is created', async () => {
-    sdkMock.getCurrentOperationPlan.mockResolvedValue(null);
+it('mounts the operation plan review panel after a session is created', async () => {
+  sdkMock.getCurrentOperationPlan.mockResolvedValue(null);
 
-    render(AgentSessionPageContent, { props: { runnerStatus: healthyRunner, credentials } });
+  render(AgentSessionPageContent, { props: { runnerStatus: healthyRunner, credentials } });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
 
-    expect(await screen.findByText('No proposed album plan yet.')).toBeInTheDocument();
-    expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: createdSession.id });
-  });
+  expect(await screen.findByText('No proposed album plan yet.')).toBeInTheDocument();
+  expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: createdSession.id });
+});
 ```
 
 - [ ] **Step 2: Run the page-content test and verify it fails**
@@ -1386,7 +1397,7 @@ Expected: FAIL because the panel is not rendered.
 In `web/src/routes/(user)/assistant/agent-session-page-content.svelte`, add the import:
 
 ```ts
-  import AgentOperationPlanReviewPanel from './agent-operation-plan-review-panel.svelte';
+import AgentOperationPlanReviewPanel from './agent-operation-plan-review-panel.svelte';
 ```
 
 Then render it inside the created-session block after `AgentSessionChatPanel`:
@@ -1420,6 +1431,7 @@ git commit -m "feat(web): mount assistant plan review panel"
 ### Task 6: Add English Translation Keys
 
 **Files:**
+
 - Modify: `i18n/en.json`
 
 - [ ] **Step 1: Add translation keys**
@@ -1465,6 +1477,7 @@ git commit -m "feat(web): add assistant plan review translations"
 ### Task 7: Run Focused Web Verification
 
 **Files:**
+
 - No code changes.
 
 - [ ] **Step 1: Run Assistant-focused web tests**
@@ -1517,6 +1530,7 @@ If a verification command fails because of this slice, fix the failing task's co
 ### Task 8: Final Review Checklist
 
 **Files:**
+
 - No code changes unless the checklist finds a defect.
 
 - [ ] **Step 1: Inspect the final diff**
