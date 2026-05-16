@@ -4,7 +4,6 @@
   import {
     AgentSessionStatus,
     AgentToolApprovalDecision,
-    AgentToolCallStatus,
     approveToolCall,
     getAgentSession,
     getToolCalls,
@@ -15,20 +14,16 @@
   import { t } from 'svelte-i18n';
   import AgentOperationPlanReviewPanel from './agent-operation-plan-review-panel.svelte';
   import AgentToolApprovalCard from './agent-tool-approval-card.svelte';
-  import {
-    buildToolApprovalPayload,
-    getAgentToolNameLabelKey,
-    getPendingToolCalls,
-    getRecentToolCalls,
-  } from './agent-tool-approval-ui';
+  import { buildToolApprovalPayload, getPendingToolCalls, getRecentToolCalls } from './agent-tool-approval-ui';
 
   interface Props {
     session: AgentSessionResponseDto;
     onSessionUpdated?: (session: AgentSessionResponseDto) => void;
     onPendingApprovalCountChange?: (count: number) => void;
+    onRecentToolCallsChange?: (toolCalls: AgentToolCallResponseDto[]) => void;
   }
 
-  let { session, onSessionUpdated, onPendingApprovalCountChange }: Props = $props();
+  let { session, onSessionUpdated, onPendingApprovalCountChange, onRecentToolCallsChange }: Props = $props();
 
   let toolCalls = $state<AgentToolCallResponseDto[]>([]);
   let loading = $state(true);
@@ -42,19 +37,20 @@
   let destroyed = false;
 
   const pendingToolCalls = $derived(getPendingToolCalls(toolCalls));
-  const recentToolCalls = $derived(getRecentToolCalls(toolCalls));
   const shouldPoll = $derived(
     session.status === AgentSessionStatus.Running || session.status === AgentSessionStatus.WaitingForToolApproval,
   );
   const canShowPlanReview = $derived((!loading || loadErrorMessage !== null) && pendingToolCalls.length === 0);
 
-  const publishPendingCount = () => {
-    onPendingApprovalCountChange?.(pendingToolCalls.length);
+  const publishToolCallState = (nextToolCalls: AgentToolCallResponseDto[]) => {
+    onPendingApprovalCountChange?.(getPendingToolCalls(nextToolCalls).length);
+    onRecentToolCallsChange?.(getRecentToolCalls(nextToolCalls));
   };
 
   const replaceToolCall = (toolCall: AgentToolCallResponseDto) => {
-    toolCalls = [toolCall, ...toolCalls.filter((existingToolCall) => existingToolCall.id !== toolCall.id)];
-    publishPendingCount();
+    const nextToolCalls = [toolCall, ...toolCalls.filter((existingToolCall) => existingToolCall.id !== toolCall.id)];
+    toolCalls = nextToolCalls;
+    publishToolCallState(nextToolCalls);
   };
 
   const loadToolCalls = async ({ quiet = false }: { quiet?: boolean } = {}) => {
@@ -71,7 +67,7 @@
       }
 
       toolCalls = nextToolCalls;
-      publishPendingCount();
+      publishToolCallState(nextToolCalls);
     } catch (error) {
       if (destroyed || sequence !== loadSequence) {
         return;
@@ -159,6 +155,7 @@
     stopPolling();
     cleanupWebsocketListener?.();
     onPendingApprovalCountChange?.(0);
+    onRecentToolCallsChange?.([]);
   });
 </script>
 
@@ -188,37 +185,5 @@
 
   {#if canShowPlanReview}
     <AgentOperationPlanReviewPanel {session} variant="dock" hideEmpty />
-  {/if}
-
-  {#if recentToolCalls.length > 0}
-    <details
-      class="rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-gray-800 dark:bg-immich-dark-gray"
-    >
-      <summary class="cursor-pointer font-medium">
-        {$t('assistant_approval_recent_activity', { values: { count: recentToolCalls.length } })}
-      </summary>
-      <ul class="mt-3 flex flex-col gap-2">
-        {#each recentToolCalls as toolCall (toolCall.id)}
-          <li class="rounded-md bg-gray-50 p-2 dark:bg-gray-900">
-            <div class="font-medium">{$t(getAgentToolNameLabelKey(toolCall.toolName))}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">
-              {#if toolCall.status === AgentToolCallStatus.Completed}
-                {$t('assistant_agent_tool_status_completed')}
-              {:else if toolCall.status === AgentToolCallStatus.Denied}
-                {$t('assistant_agent_tool_status_denied')}
-              {:else}
-                {$t('assistant_agent_tool_status_failed')}
-              {/if}
-              · {new Date(toolCall.completedAt ?? toolCall.startedAt).toLocaleString()}
-            </div>
-            {#if toolCall.responseSummary || toolCall.error}
-              <p class="mt-1 break-words text-xs text-gray-600 dark:text-gray-300">
-                {toolCall.responseSummary ?? toolCall.error}
-              </p>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-    </details>
   {/if}
 </section>
