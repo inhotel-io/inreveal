@@ -151,6 +151,7 @@ Status badges:
 - `Review plan` for `waiting_for_plan_review`.
 - `Running` for `running`.
 - `Interrupted` for `interrupted`.
+- `Applying` for `applying`.
 - `Done` for `completed`.
 - `Cancelled` for `cancelled`.
 - `Failed` for `failed`.
@@ -381,7 +382,8 @@ Refresh behavior:
   2. `waiting_for_plan_review`;
   3. `interrupted`;
   4. most recent `running`;
-  5. otherwise no selection/new chat.
+  5. most recent `applying`;
+  6. otherwise no selection/new chat.
 
 URL shape:
 
@@ -542,7 +544,7 @@ Web unit/component tests:
 - invalid, missing, or unauthorized session query falls back to the actionable
   session heuristic without crashing.
 - actionable-session heuristic prefers tool approval, then plan review, then
-  interrupted, then running.
+  interrupted, then running, then applying.
 - sidebar renders sessions sorted by actionable state and recency.
 - sidebar derives a temporary title from the first loaded user message and falls
   back to `New chat` when no title source exists.
@@ -608,6 +610,7 @@ Selection and URL state:
 - A new session is created while another selected-session load is still pending.
 - The user opens `/assistant` with no sessions and no credentials.
 - The user opens `/assistant` with only terminal sessions.
+- The user opens `/assistant` with only an `applying` non-terminal session.
 
 Session list and titles:
 
