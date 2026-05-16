@@ -36,6 +36,7 @@ vi.mock('svelte-i18n', () => {
     assistant_message: 'Message',
     assistant_model: 'Model',
     assistant_new_chat: 'New chat',
+    assistant_details: 'Details',
     assistant_no: 'no',
     assistant_operation_plan_empty: 'No proposed album plan yet.',
     assistant_operation_plan_loading: 'Loading proposed album plan',
@@ -154,6 +155,11 @@ const makeMessage = (sessionId: string, text: string): AgentMessageResponseDto =
   createdAt: '2026-05-14T00:00:00.000Z',
 });
 
+const makeUserMessage = (sessionId: string, text: string): AgentMessageResponseDto => ({
+  ...makeMessage(sessionId, text),
+  role: AgentMessageRole.User,
+});
+
 const requestedSession = makeSession({
   id: '00000000-0000-4000-8000-000000000200',
   status: AgentSessionStatus.Completed,
@@ -178,7 +184,7 @@ describe(AgentAssistantWorkspace.name, () => {
   });
 
   it('selects a valid requested session and mounts chat and plan panels for it', async () => {
-    sdkMock.getAgentSessionMessages.mockResolvedValueOnce([makeMessage(requestedSession.id, 'Existing transcript')]);
+    sdkMock.getAgentSessionMessages.mockResolvedValue([makeMessage(requestedSession.id, 'Existing transcript')]);
 
     render(AgentAssistantWorkspace, {
       props: {
@@ -189,7 +195,7 @@ describe(AgentAssistantWorkspace.name, () => {
       },
     });
 
-    expect(screen.getByRole('heading', { name: 'Selected session' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Selected session' })).not.toBeInTheDocument();
     expect(await screen.findByText('Existing transcript')).toBeInTheDocument();
     expect(await screen.findByText('No proposed album plan yet.')).toBeInTheDocument();
     expect(gotoMock).not.toHaveBeenCalled();
@@ -214,7 +220,7 @@ describe(AgentAssistantWorkspace.name, () => {
         replaceState: true,
       }),
     );
-    expect(screen.getByRole('heading', { name: 'Selected session' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'New chat' })).not.toHaveLength(0);
   });
 
   it('falls back from an unknown requested session and replaces the stale query param', async () => {
@@ -234,7 +240,7 @@ describe(AgentAssistantWorkspace.name, () => {
         replaceState: true,
       }),
     );
-    expect(screen.getByRole('heading', { name: 'Selected session' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'New chat' })).not.toHaveLength(0);
   });
 
   it('uses push-style navigation when a user selects a session from a no-query new-chat state', async () => {
@@ -301,11 +307,101 @@ describe(AgentAssistantWorkspace.name, () => {
 
     await fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
 
-    expect(await screen.findByRole('heading', { name: 'Selected session' })).toBeInTheDocument();
+    expect(await screen.findAllByRole('heading', { name: 'New chat' })).not.toHaveLength(0);
     expect(screen.getByTestId(`agent-session-row-${createdSession.id}`)).toHaveAttribute('aria-current', 'true');
     expect(gotoMock).toHaveBeenCalledWith(
       `/assistant?session=${createdSession.id}`,
       expect.objectContaining({ replaceState: false }),
     );
+  });
+
+  it('updates the selected header and matching sidebar row from the selected transcript title', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      makeUserMessage(requestedSession.id, 'Create a Porto family highlights album'),
+    ]);
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession, requestedSession],
+        requestedSessionId: requestedSession.id,
+      },
+    });
+
+    expect(await screen.findAllByRole('heading', { name: 'Create a Porto family highlights album' })).not.toHaveLength(
+      0,
+    );
+    expect(screen.getByRole('button', { name: /Create a Porto family highlights album/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+  });
+
+  it('lets sidebar search find a newly discovered selected-session title', async () => {
+    const user = userEvent.setup();
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      makeUserMessage(requestedSession.id, 'Find all mountain birthday photos'),
+    ]);
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession, requestedSession],
+        requestedSessionId: requestedSession.id,
+      },
+    });
+
+    expect(await screen.findByRole('button', { name: /Find all mountain birthday photos/ })).toBeInTheDocument();
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search chats' }), 'mountain birthday');
+
+    expect(screen.getByTestId(`agent-session-row-${requestedSession.id}`)).toBeInTheDocument();
+    expect(screen.queryByTestId(`agent-session-row-${actionableSession.id}`)).not.toBeInTheDocument();
+  });
+
+  it('keeps discovered titles cached after switching sessions', async () => {
+    const user = userEvent.setup();
+    sdkMock.getAgentSessionMessages.mockImplementation(({ id }) =>
+      Promise.resolve([
+        makeUserMessage(
+          id,
+          id === requestedSession.id ? 'Review archived wedding favorites' : 'Prepare current cleanup plan',
+        ),
+      ]),
+    );
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession, requestedSession],
+        requestedSessionId: requestedSession.id,
+      },
+    });
+
+    expect(await screen.findAllByRole('heading', { name: 'Review archived wedding favorites' })).not.toHaveLength(0);
+
+    await user.click(screen.getByTestId(`agent-session-row-${actionableSession.id}`));
+    expect(await screen.findAllByRole('heading', { name: 'Prepare current cleanup plan' })).not.toHaveLength(0);
+    expect(screen.getByRole('button', { name: /Review archived wedding favorites/ })).toBeInTheDocument();
+
+    await user.click(screen.getByTestId(`agent-session-row-${requestedSession.id}`));
+    expect(await screen.findAllByRole('heading', { name: 'Review archived wedding favorites' })).not.toHaveLength(0);
+  });
+
+  it('does not load transcripts for unselected sidebar sessions', async () => {
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession, requestedSession],
+        requestedSessionId: requestedSession.id,
+      },
+    });
+
+    await waitFor(() => expect(sdkMock.getAgentSessionMessages).toHaveBeenCalled());
+    expect(sdkMock.getAgentSessionMessages).not.toHaveBeenCalledWith({ id: actionableSession.id });
   });
 });
