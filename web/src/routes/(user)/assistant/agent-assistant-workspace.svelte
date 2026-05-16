@@ -66,6 +66,7 @@
   let newChatDraft = $state('');
   let newChatError = $state<string | null>(null);
   let isStartingFromMessage = $state(false);
+  let startingFromMessageSessionId = $state<string | null>(null);
   let assistantPermissionPreset = $state<AgentPermissionPreset>(DEFAULT_AGENT_PERMISSION_PRESET);
   let assistantApprovalMode = $state<AgentApprovalMode>(DEFAULT_AGENT_APPROVAL_MODE);
   let assistantDefaultsInitialized = false;
@@ -257,6 +258,7 @@
     try {
       await validateAgentSession({ agentSessionCreateDto });
       const session = await createAgentSession({ agentSessionCreateDto });
+      startingFromMessageSessionId = session.id;
       handleSessionCreated(session);
       await appendAgentSessionMessage({
         id: session.id,
@@ -272,6 +274,7 @@
       newChatError = $t('assistant_session_create_error');
       handleError(error, newChatError);
     } finally {
+      startingFromMessageSessionId = null;
       isStartingFromMessage = false;
     }
   };
@@ -527,6 +530,7 @@
         <AgentConversationPane
           session={selectedSession}
           title={selectedTitle}
+          assistantResponsePending={isStartingFromMessage && startingFromMessageSessionId === selectedSession.id}
           onNewChat={startNewChat}
           onTitleDiscovered={handleTitleDiscovered}
           onSessionUpdated={handleSessionUpdated}
