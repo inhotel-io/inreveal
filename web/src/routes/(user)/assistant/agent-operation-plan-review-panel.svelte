@@ -1,7 +1,11 @@
 <script lang="ts">
   import { websocketEvents, type AgentSessionClientEvent } from '$lib/stores/websocket';
   import { handleError } from '$lib/utils/handle-error';
-  import { getCurrentOperationPlan, type AgentOperationPlanResponseDto, type AgentSessionResponseDto } from '@immich/sdk';
+  import {
+    getCurrentOperationPlan,
+    type AgentOperationPlanResponseDto,
+    type AgentSessionResponseDto,
+  } from '@immich/sdk';
   import { Button } from '@immich/ui';
   import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
@@ -33,7 +37,10 @@
   const model = $derived(plan ? buildOperationReviewModel(plan, enabledByOperationId) : null);
   const selectedOperationIds = $derived(model ? buildSelectionPayload(model).operationIds : []);
 
-  const publishSelection = (nextPlan: AgentOperationPlanResponseDto, nextEnabledByOperationId: OperationEnabledState) => {
+  const publishSelection = (
+    nextPlan: AgentOperationPlanResponseDto,
+    nextEnabledByOperationId: OperationEnabledState,
+  ) => {
     if (destroyed) {
       return;
     }
@@ -158,7 +165,9 @@
     <div class="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-immich-dark-gray">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 id="assistant-operation-plan-title" class="text-lg font-semibold">{$t('assistant_operation_plan_review')}</h2>
+          <h2 id="assistant-operation-plan-title" class="text-lg font-semibold">
+            {$t('assistant_operation_plan_review')}
+          </h2>
           <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">{model.plan.summary}</p>
         </div>
         <div class="text-sm font-medium text-gray-600 dark:text-gray-300">
