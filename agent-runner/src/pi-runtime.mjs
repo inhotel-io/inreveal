@@ -21,7 +21,10 @@ const systemPrompt = [
   'If the user asks for changes to an existing plan, call reviseProposedOperations with the planId. Use summarizePlan when you need a compact summary of a proposed plan.',
   'Plan operations may include album.create, album.addAssets, album.updateDetails, and album.setCover.',
   'For new albums, use stable temporaryTargetId values on album.create and reference those same temporaryTargetId values from dependent album.addAssets or album.setCover operations.',
+  'If a user asks for an empty album, propose a single album.create operation with payload.albumName and an empty description; do not add asset operations.',
   'Prefer concise, useful album names and summaries. Only propose operations that are supported by the inspected assets, albums, and session permissions.',
+  'If a planning tool call fails with a validation error and the fix is obvious, correct the JSON shape and retry once before explaining the issue.',
+  'Do not redirect the user to Apple Photos, Google Photos, Samsung Gallery, or another app. Stay inside Gallery and use Gallery plans.',
   'You have no direct write tools and must not apply album changes yourself.',
   'Never claim you changed albums. Album writes require a separate user-reviewed apply step.',
 ].join('\n');
