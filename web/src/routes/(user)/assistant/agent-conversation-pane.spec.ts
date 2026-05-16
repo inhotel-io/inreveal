@@ -11,6 +11,7 @@ import {
   AgentPermissionPreset,
   AgentProviderType,
   AgentSessionStatus,
+  AgentToolApprovalDecision,
   AgentToolCallStatus,
   AgentToolDataClass,
   AgentToolName,
@@ -35,10 +36,12 @@ vi.mock('svelte-i18n', () => {
     assistant_approval_request: 'Approval request',
     assistant_approval_album_count: '{count} albums',
     assistant_approval_approve: 'Approve',
+    assistant_approval_action_error: 'Unable to record approval decision',
     assistant_approval_asset_count: '{count} assets',
     assistant_approval_data_access: 'Data access',
     assistant_approval_deny: 'Deny',
     assistant_approval_recent_activity: 'Recent activity ({count})',
+    assistant_approval_refresh_error: 'Approval was recorded, but refresh failed.',
     assistant_approval_tool_calls_error: 'Unable to load approval requests',
     assistant_agent_tool_data_class_metadata: 'Metadata',
     assistant_agent_tool_name_searchAssets: 'Search photos',
@@ -348,6 +351,47 @@ describe(AgentConversationPane.name, () => {
       expect.stringContaining('Search photos'),
       expect.stringContaining('I found the best candidates.'),
     ]);
+  });
+
+  it('hides an approved pending card and shows the handled tool card in chat after refresh', async () => {
+    const session = makeSession({ status: AgentSessionStatus.WaitingForToolApproval });
+    const pendingToolCall = makeToolCall(session.id);
+    const completedToolCall: AgentToolCallResponseDto = {
+      ...pendingToolCall,
+      status: AgentToolCallStatus.Completed,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      responseSummary: 'Found matching photos',
+      completedAt: '2026-05-16T10:00:10.000Z',
+    };
+    sdkMock.getToolCalls.mockResolvedValueOnce([pendingToolCall]).mockResolvedValueOnce([completedToolCall]);
+    sdkMock.approveToolCall.mockResolvedValue({
+      ...pendingToolCall,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+    });
+    sdkMock.getAgentSession.mockResolvedValue(makeSession({ id: session.id, status: AgentSessionStatus.Running }));
+
+    render(AgentConversationPane, {
+      props: {
+        session,
+        title: null,
+        onNewChat: vi.fn(),
+        onTitleDiscovered: vi.fn(),
+      },
+    });
+
+    expect(await screen.findByText('Pi wants to search your photos.')).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() => expect(screen.queryByRole('article', { name: 'Approval request' })).not.toBeInTheDocument());
+    const activity = await screen.findByRole('article', { name: 'Pi searched your photos: Done' });
+    expect(activity).toHaveTextContent('Pi searched your photos.');
+    expect(activity).not.toHaveTextContent('Found matching photos');
+
+    await fireEvent.click(within(activity).getByRole('button', { name: 'Details' }));
+
+    expect(activity).toHaveTextContent('Search recent favorites');
+    expect(activity).toHaveTextContent('Found matching photos');
   });
 
   it('resumes interrupted sessions through append and refreshes the selected session', async () => {

@@ -125,6 +125,30 @@ describe(AgentToolApprovalCard.name, () => {
     expect(screen.getByText('It may use no photos and no albums.')).toBeInTheDocument();
   });
 
+  it('uses safe plain-language fallback copy for unknown future tools', async () => {
+    render(AgentToolApprovalCard, {
+      props: {
+        session,
+        toolCall: toolCall({
+          toolName: 'futureGalleryTool' as AgentToolName,
+          requestSummary: 'Use a future gallery capability',
+          assetCount: 0,
+          albumCount: 0,
+        }),
+        onApprove: vi.fn(),
+        onDeny: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText('Pi wants to use your gallery.')).toBeInTheDocument();
+    expect(screen.queryByText('futureGalleryTool')).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+    expect(screen.getByText('futureGalleryTool')).toBeInTheDocument();
+    expect(screen.getByText('Use a future gallery capability')).toBeInTheDocument();
+  });
+
   it('calls approve and deny callbacks with trimmed optional reason', async () => {
     const onApprove = vi.fn();
     const onDeny = vi.fn();
