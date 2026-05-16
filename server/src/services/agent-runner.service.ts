@@ -16,6 +16,8 @@ const RUNNER_STATUS_CACHE_MS = 15_000;
 const buildMcpSessionUrl = (mcpGatewayBaseUrl: string, sessionId: string) =>
   new URL(`sessions/${encodeURIComponent(sessionId)}`, `${mcpGatewayBaseUrl.replace(/\/+$/, '')}/`).toString();
 
+class RunnerReportedError extends Error {}
+
 @Injectable()
 export class AgentRunnerService {
   private static readonly completionActiveStatuses = [
@@ -165,6 +167,32 @@ export class AgentRunnerService {
     }
   }
 
+  async resumeAfterToolApproval({
+    userId,
+    sessionId,
+    runnerSessionId,
+  }: {
+    userId: string;
+    sessionId: string;
+    runnerSessionId: string;
+  }) {
+    const activeDispatch = this.sessionDispatches.get(sessionId);
+    if (activeDispatch) {
+      throw new BadRequestException('Agent session already has a message in progress');
+    }
+
+    const dispatch = this.resumeRunnerSession({ userId, sessionId, runnerSessionId });
+    this.sessionDispatches.set(sessionId, dispatch);
+
+    try {
+      await dispatch;
+    } finally {
+      if (this.sessionDispatches.get(sessionId) === dispatch) {
+        this.sessionDispatches.delete(sessionId);
+      }
+    }
+  }
+
   isSessionDispatchActive(sessionId: string) {
     return this.sessionDispatches.has(sessionId);
   }
@@ -182,76 +210,135 @@ export class AgentRunnerService {
     messageId: string;
     content: AgentMessageContent;
   }) {
-    let runnerErrorMessage: string | undefined;
-
     try {
       const { runnerUrl, runnerMessageStreamTimeoutMs } = this.configRepository.getEnv().agent;
       if (!runnerUrl) {
         throw new BadRequestException('Agent runner is not configured');
       }
 
-      let completedEvent: Extract<AgentRunnerStreamEvent, { type: 'assistant-message-completed' }> | undefined;
-      for await (const event of this.agentRunnerRepository.streamMessage({
-        url: runnerUrl,
+      await this.processRunnerStream({
+        userId,
+        sessionId,
         runnerSessionId,
-        timeoutMs: runnerMessageStreamTimeoutMs,
-        body: { gallerySessionId: sessionId, messageId, content },
-      })) {
-        if (event.sessionId !== sessionId || event.runnerSessionId !== runnerSessionId) {
-          continue;
-        }
-
-        if (event.type === 'assistant-message-delta') {
-          this.websocketRepository.clientSend('on_agent_session_event', userId, {
-            type: 'assistant-message-delta',
-            sessionId,
-            delta: event.delta,
-            sequence: event.sequence,
-            createdAt: this.toIsoNow(),
-          });
-          continue;
-        }
-
-        if (event.type === 'runner-error') {
-          runnerErrorMessage = event.message;
-          throw new Error(event.message);
-        }
-
-        completedEvent = event;
-      }
-
-      if (!completedEvent) {
-        throw new Error('Agent runner message stream ended before completion');
-      }
-
-      const session = await this.sessionRepository.getById(userId, sessionId);
-      if (!session || !AgentRunnerService.completionActiveStatuses.includes(session.status)) {
-        return;
-      }
-
-      const message = await this.messageRepository.create({
-        sessionId,
-        role: AgentMessageRole.Assistant,
-        content: completedEvent.content,
-        providerMessageId: completedEvent.providerMessageId,
-        toolCallId: null,
-      });
-      this.websocketRepository.clientSend('on_agent_session_event', userId, {
-        type: 'assistant-message-created',
-        sessionId,
-        message: this.mapMessage(message),
-        createdAt: this.toIsoNow(),
+        stream: this.agentRunnerRepository.streamMessage({
+          url: runnerUrl,
+          runnerSessionId,
+          timeoutMs: runnerMessageStreamTimeoutMs,
+          body: { gallerySessionId: sessionId, messageId, content },
+        }),
+        emptyStreamMessage: 'Agent runner message stream ended before completion',
       });
     } catch (error) {
-      await this.sessionRepository.markInterruptedFromActive(userId, sessionId).catch(() => {});
-      this.websocketRepository.clientSend('on_agent_session_event', userId, {
-        type: 'runner-error',
-        sessionId,
-        message: runnerErrorMessage ?? 'The assistant runner stopped while processing the message.',
-        createdAt: this.toIsoNow(),
-      });
+      await this.emitRunnerFailure(userId, sessionId, error);
       throw error;
     }
+  }
+
+  private async resumeRunnerSession({
+    userId,
+    sessionId,
+    runnerSessionId,
+  }: {
+    userId: string;
+    sessionId: string;
+    runnerSessionId: string;
+  }) {
+    try {
+      const { runnerUrl, runnerMessageStreamTimeoutMs } = this.configRepository.getEnv().agent;
+      if (!runnerUrl) {
+        throw new BadRequestException('Agent runner is not configured');
+      }
+
+      await this.processRunnerStream({
+        userId,
+        sessionId,
+        runnerSessionId,
+        stream: this.agentRunnerRepository.streamResume({
+          url: runnerUrl,
+          runnerSessionId,
+          timeoutMs: runnerMessageStreamTimeoutMs,
+          body: { gallerySessionId: sessionId },
+        }),
+        emptyStreamMessage: 'Agent runner resume stream ended before completion',
+      });
+    } catch (error) {
+      await this.emitRunnerFailure(userId, sessionId, error);
+      throw error;
+    }
+  }
+
+  private async processRunnerStream({
+    userId,
+    sessionId,
+    runnerSessionId,
+    stream,
+    emptyStreamMessage,
+  }: {
+    userId: string;
+    sessionId: string;
+    runnerSessionId: string;
+    stream: AsyncGenerator<AgentRunnerStreamEvent>;
+    emptyStreamMessage: string;
+  }) {
+    let completedEvent: Extract<AgentRunnerStreamEvent, { type: 'assistant-message-completed' }> | undefined;
+    for await (const event of stream) {
+      if (event.sessionId !== sessionId || event.runnerSessionId !== runnerSessionId) {
+        continue;
+      }
+
+      if (event.type === 'assistant-message-delta') {
+        this.websocketRepository.clientSend('on_agent_session_event', userId, {
+          type: 'assistant-message-delta',
+          sessionId,
+          delta: event.delta,
+          sequence: event.sequence,
+          createdAt: this.toIsoNow(),
+        });
+        continue;
+      }
+
+      if (event.type === 'runner-error') {
+        throw new RunnerReportedError(event.message);
+      }
+
+      completedEvent = event;
+    }
+
+    if (!completedEvent) {
+      throw new Error(emptyStreamMessage);
+    }
+
+    const session = await this.sessionRepository.getById(userId, sessionId);
+    if (!session || !AgentRunnerService.completionActiveStatuses.includes(session.status)) {
+      return;
+    }
+
+    const message = await this.messageRepository.create({
+      sessionId,
+      role: AgentMessageRole.Assistant,
+      content: completedEvent.content,
+      providerMessageId: completedEvent.providerMessageId,
+      toolCallId: null,
+    });
+    this.websocketRepository.clientSend('on_agent_session_event', userId, {
+      type: 'assistant-message-created',
+      sessionId,
+      message: this.mapMessage(message),
+      createdAt: this.toIsoNow(),
+    });
+  }
+
+  private async emitRunnerFailure(userId: string, sessionId: string, error: unknown) {
+    await this.sessionRepository.markInterruptedFromActive(userId, sessionId).catch(() => {});
+    this.websocketRepository.clientSend('on_agent_session_event', userId, {
+      type: 'runner-error',
+      sessionId,
+      message:
+        error instanceof RunnerReportedError && error.message.trim().length > 0
+          ? error.message
+          : 'The assistant runner stopped while processing the message.',
+      createdAt: this.toIsoNow(),
+    });
   }
 
   private mapMessage(message: AgentMessage) {

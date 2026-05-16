@@ -1,6 +1,10 @@
 import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType } from 'src/enum';
 import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository';
-import type { AgentRunnerCreateSessionRequest, AgentRunnerMessageRequest } from 'src/types/agent-runner.types';
+import type {
+  AgentRunnerCreateSessionRequest,
+  AgentRunnerMessageRequest,
+  AgentRunnerResumeRequest,
+} from 'src/types/agent-runner.types';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
@@ -46,6 +50,10 @@ const messageBody: AgentRunnerMessageRequest = {
   gallerySessionId: 'gallery-session-1',
   messageId: 'message-1',
   content: { blocks: [{ type: 'text', text: 'Organize these photos.' }] },
+};
+
+const resumeBody: AgentRunnerResumeRequest = {
+  gallerySessionId: 'gallery-session-1',
 };
 
 const sseBody = (body: string) =>
@@ -366,6 +374,49 @@ describe(AgentRunnerRepository.name, () => {
         }),
       ),
     ).resolves.toEqual([completedEvent]);
+  });
+
+  it('streams runner resume SSE events from the continue endpoint', async () => {
+    const deltaEvent = {
+      type: 'assistant-message-delta',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      delta: 'Continuing',
+      sequence: 1,
+    };
+    const completedEvent = {
+      type: 'assistant-message-completed',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      providerMessageId: 'provider-message-2',
+      content: { blocks: [{ type: 'text', text: 'Continuing now.' }] },
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`data: ${JSON.stringify(deltaEvent)}\n\n` + `data: ${JSON.stringify(completedEvent)}\n\n`),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamResume({
+          url: 'https://gateway.local/pi-runner/',
+          runnerSessionId: 'runner/session 1',
+          timeoutMs: 3000,
+          body: resumeBody,
+        }),
+      ),
+    ).resolves.toEqual([deltaEvent, completedEvent]);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      new URL('https://gateway.local/pi-runner/sessions/runner%2Fsession%201/continue'),
+      {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify(resumeBody),
+        signal: expect.any(AbortSignal),
+      },
+    );
   });
 
   it('parses CRLF-separated SSE frames as separate events', async () => {

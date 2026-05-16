@@ -41,6 +41,7 @@ const makeSession = (overrides: Partial<AgentSession> = {}): AgentSession => {
 
   return {
     id: newUuid(),
+    title: null,
     userId: newUuid(),
     providerCredentialId,
     credentialSnapshot: {
