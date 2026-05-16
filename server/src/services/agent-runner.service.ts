@@ -81,7 +81,7 @@ export class AgentRunnerService {
     await this.agentRunnerRepository.validateSession({
       url: runnerUrl,
       timeoutMs: runnerMessageStreamTimeoutMs,
-      body: { ...body, toolGateway: null },
+      body: { ...body, mcpGateway: null },
     });
   }
 
