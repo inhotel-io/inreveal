@@ -340,6 +340,8 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].systemPrompt.includes('album.create'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('call proposeAlbumOperations'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('reviewable album operation plan'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('If a planning tool call fails with a validation error'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('Do not redirect the user to Apple Photos'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('no direct write tools'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('has no Gallery read tools'), false);
     assert.deepEqual(calls.loaders[0].appendSystemPrompt, []);
