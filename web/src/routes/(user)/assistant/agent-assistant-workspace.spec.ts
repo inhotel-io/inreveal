@@ -430,6 +430,39 @@ describe(AgentAssistantWorkspace.name, () => {
     );
   });
 
+  it('creates a default session from the first message when Enter is pressed', async () => {
+    const createdSession = makeSession({
+      id: '00000000-0000-4000-8000-000000000400',
+      status: AgentSessionStatus.Running,
+    });
+    sdkMock.createAgentSession.mockResolvedValue(createdSession);
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(makeUserMessage(createdSession.id, 'Make an album'));
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    const input = screen.getByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Make an album' } });
+    const wasNotCancelled = await fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+
+    expect(wasNotCancelled).toBe(false);
+    await waitFor(() => expect(sdkMock.createAgentSession).toHaveBeenCalledTimes(1));
+    expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledWith({
+      id: createdSession.id,
+      agentMessageCreateDto: {
+        content: {
+          blocks: [{ type: AgentMessageTextBlockType.Text, text: 'Make an album' }],
+        },
+      },
+    });
+  });
+
   it('shows Pi working in the selected chat while the first message is waiting for approval', async () => {
     const user = userEvent.setup();
     const createdSession = makeSession({
