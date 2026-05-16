@@ -2,6 +2,8 @@
   import { websocketEvents, type AgentSessionClientEvent } from '$lib/stores/websocket';
   import { handleError } from '$lib/utils/handle-error';
   import {
+    AgentOperationPlanStatus,
+    applyApprovedOperations,
     getCurrentOperationPlan,
     type AgentOperationPlanResponseDto,
     type AgentSessionResponseDto,
@@ -30,12 +32,21 @@
   let enabledByOperationId = $state<OperationEnabledState>({});
   let loading = $state(true);
   let errorMessage = $state<string | null>(null);
+  let applying = $state(false);
+  let applyMessage = $state<string | null>(null);
+  let applyErrorMessage = $state<string | null>(null);
   let cleanupWebsocketListener: (() => void) | undefined;
   let loadSequence = 0;
   let destroyed = false;
 
   const model = $derived(plan ? buildOperationReviewModel(plan, enabledByOperationId) : null);
   const selectedOperationIds = $derived(model ? buildSelectionPayload(model).operationIds : []);
+  const canApply = $derived(
+    model !== null &&
+      model.plan.status === AgentOperationPlanStatus.Proposed &&
+      selectedOperationIds.length > 0 &&
+      !applying,
+  );
 
   const publishSelection = (
     nextPlan: AgentOperationPlanResponseDto,
@@ -72,6 +83,8 @@
     const sequence = ++loadSequence;
     loading = true;
     errorMessage = null;
+    applyMessage = null;
+    applyErrorMessage = null;
 
     try {
       const nextPlan = await getCurrentOperationPlan({ id: session.id });
@@ -101,11 +114,46 @@
   };
 
   const handleSessionEvent = (event: AgentSessionClientEvent) => {
-    if (event.type !== 'operation-plan-ready' || event.sessionId !== session.id) {
+    if (
+      (event.type !== 'operation-plan-ready' && event.type !== 'operation-plan-applied') ||
+      event.sessionId !== session.id
+    ) {
       return;
     }
 
     void loadPlan();
+  };
+
+  const applySelectedOperations = async () => {
+    if (!model || !canApply) {
+      return;
+    }
+
+    applying = true;
+    errorMessage = null;
+    applyMessage = null;
+    applyErrorMessage = null;
+
+    try {
+      const response = await applyApprovedOperations({
+        id: session.id,
+        planId: model.plan.id,
+        agentOperationPlanApplyRequestDto: { operationIds: selectedOperationIds },
+      });
+      plan = response.plan;
+      enabledByOperationId = createInitialOperationEnabledState(response.plan);
+      applyMessage = $t('assistant_operation_apply_success', {
+        values: {
+          applied: response.appliedOperationIds.length,
+          failed: response.failedOperationIds.length,
+        },
+      });
+    } catch (error) {
+      applyErrorMessage = $t('assistant_operation_apply_error');
+      handleError(error, applyErrorMessage);
+    } finally {
+      applying = false;
+    }
   };
 
   const toggleOperation = (operationId: string, checked: boolean) => {
@@ -232,9 +280,29 @@
         {/each}
       </div>
 
+      {#if applyErrorMessage}
+        <p
+          class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+          role="alert"
+        >
+          {applyErrorMessage}
+        </p>
+      {/if}
+
+      {#if applyMessage}
+        <p
+          class="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-200"
+          role="status"
+        >
+          {applyMessage}
+        </p>
+      {/if}
+
       <div class="mt-5">
-        <Button type="button" disabled>
-          {$t('assistant_operation_selected_count', { values: { count: selectedOperationIds.length } })}
+        <Button type="button" disabled={!canApply} onclick={applySelectedOperations}>
+          {applying
+            ? $t('assistant_operation_apply_applying')
+            : $t('assistant_operation_apply_selected', { values: { count: selectedOperationIds.length } })}
         </Button>
       </div>
     </div>
