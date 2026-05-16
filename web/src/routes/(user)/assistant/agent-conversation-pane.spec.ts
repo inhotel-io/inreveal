@@ -38,9 +38,13 @@ vi.mock('svelte-i18n', () => {
     assistant_approval_asset_count: '{count} assets',
     assistant_approval_data_access: 'Data access',
     assistant_approval_deny: 'Deny',
+    assistant_approval_recent_activity: 'Recent activity ({count})',
     assistant_approval_tool_calls_error: 'Unable to load approval requests',
     assistant_agent_tool_data_class_metadata: 'Metadata',
     assistant_agent_tool_name_searchAssets: 'Search photos',
+    assistant_agent_tool_status_completed: 'Completed',
+    assistant_agent_tool_status_denied: 'Denied',
+    assistant_agent_tool_status_failed: 'Failed',
     assistant_cancel: 'Cancel',
     assistant_chat: 'Chat',
     assistant_details: 'Details',
@@ -294,6 +298,49 @@ describe(AgentConversationPane.name, () => {
     expect(await screen.findByText('Search photos')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
     expect(screen.getByText('Review pending approvals before sending a message.')).toBeInTheDocument();
+  });
+
+  it('renders handled tool calls inline in the chat instead of a recent activity pile', async () => {
+    const session = makeSession();
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      makeMessage(session.id, 'Find my beach photos', AgentMessageRole.User),
+      {
+        ...makeMessage(session.id, 'I found the best candidates.', AgentMessageRole.Assistant),
+        createdAt: '2026-05-14T00:01:00.000Z',
+      },
+    ]);
+    sdkMock.getToolCalls.mockResolvedValue([
+      {
+        ...makeToolCall(session.id),
+        id: 'tool-call-completed',
+        status: AgentToolCallStatus.Completed,
+        requestSummary: 'Search recent favorites',
+        responseSummary: 'Found matching photos',
+        startedAt: '2026-05-14T00:00:30.000Z',
+        completedAt: '2026-05-14T00:00:45.000Z',
+      },
+    ]);
+
+    render(AgentConversationPane, {
+      props: {
+        session,
+        title: null,
+        onNewChat: vi.fn(),
+        onTitleDiscovered: vi.fn(),
+      },
+    });
+
+    expect(await screen.findByRole('article', { name: 'Search photos action: Completed' })).toBeInTheDocument();
+    expect(screen.getByText('Search recent favorites')).toBeInTheDocument();
+    expect(screen.getByText('Found matching photos')).toBeInTheDocument();
+    expect(screen.queryByText('Recent activity (1)')).not.toBeInTheDocument();
+
+    const transcript = screen.getByTestId('agent-session-chat-transcript');
+    expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
+      expect.stringContaining('Find my beach photos'),
+      expect.stringContaining('Search photos'),
+      expect.stringContaining('I found the best candidates.'),
+    ]);
   });
 
   it('resumes interrupted sessions through append and refreshes the selected session', async () => {
