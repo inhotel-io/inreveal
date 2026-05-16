@@ -216,6 +216,56 @@ describe(AgentSessionChatPanel.name, () => {
     expect(screen.getByText('Done.')).toBeInTheDocument();
   });
 
+  it('renders assistant markdown links and images as formatted content', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      makeMessage(
+        'message-assistant',
+        AgentMessageRole.Assistant,
+        [
+          '[Inline link](https://example.com)',
+          '[Link with title](https://example.com "Example Site")',
+          '![Alt text for image](https://via.placeholder.com/150 "Optional title")',
+        ].join('\n'),
+      ),
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const inlineLink = await screen.findByRole('link', { name: 'Inline link' });
+    expect(inlineLink).toHaveAttribute('href', 'https://example.com');
+    expect(inlineLink).toHaveAttribute('target', '_blank');
+    expect(inlineLink).toHaveAttribute('rel', 'noreferrer');
+
+    const titledLink = screen.getByRole('link', { name: 'Link with title' });
+    expect(titledLink).toHaveAttribute('title', 'Example Site');
+
+    const image = screen.getByRole('img', { name: 'Alt text for image' });
+    expect(image).toHaveAttribute('src', 'https://via.placeholder.com/150');
+    expect(image).toHaveAttribute('title', 'Optional title');
+  });
+
+  it('renders streamed assistant markdown links and images as formatted content', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+
+    render(AgentSessionChatPanel, { props: { session } });
+    await screen.findByRole('textbox', { name: 'Message' });
+
+    handler?.({
+      type: 'assistant-message-delta',
+      sessionId: session.id,
+      delta: '[Docs](https://example.com/docs)\n![Preview](https://example.com/preview.jpg)',
+      sequence: 1,
+      createdAt: '2026-05-14T00:00:01.000Z',
+    });
+
+    expect(await screen.findByRole('link', { name: 'Docs' })).toHaveAttribute('href', 'https://example.com/docs');
+    expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', 'https://example.com/preview.jpg');
+  });
+
   it('renders streamed assistant markdown tables as formatted content', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
