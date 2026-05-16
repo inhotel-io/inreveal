@@ -33,6 +33,9 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_plan_error: 'Unable to load proposed album plan',
     assistant_operation_plan_loading: 'Loading proposed album plan',
     assistant_operation_plan_review: 'Plan review',
+    assistant_operation_status_applied: 'Applied',
+    assistant_operation_status_failed: 'Failed',
+    assistant_operation_status_skipped: 'Skipped',
     assistant_operation_risk_high: 'High risk',
     assistant_operation_risk_low: 'Low risk',
     assistant_operation_risk_medium: 'Medium risk',
@@ -173,6 +176,22 @@ const appliedPlan = (): AgentOperationPlanResponseDto => ({
   })),
 });
 
+const completedPlan = (): AgentOperationPlanResponseDto => ({
+  ...samplePlan(),
+  status: AgentOperationPlanStatus.Applied,
+  operations: samplePlan().operations.map((operation, index) => ({
+    ...operation,
+    status:
+      index === 0
+        ? AgentOperationStatus.Applied
+        : index === 1
+          ? AgentOperationStatus.Failed
+          : AgentOperationStatus.Skipped,
+    result: index === 0 ? { albumId: '00000000-0000-4000-8000-000000000400' } : null,
+    error: index === 1 ? 'Asset permissions changed before apply' : null,
+  })),
+});
+
 describe('AgentOperationPlanReviewPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -186,6 +205,19 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     expect(await screen.findByText('No proposed album plan yet.')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Plan review' })).not.toBeInTheDocument();
+  });
+
+  it('renders nothing in dock mode when there is no plan and hideEmpty is set', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(null);
+
+    const { container } = render(AgentOperationPlanReviewPanel, {
+      props: { session, variant: 'dock', hideEmpty: true },
+    });
+
+    await waitFor(() => expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: session.id }));
+    await waitFor(() => expect(screen.queryByText('Loading proposed album plan')).not.toBeInTheDocument());
+    expect(screen.queryByText('No proposed album plan yet.')).not.toBeInTheDocument();
+    expect(container.children).toHaveLength(0);
   });
 
   it('loads and renders grouped proposed operations', async () => {
@@ -207,6 +239,81 @@ describe('AgentOperationPlanReviewPanel', () => {
         operationIds: [createId, addId, existingId],
       }),
     );
+  });
+
+  it('renders dock mode without the standalone page shell', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+
+    const { container } = render(AgentOperationPlanReviewPanel, { props: { session, variant: 'dock' } });
+
+    expect(await screen.findByRole('region', { name: 'Plan review' })).toBeInTheDocument();
+    expect(container.querySelector('.max-w-3xl')).not.toBeInTheDocument();
+  });
+
+  it('collapses the plan card without losing the selected operations', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+
+    render(AgentOperationPlanReviewPanel, { props: { session, variant: 'dock' } });
+
+    await fireEvent.click(await screen.findByRole('checkbox', { name: 'Update existing album description' }));
+    expect(screen.getByRole('button', { name: 'Apply 2 selected' })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByText('Organize Portugal holiday'));
+    expect(screen.queryByRole('checkbox', { name: 'Update existing album description' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Apply 2 selected' })).not.toBeInTheDocument();
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByText('Organize Portugal holiday'));
+    expect(screen.getByRole('checkbox', { name: 'Update existing album description' })).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Apply 2 selected' })).toBeInTheDocument();
+  });
+
+  it('keeps the apply action in a sticky area with the selected count', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+
+    const { container } = render(AgentOperationPlanReviewPanel, { props: { session, variant: 'dock' } });
+
+    expect(await screen.findByRole('button', { name: 'Apply 3 selected' })).toBeInTheDocument();
+    const applyArea = container.querySelector('[data-testid="agent-operation-plan-sticky-actions"]');
+    expect(applyArea).toHaveClass('sticky');
+    expect(applyArea).toHaveTextContent('3 selected');
+  });
+
+  it('reopens the plan card when an apply error arrives after collapse', async () => {
+    let rejectApply: (error: Error) => void;
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+    sdkMock.applyApprovedOperations.mockReturnValue(
+      new Promise((_, reject) => {
+        rejectApply = reject;
+      }),
+    );
+
+    render(AgentOperationPlanReviewPanel, { props: { session, variant: 'dock' } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
+    await fireEvent.click(screen.getByText('Organize Portugal holiday'));
+    expect(screen.queryByRole('button', { name: 'Applying operations' })).not.toBeInTheDocument();
+
+    rejectApply!(new Error('failed'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to apply proposed operations');
+    expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeInTheDocument();
+  });
+
+  it('shows read-only operation statuses and errors without dumping raw result JSON', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(completedPlan());
+
+    render(AgentOperationPlanReviewPanel, { props: { session, variant: 'dock' } });
+
+    const region = await screen.findByRole('region', { name: 'Plan review' });
+    expect(within(region).getByText('Applied')).toBeInTheDocument();
+    expect(within(region).getByText('Failed')).toBeInTheDocument();
+    expect(within(region).getByText('Skipped')).toBeInTheDocument();
+    expect(within(region).getByText('Asset permissions changed before apply')).toBeInTheDocument();
+    expect(within(region).queryByText(/albumId/)).not.toBeInTheDocument();
+    expect(within(region).queryByText(/\{/)).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Create Portugal album' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeDisabled();
   });
 
   it('does not publish a selection when an in-flight load resolves after unmount', async () => {
