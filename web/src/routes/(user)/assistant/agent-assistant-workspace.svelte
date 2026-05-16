@@ -41,6 +41,8 @@
   let syncedFallbackSessionId = $state<string | null>(null);
   let shouldReplaceSelectedSessionUrl = $state(getInitialShouldReplaceSessionUrl());
   let titleBySessionId = $state<AgentSessionTitleCache>({});
+  let sidebarCollapsed = $state(false);
+  let explicitNewChatPending = false;
 
   const selectedSession = $derived(localSessions.find((session) => session.id === selectedSessionId) ?? null);
   const selectedTitle = $derived(
@@ -64,6 +66,7 @@
   };
 
   const selectSession = (sessionId: string) => {
+    explicitNewChatPending = false;
     shouldReplaceSelectedSessionUrl = false;
     selectedSessionId = sessionId;
     sidebarOpen = false;
@@ -71,6 +74,7 @@
   };
 
   const startNewChat = () => {
+    explicitNewChatPending = true;
     shouldReplaceSelectedSessionUrl = false;
     selectedSessionId = null;
     sidebarOpen = false;
@@ -78,6 +82,7 @@
   };
 
   const handleSessionCreated = (session: AgentSessionResponseDto) => {
+    explicitNewChatPending = false;
     localSessions = [session, ...localSessions.filter((existingSession) => existingSession.id !== session.id)];
     shouldReplaceSelectedSessionUrl = false;
     selectedSessionId = session.id;
@@ -106,6 +111,15 @@
     }
 
     lastRequestedSessionId = requestedSessionId;
+
+    if (explicitNewChatPending && !requestedSessionId?.trim()) {
+      explicitNewChatPending = false;
+      selectedSessionId = null;
+      shouldReplaceSelectedSessionUrl = false;
+      return;
+    }
+
+    explicitNewChatPending = false;
     selectedSessionId = selectInitialAgentSessionId(localSessions, requestedSessionId);
     shouldReplaceSelectedSessionUrl = selectedSessionId !== null && requestedSessionId?.trim() !== selectedSessionId;
   });
@@ -121,15 +135,34 @@
   });
 </script>
 
-<div class="flex h-[calc(100vh-8rem)] min-h-[34rem] overflow-hidden bg-white text-black dark:bg-black dark:text-white">
-  <div class="hidden w-80 shrink-0 md:block">
-    <AgentSessionSidebar
-      sessions={localSessions}
-      {selectedSessionId}
-      {titleBySessionId}
-      onSelectSession={selectSession}
-      onNewChat={startNewChat}
-    />
+<div class="flex h-full min-h-0 overflow-hidden bg-white text-black dark:bg-black dark:text-white">
+  <div class="hidden shrink-0 md:block">
+    {#if sidebarCollapsed}
+      <div
+        class="flex h-full w-14 flex-col items-center border-r border-gray-200 bg-slate-50 py-2 dark:border-neutral-800 dark:bg-neutral-950"
+      >
+        <button
+          type="button"
+          data-testid="agent-session-sidebar-expand"
+          class="rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
+          aria-label={$t('assistant_open_sessions')}
+          onclick={() => (sidebarCollapsed = false)}
+        >
+          {$t('assistant_sessions').slice(0, 1)}
+        </button>
+      </div>
+    {:else}
+      <div class="h-full w-72">
+        <AgentSessionSidebar
+          sessions={localSessions}
+          {selectedSessionId}
+          {titleBySessionId}
+          onSelectSession={selectSession}
+          onNewChat={startNewChat}
+          onCollapse={() => (sidebarCollapsed = true)}
+        />
+      </div>
+    {/if}
   </div>
 
   {#if sidebarOpen}
@@ -151,7 +184,10 @@
 
   <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
     <header
-      class="flex min-h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-4 dark:border-gray-800 md:px-6"
+      class={[
+        'flex min-h-14 shrink-0 items-center gap-3 border-b border-gray-200 px-4 dark:border-gray-800 md:px-6',
+        selectedSession ? 'md:hidden' : '',
+      ]}
     >
       <button
         type="button"
@@ -171,7 +207,7 @@
       </div>
     </header>
 
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div class="min-h-0 flex-1 overflow-hidden">
       {#if selectedSession}
         <AgentConversationPane
           session={selectedSession}

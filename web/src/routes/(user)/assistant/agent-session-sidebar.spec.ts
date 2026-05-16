@@ -15,6 +15,7 @@ import AgentSessionSidebar from './agent-session-sidebar.svelte';
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_new_chat: 'New chat',
+    assistant_collapse_sessions: 'Collapse sessions',
     assistant_search_chats: 'Search chats',
     assistant_sessions: 'Sessions',
     assistant_session_status_applying: 'Applying',
@@ -132,8 +133,9 @@ describe(AgentSessionSidebar.name, () => {
   it('renders New chat, accessible search, helper-sorted rows, and selected current state', () => {
     renderSidebar();
 
-    expect(screen.getByRole('button', { name: 'New chat' })).toBeInTheDocument();
+    expect(screen.getByTestId('agent-session-sidebar-new-chat')).toHaveTextContent('New chat');
     expect(screen.getByRole('searchbox', { name: 'Search chats' })).toBeInTheDocument();
+    expect(screen.getByText('Recents')).toBeInTheDocument();
 
     const rows = screen.getAllByTestId('agent-session-row');
     expect(rows.map((row) => row.dataset.sessionId)).toEqual([
@@ -156,8 +158,18 @@ describe(AgentSessionSidebar.name, () => {
     await user.click(screen.getByRole('button', { name: /Approve album cleanup/ }));
     expect(onSelectSession).toHaveBeenCalledWith('approval');
 
-    await user.click(screen.getByRole('button', { name: 'New chat' }));
+    await user.click(screen.getByTestId('agent-session-sidebar-new-chat'));
     expect(onNewChat).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders an optional collapse action', async () => {
+    const user = userEvent.setup();
+    const onCollapse = vi.fn();
+    renderSidebar({ onCollapse });
+
+    await user.click(screen.getByRole('button', { name: 'Collapse sessions' }));
+
+    expect(onCollapse).toHaveBeenCalledTimes(1);
   });
 
   it('filters rows by title, model, credential, visible status, and raw status without mutating the input list', async () => {
@@ -189,18 +201,16 @@ describe(AgentSessionSidebar.name, () => {
     expect(sessions.map((session) => session.id)).toEqual(originalOrder);
   });
 
-  it('renders status badges for actionable and terminal states, and falls back to New chat titles', () => {
+  it('keeps rows visually simple without visible status pills and falls back to New chat titles', () => {
     renderSidebar();
 
     expect(
-      within(screen.getByTestId('agent-session-row-approval')).getByText('Waiting for tool approval'),
-    ).toBeInTheDocument();
-    expect(
-      within(screen.getByTestId('agent-session-row-plan')).getByText('Waiting for plan review'),
-    ).toBeInTheDocument();
-    expect(within(screen.getByTestId('agent-session-row-running-z')).getByText('Running')).toBeInTheDocument();
-    expect(within(screen.getByTestId('agent-session-row-completed')).getByText('Completed')).toBeInTheDocument();
-    expect(within(screen.getByTestId('agent-session-row-failed')).getByText('Failed')).toBeInTheDocument();
+      within(screen.getByTestId('agent-session-row-approval')).queryByText('Waiting for tool approval'),
+    ).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('agent-session-row-plan')).queryByText('Waiting for plan review')).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('agent-session-row-running-z')).queryByText('Running')).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('agent-session-row-completed')).queryByText('Completed')).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('agent-session-row-failed')).queryByText('Failed')).not.toBeInTheDocument();
     expect(
       within(screen.getByTestId('agent-session-row-created-newer')).queryByText('created'),
     ).not.toBeInTheDocument();
