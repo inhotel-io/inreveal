@@ -385,6 +385,44 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(screen.queryByText('No proposed album plan yet.')).not.toBeInTheDocument();
   });
 
+  it('uses a pending same-plan applied event when the apply response fails after server success', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    let rejectApply: (error: Error) => void;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    sdkMock.getCurrentOperationPlan.mockImplementation(() =>
+      Promise.resolve(sdkMock.getCurrentOperationPlan.mock.calls.length === 1 ? samplePlan() : null),
+    );
+    sdkMock.applyApprovedOperations.mockReturnValue(
+      new Promise((_, reject) => {
+        rejectApply = reject;
+      }),
+    );
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
+
+    handler?.({
+      type: 'operation-plan-applied',
+      sessionId: session.id,
+      planId,
+      status: AgentOperationApplyStatus.Applied,
+      appliedCount: 3,
+      skippedCount: 0,
+      failedCount: 0,
+    });
+
+    rejectApply!(new Error('network timeout'));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
+    expect(screen.queryByText('No proposed album plan yet.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledTimes(2);
+  });
+
   it('disables operation selection while applying and after the plan is applied', async () => {
     let resolveApply: (response: Awaited<ReturnType<typeof sdkMock.applyApprovedOperations>>) => void;
     sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
