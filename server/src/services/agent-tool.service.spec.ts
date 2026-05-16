@@ -2053,6 +2053,52 @@ describe(AgentToolService.name, () => {
     });
   });
 
+  it('resumes a runner-backed session after a denied approval decision', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForToolApproval,
+      runnerSessionId: 'runner-session-1',
+    });
+    const pending = makeToolCall({ sessionId: session.id });
+    const denied = makeToolCall({
+      ...pending,
+      status: AgentToolCallStatus.Denied,
+      approvalDecision: AgentToolApprovalDecision.Denied,
+      responseSummary: null,
+      error: 'Use fewer photos',
+      completedAt,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(pending);
+    toolCallRepository.transition.mockResolvedValue(denied);
+
+    const result = await sut.approveToolCall(auth, session.id, pending.id, {
+      decision: AgentToolApprovalDecision.Denied,
+      reason: 'Use fewer photos',
+    });
+    await flushAsync();
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: pending.id,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: 'Use fewer photos',
+      }),
+    );
+    expect(agentRunnerService.resumeAfterToolApproval).toHaveBeenCalledTimes(1);
+    expect(agentRunnerService.resumeAfterToolApproval).toHaveBeenCalledWith({
+      userId: auth.user.id,
+      sessionId: session.id,
+      runnerSessionId: 'runner-session-1',
+      toolCallId: pending.id,
+      approvalDecision: AgentToolApprovalDecision.Denied,
+      toolResult: undefined,
+    });
+  });
+
   it('executes an approved read tool before resuming a runner-backed session', async () => {
     const auth = AuthFactory.create();
     const album = makeAlbumSummary({ ownerId: auth.user.id });
@@ -2111,6 +2157,80 @@ describe(AgentToolService.name, () => {
     });
   });
 
+  it('resumes the runner with an error tool result when an approved read tool fails', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForToolApproval,
+      runnerSessionId: 'runner-session-1',
+    });
+    const pending = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.ReadAssetMetadata,
+      redactedRequestMetadata: { assetIds: [newUuid()] },
+      assetCount: 1,
+    });
+    const approved = makeToolCall({
+      ...pending,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      responseSummary: 'Tool call approved by user',
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValueOnce(pending).mockResolvedValueOnce(approved);
+    toolCallRepository.transition
+      .mockResolvedValueOnce(approved)
+      .mockRejectedValueOnce(new Error('asset read failed'));
+
+    await sut.approveToolCall(auth, session.id, pending.id, { decision: AgentToolApprovalDecision.Approved });
+    await flushAsync();
+    await flushAsync();
+
+    expect(agentRunnerService.resumeAfterToolApproval).toHaveBeenCalledTimes(1);
+    expect(agentRunnerService.resumeAfterToolApproval).toHaveBeenCalledWith({
+      userId: auth.user.id,
+      sessionId: session.id,
+      runnerSessionId: 'runner-session-1',
+      toolCallId: pending.id,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      toolResult: {
+        status: 'error',
+        message: 'Approved tool call failed before returning a result.',
+      },
+    });
+  });
+
+  it('marks the session interrupted when runner continuation fails after approval', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForToolApproval,
+      runnerSessionId: 'runner-session-1',
+    });
+    const pending = makeToolCall({ sessionId: session.id });
+    const approved = makeToolCall({
+      ...pending,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      responseSummary: 'Tool call approved by user',
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(pending);
+    toolCallRepository.transition.mockResolvedValue(approved);
+    agentRunnerService.resumeAfterToolApproval.mockRejectedValue(new Error('Agent session already has a message in progress'));
+
+    await sut.approveToolCall(auth, session.id, pending.id, { decision: AgentToolApprovalDecision.Approved });
+    await flushAsync();
+    await flushAsync();
+
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.Running,
+    });
+    expect(sessionRepository.markInterruptedFromActive).toHaveBeenCalledWith(auth.user.id, session.id);
+  });
+
   it('does not try to resume a runner when approving a session without a runner session id', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({
@@ -2135,9 +2255,12 @@ describe(AgentToolService.name, () => {
     expect(agentRunnerService.resumeAfterToolApproval).not.toHaveBeenCalled();
   });
 
-  it('rejects non-pending approval without transition', async () => {
+  it('rejects non-pending approval without transition, session update, or runner continuation', async () => {
     const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id });
+    const session = makeSession({
+      userId: auth.user.id,
+      runnerSessionId: 'runner-session-1',
+    });
     const toolCall = makeToolCall({ sessionId: session.id, status: AgentToolCallStatus.Completed, completedAt });
 
     sessionRepository.getById.mockResolvedValue(session);
@@ -2146,7 +2269,10 @@ describe(AgentToolService.name, () => {
     await expect(
       sut.approveToolCall(auth, session.id, toolCall.id, { decision: AgentToolApprovalDecision.Approved }),
     ).rejects.toThrow('Agent tool call is not pending approval');
+
     expect(toolCallRepository.transition).not.toHaveBeenCalled();
+    expect(sessionRepository.update).not.toHaveBeenCalled();
+    expect(agentRunnerService.resumeAfterToolApproval).not.toHaveBeenCalled();
   });
 
   it('returns denied without transition or asset read when executing an already-denied tool call', async () => {

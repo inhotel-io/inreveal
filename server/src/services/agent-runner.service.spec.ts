@@ -504,6 +504,78 @@ describe(AgentRunnerService.name, () => {
     });
   });
 
+  it('resumes a runner session with denied approval context and no tool result', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'I will avoid that action.' }] };
+    const assistantMessage = makeAssistantMessage({
+      sessionId,
+      content: assistantContent,
+      providerMessageId: 'provider-message-denied',
+    });
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamResume.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-delta',
+          sessionId,
+          runnerSessionId,
+          delta: 'I will avoid',
+          sequence: 1,
+        },
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: 'provider-message-denied',
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(assistantMessage);
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
+
+    await sut.resumeAfterToolApproval({
+      userId,
+      sessionId,
+      runnerSessionId,
+      toolCallId: '00000000-0000-4000-8000-000000000333',
+      approvalDecision: 'denied',
+    });
+
+    expect(agentRunnerRepository.streamResume).toHaveBeenCalledWith({
+      url: 'http://agent-runner:4477',
+      runnerSessionId,
+      timeoutMs: 120_000,
+      body: {
+        gallerySessionId: sessionId,
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+        approvalDecision: 'denied',
+      },
+    });
+    expect(websocketRepository.clientSend).toHaveBeenNthCalledWith(1, 'on_agent_session_event', userId, {
+      type: 'assistant-message-delta',
+      sessionId,
+      delta: 'I will avoid',
+      sequence: 1,
+      createdAt: '2026-05-14T10:00:00.000Z',
+    });
+    expect(messageRepository.create).toHaveBeenCalledWith({
+      sessionId,
+      role: AgentMessageRole.Assistant,
+      content: assistantContent,
+      providerMessageId: 'provider-message-denied',
+      toolCallId: null,
+    });
+  });
+
   it('marks the session interrupted and emits an error when runner message streaming fails', async () => {
     const userId = '00000000-0000-4000-8000-000000000001';
     const sessionId = '00000000-0000-4000-8000-000000000100';
@@ -530,6 +602,83 @@ describe(AgentRunnerService.name, () => {
       type: 'runner-error',
       sessionId,
       message: 'The assistant runner stopped while processing the message.',
+      createdAt: '2026-05-14T10:00:00.000Z',
+    });
+  });
+
+  it('marks the session interrupted and emits an error when runner resume streaming fails', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const error = new Error('resume connection failed with sk-secret');
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamResume.mockReturnValue(failingStream(error));
+    sessionRepository.markInterruptedFromActive.mockResolvedValue({} as never);
+
+    await expect(
+      sut.resumeAfterToolApproval({
+        userId,
+        sessionId,
+        runnerSessionId,
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+        approvalDecision: 'approved',
+        toolResult: { status: 'success' },
+      }),
+    ).rejects.toBe(error);
+
+    expect(sessionRepository.markInterruptedFromActive).toHaveBeenCalledWith(userId, sessionId);
+    expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', userId, {
+      type: 'runner-error',
+      sessionId,
+      message: 'The assistant runner stopped while processing the message.',
+      createdAt: '2026-05-14T10:00:00.000Z',
+    });
+  });
+
+  it('marks the session interrupted with a runner-reported resume failure', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamResume.mockReturnValue(
+      streamEvents([
+        {
+          type: 'runner-error',
+          sessionId,
+          runnerSessionId,
+          message: 'Provider rejected the approval continuation',
+        },
+      ]),
+    );
+    sessionRepository.markInterruptedFromActive.mockResolvedValue({} as never);
+
+    await expect(
+      sut.resumeAfterToolApproval({
+        userId,
+        sessionId,
+        runnerSessionId,
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+        approvalDecision: 'approved',
+        toolResult: { status: 'success' },
+      }),
+    ).rejects.toThrow('Provider rejected the approval continuation');
+
+    expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', userId, {
+      type: 'runner-error',
+      sessionId,
+      message: 'Provider rejected the approval continuation',
       createdAt: '2026-05-14T10:00:00.000Z',
     });
   });
@@ -921,6 +1070,62 @@ describe(AgentRunnerService.name, () => {
     finishStream();
     await first;
     expect(sut.isSessionDispatchActive(sessionId)).toBe(false);
+  });
+
+  it('rejects runner resume while another dispatch is active for the same session', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    let releaseMessageStream: (() => void) | undefined;
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      (async function* () {
+        await new Promise<void>((resolve) => {
+          releaseMessageStream = resolve;
+        });
+        yield {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: 'provider-message-1',
+          content: { blocks: [{ type: 'text', text: 'Done.' }] },
+        };
+      })(),
+    );
+    messageRepository.create.mockResolvedValue(makeAssistantMessage({ sessionId }));
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
+
+    const activeSend = sut.sendMessage({
+      userId,
+      sessionId,
+      runnerSessionId,
+      messageId: '00000000-0000-4000-8000-000000000200',
+      content: { blocks: [{ type: 'text', text: 'Start.' }] },
+    });
+
+    await Promise.resolve();
+
+    await expect(
+      sut.resumeAfterToolApproval({
+        userId,
+        sessionId,
+        runnerSessionId,
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+        approvalDecision: 'approved',
+        toolResult: { status: 'success' },
+      }),
+    ).rejects.toThrow('Agent session already has a message in progress');
+
+    expect(agentRunnerRepository.streamResume).not.toHaveBeenCalled();
+
+    releaseMessageStream?.();
+    await activeSend;
   });
 
   it('returns disabled status without probing when runner URL is missing', async () => {
