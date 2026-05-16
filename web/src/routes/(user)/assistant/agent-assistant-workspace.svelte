@@ -282,6 +282,22 @@
     }
   };
 
+  const handleNewChatComposerKeydown = (event: KeyboardEvent) => {
+    if (
+      event.key !== 'Enter' ||
+      event.shiftKey ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.metaKey ||
+      event.isComposing
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    void startSessionFromMessage();
+  };
+
   const handleTitleDiscovered = (sessionId: string, title: string) => {
     if (sessionId !== selectedSessionId || !localSessions.some((session) => session.id === sessionId)) {
       return;
@@ -590,6 +606,7 @@
                   bind:value={newChatDraft}
                   placeholder={$t('assistant_new_chat_placeholder')}
                   disabled={isStartingFromMessage || !isRunnerAvailable}
+                  onkeydown={handleNewChatComposerKeydown}
                 ></textarea>
                 <Button type="submit" disabled={!canSendNewChat} loading={isStartingFromMessage}
                   >{$t('assistant_send')}</Button
