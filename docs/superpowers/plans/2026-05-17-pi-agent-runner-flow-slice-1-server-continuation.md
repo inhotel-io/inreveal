@@ -199,9 +199,7 @@ it('resumes the runner with an error tool result when an approved read tool fail
 
   sessionRepository.getById.mockResolvedValue(session);
   toolCallRepository.getByIdForSession.mockResolvedValueOnce(pending).mockResolvedValueOnce(approved);
-  toolCallRepository.transition
-    .mockResolvedValueOnce(approved)
-    .mockRejectedValueOnce(new Error('asset read failed'));
+  toolCallRepository.transition.mockResolvedValueOnce(approved).mockRejectedValueOnce(new Error('asset read failed'));
 
   await sut.approveToolCall(auth, session.id, pending.id, { decision: AgentToolApprovalDecision.Approved });
   await flushAsync();
