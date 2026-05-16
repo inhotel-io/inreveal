@@ -919,6 +919,8 @@ export enum JobName {
   FaceIdentityBackfill = 'FaceIdentityBackfill',
   FaceIdentityMaintenanceAfterRecognition = 'FaceIdentityMaintenanceAfterRecognition',
   FaceRepairScan = 'FaceRepairScan',
+  PersonSuggestionScanQueueAll = 'PersonSuggestionScanQueueAll',
+  PersonSuggestionScan = 'PersonSuggestionScan',
 
   FileDelete = 'FileDelete',
   FileMigrationQueueAll = 'FileMigrationQueueAll',
