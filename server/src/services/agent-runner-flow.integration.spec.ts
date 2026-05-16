@@ -8,7 +8,6 @@ import {
   AgentSessionStatus,
   AgentToolApprovalDecision,
   AgentToolCallStatus,
-  AgentToolDataClass,
   AgentToolName,
 } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
@@ -27,7 +26,6 @@ import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import { AgentMessageContent } from 'src/types/agent-message.types';
-import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import { AgentAlbumSummary } from 'src/types/agent-tool.types';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { newUuid } from 'test/small.factory';
@@ -50,27 +48,6 @@ const waitFor = async (assertion: () => void | Promise<void>) => {
 
 const now = () => new Date();
 
-const permissionPlan: AgentPermissionPlanSnapshot = {
-  read: { metadata: true, previews: false, originals: false },
-  providerExposure: {
-    metadata: true,
-    previews: false,
-    originals: false,
-    allowOriginalsForExternalProviders: false,
-  },
-  assetScope: { owned: true, sharedSpaces: false, locked: false },
-  writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
-  limits: {
-    maxAssetsPerToolCall: 100,
-    maxAssetsPerSession: 1000,
-    maxPreviewsPerToolCall: 0,
-    maxPreviewsPerSession: 0,
-    maxOriginalsPerToolCall: 0,
-    maxOriginalsPerSession: 0,
-    expiresInMinutes: 60,
-  },
-};
-
 const album = (ownerId: string): AgentAlbumSummary => ({
   id: '00000000-0000-4000-8000-000000000301',
   albumName: 'Portugal',
@@ -85,7 +62,7 @@ const album = (ownerId: string): AgentAlbumSummary => ({
 class InMemoryAgentSessionRepository {
   sessions = new Map<string, AgentSession>();
 
-  create = vi.fn(async (dto: Partial<AgentSession>) => {
+  create = vi.fn((dto: Partial<AgentSession>) => {
     const session: AgentSession = {
       id: newUuid(),
       userId: dto.userId!,
@@ -107,12 +84,12 @@ class InMemoryAgentSessionRepository {
       updateId: newUuid(),
     };
     this.sessions.set(session.id, session);
-    return session;
+    return Promise.resolve(session);
   });
 
-  getById = vi.fn(async (userId: string, id: string) => {
+  getById = vi.fn((userId: string, id: string) => {
     const session = this.sessions.get(id);
-    return session?.userId === userId ? session : undefined;
+    return Promise.resolve(session?.userId === userId ? session : undefined);
   });
 
   update = vi.fn(async (userId: string, id: string, dto: Partial<AgentSession>) => {
@@ -129,7 +106,7 @@ class InMemoryAgentSessionRepository {
   markRunningFromCreated = vi.fn(async (userId: string, id: string, dto: Partial<AgentSession>) => {
     const session = await this.getById(userId, id);
     if (!session || session.status !== AgentSessionStatus.Created) {
-      return undefined;
+      return;
     }
 
     const updated = { ...session, ...dto, updatedAt: now(), updateId: newUuid() };
@@ -148,7 +125,7 @@ class InMemoryAgentSessionRepository {
         AgentSessionStatus.Interrupted,
       ].includes(session.status)
     ) {
-      return undefined;
+      return;
     }
 
     const updated = { ...session, status: AgentSessionStatus.Interrupted, updatedAt: now(), updateId: newUuid() };
@@ -160,7 +137,7 @@ class InMemoryAgentSessionRepository {
 class InMemoryAgentMessageRepository {
   messages: AgentMessage[] = [];
 
-  create = vi.fn(async (dto: Partial<AgentMessage>) => {
+  create = vi.fn((dto: Partial<AgentMessage>) => {
     const message: AgentMessage = {
       id: newUuid(),
       sessionId: dto.sessionId!,
@@ -171,22 +148,25 @@ class InMemoryAgentMessageRepository {
       createdAt: now(),
     };
     this.messages.push(message);
-    return message;
+    return Promise.resolve(message);
   });
 
-  getBySessionId = vi.fn(async (sessionId: string) =>
-    this.messages
-      .filter((message) => message.sessionId === sessionId)
-      .toSorted(
-        (first, second) => first.createdAt.getTime() - second.createdAt.getTime() || first.id.localeCompare(second.id),
-      ),
+  getBySessionId = vi.fn((sessionId: string) =>
+    Promise.resolve(
+      this.messages
+        .filter((message) => message.sessionId === sessionId)
+        .toSorted(
+          (first, second) =>
+            first.createdAt.getTime() - second.createdAt.getTime() || first.id.localeCompare(second.id),
+        ),
+    ),
   );
 }
 
 class InMemoryAgentToolCallRepository {
   toolCalls: AgentToolCall[] = [];
 
-  create = vi.fn(async (dto: Partial<AgentToolCall>) => {
+  create = vi.fn((dto: Partial<AgentToolCall>) => {
     const toolCall: AgentToolCall = {
       id: newUuid(),
       sessionId: dto.sessionId!,
@@ -206,7 +186,7 @@ class InMemoryAgentToolCallRepository {
       error: dto.error ?? null,
     };
     this.toolCalls.push(toolCall);
-    return toolCall;
+    return Promise.resolve(toolCall);
   });
 
   createWithSessionLimit = vi.fn(async (dto: Partial<AgentToolCall>) => ({
@@ -214,20 +194,23 @@ class InMemoryAgentToolCallRepository {
     toolCall: await this.create(dto),
   }));
 
-  getBySessionId = vi.fn(async (sessionId: string) =>
-    this.toolCalls
-      .filter((toolCall) => toolCall.sessionId === sessionId)
-      .toSorted(
-        (first, second) => second.startedAt.getTime() - first.startedAt.getTime() || second.id.localeCompare(first.id),
-      ),
+  getBySessionId = vi.fn((sessionId: string) =>
+    Promise.resolve(
+      this.toolCalls
+        .filter((toolCall) => toolCall.sessionId === sessionId)
+        .toSorted(
+          (first, second) =>
+            second.startedAt.getTime() - first.startedAt.getTime() || second.id.localeCompare(first.id),
+        ),
+    ),
   );
 
-  getByIdForSession = vi.fn(async (sessionId: string, id: string) =>
-    this.toolCalls.find((toolCall) => toolCall.sessionId === sessionId && toolCall.id === id),
+  getByIdForSession = vi.fn((sessionId: string, id: string) =>
+    Promise.resolve(this.toolCalls.find((toolCall) => toolCall.sessionId === sessionId && toolCall.id === id)),
   );
 
-  getCountedAssetCountBySession = vi.fn(async () => 0);
-  getCountedAssetCountBySessionAndDataClass = vi.fn(async () => 0);
+  getCountedAssetCountBySession = vi.fn(() => Promise.resolve(0));
+  getCountedAssetCountBySessionAndDataClass = vi.fn(() => Promise.resolve(0));
 
   transition = vi.fn(
     async (sessionId: string, id: string, expectedStatus: AgentToolCallStatus, dto: Partial<AgentToolCall>) => {
@@ -235,7 +218,7 @@ class InMemoryAgentToolCallRepository {
         (toolCall) => toolCall.sessionId === sessionId && toolCall.id === id && toolCall.status === expectedStatus,
       );
       if (index === -1) {
-        return undefined;
+        return;
       }
 
       const updated = { ...this.toolCalls[index], ...dto };
@@ -252,146 +235,150 @@ class InMemoryAgentToolCallRepository {
   );
 }
 
-describe('Pi agent runner flow harness', () => {
-  const setup = () => {
-    const auth = AuthFactory.create();
-    const sessions = new InMemoryAgentSessionRepository();
-    const messages = new InMemoryAgentMessageRepository();
-    const toolCalls = new InMemoryAgentToolCallRepository();
-    const websocketEvents: Array<{ userId: string; event: Record<string, unknown> }> = [];
-    const runnerResumeBodies: unknown[] = [];
+const setup = () => {
+  const auth = AuthFactory.create();
+  const sessions = new InMemoryAgentSessionRepository();
+  const messages = new InMemoryAgentMessageRepository();
+  const toolCalls = new InMemoryAgentToolCallRepository();
+  const websocketEvents: Array<{ userId: string; event: Record<string, unknown> }> = [];
+  const runnerResumeBodies: unknown[] = [];
 
-    let toolService: AgentToolService;
-    let resumeMode: 'success' | 'error' = 'success';
+  const toolServiceContainer = {} as { current: AgentToolService };
+  let resumeMode: 'success' | 'error' = 'success';
 
-    const runnerRepository = {
-      createSession: vi.fn(async () => ({
+  const runnerRepository = {
+    createSession: vi.fn(() =>
+      Promise.resolve({
         runnerSessionId: 'runner-session-1',
         capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['gallery'], models: [] },
-      })),
-      streamMessage: vi.fn(async function* ({
-        body,
-      }: {
-        body: { gallerySessionId: string; content: AgentMessageContent };
-      }) {
-        const result = await toolService.listAlbums(auth, body.gallerySessionId, {});
-        if (result.status !== 'approval-required') {
-          throw new Error('Expected listAlbums to request approval');
-        }
+      }),
+    ),
+    streamMessage: vi.fn(async function* ({
+      body,
+    }: {
+      body: { gallerySessionId: string; content: AgentMessageContent };
+    }) {
+      const result = await toolServiceContainer.current.listAlbums(auth, body.gallerySessionId, {});
+      if (result.status !== 'approval-required') {
+        throw new Error('Expected listAlbums to request approval');
+      }
 
+      yield {
+        type: 'tool-approval-needed',
+        sessionId: body.gallerySessionId,
+        runnerSessionId: 'runner-session-1',
+        toolCallId: result.toolCall.id,
+      };
+    }),
+    streamResume: vi.fn(async function* ({ body }: { body: { gallerySessionId: string } }) {
+      await Promise.resolve();
+      runnerResumeBodies.push(body);
+      if (resumeMode === 'error') {
         yield {
-          type: 'tool-approval-needed',
+          type: 'runner-error',
           sessionId: body.gallerySessionId,
           runnerSessionId: 'runner-session-1',
-          toolCallId: result.toolCall.id,
+          message: 'Provider refused the resumed request.',
         };
-      }),
-      streamResume: vi.fn(async function* ({ body }: { body: { gallerySessionId: string } }) {
-        runnerResumeBodies.push(body);
-        if (resumeMode === 'error') {
-          yield {
-            type: 'runner-error',
-            sessionId: body.gallerySessionId,
-            runnerSessionId: 'runner-session-1',
-            message: 'Provider refused the resumed request.',
-          };
-          return;
-        }
+        return;
+      }
 
-        yield {
-          type: 'assistant-message-delta',
-          sessionId: body.gallerySessionId,
-          runnerSessionId: 'runner-session-1',
-          delta: 'I found one album.',
-          sequence: 1,
-        };
-        yield {
-          type: 'assistant-message-completed',
-          sessionId: body.gallerySessionId,
-          runnerSessionId: 'runner-session-1',
-          providerMessageId: 'provider-message-1',
-          content: { blocks: [{ type: 'text', text: 'I found one album.' }] },
-        };
-      }),
-    };
-
-    const configRepository = {
-      getEnv: vi.fn(() => ({
-        agent: {
-          runnerUrl: 'http://agent-runner:4477',
-          mcpGatewayUrl: 'http://gallery:2283/api/agent/internal/mcp/',
-          runnerHealthTimeoutMs: 3000,
-          runnerMessageStreamTimeoutMs: 120_000,
-        },
-      })),
-    };
-    const websocketRepository = {
-      clientSend: vi.fn((_eventName: string, userId: string, event: Record<string, unknown>) => {
-        websocketEvents.push({ userId, event });
-      }),
-    };
-    const toolTokenService = { create: vi.fn(() => 'runner-tool-token') };
-
-    const runnerService = new AgentRunnerService(
-      configRepository as unknown as ConfigRepository,
-      runnerRepository as unknown as AgentRunnerRepository,
-      messages as unknown as AgentMessageRepository,
-      sessions as unknown as AgentSessionRepository,
-      websocketRepository as unknown as WebsocketRepository,
-      toolTokenService as unknown as AgentRunnerToolTokenService,
-    );
-
-    const credential = {
-      id: '00000000-0000-4000-8000-000000000201',
-      providerType: AgentProviderType.OpenAI,
-      label: 'OpenAI personal',
-      baseUrl: null,
-      models: ['gpt-5.1'],
-      defaultModel: 'gpt-5.1',
-      createdAt: now(),
-      updatedAt: now(),
-      lastUsedAt: null,
-    };
-    const credentialService = {
-      getById: vi.fn(async () => credential),
-      getSecret: vi.fn(async () => 'sk-test'),
-    };
-
-    const sessionService = new AgentSessionService(
-      sessions as unknown as AgentSessionRepository,
-      credentialService as unknown as AgentProviderCredentialService,
-      runnerService,
-    );
-    const messageService = new AgentMessageService(
-      messages as unknown as AgentMessageRepository,
-      sessions as unknown as AgentSessionRepository,
-      runnerService,
-    );
-    const albumRepository = { getAgentAlbums: vi.fn(async () => [album(auth.user.id)]) };
-    toolService = new AgentToolService(
-      {} as AccessRepository,
-      {} as AssetRepository,
-      albumRepository as unknown as AlbumRepository,
-      sessions as unknown as AgentSessionRepository,
-      toolCalls as unknown as AgentToolCallRepository,
-      runnerService,
-    );
-
-    return {
-      auth,
-      messageService,
-      runnerRepository,
-      runnerResumeBodies,
-      sessionService,
-      sessions,
-      setResumeMode: (mode: 'success' | 'error') => {
-        resumeMode = mode;
-      },
-      toolService,
-      websocketEvents,
-    };
+      yield {
+        type: 'assistant-message-delta',
+        sessionId: body.gallerySessionId,
+        runnerSessionId: 'runner-session-1',
+        delta: 'I found one album.',
+        sequence: 1,
+      };
+      yield {
+        type: 'assistant-message-completed',
+        sessionId: body.gallerySessionId,
+        runnerSessionId: 'runner-session-1',
+        providerMessageId: 'provider-message-1',
+        content: { blocks: [{ type: 'text', text: 'I found one album.' }] },
+      };
+    }),
   };
 
+  const configRepository = {
+    getEnv: vi.fn(() => ({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        mcpGatewayUrl: 'http://gallery:2283/api/agent/internal/mcp/',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    })),
+  };
+  const websocketRepository = {
+    clientSend: vi.fn((_eventName: string, userId: string, event: Record<string, unknown>) => {
+      websocketEvents.push({ userId, event });
+    }),
+  };
+  const toolTokenService = { create: vi.fn(() => 'runner-tool-token') };
+
+  const runnerService = new AgentRunnerService(
+    configRepository as unknown as ConfigRepository,
+    runnerRepository as unknown as AgentRunnerRepository,
+    messages as unknown as AgentMessageRepository,
+    sessions as unknown as AgentSessionRepository,
+    websocketRepository as unknown as WebsocketRepository,
+    toolTokenService as unknown as AgentRunnerToolTokenService,
+  );
+
+  const credential = {
+    id: '00000000-0000-4000-8000-000000000201',
+    providerType: AgentProviderType.OpenAI,
+    label: 'OpenAI personal',
+    baseUrl: null,
+    models: ['gpt-5.1'],
+    defaultModel: 'gpt-5.1',
+    createdAt: now(),
+    updatedAt: now(),
+    lastUsedAt: null,
+  };
+  const credentialService = {
+    getById: vi.fn(() => Promise.resolve(credential)),
+    getSecret: vi.fn(() => Promise.resolve('sk-test')),
+  };
+
+  const sessionService = new AgentSessionService(
+    sessions as unknown as AgentSessionRepository,
+    credentialService as unknown as AgentProviderCredentialService,
+    runnerService,
+  );
+  const messageService = new AgentMessageService(
+    messages as unknown as AgentMessageRepository,
+    sessions as unknown as AgentSessionRepository,
+    runnerService,
+  );
+  const albumRepository = { getAgentAlbums: vi.fn(() => Promise.resolve([album(auth.user.id)])) };
+  const toolService = new AgentToolService(
+    {} as AccessRepository,
+    {} as AssetRepository,
+    albumRepository as unknown as AlbumRepository,
+    sessions as unknown as AgentSessionRepository,
+    toolCalls as unknown as AgentToolCallRepository,
+    runnerService,
+  );
+  toolServiceContainer.current = toolService;
+
+  return {
+    auth,
+    messageService,
+    runnerRepository,
+    runnerResumeBodies,
+    sessionService,
+    sessions,
+    setResumeMode: (mode: 'success' | 'error') => {
+      resumeMode = mode;
+    },
+    toolService,
+    websocketEvents,
+  };
+};
+
+describe('Pi agent runner flow harness', () => {
   it('persists and resumes the approval flow from reloadable state', async () => {
     const harness = setup();
     const session = await harness.sessionService.create(harness.auth, {
@@ -409,10 +396,12 @@ describe('Pi agent runner flow harness', () => {
     });
 
     expect(userMessage.role).toBe(AgentMessageRole.User);
-    expect(await harness.messageService.getMessages(harness.auth, session.id)).toHaveLength(1);
+    const initialMessages = await harness.messageService.getMessages(harness.auth, session.id);
+    expect(initialMessages).toHaveLength(1);
 
     await waitFor(async () => {
       const pendingCalls = await harness.toolService.getToolCalls(harness.auth, session.id);
+      const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
       expect(pendingCalls).toEqual([
         expect.objectContaining({
           toolName: AgentToolName.ListAlbums,
@@ -420,9 +409,7 @@ describe('Pi agent runner flow harness', () => {
           requestSummary: 'List albums',
         }),
       ]);
-      expect((await harness.sessions.getById(harness.auth.user.id, session.id))?.status).toBe(
-        AgentSessionStatus.WaitingForToolApproval,
-      );
+      expect(reloadedSession?.status).toBe(AgentSessionStatus.WaitingForToolApproval);
     });
 
     expect(harness.websocketEvents).toEqual([
@@ -451,6 +438,8 @@ describe('Pi agent runner flow harness', () => {
 
     await waitFor(async () => {
       const messages = await harness.messageService.getMessages(harness.auth, session.id);
+      const toolCalls = await harness.toolService.getToolCalls(harness.auth, session.id);
+      const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
       expect(messages).toEqual([
         expect.objectContaining({ role: AgentMessageRole.User }),
         expect.objectContaining({
@@ -459,7 +448,7 @@ describe('Pi agent runner flow harness', () => {
           content: { blocks: [{ type: 'text', text: 'I found one album.' }] },
         }),
       ]);
-      expect(await harness.toolService.getToolCalls(harness.auth, session.id)).toEqual([
+      expect(toolCalls).toEqual([
         expect.objectContaining({
           id: pendingToolCall.id,
           status: AgentToolCallStatus.Completed,
@@ -468,9 +457,7 @@ describe('Pi agent runner flow harness', () => {
           albumCount: 1,
         }),
       ]);
-      expect((await harness.sessions.getById(harness.auth.user.id, session.id))?.status).toBe(
-        AgentSessionStatus.Running,
-      );
+      expect(reloadedSession?.status).toBe(AgentSessionStatus.Running);
     });
 
     expect(harness.websocketEvents.map(({ event }) => event.type)).toEqual([
@@ -501,7 +488,8 @@ describe('Pi agent runner flow harness', () => {
       content: { blocks: [{ type: 'text', text: 'List my albums.' }] },
     });
     await waitFor(async () => {
-      expect(await harness.toolService.getToolCalls(harness.auth, session.id)).toHaveLength(1);
+      const toolCalls = await harness.toolService.getToolCalls(harness.auth, session.id);
+      expect(toolCalls).toHaveLength(1);
     });
 
     const [pendingToolCall] = await harness.toolService.getToolCalls(harness.auth, session.id);
@@ -510,10 +498,12 @@ describe('Pi agent runner flow harness', () => {
     });
 
     await waitFor(async () => {
-      expect((await harness.sessions.getById(harness.auth.user.id, session.id))?.status).toBe(
-        AgentSessionStatus.Interrupted,
-      );
-      expect(await harness.toolService.getToolCalls(harness.auth, session.id)).toEqual([
+      const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
+      const toolCalls = await harness.toolService.getToolCalls(harness.auth, session.id);
+      const messages = await harness.messageService.getMessages(harness.auth, session.id);
+
+      expect(reloadedSession?.status).toBe(AgentSessionStatus.Interrupted);
+      expect(toolCalls).toEqual([
         expect.objectContaining({
           id: pendingToolCall.id,
           status: AgentToolCallStatus.Completed,
@@ -521,9 +511,7 @@ describe('Pi agent runner flow harness', () => {
         }),
       ]);
       expect(harness.websocketEvents.map(({ event }) => event.type)).toContain('runner-error');
-      expect(await harness.messageService.getMessages(harness.auth, session.id)).toEqual([
-        expect.objectContaining({ role: AgentMessageRole.User }),
-      ]);
+      expect(messages).toEqual([expect.objectContaining({ role: AgentMessageRole.User })]);
     });
   });
 });
