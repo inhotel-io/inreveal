@@ -244,6 +244,7 @@ export class PersonService extends BaseService {
         }
 
         await this.personRepository.reassignFace(face.id, personId);
+        await this.personFaceSuggestionRepository.resolveAssignedFace(face.id);
         await this.replaceFaceIdentity(personId, face.id, 'manual');
       }
 
@@ -263,6 +264,7 @@ export class PersonService extends BaseService {
     const person = await this.findOrFail(personId);
 
     await this.personRepository.reassignFace(face.id, personId);
+    await this.personFaceSuggestionRepository.resolveAssignedFace(face.id);
     await this.replaceFaceIdentity(personId, face.id, 'manual');
     if (person.faceAssetId === null) {
       await this.createNewFeaturePhoto([person.id]);
