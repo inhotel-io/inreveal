@@ -372,6 +372,7 @@ DELETE FROM "kysely_migrations"
    '1778700000000-AddSharedSpaceFaceMatchBackfillTarget',
    '1778800000000-ReconcileFaceIdentityIndexOverrides',
    '1778800000000-TrimSpacePersonNameIndex',
+   '1778900000000-AddPersonFaceSuggestion',
    '1779000000000-AddSharedSpaceAlbumUserTables',
    '1779100000000-AddSharedSpaceAlbumCreateSideTriggers',
    '1779200000000-AddSharedSpaceAlbumDeleteSideTriggers',
@@ -386,7 +387,6 @@ DELETE FROM "kysely_migrations"
    '1783100000000-AddAlbumSpaceAssetSyncAndAudit',
    '1783628194057-DisablePostgresJit',
    '1783700000000-FixSharedSpaceMemberJoinGrantCreateId',
-   '1778800000000-AddPersonFaceSuggestion',
    '1784800000000-RepairSharedSpaceAlbumGrantDrift',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
