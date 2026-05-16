@@ -25,6 +25,11 @@ services:
       IMMICH_ENV: testing
       IMMICH_PORT: '2285'
       IMMICH_IGNORE_MOUNT_CHECK_ERRORS: 'true'
+      IMMICH_AGENT_SECRET_KEY: e2e-agent-secret-key-change-me
+      IMMICH_AGENT_RUNNER_URL: http://agent-runner:4477
+      IMMICH_AGENT_TOOL_GATEWAY_URL: http://immich-server:2285/api/agent/internal/tools
+      IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS: '5000'
+      IMMICH_AGENT_RUNNER_MESSAGE_STREAM_TIMEOUT_MS: '30000'
     volumes:
       - ./test-assets:/test-assets
     depends_on:
@@ -32,8 +37,22 @@ services:
         condition: service_started
       database:
         condition: service_healthy
+      agent-runner:
+        condition: service_started
     ports:
       - 2285:2285
+
+  agent-runner:
+    container_name: immich-e2e-agent-runner
+    build:
+      context: ../
+      dockerfile: agent-runner/Dockerfile
+    environment:
+      HOST: 0.0.0.0
+      PORT: 4477
+      GALLERY_AGENT_RUNNER_RUNTIME: e2e
+    ports:
+      - 4477:4477
 
   redis:
     container_name: immich-e2e-redis
