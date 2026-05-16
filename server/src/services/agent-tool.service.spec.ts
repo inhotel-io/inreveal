@@ -2219,6 +2219,7 @@ describe(AgentToolService.name, () => {
     sessionRepository.getById.mockResolvedValue(session);
     toolCallRepository.getByIdForSession.mockResolvedValue(pending);
     toolCallRepository.transition.mockResolvedValue(approved);
+    sessionRepository.markInterruptedFromActive.mockResolvedValue({} as never);
     agentRunnerService.resumeAfterToolApproval.mockRejectedValue(new Error('Agent session already has a message in progress'));
 
     await sut.approveToolCall(auth, session.id, pending.id, { decision: AgentToolApprovalDecision.Approved });
