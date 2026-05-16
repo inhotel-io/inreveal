@@ -1,6 +1,8 @@
 import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import { AgentOperationPlanController } from 'src/controllers/agent-operation-plan.controller';
 import {
+  AgentOperationPlanApplyRequestDto,
+  AgentOperationPlanApplyResponseDto,
   AgentOperationPlanResponseDto,
   AgentOperationPlanSummaryRequestDto,
   AgentOperationPlanToolResponseDto,
@@ -8,6 +10,7 @@ import {
   AgentReviseAlbumOperationsDto,
 } from 'src/dtos/agent-operation.dto';
 import {
+  AgentOperationApplyStatus,
   AgentOperationPlanStatus,
   AgentOperationRiskLevel,
   AgentOperationStatus,
@@ -24,7 +27,7 @@ import { automock, ControllerContext, controllerSetup } from 'test/utils';
 describe(AgentOperationPlanController.name, () => {
   let ctx: ControllerContext;
   const service = automock(AgentOperationPlanService, {
-    args: [{} as never, {} as never, {} as never, {} as never, {} as never, {} as never],
+    args: [{} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never],
     strict: false,
   });
   const auth = AuthFactory.create();
@@ -89,6 +92,7 @@ describe(AgentOperationPlanController.name, () => {
     ['proposeAlbumOperations', AgentOperationPlanToolResponseDto, 'AgentOperationPlanToolResponseDto', 201],
     ['reviseProposedOperations', AgentOperationPlanToolResponseDto, 'AgentOperationPlanToolResponseDto', 201],
     ['summarizePlan', AgentOperationPlanToolResponseDto, 'AgentOperationPlanToolResponseDto', 201],
+    ['applyApprovedOperations', AgentOperationPlanApplyResponseDto, 'AgentOperationPlanApplyResponseDto', 201],
   ] as const)('documents %s with a typed response DTO', (methodName, responseDto, schemaName, statusCode) => {
     const responses = Reflect.getMetadata(
       DECORATORS.API_RESPONSE,
@@ -275,6 +279,59 @@ describe(AgentOperationPlanController.name, () => {
 
       expect(status).toBe(400);
       expect(service.summarizePlan).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /agent/sessions/:id/operation-plan/:planId/apply', () => {
+    const dto: AgentOperationPlanApplyRequestDto = { operationIds: [operationId] };
+
+    it('applies approved operations with update permission and serializes dates', async () => {
+      service.applyApprovedOperations.mockResolvedValue({
+        status: AgentOperationApplyStatus.Applied,
+        plan: {
+          ...plan,
+          status: AgentOperationPlanStatus.Applied,
+          operations: [{ ...plan.operations[0], status: AgentOperationStatus.Applied, result: { albumId: factory.uuid() } }],
+        },
+        appliedOperationIds: [operationId],
+        skippedOperationIds: [],
+        failedOperationIds: [],
+        summary: 'Applied 1 operation(s), skipped 0, failed 0.',
+      });
+
+      const { status, body } = await request(ctx.getHttpServer())
+        .post(`/agent/sessions/${sessionId}/operation-plan/${planId}/apply`)
+        .send(dto);
+
+      expect(status).toBe(201);
+      expectPermission(Permission.AgentSessionUpdate);
+      expect(service.applyApprovedOperations).toHaveBeenCalledWith(auth, sessionId, planId, dto);
+      expect(body.plan.createdAt).toBe(createdAt.toISOString());
+      expect(body.plan.operations[0].createdAt).toBe(createdAt.toISOString());
+    });
+
+    it('validates apply params and body before calling the service', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/agent/sessions/${sessionId}/operation-plan/not-a-uuid/apply`)
+        .send({ operationIds: [] });
+
+      expect(status).toBe(400);
+      expect(service.applyApprovedOperations).not.toHaveBeenCalled();
+    });
+
+    it('returns the apply response directly from the controller method', async () => {
+      const response = {
+        status: AgentOperationApplyStatus.Applied,
+        plan: { ...plan, status: AgentOperationPlanStatus.Applied },
+        appliedOperationIds: [operationId],
+        skippedOperationIds: [],
+        failedOperationIds: [],
+        summary: 'Applied 1 operation(s), skipped 0, failed 0.',
+      };
+      service.applyApprovedOperations.mockResolvedValue(response);
+      const controller = new AgentOperationPlanController(service);
+
+      await expect(controller.applyApprovedOperations(auth, { id: sessionId, planId }, dto)).resolves.toBe(response);
     });
   });
 });
