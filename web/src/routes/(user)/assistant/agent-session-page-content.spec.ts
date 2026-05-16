@@ -30,6 +30,10 @@ vi.mock('svelte-i18n', () => {
     assistant_approval_mode_strict: 'Strict',
     assistant_chat: 'Chat',
     assistant_configured: 'Configured',
+    assistant_add_api_key: 'Add API key',
+    assistant_credentials_empty_description:
+      'Save a provider key once, add the models available for that key, then start a chat from here.',
+    assistant_credentials_empty_title: 'Connect a model provider',
     assistant_created_session: 'Created session',
     assistant_healthy: 'Healthy',
     assistant_message: 'Message',
@@ -38,6 +42,7 @@ vi.mock('svelte-i18n', () => {
     assistant_model: 'Model',
     assistant_no: 'no',
     assistant_no_credentials: 'Add an agent provider credential before starting a session.',
+    assistant_no_credentials_setup: 'Connect a model provider before starting a session.',
     assistant_operation_apply_applying: 'Applying operations',
     assistant_operation_apply_error: 'Unable to apply proposed operations',
     assistant_operation_apply_selected: 'Apply {count} selected',
@@ -81,12 +86,25 @@ vi.mock('./agent-session-ui', () => ({
   DEFAULT_AGENT_APPROVAL_MODE: AgentApprovalMode.Strict,
   DEFAULT_AGENT_PERMISSION_PRESET: AgentPermissionPreset.Careful,
   approvalModeOptions: [
-    { value: AgentApprovalMode.Strict, labelKey: 'assistant_approval_mode_strict' },
-    { value: AgentApprovalMode.AskOnEscalation, labelKey: 'assistant_approval_mode_ask_on_escalation' },
-    { value: AgentApprovalMode.PlanOnly, labelKey: 'assistant_approval_mode_plan_only' },
+    {
+      value: AgentApprovalMode.Strict,
+      labelKey: 'assistant_approval_mode_strict',
+      descriptionKey: 'assistant_approval_mode_strict_description',
+    },
+    {
+      value: AgentApprovalMode.AskOnEscalation,
+      labelKey: 'assistant_approval_mode_ask_on_escalation',
+      descriptionKey: 'assistant_approval_mode_ask_on_escalation_description',
+    },
+    {
+      value: AgentApprovalMode.PlanOnly,
+      labelKey: 'assistant_approval_mode_plan_only',
+      descriptionKey: 'assistant_approval_mode_plan_only_description',
+    },
     {
       value: AgentApprovalMode.DangerouslySkipPermissions,
       labelKey: 'assistant_approval_mode_dangerously_skip_permissions',
+      descriptionKey: 'assistant_approval_mode_dangerously_skip_permissions_description',
     },
   ],
   getApprovalModeLabelKey: (mode: AgentApprovalMode) => `approval:${mode}`,
@@ -95,9 +113,21 @@ vi.mock('./agent-session-ui', () => ({
   getPermissionPresetLabelKey: (preset: AgentPermissionPreset) => `preset:${preset}`,
   getSessionStatusLabelKey: (status: AgentSessionStatus) => `status:${status}`,
   permissionPresetOptions: [
-    { value: AgentPermissionPreset.Careful, labelKey: 'assistant_permission_preset_careful' },
-    { value: AgentPermissionPreset.VisualOrganizer, labelKey: 'assistant_permission_preset_visual_organizer' },
-    { value: AgentPermissionPreset.LocalPowerUser, labelKey: 'assistant_permission_preset_local_power_user' },
+    {
+      value: AgentPermissionPreset.Careful,
+      labelKey: 'assistant_permission_preset_careful',
+      descriptionKey: 'assistant_permission_preset_careful_description',
+    },
+    {
+      value: AgentPermissionPreset.VisualOrganizer,
+      labelKey: 'assistant_permission_preset_visual_organizer',
+      descriptionKey: 'assistant_permission_preset_visual_organizer_description',
+    },
+    {
+      value: AgentPermissionPreset.LocalPowerUser,
+      labelKey: 'assistant_permission_preset_local_power_user',
+      descriptionKey: 'assistant_permission_preset_local_power_user_description',
+    },
   ],
 }));
 
@@ -196,6 +226,7 @@ const makeMessage = (id: string, sessionId: string, text: string): AgentMessageR
 describe(AgentSessionPageContent.name, () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sdkMock.validateAgentSession.mockResolvedValue(undefined as never);
     sdkMock.createAgentSession.mockResolvedValue(createdSession);
     sdkMock.getAgentSessionMessages.mockResolvedValue([]);
     websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
@@ -283,7 +314,9 @@ describe(AgentSessionPageContent.name, () => {
   it('renders setup disabled when there are no credentials', () => {
     render(AgentSessionPageContent, { props: { runnerStatus: healthyRunner, credentials: [] } });
 
-    expect(screen.getByText('Add an agent provider credential before starting a session.')).toBeInTheDocument();
+    expect(screen.getByText('Connect a model provider before starting a session.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Connect a model provider' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add API key' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start session' })).toBeDisabled();
   });
 });

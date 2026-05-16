@@ -1,7 +1,7 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
-import { AgentSessionCreateDto, AgentSessionResponseDto } from 'src/dtos/agent-session.dto';
+import { AgentSessionCreateDto, AgentSessionResponseDto, AgentSessionUpdateDto } from 'src/dtos/agent-session.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { ApiTag, Permission } from 'src/enum';
 import { Auth, Authenticated } from 'src/middleware/auth.guard';
@@ -25,6 +25,19 @@ export class AgentSessionController {
     return this.service.create(auth, dto);
   }
 
+  @Post('validate')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Authenticated({ permission: Permission.AgentSessionCreate })
+  @Endpoint({
+    summary: 'Validate an agent session setup',
+    description:
+      'Validate the selected provider credential and model with the configured runner before creating a persisted AI agent session.',
+    history: new HistoryBuilder().added('v2.7.5').alpha('v2.7.5'),
+  })
+  validateAgentSession(@Auth() auth: AuthDto, @Body() dto: AgentSessionCreateDto): Promise<void> {
+    return this.service.validateCreate(auth, dto);
+  }
+
   @Get()
   @Authenticated({ permission: Permission.AgentSessionRead })
   @Endpoint({
@@ -45,6 +58,33 @@ export class AgentSessionController {
   })
   getAgentSession(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto): Promise<AgentSessionResponseDto> {
     return this.service.getById(auth, id);
+  }
+
+  @Put(':id')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @Endpoint({
+    summary: 'Update an agent session',
+    description: 'Update mutable metadata for an AI agent session owned by the current user.',
+    history: new HistoryBuilder().added('v2.7.5').alpha('v2.7.5'),
+  })
+  updateAgentSession(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: AgentSessionUpdateDto,
+  ): Promise<AgentSessionResponseDto> {
+    return this.service.update(auth, id, dto);
+  }
+
+  @Delete(':id')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Endpoint({
+    summary: 'Delete an agent session',
+    description: 'Delete an AI agent session owned by the current user.',
+    history: new HistoryBuilder().added('v2.7.5').alpha('v2.7.5'),
+  })
+  deleteAgentSession(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto): Promise<void> {
+    return this.service.delete(auth, id);
   }
 
   @Post(':id/cancel')

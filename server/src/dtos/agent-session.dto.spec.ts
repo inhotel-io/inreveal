@@ -1,4 +1,4 @@
-import { AgentPermissionPlanSchema, AgentSessionCreateDto } from 'src/dtos/agent-session.dto';
+import { AgentPermissionPlanSchema, AgentSessionCreateDto, AgentSessionUpdateDto } from 'src/dtos/agent-session.dto';
 import { AgentApprovalMode, AgentPermissionPreset } from 'src/enum';
 import type { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import type z from 'zod';
@@ -375,5 +375,33 @@ describe('AgentSessionCreateDto', () => {
       ['initialContext'],
       'initialContext must be 16 KiB or less',
     );
+  });
+});
+
+describe('AgentSessionUpdateDto', () => {
+  it('accepts a trimmed title and clearing the title', () => {
+    expect(AgentSessionUpdateDto.schema.safeParse({ title: '  Album cleanup  ' })).toMatchObject({
+      success: true,
+      data: { title: 'Album cleanup' },
+    });
+    expect(AgentSessionUpdateDto.schema.safeParse({ title: null })).toMatchObject({
+      success: true,
+      data: { title: null },
+    });
+  });
+
+  it.each([
+    { name: 'missing', input: {}, message: 'Invalid input: expected string, received undefined' },
+    { name: 'blank', input: { title: '   ' }, message: 'Too small: expected string to have >=1 characters' },
+    { name: 'too long', input: { title: 'x'.repeat(121) }, message: 'Too big: expected string to have <=120 characters' },
+  ])('rejects $name title updates', ({ input, message }) => {
+    const result = AgentSessionUpdateDto.schema.safeParse(input);
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    expect(result.error.issues).toEqual([expect.objectContaining({ path: ['title'], message })]);
   });
 });

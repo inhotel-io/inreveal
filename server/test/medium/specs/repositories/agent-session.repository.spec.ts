@@ -278,6 +278,69 @@ describe(AgentSessionRepository.name, () => {
     });
   });
 
+  it('updates title metadata by owner without mutating immutable snapshots', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { user: otherUser } = await ctx.newUser();
+    const session = await sut.create({
+      userId: user.id,
+      providerCredentialId: null,
+      credentialSnapshot,
+      modelSnapshot,
+      permissionPreset: AgentPermissionPreset.Careful,
+      permissionPlanSnapshot,
+      approvalMode: AgentApprovalMode.Strict,
+      runnerEndpoint: null,
+      runnerSessionId: null,
+      runnerCapabilitiesSnapshot: null,
+      initialContextSnapshot,
+    });
+
+    await expect(sut.updateMetadata(otherUser.id, session.id, { title: 'Wrong owner' })).rejects.toThrow();
+
+    const renamed = await sut.updateMetadata(user.id, session.id, { title: 'Album cleanup' });
+
+    expect(renamed).toMatchObject({
+      id: session.id,
+      title: 'Album cleanup',
+      credentialSnapshot,
+      modelSnapshot,
+      permissionPlanSnapshot,
+      initialContextSnapshot,
+      status: session.status,
+    });
+
+    const cleared = await sut.updateMetadata(user.id, session.id, { title: null });
+
+    expect(cleared).toMatchObject({ id: session.id, title: null });
+  });
+
+  it('deletes sessions by owner and reports whether a row was removed', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { user: otherUser } = await ctx.newUser();
+    const session = await sut.create({
+      userId: user.id,
+      providerCredentialId: null,
+      credentialSnapshot,
+      modelSnapshot,
+      permissionPreset: AgentPermissionPreset.Careful,
+      permissionPlanSnapshot,
+      approvalMode: AgentApprovalMode.Strict,
+      runnerEndpoint: null,
+      runnerSessionId: null,
+      runnerCapabilitiesSnapshot: null,
+      initialContextSnapshot,
+    });
+
+    await expect(sut.delete(otherUser.id, session.id)).resolves.toBe(false);
+    await expect(sut.getById(user.id, session.id)).resolves.toMatchObject({ id: session.id });
+
+    await expect(sut.delete(user.id, session.id)).resolves.toBe(true);
+    await expect(sut.getById(user.id, session.id)).resolves.toBeUndefined();
+    await expect(sut.delete(user.id, session.id)).resolves.toBe(false);
+  });
+
   it('conditionally cancels only when current status is cancellable', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
