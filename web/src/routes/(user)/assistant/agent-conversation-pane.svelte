@@ -169,6 +169,7 @@
         {terminalActionLabel}
         onTerminalAction={terminalActionLabel ? onNewChat : undefined}
         onMessageSent={refreshSelectedSession}
+        onRunnerError={refreshSelectedSession}
         {onTitleDiscovered}
       />
     {/key}

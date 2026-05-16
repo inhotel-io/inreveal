@@ -449,6 +449,44 @@ describe(AgentConversationPane.name, () => {
     expect(onSessionUpdated).not.toHaveBeenCalled();
   });
 
+  it('refreshes the selected session when a runner error arrives after approval resume', async () => {
+    const session = makeSession({ status: AgentSessionStatus.Running });
+    const interruptedSession = makeSession({ id: session.id, status: AgentSessionStatus.Interrupted });
+    const onSessionUpdated = vi.fn();
+    const handlers: Parameters<typeof websocketMock.websocketEvents.on>[1][] = [];
+
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handlers.push(nextHandler);
+      return vi.fn();
+    });
+    sdkMock.getAgentSession.mockResolvedValue(interruptedSession);
+
+    render(AgentConversationPane, {
+      props: {
+        session,
+        title: null,
+        onNewChat: vi.fn(),
+        onTitleDiscovered: vi.fn(),
+        onSessionUpdated,
+      },
+    });
+
+    await screen.findByRole('textbox', { name: 'Message' });
+
+    const event = {
+      type: 'runner-error',
+      sessionId: session.id,
+      message: 'The assistant runner stopped while processing the message.',
+      createdAt: '2026-05-14T00:00:02.000Z',
+    } as const;
+    for (const handler of handlers) {
+      handler(event);
+    }
+
+    await waitFor(() => expect(sdkMock.getAgentSession).toHaveBeenCalledWith({ id: session.id }));
+    expect(onSessionUpdated).toHaveBeenCalledWith(interruptedSession);
+  });
+
   it.each([
     [AgentSessionStatus.Completed, 'Completed'],
     [AgentSessionStatus.Cancelled, 'Cancelled'],

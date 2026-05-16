@@ -1109,10 +1109,11 @@ describe(AgentRunnerService.name, () => {
     expect(sut.isSessionDispatchActive(sessionId)).toBe(false);
   });
 
-  it('rejects runner resume while another dispatch is active for the same session', async () => {
+  it('waits for an active message dispatch before resuming after tool approval', async () => {
     const sessionId = '00000000-0000-4000-8000-000000000100';
     const runnerSessionId = 'runner-session-1';
     let releaseMessageStream: (() => void) | undefined;
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Continued.' }] };
 
     configRepository.getEnv.mockReturnValue({
       agent: {
@@ -1127,13 +1128,23 @@ describe(AgentRunnerService.name, () => {
           releaseMessageStream = resolve;
         });
         yield {
+          type: 'tool-approval-needed',
+          sessionId,
+          runnerSessionId,
+          toolCallId: '00000000-0000-4000-8000-000000000333',
+        };
+      })(),
+    );
+    agentRunnerRepository.streamResume.mockReturnValue(
+      streamEvents([
+        {
           type: 'assistant-message-completed',
           sessionId,
           runnerSessionId,
-          providerMessageId: 'provider-message-1',
-          content: { blocks: [{ type: 'text', text: 'Done.' }] },
-        };
-      })(),
+          providerMessageId: 'provider-message-2',
+          content: assistantContent,
+        },
+      ]),
     );
     messageRepository.create.mockResolvedValue(makeAssistantMessage({ sessionId }));
     sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
@@ -1148,21 +1159,33 @@ describe(AgentRunnerService.name, () => {
 
     await Promise.resolve();
 
-    await expect(
-      sut.resumeAfterToolApproval({
-        userId,
-        sessionId,
-        runnerSessionId,
-        toolCallId: '00000000-0000-4000-8000-000000000333',
-        approvalDecision: 'approved',
-        toolResult: { status: 'success' },
-      }),
-    ).rejects.toThrow('Agent session already has a message in progress');
+    const resume = sut.resumeAfterToolApproval({
+      userId,
+      sessionId,
+      runnerSessionId,
+      toolCallId: '00000000-0000-4000-8000-000000000333',
+      approvalDecision: 'approved',
+      toolResult: { status: 'success' },
+    });
 
+    await Promise.resolve();
     expect(agentRunnerRepository.streamResume).not.toHaveBeenCalled();
 
     releaseMessageStream?.();
     await activeSend;
+    await resume;
+
+    expect(agentRunnerRepository.streamResume).toHaveBeenCalledWith({
+      url: 'http://agent-runner:4477',
+      runnerSessionId,
+      timeoutMs: 120_000,
+      body: {
+        gallerySessionId: sessionId,
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+        approvalDecision: 'approved',
+        toolResult: { status: 'success' },
+      },
+    });
   });
 
   it('returns disabled status without probing when runner URL is missing', async () => {
