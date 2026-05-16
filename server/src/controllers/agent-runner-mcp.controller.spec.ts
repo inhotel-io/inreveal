@@ -234,6 +234,7 @@ describe(AgentRunnerMcpController.name, () => {
         { provide: AgentRunnerToolTokenService, useValue: tokenService },
         AgentMcpToolRegistryService,
         { provide: AgentToolService, useValue: realToolService },
+        { provide: AgentOperationPlanService, useValue: realOperationPlanService },
         AgentMcpService,
       ]);
       return () => realCtx.close();
@@ -242,6 +243,7 @@ describe(AgentRunnerMcpController.name, () => {
     beforeEach(() => {
       tokenService.resetAllMocks();
       realToolService.resetAllMocks();
+      realOperationPlanService.resetAllMocks();
       realCtx.reset();
       tokenService.verify.mockReturnValue({
         sessionId,
