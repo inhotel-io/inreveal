@@ -2179,9 +2179,7 @@ describe(AgentToolService.name, () => {
 
     sessionRepository.getById.mockResolvedValue(session);
     toolCallRepository.getByIdForSession.mockResolvedValueOnce(pending).mockResolvedValueOnce(approved);
-    toolCallRepository.transition
-      .mockResolvedValueOnce(approved)
-      .mockRejectedValueOnce(new Error('asset read failed'));
+    toolCallRepository.transition.mockResolvedValueOnce(approved).mockRejectedValueOnce(new Error('asset read failed'));
 
     await sut.approveToolCall(auth, session.id, pending.id, { decision: AgentToolApprovalDecision.Approved });
     await flushAsync();
@@ -2220,7 +2218,9 @@ describe(AgentToolService.name, () => {
     toolCallRepository.getByIdForSession.mockResolvedValue(pending);
     toolCallRepository.transition.mockResolvedValue(approved);
     sessionRepository.markInterruptedFromActive.mockResolvedValue({} as never);
-    agentRunnerService.resumeAfterToolApproval.mockRejectedValue(new Error('Agent session already has a message in progress'));
+    agentRunnerService.resumeAfterToolApproval.mockRejectedValue(
+      new Error('Agent session already has a message in progress'),
+    );
 
     await sut.approveToolCall(auth, session.id, pending.id, { decision: AgentToolApprovalDecision.Approved });
     await flushAsync();
