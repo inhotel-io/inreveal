@@ -71,6 +71,20 @@ export class AgentRunnerService {
     };
   }
 
+  async validateSession(input: AgentRunnerCreateSessionInput) {
+    const { userId: _userId, ...body } = input;
+    const { runnerUrl, runnerMessageStreamTimeoutMs } = this.configRepository.getEnv().agent;
+    if (!runnerUrl) {
+      throw new BadRequestException('Agent runner is not configured');
+    }
+
+    await this.agentRunnerRepository.validateSession({
+      url: runnerUrl,
+      timeoutMs: runnerMessageStreamTimeoutMs,
+      body: { ...body, toolGateway: null },
+    });
+  }
+
   async getStatus(): Promise<AgentRunnerStatusDto> {
     const { runnerUrl, runnerHealthTimeoutMs, mcpGatewayUrl } = this.configRepository.getEnv().agent;
     if (!runnerUrl || !mcpGatewayUrl) {

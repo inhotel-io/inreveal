@@ -565,6 +565,7 @@ export const columns = {
     'runnerCapabilitiesSnapshot',
     'status',
     'initialContextSnapshot',
+    'title',
     'createdAt',
     'updatedAt',
     'endedAt',
