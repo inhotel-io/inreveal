@@ -26470,6 +26470,13 @@
             "description": "Name of the model to use",
             "minLength": 1,
             "type": "string"
+          },
+          "suggestionMaxDistance": {
+            "description": "Maximum distance for face suggestions; 0 disables the suggestion feature",
+            "format": "double",
+            "maximum": 2,
+            "minimum": 0,
+            "type": "number"
           }
         },
         "required": [
@@ -26477,7 +26484,8 @@
           "maxDistance",
           "minFaces",
           "minScore",
-          "modelName"
+          "modelName",
+          "suggestionMaxDistance"
         ],
         "type": "object"
       },
