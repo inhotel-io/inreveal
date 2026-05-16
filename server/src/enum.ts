@@ -139,6 +139,12 @@ export enum AgentOperationPlanStatus {
   Cancelled = 'cancelled',
 }
 
+export enum AgentOperationApplyStatus {
+  Applied = 'applied',
+  PartiallyApplied = 'partially_applied',
+  Failed = 'failed',
+}
+
 export enum AgentOperationType {
   AlbumCreate = 'album.create',
   AlbumAddAssets = 'album.addAssets',

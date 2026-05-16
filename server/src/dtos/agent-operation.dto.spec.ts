@@ -1,4 +1,6 @@
 import {
+  AgentOperationPlanApplyRequestDto,
+  AgentOperationPlanApplyResponseDto,
   AgentOperationPlanParamsDto,
   AgentOperationPlanResponseDto,
   AgentOperationPlanSummaryRequestDto,
@@ -7,6 +9,7 @@ import {
   AgentReviseAlbumOperationsDto,
 } from 'src/dtos/agent-operation.dto';
 import {
+  AgentOperationApplyStatus,
   AgentOperationPlanStatus,
   AgentOperationRiskLevel,
   AgentOperationStatus,
@@ -387,6 +390,85 @@ describe('Agent operation DTOs', () => {
       expect(result.data.createdAt).toBe('2026-05-15T12:00:00.000Z');
       expect(result.data.operations[0].updatedAt).toBe('2026-05-15T12:00:01.000Z');
     }
+  });
+
+  it('accepts a unique apply operation id list', () => {
+    const firstOperationId = factory.uuid();
+    const secondOperationId = factory.uuid();
+
+    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+      operationIds: [firstOperationId, secondOperationId],
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({ operationIds: [firstOperationId, secondOperationId] });
+  });
+
+  it('rejects duplicate apply operation ids', () => {
+    const operationId = factory.uuid();
+
+    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+      operationIds: [operationId, operationId],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({ message: 'operationIds must be unique' }),
+    ]);
+  });
+
+  it('rejects an empty apply operation id list', () => {
+    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({ operationIds: [] });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts an apply response with per-operation result groups', () => {
+    const planId = factory.uuid();
+    const operationId = factory.uuid();
+    const createdAt = '2026-05-16T12:00:00.000Z';
+    const updatedAt = '2026-05-16T12:00:01.000Z';
+
+    const result = AgentOperationPlanApplyResponseDto.schema.safeParse({
+      status: AgentOperationApplyStatus.Applied,
+      plan: {
+        id: planId,
+        sessionId: factory.uuid(),
+        revision: 1,
+        status: AgentOperationPlanStatus.Applied,
+        summary: 'Portugal plan.',
+        operations: [
+          {
+            id: operationId,
+            planId,
+            type: AgentOperationType.AlbumCreate,
+            summary: 'Create Portugal.',
+            targetKind: AgentOperationTargetKind.NewAlbum,
+            targetId: null,
+            temporaryTargetId: 'tmp-portugal',
+            assetIds: [],
+            payload: { albumName: 'Portugal' },
+            dependencyIds: [],
+            riskLevel: AgentOperationRiskLevel.Low,
+            enabled: true,
+            status: AgentOperationStatus.Applied,
+            result: { albumId: factory.uuid() },
+            error: null,
+            createdAt,
+            updatedAt,
+          },
+        ],
+        createdAt,
+        updatedAt,
+      },
+      appliedOperationIds: [operationId],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 1 operation.',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.plan.operations[0].createdAt).toEqual(new Date(createdAt));
   });
 
   it('serializes planning tool responses with no plan as null', () => {
