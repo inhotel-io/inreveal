@@ -139,9 +139,9 @@ describe(AgentSessionChatPanel.name, () => {
 
     render(AgentSessionChatPanel, { props: { session } });
 
-    expect(await screen.findByRole('heading', { level: 3, name: 'Heading 1' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 4, name: 'Heading 2' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 5, name: 'Heading 3' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 3, name: 'Heading 1' })).toHaveClass('text-xl');
+    expect(screen.getByRole('heading', { level: 4, name: 'Heading 2' })).toHaveClass('text-lg');
+    expect(screen.getByRole('heading', { level: 5, name: 'Heading 3' })).toHaveClass('text-base');
     expect(screen.getByText('inline code').tagName).toBe('CODE');
   });
 
