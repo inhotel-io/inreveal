@@ -5,6 +5,7 @@
   import {
     AgentMessageRole,
     AgentMessageTextBlockType,
+    AgentSessionStatus,
     type AgentMessageResponseDto,
     type AgentSessionResponseDto,
   } from '@immich/sdk';
@@ -19,11 +20,26 @@
     actionDock?: Snippet;
     composerDisabled?: boolean;
     composerDisabledReason?: string | null;
+    composerPlaceholder?: string;
+    submitLabel?: string;
+    terminalActionLabel?: string;
+    onTerminalAction?: () => void;
+    onMessageSent?: (sessionId: string) => void | Promise<void>;
     onTitleDiscovered?: (sessionId: string, title: string) => void;
   }
 
-  let { session, actionDock, composerDisabled = false, composerDisabledReason = null, onTitleDiscovered }: Props =
-    $props();
+  let {
+    session,
+    actionDock,
+    composerDisabled = false,
+    composerDisabledReason = null,
+    composerPlaceholder,
+    submitLabel,
+    terminalActionLabel,
+    onTerminalAction,
+    onMessageSent,
+    onTitleDiscovered,
+  }: Props = $props();
 
   let messages = $state<AgentMessageResponseDto[]>([]);
   let draft = $state('');
@@ -35,6 +51,12 @@
   let cleanupWebsocketListener: (() => void) | undefined;
 
   const canSend = $derived(draft.trim().length > 0 && !isSending && !isAssistantActive && !composerDisabled);
+  const terminalStatuses = new Set<AgentSessionStatus>([
+    AgentSessionStatus.Applying,
+    AgentSessionStatus.Completed,
+    AgentSessionStatus.Cancelled,
+    AgentSessionStatus.Failed,
+  ]);
 
   const textForMessage = (message: AgentMessageResponseDto) =>
     message.content.blocks
@@ -67,6 +89,14 @@
 
     lastPublishedTitle = title;
     onTitleDiscovered?.(session.id, title);
+  };
+
+  const notifyMessageSent = () => {
+    try {
+      void onMessageSent?.(session.id)?.catch(() => undefined);
+    } catch {
+      // Follow-up refresh errors must not undo the successful append.
+    }
   };
 
   const appendIfNew = (message: AgentMessageResponseDto) => {
@@ -137,6 +167,7 @@
       appendIfNew(message);
       draft = '';
       isAssistantActive = true;
+      notifyMessageSent();
     } catch (error) {
       errorMessage = $t('assistant_message_send_error');
       handleError(error, errorMessage);
@@ -149,6 +180,15 @@
   onMount(() => {
     cleanupWebsocketListener = websocketEvents.on('on_agent_session_event', handleSessionEvent);
     void loadMessages();
+  });
+
+  $effect(() => {
+    if (!terminalStatuses.has(session.status)) {
+      return;
+    }
+
+    isAssistantActive = false;
+    streamingText = '';
   });
 
   onDestroy(() => {
@@ -216,6 +256,7 @@
           aria-label={$t('assistant_message')}
           class="min-h-24 w-full resize-y rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-immich-dark-gray"
           bind:value={draft}
+          placeholder={composerPlaceholder ?? $t('assistant_message_placeholder')}
           disabled={isSending || isAssistantActive || composerDisabled}
         ></textarea>
         {#if composerDisabled && composerDisabledReason}
@@ -224,7 +265,11 @@
       </div>
 
       <div>
-        <Button type="submit" disabled={!canSend} loading={isSending}>{$t('assistant_send')}</Button>
+        {#if terminalActionLabel && onTerminalAction}
+          <Button type="button" onclick={onTerminalAction}>{terminalActionLabel}</Button>
+        {:else}
+          <Button type="submit" disabled={!canSend} loading={isSending}>{submitLabel ?? $t('assistant_send')}</Button>
+        {/if}
       </div>
     </form>
   </div>
