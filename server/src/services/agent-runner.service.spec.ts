@@ -122,18 +122,19 @@ describe(AgentRunnerService.name, () => {
         runnerUrl: 'http://agent-runner:4477',
         runnerHealthTimeoutMs: 3000,
         runnerMessageStreamTimeoutMs: 120_000,
-        toolGatewayUrl: undefined,
+        mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
       },
     } as never);
+    toolTokenService.create.mockReturnValue('tool-token');
     agentRunnerRepository.createSession.mockResolvedValue({
       runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
-      capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+      capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['mcp:gallery'], models: [] },
     });
 
     await expect(sut.createSession(makeCreateSessionBody())).resolves.toEqual({
       runnerEndpoint: 'http://agent-runner:4477',
       runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
-      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['mcp:gallery'], models: [] },
     });
     expect(agentRunnerRepository.createSession).toHaveBeenCalledWith({
       url: 'http://agent-runner:4477',
@@ -141,11 +142,14 @@ describe(AgentRunnerService.name, () => {
       body: expect.objectContaining({
         gallerySessionId: '00000000-0000-4000-8000-000000000100',
         model: 'gpt-5.1',
-        mcpGateway: null,
+        mcpGateway: {
+          url: 'http://immich-server:2283/api/agent/internal/mcp/sessions/00000000-0000-4000-8000-000000000100',
+          token: 'tool-token',
+        },
       }),
     });
     expect(agentRunnerRepository.createSession.mock.calls[0][0].body).not.toHaveProperty('userId');
-    expect(toolTokenService.create).not.toHaveBeenCalled();
+    expect(agentRunnerRepository.createSession.mock.calls[0][0].body).not.toHaveProperty('toolGateway');
   });
 
   it('passes configured MCP gateway session URL and short-lived token to the runner without returning the token', async () => {
@@ -154,7 +158,7 @@ describe(AgentRunnerService.name, () => {
         runnerUrl: 'http://agent-runner:4477',
         runnerHealthTimeoutMs: 3000,
         runnerMessageStreamTimeoutMs: 120_000,
-        toolGatewayUrl: 'http://immich-server:2283/api/agent/mcp',
+        mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
       },
     } as never);
     const body = makeCreateSessionBody();
@@ -162,13 +166,13 @@ describe(AgentRunnerService.name, () => {
     toolTokenService.create.mockReturnValue('tool-token');
     agentRunnerRepository.createSession.mockResolvedValue({
       runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
-      capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+      capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['mcp:gallery'], models: [] },
     });
 
     await expect(sut.createSession(body)).resolves.toEqual({
       runnerEndpoint: 'http://agent-runner:4477',
       runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
-      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+      runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: ['mcp:gallery'], models: [] },
     });
 
     expect(toolTokenService.create).toHaveBeenCalledWith({
@@ -182,7 +186,7 @@ describe(AgentRunnerService.name, () => {
       body: expect.objectContaining({
         gallerySessionId: '00000000-0000-4000-8000-000000000100',
         mcpGateway: {
-          url: 'http://immich-server:2283/api/agent/mcp/sessions/00000000-0000-4000-8000-000000000100',
+          url: 'http://immich-server:2283/api/agent/internal/mcp/sessions/00000000-0000-4000-8000-000000000100',
           token: 'tool-token',
         },
       }),
@@ -199,13 +203,13 @@ describe(AgentRunnerService.name, () => {
         runnerUrl: 'http://agent-runner:4477',
         runnerHealthTimeoutMs: 3000,
         runnerMessageStreamTimeoutMs: 120_000,
-        toolGatewayUrl: 'http://immich-server:2283/api/agent/mcp/',
+        mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp/',
       },
     } as never);
     toolTokenService.create.mockReturnValue('tool-token');
     agentRunnerRepository.createSession.mockResolvedValue({
       runnerSessionId: 'stub-session-with-spaces',
-      capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+      capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['mcp:gallery'], models: [] },
     });
 
     await sut.createSession(body);
@@ -216,7 +220,7 @@ describe(AgentRunnerService.name, () => {
       body: expect.objectContaining({
         gallerySessionId: 'session/with spaces',
         mcpGateway: {
-          url: 'http://immich-server:2283/api/agent/mcp/sessions/session%2Fwith%20spaces',
+          url: 'http://immich-server:2283/api/agent/internal/mcp/sessions/session%2Fwith%20spaces',
           token: 'tool-token',
         },
       }),
@@ -231,13 +235,13 @@ describe(AgentRunnerService.name, () => {
         runnerUrl: 'http://agent-runner:4477',
         runnerHealthTimeoutMs: 3000,
         runnerMessageStreamTimeoutMs: 120_000,
-        toolGatewayUrl: 'http://immich-server:2283/api/agent/mcp',
+        mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
       },
     } as never);
     toolTokenService.create.mockReturnValue('tool-token');
     agentRunnerRepository.createSession.mockResolvedValue({
       runnerSessionId: 'stub-00000000-0000-4000-8000-000000000100',
-      capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['echo'], models: [] },
+      capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['mcp:gallery'], models: [] },
     });
 
     await sut.createSession(body);
@@ -256,6 +260,21 @@ describe(AgentRunnerService.name, () => {
 
     await expect(sut.createSession(makeCreateSessionBody())).rejects.toThrow('Agent runner is not configured');
     expect(agentRunnerRepository.createSession).not.toHaveBeenCalled();
+  });
+
+  it('throws a clear error when the runner is configured without an MCP gateway', async () => {
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        mcpGatewayUrl: undefined,
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 300_000,
+      },
+    } as never);
+
+    await expect(sut.createSession(makeCreateSessionBody())).rejects.toThrow('Agent MCP gateway is not configured');
+    expect(agentRunnerRepository.createSession).not.toHaveBeenCalled();
+    expect(toolTokenService.create).not.toHaveBeenCalled();
   });
 
   it('streams a user message to the runner, emits deltas, and persists the completed assistant message', async () => {
@@ -767,9 +786,31 @@ describe(AgentRunnerService.name, () => {
     expect(agentRunnerRepository.getStatus).not.toHaveBeenCalled();
   });
 
+  it('reports the runner as not configured when the MCP gateway is missing', async () => {
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        mcpGatewayUrl: undefined,
+        runnerHealthTimeoutMs: 3000,
+      },
+    } as never);
+
+    await expect(sut.getStatus()).resolves.toMatchObject({
+      configured: false,
+      healthy: false,
+      reason: 'not-configured',
+      capabilities: null,
+    });
+    expect(agentRunnerRepository.getStatus).not.toHaveBeenCalled();
+  });
+
   it('probes the configured runner and maps a healthy response', async () => {
     configRepository.getEnv.mockReturnValue({
-      agent: { runnerUrl: 'http://agent-runner:4477', runnerHealthTimeoutMs: 3000 },
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
+        runnerHealthTimeoutMs: 3000,
+      },
     } as never);
     agentRunnerRepository.getStatus.mockResolvedValue({
       healthy: true,
@@ -778,7 +819,7 @@ describe(AgentRunnerService.name, () => {
       capabilities: {
         protocolVersion: '2026-05-14',
         streaming: true,
-        tools: ['echo'],
+        tools: ['mcp:gallery'],
         models: [],
       },
     });
@@ -791,7 +832,7 @@ describe(AgentRunnerService.name, () => {
       capabilities: {
         protocolVersion: '2026-05-14',
         streaming: true,
-        tools: ['echo'],
+        tools: ['mcp:gallery'],
         models: [],
       },
       checkedAt: new Date('2026-05-14T10:00:00.000Z'),
@@ -804,7 +845,11 @@ describe(AgentRunnerService.name, () => {
 
   it('maps unhealthy probes while preserving configured=true', async () => {
     configRepository.getEnv.mockReturnValue({
-      agent: { runnerUrl: 'http://agent-runner:4477', runnerHealthTimeoutMs: 3000 },
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
+        runnerHealthTimeoutMs: 3000,
+      },
     } as never);
     agentRunnerRepository.getStatus.mockResolvedValue({
       healthy: false,
@@ -824,7 +869,11 @@ describe(AgentRunnerService.name, () => {
 
   it('caches configured runner status briefly', async () => {
     configRepository.getEnv.mockReturnValue({
-      agent: { runnerUrl: 'http://agent-runner:4477', runnerHealthTimeoutMs: 3000 },
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
+        runnerHealthTimeoutMs: 3000,
+      },
     } as never);
     agentRunnerRepository.getStatus.mockResolvedValue({
       healthy: true,
@@ -842,10 +891,18 @@ describe(AgentRunnerService.name, () => {
   it('refreshes cached status when runner config changes', async () => {
     configRepository.getEnv
       .mockReturnValueOnce({
-        agent: { runnerUrl: 'http://agent-runner-a:4477', runnerHealthTimeoutMs: 3000 },
+        agent: {
+          runnerUrl: 'http://agent-runner-a:4477',
+          mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
+          runnerHealthTimeoutMs: 3000,
+        },
       } as never)
       .mockReturnValueOnce({
-        agent: { runnerUrl: 'http://agent-runner-b:4477', runnerHealthTimeoutMs: 5000 },
+        agent: {
+          runnerUrl: 'http://agent-runner-b:4477',
+          mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
+          runnerHealthTimeoutMs: 5000,
+        },
       } as never);
     agentRunnerRepository.getStatus.mockResolvedValue({
       healthy: true,
@@ -866,7 +923,11 @@ describe(AgentRunnerService.name, () => {
 
   it('deduplicates concurrent configured runner status probes', async () => {
     configRepository.getEnv.mockReturnValue({
-      agent: { runnerUrl: 'http://agent-runner:4477', runnerHealthTimeoutMs: 3000 },
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
+        runnerHealthTimeoutMs: 3000,
+      },
     } as never);
 
     let resolveProbe: (value: Awaited<ReturnType<AgentRunnerRepository['getStatus']>>) => void;
@@ -911,10 +972,18 @@ describe(AgentRunnerService.name, () => {
   it('does not deduplicate concurrent probes for different runner configs', async () => {
     configRepository.getEnv
       .mockReturnValueOnce({
-        agent: { runnerUrl: 'http://agent-runner-a:4477', runnerHealthTimeoutMs: 3000 },
+        agent: {
+          runnerUrl: 'http://agent-runner-a:4477',
+          mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
+          runnerHealthTimeoutMs: 3000,
+        },
       } as never)
       .mockReturnValueOnce({
-        agent: { runnerUrl: 'http://agent-runner-b:4477', runnerHealthTimeoutMs: 5000 },
+        agent: {
+          runnerUrl: 'http://agent-runner-b:4477',
+          mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
+          runnerHealthTimeoutMs: 5000,
+        },
       } as never);
 
     let resolveFirst: (value: Awaited<ReturnType<AgentRunnerRepository['getStatus']>>) => void;
@@ -964,13 +1033,25 @@ describe(AgentRunnerService.name, () => {
   it('deduplicates matching runner configs when another config is also in flight', async () => {
     configRepository.getEnv
       .mockReturnValueOnce({
-        agent: { runnerUrl: 'http://agent-runner-a:4477', runnerHealthTimeoutMs: 3000 },
+        agent: {
+          runnerUrl: 'http://agent-runner-a:4477',
+          mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
+          runnerHealthTimeoutMs: 3000,
+        },
       } as never)
       .mockReturnValueOnce({
-        agent: { runnerUrl: 'http://agent-runner-b:4477', runnerHealthTimeoutMs: 5000 },
+        agent: {
+          runnerUrl: 'http://agent-runner-b:4477',
+          mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
+          runnerHealthTimeoutMs: 5000,
+        },
       } as never)
       .mockReturnValueOnce({
-        agent: { runnerUrl: 'http://agent-runner-a:4477', runnerHealthTimeoutMs: 3000 },
+        agent: {
+          runnerUrl: 'http://agent-runner-a:4477',
+          mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
+          runnerHealthTimeoutMs: 3000,
+        },
       } as never);
 
     let resolveFirst: (value: Awaited<ReturnType<AgentRunnerRepository['getStatus']>>) => void;
@@ -1013,7 +1094,11 @@ describe(AgentRunnerService.name, () => {
 
   it('refreshes cached status after the cache window', async () => {
     configRepository.getEnv.mockReturnValue({
-      agent: { runnerUrl: 'http://agent-runner:4477', runnerHealthTimeoutMs: 3000 },
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        mcpGatewayUrl: 'http://immich-server:2283/api/agent/internal/mcp',
+        runnerHealthTimeoutMs: 3000,
+      },
     } as never);
     agentRunnerRepository.getStatus.mockResolvedValue({
       healthy: true,

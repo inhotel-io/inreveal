@@ -27,7 +27,7 @@ services:
       IMMICH_IGNORE_MOUNT_CHECK_ERRORS: 'true'
       IMMICH_AGENT_SECRET_KEY: e2e-agent-secret-key-change-me
       IMMICH_AGENT_RUNNER_URL: http://agent-runner:4477
-      IMMICH_AGENT_TOOL_GATEWAY_URL: http://immich-server:2285/api/agent/internal/mcp
+      IMMICH_AGENT_MCP_GATEWAY_URL: http://immich-server:2285/api/agent/internal/mcp
       IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS: '5000'
       IMMICH_AGENT_RUNNER_MESSAGE_STREAM_TIMEOUT_MS: '30000'
     volumes:
@@ -51,8 +51,6 @@ services:
       HOST: 0.0.0.0
       PORT: 4477
       GALLERY_AGENT_RUNNER_RUNTIME: e2e
-    ports:
-      - 4477:4477
 
   redis:
     container_name: immich-e2e-redis
