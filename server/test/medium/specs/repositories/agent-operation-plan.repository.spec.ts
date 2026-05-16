@@ -419,6 +419,84 @@ describe(AgentOperationPlanRepository.name, () => {
     ]);
   });
 
+  it('claims a current proposed plan for apply by marking it applied', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const plan = await sut.createRevision(
+      planRevisionInput(session.id, {
+        revision: 1,
+        summary: 'Apply me',
+        operations: [createAlbumOperation('apply-album'), addAssetsOperation('apply-album')],
+      }),
+    );
+
+    const claimed = await sut.claimCurrentForApply(session.id, plan.id);
+
+    expect(claimed).toMatchObject({
+      id: plan.id,
+      sessionId: session.id,
+      status: AgentOperationPlanStatus.Applied,
+    });
+    expect(claimed?.operations.map((operation) => operation.id)).toEqual(
+      plan.operations.map((operation) => operation.id),
+    );
+    await expect(sut.getCurrentBySessionId(session.id)).resolves.toBeUndefined();
+  });
+
+  it('does not claim an already applied plan twice', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const plan = await sut.createRevision(
+      planRevisionInput(session.id, {
+        revision: 1,
+        summary: 'Apply once',
+        operations: [createAlbumOperation('once-album')],
+      }),
+    );
+
+    await expect(sut.claimCurrentForApply(session.id, plan.id)).resolves.toMatchObject({ id: plan.id });
+    await expect(sut.claimCurrentForApply(session.id, plan.id)).resolves.toBeUndefined();
+  });
+
+  it('persists operation apply statuses, results, and errors', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const plan = await sut.createRevision(
+      planRevisionInput(session.id, {
+        revision: 1,
+        summary: 'Persist results',
+        operations: [createAlbumOperation('result-album'), addAssetsOperation('result-album')],
+      }),
+    );
+    const [createOperation, addOperation] = plan.operations;
+    await sut.claimCurrentForApply(session.id, plan.id);
+
+    const updated = await sut.completeApply(plan.id, [
+      {
+        id: createOperation.id,
+        status: AgentOperationStatus.Applied,
+        result: { albumId: factory.uuid() },
+        error: null,
+      },
+      {
+        id: addOperation.id,
+        status: AgentOperationStatus.Skipped,
+        result: { skippedReason: 'Dependency was not applied' },
+        error: null,
+      },
+    ]);
+
+    expect(updated.status).toBe(AgentOperationPlanStatus.Applied);
+    expect(updated.operations).toEqual([
+      expect.objectContaining({ id: createOperation.id, status: AgentOperationStatus.Applied, error: null }),
+      expect.objectContaining({
+        id: addOperation.id,
+        status: AgentOperationStatus.Skipped,
+        result: { skippedReason: 'Dependency was not applied' },
+      }),
+    ]);
+  });
+
   it('rejects new-album dependent operations without a matching create operation', async () => {
     const { ctx, credentialRepository, sessionRepository, sut } = setup();
     const { session } = await createSession(ctx, credentialRepository, sessionRepository);
