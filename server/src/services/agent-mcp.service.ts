@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { serverVersion } from 'src/constants';
+import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.dto';
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
 import type { AuthDto } from 'src/dtos/auth.dto';
 import { AgentToolName } from 'src/enum';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
+import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import type {
   AgentMcpErrorResponse,
@@ -44,6 +46,7 @@ export class AgentMcpService {
   constructor(
     private readonly toolRegistry: AgentMcpToolRegistryService,
     private readonly toolService: AgentToolService,
+    private readonly operationPlanService: AgentOperationPlanService,
   ) {}
 
   async handle(auth: AuthDto, sessionId: string, request: unknown): Promise<AgentMcpHandleResponse> {
@@ -113,31 +116,17 @@ export class AgentMcpService {
       return this.error(request.id, -32_602, 'Unknown tool', { toolName: name });
     }
 
-    if (this.planningToolNames.has(name)) {
-      return this.error(request.id, -32_602, 'Tool not supported in this slice', { toolName: name });
+    if (this.isPlanningToolName(name)) {
+      return this.handlePlanningToolCall(auth, sessionId, request.id, name, args);
     }
 
     if (!this.isReadToolName(name)) {
       return this.error(request.id, -32_602, 'Unknown tool', { toolName: name });
     }
 
-    const schema = AgentReadToolRequestSchemas[name];
-    const argumentValidation = this.validateToolArguments(args);
-    if (!argumentValidation.valid) {
-      return this.success(request.id, this.argumentErrorResult(argumentValidation.path, argumentValidation.message));
-    }
-
-    const parseResult = schema.safeParse(argumentValidation.value);
-    if (!parseResult.success) {
-      return this.success(request.id, this.validationErrorResult(parseResult.error));
-    }
-
-    try {
-      const result = await this.callReadTool(auth, sessionId, name, parseResult.data);
-      return this.success(request.id, this.toolResult(result));
-    } catch {
-      return this.error(request.id, -32_603, 'Internal error');
-    }
+    return this.invokeTool(request.id, args, AgentReadToolRequestSchemas[name], (dto) =>
+      this.callReadTool(auth, sessionId, name, dto),
+    );
   }
 
   private isKnownToolName(name: string): name is AgentToolName {
@@ -146,6 +135,61 @@ export class AgentMcpService {
 
   private isReadToolName(name: AgentToolName): name is keyof typeof AgentReadToolRequestSchemas {
     return this.readToolNames.has(name);
+  }
+
+  private isPlanningToolName(name: AgentToolName): name is keyof typeof AgentOperationPlanToolRequestSchemas {
+    return this.planningToolNames.has(name);
+  }
+
+  private async invokeTool<TDto>(
+    id: AgentMcpRequestId,
+    args: unknown,
+    schema: z.ZodType<TDto>,
+    delegate: (dto: TDto) => Promise<unknown>,
+  ): Promise<AgentMcpSuccessResponse | AgentMcpErrorResponse> {
+    const argumentValidation = this.validateToolArguments(args);
+    if (!argumentValidation.valid) {
+      return this.success(id, this.argumentErrorResult(argumentValidation.path, argumentValidation.message));
+    }
+
+    const parseResult = schema.safeParse(argumentValidation.value);
+    if (!parseResult.success) {
+      return this.success(id, this.validationErrorResult(parseResult.error));
+    }
+
+    try {
+      return this.success(id, this.toolResult(await delegate(parseResult.data)));
+    } catch {
+      return this.error(id, -32_603, 'Internal error');
+    }
+  }
+
+  private async handlePlanningToolCall(
+    auth: AuthDto,
+    sessionId: string,
+    id: AgentMcpRequestId,
+    toolName: keyof typeof AgentOperationPlanToolRequestSchemas,
+    args: unknown,
+  ): Promise<AgentMcpSuccessResponse | AgentMcpErrorResponse> {
+    switch (toolName) {
+      case AgentToolName.ProposeAlbumOperations: {
+        return this.invokeTool(id, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
+          this.operationPlanService.proposeAlbumOperations(auth, sessionId, dto),
+        );
+      }
+      case AgentToolName.ReviseProposedOperations: {
+        return this.invokeTool(id, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) => {
+          const { planId, ...body } = dto;
+          return this.operationPlanService.reviseProposedOperations(auth, sessionId, planId, body);
+        });
+      }
+      case AgentToolName.SummarizePlan: {
+        return this.invokeTool(id, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) => {
+          const { planId, ...body } = dto;
+          return this.operationPlanService.summarizePlan(auth, sessionId, planId, body);
+        });
+      }
+    }
   }
 
   private async callReadTool(
