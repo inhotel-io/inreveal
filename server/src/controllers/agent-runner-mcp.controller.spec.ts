@@ -5,6 +5,7 @@ import { AgentToolName } from 'src/enum';
 import { AgentMcpService } from 'src/services/agent-mcp.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
+import { AgentToolService } from 'src/services/agent-tool.service';
 import type { AgentMcpHandleResponse } from 'src/types/agent-mcp.types';
 import request from 'supertest';
 import { factory } from 'test/small.factory';
@@ -62,7 +63,7 @@ describe(AgentRunnerMcpController.name, () => {
       userId,
       expiresAt: new Date('2026-05-16T12:00:00.000Z'),
     });
-    service.handle.mockReturnValue(initializeResponse);
+    service.handle.mockResolvedValue(initializeResponse);
   });
 
   it('verifies the bearer token and returns the MCP response without normal Gallery auth', async () => {
@@ -74,7 +75,11 @@ describe(AgentRunnerMcpController.name, () => {
 
     expect(status).toBe(200);
     expect(tokenService.verify).toHaveBeenCalledWith(token);
-    expect(service.handle).toHaveBeenCalledWith(initializeRequest);
+    expect(service.handle).toHaveBeenCalledWith(
+      expect.objectContaining({ user: { id: userId } }),
+      sessionId,
+      initializeRequest,
+    );
     expect(ctx.authenticate).not.toHaveBeenCalled();
     expect(body).toEqual(initializeResponse);
   });
@@ -90,7 +95,7 @@ describe(AgentRunnerMcpController.name, () => {
         capabilities: {},
       },
     } satisfies AgentMcpHandleResponse;
-    service.handle.mockReturnValueOnce(initializeResponse).mockReturnValueOnce(secondResponse);
+    service.handle.mockResolvedValueOnce(initializeResponse).mockResolvedValueOnce(secondResponse);
 
     const first = await request(ctx.getHttpServer())
       .post(`/agent/internal/mcp/sessions/${sessionId}`)
@@ -104,8 +109,18 @@ describe(AgentRunnerMcpController.name, () => {
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
     expect(tokenService.verify).toHaveBeenCalledTimes(2);
-    expect(service.handle).toHaveBeenNthCalledWith(1, initializeRequest);
-    expect(service.handle).toHaveBeenNthCalledWith(2, secondRequest);
+    expect(service.handle).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ user: { id: userId } }),
+      sessionId,
+      initializeRequest,
+    );
+    expect(service.handle).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ user: { id: userId } }),
+      sessionId,
+      secondRequest,
+    );
     expect(ctx.authenticate).not.toHaveBeenCalled();
   });
 
@@ -114,7 +129,7 @@ describe(AgentRunnerMcpController.name, () => {
       jsonrpc: '2.0',
       method: 'notifications/initialized',
     };
-    service.handle.mockImplementation(() => {});
+    service.handle.mockResolvedValue(void 0);
 
     const { status, body, text } = await request(ctx.getHttpServer())
       .post(`/agent/internal/mcp/sessions/${sessionId}`)
@@ -123,7 +138,11 @@ describe(AgentRunnerMcpController.name, () => {
 
     expect(status).toBe(202);
     expect(tokenService.verify).toHaveBeenCalledWith(token);
-    expect(service.handle).toHaveBeenCalledWith(notification);
+    expect(service.handle).toHaveBeenCalledWith(
+      expect.objectContaining({ user: { id: userId } }),
+      sessionId,
+      notification,
+    );
     expect(ctx.authenticate).not.toHaveBeenCalled();
     expect(body).toEqual({});
     expect(text).toBe('');
@@ -200,12 +219,14 @@ describe(AgentRunnerMcpController.name, () => {
 
   describe('with the real MCP service', () => {
     let realCtx: ControllerContext;
+    const realToolService = automock(AgentToolService, { strict: false });
 
     beforeAll(async () => {
       realCtx = await controllerSetup(AgentRunnerMcpController, [
         AgentRunnerToolGuard,
         { provide: AgentRunnerToolTokenService, useValue: tokenService },
         AgentMcpToolRegistryService,
+        { provide: AgentToolService, useValue: realToolService },
         AgentMcpService,
       ]);
       return () => realCtx.close();
@@ -213,6 +234,7 @@ describe(AgentRunnerMcpController.name, () => {
 
     beforeEach(() => {
       tokenService.resetAllMocks();
+      realToolService.resetAllMocks();
       realCtx.reset();
       tokenService.verify.mockReturnValue({
         sessionId,
@@ -254,6 +276,42 @@ describe(AgentRunnerMcpController.name, () => {
         AgentToolName.ReviseProposedOperations,
         AgentToolName.SummarizePlan,
       ]);
+    });
+
+    it('passes runner auth and session id through for read tools/call', async () => {
+      const assetId = factory.uuid();
+      const serviceResult = { status: 'success', toolCall: null, assets: [], nextPage: null };
+      realToolService.searchAssets.mockResolvedValue(serviceResult as never);
+
+      const { status, body } = await request(realCtx.getHttpServer())
+        .post(`/agent/internal/mcp/sessions/${sessionId}`)
+        .set('Authorization', authorization)
+        .send({
+          jsonrpc: '2.0',
+          id: 'call-1',
+          method: 'tools/call',
+          params: {
+            name: AgentToolName.SearchAssets,
+            arguments: { filters: { tagIds: [assetId] }, limit: 10 },
+          },
+        });
+
+      expect(status).toBe(200);
+      expect(tokenService.verify).toHaveBeenCalledWith(token);
+      expect(realCtx.authenticate).not.toHaveBeenCalled();
+      expect(realToolService.searchAssets).toHaveBeenCalledWith(
+        expect.objectContaining({ user: { id: userId } }),
+        sessionId,
+        { filters: { tagIds: [assetId] }, limit: 10 },
+      );
+      expect(body).toEqual({
+        jsonrpc: '2.0',
+        id: 'call-1',
+        result: {
+          content: [{ type: 'text', text: JSON.stringify(serviceResult) }],
+          structuredContent: serviceResult,
+        },
+      });
     });
   });
 });
