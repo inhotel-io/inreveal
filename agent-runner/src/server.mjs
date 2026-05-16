@@ -96,17 +96,21 @@ const validateCreateSessionBody = (body) => {
     return 'model is required';
   }
 
-  if (body.toolGateway !== undefined && body.toolGateway !== null) {
-    if (typeof body.toolGateway !== 'object') {
-      return 'toolGateway is required';
+  if (body.toolGateway !== undefined) {
+    return 'toolGateway is no longer supported; use mcpGateway';
+  }
+
+  if (body.mcpGateway !== undefined && body.mcpGateway !== null) {
+    if (typeof body.mcpGateway !== 'object') {
+      return 'mcpGateway is required';
     }
 
-    if (typeof body.toolGateway.url !== 'string' || body.toolGateway.url.length === 0) {
-      return 'toolGateway.url is required';
+    if (typeof body.mcpGateway.url !== 'string' || body.mcpGateway.url.length === 0) {
+      return 'mcpGateway.url is required';
     }
 
-    if (typeof body.toolGateway.token !== 'string' || body.toolGateway.token.length === 0) {
-      return 'toolGateway.token is required';
+    if (typeof body.mcpGateway.token !== 'string' || body.mcpGateway.token.length === 0) {
+      return 'mcpGateway.token is required';
     }
   }
 

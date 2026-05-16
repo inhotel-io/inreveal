@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { readFile, rm, stat } from 'node:fs/promises';
+import { join, relative } from 'node:path';
 import { describe, it } from 'node:test';
-import { galleryToolNames } from './gallery-tools.mjs';
 import { createPiRuntime, mapProviderType, redactSecret } from './pi-runtime.mjs';
 
 const permissionPlan = {
@@ -41,6 +43,12 @@ const createSessionBody = (overrides = {}) => ({
   ...overrides,
 });
 
+const createMcpGateway = (overrides = {}) => ({
+  url: 'https://gallery.example.test/mcp/sessions/00000000-0000-4000-8000-000000000100',
+  token: 'mcp-token-secret',
+  ...overrides,
+});
+
 const createDeferred = () => {
   let resolve;
   const promise = new Promise((done) => {
@@ -78,12 +86,13 @@ const createMessageRequest = (overrides = {}) => ({
   ...overrides,
 });
 
-const createFakeDependencies = ({ promptGate, sessionAbortGate } = {}) => {
+const createFakeDependencies = ({ promptGate, sessionAbortGate, mcpToolNames = ['mcp_gallery_searchAssets'] } = {}) => {
   const calls = {
     runtimeApiKeys: [],
     loaders: [],
     createAgentSession: [],
     activeToolNames: [],
+    bindExtensions: [],
     prompts: [],
     authCreate: 0,
     authInMemory: 0,
@@ -94,6 +103,8 @@ const createFakeDependencies = ({ promptGate, sessionAbortGate } = {}) => {
     disposed: 0,
     sessionAborted: 0,
     agentAborted: 0,
+    reloadEnvironments: [],
+    bindEnvironments: [],
   };
   const registeredModels = [];
   let listener;
@@ -136,6 +147,14 @@ const createFakeDependencies = ({ promptGate, sessionAbortGate } = {}) => {
       }
       abortGate.resolve();
     },
+    async bindExtensions(input) {
+      calls.bindExtensions.push(input);
+      calls.bindEnvironments.push({ cwd: process.cwd(), home: process.env.HOME });
+      calls.activeToolNames = mcpToolNames;
+    },
+    getActiveToolNames() {
+      return calls.activeToolNames;
+    },
   };
 
   class DefaultResourceLoader {
@@ -146,6 +165,7 @@ const createFakeDependencies = ({ promptGate, sessionAbortGate } = {}) => {
     }
 
     async reload() {
+      calls.reloadEnvironments.push({ cwd: process.cwd(), home: process.env.HOME });
       for (const factory of this.options.extensionFactories ?? []) {
         factory({
           registerProvider: (name, config) => {
@@ -221,9 +241,6 @@ const createFakeDependencies = ({ promptGate, sessionAbortGate } = {}) => {
     DefaultResourceLoader,
     createAgentSession: async (options) => {
       calls.createAgentSession.push(options);
-      const customToolNames = options.customTools?.map((tool) => tool.name) ?? [];
-      calls.activeToolNames =
-        Array.isArray(options.tools) ? customToolNames.filter((toolName) => options.tools.includes(toolName)) : customToolNames;
       return { session };
     },
   };
@@ -244,6 +261,12 @@ const collect = async (stream) => {
 };
 
 describe('pi runtime adapter', () => {
+  it('declares the Pi MCP extension dependency at the required version', async () => {
+    const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+
+    assert.equal(packageJson.dependencies['pi-mcp-extension'], '1.5.0');
+  });
+
   it('maps built-in provider types to Pi provider names', () => {
     assert.equal(mapProviderType('openai', 'session-1'), 'openai');
     assert.equal(mapProviderType('anthropic', 'session-1'), 'anthropic');
@@ -255,7 +278,7 @@ describe('pi runtime adapter', () => {
     assert.equal(redactSecret('request failed', 'sk-openai-secret'), 'request failed');
   });
 
-  it('creates a Pi SDK session with runtime API key, selected model, and no enabled tools', async () => {
+  it('creates a Pi SDK session with runtime API key, selected model, and no enabled tools when MCP is absent', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
 
@@ -277,30 +300,174 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.createAgentSession[0].model.id, 'gpt-5.1');
     assert.equal(calls.createAgentSession[0].noTools, 'builtin');
     assert.deepEqual(calls.createAgentSession[0].tools, []);
-    assert.deepEqual(calls.createAgentSession[0].customTools, []);
+    assert.deepEqual(calls.createAgentSession[0].customTools ?? [], []);
+    assert.deepEqual(calls.loaders[0].additionalExtensionPaths ?? [], []);
+    assert.equal(calls.bindExtensions.length, 0);
   });
 
-  it('keeps built-in tools disabled and enables all Gallery custom tools when a gateway is present', async () => {
+  it('writes per-session Gallery MCP config and exposes active MCP tools when a gateway is present', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
 
     const result = await runtime.createSession(
       createSessionBody({
-        toolGateway: {
-          url: 'https://gallery.example.test/tools',
-          token: 'gateway-token-secret',
-        },
+        mcpGateway: createMcpGateway(),
       }),
     );
 
-    assert.deepEqual(result.capabilities.tools, galleryToolNames);
+    const loaderOptions = calls.loaders[0];
+    const configPath = join(loaderOptions.cwd, '.pi/mcp.json');
+    const config = JSON.parse(await readFile(configPath, 'utf8'));
+    assert.equal((await stat(configPath)).mode & 0o777, 0o600);
+    assert.deepEqual(Object.keys(config.mcpServers), ['gallery']);
+    assert.deepEqual(config.mcpServers.gallery, {
+      transport: 'streamable-http',
+      lifecycle: 'eager',
+      url: 'https://gallery.example.test/mcp/sessions/00000000-0000-4000-8000-000000000100',
+      headers: { Authorization: 'Bearer mcp-token-secret' },
+    });
+    assert.ok(loaderOptions.cwd.includes('.pi-runtime/sessions/'));
+    assert.equal(relative(join(loaderOptions.agentDir, '..'), loaderOptions.cwd).startsWith('..'), false);
+    assert.equal(loaderOptions.noExtensions, true);
+    assert.equal(loaderOptions.additionalExtensionPaths.length, 1);
+    assert.ok(loaderOptions.additionalExtensionPaths[0].endsWith('node_modules/pi-mcp-extension/src/index.ts'));
     assert.equal(calls.createAgentSession[0].noTools, 'builtin');
+    assert.equal(calls.createAgentSession[0].cwd, loaderOptions.cwd);
+    assert.equal(calls.createAgentSession[0].agentDir, loaderOptions.agentDir);
     assert.equal(calls.createAgentSession[0].tools, undefined);
-    assert.deepEqual(
-      calls.createAgentSession[0].customTools.map((tool) => tool.name),
-      result.capabilities.tools,
+    assert.deepEqual(calls.createAgentSession[0].customTools ?? [], []);
+    assert.deepEqual(calls.bindExtensions, [{}]);
+    assert.deepEqual(result.capabilities.tools, ['mcp_gallery_searchAssets']);
+    assert.deepEqual(calls.reloadEnvironments[0], { cwd: loaderOptions.cwd, home: loaderOptions.homeDir });
+    assert.deepEqual(calls.bindEnvironments[0], { cwd: loaderOptions.cwd, home: loaderOptions.homeDir });
+    assert.notEqual(process.cwd(), loaderOptions.cwd);
+  });
+
+  it('does not use host global MCP config when the extension is loaded', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({ mcpToolNames: ['mcp_global_leaked', 'mcp_gallery_searchAssets'] });
+    const runtime = createPiRuntime({ sdk, ai });
+
+    const result = await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    assert.equal(calls.loaders[0].homeDir?.includes('.pi-runtime'), true);
+    assert.deepEqual(result.capabilities.tools, ['mcp_gallery_searchAssets']);
+  });
+
+  it('redacts provider and MCP secrets from MCP startup failures', async () => {
+    const { sdk, ai, session } = createFakeDependencies();
+    session.bindExtensions = async () => {
+      throw new Error('bind failed with sk-openai-secret and mcp-token-secret');
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await assert.rejects(
+      () => runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() })),
+      (error) => {
+        assert.equal(error.message, 'bind failed with [redacted] and [redacted]');
+        assert.equal(error.message.includes('sk-openai-secret'), false);
+        assert.equal(error.message.includes('mcp-token-secret'), false);
+        return true;
+      },
     );
-    assert.deepEqual(calls.activeToolNames, result.capabilities.tools);
+  });
+
+  it('fails startup when no active Gallery MCP tool appears after binding extensions', async () => {
+    const { sdk, ai } = createFakeDependencies({ mcpToolNames: ['mcp_other_search'] });
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await assert.rejects(
+      () => runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() })),
+      (error) => {
+        assert.equal(error.message.includes('mcp-token-secret'), false);
+        assert.match(error.message, /No active Gallery MCP tools/);
+        return true;
+      },
+    );
+  });
+
+  it('redacts provider and MCP secrets from Pi session creation failures', async () => {
+    const { sdk, ai } = createFakeDependencies();
+    sdk.createAgentSession = async () => {
+      throw new Error('create failed with sk-openai-secret and mcp-token-secret');
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await assert.rejects(
+      () => runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() })),
+      (error) => {
+        assert.equal(error.message, 'create failed with [redacted] and [redacted]');
+        return true;
+      },
+    );
+  });
+
+  it('writes isolated MCP config directories for concurrent Gallery sessions', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await Promise.all([
+      runtime.createSession(
+        createSessionBody({
+          gallerySessionId: 'session-a',
+          mcpGateway: createMcpGateway({ url: 'https://one.example/mcp', token: 'token-one' }),
+        }),
+      ),
+      runtime.createSession(
+        createSessionBody({
+          gallerySessionId: 'session-b',
+          mcpGateway: createMcpGateway({ url: 'https://two.example/mcp', token: 'token-two' }),
+        }),
+      ),
+    ]);
+
+    const configs = await Promise.all(
+      calls.loaders.map(async (loader) => JSON.parse(await readFile(join(loader.cwd, '.pi/mcp.json'), 'utf8'))),
+    );
+    assert.notEqual(calls.loaders[0].cwd, calls.loaders[1].cwd);
+    assert.deepEqual(
+      configs
+        .map((config) => [config.mcpServers.gallery.url, config.mcpServers.gallery.headers.Authorization])
+        .sort(),
+      [
+        ['https://one.example/mcp', 'Bearer token-one'],
+        ['https://two.example/mcp', 'Bearer token-two'],
+      ],
+    );
+  });
+
+  it('keeps path-like Gallery session ids inside the runtime directory', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await runtime.createSession(createSessionBody({ gallerySessionId: '../escape', mcpGateway: createMcpGateway() }));
+
+    const runtimeDir = join(new URL('..', import.meta.url).pathname, '.pi-runtime');
+    assert.equal(relative(runtimeDir, calls.loaders[0].cwd).startsWith('..'), false);
+    assert.equal(existsSync(join(calls.loaders[0].cwd, '.pi/mcp.json')), true);
+  });
+
+  it('removes the token-bearing MCP config directory on dispose', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+    const sessionWorkspace = calls.loaders[0].cwd;
+
+    await runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
+
+    assert.equal(existsSync(sessionWorkspace), false);
+  });
+
+  it('removes the old MCP config directory when replacing a deterministic session', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway({ token: 'old-token' }) }));
+    const oldWorkspace = calls.loaders[0].cwd;
+
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway({ token: 'new-token' }) }));
+
+    assert.equal(existsSync(oldWorkspace), false);
+    assert.notEqual(calls.loaders[1].cwd, oldWorkspace);
+    await rm(calls.loaders[1].cwd, { recursive: true, force: true });
   });
 
   it('uses transient in-memory Pi auth storage and model registry', async () => {
@@ -335,10 +502,12 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].noExtensions, true);
     assert.ok(Array.isArray(calls.loaders[0].extensionFactories));
     assert.equal(calls.loaders[0].systemPrompt.startsWith('You are Gallery Assistant'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('searchAssets'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('proposeAlbumOperations'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_searchAssets'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_readAssetMetadata'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_proposeAlbumOperations'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('album.create'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('call proposeAlbumOperations'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('call mcp_gallery_proposeAlbumOperations'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('call proposeAlbumOperations'), false);
     assert.equal(calls.loaders[0].systemPrompt.includes('reviewable album operation plan'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('If a planning tool call fails with a validation error'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('Do not redirect the user to Apple Photos'), true);
@@ -464,7 +633,7 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.disposed, 1);
   });
 
-  it('redacts old and new provider secrets when duplicate session disposal fails', async () => {
+  it('redacts old and new provider and MCP secrets when duplicate session disposal fails', async () => {
     const { sdk, ai } = createFakeDependencies();
     let createdSessions = 0;
     sdk.createAgentSession = async () => {
@@ -475,9 +644,11 @@ describe('pi runtime adapter', () => {
           messages: [],
           subscribe: () => () => {},
           async prompt() {},
+          async bindExtensions() {},
+          getActiveToolNames: () => ['mcp_gallery_searchAssets'],
           dispose() {
             if (sessionNumber === 1 && createdSessions === 2) {
-              throw new Error('dispose failed with old-secret and new-secret');
+              throw new Error('dispose failed with old-secret, new-secret, old-mcp-token, and new-mcp-token');
             }
           },
         },
@@ -488,6 +659,7 @@ describe('pi runtime adapter', () => {
     await runtime.createSession(
       createSessionBody({
         credential: { ...createSessionBody().credential, secret: 'old-secret' },
+        mcpGateway: createMcpGateway({ token: 'old-mcp-token' }),
       }),
     );
 
@@ -496,12 +668,15 @@ describe('pi runtime adapter', () => {
         runtime.createSession(
           createSessionBody({
             credential: { ...createSessionBody().credential, secret: 'new-secret' },
+            mcpGateway: createMcpGateway({ token: 'new-mcp-token' }),
           }),
         ),
       (error) => {
-        assert.equal(error.message, 'dispose failed with [redacted] and [redacted]');
+        assert.equal(error.message, 'dispose failed with [redacted], [redacted], [redacted], and [redacted]');
         assert.equal(error.message.includes('old-secret'), false);
         assert.equal(error.message.includes('new-secret'), false);
+        assert.equal(error.message.includes('old-mcp-token'), false);
+        assert.equal(error.message.includes('new-mcp-token'), false);
         return true;
       },
     );
@@ -664,6 +839,31 @@ describe('pi runtime adapter', () => {
     ]);
   });
 
+  it('redacts provider and MCP secrets from assistant error messages', async () => {
+    const { sdk, ai, session } = createFakeDependencies();
+    session.prompt = async () => {
+      session.messages.push({
+        role: 'assistant',
+        content: [],
+        stopReason: 'error',
+        errorMessage: 'provider rejected sk-openai-secret and mcp-token-secret',
+      });
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    const events = await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.deepEqual(events, [
+      {
+        type: 'runner-error',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        message: 'provider rejected [redacted] and [redacted]',
+      },
+    ]);
+  });
+
   it('unsubscribes from Pi runtime events after a message stream completes', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
@@ -704,6 +904,25 @@ describe('pi runtime adapter', () => {
 
     assert.equal(subscribeAttempts, 2);
     assert.equal(events[0].type, 'assistant-message-delta');
+  });
+
+  it('redacts provider and MCP secrets when Pi subscription setup fails', async () => {
+    const { sdk, ai, session } = createFakeDependencies();
+    session.subscribe = () => {
+      throw new Error('subscribe failed for sk-openai-secret and mcp-token-secret');
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    await assert.rejects(
+      () => collect(runtime.sendMessage(createMessageRequest())),
+      (error) => {
+        assert.equal(error.message, 'subscribe failed for [redacted] and [redacted]');
+        assert.equal(error.message.includes('sk-openai-secret'), false);
+        assert.equal(error.message.includes('mcp-token-secret'), false);
+        return true;
+      },
+    );
   });
 
   it('rejects overlapping message streams for the same runner session before subscribing or prompting again', async () => {
@@ -873,6 +1092,33 @@ describe('pi runtime adapter', () => {
     assert.equal(retryEvents[0].type, 'assistant-message-delta');
   });
 
+  it('redacts provider and MCP secrets when early stream return abort fails', async () => {
+    const promptGate = createDeferred();
+    const { sdk, ai, calls, session } = createFakeDependencies({ promptGate });
+    session.abort = async () => {
+      calls.sessionAborted += 1;
+      throw new Error('abort failed for sk-openai-secret and mcp-token-secret');
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+    const first = runtime.sendMessage(createMessageRequest())[Symbol.asyncIterator]();
+
+    assert.equal((await first.next()).value.type, 'assistant-message-delta');
+
+    const returnPromise = first.return();
+    await waitForCondition(() => calls.sessionAborted === 1);
+    promptGate.resolve();
+    await assert.rejects(
+      () => returnPromise,
+      (error) => {
+        assert.equal(error.message, 'abort failed for [redacted] and [redacted]');
+        assert.equal(error.message.includes('sk-openai-secret'), false);
+        assert.equal(error.message.includes('mcp-token-secret'), false);
+        return true;
+      },
+    );
+  });
+
   it('cleans up and redacts the error when unsubscribe fails during stream cleanup', async () => {
     const promptGate = createDeferred();
     const { sdk, ai, calls, session } = createFakeDependencies({ promptGate });
@@ -993,6 +1239,26 @@ describe('pi runtime adapter', () => {
         sessionId: '00000000-0000-4000-8000-000000000100',
         runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
         message: 'provider rejected [redacted]',
+      },
+    ]);
+  });
+
+  it('redacts provider and MCP secrets from Pi prompt failures', async () => {
+    const { sdk, ai, session } = createFakeDependencies();
+    session.prompt = async () => {
+      throw new Error('provider rejected sk-openai-secret and mcp-token-secret');
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    const events = await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.deepEqual(events, [
+      {
+        type: 'runner-error',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        message: 'provider rejected [redacted] and [redacted]',
       },
     ]);
   });
