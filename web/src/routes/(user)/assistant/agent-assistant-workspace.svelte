@@ -92,6 +92,14 @@
     titleBySessionId = { ...titleBySessionId, [sessionId]: title };
   };
 
+  const handleSessionUpdated = (session: AgentSessionResponseDto) => {
+    if (session.id !== selectedSessionId || !localSessions.some((existingSession) => existingSession.id === session.id)) {
+      return;
+    }
+
+    localSessions = localSessions.map((existingSession) => (existingSession.id === session.id ? session : existingSession));
+  };
+
   $effect(() => {
     if (requestedSessionId === lastRequestedSessionId) {
       return;
@@ -170,6 +178,7 @@
           title={selectedTitle}
           onNewChat={startNewChat}
           onTitleDiscovered={handleTitleDiscovered}
+          onSessionUpdated={handleSessionUpdated}
         />
       {:else}
         <AgentRunnerStatusPanel status={runnerStatus} />

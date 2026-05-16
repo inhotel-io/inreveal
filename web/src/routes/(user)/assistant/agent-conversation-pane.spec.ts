@@ -21,6 +21,8 @@ vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_approval_mode: 'Approval mode',
     assistant_approval_mode_strict: 'Strict',
+    assistant_approval_request: 'Approval request',
+    assistant_approval_tool_calls_error: 'Unable to load approval requests',
     assistant_chat: 'Chat',
     assistant_details: 'Details',
     assistant_close_details: 'Close details',
@@ -119,6 +121,7 @@ describe(AgentConversationPane.name, () => {
     websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
     sdkMock.getAgentSessionMessages.mockResolvedValue([]);
     sdkMock.getCurrentOperationPlan.mockResolvedValue(null);
+    sdkMock.getToolCalls.mockResolvedValue([]);
   });
 
   it('renders a compact header, chat, and plan review without the old persistent summary', async () => {

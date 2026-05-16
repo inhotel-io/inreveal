@@ -30,6 +30,8 @@ vi.mock('svelte-i18n', () => {
     assistant: 'Assistant',
     assistant_approval_mode: 'Approval mode',
     assistant_approval_mode_strict: 'Strict',
+    assistant_approval_request: 'Approval request',
+    assistant_approval_tool_calls_error: 'Unable to load approval requests',
     assistant_chat: 'Chat',
     assistant_configured: 'Configured',
     assistant_healthy: 'Healthy',
@@ -180,6 +182,7 @@ describe(AgentAssistantWorkspace.name, () => {
     websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
     sdkMock.getAgentSessionMessages.mockResolvedValue([]);
     sdkMock.getCurrentOperationPlan.mockResolvedValue(null);
+    sdkMock.getToolCalls.mockResolvedValue([]);
     sdkMock.createAgentSession.mockResolvedValue(actionableSession);
   });
 

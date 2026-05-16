@@ -1,0 +1,208 @@
+import { sdkMock } from '$lib/__mocks__/sdk.mock';
+import {
+  AgentApprovalMode,
+  AgentPermissionPreset,
+  AgentProviderType,
+  AgentSessionStatus,
+  AgentToolApprovalDecision,
+  AgentToolCallStatus,
+  AgentToolDataClass,
+  AgentToolName,
+  type AgentSessionResponseDto,
+  type AgentToolCallResponseDto,
+} from '@immich/sdk';
+import { websocketMock } from '@test-data/mocks/websocket.mock';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { readable } from 'svelte/store';
+import AgentSessionActionDock from './agent-session-action-dock.svelte';
+
+vi.mock('$lib/stores/websocket');
+
+vi.mock('svelte-i18n', () => {
+  const messages: Record<string, string> = {
+    assistant_approval_action_error: 'Unable to record approval decision',
+    assistant_approval_album_count: '{count} albums',
+    assistant_approval_approve: 'Approve',
+    assistant_approval_asset_count: '{count} assets',
+    assistant_approval_data_access: 'Data access',
+    assistant_approval_deny: 'Deny',
+    assistant_approval_recent_activity: 'Recent activity ({count})',
+    assistant_approval_refresh_error: 'Approval was recorded, but refresh failed.',
+    assistant_approval_request: 'Approval request',
+    assistant_approval_tool_calls_error: 'Unable to load approval requests',
+    assistant_agent_tool_data_class_metadata: 'Metadata',
+    assistant_agent_tool_name_readAssetPreviews: 'Read previews',
+    assistant_agent_tool_name_searchAssets: 'Search photos',
+    assistant_agent_tool_status_completed: 'Completed',
+    assistant_agent_tool_status_denied: 'Denied',
+    assistant_agent_tool_status_failed: 'Failed',
+    assistant_created_at: 'Created',
+    assistant_provider_credential: 'Provider credential',
+    loading: 'Loading',
+  };
+
+  return {
+    t: readable((key: string, options?: { values?: Record<string, string | number> }) =>
+      (messages[key] ?? key).replace('{count}', String(options?.values?.count ?? '')),
+    ),
+  };
+});
+
+const makeSession = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSessionResponseDto => ({
+  id: overrides.id ?? 'session-1',
+  status: AgentSessionStatus.WaitingForToolApproval,
+  providerCredentialId: 'credential-1',
+  credentialSnapshot: {
+    id: 'credential-1',
+    providerType: AgentProviderType.Openai,
+    label: 'OpenAI personal',
+    baseUrl: null,
+    models: ['gpt-5.1'],
+    defaultModel: 'gpt-5.1',
+  },
+  modelSnapshot: { model: 'gpt-5.1', providerCredentialId: 'credential-1' },
+  initialContextSnapshot: {},
+  permissionPlanSnapshot: {
+    assetScope: { locked: true, owned: true, sharedSpaces: false },
+    limits: {
+      expiresInMinutes: null,
+      maxAssetsPerSession: 200,
+      maxAssetsPerToolCall: 50,
+      maxOriginalsPerToolCall: 10,
+      maxPreviewsPerToolCall: 50,
+    },
+    providerExposure: { allowOriginalsForExternalProviders: false, metadata: true, originals: false, previews: true },
+    read: { metadata: true, originals: false, previews: true },
+    writeScope: { addAssets: true, createAlbum: true, setCover: true, updateDetails: true },
+  },
+  permissionPreset: AgentPermissionPreset.VisualOrganizer,
+  approvalMode: AgentApprovalMode.Strict,
+  runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: [], models: [] },
+  runnerEndpoint: null,
+  runnerSessionId: null,
+  createdAt: '2026-05-15T00:00:00.000Z',
+  updatedAt: '2026-05-15T00:00:00.000Z',
+  endedAt: null,
+  ...overrides,
+});
+
+const toolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentToolCallResponseDto => ({
+  id: overrides.id ?? 'tool-call-1',
+  sessionId: overrides.sessionId ?? 'session-1',
+  toolName: overrides.toolName ?? AgentToolName.SearchAssets,
+  status: overrides.status ?? AgentToolCallStatus.PendingApproval,
+  approvalDecision: overrides.approvalDecision ?? null,
+  requestSummary: overrides.requestSummary ?? 'Search recent favorites',
+  responseSummary: overrides.responseSummary ?? null,
+  dataClass: overrides.dataClass ?? AgentToolDataClass.Metadata,
+  assetCount: overrides.assetCount ?? 4,
+  albumCount: overrides.albumCount ?? 0,
+  startedAt: overrides.startedAt ?? '2026-05-16T10:00:00.000Z',
+  completedAt: overrides.completedAt ?? null,
+  error: overrides.error ?? null,
+});
+
+describe(AgentSessionActionDock.name, () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+    websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
+    sdkMock.getToolCalls.mockResolvedValue([]);
+    sdkMock.getAgentSession.mockResolvedValue(makeSession({ status: AgentSessionStatus.Running }));
+  });
+
+  it('loads pending approvals for the selected session and reports count', async () => {
+    const onPendingApprovalCountChange = vi.fn();
+    sdkMock.getToolCalls.mockResolvedValue([
+      toolCall({ id: 'b', startedAt: '2026-05-16T11:00:00.000Z' }),
+      toolCall({ id: 'a', startedAt: '2026-05-16T10:00:00.000Z', toolName: AgentToolName.ReadAssetPreviews }),
+    ]);
+
+    render(AgentSessionActionDock, { props: { session: makeSession(), onPendingApprovalCountChange } });
+
+    expect(await screen.findByText('Read previews')).toBeInTheDocument();
+    expect(screen.getByText('Search photos')).toBeInTheDocument();
+    expect(sdkMock.getToolCalls).toHaveBeenCalledWith({ id: 'session-1' });
+    expect(onPendingApprovalCountChange).toHaveBeenLastCalledWith(2);
+  });
+
+  it('shows load errors without throwing away the dock', async () => {
+    sdkMock.getToolCalls.mockRejectedValue(new Error('failed'));
+
+    render(AgentSessionActionDock, { props: { session: makeSession() } });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load approval requests');
+  });
+
+  it('approves through the API and refreshes session and tool calls', async () => {
+    const onSessionUpdated = vi.fn();
+    sdkMock.getToolCalls.mockResolvedValueOnce([toolCall()]).mockResolvedValue([]);
+    sdkMock.approveToolCall.mockResolvedValue(toolCall({ status: AgentToolCallStatus.Approved }));
+    sdkMock.getAgentSession.mockResolvedValue(makeSession({ status: AgentSessionStatus.Running }));
+
+    render(AgentSessionActionDock, { props: { session: makeSession(), onSessionUpdated } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+
+    await waitFor(() =>
+      expect(sdkMock.approveToolCall).toHaveBeenCalledWith({
+        id: 'session-1',
+        toolCallId: 'tool-call-1',
+        agentToolApprovalDto: { decision: AgentToolApprovalDecision.Approved },
+      }),
+    );
+    await waitFor(() => expect(onSessionUpdated).toHaveBeenCalledWith(expect.objectContaining({ id: 'session-1' })));
+    expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps cards actionable when approval fails', async () => {
+    sdkMock.getToolCalls.mockResolvedValue([toolCall()]);
+    sdkMock.approveToolCall.mockRejectedValue(new Error('already handled'));
+
+    render(AgentSessionActionDock, { props: { session: makeSession() } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to record approval decision');
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
+  });
+
+  it('renders recent activity collapsed by default', async () => {
+    sdkMock.getToolCalls.mockResolvedValue([
+      toolCall({
+        id: 'recent',
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Found matching photos',
+        completedAt: '2026-05-16T11:00:00.000Z',
+      }),
+    ]);
+
+    render(AgentSessionActionDock, { props: { session: makeSession() } });
+
+    expect(await screen.findByText('Recent activity (1)')).toBeInTheDocument();
+    expect(screen.queryByText('Found matching photos')).not.toBeVisible();
+  });
+
+  it('refreshes on selected websocket events and polls active sessions', async () => {
+    vi.useFakeTimers();
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+
+    render(AgentSessionActionDock, { props: { session: makeSession({ status: AgentSessionStatus.Running }) } });
+    await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1));
+
+    handler?.({ type: 'runner-error', sessionId: 'other-session', message: 'ignored', createdAt: '2026-05-16T10:00:00Z' });
+    await Promise.resolve();
+    expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1);
+
+    handler?.({ type: 'runner-error', sessionId: 'session-1', message: 'refresh', createdAt: '2026-05-16T10:00:00Z' });
+    await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(2));
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+});
