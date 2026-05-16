@@ -23,6 +23,17 @@ export type AgentMcpToolsListResult = {
   tools: AgentMcpToolDefinition[];
 };
 
+export type AgentMcpToolTextContent = {
+  type: 'text';
+  text: string;
+};
+
+export type AgentMcpToolCallResult = {
+  content: AgentMcpToolTextContent[];
+  structuredContent: unknown;
+  isError?: boolean;
+};
+
 export type AgentMcpError = {
   code: number;
   message: string;
