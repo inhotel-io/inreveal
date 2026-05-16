@@ -49,8 +49,8 @@ const createSessionBody = (overrides = {}) => ({
   ...overrides,
 });
 
-const createRuntime = ({ createSession, sendMessage } = {}) => {
-  const calls = { createSession: [], sendMessage: [] };
+const createRuntime = ({ createSession, sendMessage, disposeSession } = {}) => {
+  const calls = { createSession: [], disposeSession: [], sendMessage: [] };
 
   return {
     calls,
@@ -70,6 +70,12 @@ const createRuntime = ({ createSession, sendMessage } = {}) => {
           runtime: 'pi',
         },
       };
+    },
+    async disposeSession(runnerSessionId) {
+      calls.disposeSession.push(runnerSessionId);
+      if (disposeSession) {
+        return disposeSession(runnerSessionId);
+      }
     },
     async *sendMessage(body) {
       calls.sendMessage.push(body);
@@ -218,6 +224,69 @@ describe('agent runner server', () => {
       assert.equal(response.status, 201);
       assert.equal(runtime.calls.createSession.length, 1);
       assert.equal(runtime.calls.createSession[0].mcpGateway, null);
+    });
+  });
+
+  it('validates model setup with a temporary no-tools runtime session', async () => {
+    const runtime = createRuntime();
+
+    await withServer(runtime, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/validate-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          createSessionBody({
+            mcpGateway: {
+              url: 'https://gallery.example.test/mcp/sessions/00000000-0000-4000-8000-000000000100',
+              token: 'gateway-token-secret',
+            },
+          }),
+        ),
+      });
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), {
+        ok: true,
+        capabilities: {
+          protocolVersion: '2026-05-14',
+          streaming: true,
+          tools: [],
+          models: ['gpt-5.1'],
+          runtime: 'pi',
+        },
+      });
+      assert.equal(runtime.calls.createSession.length, 1);
+      assert.equal(runtime.calls.createSession[0].mcpGateway, null);
+      assert.equal(runtime.calls.sendMessage.length, 1);
+      assert.equal(runtime.calls.sendMessage[0].content.blocks[0].text, 'Reply with exactly: OK');
+      assert.deepEqual(runtime.calls.disposeSession, ['pi-00000000-0000-4000-8000-000000000100']);
+    });
+  });
+
+  it('rejects failed model setup validation without leaking credential secrets', async () => {
+    const runtime = createRuntime({
+      sendMessage: async function* (body) {
+        yield {
+          type: 'runner-error',
+          sessionId: body.gallerySessionId,
+          runnerSessionId: body.runnerSessionId,
+          message: 'provider rejected sk-session-secret',
+        };
+      },
+    });
+
+    await withServer(runtime, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/validate-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+
+      assert.equal(response.status, 502);
+      const body = await response.text();
+      assert.equal(body.includes('sk-session-secret'), false);
+      assert.deepEqual(JSON.parse(body), { error: 'runner model validation failed' });
+      assert.deepEqual(runtime.calls.disposeSession, ['pi-00000000-0000-4000-8000-000000000100']);
     });
   });
 

@@ -124,6 +124,38 @@ const createSessionProtocolBody = (body) => ({
   ...('mcpGateway' in body ? { mcpGateway: body.mcpGateway } : {}),
 });
 
+const validateModelSetup = async (runtime, body) => {
+  const runnerSession = normalizeRuntimeCreateSessionResponse(
+    await runtime.createSession(createSessionProtocolBody({ ...body, mcpGateway: null })),
+  );
+
+  try {
+    let completed = false;
+    for await (const event of runtime.sendMessage({
+      runnerSessionId: runnerSession.runnerSessionId,
+      gallerySessionId: body.gallerySessionId,
+      messageId: `${body.gallerySessionId}:validation`,
+      content: { blocks: [{ type: 'text', text: 'Reply with exactly: OK' }] },
+    })) {
+      if (event.type === 'runner-error') {
+        throw new Error(event.message);
+      }
+
+      if (event.type === 'assistant-message-completed') {
+        completed = true;
+      }
+    }
+
+    if (!completed) {
+      throw new Error('validation message did not complete');
+    }
+
+    return runnerSession;
+  } finally {
+    await runtime.disposeSession?.(runnerSession.runnerSessionId);
+  }
+};
+
 const normalizeRuntimeCreateSessionResponse = (runnerSession) => {
   if (typeof runnerSession?.runnerSessionId !== 'string') {
     throw new Error('invalid runtime session response');
@@ -185,6 +217,27 @@ export const startServer = ({
         sendJson(response, 201, runnerSession);
       } catch {
         sendJson(response, 502, { error: 'runner session creation failed' });
+      }
+      return;
+    }
+
+    if (request.method === 'POST' && url.pathname === '/validate-session') {
+      const result = await readJsonOrSendError(request, response);
+      if (!result.ok) {
+        return;
+      }
+
+      const validationError = validateCreateSessionBody(result.body);
+      if (validationError) {
+        sendJson(response, 400, { error: validationError });
+        return;
+      }
+
+      try {
+        const runnerSession = await validateModelSetup(runtime, result.body);
+        sendJson(response, 200, { ok: true, capabilities: runnerSession.capabilities });
+      } catch {
+        sendJson(response, 502, { error: 'runner model validation failed' });
       }
       return;
     }

@@ -7,24 +7,43 @@ import {
 import type { Translations } from 'svelte-i18n';
 
 export const permissionPresetOptions = [
-  { value: AgentPermissionPreset.Careful, labelKey: 'assistant_permission_preset_careful' as Translations },
+  {
+    value: AgentPermissionPreset.Careful,
+    labelKey: 'assistant_permission_preset_careful' as Translations,
+    descriptionKey: 'assistant_permission_preset_careful_description' as Translations,
+  },
   {
     value: AgentPermissionPreset.VisualOrganizer,
     labelKey: 'assistant_permission_preset_visual_organizer' as Translations,
+    descriptionKey: 'assistant_permission_preset_visual_organizer_description' as Translations,
   },
   {
     value: AgentPermissionPreset.LocalPowerUser,
     labelKey: 'assistant_permission_preset_local_power_user' as Translations,
+    descriptionKey: 'assistant_permission_preset_local_power_user_description' as Translations,
   },
 ] as const;
 
 export const approvalModeOptions = [
-  { value: AgentApprovalMode.Strict, labelKey: 'assistant_approval_mode_strict' as Translations },
-  { value: AgentApprovalMode.AskOnEscalation, labelKey: 'assistant_approval_mode_ask_on_escalation' as Translations },
-  { value: AgentApprovalMode.PlanOnly, labelKey: 'assistant_approval_mode_plan_only' as Translations },
+  {
+    value: AgentApprovalMode.Strict,
+    labelKey: 'assistant_approval_mode_strict' as Translations,
+    descriptionKey: 'assistant_approval_mode_strict_description' as Translations,
+  },
+  {
+    value: AgentApprovalMode.AskOnEscalation,
+    labelKey: 'assistant_approval_mode_ask_on_escalation' as Translations,
+    descriptionKey: 'assistant_approval_mode_ask_on_escalation_description' as Translations,
+  },
+  {
+    value: AgentApprovalMode.PlanOnly,
+    labelKey: 'assistant_approval_mode_plan_only' as Translations,
+    descriptionKey: 'assistant_approval_mode_plan_only_description' as Translations,
+  },
   {
     value: AgentApprovalMode.DangerouslySkipPermissions,
     labelKey: 'assistant_approval_mode_dangerously_skip_permissions' as Translations,
+    descriptionKey: 'assistant_approval_mode_dangerously_skip_permissions_description' as Translations,
   },
 ] as const;
 

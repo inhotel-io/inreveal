@@ -15,7 +15,9 @@ import AgentSessionSidebar from './agent-session-sidebar.svelte';
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_new_chat: 'New chat',
+    assistant_chat_menu: 'Chat options',
     assistant_collapse_sessions: 'Collapse sessions',
+    assistant_rename_chat_title: 'Chat title',
     assistant_search_chats: 'Search chats',
     assistant_sessions: 'Sessions',
     assistant_session_status_applying: 'Applying',
@@ -26,6 +28,10 @@ vi.mock('svelte-i18n', () => {
     assistant_session_status_waiting_for_plan_review: 'Waiting for plan review',
     assistant_session_status_waiting_for_tool_approval: 'Waiting for tool approval',
     assistant_session_status_running: 'Running',
+    cancel: 'Cancel',
+    delete: 'Delete',
+    rename: 'Rename',
+    save: 'Save',
   };
 
   return { t: readable((key: string) => messages[key] ?? key) };
@@ -107,6 +113,8 @@ const sessions = [
 const renderSidebar = (props: Partial<ComponentProps<typeof AgentSessionSidebar>> = {}) => {
   const onSelectSession = vi.fn();
   const onNewChat = vi.fn();
+  const onRenameSession = vi.fn();
+  const onDeleteSession = vi.fn();
 
   render(AgentSessionSidebar, {
     props: {
@@ -118,11 +126,13 @@ const renderSidebar = (props: Partial<ComponentProps<typeof AgentSessionSidebar>
       },
       onSelectSession,
       onNewChat,
+      onRenameSession,
+      onDeleteSession,
       ...props,
     },
   });
 
-  return { onNewChat, onSelectSession };
+  return { onDeleteSession, onNewChat, onRenameSession, onSelectSession };
 };
 
 describe(AgentSessionSidebar.name, () => {
@@ -222,6 +232,28 @@ describe(AgentSessionSidebar.name, () => {
 
     expect(sdkMock.getAgentSessionMessages).not.toHaveBeenCalled();
     expect(sdkMock.appendAgentSessionMessage).not.toHaveBeenCalled();
+  });
+
+  it('opens a compact row menu to rename and delete sessions', async () => {
+    const user = userEvent.setup();
+    const { onDeleteSession, onRenameSession } = renderSidebar();
+
+    const planRow = screen.getByTestId('agent-session-row-plan');
+    await user.click(within(planRow.parentElement as HTMLElement).getByRole('button', { name: 'Chat options' }));
+
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: /Rename/ }));
+    await user.clear(screen.getByRole('textbox', { name: 'Chat title' }));
+    await user.type(screen.getByRole('textbox', { name: 'Chat title' }), 'Renamed plan');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onRenameSession).toHaveBeenCalledWith('plan', 'Renamed plan');
+
+    const renamedPlanRow = screen.getByTestId('agent-session-row-plan');
+    await user.click(within(renamedPlanRow.parentElement as HTMLElement).getByRole('button', { name: 'Chat options' }));
+    await user.click(screen.getByRole('menuitem', { name: /Delete/ }));
+
+    expect(onDeleteSession).toHaveBeenCalledWith('plan');
   });
 
   it('keeps long labels inside bounded row containers with stable sizing classes', () => {

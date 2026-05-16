@@ -14,7 +14,7 @@ import {
   type AgentSessionResponseDto,
 } from '@immich/sdk';
 import { websocketMock } from '@test-data/mocks/websocket.mock';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { tick } from 'svelte';
 import { readable } from 'svelte/store';
@@ -28,37 +28,75 @@ vi.mock('$lib/stores/websocket');
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant: 'Assistant',
+    assistant_add_api_key: 'Add API key',
+    assistant_add_api_key_collapsed_hint:
+      'Add another provider account only when you need a different key, endpoint, or local model host.',
     assistant_approval_mode: 'Approval mode',
     assistant_approval_mode_strict: 'Strict',
     assistant_approval_request: 'Approval request',
     assistant_approval_tool_calls_error: 'Unable to load approval requests',
     assistant_cancel: 'Cancel',
     assistant_chat: 'Chat',
+    assistant_chat_menu: 'Chat options',
     assistant_collapse_sessions: 'Collapse sessions',
     assistant_configured: 'Configured',
+    assistant_credentials_empty_description:
+      'Save a provider key once, add the models available for that key, then start a chat from here.',
+    assistant_credentials_empty_title: 'Connect a model provider',
+    assistant_default_model: 'Default',
+    assistant_delete_api_key: 'Delete API key',
+    assistant_delete_api_key_confirm_description:
+      'Delete {label}? Sessions that already started keep their snapshot, but this key will no longer be available for new sessions.',
+    assistant_delete_api_key_confirm_title: 'Delete this API key?',
+    assistant_edit_models: 'Edit models',
+    assistant_api_key_base_url: 'Base URL',
+    assistant_api_key_default_model: 'Default model',
+    assistant_api_key_delete_error: 'Unable to delete API key',
+    assistant_api_key_deleted: 'API key deleted',
+    assistant_api_key_label: 'Name',
+    assistant_api_key_masked: '************',
+    assistant_api_key_models: 'Models',
+    assistant_api_key_models_hint: 'Add multiple model IDs to one saved key, separated by commas.',
+    assistant_api_key_models_save_error: 'Unable to update models',
+    assistant_api_key_models_saved: 'Models updated',
+    assistant_api_key_save_error: 'Unable to save API key',
+    assistant_api_key_saved: 'API key saved',
+    assistant_api_key_secret: 'API key',
+    assistant_api_keys: 'API keys',
+    assistant_api_keys_description: 'Save one key per provider account, then add all model IDs available for that key.',
+    assistant_api_keys_menu: 'Manage API keys',
+    assistant_existing_api_keys: 'Existing API keys',
     assistant_healthy: 'Healthy',
+    assistant_hide_api_key: 'Hide API key',
     assistant_message: 'Message',
     assistant_message_disabled_placeholder: 'This session is read-only.',
     assistant_message_disabled_terminal: 'This session has ended. Start a new chat to continue.',
     assistant_message_placeholder: 'Ask the assistant to organize your albums.',
     assistant_message_refresh_error: 'Message was sent, but the latest session state could not be refreshed.',
     assistant_message_resume_placeholder: 'Describe what changed or what the assistant should try next.',
+    assistant_manage_api_keys: 'Manage API keys',
     assistant_model: 'Model',
     assistant_new_chat: 'New chat',
     assistant_details: 'Details',
     assistant_no: 'no',
+    assistant_no_api_keys: 'No API keys have been added yet.',
+    assistant_no_credentials_setup: 'Connect a model provider before starting a session.',
     assistant_operation_plan_empty: 'No proposed album plan yet.',
     assistant_operation_plan_loading: 'Loading proposed album plan',
+    assistant_ollama_no_api_key:
+      'Ollama does not require an API key. The server will save a local placeholder secret for compatibility.',
     assistant_open_sessions: 'Open sessions',
     assistant_permission_preset: 'Permission preset',
     assistant_permission_preset_careful: 'Careful',
     assistant_protocol: 'Protocol {protocol}',
     assistant_provider_credential: 'Provider credential',
+    assistant_provider_type: 'Provider',
     assistant_runner: 'Runner {version}',
     assistant_runner_healthy: 'Runner healthy',
     assistant_search_chats: 'Search chats',
     assistant_selected_session: 'Selected session',
     assistant_resume: 'Resume',
+    assistant_rename_chat_title: 'Chat title',
     assistant_send: 'Send',
     assistant_session_cancel_error: 'Unable to cancel assistant session',
     assistant_session_created: 'Assistant session started',
@@ -70,19 +108,28 @@ vi.mock('svelte-i18n', () => {
     assistant_session_status_running: 'Running',
     assistant_session_status_waiting_for_plan_review: 'Waiting for plan review',
     assistant_sessions: 'Sessions',
+    assistant_secret_not_retrievable: 'Saved key is encrypted and cannot be displayed.',
+    assistant_save_api_key: 'Save API key',
+    assistant_show_api_key: 'Show API key',
     assistant_start_session: 'Start session',
     assistant_start_new_chat: 'Start new chat',
     assistant_streaming: 'Streaming',
     assistant_subtitle: 'Album organization assistant',
     assistant_yes: 'yes',
     status: 'Status',
+    cancel: 'Cancel',
+    close: 'Close',
+    delete: 'Delete',
+    rename: 'Rename',
+    save: 'Save',
   };
 
   return {
     t: readable((key: string, options?: { values?: Record<string, string | number> }) =>
       (messages[key] ?? key)
         .replace('{protocol}', String(options?.values?.protocol ?? ''))
-        .replace('{version}', String(options?.values?.version ?? '')),
+        .replace('{version}', String(options?.values?.version ?? ''))
+        .replace('{label}', String(options?.values?.label ?? '')),
     ),
   };
 });
@@ -195,7 +242,14 @@ describe(AgentAssistantWorkspace.name, () => {
     sdkMock.getAgentSessionMessages.mockResolvedValue([]);
     sdkMock.getCurrentOperationPlan.mockResolvedValue(null);
     sdkMock.getToolCalls.mockResolvedValue([]);
+    sdkMock.validateAgentSession.mockResolvedValue(undefined as never);
     sdkMock.createAgentSession.mockResolvedValue(actionableSession);
+    sdkMock.createAgentProviderCredential.mockResolvedValue(credentials[0]);
+    sdkMock.getAgentProviderCredentials.mockResolvedValue(credentials);
+    sdkMock.updateAgentProviderCredential.mockResolvedValue(credentials[0]);
+    sdkMock.deleteAgentProviderCredential.mockResolvedValue(undefined as never);
+    sdkMock.updateAgentSession.mockResolvedValue({ ...actionableSession, title: 'Renamed chat' });
+    sdkMock.deleteAgentSession.mockResolvedValue(undefined as never);
   });
 
   it('selects a valid requested session and mounts chat and plan panels for it', async () => {
@@ -304,6 +358,58 @@ describe(AgentAssistantWorkspace.name, () => {
     );
   });
 
+  it('renames a session through the sidebar menu and uses the persisted title', async () => {
+    const user = userEvent.setup();
+    const renamedSession = { ...actionableSession, title: 'Curated album cleanup' };
+    sdkMock.updateAgentSession.mockResolvedValue(renamedSession);
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession],
+        requestedSessionId: actionableSession.id,
+      },
+    });
+
+    const row = screen.getByTestId(`agent-session-row-${actionableSession.id}`);
+    await user.click(within(row.parentElement as HTMLElement).getByRole('button', { name: 'Chat options' }));
+    await user.click(screen.getByRole('menuitem', { name: /Rename/ }));
+    await user.clear(screen.getByRole('textbox', { name: 'Chat title' }));
+    await user.type(screen.getByRole('textbox', { name: 'Chat title' }), 'Curated album cleanup');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(sdkMock.updateAgentSession).toHaveBeenCalledWith({
+        id: actionableSession.id,
+        agentSessionUpdateDto: { title: 'Curated album cleanup' },
+      }),
+    );
+    expect(screen.getByTestId(`agent-session-row-${actionableSession.id}`)).toHaveTextContent('Curated album cleanup');
+  });
+
+  it('deletes the selected session through the sidebar menu and returns to session setup', async () => {
+    const user = userEvent.setup();
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession, requestedSession],
+        requestedSessionId: actionableSession.id,
+      },
+    });
+
+    const row = screen.getByTestId(`agent-session-row-${actionableSession.id}`);
+    await user.click(within(row.parentElement as HTMLElement).getByRole('button', { name: 'Chat options' }));
+    await user.click(screen.getByRole('menuitem', { name: /Delete/ }));
+
+    await waitFor(() => expect(sdkMock.deleteAgentSession).toHaveBeenCalledWith({ id: actionableSession.id }));
+    expect(screen.queryByTestId(`agent-session-row-${actionableSession.id}`)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Session setup' })).toBeInTheDocument();
+    expect(gotoMock).toHaveBeenLastCalledWith('/assistant', expect.objectContaining({ replaceState: false }));
+  });
+
   it('keeps the explicit new-chat state when the URL query is cleared', async () => {
     const user = userEvent.setup();
 
@@ -349,6 +455,199 @@ describe(AgentAssistantWorkspace.name, () => {
     await user.click(screen.getByTestId('agent-session-sidebar-expand'));
 
     expect(screen.getByRole('searchbox', { name: 'Search chats' })).toBeInTheDocument();
+  });
+
+  it('manages provider keys and model lists from the workspace menu', async () => {
+    const user = userEvent.setup();
+    const createdCredential: AgentProviderCredentialResponseDto = {
+      ...credentials[0],
+      id: '00000000-0000-4000-8000-000000000009',
+      label: 'OpenAI work',
+      models: ['gpt-5.1', 'gpt-5.2'],
+      defaultModel: 'gpt-5.2',
+    };
+    const updatedCredential: AgentProviderCredentialResponseDto = {
+      ...credentials[0],
+      models: ['gpt-5.1', 'gpt-5.2', 'gpt-5.2-mini'],
+    };
+    sdkMock.createAgentProviderCredential.mockResolvedValue(createdCredential);
+    sdkMock.getAgentProviderCredentials
+      .mockResolvedValueOnce([updatedCredential])
+      .mockResolvedValueOnce([createdCredential]);
+    sdkMock.updateAgentProviderCredential.mockResolvedValue(updatedCredential);
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    await user.click(screen.getAllByRole('button', { name: 'Manage API keys' })[0]);
+
+    expect(screen.getByRole('dialog', { name: 'API keys' })).toBeInTheDocument();
+    expect(screen.getAllByText('OpenAI personal')).not.toHaveLength(0);
+    expect(screen.getByTestId(`agent-api-key-secret-${credentials[0].id}`)).toHaveTextContent('************');
+
+    await user.click(screen.getByRole('button', { name: 'Show API key' }));
+    expect(screen.getByText('Saved key is encrypted and cannot be displayed.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Edit models' }));
+    await user.clear(screen.getByLabelText(`${credentials[0].label} Models`));
+    await user.type(screen.getByLabelText(`${credentials[0].label} Models`), 'gpt-5.1, gpt-5.2, gpt-5.2-mini');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(sdkMock.updateAgentProviderCredential).toHaveBeenCalledWith({
+        id: credentials[0].id,
+        agentProviderCredentialUpdateDto: {
+          models: ['gpt-5.1', 'gpt-5.2', 'gpt-5.2-mini'],
+          defaultModel: 'gpt-5.1',
+        },
+      }),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add API key' }));
+    await user.selectOptions(screen.getByLabelText('Provider'), ProviderType.Openai);
+    await user.type(screen.getByLabelText('Name'), 'OpenAI work');
+    await user.type(screen.getByLabelText('API key'), 'sk-test');
+    await user.type(screen.getAllByLabelText('Models')[1], 'gpt-5.1, gpt-5.2');
+    await user.type(screen.getByLabelText('Default model'), 'gpt-5.2');
+    await user.click(screen.getByRole('button', { name: 'Save API key' }));
+
+    await waitFor(() =>
+      expect(sdkMock.createAgentProviderCredential).toHaveBeenCalledWith({
+        agentProviderCredentialCreateDto: {
+          providerType: ProviderType.Openai,
+          label: 'OpenAI work',
+          secret: 'sk-test',
+          baseUrl: undefined,
+          models: ['gpt-5.1', 'gpt-5.2'],
+          defaultModel: 'gpt-5.2',
+        },
+      }),
+    );
+    expect(await screen.findByRole('option', { name: 'OpenAI work' })).toBeInTheDocument();
+  });
+
+  it('adds Ollama credentials without asking for an API key', async () => {
+    const user = userEvent.setup();
+    const createdCredential: AgentProviderCredentialResponseDto = {
+      ...credentials[0],
+      id: '00000000-0000-4000-8000-000000000010',
+      providerType: ProviderType.OpenaiCompatible,
+      label: 'Ollama',
+      baseUrl: 'http://localhost:11434/v1',
+      models: ['llama3.2'],
+      defaultModel: 'llama3.2',
+    };
+    sdkMock.createAgentProviderCredential.mockResolvedValue(createdCredential);
+    sdkMock.getAgentProviderCredentials.mockResolvedValue([createdCredential]);
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials: [],
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Add API key' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'API keys' })).getByRole('button', { name: 'Add API key' }));
+    await user.selectOptions(screen.getByLabelText('Provider'), 'ollama');
+
+    expect(screen.queryByLabelText('API key')).not.toBeInTheDocument();
+    expect(screen.getByText(/Ollama does not require an API key/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toHaveValue('Ollama');
+    expect(screen.getByLabelText('Base URL')).toHaveValue('http://localhost:11434/v1');
+
+    await user.type(screen.getByLabelText('Models'), 'llama3.2');
+    await user.type(screen.getByLabelText('Default model'), 'llama3.2');
+    await user.click(screen.getByRole('button', { name: 'Save API key' }));
+
+    await waitFor(() =>
+      expect(sdkMock.createAgentProviderCredential).toHaveBeenCalledWith({
+        agentProviderCredentialCreateDto: {
+          providerType: ProviderType.OpenaiCompatible,
+          label: 'Ollama',
+          secret: 'ollama',
+          baseUrl: 'http://localhost:11434/v1',
+          models: ['llama3.2'],
+          defaultModel: 'llama3.2',
+        },
+      }),
+    );
+    await waitFor(() => expect(screen.getByLabelText('Provider credential')).toHaveValue(createdCredential.id));
+    expect(screen.getByLabelText('Model')).toHaveValue('llama3.2');
+  });
+
+  it('deletes a configured API key entry after confirmation', async () => {
+    const user = userEvent.setup();
+    sdkMock.getAgentProviderCredentials.mockResolvedValue([]);
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    await user.click(screen.getAllByRole('button', { name: 'Manage API keys' })[0]);
+    await user.click(screen.getByRole('button', { name: 'Delete API key' }));
+
+    expect(screen.getByText('Delete this API key?')).toBeInTheDocument();
+    expect(screen.getByText(/Delete OpenAI personal/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(sdkMock.deleteAgentProviderCredential).toHaveBeenCalledWith({ id: credentials[0].id }));
+    expect(sdkMock.getAgentProviderCredentials).toHaveBeenCalled();
+    expect(await screen.findByText('No API keys have been added yet.')).toBeInTheDocument();
+    expect(screen.getByText('Connect a model provider before starting a session.')).toBeInTheDocument();
+  });
+
+  it('opens API key management from setup when credentials already exist', async () => {
+    const user = userEvent.setup();
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    await user.click(screen.getAllByRole('button', { name: 'Manage API keys' })[1]);
+
+    expect(screen.getByRole('dialog', { name: 'API keys' })).toBeInTheDocument();
+    expect(screen.getAllByText('OpenAI personal')).not.toHaveLength(0);
+  });
+
+  it('guides first-time users to add an API key from setup', async () => {
+    const user = userEvent.setup();
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials: [],
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    expect(screen.getByRole('heading', { name: 'Connect a model provider' })).toBeInTheDocument();
+    expect(screen.getByText('Connect a model provider before starting a session.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Add API key' }));
+
+    expect(screen.getByRole('dialog', { name: 'API keys' })).toBeInTheDocument();
+    expect(screen.getByText('No API keys have been added yet.')).toBeInTheDocument();
   });
 
   it('adds a newly created session to the sidebar, selects it, and opens the chat workspace', async () => {

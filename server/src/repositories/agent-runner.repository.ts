@@ -5,6 +5,7 @@ import type {
   AgentRunnerCreateSessionResult,
   AgentRunnerMessageRequest,
   AgentRunnerStreamEvent,
+  AgentRunnerValidateSessionResult,
 } from 'src/types/agent-runner.types';
 
 type RunnerHealthBody = {
@@ -62,6 +63,11 @@ const getRunnerUrl = (url: string, path: string) => {
 const isCreateSessionResult = (value: unknown): value is AgentRunnerCreateSessionResult => {
   const body = objectRecord(value);
   return typeof body.runnerSessionId === 'string' && objectRecord(body.capabilities) === body.capabilities;
+};
+
+const isValidateSessionResult = (value: unknown): value is AgentRunnerValidateSessionResult => {
+  const body = objectRecord(value);
+  return body.ok === true && objectRecord(body.capabilities) === body.capabilities;
 };
 
 const optionalString = (value: unknown): boolean => value === undefined || typeof value === 'string';
@@ -256,6 +262,34 @@ export class AgentRunnerRepository {
     const result = await response.json();
     if (!isCreateSessionResult(result)) {
       throw new Error('Agent runner returned an invalid session response');
+    }
+
+    return result;
+  }
+
+  async validateSession({
+    url,
+    timeoutMs,
+    body,
+  }: {
+    url: string;
+    timeoutMs: number;
+    body: AgentRunnerCreateSessionRequest;
+  }): Promise<AgentRunnerValidateSessionResult> {
+    const response = await fetch(getRunnerUrl(url, 'validate-session'), {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Agent runner model validation failed with status ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (!isValidateSessionResult(result)) {
+      throw new Error('Agent runner returned an invalid validation response');
     }
 
     return result;
