@@ -817,7 +817,6 @@
   "assistant_unavailable_banner": "Assistant runner unavailable. Check configuration.",
   "assistant_updated_at": "Updated",
   "assistant_validating_session": "Testing setup",
-  "assistant_validating_session": "Testing setup",
   "assistant_yes": "yes",
   "authorized_devices": "Authorized Devices",
   "automatic_endpoint_switching_subtitle": "Connect locally over designated Wi-Fi when available and use alternative connections elsewhere",
