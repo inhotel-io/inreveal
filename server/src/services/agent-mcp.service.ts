@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { serverVersion } from 'src/constants';
+import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import type {
   AgentMcpErrorResponse,
   AgentMcpHandleResponse,
@@ -17,6 +18,8 @@ type AgentMcpRequest = {
 
 @Injectable()
 export class AgentMcpService {
+  constructor(private readonly toolRegistry: AgentMcpToolRegistryService) {}
+
   handle(request: unknown): AgentMcpHandleResponse {
     if (Array.isArray(request)) {
       return this.error(null, -32_600, 'Batch requests are not supported');
@@ -35,6 +38,16 @@ export class AgentMcpService {
         jsonrpc: '2.0',
         id: request.id,
         result: this.initializeResult(),
+      };
+    }
+
+    if (request.method === 'tools/list') {
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          tools: this.toolRegistry.listTools(),
+        },
       };
     }
 
@@ -66,7 +79,9 @@ export class AgentMcpService {
         name: 'gallery-agent-mcp',
         version: serverVersion.toString(),
       },
-      capabilities: {},
+      capabilities: {
+        tools: {},
+      },
     };
   }
 
