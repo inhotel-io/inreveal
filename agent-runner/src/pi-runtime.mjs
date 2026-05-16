@@ -18,6 +18,9 @@ const systemPrompt = [
   'You are Gallery Assistant, a personal photo organization assistant.',
   'Your goal is to help the user organize photos into albums by producing a reviewable album operation plan.',
   'Use Gallery read tools to inspect the session-scoped library before planning: mcp_gallery_searchAssets, mcp_gallery_readAssetMetadata, mcp_gallery_readAssetPreviews, mcp_gallery_readAssetOriginals, mcp_gallery_listAlbums, and mcp_gallery_readAlbum.',
+  'For factual questions about albums, photo counts, video counts, asset counts, dates, places, tags, ratings, or asset details, use Gallery MCP read tools before answering. Do not guess from memory or say you cannot inspect Gallery while read tools are available.',
+  'If a Gallery MCP read tool returns status "approval-required", stop the turn without explaining the approval request to the user. Gallery will show approval UI and resume you after the user decides.',
+  'After Gallery resumes you from an approval decision, treat any previous approval-required result as obsolete. Use the approved tool result or approved toolCallId Gallery provides, continue the original user task, and do not mention pending approval.',
   'When you have a concrete plan, call mcp_gallery_proposeAlbumOperations so Gallery can show the user a review panel.',
   'If the user asks for changes to an existing plan, call mcp_gallery_reviseProposedOperations with the planId. Use mcp_gallery_summarizePlan when you need a compact summary of a proposed plan.',
   'Plan operations may include album.create, album.addAssets, album.updateDetails, and album.setCover.',
@@ -115,6 +118,38 @@ const assistantErrorFromSession = (session) => {
   return typeof assistant.errorMessage === 'string' && assistant.errorMessage.length > 0
     ? assistant.errorMessage
     : 'Provider request failed';
+};
+
+const approvalResumePrompt = ({ toolCallId, approvalDecision, toolResult }) => {
+  if (!toolCallId || !approvalDecision) {
+    return undefined;
+  }
+
+  if (approvalDecision === 'approved') {
+    if (toolResult !== undefined) {
+      return [
+        'This is an internal Gallery resume instruction, not a new user request.',
+        `The previous approval-required response for Gallery tool call ${toolCallId} is obsolete.`,
+        `The user approved Gallery tool call ${toolCallId}, and Gallery already executed it successfully.`,
+        `Use this approved tool result JSON as authoritative data to continue the user's original request: ${JSON.stringify(toolResult)}.`,
+        'Do not mention pending approval or ask for approval again for this same tool result.',
+        'If the original request still needs album details after mcp_gallery_listAlbums, find the matching album id in the approved result and call mcp_gallery_readAlbum. If it needs asset metadata or search, call the next appropriate Gallery MCP read tool.',
+      ].join(' ');
+    }
+
+    return [
+      'This is an internal Gallery resume instruction, not a new user request.',
+      `The previous approval-required response for Gallery tool call ${toolCallId} is obsolete.`,
+      `The user approved Gallery tool call ${toolCallId}.`,
+      `Continue the user's request by calling the same Gallery MCP tool again with toolCallId "${toolCallId}" to execute the approved request.`,
+      'Do not mention pending approval or ask for approval again.',
+    ].join(' ');
+  }
+
+  return [
+    `The user denied Gallery tool call ${toolCallId}.`,
+    'Continue the conversation without using the denied data, and explain briefly if the task cannot be completed.',
+  ].join(' ');
 };
 
 const sanitizedErrorMessage = (error, secret) => {
@@ -592,7 +627,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       }
     },
 
-    async *resumeSession({ runnerSessionId, gallerySessionId }) {
+    async *resumeSession({ runnerSessionId, gallerySessionId, toolCallId, approvalDecision, toolResult }) {
       const entry = sessions.get(runnerSessionId);
       if (!entry || entry.gallerySessionId !== gallerySessionId) {
         throw new Error('Runner session not found');
@@ -678,10 +713,15 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       entry.unsubscribe = releaseSubscription;
       entry.abortActiveStream = abortActiveStream;
       let promptPromise;
+      const resumePrompt = approvalResumePrompt({ toolCallId, approvalDecision, toolResult });
 
       try {
         promptPromise = Promise.resolve()
           .then(() => {
+            if (resumePrompt) {
+              return entry.session.prompt(resumePrompt);
+            }
+
             const continueTurn = entry.session.continue ?? entry.session.agent?.continue;
             if (typeof continueTurn !== 'function') {
               throw new Error('Runner session cannot continue after approval');

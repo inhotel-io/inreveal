@@ -799,7 +799,12 @@ describe('agent runner server', () => {
       const response = await fetch(`${baseUrl}/sessions/pi-00000000-0000-4000-8000-000000000100/continue`, {
         method: 'POST',
         headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gallerySessionId: '00000000-0000-4000-8000-000000000100' }),
+        body: JSON.stringify({
+          gallerySessionId: '00000000-0000-4000-8000-000000000100',
+          toolCallId: '00000000-0000-4000-8000-000000000333',
+          approvalDecision: 'approved',
+          toolResult: { status: 'success', albums: [{ id: 'album-1', albumName: 'Test Pierre' }] },
+        }),
       });
 
       assert.equal(response.status, 200);
@@ -829,6 +834,9 @@ describe('agent runner server', () => {
         {
           runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
           gallerySessionId: '00000000-0000-4000-8000-000000000100',
+          toolCallId: '00000000-0000-4000-8000-000000000333',
+          approvalDecision: 'approved',
+          toolResult: { status: 'success', albums: [{ id: 'album-1', albumName: 'Test Pierre' }] },
         },
       ]);
     });

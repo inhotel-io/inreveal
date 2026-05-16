@@ -6,8 +6,13 @@ import {
   AgentPermissionPreset,
   AgentProviderType,
   AgentSessionStatus,
+  AgentToolApprovalDecision,
+  AgentToolCallStatus,
+  AgentToolDataClass,
+  AgentToolName,
   type AgentMessageResponseDto,
   type AgentSessionResponseDto,
+  type AgentToolCallResponseDto,
 } from '@immich/sdk';
 import { websocketMock } from '@test-data/mocks/websocket.mock';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
@@ -28,6 +33,8 @@ vi.mock('svelte-i18n', () => {
     assistant_send: 'Send',
     assistant_start_new_chat: 'Start new chat',
     assistant_streaming_response: 'Assistant is responding',
+    assistant_agent_tool_data_class_metadata: 'Metadata',
+    assistant_agent_tool_name_listAlbums: 'List albums',
   };
 
   return {
@@ -89,6 +96,22 @@ const makeMessage = (
   createdAt: '2026-05-14T00:00:00.000Z',
 });
 
+const makeToolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentToolCallResponseDto => ({
+  id: overrides.id ?? 'tool-call-1',
+  sessionId: overrides.sessionId ?? session.id,
+  toolName: overrides.toolName ?? AgentToolName.ListAlbums,
+  status: overrides.status ?? AgentToolCallStatus.Completed,
+  approvalDecision: overrides.approvalDecision ?? null,
+  requestSummary: overrides.requestSummary ?? 'List albums',
+  responseSummary: overrides.responseSummary ?? 'Returned 1 album(s)',
+  dataClass: overrides.dataClass ?? AgentToolDataClass.Metadata,
+  assetCount: overrides.assetCount ?? 0,
+  albumCount: overrides.albumCount ?? 1,
+  startedAt: overrides.startedAt ?? '2026-05-16T11:56:50.000Z',
+  completedAt: overrides.completedAt ?? '2026-05-16T11:56:55.000Z',
+  error: overrides.error ?? null,
+});
+
 describe(AgentSessionChatPanel.name, () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -126,6 +149,47 @@ describe(AgentSessionChatPanel.name, () => {
     expect(screen.getByRole('list')).toBeInTheDocument();
     expect(screen.getByText('Beach day').closest('li')).toBeInTheDocument();
     expect(screen.getByText('Birthday cake').closest('li')).toBeInTheDocument();
+  });
+
+  it('renders handled tool calls as plain-language activity with expandable details', async () => {
+    render(AgentSessionChatPanel, {
+      props: {
+        session,
+        toolCalls: [makeToolCall()],
+      },
+    });
+
+    const activity = await screen.findByRole('article', { name: 'Pi checked your albums: Done' });
+    expect(activity).toHaveTextContent('Pi checked your albums.');
+    expect(activity).toHaveTextContent('1 album');
+    expect(activity).not.toHaveTextContent('List albums');
+    expect(activity).not.toHaveTextContent('Returned 1 album(s)');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+    expect(activity).toHaveTextContent('List albums');
+    expect(activity).toHaveTextContent('Returned 1 album(s)');
+    expect(activity).toHaveTextContent('Metadata');
+  });
+
+  it('renders approved tool calls as in-progress chat activity', async () => {
+    render(AgentSessionChatPanel, {
+      props: {
+        session,
+        toolCalls: [
+          makeToolCall({
+            status: AgentToolCallStatus.Approved,
+            approvalDecision: AgentToolApprovalDecision.Approved,
+            responseSummary: 'Tool call approved by user',
+            completedAt: null,
+          }),
+        ],
+      },
+    });
+
+    const activity = await screen.findByRole('article', { name: 'Pi checked your albums: Approved' });
+    expect(activity).toHaveTextContent('Pi checked your albums.');
+    expect(activity).toHaveTextContent('Approved');
   });
 
   it('renders assistant markdown headings and inline code as formatted content', async () => {

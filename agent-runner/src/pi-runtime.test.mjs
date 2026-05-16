@@ -516,6 +516,10 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_searchAssets'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_readAssetMetadata'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_proposeAlbumOperations'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('factual questions about albums, photo counts'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('use Gallery MCP read tools before answering'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('status "approval-required"'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('stop the turn without explaining the approval request'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('album.create'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('call mcp_gallery_proposeAlbumOperations'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('call proposeAlbumOperations'), false);
@@ -831,6 +835,52 @@ describe('pi runtime adapter', () => {
         runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
         providerMessageId: null,
         content: { blocks: [{ type: 'text', text: 'Approved. Continuing.' }] },
+      },
+    ]);
+  });
+
+  it('prompts the Pi agent with approval context instead of continuing an assistant-ended turn', async () => {
+    const { sdk, ai, calls, session } = createFakeDependencies();
+    session.agent.continue = async () => {
+      calls.continues += 1;
+      throw new Error('Cannot continue from message role: assistant');
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collect(
+      runtime.resumeSession({
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        gallerySessionId: '00000000-0000-4000-8000-000000000100',
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+        approvalDecision: 'approved',
+        toolResult: { status: 'success', albums: [{ id: 'album-1', albumName: 'Test Pierre' }] },
+      }),
+    );
+
+    assert.equal(calls.continues, 0);
+    assert.equal(calls.prompts.length, 1);
+    assert.match(calls.prompts[0], /approved/i);
+    assert.match(calls.prompts[0], /00000000-0000-4000-8000-000000000333/);
+    assert.match(calls.prompts[0], /Test Pierre/);
+    assert.match(calls.prompts[0], /previous approval-required/i);
+    assert.match(calls.prompts[0], /obsolete/i);
+    assert.match(calls.prompts[0], /Do not mention pending approval/i);
+    assert.match(calls.prompts[0], /mcp_gallery_readAlbum/);
+    assert.deepEqual(events, [
+      {
+        type: 'assistant-message-delta',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        delta: 'I can help.',
+        sequence: 1,
+      },
+      {
+        type: 'assistant-message-completed',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        providerMessageId: null,
+        content: { blocks: [{ type: 'text', text: 'I can help.' }] },
       },
     ]);
   });

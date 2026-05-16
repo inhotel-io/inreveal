@@ -28,6 +28,7 @@ const dataClassLabelKeys: Record<AgentToolDataClass, Translations> = {
 };
 
 const handledStatuses = new Set<AgentToolCallStatus>([
+  AgentToolCallStatus.Approved,
   AgentToolCallStatus.Denied,
   AgentToolCallStatus.Completed,
   AgentToolCallStatus.Failed,
@@ -37,6 +38,51 @@ export const getAgentToolNameLabelKey = (toolName: AgentToolName) => toolNameLab
 
 export const getAgentToolDataClassLabelKey = (dataClass: AgentToolDataClass) =>
   dataClassLabelKeys[dataClass] ?? dataClass;
+
+const pendingActionText: Partial<Record<AgentToolName, string>> = {
+  [AgentToolName.SearchAssets]: 'Pi wants to search your photos.',
+  [AgentToolName.ReadAssetMetadata]: 'Pi wants to read photo details.',
+  [AgentToolName.ReadAssetPreviews]: 'Pi wants to view photo previews.',
+  [AgentToolName.ReadAssetOriginals]: 'Pi wants to open original files.',
+  [AgentToolName.ListAlbums]: 'Pi wants to check your albums.',
+  [AgentToolName.ReadAlbum]: 'Pi wants to inspect an album.',
+  [AgentToolName.ProposeAlbumOperations]: 'Pi wants to draft album changes.',
+  [AgentToolName.ReviseProposedOperations]: 'Pi wants to revise album changes.',
+  [AgentToolName.SummarizePlan]: 'Pi wants to summarize the plan.',
+};
+
+const completedActionText: Partial<Record<AgentToolName, string>> = {
+  [AgentToolName.SearchAssets]: 'Pi searched your photos.',
+  [AgentToolName.ReadAssetMetadata]: 'Pi read photo details.',
+  [AgentToolName.ReadAssetPreviews]: 'Pi viewed photo previews.',
+  [AgentToolName.ReadAssetOriginals]: 'Pi opened original files.',
+  [AgentToolName.ListAlbums]: 'Pi checked your albums.',
+  [AgentToolName.ReadAlbum]: 'Pi inspected an album.',
+  [AgentToolName.ProposeAlbumOperations]: 'Pi drafted album changes.',
+  [AgentToolName.ReviseProposedOperations]: 'Pi revised album changes.',
+  [AgentToolName.SummarizePlan]: 'Pi summarized the plan.',
+};
+
+const pluralize = (count: number, singular: string, plural: string) => `${count} ${count === 1 ? singular : plural}`;
+
+export const getAgentToolCallScopeText = (toolCall: AgentToolCallResponseDto) => {
+  const parts = [
+    toolCall.assetCount > 0 ? pluralize(toolCall.assetCount, 'photo', 'photos') : null,
+    toolCall.albumCount > 0 ? pluralize(toolCall.albumCount, 'album', 'albums') : null,
+  ].filter((part): part is string => Boolean(part));
+
+  if (parts.length === 0) {
+    return 'no photos and no albums';
+  }
+
+  return parts.join(' and ');
+};
+
+export const getAgentToolCallPendingText = (toolCall: AgentToolCallResponseDto) =>
+  pendingActionText[toolCall.toolName] ?? 'Pi wants to use your gallery.';
+
+export const getAgentToolCallCompletedText = (toolCall: AgentToolCallResponseDto) =>
+  completedActionText[toolCall.toolName] ?? 'Pi used your gallery.';
 
 export const getPendingToolCalls = (toolCalls: AgentToolCallResponseDto[]) =>
   toolCalls

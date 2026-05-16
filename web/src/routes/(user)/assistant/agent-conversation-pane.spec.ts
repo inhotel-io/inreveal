@@ -21,7 +21,7 @@ import {
   type AgentToolCallResponseDto,
 } from '@immich/sdk';
 import { websocketMock } from '@test-data/mocks/websocket.mock';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import AgentConversationPane from './agent-conversation-pane.svelte';
 
@@ -295,7 +295,7 @@ describe(AgentConversationPane.name, () => {
       },
     });
 
-    expect(await screen.findByText('Search photos')).toBeInTheDocument();
+    expect(await screen.findByText('Pi wants to search your photos.')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
     expect(screen.getByText('Review pending approvals before sending a message.')).toBeInTheDocument();
   });
@@ -330,9 +330,16 @@ describe(AgentConversationPane.name, () => {
       },
     });
 
-    expect(await screen.findByRole('article', { name: 'Search photos action: Completed' })).toBeInTheDocument();
-    expect(screen.getByText('Search recent favorites')).toBeInTheDocument();
-    expect(screen.getByText('Found matching photos')).toBeInTheDocument();
+    const activity = await screen.findByRole('article', { name: 'Pi searched your photos: Done' });
+    expect(activity).toHaveTextContent('Pi searched your photos.');
+    expect(activity).toHaveTextContent('4 photos');
+    expect(activity).not.toHaveTextContent('Search recent favorites');
+    expect(activity).not.toHaveTextContent('Found matching photos');
+
+    await fireEvent.click(within(activity).getByRole('button', { name: 'Details' }));
+
+    expect(activity).toHaveTextContent('Search recent favorites');
+    expect(activity).toHaveTextContent('Found matching photos');
     expect(screen.queryByText('Recent activity (1)')).not.toBeInTheDocument();
 
     const transcript = screen.getByTestId('agent-session-chat-transcript');
