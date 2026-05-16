@@ -4,6 +4,7 @@ import {
   AgentOperationPlanParamsDto,
   AgentOperationPlanResponseDto,
   AgentOperationPlanSummaryRequestDto,
+  AgentOperationPlanToolRequestSchemas,
   AgentOperationPlanToolResponseDto,
   AgentProposeAlbumOperationsDto,
   AgentReviseAlbumOperationsDto,
@@ -15,6 +16,7 @@ import {
   AgentOperationStatus,
   AgentOperationTargetKind,
   AgentOperationType,
+  AgentToolName,
 } from 'src/enum';
 import { factory } from 'test/small.factory';
 import z from 'zod';
@@ -34,6 +36,19 @@ const expectIssue = (
     ]),
   );
 };
+
+const makeCreateAlbumOperation = () => ({
+  type: AgentOperationType.AlbumCreate,
+  summary: 'Create Portugal highlights.',
+  targetKind: AgentOperationTargetKind.NewAlbum,
+  temporaryTargetId: 'tmp-portugal',
+  payload: { albumName: 'Portugal highlights', description: '' },
+});
+
+const makePlanningToolRequest = () => ({
+  summary: 'Create a Portugal highlights album.',
+  operations: [makeCreateAlbumOperation()],
+});
 
 describe('Agent operation DTOs', () => {
   it('accepts a create album operation proposal and defaults enabled/risk fields', () => {
@@ -480,5 +495,114 @@ describe('Agent operation DTOs', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  describe('MCP planning tool request schemas', () => {
+    it('does not require planId for proposeAlbumOperations', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse(
+        makePlanningToolRequest(),
+      );
+
+      expect(result.success).toBe(true);
+    });
+
+    it('requires planId for reviseProposedOperations MCP calls and keeps the body fields', () => {
+      const planId = factory.uuid();
+      const valid = AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse({
+        planId,
+        feedback: 'Use a shorter title.',
+        ...makePlanningToolRequest(),
+      });
+
+      expect(valid.success).toBe(true);
+      if (valid.success) {
+        expect(valid.data).toMatchObject({
+          planId,
+          feedback: 'Use a shorter title.',
+          summary: 'Create a Portugal highlights album.',
+          operations: expect.any(Array),
+        });
+      }
+
+      expectIssue(
+        AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse(
+          makePlanningToolRequest(),
+        ),
+        ['planId'],
+        'Invalid input',
+      );
+      expectIssue(
+        AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse({
+          planId: 'not-a-uuid',
+          ...makePlanningToolRequest(),
+        }),
+        ['planId'],
+        'Invalid UUID',
+      );
+    });
+
+    it('requires planId for summarizePlan MCP calls and validates focus', () => {
+      const planId = factory.uuid();
+      const valid = AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({
+        planId,
+        focus: 'risk',
+      });
+
+      expect(valid.success).toBe(true);
+      if (valid.success) {
+        expect(valid.data).toEqual({ planId, focus: 'risk' });
+      }
+
+      expectIssue(
+        AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({ focus: 'risk' }),
+        ['planId'],
+        'Invalid input',
+      );
+      expectIssue(
+        AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({
+          planId: 'not-a-uuid',
+          focus: 'risk',
+        }),
+        ['planId'],
+        'Invalid UUID',
+      );
+      expectIssue(
+        AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({
+          planId,
+          focus: '',
+        }),
+        ['focus'],
+        'Too small',
+      );
+    });
+
+    it('keeps strict object validation for planning MCP tool arguments', () => {
+      expectIssue(
+        AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse({
+          ...makePlanningToolRequest(),
+          unexpected: true,
+        }),
+        [],
+        'Unrecognized key',
+      );
+      expectIssue(
+        AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse({
+          planId: factory.uuid(),
+          ...makePlanningToolRequest(),
+          unexpected: true,
+        }),
+        [],
+        'Unrecognized key',
+      );
+      expectIssue(
+        AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan].safeParse({
+          planId: factory.uuid(),
+          focus: 'risk',
+          unexpected: true,
+        }),
+        [],
+        'Unrecognized key',
+      );
+    });
   });
 });
