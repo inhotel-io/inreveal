@@ -50,6 +50,7 @@ Behavior:
 ## Task 1: Add Tests For The Busy Indicator Lifecycle
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-session-chat-panel.spec.ts`
 
 - [ ] **Step 1: Add the translation test fixture string**
@@ -217,6 +218,7 @@ Expected: FAIL until `assistant-message-created` and `runner-error` clear the in
 ## Task 2: Implement The Minimal Busy Indicator
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-session-chat-panel.svelte`
 - Modify: `i18n/en.json`
 
@@ -281,6 +283,7 @@ Expected: PASS, including all new busy indicator lifecycle tests.
 ## Task 3: Edge Case Coverage And Polish
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-session-chat-panel.spec.ts`
 - Modify: `web/src/routes/(user)/assistant/agent-session-chat-panel.svelte`
 
@@ -359,6 +362,7 @@ Expected: PASS.
 ## Task 4: Final Verification
 
 **Files:**
+
 - No new files.
 
 - [ ] **Step 1: Run web typecheck or existing web check command**
