@@ -8,6 +8,21 @@
 
 **Tech Stack:** Node.js `agent-runner`, Gallery internal agent tool gateway, Docker Compose, Playwright, generated `@immich/sdk`, NestJS server running in the existing e2e stack.
 
+## MCP Coordination Note
+
+The concurrent MCP design in `docs/superpowers/specs/2026-05-16-pi-agent-mcp-server-design.md` replaces the runner's hardcoded Gallery tool gateway with a Gallery-hosted MCP endpoint. If this plan is implemented or refactored after that MCP work lands, treat this note as overriding the older gateway-specific snippets below.
+
+Preserve the Playwright behavior and deterministic e2e runtime intent, but adapt the transport surface:
+
+- Use `mcpGateway` instead of `toolGateway` in runner session creation.
+- Call Gallery through MCP `tools/call` for `searchAssets` and `proposeAlbumOperations` instead of posting to `/api/agent/internal/tools/.../search-assets` and `/propose-album-operations`.
+- Do not import `agent-runner/src/gallery-tools.mjs` or `agent-runner/src/gallery-tool-client.mjs`; the MCP migration retires those files.
+- Configure e2e with `IMMICH_AGENT_MCP_GATEWAY_URL=http://immich-server:2285/api/agent/internal/mcp` instead of `IMMICH_AGENT_TOOL_GATEWAY_URL`.
+- Keep the end-to-end spec mostly transport-agnostic. It should continue to validate the user flow, persisted plan, denied proposal audit, and final album state rather than asserting the runner transport.
+- Replace the final "no direct write/apply tool" registry check with an MCP `tools/list` assertion once the MCP server owns tool discovery.
+
+Scheduling recommendation: if slice 14 has not been implemented yet, wait until MCP slices 1-5 from the MCP design are complete, then implement the e2e runner against MCP. If this slice has already landed, keep the behavioral e2e coverage and let the MCP migration refactor `agent-runner/src/e2e-runtime.mjs`, `agent-runner/src/e2e-runtime.test.mjs`, `agent-runner/src/server.mjs`, `agent-runner/src/server.test.mjs`, and `e2e/docker-compose.yml`.
+
 ---
 
 ## Scope
