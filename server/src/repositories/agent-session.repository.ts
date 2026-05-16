@@ -12,6 +12,7 @@ type AgentSessionUpdate = Pick<
   Updateable<AgentSessionTable>,
   'status' | 'endedAt' | 'runnerEndpoint' | 'runnerSessionId' | 'runnerCapabilitiesSnapshot'
 >;
+type AgentSessionMetadataUpdate = Pick<Updateable<AgentSessionTable>, 'title'>;
 type AgentSessionMarkRunning = Pick<
   Updateable<AgentSessionTable>,
   'status' | 'runnerEndpoint' | 'runnerSessionId' | 'runnerCapabilitiesSnapshot'
@@ -68,6 +69,26 @@ export class AgentSessionRepository {
       .where('id', '=', asUuid(id))
       .returning(columns.agentSession)
       .executeTakeFirstOrThrow();
+  }
+
+  updateMetadata(userId: string, id: string, dto: AgentSessionMetadataUpdate) {
+    return this.db
+      .updateTable('agent_session')
+      .set(dto)
+      .where('userId', '=', userId)
+      .where('id', '=', asUuid(id))
+      .returning(columns.agentSession)
+      .executeTakeFirstOrThrow();
+  }
+
+  async delete(userId: string, id: string) {
+    const result = await this.db
+      .deleteFrom('agent_session')
+      .where('userId', '=', userId)
+      .where('id', '=', asUuid(id))
+      .executeTakeFirst();
+
+    return Number(result.numDeletedRows) > 0;
   }
 
   @GenerateSql({

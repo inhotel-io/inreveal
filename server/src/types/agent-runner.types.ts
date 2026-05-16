@@ -31,6 +31,11 @@ export type AgentRunnerCreateSessionResult = {
   capabilities: Record<string, unknown>;
 };
 
+export type AgentRunnerValidateSessionResult = {
+  ok: true;
+  capabilities: Record<string, unknown>;
+};
+
 export type AgentRunnerMessageRequest = {
   gallerySessionId: string;
   messageId: string;

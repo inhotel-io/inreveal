@@ -65,6 +65,9 @@ export class AgentSessionTable {
   @Column({ type: 'jsonb' })
   initialContextSnapshot!: AgentInitialContextSnapshot;
 
+  @Column({ nullable: true })
+  title!: string | null;
+
   @CreateDateColumn()
   createdAt!: Generated<Timestamp>;
 

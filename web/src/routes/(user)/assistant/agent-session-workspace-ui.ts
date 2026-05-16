@@ -75,6 +75,11 @@ export const getAgentSessionTitle = (
   session: AgentSessionResponseDto,
   titleCache: AgentSessionTitleCache = {},
 ): string => {
+  const savedTitle = session.title?.trim();
+  if (savedTitle) {
+    return savedTitle;
+  }
+
   const title = titleCache[session.id]?.trim();
   return title || 'New chat';
 };
