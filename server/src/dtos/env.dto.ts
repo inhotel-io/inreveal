@@ -67,9 +67,7 @@ export const EnvSchema = z
     IMMICH_AGENT_SECRET_KEY: z.string().optional(),
     IMMICH_AGENT_RUNNER_URL: httpUrl('Runner URL must use http or https').optional(),
     IMMICH_AGENT_MCP_GATEWAY_URL: httpUrl('MCP gateway URL must use http or https').optional(),
-    IMMICH_AGENT_TOOL_GATEWAY_URL: z
-      .undefined({ error: 'Use IMMICH_AGENT_MCP_GATEWAY_URL instead' })
-      .optional(),
+    IMMICH_AGENT_TOOL_GATEWAY_URL: z.undefined({ error: 'Use IMMICH_AGENT_MCP_GATEWAY_URL instead' }).optional(),
     IMMICH_AGENT_RUNNER_HEALTH_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
     IMMICH_AGENT_RUNNER_MESSAGE_STREAM_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
     IMMICH_PLUGINS_INSTALL_FOLDER: absolutePath,

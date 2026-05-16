@@ -106,16 +106,23 @@
   };
 
   const handleSessionUpdated = (session: AgentSessionResponseDto) => {
-    if (session.id !== selectedSessionId || !localSessions.some((existingSession) => existingSession.id === session.id)) {
+    if (
+      session.id !== selectedSessionId ||
+      !localSessions.some((existingSession) => existingSession.id === session.id)
+    ) {
       return;
     }
 
-    localSessions = localSessions.map((existingSession) => (existingSession.id === session.id ? session : existingSession));
+    localSessions = localSessions.map((existingSession) =>
+      existingSession.id === session.id ? session : existingSession,
+    );
   };
 
   const handleRenameSession = async (sessionId: string, title: string) => {
     const session = await updateAgentSession({ id: sessionId, agentSessionUpdateDto: { title } });
-    localSessions = localSessions.map((existingSession) => (existingSession.id === session.id ? session : existingSession));
+    localSessions = localSessions.map((existingSession) =>
+      existingSession.id === session.id ? session : existingSession,
+    );
     titleBySessionId = { ...titleBySessionId, [sessionId]: null };
   };
 

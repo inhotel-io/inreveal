@@ -1,14 +1,9 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { AgentRunnerMcpController } from 'src/controllers/agent-runner-mcp.controller';
 import { AgentRunnerTokenGuard } from 'src/controllers/agent-runner-token.guard';
-import {
-  AgentOperationRiskLevel,
-  AgentOperationTargetKind,
-  AgentOperationType,
-  AgentToolName,
-} from 'src/enum';
-import { AgentMcpService } from 'src/services/agent-mcp.service';
+import { AgentOperationRiskLevel, AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
+import { AgentMcpService } from 'src/services/agent-mcp.service';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
 import { AgentToolService } from 'src/services/agent-tool.service';

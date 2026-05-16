@@ -322,6 +322,55 @@ class AgentSessionsApi {
     return null;
   }
 
+  /// Delete an agent session
+  ///
+  /// Delete an AI agent session owned by the current user.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  Future<Response> deleteAgentSessionWithHttpInfo(String id,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/{id}'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'DELETE',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Delete an agent session
+  ///
+  /// Delete an AI agent session owned by the current user.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  Future<void> deleteAgentSession(String id,) async {
+    final response = await deleteAgentSessionWithHttpInfo(id,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
   /// Execute the internal searchAssets agent tool
   ///
   /// Internal route for requesting or resuming a strict-approved asset search tool call for an AI agent session.
@@ -666,6 +715,55 @@ class AgentSessionsApi {
 
     }
     return null;
+  }
+
+  /// Handle the internal runner MCP endpoint
+  ///
+  /// Internal runner MCP endpoint for a first-party Pi agent session.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  Future<Response> handleWithHttpInfo(String id,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/internal/mcp/sessions/{id}'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Handle the internal runner MCP endpoint
+  ///
+  /// Internal runner MCP endpoint for a first-party Pi agent session.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  Future<void> handle(String id,) async {
+    final response = await handleWithHttpInfo(id,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
   }
 
   /// Execute the internal listAlbums agent tool
@@ -1100,565 +1198,6 @@ class AgentSessionsApi {
     return null;
   }
 
-  /// Execute the runner listAlbums agent tool
-  ///
-  /// Internal runner gateway for executing an album list tool call for an AI agent session.
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentListAlbumsToolRequestDto] agentListAlbumsToolRequestDto (required):
-  Future<Response> runnerListAlbumsWithHttpInfo(String id, AgentListAlbumsToolRequestDto agentListAlbumsToolRequestDto,) async {
-    // ignore: prefer_const_declarations
-    final apiPath = r'/agent/internal/tools/sessions/{id}/list-albums'
-      .replaceAll('{id}', id);
-
-    // ignore: prefer_final_locals
-    Object? postBody = agentListAlbumsToolRequestDto;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>['application/json'];
-
-
-    return apiClient.invokeAPI(
-      apiPath,
-      'POST',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-    );
-  }
-
-  /// Execute the runner listAlbums agent tool
-  ///
-  /// Internal runner gateway for executing an album list tool call for an AI agent session.
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentListAlbumsToolRequestDto] agentListAlbumsToolRequestDto (required):
-  Future<AgentListAlbumsToolResponseDto?> runnerListAlbums(String id, AgentListAlbumsToolRequestDto agentListAlbumsToolRequestDto,) async {
-    final response = await runnerListAlbumsWithHttpInfo(id, agentListAlbumsToolRequestDto,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-    // When a remote server returns no body with a status of 204, we shall not decode it.
-    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
-    // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentListAlbumsToolResponseDto',) as AgentListAlbumsToolResponseDto;
-    
-    }
-    return null;
-  }
-
-  /// Execute the runner proposeAlbumOperations agent tool
-  ///
-  /// Internal runner gateway for storing proposed album operations for an AI agent session.
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentProposeAlbumOperationsDto] agentProposeAlbumOperationsDto (required):
-  Future<Response> runnerProposeAlbumOperationsWithHttpInfo(String id, AgentProposeAlbumOperationsDto agentProposeAlbumOperationsDto,) async {
-    // ignore: prefer_const_declarations
-    final apiPath = r'/agent/internal/tools/sessions/{id}/propose-album-operations'
-      .replaceAll('{id}', id);
-
-    // ignore: prefer_final_locals
-    Object? postBody = agentProposeAlbumOperationsDto;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>['application/json'];
-
-
-    return apiClient.invokeAPI(
-      apiPath,
-      'POST',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-    );
-  }
-
-  /// Execute the runner proposeAlbumOperations agent tool
-  ///
-  /// Internal runner gateway for storing proposed album operations for an AI agent session.
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentProposeAlbumOperationsDto] agentProposeAlbumOperationsDto (required):
-  Future<AgentOperationPlanToolResponseDto?> runnerProposeAlbumOperations(String id, AgentProposeAlbumOperationsDto agentProposeAlbumOperationsDto,) async {
-    final response = await runnerProposeAlbumOperationsWithHttpInfo(id, agentProposeAlbumOperationsDto,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-    // When a remote server returns no body with a status of 204, we shall not decode it.
-    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
-    // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentOperationPlanToolResponseDto',) as AgentOperationPlanToolResponseDto;
-    
-    }
-    return null;
-  }
-
-  /// Execute the runner readAlbum agent tool
-  ///
-  /// Internal runner gateway for executing an album read tool call for an AI agent session.
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentReadAlbumToolRequestDto] agentReadAlbumToolRequestDto (required):
-  Future<Response> runnerReadAlbumWithHttpInfo(String id, AgentReadAlbumToolRequestDto agentReadAlbumToolRequestDto,) async {
-    // ignore: prefer_const_declarations
-    final apiPath = r'/agent/internal/tools/sessions/{id}/read-album'
-      .replaceAll('{id}', id);
-
-    // ignore: prefer_final_locals
-    Object? postBody = agentReadAlbumToolRequestDto;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>['application/json'];
-
-
-    return apiClient.invokeAPI(
-      apiPath,
-      'POST',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-    );
-  }
-
-  /// Execute the runner readAlbum agent tool
-  ///
-  /// Internal runner gateway for executing an album read tool call for an AI agent session.
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentReadAlbumToolRequestDto] agentReadAlbumToolRequestDto (required):
-  Future<AgentReadAlbumToolResponseDto?> runnerReadAlbum(String id, AgentReadAlbumToolRequestDto agentReadAlbumToolRequestDto,) async {
-    final response = await runnerReadAlbumWithHttpInfo(id, agentReadAlbumToolRequestDto,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-    // When a remote server returns no body with a status of 204, we shall not decode it.
-    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
-    // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentReadAlbumToolResponseDto',) as AgentReadAlbumToolResponseDto;
-    
-    }
-    return null;
-  }
-
-  /// Execute the runner readAssetMetadata agent tool
-  ///
-  /// Internal runner gateway for executing a metadata read tool call for an AI agent session.
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentReadAssetMetadataToolRequestDto] agentReadAssetMetadataToolRequestDto (required):
-  Future<Response> runnerReadAssetMetadataWithHttpInfo(String id, AgentReadAssetMetadataToolRequestDto agentReadAssetMetadataToolRequestDto,) async {
-    // ignore: prefer_const_declarations
-    final apiPath = r'/agent/internal/tools/sessions/{id}/read-asset-metadata'
-      .replaceAll('{id}', id);
-
-    // ignore: prefer_final_locals
-    Object? postBody = agentReadAssetMetadataToolRequestDto;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>['application/json'];
-
-
-    return apiClient.invokeAPI(
-      apiPath,
-      'POST',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-    );
-  }
-
-  /// Execute the runner readAssetMetadata agent tool
-  ///
-  /// Internal runner gateway for executing a metadata read tool call for an AI agent session.
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentReadAssetMetadataToolRequestDto] agentReadAssetMetadataToolRequestDto (required):
-  Future<AgentReadAssetMetadataToolResponseDto?> runnerReadAssetMetadata(String id, AgentReadAssetMetadataToolRequestDto agentReadAssetMetadataToolRequestDto,) async {
-    final response = await runnerReadAssetMetadataWithHttpInfo(id, agentReadAssetMetadataToolRequestDto,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-    // When a remote server returns no body with a status of 204, we shall not decode it.
-    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
-    // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentReadAssetMetadataToolResponseDto',) as AgentReadAssetMetadataToolResponseDto;
-    
-    }
-    return null;
-  }
-
-  /// Execute the runner readAssetOriginals agent tool
-  ///
-  /// Internal runner gateway for executing an original read tool call for an AI agent session.
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentReadAssetOriginalsToolRequestDto] agentReadAssetOriginalsToolRequestDto (required):
-  Future<Response> runnerReadAssetOriginalsWithHttpInfo(String id, AgentReadAssetOriginalsToolRequestDto agentReadAssetOriginalsToolRequestDto,) async {
-    // ignore: prefer_const_declarations
-    final apiPath = r'/agent/internal/tools/sessions/{id}/read-asset-originals'
-      .replaceAll('{id}', id);
-
-    // ignore: prefer_final_locals
-    Object? postBody = agentReadAssetOriginalsToolRequestDto;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>['application/json'];
-
-
-    return apiClient.invokeAPI(
-      apiPath,
-      'POST',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-    );
-  }
-
-  /// Execute the runner readAssetOriginals agent tool
-  ///
-  /// Internal runner gateway for executing an original read tool call for an AI agent session.
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentReadAssetOriginalsToolRequestDto] agentReadAssetOriginalsToolRequestDto (required):
-  Future<AgentReadAssetOriginalsToolResponseDto?> runnerReadAssetOriginals(String id, AgentReadAssetOriginalsToolRequestDto agentReadAssetOriginalsToolRequestDto,) async {
-    final response = await runnerReadAssetOriginalsWithHttpInfo(id, agentReadAssetOriginalsToolRequestDto,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-    // When a remote server returns no body with a status of 204, we shall not decode it.
-    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
-    // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentReadAssetOriginalsToolResponseDto',) as AgentReadAssetOriginalsToolResponseDto;
-    
-    }
-    return null;
-  }
-
-  /// Execute the runner readAssetPreviews agent tool
-  ///
-  /// Internal runner gateway for executing a preview read tool call for an AI agent session.
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentReadAssetPreviewsToolRequestDto] agentReadAssetPreviewsToolRequestDto (required):
-  Future<Response> runnerReadAssetPreviewsWithHttpInfo(String id, AgentReadAssetPreviewsToolRequestDto agentReadAssetPreviewsToolRequestDto,) async {
-    // ignore: prefer_const_declarations
-    final apiPath = r'/agent/internal/tools/sessions/{id}/read-asset-previews'
-      .replaceAll('{id}', id);
-
-    // ignore: prefer_final_locals
-    Object? postBody = agentReadAssetPreviewsToolRequestDto;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>['application/json'];
-
-
-    return apiClient.invokeAPI(
-      apiPath,
-      'POST',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-    );
-  }
-
-  /// Execute the runner readAssetPreviews agent tool
-  ///
-  /// Internal runner gateway for executing a preview read tool call for an AI agent session.
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentReadAssetPreviewsToolRequestDto] agentReadAssetPreviewsToolRequestDto (required):
-  Future<AgentReadAssetPreviewsToolResponseDto?> runnerReadAssetPreviews(String id, AgentReadAssetPreviewsToolRequestDto agentReadAssetPreviewsToolRequestDto,) async {
-    final response = await runnerReadAssetPreviewsWithHttpInfo(id, agentReadAssetPreviewsToolRequestDto,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-    // When a remote server returns no body with a status of 204, we shall not decode it.
-    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
-    // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentReadAssetPreviewsToolResponseDto',) as AgentReadAssetPreviewsToolResponseDto;
-    
-    }
-    return null;
-  }
-
-  /// Execute the runner reviseProposedOperations agent tool
-  ///
-  /// Internal runner gateway for replacing a proposed album operation plan revision.
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [String] planId (required):
-  ///
-  /// * [AgentReviseAlbumOperationsDto] agentReviseAlbumOperationsDto (required):
-  Future<Response> runnerReviseProposedOperationsWithHttpInfo(String id, String planId, AgentReviseAlbumOperationsDto agentReviseAlbumOperationsDto,) async {
-    // ignore: prefer_const_declarations
-    final apiPath = r'/agent/internal/tools/sessions/{id}/revise-proposed-operations/{planId}'
-      .replaceAll('{id}', id)
-      .replaceAll('{planId}', planId);
-
-    // ignore: prefer_final_locals
-    Object? postBody = agentReviseAlbumOperationsDto;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>['application/json'];
-
-
-    return apiClient.invokeAPI(
-      apiPath,
-      'POST',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-    );
-  }
-
-  /// Execute the runner reviseProposedOperations agent tool
-  ///
-  /// Internal runner gateway for replacing a proposed album operation plan revision.
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [String] planId (required):
-  ///
-  /// * [AgentReviseAlbumOperationsDto] agentReviseAlbumOperationsDto (required):
-  Future<AgentOperationPlanToolResponseDto?> runnerReviseProposedOperations(String id, String planId, AgentReviseAlbumOperationsDto agentReviseAlbumOperationsDto,) async {
-    final response = await runnerReviseProposedOperationsWithHttpInfo(id, planId, agentReviseAlbumOperationsDto,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-    // When a remote server returns no body with a status of 204, we shall not decode it.
-    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
-    // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentOperationPlanToolResponseDto',) as AgentOperationPlanToolResponseDto;
-    
-    }
-    return null;
-  }
-
-  /// Execute the runner searchAssets agent tool
-  ///
-  /// Internal runner gateway for executing an asset search tool call for an AI agent session.
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentSearchAssetsToolRequestDto] agentSearchAssetsToolRequestDto (required):
-  Future<Response> runnerSearchAssetsWithHttpInfo(String id, AgentSearchAssetsToolRequestDto agentSearchAssetsToolRequestDto,) async {
-    // ignore: prefer_const_declarations
-    final apiPath = r'/agent/internal/tools/sessions/{id}/search-assets'
-      .replaceAll('{id}', id);
-
-    // ignore: prefer_final_locals
-    Object? postBody = agentSearchAssetsToolRequestDto;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>['application/json'];
-
-
-    return apiClient.invokeAPI(
-      apiPath,
-      'POST',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-    );
-  }
-
-  /// Execute the runner searchAssets agent tool
-  ///
-  /// Internal runner gateway for executing an asset search tool call for an AI agent session.
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [AgentSearchAssetsToolRequestDto] agentSearchAssetsToolRequestDto (required):
-  Future<AgentSearchAssetsToolResponseDto?> runnerSearchAssets(String id, AgentSearchAssetsToolRequestDto agentSearchAssetsToolRequestDto,) async {
-    final response = await runnerSearchAssetsWithHttpInfo(id, agentSearchAssetsToolRequestDto,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-    // When a remote server returns no body with a status of 204, we shall not decode it.
-    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
-    // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentSearchAssetsToolResponseDto',) as AgentSearchAssetsToolResponseDto;
-    
-    }
-    return null;
-  }
-
-  /// Execute the runner summarizePlan agent tool
-  ///
-  /// Internal runner gateway for summarizing a proposed album operation plan.
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [String] planId (required):
-  ///
-  /// * [AgentOperationPlanSummaryRequestDto] agentOperationPlanSummaryRequestDto (required):
-  Future<Response> runnerSummarizePlanWithHttpInfo(String id, String planId, AgentOperationPlanSummaryRequestDto agentOperationPlanSummaryRequestDto,) async {
-    // ignore: prefer_const_declarations
-    final apiPath = r'/agent/internal/tools/sessions/{id}/summarize-plan/{planId}'
-      .replaceAll('{id}', id)
-      .replaceAll('{planId}', planId);
-
-    // ignore: prefer_final_locals
-    Object? postBody = agentOperationPlanSummaryRequestDto;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>['application/json'];
-
-
-    return apiClient.invokeAPI(
-      apiPath,
-      'POST',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-    );
-  }
-
-  /// Execute the runner summarizePlan agent tool
-  ///
-  /// Internal runner gateway for summarizing a proposed album operation plan.
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [String] planId (required):
-  ///
-  /// * [AgentOperationPlanSummaryRequestDto] agentOperationPlanSummaryRequestDto (required):
-  Future<AgentOperationPlanToolResponseDto?> runnerSummarizePlan(String id, String planId, AgentOperationPlanSummaryRequestDto agentOperationPlanSummaryRequestDto,) async {
-    final response = await runnerSummarizePlanWithHttpInfo(id, planId, agentOperationPlanSummaryRequestDto,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-    // When a remote server returns no body with a status of 204, we shall not decode it.
-    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
-    // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentOperationPlanToolResponseDto',) as AgentOperationPlanToolResponseDto;
-    
-    }
-    return null;
-  }
-
   /// Summarize an agent operation plan
   ///
   /// Internal route for returning a compact summary of a stored operation plan.
@@ -1723,5 +1262,114 @@ class AgentSessionsApi {
     
     }
     return null;
+  }
+
+  /// Update an agent session
+  ///
+  /// Update mutable metadata for an AI agent session owned by the current user.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentSessionUpdateDto] agentSessionUpdateDto (required):
+  Future<Response> updateAgentSessionWithHttpInfo(String id, AgentSessionUpdateDto agentSessionUpdateDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/{id}'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = agentSessionUpdateDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'PUT',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Update an agent session
+  ///
+  /// Update mutable metadata for an AI agent session owned by the current user.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentSessionUpdateDto] agentSessionUpdateDto (required):
+  Future<AgentSessionResponseDto?> updateAgentSession(String id, AgentSessionUpdateDto agentSessionUpdateDto,) async {
+    final response = await updateAgentSessionWithHttpInfo(id, agentSessionUpdateDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentSessionResponseDto',) as AgentSessionResponseDto;
+    
+    }
+    return null;
+  }
+
+  /// Validate an agent session setup
+  ///
+  /// Validate the selected provider credential and model with the configured runner before creating a persisted AI agent session.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [AgentSessionCreateDto] agentSessionCreateDto (required):
+  Future<Response> validateAgentSessionWithHttpInfo(AgentSessionCreateDto agentSessionCreateDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/validate';
+
+    // ignore: prefer_final_locals
+    Object? postBody = agentSessionCreateDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Validate an agent session setup
+  ///
+  /// Validate the selected provider credential and model with the configured runner before creating a persisted AI agent session.
+  ///
+  /// Parameters:
+  ///
+  /// * [AgentSessionCreateDto] agentSessionCreateDto (required):
+  Future<void> validateAgentSession(AgentSessionCreateDto agentSessionCreateDto,) async {
+    final response = await validateAgentSessionWithHttpInfo(agentSessionCreateDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
   }
 }

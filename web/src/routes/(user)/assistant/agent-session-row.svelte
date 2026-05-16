@@ -14,14 +14,7 @@
     onDeleteSession?: (sessionId: string) => Promise<void> | void;
   }
 
-  let {
-    session,
-    selected,
-    titleBySessionId = {},
-    onSelectSession,
-    onRenameSession,
-    onDeleteSession,
-  }: Props = $props();
+  let { session, selected, titleBySessionId = {}, onSelectSession, onRenameSession, onDeleteSession }: Props = $props();
 
   const title = $derived(getAgentSessionTitle(session, titleBySessionId));
   let menuOpen = $state(false);
@@ -84,7 +77,11 @@
         bind:value={draftTitle}
         disabled={busy}
       />
-      <button type="submit" class="rounded p-1 text-slate-600 hover:bg-slate-200 dark:text-neutral-300 dark:hover:bg-neutral-700" aria-label={$t('save')}>
+      <button
+        type="submit"
+        class="rounded p-1 text-slate-600 hover:bg-slate-200 dark:text-neutral-300 dark:hover:bg-neutral-700"
+        aria-label={$t('save')}
+      >
         <Icon icon={mdiCheck} size="16" />
       </button>
       <button

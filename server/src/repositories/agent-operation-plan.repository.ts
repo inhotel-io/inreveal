@@ -65,7 +65,7 @@ export class AgentOperationPlanRepository {
           AgentSessionStatus.Failed,
         ].includes(session.status)
       ) {
-        return undefined;
+        return;
       }
 
       const revision = await this.getNextRevisionInTransaction(trx, sessionId);
@@ -111,14 +111,11 @@ export class AgentOperationPlanRepository {
     return plan ? this.withOperations(plan) : undefined;
   }
 
-  async claimCurrentForApply(
-    sessionId: string,
-    planId: string,
-  ): Promise<AgentOperationPlanWithOperations | undefined> {
+  async claimCurrentForApply(sessionId: string, planId: string): Promise<AgentOperationPlanWithOperations | undefined> {
     return this.db.transaction().execute(async (trx) => {
       const session = await this.lockSession(trx, sessionId);
       if (session.status !== AgentSessionStatus.WaitingForPlanReview) {
-        return undefined;
+        return;
       }
 
       const plan = await trx
@@ -131,7 +128,7 @@ export class AgentOperationPlanRepository {
         .executeTakeFirst();
 
       if (!plan) {
-        return undefined;
+        return;
       }
 
       await trx

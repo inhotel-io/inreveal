@@ -162,9 +162,12 @@
       onCredentialsChanged(nextCredentials);
       confirmingDeleteCredentialId = null;
       editingModelsCredentialId = editingModelsCredentialId === credential.id ? null : editingModelsCredentialId;
-      const { [credential.id]: _visibleSecret, ...nextVisibleSecrets } = visibleSecretByCredentialId;
-      const { [credential.id]: _revealed, ...nextRevealedIds } = revealedCredentialIds;
-      const { [credential.id]: _modelDraft, ...nextModelDrafts } = modelDraftByCredentialId;
+      const nextVisibleSecrets = { ...visibleSecretByCredentialId };
+      const nextRevealedIds = { ...revealedCredentialIds };
+      const nextModelDrafts = { ...modelDraftByCredentialId };
+      delete nextVisibleSecrets[credential.id];
+      delete nextRevealedIds[credential.id];
+      delete nextModelDrafts[credential.id];
       visibleSecretByCredentialId = nextVisibleSecrets;
       revealedCredentialIds = nextRevealedIds;
       modelDraftByCredentialId = nextModelDrafts;
@@ -197,11 +200,7 @@
 </script>
 
 {#if open}
-  <div
-    class="fixed inset-0 z-50 bg-black/55"
-    role="presentation"
-    onclick={onClose}
-  ></div>
+  <div class="fixed inset-0 z-50 bg-black/55" role="presentation" onclick={onClose}></div>
   <div
     class="fixed left-1/2 top-16 z-50 flex max-h-[calc(100vh-8rem)] w-[min(46rem,calc(100vw-2rem))] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white text-black shadow-2xl dark:border-neutral-800 dark:bg-neutral-950 dark:text-white"
     role="dialog"
@@ -225,7 +224,10 @@
 
     <div class="min-h-0 overflow-y-auto px-5 py-5">
       <section aria-labelledby="assistant-existing-api-keys-title">
-        <h3 id="assistant-existing-api-keys-title" class="text-sm font-semibold uppercase text-gray-500 dark:text-neutral-400">
+        <h3
+          id="assistant-existing-api-keys-title"
+          class="text-sm font-semibold uppercase text-gray-500 dark:text-neutral-400"
+        >
           {$t('assistant_existing_api_keys')}
         </h3>
 
@@ -236,7 +238,9 @@
             {#each credentials as credential (credential.id)}
               {@const isRevealed = Boolean(revealedCredentialIds[credential.id])}
               {@const isEditingModels = editingModelsCredentialId === credential.id}
-              <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900/60">
+              <div
+                class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900/60"
+              >
                 <div class="min-w-0">
                   <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
@@ -289,12 +293,16 @@
                       {/if}
                     </span>
                     {#if credential.defaultModel}
-                      <span class="rounded-md bg-blue-50 px-2 py-1 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-200">
+                      <span
+                        class="rounded-md bg-blue-50 px-2 py-1 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-200"
+                      >
                         {$t('assistant_default_model')}: {credential.defaultModel}
                       </span>
                     {/if}
                     {#each credential.models.slice(0, 4) as model (model)}
-                      <span class="rounded-md bg-white px-2 py-1 text-xs text-gray-700 ring-1 ring-gray-200 dark:bg-black dark:text-neutral-200 dark:ring-neutral-800">
+                      <span
+                        class="rounded-md bg-white px-2 py-1 text-xs text-gray-700 ring-1 ring-gray-200 dark:bg-black dark:text-neutral-200 dark:ring-neutral-800"
+                      >
                         {model}
                       </span>
                     {/each}
@@ -305,7 +313,10 @@
 
                   {#if isEditingModels}
                     <div class="mt-4 grid gap-2 border-t border-gray-200 pt-3 dark:border-neutral-800">
-                      <label class="text-xs font-medium uppercase text-gray-500 dark:text-neutral-400" for={`assistant-models-${credential.id}`}>
+                      <label
+                        class="text-xs font-medium uppercase text-gray-500 dark:text-neutral-400"
+                        for={`assistant-models-${credential.id}`}
+                      >
                         {$t('assistant_api_key_models')}
                       </label>
                       <Input
@@ -375,11 +386,16 @@
         {/if}
       </section>
 
-      <section class="mt-6 border-t border-gray-200 pt-5 dark:border-neutral-800" aria-labelledby="assistant-add-api-key-title">
+      <section
+        class="mt-6 border-t border-gray-200 pt-5 dark:border-neutral-800"
+        aria-labelledby="assistant-add-api-key-title"
+      >
         <div class="flex items-center justify-between gap-3">
           <h3 id="assistant-add-api-key-title" class="text-base font-semibold">{$t('assistant_add_api_key')}</h3>
           {#if !addFormOpen}
-            <Button type="button" size="small" onclick={() => (addFormOpen = true)}>{$t('assistant_add_api_key')}</Button>
+            <Button type="button" size="small" onclick={() => (addFormOpen = true)}
+              >{$t('assistant_add_api_key')}</Button
+            >
           {/if}
         </div>
 
@@ -395,70 +411,75 @@
               void handleSubmit();
             }}
           >
-          <Field label={$t('assistant_provider_type')}>
-            <select
-              id="assistant-provider-type"
-              aria-label={$t('assistant_provider_type')}
-              class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-neutral-950"
-              value={providerOption}
-              onchange={handleProviderOptionChange}
-              disabled={isSaving}
-            >
-              <option value={ProviderType.Openai}>OpenAI</option>
-              <option value={ProviderType.Anthropic}>Anthropic</option>
-              <option value="ollama">Ollama</option>
-              <option value={ProviderType.OpenaiCompatible}>OpenAI compatible</option>
-            </select>
-          </Field>
+            <Field label={$t('assistant_provider_type')}>
+              <select
+                id="assistant-provider-type"
+                aria-label={$t('assistant_provider_type')}
+                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-neutral-950"
+                value={providerOption}
+                onchange={handleProviderOptionChange}
+                disabled={isSaving}
+              >
+                <option value={ProviderType.Openai}>OpenAI</option>
+                <option value={ProviderType.Anthropic}>Anthropic</option>
+                <option value="ollama">Ollama</option>
+                <option value={ProviderType.OpenaiCompatible}>OpenAI compatible</option>
+              </select>
+            </Field>
 
-          <Field label={$t('assistant_api_key_label')} required>
-            <Input bind:value={label} aria-label={$t('assistant_api_key_label')} autocomplete="off" disabled={isSaving} />
-          </Field>
-
-          {#if !isOllama}
-            <Field label={$t('assistant_api_key_secret')} required>
+            <Field label={$t('assistant_api_key_label')} required>
               <Input
-                type="password"
-                bind:value={secret}
-                aria-label={$t('assistant_api_key_secret')}
+                bind:value={label}
+                aria-label={$t('assistant_api_key_label')}
                 autocomplete="off"
                 disabled={isSaving}
               />
             </Field>
-          {:else}
-            <Text size="small" color="muted">{$t('assistant_ollama_no_api_key')}</Text>
-          {/if}
 
-          <Field label={$t('assistant_api_key_base_url')} required={isOpenAiCompatible}>
-            <Input
-              bind:value={baseUrl}
-              aria-label={$t('assistant_api_key_base_url')}
-              placeholder={isOllama ? OLLAMA_DEFAULT_BASE_URL : 'https://api.example.com/v1'}
-              autocomplete="off"
-              disabled={isSaving}
-            />
-          </Field>
+            {#if !isOllama}
+              <Field label={$t('assistant_api_key_secret')} required>
+                <Input
+                  type="password"
+                  bind:value={secret}
+                  aria-label={$t('assistant_api_key_secret')}
+                  autocomplete="off"
+                  disabled={isSaving}
+                />
+              </Field>
+            {:else}
+              <Text size="small" color="muted">{$t('assistant_ollama_no_api_key')}</Text>
+            {/if}
 
-          <Field label={$t('assistant_api_key_models')}>
-            <Input
-              bind:value={modelsText}
-              aria-label={$t('assistant_api_key_models')}
-              placeholder="gpt-5.1, gpt-5.2, gpt-5.2-mini"
-              autocomplete="off"
-              disabled={isSaving}
-            />
-            <Text size="small" color="muted">{$t('assistant_api_key_models_hint')}</Text>
-          </Field>
+            <Field label={$t('assistant_api_key_base_url')} required={isOpenAiCompatible}>
+              <Input
+                bind:value={baseUrl}
+                aria-label={$t('assistant_api_key_base_url')}
+                placeholder={isOllama ? OLLAMA_DEFAULT_BASE_URL : 'https://api.example.com/v1'}
+                autocomplete="off"
+                disabled={isSaving}
+              />
+            </Field>
 
-          <Field label={$t('assistant_api_key_default_model')}>
-            <Input
-              bind:value={defaultModel}
-              aria-label={$t('assistant_api_key_default_model')}
-              placeholder="gpt-5.2"
-              autocomplete="off"
-              disabled={isSaving}
-            />
-          </Field>
+            <Field label={$t('assistant_api_key_models')}>
+              <Input
+                bind:value={modelsText}
+                aria-label={$t('assistant_api_key_models')}
+                placeholder="gpt-5.1, gpt-5.2, gpt-5.2-mini"
+                autocomplete="off"
+                disabled={isSaving}
+              />
+              <Text size="small" color="muted">{$t('assistant_api_key_models_hint')}</Text>
+            </Field>
+
+            <Field label={$t('assistant_api_key_default_model')}>
+              <Input
+                bind:value={defaultModel}
+                aria-label={$t('assistant_api_key_default_model')}
+                placeholder="gpt-5.2"
+                autocomplete="off"
+                disabled={isSaving}
+              />
+            </Field>
 
             <div class="flex justify-end gap-2">
               <Button type="button" color="secondary" onclick={() => (addFormOpen = false)} disabled={isSaving}>

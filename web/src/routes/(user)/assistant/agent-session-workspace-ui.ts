@@ -95,7 +95,7 @@ export const deriveAgentSessionTitleFromMessages = (messages: AgentMessageRespon
       .map((block) => block.text)
       .join(' ')
       .trim()
-      .replace(/\s+/g, ' ');
+      .replaceAll(/\s+/g, ' ');
 
     if (!title) {
       continue;
