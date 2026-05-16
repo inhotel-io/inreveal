@@ -169,8 +169,8 @@ describe(AgentSessionActionDock.name, () => {
 
     render(AgentSessionActionDock, { props: { session: makeSession(), onPendingApprovalCountChange } });
 
-    expect(await screen.findByText('Read previews')).toBeInTheDocument();
-    expect(screen.getByText('Search photos')).toBeInTheDocument();
+    expect(await screen.findByText('Pi wants to view photo previews.')).toBeInTheDocument();
+    expect(screen.getByText('Pi wants to search your photos.')).toBeInTheDocument();
     expect(sdkMock.getToolCalls).toHaveBeenCalledWith({ id: 'session-1' });
     expect(onPendingApprovalCountChange).toHaveBeenLastCalledWith(2);
   });
@@ -255,7 +255,7 @@ describe(AgentSessionActionDock.name, () => {
 
     render(AgentSessionActionDock, { props: { session: makeSession() } });
 
-    expect(await screen.findByText('Search photos')).toBeInTheDocument();
+    expect(await screen.findByText('Pi wants to search your photos.')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Plan review' })).not.toBeInTheDocument();
     expect(sdkMock.getCurrentOperationPlan).not.toHaveBeenCalled();
   });

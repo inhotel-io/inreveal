@@ -2,7 +2,12 @@
   import type { AgentSessionResponseDto, AgentToolCallResponseDto } from '@immich/sdk';
   import { Button } from '@immich/ui';
   import { t } from 'svelte-i18n';
-  import { getAgentToolDataClassLabelKey, getAgentToolNameLabelKey } from './agent-tool-approval-ui';
+  import {
+    getAgentToolCallPendingText,
+    getAgentToolCallScopeText,
+    getAgentToolDataClassLabelKey,
+    getAgentToolNameLabelKey,
+  } from './agent-tool-approval-ui';
 
   interface Props {
     session: AgentSessionResponseDto;
@@ -16,9 +21,12 @@
   let { session, toolCall, busy = false, errorMessage = null, onApprove, onDeny }: Props = $props();
 
   let reasonOpen = $state(false);
+  let detailsOpen = $state(false);
   let reason = $state('');
   const toolName = $derived($t(getAgentToolNameLabelKey(toolCall.toolName)));
   const dataClass = $derived($t(getAgentToolDataClassLabelKey(toolCall.dataClass)));
+  const actionText = $derived(getAgentToolCallPendingText(toolCall));
+  const scopeText = $derived(getAgentToolCallScopeText(toolCall));
   const startedTime = $derived(new Date(toolCall.startedAt).toLocaleString());
 
   const deny = () => {
@@ -28,38 +36,54 @@
 </script>
 
 <article
-  class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-gray-900 dark:border-amber-700/70 dark:bg-amber-950/30 dark:text-gray-100"
+  class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-gray-900 shadow-sm dark:border-amber-700/70 dark:bg-amber-950/30 dark:text-gray-100"
   aria-label={$t('assistant_approval_request')}
 >
   <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
     <div class="min-w-0">
-      <h3 class="break-words font-semibold">{toolName}</h3>
-      <p class="mt-1 break-words text-gray-700 dark:text-gray-300">{toolCall.requestSummary}</p>
+      <h3 class="break-words text-base font-semibold">{actionText}</h3>
+      <p class="mt-1 break-words text-gray-700 dark:text-gray-300">It may use {scopeText}.</p>
     </div>
-    <div
-      class="shrink-0 rounded-md bg-white px-2 py-1 text-xs font-medium text-gray-700 dark:bg-gray-900 dark:text-gray-200"
+    <button
+      type="button"
+      class="shrink-0 rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-neutral-950 dark:text-gray-200 dark:hover:bg-amber-950"
+      aria-expanded={detailsOpen}
+      onclick={() => (detailsOpen = !detailsOpen)}
     >
-      {dataClass}
-    </div>
+      Details
+    </button>
   </div>
 
-  <dl class="mt-4 grid gap-2 text-xs text-gray-600 sm:grid-cols-2 dark:text-gray-300">
-    <div>
-      <dt class="font-medium text-gray-500 dark:text-gray-400">{$t('assistant_approval_data_access')}</dt>
-      <dd>
-        {$t('assistant_approval_asset_count', { values: { count: toolCall.assetCount } })} ·
-        {$t('assistant_approval_album_count', { values: { count: toolCall.albumCount } })}
-      </dd>
+  {#if detailsOpen}
+    <div class="mt-4 rounded-md border border-amber-200/80 bg-white/70 p-3 dark:border-amber-800 dark:bg-neutral-950/80">
+      <p class="break-words text-sm text-gray-800 dark:text-gray-200">{toolCall.requestSummary}</p>
+      <dl class="mt-3 grid gap-2 text-xs text-gray-600 sm:grid-cols-2 dark:text-gray-300">
+        <div>
+          <dt class="font-medium text-gray-500 dark:text-gray-400">Action</dt>
+          <dd>{toolName}</dd>
+        </div>
+        <div>
+          <dt class="font-medium text-gray-500 dark:text-gray-400">Data</dt>
+          <dd>{dataClass}</dd>
+        </div>
+        <div>
+          <dt class="font-medium text-gray-500 dark:text-gray-400">{$t('assistant_approval_data_access')}</dt>
+          <dd>
+            {$t('assistant_approval_asset_count', { values: { count: toolCall.assetCount } })} ·
+            {$t('assistant_approval_album_count', { values: { count: toolCall.albumCount } })}
+          </dd>
+        </div>
+        <div>
+          <dt class="font-medium text-gray-500 dark:text-gray-400">{$t('assistant_provider_credential')}</dt>
+          <dd class="truncate">{session.credentialSnapshot.label} / {session.modelSnapshot.model}</dd>
+        </div>
+        <div>
+          <dt class="font-medium text-gray-500 dark:text-gray-400">{$t('assistant_created_at')}</dt>
+          <dd>{startedTime}</dd>
+        </div>
+      </dl>
     </div>
-    <div>
-      <dt class="font-medium text-gray-500 dark:text-gray-400">{$t('assistant_provider_credential')}</dt>
-      <dd class="truncate">{session.credentialSnapshot.label} / {session.modelSnapshot.model}</dd>
-    </div>
-    <div>
-      <dt class="font-medium text-gray-500 dark:text-gray-400">{$t('assistant_created_at')}</dt>
-      <dd>{startedTime}</dd>
-    </div>
-  </dl>
+  {/if}
 
   {#if reasonOpen}
     <label
