@@ -8,6 +8,7 @@ import {
   AgentOperationType,
   AgentPermissionPreset,
   AgentProviderType,
+  AgentSessionStatus,
 } from 'src/enum';
 import { AgentOperationPlanRepository } from 'src/repositories/agent-operation-plan.repository';
 import { AgentProviderCredentialRepository } from 'src/repositories/agent-provider-credential.repository';
@@ -276,7 +277,30 @@ describe(AgentOperationPlanRepository.name, () => {
       status: AgentOperationPlanStatus.Proposed,
       summary: 'Replacement plan',
     });
-    expect(replacement.operations).toHaveLength(1);
+    expect(replacement?.operations).toHaveLength(1);
+  });
+
+  it('does not create a replacement revision when the locked session is applying', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { user, session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const original = await sut.createRevision(
+      planRevisionInput(session.id, {
+        revision: 1,
+        summary: 'Original plan',
+        operations: [createAlbumOperation('original-album')],
+      }),
+    );
+    await sessionRepository.update(user.id, session.id, { status: AgentSessionStatus.Applying });
+
+    await expect(
+      sut.createReplacementRevision(
+        session.id,
+        replacementRevisionInput(session.id, 'Late replacement', [createAlbumOperation('late-album')]),
+      ),
+    ).resolves.toBeUndefined();
+    await expect(sut.getByIdForSession(session.id, original.id)).resolves.toMatchObject({
+      status: AgentOperationPlanStatus.Proposed,
+    });
   });
 
   it('serializes concurrent replacement revision calculations for the same session', async () => {
@@ -302,7 +326,8 @@ describe(AgentOperationPlanRepository.name, () => {
       ),
     ]);
 
-    expect(replacements.map((plan) => plan.revision).toSorted()).toEqual([2, 3]);
+    expect(replacements).toEqual([expect.any(Object), expect.any(Object)]);
+    expect(replacements.map((plan) => plan!.revision).toSorted()).toEqual([2, 3]);
     await expect(sut.getNextRevision(session.id)).resolves.toBe(4);
   });
 
@@ -374,7 +399,7 @@ describe(AgentOperationPlanRepository.name, () => {
     const current = await sut.getCurrentBySessionId(session.id);
 
     expect(current).toMatchObject({
-      id: replacement.id,
+      id: replacement?.id,
       revision: 2,
       status: AgentOperationPlanStatus.Proposed,
       summary: 'Replacement plan',
@@ -421,7 +446,8 @@ describe(AgentOperationPlanRepository.name, () => {
 
   it('claims a current proposed plan for apply by marking it applied', async () => {
     const { ctx, credentialRepository, sessionRepository, sut } = setup();
-    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const { user, session } = await createSession(ctx, credentialRepository, sessionRepository);
+    await sessionRepository.update(user.id, session.id, { status: AgentSessionStatus.WaitingForPlanReview });
     const plan = await sut.createRevision(
       planRevisionInput(session.id, {
         revision: 1,
@@ -441,11 +467,15 @@ describe(AgentOperationPlanRepository.name, () => {
       plan.operations.map((operation) => operation.id),
     );
     await expect(sut.getCurrentBySessionId(session.id)).resolves.toBeUndefined();
+    await expect(sessionRepository.getById(user.id, session.id)).resolves.toMatchObject({
+      status: AgentSessionStatus.Applying,
+    });
   });
 
   it('does not claim an already applied plan twice', async () => {
     const { ctx, credentialRepository, sessionRepository, sut } = setup();
-    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const { user, session } = await createSession(ctx, credentialRepository, sessionRepository);
+    await sessionRepository.update(user.id, session.id, { status: AgentSessionStatus.WaitingForPlanReview });
     const plan = await sut.createRevision(
       planRevisionInput(session.id, {
         revision: 1,
@@ -458,9 +488,28 @@ describe(AgentOperationPlanRepository.name, () => {
     await expect(sut.claimCurrentForApply(session.id, plan.id)).resolves.toBeUndefined();
   });
 
+  it('does not claim a plan when the locked session is no longer waiting for review', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { user, session } = await createSession(ctx, credentialRepository, sessionRepository);
+    await sessionRepository.update(user.id, session.id, { status: AgentSessionStatus.Completed });
+    const plan = await sut.createRevision(
+      planRevisionInput(session.id, {
+        revision: 1,
+        summary: 'Do not apply after cancel',
+        operations: [createAlbumOperation('cancelled-album')],
+      }),
+    );
+
+    await expect(sut.claimCurrentForApply(session.id, plan.id)).resolves.toBeUndefined();
+    await expect(sut.getByIdForSession(session.id, plan.id)).resolves.toMatchObject({
+      status: AgentOperationPlanStatus.Proposed,
+    });
+  });
+
   it('persists operation apply statuses, results, and errors', async () => {
     const { ctx, credentialRepository, sessionRepository, sut } = setup();
-    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const { user, session } = await createSession(ctx, credentialRepository, sessionRepository);
+    await sessionRepository.update(user.id, session.id, { status: AgentSessionStatus.WaitingForPlanReview });
     const plan = await sut.createRevision(
       planRevisionInput(session.id, {
         revision: 1,
