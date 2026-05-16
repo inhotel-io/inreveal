@@ -180,6 +180,18 @@ describe(AgentMcpService.name, () => {
     });
   };
 
+  const expectToolValidationError = (response: AgentMcpSuccessResponse, path: string) => {
+    const result = response.result as AgentMcpToolCallResult;
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      status: 'error',
+      error: 'Invalid tool arguments',
+      issues: expect.arrayContaining([expect.objectContaining({ path })]),
+    });
+    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+  };
+
   it.each([
     {
       toolName: AgentToolName.SearchAssets,
@@ -292,6 +304,180 @@ describe(AgentMcpService.name, () => {
 
     expect(toolService.readAssetPreviews).toHaveBeenCalledWith(auth, sessionId, { toolCallId });
     expectToolResult(response, `${AgentToolName.ReadAssetPreviews}-call`, serviceResult);
+  });
+
+  it.each([
+    {
+      name: 'missing arguments',
+      args: undefined,
+      expectedPath: 'arguments',
+    },
+    {
+      name: 'arguments array',
+      args: [factory.uuid()],
+      expectedPath: 'arguments',
+    },
+    {
+      name: 'arguments primitive',
+      args: 'not-an-object',
+      expectedPath: 'arguments',
+    },
+    {
+      name: 'arguments null',
+      args: null,
+      expectedPath: 'arguments',
+    },
+    {
+      name: 'unknown strict DTO field',
+      args: { filters: {}, unexpected: true },
+      expectedPath: '',
+    },
+    {
+      name: 'missing metadata assetIds or toolCallId',
+      args: {},
+      expectedPath: '',
+      toolName: AgentToolName.ReadAssetMetadata,
+    },
+    {
+      name: 'empty asset id array',
+      args: { assetIds: [] },
+      expectedPath: 'assetIds',
+      toolName: AgentToolName.ReadAssetMetadata,
+    },
+    {
+      name: 'invalid asset id',
+      args: { assetIds: ['not-a-uuid'] },
+      expectedPath: 'assetIds.0',
+      toolName: AgentToolName.ReadAssetMetadata,
+    },
+    {
+      name: 'invalid album id',
+      args: { albumId: 'not-a-uuid' },
+      expectedPath: 'albumId',
+      toolName: AgentToolName.ReadAlbum,
+    },
+    {
+      name: 'wrong primitive search limit',
+      args: { limit: 'ten' },
+      expectedPath: 'limit',
+      toolName: AgentToolName.SearchAssets,
+    },
+    {
+      name: 'excessive search limit',
+      args: { limit: 10_001 },
+      expectedPath: 'limit',
+      toolName: AgentToolName.SearchAssets,
+    },
+  ])('returns isError tool result for malformed arguments: $name', async ({ args, expectedPath, toolName }) => {
+    const response = (await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(toolName ?? AgentToolName.SearchAssets, args),
+    )) as AgentMcpSuccessResponse;
+
+    expectToolValidationError(response, expectedPath);
+    expect(toolService.searchAssets).not.toHaveBeenCalled();
+    expect(toolService.readAssetMetadata).not.toHaveBeenCalled();
+    expect(toolService.readAlbum).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing params', undefined],
+    ['params is not object', 'bad-params'],
+    ['missing name', { arguments: {} }],
+    ['non-string name', { name: 12, arguments: {} }],
+  ] as const)('returns invalid params for tools/call when %s', async (_name, params) => {
+    await expect(
+      sut.handle(auth, sessionId, {
+        jsonrpc: '2.0',
+        id: 'bad-call',
+        method: 'tools/call',
+        params,
+      }),
+    ).resolves.toEqual({
+      jsonrpc: '2.0',
+      id: 'bad-call',
+      error: {
+        code: -32_602,
+        message: 'Invalid params',
+      },
+    });
+  });
+
+  it('returns a protocol error for an unknown tool name', async () => {
+    await expect(
+      sut.handle(auth, sessionId, {
+        jsonrpc: '2.0',
+        id: 'unknown-tool',
+        method: 'tools/call',
+        params: { name: 'deleteEverything', arguments: {} },
+      }),
+    ).resolves.toEqual({
+      jsonrpc: '2.0',
+      id: 'unknown-tool',
+      error: {
+        code: -32_602,
+        message: 'Unknown tool',
+        data: { toolName: 'deleteEverything' },
+      },
+    });
+  });
+
+  it('returns a protocol error for planning tools until slice 4', async () => {
+    await expect(
+      sut.handle(auth, sessionId, {
+        jsonrpc: '2.0',
+        id: 'planning-tool',
+        method: 'tools/call',
+        params: { name: AgentToolName.ProposeAlbumOperations, arguments: { summary: 'Plan', operations: [] } },
+      }),
+    ).resolves.toEqual({
+      jsonrpc: '2.0',
+      id: 'planning-tool',
+      error: {
+        code: -32_602,
+        message: 'Tool not supported in this slice',
+        data: { toolName: AgentToolName.ProposeAlbumOperations },
+      },
+    });
+  });
+
+  it('converts unexpected service failures to redacted JSON-RPC internal errors', async () => {
+    toolService.readAssetMetadata.mockRejectedValue(
+      new Error('secret bearer token abc /srv/gallery/provider-request.json stacktrace'),
+    );
+
+    await expect(
+      sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(AgentToolName.ReadAssetMetadata, { assetIds: [factory.uuid()] }),
+      ),
+    ).resolves.toEqual({
+      jsonrpc: '2.0',
+      id: `${AgentToolName.ReadAssetMetadata}-call`,
+      error: {
+        code: -32_603,
+        message: 'Internal error',
+      },
+    });
+  });
+
+  it('converts rejected retry toolCallId failures to redacted JSON-RPC internal errors', async () => {
+    const toolCallId = factory.uuid();
+    toolService.readAssetMetadata.mockRejectedValue(new Error('Agent tool call not found for another session'));
+
+    await expect(
+      sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.ReadAssetMetadata, { toolCallId })),
+    ).resolves.toEqual({
+      jsonrpc: '2.0',
+      id: `${AgentToolName.ReadAssetMetadata}-call`,
+      error: {
+        code: -32_603,
+        message: 'Internal error',
+      },
+    });
+    expect(toolService.readAssetMetadata).toHaveBeenCalledWith(auth, sessionId, { toolCallId });
   });
 
   it.each(['resources/list'] as const)('returns method-not-found for %s', async (method) => {
