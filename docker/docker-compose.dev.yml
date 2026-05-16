@@ -95,7 +95,7 @@ services:
       IMMICH_HELMET_FILE: 'true'
       IMMICH_AGENT_SECRET_KEY: ${IMMICH_AGENT_SECRET_KEY:-dev-agent-secret-key-change-me}
       IMMICH_AGENT_RUNNER_URL: http://agent-runner:4477
-      IMMICH_AGENT_TOOL_GATEWAY_URL: http://immich-server:2283/api/agent/internal/tools
+      IMMICH_AGENT_MCP_GATEWAY_URL: http://immich-server:2283/api/agent/internal/mcp
     ports:
       - 9230:9230
       - 9231:9231
@@ -126,8 +126,6 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 4477
-    ports:
-      - 4477:4477
     depends_on:
       immich-init:
         condition: service_healthy

@@ -69,7 +69,7 @@ describe(AgentRunnerToolTokenService.name, () => {
     ).toString('base64url');
 
     expect(() => sut.verify(parts.join('.'), new Date('2026-05-15T11:00:00.000Z'))).toThrow(
-      new UnauthorizedException('Invalid agent runner tool token'),
+      new UnauthorizedException('Invalid agent runner token'),
     );
   });
 
@@ -81,7 +81,7 @@ describe(AgentRunnerToolTokenService.name, () => {
     });
 
     expect(() => sut.verify(token, new Date('2026-05-15T12:00:01.000Z'))).toThrow(
-      new UnauthorizedException('Agent runner tool token expired'),
+      new UnauthorizedException('Agent runner token expired'),
     );
   });
 
@@ -106,17 +106,17 @@ describe(AgentRunnerToolTokenService.name, () => {
     createServiceWithoutKey();
 
     expect(() => sut.verify(token, new Date('2026-05-15T11:00:00.000Z'))).toThrow(
-      new UnauthorizedException('Invalid agent runner tool token'),
+      new UnauthorizedException('Invalid agent runner token'),
     );
   });
 
   it.each(['not-a-token', 'v2.e30.signature', 'v1.not-json.signature'])('rejects malformed token %s', (token) => {
-    expect(() => sut.verify(token)).toThrow(new UnauthorizedException('Invalid agent runner tool token'));
+    expect(() => sut.verify(token)).toThrow(new UnauthorizedException('Invalid agent runner token'));
   });
 
   it('rejects a correctly signed non-json payload', () => {
     expect(() => sut.verify(createTokenWithClaims('not-json'))).toThrow(
-      new UnauthorizedException('Invalid agent runner tool token'),
+      new UnauthorizedException('Invalid agent runner token'),
     );
   });
 
@@ -128,7 +128,7 @@ describe(AgentRunnerToolTokenService.name, () => {
           expiresAt: '2026-05-15T12:00:00.000Z',
         }),
       ),
-    ).toThrow(new UnauthorizedException('Invalid agent runner tool token'));
+    ).toThrow(new UnauthorizedException('Invalid agent runner token'));
   });
 
   it('rejects invalid claim dates', () => {
@@ -140,7 +140,7 @@ describe(AgentRunnerToolTokenService.name, () => {
           expiresAt: 'not-a-date',
         }),
       ),
-    ).toThrow(new UnauthorizedException('Invalid agent runner tool token'));
+    ).toThrow(new UnauthorizedException('Invalid agent runner token'));
   });
 
   it('rejects expired correctly signed claims', () => {
@@ -153,6 +153,6 @@ describe(AgentRunnerToolTokenService.name, () => {
         }),
         new Date('2026-05-15T12:00:01.000Z'),
       ),
-    ).toThrow(new UnauthorizedException('Agent runner tool token expired'));
+    ).toThrow(new UnauthorizedException('Agent runner token expired'));
   });
 });

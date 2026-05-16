@@ -1,4 +1,4 @@
-import { AgentRunnerToolGuard } from 'src/controllers/agent-runner-tool.controller';
+import { AgentRunnerTokenGuard } from 'src/controllers/agent-runner-token.guard';
 import { ActivityService } from 'src/services/activity.service';
 import { AgentMessageService } from 'src/services/agent-message.service';
 import { AgentMcpService } from 'src/services/agent-mcp.service';
@@ -66,7 +66,7 @@ import { WorkflowService } from 'src/services/workflow.service';
 export const services = [
   ApiKeyService,
   ActivityService,
-  AgentRunnerToolGuard,
+  AgentRunnerTokenGuard,
   AgentMessageService,
   AgentMcpService,
   AgentMcpToolRegistryService,

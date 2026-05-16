@@ -16,7 +16,7 @@ type EncodedAgentRunnerToolTokenClaims = {
 
 const FORMAT_VERSION = 'v1';
 const BASE64URL_PATTERN = /^[\w-]+$/;
-const INVALID_TOKEN = 'Invalid agent runner tool token';
+const INVALID_TOKEN = 'Invalid agent runner token';
 
 @Injectable()
 export class AgentRunnerToolTokenService {
@@ -51,7 +51,7 @@ export class AgentRunnerToolTokenService {
 
     const claims = this.parseClaims(encodedClaims);
     if (claims.expiresAt.getTime() <= now.getTime()) {
-      throw new UnauthorizedException('Agent runner tool token expired');
+      throw new UnauthorizedException('Agent runner token expired');
     }
 
     return claims;

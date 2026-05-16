@@ -55,6 +55,18 @@ RUN --mount=type=cache,id=pnpm-cli,target=/buildcache/pnpm-store \
   pnpm --filter @immich/cli build && \
   pnpm --filter @immich/cli --prod --no-optional deploy /output/cli-pruned
 
+FROM builder AS agent-runner
+
+WORKDIR /usr/src/app
+COPY ./agent-runner ./agent-runner/
+RUN --mount=type=cache,id=pnpm-agent-runner,target=/buildcache/pnpm-store \
+  --mount=type=bind,source=package.json,target=package.json \
+  --mount=type=bind,source=.pnpmfile.cjs,target=.pnpmfile.cjs \
+  --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
+  --mount=type=bind,source=pnpm-workspace.yaml,target=pnpm-workspace.yaml \
+  --mount=type=bind,source=patches,target=patches \
+  pnpm --filter @open-noodle/agent-runner --frozen-lockfile --prod --no-optional deploy /output/agent-runner-pruned
+
 FROM builder AS plugins
 
 ARG TARGETPLATFORM
@@ -89,9 +101,12 @@ ENV NODE_ENV=production \
 COPY --from=server /output/server-pruned ./server
 COPY --from=web /usr/src/app/web/build /build/www
 COPY --from=cli /output/cli-pruned ./cli
+COPY --from=agent-runner /output/agent-runner-pruned ./agent-runner
 COPY --from=plugins /usr/src/app/plugins/dist /build/corePlugin/dist
 COPY --from=plugins /usr/src/app/plugins/manifest.json /build/corePlugin/manifest.json
-RUN ln -s ../../cli/bin/immich server/bin/immich
+RUN ln -s ../../cli/bin/immich server/bin/immich && \
+  printf '%s\n' '#!/usr/bin/env bash' 'cd /usr/src/app/agent-runner' 'exec node src/server.mjs "$@"' > server/bin/agent-runner && \
+  chmod +x server/bin/agent-runner
 COPY LICENSE /licenses/LICENSE.txt
 COPY LICENSE /LICENSE
 

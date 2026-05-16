@@ -1,7 +1,7 @@
 import { Body, Controller, HttpCode, HttpStatus, Param, Post, Res, UseGuards } from '@nestjs/common';
 import { ApiAcceptedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { AgentRunnerToolGuard } from 'src/controllers/agent-runner-tool.controller';
+import { AgentRunnerTokenGuard } from 'src/controllers/agent-runner-token.guard';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { ApiTag } from 'src/enum';
@@ -14,7 +14,7 @@ const history = () => new HistoryBuilder().added('v2.7.5').internal('v2.7.5');
 
 @ApiTags(ApiTag.AgentSessions)
 @Controller('agent/internal/mcp/sessions/:id')
-@UseGuards(AgentRunnerToolGuard)
+@UseGuards(AgentRunnerTokenGuard)
 export class AgentRunnerMcpController {
   constructor(private readonly service: AgentMcpService) {}
 

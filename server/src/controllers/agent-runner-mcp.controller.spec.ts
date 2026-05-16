@@ -1,6 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { AgentRunnerMcpController } from 'src/controllers/agent-runner-mcp.controller';
-import { AgentRunnerToolGuard } from 'src/controllers/agent-runner-tool.controller';
+import { AgentRunnerTokenGuard } from 'src/controllers/agent-runner-token.guard';
 import {
   AgentOperationRiskLevel,
   AgentOperationTargetKind,
@@ -53,7 +53,7 @@ describe(AgentRunnerMcpController.name, () => {
 
   beforeAll(async () => {
     ctx = await controllerSetup(AgentRunnerMcpController, [
-      AgentRunnerToolGuard,
+      AgentRunnerTokenGuard,
       { provide: AgentRunnerToolTokenService, useValue: tokenService },
       { provide: AgentMcpService, useValue: service },
     ]);
@@ -169,7 +169,7 @@ describe(AgentRunnerMcpController.name, () => {
     expect(status).toBe(401);
     expect(body).toMatchObject({
       error: 'Unauthorized',
-      message: 'Invalid agent runner tool token',
+      message: 'Invalid agent runner token',
       statusCode: 401,
     });
     expect(service.handle).not.toHaveBeenCalled();
@@ -195,7 +195,7 @@ describe(AgentRunnerMcpController.name, () => {
 
   it('returns 401 when token verification fails', async () => {
     tokenService.verify.mockImplementation(() => {
-      throw new UnauthorizedException('Agent runner tool token expired');
+      throw new UnauthorizedException('Agent runner token expired');
     });
 
     const { status, body } = await request(ctx.getHttpServer())
@@ -206,7 +206,7 @@ describe(AgentRunnerMcpController.name, () => {
     expect(status).toBe(401);
     expect(body).toMatchObject({
       error: 'Unauthorized',
-      message: 'Agent runner tool token expired',
+      message: 'Agent runner token expired',
       statusCode: 401,
     });
     expect(service.handle).not.toHaveBeenCalled();
@@ -230,7 +230,7 @@ describe(AgentRunnerMcpController.name, () => {
 
     beforeAll(async () => {
       realCtx = await controllerSetup(AgentRunnerMcpController, [
-        AgentRunnerToolGuard,
+        AgentRunnerTokenGuard,
         { provide: AgentRunnerToolTokenService, useValue: tokenService },
         AgentMcpToolRegistryService,
         { provide: AgentToolService, useValue: realToolService },

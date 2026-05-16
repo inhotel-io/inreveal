@@ -91,7 +91,7 @@ describe(AgentRunnerRepository.name, () => {
           capabilities: {
             protocolVersion: '2026-05-14',
             streaming: true,
-            tools: ['echo', 123, 'read_asset_metadata'],
+            tools: ['mcp:gallery', 123, 'mcp_gallery_readAssetMetadata'],
             models: ['gpt-5.1', null],
           },
         }),
@@ -104,7 +104,7 @@ describe(AgentRunnerRepository.name, () => {
       capabilities: {
         protocolVersion: '2026-05-14',
         streaming: true,
-        tools: ['echo', 'read_asset_metadata'],
+        tools: ['mcp:gallery', 'mcp_gallery_readAssetMetadata'],
         models: ['gpt-5.1'],
       },
     });
