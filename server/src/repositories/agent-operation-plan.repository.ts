@@ -7,7 +7,7 @@ import { AgentOperationPlanStatus, AgentOperationStatus, AgentOperationTargetKin
 import { DB } from 'src/schema';
 import { AgentOperationPlanTable } from 'src/schema/tables/agent-operation-plan.table';
 import { AgentOperationTable } from 'src/schema/tables/agent-operation.table';
-import { AgentAlbumOperationInput } from 'src/types/agent-operation.types';
+import { AgentAlbumOperationInput, AgentOperationResult } from 'src/types/agent-operation.types';
 import { asUuid } from 'src/utils/database';
 
 type AgentOperationPlanCreateRevision = {
@@ -32,6 +32,12 @@ type DatabaseOrTransaction = Kysely<DB> | Transaction<DB>;
 type AgentOperationPlanRow = Awaited<ReturnType<AgentOperationPlanRepository['insertPlan']>>;
 type AgentOperationRow = Awaited<ReturnType<AgentOperationPlanRepository['insertOperation']>>;
 export type AgentOperationPlanWithOperations = AgentOperationPlanRow & { operations: AgentOperationRow[] };
+export type AgentOperationApplyUpdate = {
+  id: string;
+  status: AgentOperationStatus;
+  result: AgentOperationResult | null;
+  error: string | null;
+};
 
 @Injectable()
 export class AgentOperationPlanRepository {
@@ -85,6 +91,61 @@ export class AgentOperationPlanRepository {
       .executeTakeFirst();
 
     return plan ? this.withOperations(plan) : undefined;
+  }
+
+  async claimCurrentForApply(
+    sessionId: string,
+    planId: string,
+  ): Promise<AgentOperationPlanWithOperations | undefined> {
+    return this.db.transaction().execute(async (trx) => {
+      await this.lockSession(trx, sessionId);
+      const plan = await trx
+        .selectFrom('agent_operation_plan')
+        .select(columns.agentOperationPlan)
+        .where('sessionId', '=', asUuid(sessionId))
+        .where('id', '=', asUuid(planId))
+        .where('status', '=', AgentOperationPlanStatus.Proposed)
+        .forUpdate()
+        .executeTakeFirst();
+
+      if (!plan) {
+        return undefined;
+      }
+
+      const appliedPlan = await trx
+        .updateTable('agent_operation_plan')
+        .set({ status: AgentOperationPlanStatus.Applied })
+        .where('id', '=', asUuid(plan.id))
+        .returning(columns.agentOperationPlan)
+        .executeTakeFirstOrThrow();
+
+      return this.withOperationsFrom(trx, appliedPlan);
+    });
+  }
+
+  async completeApply(planId: string, updates: AgentOperationApplyUpdate[]) {
+    return this.db.transaction().execute(async (trx) => {
+      for (const update of updates) {
+        await trx
+          .updateTable('agent_operation')
+          .set({
+            status: update.status,
+            result: update.result,
+            error: update.error,
+          })
+          .where('planId', '=', asUuid(planId))
+          .where('id', '=', asUuid(update.id))
+          .execute();
+      }
+
+      const plan = await trx
+        .selectFrom('agent_operation_plan')
+        .select(columns.agentOperationPlan)
+        .where('id', '=', asUuid(planId))
+        .executeTakeFirstOrThrow();
+
+      return this.withOperationsFrom(trx, plan);
+    });
   }
 
   private async createRevisionInTransaction(
@@ -185,8 +246,15 @@ export class AgentOperationPlanRepository {
     return trx.insertInto('agent_operation').values(dto).returning(columns.agentOperation).executeTakeFirstOrThrow();
   }
 
-  private async withOperations(plan: AgentOperationPlanRow): Promise<AgentOperationPlanWithOperations> {
-    const operations = await this.db
+  private withOperations(plan: AgentOperationPlanRow): Promise<AgentOperationPlanWithOperations> {
+    return this.withOperationsFrom(this.db, plan);
+  }
+
+  private async withOperationsFrom(
+    db: DatabaseOrTransaction,
+    plan: AgentOperationPlanRow,
+  ): Promise<AgentOperationPlanWithOperations> {
+    const operations = await db
       .selectFrom('agent_operation')
       .select(columns.agentOperation)
       .where('planId', '=', asUuid(plan.id))
