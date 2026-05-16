@@ -858,7 +858,9 @@ describe(AgentSessionChatPanel.name, () => {
   });
 
   it('clears the ASCII busy indicator when the session becomes terminal before any assistant text streams', async () => {
-    sdkMock.appendAgentSessionMessage.mockResolvedValue(makeMessage('message-created', AgentMessageRole.User, 'Start task'));
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(
+      makeMessage('message-created', AgentMessageRole.User, 'Start task'),
+    );
 
     const { rerender } = render(AgentSessionChatPanel, { props: { session } });
 
