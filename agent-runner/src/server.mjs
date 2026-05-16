@@ -40,6 +40,41 @@ const sendSse = (response, event, data) => {
   response.write(`data: ${JSON.stringify(data)}\n\n`);
 };
 
+const streamRuntimeEvents = async ({ response, stream, onRuntimeError }) => {
+  const iterator = stream[Symbol.asyncIterator]();
+  let clientClosed = false;
+  const handleClose = () => {
+    if (response.writableEnded) {
+      return;
+    }
+
+    clientClosed = true;
+    void iterator.return?.();
+  };
+
+  response.on('close', handleClose);
+  try {
+    while (true) {
+      const { value, done } = await iterator.next();
+      if (done || clientClosed || response.destroyed || response.writableEnded) {
+        break;
+      }
+
+      sendSse(response, value.type, value);
+    }
+  } catch {
+    if (!clientClosed && !response.destroyed && !response.writableEnded) {
+      onRuntimeError();
+    }
+  } finally {
+    response.off('close', handleClose);
+    await iterator.return?.();
+    if (!response.destroyed && !response.writableEnded) {
+      response.end();
+    }
+  }
+};
+
 const decodeRunnerSessionId = (encodedRunnerSessionId) => {
   try {
     return decodeURIComponent(encodedRunnerSessionId);
@@ -303,24 +338,22 @@ export const startServer = ({
 
       startSse(response);
 
-      try {
-        for await (const event of runtime.sendMessage({
+      await streamRuntimeEvents({
+        response,
+        stream: runtime.sendMessage({
           runnerSessionId,
           gallerySessionId: body.gallerySessionId,
           messageId: body.messageId,
           content: body.content,
-        })) {
-          sendSse(response, event.type, event);
-        }
-      } catch {
-        sendSse(response, 'runner-error', {
-          type: 'runner-error',
-          sessionId: body.gallerySessionId,
-          runnerSessionId,
-          message: 'Runner session failed',
-        });
-      }
-      response.end();
+        }),
+        onRuntimeError: () =>
+          sendSse(response, 'runner-error', {
+            type: 'runner-error',
+            sessionId: body.gallerySessionId,
+            runnerSessionId,
+            message: 'Runner session failed',
+          }),
+      });
       return;
     }
 
@@ -356,25 +389,23 @@ export const startServer = ({
 
       startSse(response);
 
-      try {
-        for await (const event of runtime.resumeSession({
+      await streamRuntimeEvents({
+        response,
+        stream: runtime.resumeSession({
           runnerSessionId,
           gallerySessionId: body.gallerySessionId,
           toolCallId: body.toolCallId,
           approvalDecision: body.approvalDecision,
           toolResult: body.toolResult,
-        })) {
-          sendSse(response, event.type, event);
-        }
-      } catch {
-        sendSse(response, 'runner-error', {
-          type: 'runner-error',
-          sessionId: body.gallerySessionId,
-          runnerSessionId,
-          message: 'Runner session failed',
-        });
-      }
-      response.end();
+        }),
+        onRuntimeError: () =>
+          sendSse(response, 'runner-error', {
+            type: 'runner-error',
+            sessionId: body.gallerySessionId,
+            runnerSessionId,
+            message: 'Runner session failed',
+          }),
+      });
       return;
     }
 
