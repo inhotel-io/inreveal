@@ -335,7 +335,11 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].noExtensions, true);
     assert.ok(Array.isArray(calls.loaders[0].extensionFactories));
     assert.equal(calls.loaders[0].systemPrompt.startsWith('You are Gallery Assistant'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('may have Gallery read and planning tools available'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('searchAssets'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('proposeAlbumOperations'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('album.create'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('call proposeAlbumOperations'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('reviewable album operation plan'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('no direct write tools'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('has no Gallery read tools'), false);
     assert.deepEqual(calls.loaders[0].appendSystemPrompt, []);
