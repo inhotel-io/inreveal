@@ -32,10 +32,23 @@
     onTitleDiscovered?: (sessionId: string, title: string) => void;
   }
 
-  type AssistantMarkdownInlineSegment = {
-    type: 'text' | 'strong' | 'emphasis' | 'code';
-    text: string;
-  };
+  type AssistantMarkdownInlineSegment =
+    | {
+        type: 'text' | 'strong' | 'emphasis' | 'code';
+        text: string;
+      }
+    | {
+        type: 'link';
+        text: string;
+        url: string;
+        title: string | null;
+      }
+    | {
+        type: 'image';
+        alt: string;
+        url: string;
+        title: string | null;
+      };
 
   type AssistantMarkdownBlock =
     | { type: 'paragraph'; segments: AssistantMarkdownInlineSegment[] }
@@ -138,7 +151,8 @@
 
   const parseAssistantInlineMarkdown = (text: string): AssistantMarkdownInlineSegment[] => {
     const segments: AssistantMarkdownInlineSegment[] = [];
-    const inlinePattern = /(`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*)/g;
+    const inlinePattern =
+      /(!\[([^\]\n]*)\]\(([^\s)]+)(?:\s+"([^"\n]*)")?\)|\[([^\]\n]+)\]\(([^\s)]+)(?:\s+"([^"\n]*)")?\)|`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*)/g;
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
@@ -147,12 +161,16 @@
         segments.push({ type: 'text', text: text.slice(lastIndex, match.index) });
       }
 
-      if (match[2]) {
-        segments.push({ type: 'code', text: match[2] });
-      } else if (match[3]) {
-        segments.push({ type: 'strong', text: match[3] });
-      } else if (match[4]) {
-        segments.push({ type: 'emphasis', text: match[4] });
+      if (match[2] !== undefined && match[3]) {
+        segments.push({ type: 'image', alt: match[2], url: match[3], title: match[4] ?? null });
+      } else if (match[5] && match[6]) {
+        segments.push({ type: 'link', text: match[5], url: match[6], title: match[7] ?? null });
+      } else if (match[8]) {
+        segments.push({ type: 'code', text: match[8] });
+      } else if (match[9]) {
+        segments.push({ type: 'strong', text: match[9] });
+      } else if (match[10]) {
+        segments.push({ type: 'emphasis', text: match[10] });
       }
 
       lastIndex = match.index + match[0].length;
@@ -452,6 +470,23 @@
       <em>{segment.text}</em>
     {:else if segment.type === 'code'}
       <code class="rounded bg-black/5 px-1 py-0.5 font-mono text-[0.92em] dark:bg-white/10">{segment.text}</code>
+    {:else if segment.type === 'link'}
+      <a
+        class="text-blue-600 underline underline-offset-2 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+        href={segment.url}
+        title={segment.title ?? undefined}
+        target="_blank"
+        rel="noreferrer"
+      >
+        {segment.text}
+      </a>
+    {:else if segment.type === 'image'}
+      <img
+        class="my-2 max-h-64 max-w-full rounded-md border border-gray-200 object-contain dark:border-neutral-800"
+        src={segment.url}
+        alt={segment.alt}
+        title={segment.title ?? undefined}
+      />
     {:else}
       {segment.text}
     {/if}
