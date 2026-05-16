@@ -459,7 +459,9 @@ describe(AgentAssistantWorkspace.name, () => {
     expect(await screen.findByTestId(`agent-session-row-${createdSession.id}`)).toHaveAttribute('aria-current', 'true');
     expect(await screen.findByText('pi is working...')).toBeInTheDocument();
 
+    const transcript = await screen.findByTestId('agent-session-chat-transcript');
     resolveAppend!(makeUserMessage(createdSession.id, 'Make an album from last weekend'));
+    expect(await within(transcript).findByText('Make an album from last weekend')).toBeInTheDocument();
   });
 
   it('uses permissions selected from the three-dot menu when creating the next session', async () => {
