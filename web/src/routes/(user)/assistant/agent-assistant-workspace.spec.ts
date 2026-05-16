@@ -32,6 +32,9 @@ vi.mock('svelte-i18n', () => {
     assistant_add_api_key_collapsed_hint:
       'Add another provider account only when you need a different key, endpoint, or local model host.',
     assistant_approval_mode: 'Approval mode',
+    assistant_approval_mode_ask_on_escalation: 'Ask on escalation',
+    assistant_approval_mode_dangerously_skip_permissions: 'Dangerously skip read approvals',
+    assistant_approval_mode_plan_only: 'Plan review only',
     assistant_approval_mode_strict: 'Strict',
     assistant_approval_request: 'Approval request',
     assistant_approval_tool_calls_error: 'Unable to load approval requests',
@@ -72,6 +75,10 @@ vi.mock('svelte-i18n', () => {
     assistant_message_disabled_placeholder: 'This session is read-only.',
     assistant_message_disabled_terminal: 'This session has ended. Start a new chat to continue.',
     assistant_message_placeholder: 'Ask the assistant to organize your albums.',
+    assistant_new_chat_placeholder: 'Ask Gallery what to do with your photos.',
+    assistant_runner_ready: 'Assistant ready',
+    assistant_settings: 'Assistant settings',
+    assistant_unavailable_banner: 'Assistant runner unavailable. Check configuration.',
     assistant_message_refresh_error: 'Message was sent, but the latest session state could not be refreshed.',
     assistant_message_resume_placeholder: 'Describe what changed or what the assistant should try next.',
     assistant_manage_api_keys: 'Manage API keys',
@@ -88,6 +95,8 @@ vi.mock('svelte-i18n', () => {
     assistant_open_sessions: 'Open sessions',
     assistant_permission_preset: 'Permission preset',
     assistant_permission_preset_careful: 'Careful',
+    assistant_permission_preset_local_power_user: 'Local power user',
+    assistant_permission_preset_visual_organizer: 'Visual organizer',
     assistant_protocol: 'Protocol {protocol}',
     assistant_provider_credential: 'Provider credential',
     assistant_provider_type: 'Provider',
@@ -145,6 +154,15 @@ const healthyRunner: AgentRunnerStatusDto = {
     tools: [],
     models: [],
   },
+  checkedAt: '2026-05-14T00:00:00.000Z',
+};
+
+const unavailableRunner: AgentRunnerStatusDto = {
+  configured: true,
+  healthy: false,
+  reason: AgentRunnerStatusReason.Timeout,
+  version: null,
+  capabilities: null,
   checkedAt: '2026-05-14T00:00:00.000Z',
 };
 
@@ -236,6 +254,7 @@ const actionableSession = makeSession({
 describe(AgentAssistantWorkspace.name, () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     history.replaceState(null, '', '/assistant');
     gotoMock.mockResolvedValue(undefined);
     websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
@@ -244,6 +263,7 @@ describe(AgentAssistantWorkspace.name, () => {
     sdkMock.getToolCalls.mockResolvedValue([]);
     sdkMock.validateAgentSession.mockResolvedValue(undefined as never);
     sdkMock.createAgentSession.mockResolvedValue(actionableSession);
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(makeUserMessage(actionableSession.id, 'Start organizing'));
     sdkMock.createAgentProviderCredential.mockResolvedValue(credentials[0]);
     sdkMock.getAgentProviderCredentials.mockResolvedValue(credentials);
     sdkMock.updateAgentProviderCredential.mockResolvedValue(credentials[0]);
@@ -335,6 +355,138 @@ describe(AgentAssistantWorkspace.name, () => {
     );
   });
 
+  it('opens a chat-first new session surface without setup or runner detail cards', () => {
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    expect(screen.queryByRole('heading', { name: 'Session setup' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('assistant-status-reason')).not.toBeInTheDocument();
+    expect(screen.getByTestId('assistant-empty-chat-surface')).toHaveClass('justify-center');
+    expect(screen.getByTestId('assistant-new-chat-composer')).toHaveClass('mt-4');
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute(
+      'placeholder',
+      'Ask Gallery what to do with your photos.',
+    );
+    const settingsButton = screen.getByRole('button', { name: 'Assistant settings' });
+    expect(screen.getByRole('button', { name: 'Assistant ready' })).toBeInTheDocument();
+    expect(settingsButton).toHaveAttribute('data-testid', 'assistant-settings-menu');
+    expect(settingsButton.closest('header')).toBeInTheDocument();
+  });
+
+  it('creates a default session from the first message and sends the message immediately', async () => {
+    const user = userEvent.setup();
+    const createdSession = makeSession({
+      id: '00000000-0000-4000-8000-000000000400',
+      status: AgentSessionStatus.Running,
+    });
+    sdkMock.createAgentSession.mockResolvedValue(createdSession);
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(
+      makeUserMessage(createdSession.id, 'Make an album from last weekend'),
+    );
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Make an album from last weekend');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() =>
+      expect(sdkMock.createAgentSession).toHaveBeenCalledWith({
+        agentSessionCreateDto: {
+          providerCredentialId: credentials[0].id,
+          model: 'gpt-5.1',
+          permissionPreset: AgentPermissionPreset.Careful,
+          approvalMode: AgentApprovalMode.Strict,
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledWith({
+        id: createdSession.id,
+        agentMessageCreateDto: {
+          content: {
+            blocks: [{ type: AgentMessageTextBlockType.Text, text: 'Make an album from last weekend' }],
+          },
+        },
+      }),
+    );
+    expect(screen.getByTestId(`agent-session-row-${createdSession.id}`)).toHaveAttribute('aria-current', 'true');
+    expect(gotoMock).toHaveBeenCalledWith(
+      `/assistant?session=${createdSession.id}`,
+      expect.objectContaining({ replaceState: false }),
+    );
+  });
+
+  it('uses permissions selected from the three-dot menu when creating the next session', async () => {
+    const user = userEvent.setup();
+    const createdSession = makeSession({
+      id: '00000000-0000-4000-8000-000000000401',
+      status: AgentSessionStatus.Running,
+      permissionPreset: AgentPermissionPreset.VisualOrganizer,
+      approvalMode: AgentApprovalMode.AskOnEscalation,
+    });
+    sdkMock.createAgentSession.mockResolvedValue(createdSession);
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(makeUserMessage(createdSession.id, 'Organize screenshots'));
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
+    await user.selectOptions(screen.getByLabelText('Permission preset'), AgentPermissionPreset.VisualOrganizer);
+    await user.selectOptions(screen.getByLabelText('Approval mode'), AgentApprovalMode.AskOnEscalation);
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Assistant settings' })).getByRole('button', { name: 'Close' }),
+    );
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Organize screenshots');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() =>
+      expect(sdkMock.createAgentSession).toHaveBeenCalledWith({
+        agentSessionCreateDto: expect.objectContaining({
+          permissionPreset: AgentPermissionPreset.VisualOrganizer,
+          approvalMode: AgentApprovalMode.AskOnEscalation,
+        }),
+      }),
+    );
+  });
+
+  it('keeps the composer visible but blocks sending with an inline runner-unavailable banner', () => {
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: unavailableRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    expect(screen.queryByRole('heading', { name: 'Session setup' })).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Assistant runner unavailable. Check configuration.');
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Assistant runner unavailable. Check configuration.' }),
+    ).toBeInTheDocument();
+  });
+
   it('switches selected sessions through the sidebar and syncs the URL query', async () => {
     const user = userEvent.setup();
 
@@ -348,7 +500,7 @@ describe(AgentAssistantWorkspace.name, () => {
     });
 
     await user.click(screen.getByTestId('agent-session-sidebar-new-chat'));
-    expect(screen.getByRole('heading', { name: 'Session setup' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
     expect(gotoMock).toHaveBeenCalledWith('/assistant', expect.objectContaining({ replaceState: false }));
 
     await user.click(screen.getByTestId(`agent-session-row-${actionableSession.id}`));
@@ -388,7 +540,7 @@ describe(AgentAssistantWorkspace.name, () => {
     expect(screen.getByTestId(`agent-session-row-${actionableSession.id}`)).toHaveTextContent('Curated album cleanup');
   });
 
-  it('deletes the selected session through the sidebar menu and returns to session setup', async () => {
+  it('deletes the selected session through the sidebar menu and returns to the new chat composer', async () => {
     const user = userEvent.setup();
 
     render(AgentAssistantWorkspace, {
@@ -406,7 +558,7 @@ describe(AgentAssistantWorkspace.name, () => {
 
     await waitFor(() => expect(sdkMock.deleteAgentSession).toHaveBeenCalledWith({ id: actionableSession.id }));
     expect(screen.queryByTestId(`agent-session-row-${actionableSession.id}`)).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Session setup' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
     expect(gotoMock).toHaveBeenLastCalledWith('/assistant', expect.objectContaining({ replaceState: false }));
   });
 
@@ -423,7 +575,7 @@ describe(AgentAssistantWorkspace.name, () => {
     });
 
     await user.click(screen.getByTestId('agent-session-sidebar-new-chat'));
-    expect(screen.getByRole('heading', { name: 'Session setup' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
 
     await view.rerender({
       runnerStatus: healthyRunner,
@@ -432,7 +584,7 @@ describe(AgentAssistantWorkspace.name, () => {
       requestedSessionId: null,
     });
 
-    expect(screen.getByRole('heading', { name: 'Session setup' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
     expect(screen.getByTestId(`agent-session-row-${actionableSession.id}`)).not.toHaveAttribute('aria-current');
   });
 
@@ -485,7 +637,8 @@ describe(AgentAssistantWorkspace.name, () => {
       },
     });
 
-    await user.click(screen.getAllByRole('button', { name: 'Manage API keys' })[0]);
+    await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
+    await user.click(screen.getByRole('button', { name: 'Manage API keys' }));
 
     expect(screen.getByRole('dialog', { name: 'API keys' })).toBeInTheDocument();
     expect(screen.getAllByText('OpenAI personal')).not.toHaveLength(0);
@@ -529,7 +682,7 @@ describe(AgentAssistantWorkspace.name, () => {
         },
       }),
     );
-    expect(await screen.findByRole('option', { name: 'OpenAI work' })).toBeInTheDocument();
+    expect(await screen.findByText('OpenAI work')).toBeInTheDocument();
   });
 
   it('adds Ollama credentials without asking for an API key', async () => {
@@ -555,6 +708,7 @@ describe(AgentAssistantWorkspace.name, () => {
       },
     });
 
+    await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
     await user.click(screen.getByRole('button', { name: 'Add API key' }));
     await user.click(
       within(screen.getByRole('dialog', { name: 'API keys' })).getByRole('button', { name: 'Add API key' }),
@@ -582,8 +736,21 @@ describe(AgentAssistantWorkspace.name, () => {
         },
       }),
     );
-    await waitFor(() => expect(screen.getByLabelText('Provider credential')).toHaveValue(createdCredential.id));
-    expect(screen.getByLabelText('Model')).toHaveValue('llama3.2');
+    await user.click(within(screen.getByRole('dialog', { name: 'API keys' })).getByRole('button', { name: 'Close' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Assistant settings' })).getByRole('button', { name: 'Close' }),
+    );
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Use local model');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() =>
+      expect(sdkMock.createAgentSession).toHaveBeenCalledWith({
+        agentSessionCreateDto: expect.objectContaining({
+          providerCredentialId: createdCredential.id,
+          model: 'llama3.2',
+        }),
+      }),
+    );
   });
 
   it('deletes a configured API key entry after confirmation', async () => {
@@ -599,7 +766,8 @@ describe(AgentAssistantWorkspace.name, () => {
       },
     });
 
-    await user.click(screen.getAllByRole('button', { name: 'Manage API keys' })[0]);
+    await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
+    await user.click(screen.getByRole('button', { name: 'Manage API keys' }));
     await user.click(screen.getByRole('button', { name: 'Delete API key' }));
 
     expect(screen.getByText('Delete this API key?')).toBeInTheDocument();
@@ -610,10 +778,10 @@ describe(AgentAssistantWorkspace.name, () => {
     await waitFor(() => expect(sdkMock.deleteAgentProviderCredential).toHaveBeenCalledWith({ id: credentials[0].id }));
     expect(sdkMock.getAgentProviderCredentials).toHaveBeenCalled();
     expect(await screen.findByText('No API keys have been added yet.')).toBeInTheDocument();
-    expect(screen.getByText('Connect a model provider before starting a session.')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
   });
 
-  it('opens API key management from setup when credentials already exist', async () => {
+  it('opens API key management from assistant settings when credentials already exist', async () => {
     const user = userEvent.setup();
 
     render(AgentAssistantWorkspace, {
@@ -625,13 +793,14 @@ describe(AgentAssistantWorkspace.name, () => {
       },
     });
 
-    await user.click(screen.getAllByRole('button', { name: 'Manage API keys' })[1]);
+    await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
+    await user.click(screen.getByRole('button', { name: 'Manage API keys' }));
 
     expect(screen.getByRole('dialog', { name: 'API keys' })).toBeInTheDocument();
     expect(screen.getAllByText('OpenAI personal')).not.toHaveLength(0);
   });
 
-  it('guides first-time users to add an API key from setup', async () => {
+  it('guides first-time users to add an API key from assistant settings', async () => {
     const user = userEvent.setup();
 
     render(AgentAssistantWorkspace, {
@@ -643,21 +812,22 @@ describe(AgentAssistantWorkspace.name, () => {
       },
     });
 
-    expect(screen.getByRole('heading', { name: 'Connect a model provider' })).toBeInTheDocument();
-    expect(screen.getByText('Connect a model provider before starting a session.')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
 
+    await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
     await user.click(screen.getByRole('button', { name: 'Add API key' }));
 
     expect(screen.getByRole('dialog', { name: 'API keys' })).toBeInTheDocument();
     expect(screen.getByText('No API keys have been added yet.')).toBeInTheDocument();
   });
 
-  it('adds a newly created session to the sidebar, selects it, and opens the chat workspace', async () => {
+  it('adds a newly created session from the first message to the sidebar and selects it', async () => {
     const createdSession = makeSession({
       id: '00000000-0000-4000-8000-000000000400',
       status: AgentSessionStatus.Running,
     });
     sdkMock.createAgentSession.mockResolvedValue(createdSession);
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(makeUserMessage(createdSession.id, 'Start organizing'));
 
     render(AgentAssistantWorkspace, {
       props: {
@@ -668,9 +838,17 @@ describe(AgentAssistantWorkspace.name, () => {
       },
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+    await fireEvent.input(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Start organizing' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(await screen.findAllByRole('heading', { name: 'New chat' })).not.toHaveLength(0);
+    await waitFor(() =>
+      expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: createdSession.id,
+        }),
+      ),
+    );
     expect(screen.getByTestId(`agent-session-row-${createdSession.id}`)).toHaveAttribute('aria-current', 'true');
     expect(gotoMock).toHaveBeenCalledWith(
       `/assistant?session=${createdSession.id}`,
@@ -829,7 +1007,7 @@ describe(AgentAssistantWorkspace.name, () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Start new chat' }));
 
-    expect(screen.getByRole('heading', { name: 'Session setup' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
     expect(gotoMock).toHaveBeenCalledWith('/assistant', expect.objectContaining({ replaceState: false }));
     expect(screen.getByTestId(`agent-session-row-${requestedSession.id}`)).not.toHaveAttribute('aria-current');
   });

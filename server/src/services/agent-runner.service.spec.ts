@@ -294,7 +294,10 @@ describe(AgentRunnerService.name, () => {
         runnerMessageStreamTimeoutMs: 120_000,
       },
     } as never);
-    agentRunnerRepository.validateSession.mockResolvedValue({ ok: true, capabilities: {} });
+    agentRunnerRepository.validateSession.mockResolvedValue({
+      ok: true,
+      capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: [], models: [] },
+    });
 
     await sut.validateSession(makeCreateSessionBody());
 
@@ -384,6 +387,64 @@ describe(AgentRunnerService.name, () => {
         createdAt: new Date('2026-05-14T10:00:01.000Z'),
       },
       createdAt: '2026-05-14T10:00:00.000Z',
+    });
+  });
+
+  it('resumes a runner session after tool approval and streams the continued assistant message', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'I added those photos.' }] };
+    const assistantMessage = makeAssistantMessage({ sessionId, content: assistantContent });
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamResume.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-delta',
+          sessionId,
+          runnerSessionId,
+          delta: 'I added',
+          sequence: 1,
+        },
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: 'provider-message-2',
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(assistantMessage);
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
+
+    await sut.resumeAfterToolApproval({ userId, sessionId, runnerSessionId });
+
+    expect(agentRunnerRepository.streamResume).toHaveBeenCalledWith({
+      url: 'http://agent-runner:4477',
+      runnerSessionId,
+      timeoutMs: 120_000,
+      body: { gallerySessionId: sessionId },
+    });
+    expect(websocketRepository.clientSend).toHaveBeenNthCalledWith(1, 'on_agent_session_event', userId, {
+      type: 'assistant-message-delta',
+      sessionId,
+      delta: 'I added',
+      sequence: 1,
+      createdAt: '2026-05-14T10:00:00.000Z',
+    });
+    expect(messageRepository.create).toHaveBeenCalledWith({
+      sessionId,
+      role: AgentMessageRole.Assistant,
+      content: assistantContent,
+      providerMessageId: 'provider-message-2',
+      toolCallId: null,
     });
   });
 
