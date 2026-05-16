@@ -1,12 +1,49 @@
 import { serverVersion } from 'src/constants';
 import type { AuthDto } from 'src/dtos/auth.dto';
-import { AgentToolName } from 'src/enum';
-import { AgentMcpService } from 'src/services/agent-mcp.service';
+import { AgentOperationRiskLevel, AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
+import { AgentMcpService } from 'src/services/agent-mcp.service';
+import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import type { AgentMcpSuccessResponse, AgentMcpToolCallResult } from 'src/types/agent-mcp.types';
 import { factory } from 'test/small.factory';
 import { automock, type AutoMocked } from 'test/utils';
+
+const makeAlbumCreateOperation = () => ({
+  type: AgentOperationType.AlbumCreate,
+  summary: 'Create Portugal highlights.',
+  targetKind: AgentOperationTargetKind.NewAlbum,
+  temporaryTargetId: 'tmp-portugal',
+  payload: { albumName: 'Portugal highlights' },
+});
+
+const makeParsedAlbumCreateOperation = () => ({
+  ...makeAlbumCreateOperation(),
+  riskLevel: AgentOperationRiskLevel.Low,
+  enabled: true,
+  payload: { albumName: 'Portugal highlights', description: '' },
+});
+
+const makePlanningRequest = () => ({
+  summary: 'Create a Portugal highlights album.',
+  operations: [makeAlbumCreateOperation()],
+});
+
+const makeParsedPlanningRequest = () => ({
+  summary: 'Create a Portugal highlights album.',
+  operations: [makeParsedAlbumCreateOperation()],
+});
+
+const makePlanningServiceResult = (planId = factory.uuid()) => ({
+  status: 'success',
+  plan: {
+    id: planId,
+    revision: 1,
+    operations: [],
+  },
+  toolCall: null,
+  summary: 'Plan revision 1 is ready for review.',
+});
 
 const makeToolCallRequest = (toolName: AgentToolName, args: unknown) => ({
   jsonrpc: '2.0',
@@ -48,6 +85,7 @@ const expectToolValidationError = (response: AgentMcpSuccessResponse, path: stri
 describe(AgentMcpService.name, () => {
   let registry: AgentMcpToolRegistryService;
   let toolService: AutoMocked<AgentToolService>;
+  let operationPlanService: AutoMocked<AgentOperationPlanService>;
   let sut: AgentMcpService;
 
   const sessionId = factory.uuid();
@@ -57,7 +95,8 @@ describe(AgentMcpService.name, () => {
   beforeEach(() => {
     registry = new AgentMcpToolRegistryService();
     toolService = automock(AgentToolService, { strict: false });
-    sut = new AgentMcpService(registry, toolService);
+    operationPlanService = automock(AgentOperationPlanService, { strict: false });
+    sut = new AgentMcpService(registry, toolService, operationPlanService);
   });
 
   it('returns the MCP initialize result and advertises tools once tools/list exists', async () => {
@@ -234,7 +273,11 @@ describe(AgentMcpService.name, () => {
     async ({ toolName, args, serviceMethod, serviceResult }) => {
       toolService[serviceMethod].mockResolvedValue(serviceResult as never);
 
-      const response = (await sut.handle(auth, sessionId, makeToolCallRequest(toolName, args))) as AgentMcpSuccessResponse;
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(toolName, args),
+      )) as AgentMcpSuccessResponse;
 
       expect(toolService[serviceMethod]).toHaveBeenCalledTimes(1);
       expect(toolService[serviceMethod]).toHaveBeenCalledWith(auth, sessionId, args);
@@ -304,6 +347,126 @@ describe(AgentMcpService.name, () => {
 
     expect(toolService.readAssetPreviews).toHaveBeenCalledWith(auth, sessionId, { toolCallId });
     expectToolResult(response, `${AgentToolName.ReadAssetPreviews}-call`, serviceResult);
+  });
+
+  it.each([
+    {
+      toolName: AgentToolName.ProposeAlbumOperations,
+      args: makePlanningRequest(),
+      serviceMethod: 'proposeAlbumOperations' as const,
+      expectedArguments: (authValue: AuthDto, sessionIdValue: string) => [
+        authValue,
+        sessionIdValue,
+        makeParsedPlanningRequest(),
+      ],
+    },
+    {
+      toolName: AgentToolName.ReviseProposedOperations,
+      args: {
+        planId: factory.uuid(),
+        feedback: 'Use a shorter title.',
+        ...makePlanningRequest(),
+      },
+      serviceMethod: 'reviseProposedOperations' as const,
+      expectedArguments: (authValue: AuthDto, sessionIdValue: string, args: Record<string, unknown>) => {
+        const { planId } = args;
+        return [
+          authValue,
+          sessionIdValue,
+          planId,
+          {
+            feedback: 'Use a shorter title.',
+            ...makeParsedPlanningRequest(),
+          },
+        ];
+      },
+    },
+    {
+      toolName: AgentToolName.SummarizePlan,
+      args: {
+        planId: factory.uuid(),
+        focus: 'risk',
+      },
+      serviceMethod: 'summarizePlan' as const,
+      expectedArguments: (authValue: AuthDto, sessionIdValue: string, args: Record<string, unknown>) => {
+        const { planId, ...dto } = args;
+        return [authValue, sessionIdValue, planId, dto];
+      },
+    },
+  ])(
+    'delegates planning tool $toolName to AgentOperationPlanService and wraps the result',
+    async ({ toolName, args, serviceMethod, expectedArguments }) => {
+      const serviceResult = makePlanningServiceResult();
+      operationPlanService[serviceMethod].mockResolvedValue(serviceResult as never);
+
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(toolName, args),
+      )) as AgentMcpSuccessResponse;
+
+      expect(operationPlanService[serviceMethod]).toHaveBeenCalledTimes(1);
+      expect(operationPlanService[serviceMethod]).toHaveBeenCalledWith(
+        ...expectedArguments(auth, sessionId, args as Record<string, unknown>),
+      );
+      expectToolResult(response, `${toolName}-call`, serviceResult);
+    },
+  );
+
+  it.each([
+    {
+      toolName: AgentToolName.ProposeAlbumOperations,
+      args: makePlanningRequest(),
+      serviceMethod: 'proposeAlbumOperations' as const,
+    },
+    {
+      toolName: AgentToolName.ReviseProposedOperations,
+      args: { planId: factory.uuid(), ...makePlanningRequest() },
+      serviceMethod: 'reviseProposedOperations' as const,
+    },
+    {
+      toolName: AgentToolName.SummarizePlan,
+      args: { planId: factory.uuid(), focus: 'risk' },
+      serviceMethod: 'summarizePlan' as const,
+    },
+  ])(
+    'converts $toolName service failures to redacted JSON-RPC internal errors',
+    async ({ toolName, args, serviceMethod }) => {
+      operationPlanService[serviceMethod].mockRejectedValue(
+        new Error('Agent operation plan not found /srv/gallery/provider-request.json bearer token abc'),
+      );
+
+      await expect(sut.handle(auth, sessionId, makeToolCallRequest(toolName, args))).resolves.toEqual({
+        jsonrpc: '2.0',
+        id: `${toolName}-call`,
+        error: {
+          code: -32_603,
+          message: 'Internal error',
+        },
+      });
+    },
+  );
+
+  it('does not expose an MCP apply tool call', async () => {
+    await expect(
+      sut.handle(auth, sessionId, {
+        jsonrpc: '2.0',
+        id: 'apply-tool',
+        method: 'tools/call',
+        params: { name: 'applyAlbumOperations', arguments: { planId: factory.uuid(), operationIds: [factory.uuid()] } },
+      }),
+    ).resolves.toEqual({
+      jsonrpc: '2.0',
+      id: 'apply-tool',
+      error: {
+        code: -32_602,
+        message: 'Unknown tool',
+        data: { toolName: 'applyAlbumOperations' },
+      },
+    });
+    expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
+    expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
+    expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -381,6 +544,177 @@ describe(AgentMcpService.name, () => {
     expect(toolService.readAlbum).not.toHaveBeenCalled();
   });
 
+  describe('planning argument validation', () => {
+    const assetId = factory.uuid();
+
+    it.each([
+      {
+        name: 'planning missing arguments',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: undefined,
+        expectedPath: 'arguments',
+      },
+      {
+        name: 'planning array arguments',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: [makeAlbumCreateOperation()],
+        expectedPath: 'arguments',
+      },
+      {
+        name: 'proposal wrong primitive summary',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: { summary: 12, operations: [makeAlbumCreateOperation()] },
+        expectedPath: 'summary',
+      },
+      {
+        name: 'proposal missing summary',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: { operations: [makeAlbumCreateOperation()] },
+        expectedPath: 'summary',
+      },
+      {
+        name: 'proposal empty operations',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: { summary: 'Empty operations.', operations: [] },
+        expectedPath: 'operations',
+      },
+      {
+        name: 'proposal too many operations',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: {
+          summary: 'Too many operations.',
+          operations: Array.from({ length: 501 }, (_, index) => ({
+            ...makeAlbumCreateOperation(),
+            temporaryTargetId: `tmp-portugal-${index}`,
+            payload: { albumName: `Portugal ${index}` },
+          })),
+        },
+        expectedPath: 'operations',
+      },
+      {
+        name: 'proposal duplicate asset ids',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: {
+          summary: 'Duplicate assets.',
+          operations: [
+            {
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add duplicate assets.',
+              targetKind: AgentOperationTargetKind.ExistingAlbum,
+              targetId: factory.uuid(),
+              assetIds: [assetId, assetId],
+            },
+          ],
+        },
+        expectedPath: 'operations.0.assetIds',
+      },
+      {
+        name: 'proposal missing new album temporary target',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: {
+          summary: 'Missing temp id.',
+          operations: [
+            {
+              type: AgentOperationType.AlbumCreate,
+              summary: 'Create missing temp id.',
+              targetKind: AgentOperationTargetKind.NewAlbum,
+              payload: { albumName: 'Portugal' },
+            },
+          ],
+        },
+        expectedPath: 'operations.0.temporaryTargetId',
+      },
+      {
+        name: 'proposal excessive album name',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: {
+          summary: 'Album name too long.',
+          operations: [
+            {
+              ...makeAlbumCreateOperation(),
+              payload: { albumName: 'a'.repeat(201) },
+            },
+          ],
+        },
+        expectedPath: 'operations.0.payload.albumName',
+      },
+      {
+        name: 'revision missing planId',
+        toolName: AgentToolName.ReviseProposedOperations,
+        args: makePlanningRequest(),
+        expectedPath: 'planId',
+      },
+      {
+        name: 'revision numeric planId',
+        toolName: AgentToolName.ReviseProposedOperations,
+        args: { planId: 12, ...makePlanningRequest() },
+        expectedPath: 'planId',
+      },
+      {
+        name: 'revision invalid planId',
+        toolName: AgentToolName.ReviseProposedOperations,
+        args: { planId: 'not-a-uuid', ...makePlanningRequest() },
+        expectedPath: 'planId',
+      },
+      {
+        name: 'revision excessive feedback',
+        toolName: AgentToolName.ReviseProposedOperations,
+        args: { planId: factory.uuid(), feedback: 'a'.repeat(2001), ...makePlanningRequest() },
+        expectedPath: 'feedback',
+      },
+      {
+        name: 'summary missing planId',
+        toolName: AgentToolName.SummarizePlan,
+        args: { focus: 'risk' },
+        expectedPath: 'planId',
+      },
+      {
+        name: 'summary numeric planId',
+        toolName: AgentToolName.SummarizePlan,
+        args: { planId: 12, focus: 'risk' },
+        expectedPath: 'planId',
+      },
+      {
+        name: 'summary wrong primitive focus',
+        toolName: AgentToolName.SummarizePlan,
+        args: { planId: factory.uuid(), focus: 12 },
+        expectedPath: 'focus',
+      },
+      {
+        name: 'summary invalid focus',
+        toolName: AgentToolName.SummarizePlan,
+        args: { planId: factory.uuid(), focus: '' },
+        expectedPath: 'focus',
+      },
+      {
+        name: 'summary excessive focus',
+        toolName: AgentToolName.SummarizePlan,
+        args: { planId: factory.uuid(), focus: 'a'.repeat(1001) },
+        expectedPath: 'focus',
+      },
+      {
+        name: 'summary unknown strict field',
+        toolName: AgentToolName.SummarizePlan,
+        args: { planId: factory.uuid(), focus: 'risk', unexpected: true },
+        expectedPath: '',
+      },
+    ])(
+      'returns isError tool result for malformed planning arguments: $name',
+      async ({ toolName, args, expectedPath }) => {
+        const response = (await sut.handle(
+          auth,
+          sessionId,
+          makeToolCallRequest(toolName, args),
+        )) as AgentMcpSuccessResponse;
+
+        expectToolValidationError(response, expectedPath);
+        expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
+        expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
+        expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   it.each([
     ['missing params', undefined],
     ['params is not object', 'bad-params'],
@@ -423,36 +757,13 @@ describe(AgentMcpService.name, () => {
     });
   });
 
-  it('returns a protocol error for planning tools until slice 4', async () => {
-    await expect(
-      sut.handle(auth, sessionId, {
-        jsonrpc: '2.0',
-        id: 'planning-tool',
-        method: 'tools/call',
-        params: { name: AgentToolName.ProposeAlbumOperations, arguments: { summary: 'Plan', operations: [] } },
-      }),
-    ).resolves.toEqual({
-      jsonrpc: '2.0',
-      id: 'planning-tool',
-      error: {
-        code: -32_602,
-        message: 'Tool not supported in this slice',
-        data: { toolName: AgentToolName.ProposeAlbumOperations },
-      },
-    });
-  });
-
   it('converts unexpected service failures to redacted JSON-RPC internal errors', async () => {
     toolService.readAssetMetadata.mockRejectedValue(
       new Error('secret bearer token abc /srv/gallery/provider-request.json stacktrace'),
     );
 
     await expect(
-      sut.handle(
-        auth,
-        sessionId,
-        makeToolCallRequest(AgentToolName.ReadAssetMetadata, { assetIds: [factory.uuid()] }),
-      ),
+      sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.ReadAssetMetadata, { assetIds: [factory.uuid()] })),
     ).resolves.toEqual({
       jsonrpc: '2.0',
       id: `${AgentToolName.ReadAssetMetadata}-call`,
