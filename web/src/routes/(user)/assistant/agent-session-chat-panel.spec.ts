@@ -128,6 +128,140 @@ describe(AgentSessionChatPanel.name, () => {
     expect(screen.getByText('Birthday cake').closest('li')).toBeInTheDocument();
   });
 
+  it('renders assistant markdown headings and inline code as formatted content', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      makeMessage(
+        'message-assistant',
+        AgentMessageRole.Assistant,
+        '# Heading 1\n## Heading 2\n### Heading 3\nUse `inline code` in text.',
+      ),
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    expect(await screen.findByRole('heading', { level: 3, name: 'Heading 1' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 4, name: 'Heading 2' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 5, name: 'Heading 3' })).toBeInTheDocument();
+    expect(screen.getByText('inline code').tagName).toBe('CODE');
+  });
+
+  it('renders assistant fenced multiline code blocks as formatted code', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      makeMessage(
+        'message-assistant',
+        AgentMessageRole.Assistant,
+        'Use this:\n```python\ndef hello(name):\n    return f\"Hello, {name}!\"\n```\nThen save it.',
+      ),
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const code = await screen.findByText(/def hello\(name\):/);
+    expect(code.tagName).toBe('CODE');
+    expect(code.closest('pre')).toBeInTheDocument();
+    expect(code).toHaveTextContent('return f"Hello, {name}!"');
+    expect(screen.getByText('Then save it.')).toBeInTheDocument();
+  });
+
+  it('renders streamed assistant fenced multiline code blocks as formatted code', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+
+    render(AgentSessionChatPanel, { props: { session } });
+    await screen.findByRole('textbox', { name: 'Message' });
+
+    handler?.({
+      type: 'assistant-message-delta',
+      sessionId: session.id,
+      delta: '```ts\nconst album = \"Favorites\";\nconsole.log(album);\n```',
+      sequence: 1,
+      createdAt: '2026-05-14T00:00:01.000Z',
+    });
+
+    const code = await screen.findByText(/const album = "Favorites";/);
+    expect(code.tagName).toBe('CODE');
+    expect(code.closest('pre')).toBeInTheDocument();
+    expect(code).toHaveTextContent('console.log(album);');
+  });
+
+  it('renders assistant markdown tables as formatted content', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      makeMessage(
+        'message-assistant',
+        AgentMessageRole.Assistant,
+        [
+          'Rendered:',
+          '| Feature | Supported | Notes |',
+          '| --- | --- | --- |',
+          '| Headings | Yes | #, ##, ### |',
+          '| Inline styles | Yes | **bold**, *italic*, `code` |',
+          'Done.',
+        ].join('\n'),
+      ),
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Feature' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Supported' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Headings' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '#, ##, ###' })).toBeInTheDocument();
+    expect(screen.getByText('bold').tagName).toBe('STRONG');
+    expect(screen.getByText('italic').tagName).toBe('EM');
+    expect(screen.getByText('code').tagName).toBe('CODE');
+    expect(screen.getByText('Done.')).toBeInTheDocument();
+  });
+
+  it('renders streamed assistant markdown tables as formatted content', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+
+    render(AgentSessionChatPanel, { props: { session } });
+    await screen.findByRole('textbox', { name: 'Message' });
+
+    handler?.({
+      type: 'assistant-message-delta',
+      sessionId: session.id,
+      delta: '| Album | Count |\n| --- | --- |\n| Favorites | 42 |',
+      sequence: 1,
+      createdAt: '2026-05-14T00:00:01.000Z',
+    });
+
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Album' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Favorites' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '42' })).toBeInTheDocument();
+  });
+
+  it('renders streamed assistant markdown headings and inline code as formatted content', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+
+    render(AgentSessionChatPanel, { props: { session } });
+    await screen.findByRole('textbox', { name: 'Message' });
+
+    handler?.({
+      type: 'assistant-message-delta',
+      sessionId: session.id,
+      delta: '## Suggested query\nTry `rating:5`.',
+      sequence: 1,
+      createdAt: '2026-05-14T00:00:01.000Z',
+    });
+
+    expect(await screen.findByRole('heading', { level: 4, name: 'Suggested query' })).toBeInTheDocument();
+    expect(screen.getByText('rating:5').tagName).toBe('CODE');
+  });
+
   it('renders streamed assistant markdown as formatted content', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
