@@ -1,6 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { AgentToolCallResponseDto } from 'src/dtos/agent-tool.dto';
 import {
+  AgentOperationApplyStatus,
   AgentOperationPlanStatus,
   AgentOperationRiskLevel,
   AgentOperationStatus,
@@ -31,8 +32,23 @@ const uniqueAssetIds = z
       });
     }
   });
+const uniqueOperationIds = z
+  .array(uuid)
+  .min(1)
+  .max(500)
+  .superRefine((operationIds, ctx) => {
+    if (new Set(operationIds).size !== operationIds.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'operationIds must be unique',
+      });
+    }
+  });
 
 const AgentOperationPlanStatusSchema = z.enum(AgentOperationPlanStatus).meta({ id: 'AgentOperationPlanStatus' });
+const AgentOperationApplyStatusSchema = z
+  .enum(AgentOperationApplyStatus)
+  .meta({ id: 'AgentOperationApplyStatus' });
 const AgentOperationTypeSchema = z.enum(AgentOperationType).meta({ id: 'AgentOperationType' });
 const AgentOperationTargetKindSchema = z.enum(AgentOperationTargetKind).meta({ id: 'AgentOperationTargetKind' });
 const AgentOperationRiskLevelSchema = z.enum(AgentOperationRiskLevel).meta({ id: 'AgentOperationRiskLevel' });
@@ -209,6 +225,23 @@ const AgentOperationPlanToolResponseSchema = z
   })
   .meta({ id: 'AgentOperationPlanToolResponseDto' });
 
+const AgentOperationPlanApplyRequestSchema = z
+  .strictObject({
+    operationIds: uniqueOperationIds,
+  })
+  .meta({ id: 'AgentOperationPlanApplyRequestDto' });
+
+const AgentOperationPlanApplyResponseSchema = z
+  .object({
+    status: AgentOperationApplyStatusSchema,
+    plan: AgentOperationPlanResponseSchema,
+    appliedOperationIds: z.array(uuid),
+    skippedOperationIds: z.array(uuid),
+    failedOperationIds: z.array(uuid),
+    summary,
+  })
+  .meta({ id: 'AgentOperationPlanApplyResponseDto' });
+
 function validateTarget(
   operation: {
     targetKind: AgentOperationTargetKind;
@@ -257,3 +290,5 @@ export class AgentOperationPlanSummaryRequestDto extends createZodDto(AgentOpera
 export class AgentOperationResponseDto extends createZodDto(AgentOperationResponseSchema) {}
 export class AgentOperationPlanResponseDto extends createZodDto(AgentOperationPlanResponseSchema) {}
 export class AgentOperationPlanToolResponseDto extends createZodDto(AgentOperationPlanToolResponseSchema) {}
+export class AgentOperationPlanApplyRequestDto extends createZodDto(AgentOperationPlanApplyRequestSchema) {}
+export class AgentOperationPlanApplyResponseDto extends createZodDto(AgentOperationPlanApplyResponseSchema) {}
