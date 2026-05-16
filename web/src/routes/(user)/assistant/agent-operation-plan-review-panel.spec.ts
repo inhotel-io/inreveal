@@ -1,6 +1,7 @@
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import {
   AgentApprovalMode,
+  AgentOperationApplyStatus,
   AgentOperationPlanStatus,
   AgentOperationRiskLevel,
   AgentOperationStatus,
@@ -23,6 +24,10 @@ vi.mock('$lib/stores/websocket');
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_operation_asset_count: '{count} assets',
+    assistant_operation_apply_applying: 'Applying operations',
+    assistant_operation_apply_error: 'Unable to apply proposed operations',
+    assistant_operation_apply_selected: 'Apply {count} selected',
+    assistant_operation_apply_success: 'Applied {applied} operations. {failed} failed.',
     assistant_operation_blocked_by: 'Blocked by {dependencies}',
     assistant_operation_plan_empty: 'No proposed album plan yet.',
     assistant_operation_plan_error: 'Unable to load proposed album plan',
@@ -42,6 +47,8 @@ vi.mock('svelte-i18n', () => {
     t: readable((key: string, options?: { values?: Record<string, string | number> }) =>
       (messages[key] ?? key)
         .replace('{count}', String(options?.values?.count ?? ''))
+        .replace('{applied}', String(options?.values?.applied ?? ''))
+        .replace('{failed}', String(options?.values?.failed ?? ''))
         .replace('{dependencies}', String(options?.values?.dependencies ?? '')),
     ),
   };
@@ -259,6 +266,110 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(groupToggle).not.toBeChecked();
     expect(groupToggle.indeterminate).toBe(true);
     expect(groupToggle).toHaveAttribute('aria-checked', 'mixed');
+  });
+
+  it('applies the current approved operation selection', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+    sdkMock.applyApprovedOperations.mockResolvedValue({
+      status: AgentOperationApplyStatus.Applied,
+      plan: {
+        ...samplePlan(),
+        status: AgentOperationPlanStatus.Applied,
+        operations: samplePlan().operations.map((operation) => ({
+          ...operation,
+          status: AgentOperationStatus.Applied,
+          result: { albumId: '00000000-0000-4000-8000-000000000400' },
+        })),
+      },
+      appliedOperationIds: [createId, addId, existingId],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 3 operation(s), skipped 0, failed 0.',
+    });
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
+
+    expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith({
+      id: session.id,
+      planId,
+      agentOperationPlanApplyRequestDto: { operationIds: [createId, addId, existingId] },
+    });
+    expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
+    expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeDisabled();
+  });
+
+  it('sends only enabled and unblocked operation ids when applying', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+    sdkMock.applyApprovedOperations.mockResolvedValue({
+      status: AgentOperationApplyStatus.PartiallyApplied,
+      plan: samplePlan(),
+      appliedOperationIds: [existingId],
+      skippedOperationIds: [createId, addId],
+      failedOperationIds: [],
+      summary: 'Applied 1 operation(s), skipped 2, failed 0.',
+    });
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    await fireEvent.click(await screen.findByRole('checkbox', { name: 'New album "Portugal"' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply 1 selected' }));
+
+    expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentOperationPlanApplyRequestDto: { operationIds: [existingId] },
+      }),
+    );
+  });
+
+  it('disables apply when no operations are selected', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    await fireEvent.click(await screen.findByRole('checkbox', { name: 'New album "Portugal"' }));
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Update existing album description' }));
+
+    expect(screen.getByRole('button', { name: 'Apply 0 selected' })).toBeDisabled();
+    expect(sdkMock.applyApprovedOperations).not.toHaveBeenCalled();
+  });
+
+  it('shows an apply error without clearing the loaded plan', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+    sdkMock.applyApprovedOperations.mockRejectedValue(new Error('failed'));
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to apply proposed operations');
+    expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
+  });
+
+  it('refetches the current plan for same-session plan-applied events from another client', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    sdkMock.getCurrentOperationPlan.mockResolvedValueOnce(samplePlan()).mockResolvedValueOnce(null);
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+    expect(await screen.findByText('Organize Portugal holiday')).toBeInTheDocument();
+
+    handler?.({
+      type: 'operation-plan-applied',
+      sessionId: session.id,
+      planId,
+      status: AgentOperationApplyStatus.Applied,
+      appliedCount: 3,
+      skippedCount: 0,
+      failedCount: 0,
+    });
+
+    expect(await screen.findByText('No proposed album plan yet.')).toBeInTheDocument();
+    expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledTimes(2);
   });
 
   it('refetches the current plan for same-session plan-ready events', async () => {
