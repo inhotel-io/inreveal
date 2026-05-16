@@ -183,6 +183,24 @@ const validateMessageBody = (body) => {
   return undefined;
 };
 
+const validateResumeBody = (body) => {
+  if (typeof body?.gallerySessionId !== 'string') {
+    return 'gallerySessionId is required';
+  }
+
+  return undefined;
+};
+
+const startSse = (response) => {
+  response.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+  response.flushHeaders?.();
+  response.write(': connected\n\n');
+};
+
 export const startServer = ({
   port = Number(process.env.PORT ?? 4477),
   host = process.env.HOST ?? '127.0.0.1',
@@ -267,11 +285,7 @@ export const startServer = ({
         return;
       }
 
-      response.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-      });
+      startSse(response);
 
       try {
         for await (const event of runtime.sendMessage({
@@ -279,6 +293,57 @@ export const startServer = ({
           gallerySessionId: body.gallerySessionId,
           messageId: body.messageId,
           content: body.content,
+        })) {
+          sendSse(response, event.type, event);
+        }
+      } catch {
+        sendSse(response, 'runner-error', {
+          type: 'runner-error',
+          sessionId: body.gallerySessionId,
+          runnerSessionId,
+          message: 'Runner session failed',
+        });
+      }
+      response.end();
+      return;
+    }
+
+    const continueMatch = url.pathname.match(/^\/sessions\/([^/]+)\/continue$/);
+    if (request.method === 'POST' && continueMatch) {
+      const runnerSessionId = decodeRunnerSessionId(continueMatch[1]);
+      if (!runnerSessionId) {
+        sendJson(response, 404, { error: 'runner session not found' });
+        return;
+      }
+
+      const result = await readJsonOrSendError(request, response);
+      if (!result.ok) {
+        return;
+      }
+
+      const { body } = result;
+      const validationError = validateResumeBody(body);
+      if (validationError) {
+        sendJson(response, 400, { error: validationError });
+        return;
+      }
+
+      if (runnerSessions.get(runnerSessionId) !== body.gallerySessionId) {
+        sendJson(response, 404, { error: 'runner session not found' });
+        return;
+      }
+
+      if (typeof runtime.resumeSession !== 'function') {
+        sendJson(response, 501, { error: 'runner session resume is not supported' });
+        return;
+      }
+
+      startSse(response);
+
+      try {
+        for await (const event of runtime.resumeSession({
+          runnerSessionId,
+          gallerySessionId: body.gallerySessionId,
         })) {
           sendSse(response, event.type, event);
         }
