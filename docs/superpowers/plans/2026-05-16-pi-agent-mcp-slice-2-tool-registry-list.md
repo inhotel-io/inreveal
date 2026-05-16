@@ -80,7 +80,7 @@ The exact tool order returned by `tools/list` is:
   AgentToolName.ProposeAlbumOperations,
   AgentToolName.ReviseProposedOperations,
   AgentToolName.SummarizePlan,
-]
+];
 ```
 
 No MCP result may include an apply/direct mutation tool name such as `applyAlbumOperations`, `createAlbum`, `addAssetsToAlbum`, `updateAlbum`, `deleteAlbum`, or `setAlbumCover`.
@@ -134,6 +134,7 @@ Each task below starts with a failing test. Do not edit production files for a t
 ### Task 1: Write Failing Registry Tests
 
 **Files:**
+
 - Create: `server/src/services/agent-mcp-tool-registry.service.spec.ts`
 - Modify: none
 
@@ -307,6 +308,7 @@ Expected: FAIL because `src/services/agent-mcp-tool-registry.service`, `AgentRea
 ### Task 2: Implement DTO Schema Exports And Registry
 
 **Files:**
+
 - Modify: `server/src/dtos/agent-tool.dto.ts`
 - Modify: `server/src/dtos/agent-operation.dto.ts`
 - Modify: `server/src/types/agent-mcp.types.ts`
@@ -548,6 +550,7 @@ git commit -m "feat: add agent mcp tool registry"
 ### Task 3: Write Failing MCP Service And Controller Tests For `tools/list`
 
 **Files:**
+
 - Modify: `server/src/services/agent-mcp.service.spec.ts`
 - Modify: `server/src/controllers/agent-runner-mcp.controller.spec.ts`
 
@@ -562,13 +565,13 @@ import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registr
 Change the setup to inject the registry:
 
 ```ts
-  let registry: AgentMcpToolRegistryService;
-  let sut: AgentMcpService;
+let registry: AgentMcpToolRegistryService;
+let sut: AgentMcpService;
 
-  beforeEach(() => {
-    registry = new AgentMcpToolRegistryService();
-    sut = new AgentMcpService(registry);
-  });
+beforeEach(() => {
+  registry = new AgentMcpToolRegistryService();
+  sut = new AgentMcpService(registry);
+});
 ```
 
 Rename the first initialize test to:
@@ -594,55 +597,55 @@ to:
 Then replace the current unsupported-method test with these tests:
 
 ```ts
-  it('returns the registered Gallery MCP tools for tools/list', () => {
-    const response = sut.handle({
-      jsonrpc: '2.0',
-      id: 'tools-1',
-      method: 'tools/list',
-    });
-
-    expect(response).toEqual({
-      jsonrpc: '2.0',
-      id: 'tools-1',
-      result: {
-        tools: registry.listTools(),
-      },
-    });
+it('returns the registered Gallery MCP tools for tools/list', () => {
+  const response = sut.handle({
+    jsonrpc: '2.0',
+    id: 'tools-1',
+    method: 'tools/list',
   });
 
-  it('preserves numeric JSON-RPC request ids for tools/list', () => {
-    expect(
-      sut.handle({
-        jsonrpc: '2.0',
-        id: 9,
-        method: 'tools/list',
-      }),
-    ).toEqual({
+  expect(response).toEqual({
+    jsonrpc: '2.0',
+    id: 'tools-1',
+    result: {
+      tools: registry.listTools(),
+    },
+  });
+});
+
+it('preserves numeric JSON-RPC request ids for tools/list', () => {
+  expect(
+    sut.handle({
       jsonrpc: '2.0',
       id: 9,
-      result: {
-        tools: registry.listTools(),
-      },
-    });
+      method: 'tools/list',
+    }),
+  ).toEqual({
+    jsonrpc: '2.0',
+    id: 9,
+    result: {
+      tools: registry.listTools(),
+    },
   });
+});
 
-  it.each(['tools/call', 'resources/list'] as const)('returns method-not-found for %s', (method) => {
-    expect(
-      sut.handle({
-        jsonrpc: '2.0',
-        id: 7,
-        method,
-      }),
-    ).toEqual({
+it.each(['tools/call', 'resources/list'] as const)('returns method-not-found for %s', (method) => {
+  expect(
+    sut.handle({
       jsonrpc: '2.0',
       id: 7,
-      error: {
-        code: -32_601,
-        message: 'Method not found',
-        data: { method },
-      },
-    });
+      method,
+    }),
+  ).toEqual({
+    jsonrpc: '2.0',
+    id: 7,
+    error: {
+      code: -32_601,
+      message: 'Method not found',
+      data: { method },
+    },
   });
+});
 ```
 
 - [ ] **Step 2: Add a real-service controller test for authenticated `tools/list`**
@@ -656,64 +659,64 @@ import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registr
 Then append this `describe` block inside the top-level `describe(AgentRunnerMcpController.name, () => { ... })`, after the existing tests:
 
 ```ts
-  describe('with the real MCP service', () => {
-    let realCtx: ControllerContext;
+describe('with the real MCP service', () => {
+  let realCtx: ControllerContext;
 
-    beforeAll(async () => {
-      realCtx = await controllerSetup(AgentRunnerMcpController, [
-        AgentRunnerToolGuard,
-        { provide: AgentRunnerToolTokenService, useValue: tokenService },
-        AgentMcpToolRegistryService,
-        AgentMcpService,
-      ]);
-      return () => realCtx.close();
-    });
+  beforeAll(async () => {
+    realCtx = await controllerSetup(AgentRunnerMcpController, [
+      AgentRunnerToolGuard,
+      { provide: AgentRunnerToolTokenService, useValue: tokenService },
+      AgentMcpToolRegistryService,
+      AgentMcpService,
+    ]);
+    return () => realCtx.close();
+  });
 
-    beforeEach(() => {
-      tokenService.resetAllMocks();
-      realCtx.reset();
-      tokenService.verify.mockReturnValue({
-        sessionId,
-        userId,
-        expiresAt: new Date('2026-05-16T12:00:00.000Z'),
-      });
-    });
-
-    it('requires a valid runner token and returns tools/list from the real MCP service', async () => {
-      const toolsListRequest = {
-        jsonrpc: '2.0',
-        id: 'tools-1',
-        method: 'tools/list',
-      };
-
-      const { status, body } = await request(realCtx.getHttpServer())
-        .post(`/agent/internal/mcp/sessions/${sessionId}`)
-        .set('Authorization', authorization)
-        .send(toolsListRequest);
-
-      expect(status).toBe(200);
-      expect(tokenService.verify).toHaveBeenCalledWith(token);
-      expect(realCtx.authenticate).not.toHaveBeenCalled();
-      expect(body).toMatchObject({
-        jsonrpc: '2.0',
-        id: 'tools-1',
-        result: {
-          tools: expect.any(Array),
-        },
-      });
-      expect(body.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
-        AgentToolName.SearchAssets,
-        AgentToolName.ReadAssetMetadata,
-        AgentToolName.ReadAssetPreviews,
-        AgentToolName.ReadAssetOriginals,
-        AgentToolName.ListAlbums,
-        AgentToolName.ReadAlbum,
-        AgentToolName.ProposeAlbumOperations,
-        AgentToolName.ReviseProposedOperations,
-        AgentToolName.SummarizePlan,
-      ]);
+  beforeEach(() => {
+    tokenService.resetAllMocks();
+    realCtx.reset();
+    tokenService.verify.mockReturnValue({
+      sessionId,
+      userId,
+      expiresAt: new Date('2026-05-16T12:00:00.000Z'),
     });
   });
+
+  it('requires a valid runner token and returns tools/list from the real MCP service', async () => {
+    const toolsListRequest = {
+      jsonrpc: '2.0',
+      id: 'tools-1',
+      method: 'tools/list',
+    };
+
+    const { status, body } = await request(realCtx.getHttpServer())
+      .post(`/agent/internal/mcp/sessions/${sessionId}`)
+      .set('Authorization', authorization)
+      .send(toolsListRequest);
+
+    expect(status).toBe(200);
+    expect(tokenService.verify).toHaveBeenCalledWith(token);
+    expect(realCtx.authenticate).not.toHaveBeenCalled();
+    expect(body).toMatchObject({
+      jsonrpc: '2.0',
+      id: 'tools-1',
+      result: {
+        tools: expect.any(Array),
+      },
+    });
+    expect(body.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
+      AgentToolName.SearchAssets,
+      AgentToolName.ReadAssetMetadata,
+      AgentToolName.ReadAssetPreviews,
+      AgentToolName.ReadAssetOriginals,
+      AgentToolName.ListAlbums,
+      AgentToolName.ReadAlbum,
+      AgentToolName.ProposeAlbumOperations,
+      AgentToolName.ReviseProposedOperations,
+      AgentToolName.SummarizePlan,
+    ]);
+  });
+});
 ```
 
 Add `AgentToolName` to the controller spec imports:
@@ -735,6 +738,7 @@ Expected: FAIL because `AgentMcpService` does not accept `AgentMcpToolRegistrySe
 ### Task 4: Implement `tools/list` Protocol Wiring
 
 **Files:**
+
 - Modify: `server/src/types/agent-mcp.types.ts`
 - Modify: `server/src/services/agent-mcp.service.ts`
 - Modify: `server/src/services/index.ts`
@@ -777,15 +781,15 @@ export class AgentMcpService {
 Add `tools/list` handling immediately after the `initialize` branch:
 
 ```ts
-    if (request.method === 'tools/list') {
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          tools: this.toolRegistry.listTools(),
-        },
-      };
-    }
+if (request.method === 'tools/list') {
+  return {
+    jsonrpc: '2.0',
+    id: request.id,
+    result: {
+      tools: this.toolRegistry.listTools(),
+    },
+  };
+}
 ```
 
 Change initialize capabilities to:
@@ -838,6 +842,7 @@ git commit -m "feat: expose agent mcp tools list"
 ### Task 5: Final Verification And Review
 
 **Files:**
+
 - Verify only
 
 - [ ] **Step 1: Run full Slice 2 focused server suite**

@@ -590,6 +590,7 @@ DELETE FROM "kysely_migrations"
    '1778900000000-AgentToolCall',
    '1778910000000-BackfillAgentReadSessionLimits',
    '1778920000000-AgentOperationPlan',
+   '1778930000000-AgentSessionTitle',
 
    -- Post-v2.7.5 upstream migrations pulled in by rebase. Paired with the
    -- schema rollbacks in step 7 above.

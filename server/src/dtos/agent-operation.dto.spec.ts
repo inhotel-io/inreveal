@@ -427,9 +427,7 @@ describe('Agent operation DTOs', () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error?.issues).toEqual([
-      expect.objectContaining({ message: 'operationIds must be unique' }),
-    ]);
+    expect(result.error?.issues).toEqual([expect.objectContaining({ message: 'operationIds must be unique' })]);
   });
 
   it('rejects an empty apply operation id list', () => {
@@ -499,9 +497,8 @@ describe('Agent operation DTOs', () => {
 
   describe('MCP planning tool request schemas', () => {
     it('does not require planId for proposeAlbumOperations', () => {
-      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse(
-        makePlanningToolRequest(),
-      );
+      const result =
+        AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse(makePlanningToolRequest());
 
       expect(result.success).toBe(true);
     });

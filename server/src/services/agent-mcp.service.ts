@@ -245,7 +245,9 @@ export class AgentMcpService {
     return this.validationIssuesResult(error.issues);
   }
 
-  private validationIssuesResult(issues: readonly { path: readonly unknown[]; message: string }[]): AgentMcpToolCallResult {
+  private validationIssuesResult(
+    issues: readonly { path: readonly unknown[]; message: string }[],
+  ): AgentMcpToolCallResult {
     const structuredContent = {
       status: 'error',
       error: 'Invalid tool arguments',
@@ -286,12 +288,7 @@ export class AgentMcpService {
     };
   }
 
-  private error(
-    id: AgentMcpRequestId | null,
-    code: number,
-    message: string,
-    data?: unknown,
-  ): AgentMcpErrorResponse {
+  private error(id: AgentMcpRequestId | null, code: number, message: string, data?: unknown): AgentMcpErrorResponse {
     return {
       jsonrpc: '2.0',
       id,
