@@ -16,10 +16,10 @@ type AgentRunnerCreateSessionBase = {
   initialContext: Record<string, unknown>;
 };
 
-export type AgentRunnerToolGateway = { url: string; token: string };
+export type AgentRunnerMcpGateway = { url: string; token: string };
 
 export type AgentRunnerCreateSessionRequest = AgentRunnerCreateSessionBase & {
-  toolGateway?: AgentRunnerToolGateway | null;
+  mcpGateway?: AgentRunnerMcpGateway | null;
 };
 
 export type AgentRunnerCreateSessionInput = AgentRunnerCreateSessionBase & {
