@@ -1185,13 +1185,6 @@ export class AgentToolService {
       }
     }
 
-    const agentReadableIds = await this.assetRepository.getAgentReadableIds(readableIds);
-    for (const id of readableIds) {
-      if (!agentReadableIds.has(id)) {
-        readableIds.delete(id);
-      }
-    }
-
     return readableIds;
   }
 
