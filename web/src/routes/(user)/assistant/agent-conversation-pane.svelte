@@ -111,7 +111,7 @@
   });
 </script>
 
-<section class="flex min-h-0 flex-1 flex-col text-black dark:text-white" aria-labelledby="agent-session-header-title">
+<section class="flex h-full min-h-0 flex-col text-black dark:text-white" aria-labelledby="agent-session-header-title">
   <AgentSessionHeader
     {session}
     {title}
@@ -131,7 +131,7 @@
     </div>
   {/if}
 
-  <div class="min-h-0 flex-1 overflow-y-auto py-6">
+  <div class="min-h-0 flex-1 overflow-hidden">
     {#key session.id}
       {#snippet actionDock()}
         <AgentSessionActionDock
