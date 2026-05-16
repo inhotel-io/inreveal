@@ -59,12 +59,12 @@ guards the full flow and prevents gaps like:
 
 Use the smallest layer that proves the behavior.
 
-| Layer | Purpose | Example files |
-| --- | --- | --- |
-| Web component tests | User-visible UI behavior, composer state, cards, transcript order | `web/src/routes/(user)/assistant/*.spec.ts` |
-| Server service tests | Persistence, status transitions, websocket bridging, runner calls | `server/src/services/agent-*.spec.ts` |
-| Runner HTTP tests | `/sessions`, `/messages`, SSE, validation, continuation route behavior | `agent-runner/src/server.test.mjs` |
-| Pi runtime tests | Mapping Pi events to Gallery runner events, pause/resume semantics | `agent-runner/src/pi-runtime.test.mjs` |
+| Layer                    | Purpose                                                                      | Example files                                 |
+| ------------------------ | ---------------------------------------------------------------------------- | --------------------------------------------- |
+| Web component tests      | User-visible UI behavior, composer state, cards, transcript order            | `web/src/routes/(user)/assistant/*.spec.ts`   |
+| Server service tests     | Persistence, status transitions, websocket bridging, runner calls            | `server/src/services/agent-*.spec.ts`         |
+| Runner HTTP tests        | `/sessions`, `/messages`, SSE, validation, continuation route behavior       | `agent-runner/src/server.test.mjs`            |
+| Pi runtime tests         | Mapping Pi events to Gallery runner events, pause/resume semantics           | `agent-runner/src/pi-runtime.test.mjs`        |
 | Thin integration harness | One deterministic end-to-end flow across server service + fake runner client | New focused server-side test helper if needed |
 
 The matrix should not force every row into every layer. It should ensure each
@@ -94,74 +94,74 @@ The main flow to protect is:
 
 ### Message Send And Display
 
-| Case | Web expectations | Server expectations | Runner expectations |
-| --- | --- | --- | --- |
-| User sends non-empty message | User bubble appears; composer clears; composer disables while assistant active | `appendAgentSessionMessage` persists one user message and starts runner send | `/messages` receives gallery session id, message id, and text block |
-| Empty/whitespace message | No append call; composer stays enabled | No message row | No runner call |
-| Send fails before runner call | Error shown; draft retained; composer recovers | No partial runner state | No runtime invocation |
-| Page reload after send | User message rehydrates from transcript | `getAgentSessionMessages` returns persisted message | Not applicable |
+| Case                          | Web expectations                                                               | Server expectations                                                          | Runner expectations                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| User sends non-empty message  | User bubble appears; composer clears; composer disables while assistant active | `appendAgentSessionMessage` persists one user message and starts runner send | `/messages` receives gallery session id, message id, and text block |
+| Empty/whitespace message      | No append call; composer stays enabled                                         | No message row                                                               | No runner call                                                      |
+| Send fails before runner call | Error shown; draft retained; composer recovers                                 | No partial runner state                                                      | No runtime invocation                                               |
+| Page reload after send        | User message rehydrates from transcript                                        | `getAgentSessionMessages` returns persisted message                          | Not applicable                                                      |
 
 ### Streaming Assistant Responses
 
-| Case | Web expectations | Server expectations | Runner expectations |
-| --- | --- | --- | --- |
-| First delta arrives | Streaming text appears before completion | SSE delta becomes websocket `assistant-message-delta` | Runtime yields delta immediately |
-| Multiple deltas | Text appends in order; no dropped chunks | Sequence/order preserved | Runtime event order preserved |
-| Completion after deltas | Streaming text clears; persisted assistant message appears once | Completion creates one assistant message | Runtime emits final content/provider id |
-| Completion without deltas | Assistant message still appears | Completion persists content | Runtime can complete with no deltas |
-| Runner error mid-stream | Error shown; streaming clears; composer recovers according to session state | `runner-error` websocket sent; secrets redacted | Runtime error mapped to generic safe event |
+| Case                      | Web expectations                                                            | Server expectations                                   | Runner expectations                        |
+| ------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------ |
+| First delta arrives       | Streaming text appears before completion                                    | SSE delta becomes websocket `assistant-message-delta` | Runtime yields delta immediately           |
+| Multiple deltas           | Text appends in order; no dropped chunks                                    | Sequence/order preserved                              | Runtime event order preserved              |
+| Completion after deltas   | Streaming text clears; persisted assistant message appears once             | Completion creates one assistant message              | Runtime emits final content/provider id    |
+| Completion without deltas | Assistant message still appears                                             | Completion persists content                           | Runtime can complete with no deltas        |
+| Runner error mid-stream   | Error shown; streaming clears; composer recovers according to session state | `runner-error` websocket sent; secrets redacted       | Runtime error mapped to generic safe event |
 
 ### Tool Approval Request
 
-| Case | Web expectations | Server expectations | Runner expectations |
-| --- | --- | --- | --- |
-| Tool requires approval | Plain-language approval card appears; technical details hidden | Tool call persisted as `PendingApproval` with counts and summary | Runtime returns approval-needed/tool-pause result |
-| Pending approval blocks composer | Composer disabled with review-pending message | Session status is `WaitingForToolApproval` | Runtime is paused |
-| Details expanded | Raw tool name, request summary, counts, data class, time visible | Stored metadata is complete | Not applicable |
-| Multiple pending approvals | Cards sorted oldest first; count reported | `getToolCalls` returns pending calls deterministically | Runtime may have multiple blocked tool calls |
-| Reload during pending approval | Same approval card rehydrates | Pending call is returned by `getToolCalls` | No duplicate runtime call |
+| Case                             | Web expectations                                                 | Server expectations                                              | Runner expectations                               |
+| -------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------- |
+| Tool requires approval           | Plain-language approval card appears; technical details hidden   | Tool call persisted as `PendingApproval` with counts and summary | Runtime returns approval-needed/tool-pause result |
+| Pending approval blocks composer | Composer disabled with review-pending message                    | Session status is `WaitingForToolApproval`                       | Runtime is paused                                 |
+| Details expanded                 | Raw tool name, request summary, counts, data class, time visible | Stored metadata is complete                                      | Not applicable                                    |
+| Multiple pending approvals       | Cards sorted oldest first; count reported                        | `getToolCalls` returns pending calls deterministically           | Runtime may have multiple blocked tool calls      |
+| Reload during pending approval   | Same approval card rehydrates                                    | Pending call is returned by `getToolCalls`                       | No duplicate runtime call                         |
 
 ### Approval Decision And Continuation
 
-| Case | Web expectations | Server expectations | Runner expectations |
-| --- | --- | --- | --- |
-| Approve pending call | Approve button disables while busy; card resolves | Decision recorded as approved | Continuation endpoint/client called once with tool call id and decision |
-| Runner continues after approval | Assistant streaming starts without another user prompt | Continuation SSE bridged to websocket | Runtime `continue()` or fallback prompt resumes Pi |
-| Approval card moves to chat | Pending card disappears; handled tool activity appears inline in transcript | Tool call status becomes handled and is returned as recent activity | Runtime may continue independently of card rendering |
-| Deny pending call | Denial recorded; optional reason sent; agent receives denial context | Decision recorded as denied with trimmed reason | Runtime receives denial context and continues or stops cleanly |
-| Duplicate approve click | Only one API decision call; no duplicate continuation | Idempotent handling or safe conflict response | Runtime continuation called once |
-| Approve after already handled | UI shows recoverable state; no stuck composer | Server returns safe handled state or conflict | Runtime not called again |
+| Case                            | Web expectations                                                            | Server expectations                                                 | Runner expectations                                                     |
+| ------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Approve pending call            | Approve button disables while busy; card resolves                           | Decision recorded as approved                                       | Continuation endpoint/client called once with tool call id and decision |
+| Runner continues after approval | Assistant streaming starts without another user prompt                      | Continuation SSE bridged to websocket                               | Runtime `continue()` or fallback prompt resumes Pi                      |
+| Approval card moves to chat     | Pending card disappears; handled tool activity appears inline in transcript | Tool call status becomes handled and is returned as recent activity | Runtime may continue independently of card rendering                    |
+| Deny pending call               | Denial recorded; optional reason sent; agent receives denial context        | Decision recorded as denied with trimmed reason                     | Runtime receives denial context and continues or stops cleanly          |
+| Duplicate approve click         | Only one API decision call; no duplicate continuation                       | Idempotent handling or safe conflict response                       | Runtime continuation called once                                        |
+| Approve after already handled   | UI shows recoverable state; no stuck composer                               | Server returns safe handled state or conflict                       | Runtime not called again                                                |
 
 ### Chat Timeline And Activity Cards
 
-| Case | Web expectations | Server expectations | Runner expectations |
-| --- | --- | --- | --- |
-| User -> tool -> assistant | Transcript order matches timestamps/ids | Messages and tool calls have stable timestamps | Event order does not matter after persisted ordering |
-| Completed tool call default view | Low-info text like `Pi checked your albums`; details collapsed | Response summary remains available | Not applicable |
-| Completed tool details | Request, result/error, data class, time visible after expand | Full audit metadata returned | Not applicable |
-| Failed tool call | Shows failed status and safe error in details | Error stored without secrets | Runtime/server redacts sensitive data |
-| Denied tool call | Shows not-allowed status, optional reason in details if exposed | Denial state persisted | Runtime receives denial |
-| Same timestamp items | Deterministic id tie-break | Sort stable across refresh | Not applicable |
+| Case                             | Web expectations                                                | Server expectations                            | Runner expectations                                  |
+| -------------------------------- | --------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------- |
+| User -> tool -> assistant        | Transcript order matches timestamps/ids                         | Messages and tool calls have stable timestamps | Event order does not matter after persisted ordering |
+| Completed tool call default view | Low-info text like `Pi checked your albums`; details collapsed  | Response summary remains available             | Not applicable                                       |
+| Completed tool details           | Request, result/error, data class, time visible after expand    | Full audit metadata returned                   | Not applicable                                       |
+| Failed tool call                 | Shows failed status and safe error in details                   | Error stored without secrets                   | Runtime/server redacts sensitive data                |
+| Denied tool call                 | Shows not-allowed status, optional reason in details if exposed | Denial state persisted                         | Runtime receives denial                              |
+| Same timestamp items             | Deterministic id tie-break                                      | Sort stable across refresh                     | Not applicable                                       |
 
 ### Reload And Recovery
 
-| Case | Expected |
-| --- | --- |
-| Reload during assistant streaming | Persisted messages reload; transient streaming text is gone; session status drives disabled state |
-| Reload during pending approval | Approval card returns and composer remains blocked |
-| Reload after approval before assistant continuation completes | Handled card appears; session remains running/interrupted according to server state |
-| Reload after completion | User message, tool activity, and assistant message all appear in order |
-| Runner sidecar restarts | Server reports recoverable runner/session error instead of hanging UI |
+| Case                                                          | Expected                                                                                          |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Reload during assistant streaming                             | Persisted messages reload; transient streaming text is gone; session status drives disabled state |
+| Reload during pending approval                                | Approval card returns and composer remains blocked                                                |
+| Reload after approval before assistant continuation completes | Handled card appears; session remains running/interrupted according to server state               |
+| Reload after completion                                       | User message, tool activity, and assistant message all appear in order                            |
+| Runner sidecar restarts                                       | Server reports recoverable runner/session error instead of hanging UI                             |
 
 ### Security And Privacy
 
-| Case | Expected |
-| --- | --- |
-| Provider secret in runtime error | Redacted from runner event, server websocket, and UI |
-| Runner tool token in error | Redacted everywhere |
-| Approval details collapsed | No raw internal route/token/provider fields visible |
-| Unknown/future tool name | UI falls back to safe generic copy; details show raw value only when expanded |
-| Unauthorized session/tool approval | Server rejects; UI shows error; runner not called |
+| Case                               | Expected                                                                      |
+| ---------------------------------- | ----------------------------------------------------------------------------- |
+| Provider secret in runtime error   | Redacted from runner event, server websocket, and UI                          |
+| Runner tool token in error         | Redacted everywhere                                                           |
+| Approval details collapsed         | No raw internal route/token/provider fields visible                           |
+| Unknown/future tool name           | UI falls back to safe generic copy; details show raw value only when expanded |
+| Unauthorized session/tool approval | Server rejects; UI shows error; runner not called                             |
 
 ## Vertical Slices
 
