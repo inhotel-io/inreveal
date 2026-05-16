@@ -35,6 +35,7 @@ import { automock } from 'test/utils';
 
 const now = new Date('2026-05-14T12:00:00.000Z');
 const completedAt = new Date('2026-05-14T12:01:00.000Z');
+const flushAsync = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 const permissionPlanSnapshot: AgentPermissionPlanSnapshot = {
   read: { metadata: true, previews: false, originals: false },
@@ -2052,31 +2053,61 @@ describe(AgentToolService.name, () => {
     });
   });
 
-  it('resumes the runner after a pending approval decision for a runner-backed session', async () => {
+  it('executes an approved read tool before resuming a runner-backed session', async () => {
     const auth = AuthFactory.create();
+    const album = makeAlbumSummary({ ownerId: auth.user.id });
     const session = makeSession({
       userId: auth.user.id,
       status: AgentSessionStatus.WaitingForToolApproval,
       runnerSessionId: 'runner-session-1',
     });
-    const pending = makeToolCall({ sessionId: session.id });
+    const pending = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.ListAlbums,
+      requestSummary: 'List albums',
+      redactedRequestMetadata: {},
+      assetCount: 0,
+      albumCount: 0,
+    });
     const transitioned = makeToolCall({
       ...pending,
       status: AgentToolCallStatus.Approved,
       approvalDecision: AgentToolApprovalDecision.Approved,
       responseSummary: 'Tool call approved by user',
     });
+    const executing = makeToolCall({ ...transitioned, status: AgentToolCallStatus.Executing });
+    const completed = makeToolCall({
+      ...transitioned,
+      status: AgentToolCallStatus.Completed,
+      responseSummary: 'Returned 1 album(s)',
+      redactedResponseMetadata: { albumIds: [album.id] },
+      albumCount: 1,
+      completedAt,
+    });
 
     sessionRepository.getById.mockResolvedValue(session);
-    toolCallRepository.getByIdForSession.mockResolvedValue(pending);
-    toolCallRepository.transition.mockResolvedValue(transitioned);
+    toolCallRepository.getByIdForSession.mockResolvedValueOnce(pending).mockResolvedValueOnce(transitioned);
+    toolCallRepository.transition
+      .mockResolvedValueOnce(transitioned)
+      .mockResolvedValueOnce(executing)
+      .mockResolvedValueOnce(completed);
+    albumRepository.getAgentAlbums.mockResolvedValue([album]);
 
     await sut.approveToolCall(auth, session.id, pending.id, { decision: AgentToolApprovalDecision.Approved });
+    await flushAsync();
+    await flushAsync();
 
     expect(agentRunnerService.resumeAfterToolApproval).toHaveBeenCalledWith({
       userId: auth.user.id,
       sessionId: session.id,
       runnerSessionId: 'runner-session-1',
+      toolCallId: pending.id,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      toolResult: expect.objectContaining({
+        status: 'success',
+        albums: [album],
+        toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+      }),
     });
   });
 
