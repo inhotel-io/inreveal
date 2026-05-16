@@ -83,15 +83,55 @@ describe('Gallery read tools', () => {
     );
   });
 
-  it('uses object parameter schemas compatible with OpenAI function tools', () => {
+  it('uses permissive object parameter schemas for read tools', () => {
     const tools = createGalleryTools({ client: createRecordingClient() });
 
-    for (const tool of tools) {
+    for (const tool of tools.filter((candidate) => expectedReadToolNames.includes(candidate.name))) {
       assert.equal(tool.parameters.type, 'object');
       assert.deepEqual(tool.parameters.properties, {});
       assert.equal(tool.parameters.additionalProperties, true);
       assert.equal(tool.parameters.patternProperties, undefined);
     }
+  });
+
+  it('uses concrete planning schemas so models can form valid operation plans', () => {
+    const tools = createGalleryTools({ client: createRecordingClient() });
+    const propose = tools.find((tool) => tool.name === 'proposeAlbumOperations');
+    const revise = tools.find((tool) => tool.name === 'reviseProposedOperations');
+    const summarize = tools.find((tool) => tool.name === 'summarizePlan');
+
+    assert.deepEqual(propose.parameters.required, ['summary', 'operations']);
+    assert.deepEqual(revise.parameters.required, ['planId', 'summary', 'operations']);
+    assert.deepEqual(summarize.parameters.required, ['planId']);
+    assert.equal(propose.parameters.additionalProperties, false);
+    assert.equal(revise.parameters.additionalProperties, false);
+    assert.equal(summarize.parameters.additionalProperties, false);
+    assert.equal(propose.parameters.properties.operations.type, 'array');
+    assert.equal(propose.parameters.properties.operations.items.anyOf.length, 4);
+    assert.equal(
+      propose.parameters.properties.operations.items.anyOf.some((operation) =>
+        operation.properties.type.enum.includes('album.create'),
+      ),
+      true,
+    );
+    assert.deepEqual(
+      propose.parameters.properties.operations.items.anyOf.find(
+        (operation) => operation.properties.type.enum.includes('album.create'),
+      ).required,
+      ['type', 'summary', 'targetKind', 'temporaryTargetId', 'payload'],
+    );
+    assert.deepEqual(
+      propose.parameters.properties.operations.items.anyOf.find((operation) =>
+        operation.properties.type.enum.includes('album.create'),
+      ).properties.targetKind.enum,
+      ['new_album'],
+    );
+    assert.deepEqual(
+      propose.parameters.properties.operations.items.anyOf
+        .find((operation) => operation.properties.type.enum.includes('album.create'))
+        .properties.payload.required,
+      ['albumName'],
+    );
   });
 
   it('searchAssets calls the search-assets gateway route', async () => {
