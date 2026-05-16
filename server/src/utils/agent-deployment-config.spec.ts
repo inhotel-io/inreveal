@@ -105,6 +105,16 @@ describe('agent runner deployment config', () => {
     expect(Object.keys(env).filter((key) => key.startsWith('IMMICH_S3_'))).toEqual([]);
   });
 
+  it('dev compose runs the agent-runner with the package watch script', () => {
+    const compose = parseCompose('docker/docker-compose.dev.yml');
+    const packageJson = JSON.parse(readRepo('agent-runner/package.json')) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.dev).toBe('node --watch src/server.mjs');
+    expect(compose.services['agent-runner'].command).toEqual(['exec pnpm --dir agent-runner dev']);
+  });
+
   it('rootless compose uses the Gallery server image for both server and bundled runner', () => {
     const compose = parseCompose('docker/docker-compose.rootless.yml');
 

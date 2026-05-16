@@ -82,6 +82,17 @@ describe(AgentMcpToolRegistryService.name, () => {
     }
   });
 
+  it('tells models how to continue approved read requests with toolCallId', () => {
+    const readTools = sut.listTools().filter((tool) => expectedReadToolNameSet.has(tool.name));
+
+    expect(readTools).toHaveLength(expectedReadToolNames.length);
+    for (const tool of readTools) {
+      expect(tool.description).toMatch(/approval/i);
+      expect(tool.description).toMatch(/toolCallId/);
+      expect(tool.description).toMatch(/approved request/i);
+    }
+  });
+
   it('marks read tools as read-only, non-destructive, non-idempotent, and closed-world', () => {
     const tools = sut.listTools().filter((tool) => expectedReadToolNameSet.has(tool.name));
 

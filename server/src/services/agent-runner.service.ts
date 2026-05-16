@@ -22,7 +22,6 @@ class RunnerReportedError extends Error {}
 export class AgentRunnerService {
   private static readonly completionActiveStatuses = [
     AgentSessionStatus.Running,
-    AgentSessionStatus.WaitingForToolApproval,
     AgentSessionStatus.WaitingForPlanReview,
   ];
 
@@ -171,17 +170,30 @@ export class AgentRunnerService {
     userId,
     sessionId,
     runnerSessionId,
+    toolCallId,
+    approvalDecision,
+    toolResult,
   }: {
     userId: string;
     sessionId: string;
     runnerSessionId: string;
+    toolCallId?: string;
+    approvalDecision?: 'approved' | 'denied';
+    toolResult?: unknown;
   }) {
     const activeDispatch = this.sessionDispatches.get(sessionId);
     if (activeDispatch) {
       throw new BadRequestException('Agent session already has a message in progress');
     }
 
-    const dispatch = this.resumeRunnerSession({ userId, sessionId, runnerSessionId });
+    const dispatch = this.resumeRunnerSession({
+      userId,
+      sessionId,
+      runnerSessionId,
+      toolCallId,
+      approvalDecision,
+      toolResult,
+    });
     this.sessionDispatches.set(sessionId, dispatch);
 
     try {
@@ -238,16 +250,29 @@ export class AgentRunnerService {
     userId,
     sessionId,
     runnerSessionId,
+    toolCallId,
+    approvalDecision,
+    toolResult,
   }: {
     userId: string;
     sessionId: string;
     runnerSessionId: string;
+    toolCallId?: string;
+    approvalDecision?: 'approved' | 'denied';
+    toolResult?: unknown;
   }) {
     try {
       const { runnerUrl, runnerMessageStreamTimeoutMs } = this.configRepository.getEnv().agent;
       if (!runnerUrl) {
         throw new BadRequestException('Agent runner is not configured');
       }
+
+      const body = {
+        gallerySessionId: sessionId,
+        ...(toolCallId ? { toolCallId } : {}),
+        ...(approvalDecision ? { approvalDecision } : {}),
+        ...(toolResult !== undefined ? { toolResult } : {}),
+      };
 
       await this.processRunnerStream({
         userId,
@@ -257,7 +282,7 @@ export class AgentRunnerService {
           url: runnerUrl,
           runnerSessionId,
           timeoutMs: runnerMessageStreamTimeoutMs,
-          body: { gallerySessionId: sessionId },
+          body,
         }),
         emptyStreamMessage: 'Agent runner resume stream ended before completion',
       });
@@ -281,12 +306,18 @@ export class AgentRunnerService {
     emptyStreamMessage: string;
   }) {
     let completedEvent: Extract<AgentRunnerStreamEvent, { type: 'assistant-message-completed' }> | undefined;
+    let suppressAssistantOutput = false;
     for await (const event of stream) {
       if (event.sessionId !== sessionId || event.runnerSessionId !== runnerSessionId) {
         continue;
       }
 
       if (event.type === 'assistant-message-delta') {
+        suppressAssistantOutput ||= await this.isWaitingForToolApproval(userId, sessionId);
+        if (suppressAssistantOutput) {
+          continue;
+        }
+
         this.websocketRepository.clientSend('on_agent_session_event', userId, {
           type: 'assistant-message-delta',
           sessionId,
@@ -326,6 +357,11 @@ export class AgentRunnerService {
       message: this.mapMessage(message),
       createdAt: this.toIsoNow(),
     });
+  }
+
+  private async isWaitingForToolApproval(userId: string, sessionId: string) {
+    const session = await this.sessionRepository.getById(userId, sessionId);
+    return session?.status === AgentSessionStatus.WaitingForToolApproval;
   }
 
   private async emitRunnerFailure(userId: string, sessionId: string, error: unknown) {

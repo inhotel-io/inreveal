@@ -390,6 +390,50 @@ describe(AgentRunnerService.name, () => {
     });
   });
 
+  it('suppresses assistant output when a tool call moves the session into approval review', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'How many photos are in this album?' }] };
+    const assistantContent: AgentMessageContent = {
+      blocks: [{ type: 'text', text: 'I requested permission to read your albums.' }],
+    };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-delta',
+          sessionId,
+          runnerSessionId,
+          delta: 'I requested permission',
+          sequence: 1,
+        },
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: 'provider-message-1',
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(makeAssistantMessage({ sessionId, content: assistantContent }));
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.WaitingForToolApproval } as never);
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(websocketRepository.clientSend).not.toHaveBeenCalled();
+    expect(messageRepository.create).not.toHaveBeenCalled();
+  });
+
   it('resumes a runner session after tool approval and streams the continued assistant message', async () => {
     const sessionId = '00000000-0000-4000-8000-000000000100';
     const runnerSessionId = 'runner-session-1';
@@ -424,13 +468,25 @@ describe(AgentRunnerService.name, () => {
     messageRepository.create.mockResolvedValue(assistantMessage);
     sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
 
-    await sut.resumeAfterToolApproval({ userId, sessionId, runnerSessionId });
+    await sut.resumeAfterToolApproval({
+      userId,
+      sessionId,
+      runnerSessionId,
+      toolCallId: '00000000-0000-4000-8000-000000000333',
+      approvalDecision: 'approved',
+      toolResult: { status: 'success', albums: [{ id: 'album-1', albumName: 'Test Pierre' }] },
+    });
 
     expect(agentRunnerRepository.streamResume).toHaveBeenCalledWith({
       url: 'http://agent-runner:4477',
       runnerSessionId,
       timeoutMs: 120_000,
-      body: { gallerySessionId: sessionId },
+      body: {
+        gallerySessionId: sessionId,
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+        approvalDecision: 'approved',
+        toolResult: { status: 'success', albums: [{ id: 'album-1', albumName: 'Test Pierre' }] },
+      },
     });
     expect(websocketRepository.clientSend).toHaveBeenNthCalledWith(1, 'on_agent_session_event', userId, {
       type: 'assistant-message-delta',
@@ -534,6 +590,7 @@ describe(AgentRunnerService.name, () => {
         },
       ]),
     );
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
     sessionRepository.markInterruptedFromActive.mockResolvedValue({} as never);
 
     await expect(sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content })).rejects.toThrow(

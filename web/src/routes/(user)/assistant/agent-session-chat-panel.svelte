@@ -15,7 +15,12 @@
   import { onDestroy, onMount, type Snippet } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
-  import { getAgentToolNameLabelKey } from './agent-tool-approval-ui';
+  import {
+    getAgentToolCallCompletedText,
+    getAgentToolCallScopeText,
+    getAgentToolDataClassLabelKey,
+    getAgentToolNameLabelKey,
+  } from './agent-tool-approval-ui';
   import { deriveAgentSessionTitleFromMessages } from './agent-session-workspace-ui';
 
   interface Props {
@@ -82,6 +87,7 @@
   let errorMessage = $state<string | null>(null);
   let streamingText = $state('');
   let busyFrameIndex = $state(0);
+  let expandedToolCallIds = $state<Record<string, boolean>>({});
   let lastPublishedTitle: string | null = null;
   let cleanupWebsocketListener: (() => void) | undefined;
 
@@ -124,16 +130,24 @@
       (first, second) => first.occurredAt.localeCompare(second.occurredAt) || first.id.localeCompare(second.id),
     );
 
-  const getToolCallStatusLabelKey = (status: AgentToolCallStatus) => {
+  const getToolCallStatusLabel = (status: AgentToolCallStatus) => {
     if (status === AgentToolCallStatus.Completed) {
-      return 'assistant_agent_tool_status_completed';
+      return 'Done';
     }
 
     if (status === AgentToolCallStatus.Denied) {
-      return 'assistant_agent_tool_status_denied';
+      return 'Not allowed';
     }
 
-    return 'assistant_agent_tool_status_failed';
+    if (status === AgentToolCallStatus.Approved) {
+      return 'Approved';
+    }
+
+    return 'Failed';
+  };
+
+  const toggleToolCallDetails = (toolCallId: string) => {
+    expandedToolCallIds = { ...expandedToolCallIds, [toolCallId]: !expandedToolCallIds[toolCallId] };
   };
 
   const parseMarkdownTableRow = (line: string) =>
@@ -590,26 +604,62 @@
         {:else}
           {@const toolCall = item.toolCall}
           {@const toolName = $t(getAgentToolNameLabelKey(toolCall.toolName))}
-          {@const toolStatus = $t(getToolCallStatusLabelKey(toolCall.status))}
+          {@const dataClass = $t(getAgentToolDataClassLabelKey(toolCall.dataClass))}
+          {@const toolStatus = getToolCallStatusLabel(toolCall.status)}
+          {@const actionText = getAgentToolCallCompletedText(toolCall)}
+          {@const scopeText = getAgentToolCallScopeText(toolCall)}
+          {@const detailsOpen = expandedToolCallIds[toolCall.id] === true}
           <article
             data-chat-item
             class="mr-auto max-w-[82%] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-slate-700 shadow-sm dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
-            aria-label={`${toolName} action: ${toolStatus}`}
+            aria-label={`${actionText.replace(/\.$/, '')}: ${toolStatus}`}
           >
             <div class="flex flex-wrap items-center gap-2">
-              <span class="font-medium text-slate-950 dark:text-neutral-50">{toolName}</span>
               <span class="rounded-full bg-white px-2 py-0.5 text-[0.7rem] font-medium dark:bg-neutral-900">
                 {toolStatus}
               </span>
-              <time class="text-gray-500 dark:text-gray-400" datetime={toolCall.completedAt ?? toolCall.startedAt}>
-                {new Date(toolCall.completedAt ?? toolCall.startedAt).toLocaleString()}
-              </time>
+              <span class="font-medium text-slate-950 dark:text-neutral-50">{actionText}</span>
+              <span class="text-gray-500 dark:text-gray-400">{scopeText}</span>
             </div>
-            <p class="mt-1 break-words text-gray-600 dark:text-gray-300">{toolCall.requestSummary}</p>
-            {#if toolCall.responseSummary || toolCall.error}
-              <p class="mt-1 break-words text-gray-500 dark:text-gray-400">
-                {toolCall.responseSummary ?? toolCall.error}
-              </p>
+            <button
+              type="button"
+              class="mt-2 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[0.7rem] font-medium text-gray-600 hover:bg-gray-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-gray-300 dark:hover:bg-neutral-800"
+              aria-expanded={detailsOpen}
+              onclick={() => toggleToolCallDetails(toolCall.id)}
+            >
+              Details
+            </button>
+            {#if detailsOpen}
+              <div class="mt-2 rounded-md border border-gray-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                <dl class="grid gap-2">
+                  <div>
+                    <dt class="font-medium text-gray-500 dark:text-gray-400">Action</dt>
+                    <dd class="break-words">{toolName}</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium text-gray-500 dark:text-gray-400">Request</dt>
+                    <dd class="break-words">{toolCall.requestSummary}</dd>
+                  </div>
+                  {#if toolCall.responseSummary || toolCall.error}
+                    <div>
+                      <dt class="font-medium text-gray-500 dark:text-gray-400">Result</dt>
+                      <dd class="break-words">{toolCall.responseSummary ?? toolCall.error}</dd>
+                    </div>
+                  {/if}
+                  <div>
+                    <dt class="font-medium text-gray-500 dark:text-gray-400">Data</dt>
+                    <dd>{dataClass}</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium text-gray-500 dark:text-gray-400">Time</dt>
+                    <dd>
+                      <time datetime={toolCall.completedAt ?? toolCall.startedAt}>
+                        {new Date(toolCall.completedAt ?? toolCall.startedAt).toLocaleString()}
+                      </time>
+                    </dd>
+                  </div>
+                </dl>
+              </div>
             {/if}
           </article>
         {/if}

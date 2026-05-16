@@ -201,16 +201,57 @@ export class AgentToolService {
 
     await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Running });
     if (session.runnerSessionId) {
-      void this.agentRunnerService
-        .resumeAfterToolApproval({
-          userId: auth.user.id,
-          sessionId: session.id,
-          runnerSessionId: session.runnerSessionId,
-        })
-        .catch(() => {});
+      void this.resumeRunnerAfterApprovalDecision(auth, session, transitioned, dto.decision).catch(() => {});
     }
 
     return this.mapToolCall(transitioned);
+  }
+
+  private async resumeRunnerAfterApprovalDecision(
+    auth: AuthDto,
+    session: AgentSession,
+    toolCall: AgentToolCall,
+    approvalDecision: AgentToolApprovalDecision,
+  ) {
+    const toolResult =
+      approvalDecision === AgentToolApprovalDecision.Approved
+        ? await this.executeApprovedToolCall(auth, session, toolCall)
+        : undefined;
+
+    await this.agentRunnerService.resumeAfterToolApproval({
+      userId: auth.user.id,
+      sessionId: session.id,
+      runnerSessionId: session.runnerSessionId!,
+      toolCallId: toolCall.id,
+      approvalDecision,
+      toolResult,
+    });
+  }
+
+  private executeApprovedToolCall(auth: AuthDto, session: AgentSession, toolCall: AgentToolCall): Promise<unknown> {
+    switch (toolCall.toolName) {
+      case AgentToolName.SearchAssets: {
+        return this.searchAssets(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.ReadAssetMetadata: {
+        return this.readAssetMetadata(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.ReadAssetPreviews: {
+        return this.readAssetPreviews(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.ReadAssetOriginals: {
+        return this.readAssetOriginals(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.ListAlbums: {
+        return this.listAlbums(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.ReadAlbum: {
+        return this.readAlbum(auth, session.id, { toolCallId: toolCall.id });
+      }
+      default: {
+        return Promise.resolve(undefined);
+      }
+    }
   }
 
   async getToolCalls(auth: AuthDto, sessionId: string): Promise<AgentToolCallResponseDto[]> {
