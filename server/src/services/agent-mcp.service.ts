@@ -122,7 +122,12 @@ export class AgentMcpService {
     }
 
     const schema = AgentReadToolRequestSchemas[name];
-    const parseResult = schema.safeParse(args);
+    const argumentValidation = this.validateToolArguments(args);
+    if (!argumentValidation.valid) {
+      return this.success(request.id, this.argumentErrorResult(argumentValidation.path, argumentValidation.message));
+    }
+
+    const parseResult = schema.safeParse(argumentValidation.value);
     if (!parseResult.success) {
       return this.success(request.id, this.validationErrorResult(parseResult.error));
     }
@@ -172,11 +177,29 @@ export class AgentMcpService {
     };
   }
 
+  private validateToolArguments(
+    args: unknown,
+  ): { valid: true; value: Record<string, unknown> } | { valid: false; path: string; message: string } {
+    if (args === undefined) {
+      return { valid: false, path: 'arguments', message: 'arguments is required' };
+    }
+
+    if (!args || typeof args !== 'object' || Array.isArray(args)) {
+      return { valid: false, path: 'arguments', message: 'arguments must be an object' };
+    }
+
+    return { valid: true, value: args as Record<string, unknown> };
+  }
+
   private validationErrorResult(error: z.ZodError): AgentMcpToolCallResult {
+    return this.validationIssuesResult(error.issues);
+  }
+
+  private validationIssuesResult(issues: readonly { path: readonly unknown[]; message: string }[]): AgentMcpToolCallResult {
     const structuredContent = {
       status: 'error',
       error: 'Invalid tool arguments',
-      issues: error.issues.map((issue) => ({
+      issues: issues.map((issue) => ({
         path: issue.path.join('.'),
         message: issue.message,
       })),
@@ -186,6 +209,10 @@ export class AgentMcpService {
       ...this.toolResult(structuredContent),
       isError: true,
     };
+  }
+
+  private argumentErrorResult(path: string, message: string): AgentMcpToolCallResult {
+    return this.validationIssuesResult([{ path: [path], message }]);
   }
 
   private initializeResult(): AgentMcpInitializeResult {
