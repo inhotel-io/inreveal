@@ -2,6 +2,7 @@ import { ActivityController } from 'src/controllers/activity.controller';
 import { AgentMessageController } from 'src/controllers/agent-message.controller';
 import { AgentOperationPlanController } from 'src/controllers/agent-operation-plan.controller';
 import { AgentProviderCredentialController } from 'src/controllers/agent-provider-credential.controller';
+import { AgentRunnerMcpController } from 'src/controllers/agent-runner-mcp.controller';
 import { AgentRunnerToolController } from 'src/controllers/agent-runner-tool.controller';
 import { AgentRunnerController } from 'src/controllers/agent-runner.controller';
 import { AgentSessionController } from 'src/controllers/agent-session.controller';
@@ -60,6 +61,7 @@ export const controllers = [
   AgentOperationPlanController,
   AgentProviderCredentialController,
   AgentRunnerController,
+  AgentRunnerMcpController,
   AgentRunnerToolController,
   AgentSessionController,
   AgentToolController,
