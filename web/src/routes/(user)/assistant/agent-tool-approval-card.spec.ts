@@ -92,21 +92,29 @@ const toolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentToolC
 });
 
 describe(AgentToolApprovalCard.name, () => {
-  it('renders safe approval details and actions', () => {
+  it('renders a plain-language approval request with details collapsed', async () => {
     render(AgentToolApprovalCard, {
       props: { session, toolCall: toolCall(), onApprove: vi.fn(), onDeny: vi.fn() },
     });
 
     expect(screen.getByRole('article', { name: 'Approval request' })).toBeInTheDocument();
+    expect(screen.getByText('Pi wants to search your photos.')).toBeInTheDocument();
+    expect(screen.getByText('It may use 12 photos and 3 albums.')).toBeInTheDocument();
+    expect(screen.queryByText('Search photos')).not.toBeInTheDocument();
+    expect(screen.queryByText('Find summer photos that may belong in a travel album.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Metadata')).not.toBeInTheDocument();
+    expect(screen.queryByText(/OpenAI personal/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/gpt-5.1/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Deny' })).toBeEnabled();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+
     expect(screen.getByText('Search photos')).toBeInTheDocument();
     expect(screen.getByText('Find summer photos that may belong in a travel album.')).toBeInTheDocument();
     expect(screen.getByText('Metadata')).toBeInTheDocument();
-    expect(screen.getByText(/12 assets/)).toBeInTheDocument();
-    expect(screen.getByText(/3 albums/)).toBeInTheDocument();
     expect(screen.getByText(/OpenAI personal/)).toBeInTheDocument();
     expect(screen.getByText(/gpt-5.1/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Deny' })).toBeEnabled();
   });
 
   it('renders zero counts intentionally', () => {
@@ -114,8 +122,7 @@ describe(AgentToolApprovalCard.name, () => {
       props: { session, toolCall: toolCall({ assetCount: 0, albumCount: 0 }), onApprove: vi.fn(), onDeny: vi.fn() },
     });
 
-    expect(screen.getByText(/0 assets/)).toBeInTheDocument();
-    expect(screen.getByText(/0 albums/)).toBeInTheDocument();
+    expect(screen.getByText('It may use no photos and no albums.')).toBeInTheDocument();
   });
 
   it('calls approve and deny callbacks with trimmed optional reason', async () => {
