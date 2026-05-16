@@ -94,12 +94,14 @@ Class | Method | HTTP request | Description
 *AgentSessionsApi* | [**approveToolCall**](doc//AgentSessionsApi.md#approvetoolcall) | **POST** /agent/sessions/{id}/tool-calls/{toolCallId}/approval | Approve or deny an agent tool call
 *AgentSessionsApi* | [**cancelAgentSession**](doc//AgentSessionsApi.md#cancelagentsession) | **POST** /agent/sessions/{id}/cancel | Cancel an agent session
 *AgentSessionsApi* | [**createAgentSession**](doc//AgentSessionsApi.md#createagentsession) | **POST** /agent/sessions | Create an agent session
+*AgentSessionsApi* | [**deleteAgentSession**](doc//AgentSessionsApi.md#deleteagentsession) | **DELETE** /agent/sessions/{id} | Delete an agent session
 *AgentSessionsApi* | [**executeAgentSearchAssets**](doc//AgentSessionsApi.md#executeagentsearchassets) | **POST** /agent/sessions/{id}/tools/search-assets | Execute the internal searchAssets agent tool
 *AgentSessionsApi* | [**getAgentSession**](doc//AgentSessionsApi.md#getagentsession) | **GET** /agent/sessions/{id} | Retrieve an agent session
 *AgentSessionsApi* | [**getAgentSessionMessages**](doc//AgentSessionsApi.md#getagentsessionmessages) | **GET** /agent/sessions/{id}/messages | List agent session messages
 *AgentSessionsApi* | [**getAgentSessions**](doc//AgentSessionsApi.md#getagentsessions) | **GET** /agent/sessions | List agent sessions
 *AgentSessionsApi* | [**getCurrentOperationPlan**](doc//AgentSessionsApi.md#getcurrentoperationplan) | **GET** /agent/sessions/{id}/operation-plan | Get the current agent operation plan
 *AgentSessionsApi* | [**getToolCalls**](doc//AgentSessionsApi.md#gettoolcalls) | **GET** /agent/sessions/{id}/tool-calls | List agent tool calls
+*AgentSessionsApi* | [**handle**](doc//AgentSessionsApi.md#handle) | **POST** /agent/internal/mcp/sessions/{id} | Handle the internal runner MCP endpoint
 *AgentSessionsApi* | [**listAlbums**](doc//AgentSessionsApi.md#listalbums) | **POST** /agent/sessions/{id}/tools/list-albums | Execute the internal listAlbums agent tool
 *AgentSessionsApi* | [**proposeAlbumOperations**](doc//AgentSessionsApi.md#proposealbumoperations) | **POST** /agent/sessions/{id}/operation-plan/proposals | Propose agent album operations
 *AgentSessionsApi* | [**readAlbum**](doc//AgentSessionsApi.md#readalbum) | **POST** /agent/sessions/{id}/tools/read-album | Execute the internal readAlbum agent tool
@@ -107,16 +109,9 @@ Class | Method | HTTP request | Description
 *AgentSessionsApi* | [**readAssetOriginals**](doc//AgentSessionsApi.md#readassetoriginals) | **POST** /agent/sessions/{id}/tools/read-asset-originals | Execute the internal readAssetOriginals agent tool
 *AgentSessionsApi* | [**readAssetPreviews**](doc//AgentSessionsApi.md#readassetpreviews) | **POST** /agent/sessions/{id}/tools/read-asset-previews | Execute the internal readAssetPreviews agent tool
 *AgentSessionsApi* | [**reviseProposedOperations**](doc//AgentSessionsApi.md#reviseproposedoperations) | **POST** /agent/sessions/{id}/operation-plan/{planId}/revisions | Revise agent album operations
-*AgentSessionsApi* | [**runnerListAlbums**](doc//AgentSessionsApi.md#runnerlistalbums) | **POST** /agent/internal/tools/sessions/{id}/list-albums | Execute the runner listAlbums agent tool
-*AgentSessionsApi* | [**runnerProposeAlbumOperations**](doc//AgentSessionsApi.md#runnerproposealbumoperations) | **POST** /agent/internal/tools/sessions/{id}/propose-album-operations | Execute the runner proposeAlbumOperations agent tool
-*AgentSessionsApi* | [**runnerReadAlbum**](doc//AgentSessionsApi.md#runnerreadalbum) | **POST** /agent/internal/tools/sessions/{id}/read-album | Execute the runner readAlbum agent tool
-*AgentSessionsApi* | [**runnerReadAssetMetadata**](doc//AgentSessionsApi.md#runnerreadassetmetadata) | **POST** /agent/internal/tools/sessions/{id}/read-asset-metadata | Execute the runner readAssetMetadata agent tool
-*AgentSessionsApi* | [**runnerReadAssetOriginals**](doc//AgentSessionsApi.md#runnerreadassetoriginals) | **POST** /agent/internal/tools/sessions/{id}/read-asset-originals | Execute the runner readAssetOriginals agent tool
-*AgentSessionsApi* | [**runnerReadAssetPreviews**](doc//AgentSessionsApi.md#runnerreadassetpreviews) | **POST** /agent/internal/tools/sessions/{id}/read-asset-previews | Execute the runner readAssetPreviews agent tool
-*AgentSessionsApi* | [**runnerReviseProposedOperations**](doc//AgentSessionsApi.md#runnerreviseproposedoperations) | **POST** /agent/internal/tools/sessions/{id}/revise-proposed-operations/{planId} | Execute the runner reviseProposedOperations agent tool
-*AgentSessionsApi* | [**runnerSearchAssets**](doc//AgentSessionsApi.md#runnersearchassets) | **POST** /agent/internal/tools/sessions/{id}/search-assets | Execute the runner searchAssets agent tool
-*AgentSessionsApi* | [**runnerSummarizePlan**](doc//AgentSessionsApi.md#runnersummarizeplan) | **POST** /agent/internal/tools/sessions/{id}/summarize-plan/{planId} | Execute the runner summarizePlan agent tool
 *AgentSessionsApi* | [**summarizePlan**](doc//AgentSessionsApi.md#summarizeplan) | **POST** /agent/sessions/{id}/operation-plan/{planId}/summary | Summarize an agent operation plan
+*AgentSessionsApi* | [**updateAgentSession**](doc//AgentSessionsApi.md#updateagentsession) | **PUT** /agent/sessions/{id} | Update an agent session
+*AgentSessionsApi* | [**validateAgentSession**](doc//AgentSessionsApi.md#validateagentsession) | **POST** /agent/sessions/validate | Validate an agent session setup
 *AlbumsApi* | [**addAssetsToAlbum**](doc//AlbumsApi.md#addassetstoalbum) | **PUT** /albums/{id}/assets | Add assets to an album
 *AlbumsApi* | [**addAssetsToAlbums**](doc//AlbumsApi.md#addassetstoalbums) | **PUT** /albums/assets | Add assets to albums
 *AlbumsApi* | [**addUsersToAlbum**](doc//AlbumsApi.md#adduserstoalbum) | **PUT** /albums/{id}/users | Share album with users
@@ -516,6 +511,7 @@ Class | Method | HTTP request | Description
  - [AgentSessionCreateDto](doc//AgentSessionCreateDto.md)
  - [AgentSessionResponseDto](doc//AgentSessionResponseDto.md)
  - [AgentSessionStatus](doc//AgentSessionStatus.md)
+ - [AgentSessionUpdateDto](doc//AgentSessionUpdateDto.md)
  - [AgentToolApprovalDecision](doc//AgentToolApprovalDecision.md)
  - [AgentToolApprovalDto](doc//AgentToolApprovalDto.md)
  - [AgentToolCallResponseDto](doc//AgentToolCallResponseDto.md)

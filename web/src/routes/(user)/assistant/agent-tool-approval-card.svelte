@@ -1,11 +1,8 @@
 <script lang="ts">
-  import { AgentToolApprovalDecision, type AgentSessionResponseDto, type AgentToolCallResponseDto } from '@immich/sdk';
+  import type { AgentSessionResponseDto, AgentToolCallResponseDto } from '@immich/sdk';
   import { Button } from '@immich/ui';
   import { t } from 'svelte-i18n';
-  import {
-    getAgentToolDataClassLabelKey,
-    getAgentToolNameLabelKey,
-  } from './agent-tool-approval-ui';
+  import { getAgentToolDataClassLabelKey, getAgentToolNameLabelKey } from './agent-tool-approval-ui';
 
   interface Props {
     session: AgentSessionResponseDto;
@@ -39,7 +36,9 @@
       <h3 class="break-words font-semibold">{toolName}</h3>
       <p class="mt-1 break-words text-gray-700 dark:text-gray-300">{toolCall.requestSummary}</p>
     </div>
-    <div class="shrink-0 rounded-md bg-white px-2 py-1 text-xs font-medium text-gray-700 dark:bg-gray-900 dark:text-gray-200">
+    <div
+      class="shrink-0 rounded-md bg-white px-2 py-1 text-xs font-medium text-gray-700 dark:bg-gray-900 dark:text-gray-200"
+    >
       {dataClass}
     </div>
   </div>
@@ -63,7 +62,10 @@
   </dl>
 
   {#if reasonOpen}
-    <label class="mt-4 block text-xs font-medium text-gray-600 dark:text-gray-300" for={`approval-reason-${toolCall.id}`}>
+    <label
+      class="mt-4 block text-xs font-medium text-gray-600 dark:text-gray-300"
+      for={`approval-reason-${toolCall.id}`}
+    >
       {$t('assistant_approval_reason')}
     </label>
     <textarea
@@ -79,13 +81,7 @@
   {/if}
 
   <div class="mt-4 flex flex-wrap gap-2">
-    <Button
-      type="button"
-      size="small"
-      disabled={busy}
-      loading={busy}
-      onclick={() => onApprove(toolCall.id)}
-    >
+    <Button type="button" size="small" disabled={busy} loading={busy} onclick={() => onApprove(toolCall.id)}>
       {$t('assistant_approval_approve')}
     </Button>
     <Button type="button" size="small" color="secondary" disabled={busy} onclick={deny}>

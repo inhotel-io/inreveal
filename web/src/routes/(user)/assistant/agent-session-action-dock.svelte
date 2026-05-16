@@ -100,7 +100,8 @@
 
   const decide = async (toolCallId: string, decision: AgentToolApprovalDecision, reason?: string) => {
     busyByToolCallId = { ...busyByToolCallId, [toolCallId]: true };
-    const { [toolCallId]: _unused, ...remainingErrors } = errorByToolCallId;
+    const remainingErrors = { ...errorByToolCallId };
+    delete remainingErrors[toolCallId];
     errorByToolCallId = remainingErrors;
     refreshErrorMessage = null;
 
@@ -115,7 +116,8 @@
       errorByToolCallId = { ...errorByToolCallId, [toolCallId]: $t('assistant_approval_action_error') };
       handleError(error, errorByToolCallId[toolCallId]);
     } finally {
-      const { [toolCallId]: _busy, ...remainingBusy } = busyByToolCallId;
+      const remainingBusy = { ...busyByToolCallId };
+      delete remainingBusy[toolCallId];
       busyByToolCallId = remainingBusy;
     }
   };
@@ -131,7 +133,7 @@
       return;
     }
 
-    interval = setInterval(() => void loadToolCalls({ quiet: true }), 3_000);
+    interval = setInterval(() => void loadToolCalls({ quiet: true }), 3000);
   };
 
   const stopPolling = () => {

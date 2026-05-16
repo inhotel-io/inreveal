@@ -228,13 +228,13 @@ message: 'Agent runner token expired',
 In `server/src/services/agent-runner-tool-token.service.spec.ts`, replace all expected unauthorized messages:
 
 ```ts
-new UnauthorizedException('Invalid agent runner token')
+new UnauthorizedException('Invalid agent runner token');
 ```
 
 and replace expired-token expectations:
 
 ```ts
-new UnauthorizedException('Agent runner token expired')
+new UnauthorizedException('Agent runner token expired');
 ```
 
 - [ ] **Step 2: Run focused server tests to verify they fail**
@@ -431,17 +431,17 @@ Expected: Commit contains only server guard/controller/token cleanup and the sta
 Append these tests inside `describe('legacy agent gateway removal', () => { ... })` in `server/src/utils/agent-legacy-gateway-removal.spec.ts`:
 
 ```ts
-  it('does not keep legacy toolGateway runner protocol plumbing', () => {
-    expect(readRepo('agent-runner/src/server.mjs')).not.toContain('toolGateway');
-  });
+it('does not keep legacy toolGateway runner protocol plumbing', () => {
+  expect(readRepo('agent-runner/src/server.mjs')).not.toContain('toolGateway');
+});
 
-  it('keeps runner capability examples MCP-shaped instead of direct Gallery custom tool names', () => {
-    const serverTest = readRepo('agent-runner/src/server.test.mjs');
+it('keeps runner capability examples MCP-shaped instead of direct Gallery custom tool names', () => {
+  const serverTest = readRepo('agent-runner/src/server.test.mjs');
 
-    expect(serverTest).not.toContain("tools: ['proposeAlbumOperations']");
-    expect(serverTest).not.toContain("tools: ['searchAssets'");
-    expect(serverTest).toContain("tools: ['mcp:gallery']");
-  });
+  expect(serverTest).not.toContain("tools: ['proposeAlbumOperations']");
+  expect(serverTest).not.toContain("tools: ['searchAssets'");
+  expect(serverTest).toContain("tools: ['mcp:gallery']");
+});
 ```
 
 - [ ] **Step 2: Run the static guard to verify it fails**
@@ -516,38 +516,38 @@ it('rejects legacy Gallery toolGateway', async () => {
 Add this new failing test near the other `POST /sessions` tests:
 
 ```js
-  it('forwards only supported create-session protocol fields to the runtime', async () => {
-    const runtime = createRuntime();
+it('forwards only supported create-session protocol fields to the runtime', async () => {
+  const runtime = createRuntime();
 
-    await withServer(runtime, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/sessions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          createSessionBody({
-            unexpectedGateway: {
-              url: 'https://gallery.example.test/legacy',
-              token: 'legacy-token-secret',
-            },
-            debug: 'runtime-internal-field',
-          }),
-        ),
-      });
-
-      assert.equal(response.status, 201);
-      assert.deepEqual(Object.keys(runtime.calls.createSession[0]).sort(), [
-        'approvalMode',
-        'credential',
-        'gallerySessionId',
-        'initialContext',
-        'model',
-        'permissionPlan',
-        'permissionPreset',
-      ]);
-      assert.equal(runtime.calls.createSession[0].unexpectedGateway, undefined);
-      assert.equal(runtime.calls.createSession[0].debug, undefined);
+  await withServer(runtime, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(
+        createSessionBody({
+          unexpectedGateway: {
+            url: 'https://gallery.example.test/legacy',
+            token: 'legacy-token-secret',
+          },
+          debug: 'runtime-internal-field',
+        }),
+      ),
     });
+
+    assert.equal(response.status, 201);
+    assert.deepEqual(Object.keys(runtime.calls.createSession[0]).sort(), [
+      'approvalMode',
+      'credential',
+      'gallerySessionId',
+      'initialContext',
+      'model',
+      'permissionPlan',
+      'permissionPreset',
+    ]);
+    assert.equal(runtime.calls.createSession[0].unexpectedGateway, undefined);
+    assert.equal(runtime.calls.createSession[0].debug, undefined);
   });
+});
 ```
 
 - [ ] **Step 4: Update server capability text/tests before implementation**

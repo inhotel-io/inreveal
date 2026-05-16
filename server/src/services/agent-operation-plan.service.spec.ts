@@ -79,6 +79,7 @@ const makeSession = (overrides: Partial<AgentSession> = {}): AgentSession => {
     runnerCapabilitiesSnapshot: null,
     status: AgentSessionStatus.Running,
     initialContextSnapshot: {},
+    title: null,
     createdAt: now,
     updatedAt: now,
     endedAt: null,
@@ -736,7 +737,7 @@ describe(AgentOperationPlanService.name, () => {
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
     assetRepository.getAgentLockedIds.mockResolvedValue(new Set());
     assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
-    planRepository.createReplacementRevision.mockResolvedValue(undefined);
+    planRepository.createReplacementRevision.mockResolvedValue(null as unknown as AgentOperationPlanWithOperations);
     toolCallRepository.create.mockResolvedValue(executingToolCall);
 
     await expect(
