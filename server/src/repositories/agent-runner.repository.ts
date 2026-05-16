@@ -128,6 +128,15 @@ const isStreamEvent = (value: unknown): value is AgentRunnerStreamEvent => {
     );
   }
 
+  if (body.type === 'tool-approval-needed') {
+    return (
+      typeof body.sessionId === 'string' &&
+      typeof body.runnerSessionId === 'string' &&
+      typeof body.toolCallId === 'string' &&
+      body.toolCallId.trim().length > 0
+    );
+  }
+
   return false;
 };
 

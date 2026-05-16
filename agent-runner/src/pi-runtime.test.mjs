@@ -136,17 +136,23 @@ const createFakeDependencies = ({ promptGate, sessionAbortGate, mcpToolNames = [
         calls.unsubscribed += 1;
       };
     },
-    async prompt(text) {
-      calls.prompts.push(text);
+    emitAssistantDelta(delta) {
       listener?.({
         type: 'message_update',
-        assistantMessageEvent: { type: 'text_delta', delta: 'I can help.' },
+        assistantMessageEvent: { type: 'text_delta', delta },
       });
+    },
+    emitMessageEnd() {
+      listener?.({ type: 'message_end' });
+    },
+    async prompt(text) {
+      calls.prompts.push(text);
+      this.emitAssistantDelta('I can help.');
       if (promptGate) {
         await Promise.race([promptGate.promise, abortGate.promise]);
       }
       this.messages.push({ role: 'assistant', content: [{ type: 'text', text: 'I can help.' }] });
-      listener?.({ type: 'message_end' });
+      this.emitMessageEnd();
     },
     dispose() {
       calls.disposed += 1;
@@ -806,6 +812,200 @@ describe('pi runtime adapter', () => {
         content: { blocks: [{ type: 'text', text: 'I can help.' }] },
       },
     ]);
+  });
+
+  it('streams multiple Pi text chunks in order before completion', async () => {
+    const { sdk, ai, session } = createFakeDependencies();
+    session.prompt = async () => {
+      session.emitAssistantDelta('First ');
+      session.emitAssistantDelta('second.');
+      session.messages.push({ role: 'assistant', content: [{ type: 'text', text: 'First second.' }] });
+      session.emitMessageEnd();
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.deepEqual(events, [
+      {
+        type: 'assistant-message-delta',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        delta: 'First ',
+        sequence: 1,
+      },
+      {
+        type: 'assistant-message-delta',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        delta: 'second.',
+        sequence: 2,
+      },
+      {
+        type: 'assistant-message-completed',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        providerMessageId: null,
+        content: { blocks: [{ type: 'text', text: 'First second.' }] },
+      },
+    ]);
+  });
+
+  it('pauses without assistant completion when a Gallery tool returns approval-required', async () => {
+    const { sdk, ai, session } = createFakeDependencies();
+    session.prompt = async () => {
+      session.messages.push({
+        role: 'tool',
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              status: 'approval-required',
+              toolCall: {
+                id: '00000000-0000-4000-8000-000000000333',
+                status: 'pending-approval',
+              },
+            }),
+          },
+        ],
+      });
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.deepEqual(events, [
+      {
+        type: 'tool-approval-needed',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+      },
+    ]);
+  });
+
+  it('resumes from a denied approval with safe denial context', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collect(
+      runtime.resumeSession({
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        gallerySessionId: '00000000-0000-4000-8000-000000000100',
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+        approvalDecision: 'denied',
+      }),
+    );
+
+    assert.equal(calls.continues, 0);
+    assert.equal(calls.prompts.length, 1);
+    assert.match(calls.prompts[0], /denied Gallery tool call 00000000-0000-4000-8000-000000000333/);
+    assert.equal(calls.prompts[0].includes('sk-openai-secret'), false);
+    assert.deepEqual(events, [
+      {
+        type: 'assistant-message-delta',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        delta: 'I can help.',
+        sequence: 1,
+      },
+      {
+        type: 'assistant-message-completed',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        providerMessageId: null,
+        content: { blocks: [{ type: 'text', text: 'I can help.' }] },
+      },
+    ]);
+  });
+
+  it('does not treat an older approval-required tool result as a new pause after approval resume', async () => {
+    const { sdk, ai, session } = createFakeDependencies();
+    session.messages.push({
+      role: 'tool',
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            status: 'approval-required',
+            toolCall: {
+              id: '00000000-0000-4000-8000-000000000333',
+              status: 'pending-approval',
+            },
+          }),
+        },
+      ],
+    });
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collect(
+      runtime.resumeSession({
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        gallerySessionId: '00000000-0000-4000-8000-000000000100',
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+        approvalDecision: 'approved',
+        toolResult: { status: 'success', assets: [] },
+      }),
+    );
+
+    assert.equal(events.some((event) => event.type === 'tool-approval-needed'), false);
+    assert.equal(events.at(-1)?.type, 'assistant-message-completed');
+  });
+
+  it('throws a sanitized not-found error when resuming an unknown runner session', async () => {
+    const { sdk, ai } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await assert.rejects(
+      () =>
+        collect(
+          runtime.resumeSession({
+            runnerSessionId: 'missing',
+            gallerySessionId: '00000000-0000-4000-8000-000000000100',
+            toolCallId: '00000000-0000-4000-8000-000000000333',
+            approvalDecision: 'approved',
+          }),
+        ),
+      /Runner session not found/,
+    );
+  });
+
+  it('wakes an active approval resume stream with a runner-error when disposed while waiting on Pi', async () => {
+    const promptGate = createDeferred();
+    const { sdk, ai, calls } = createFakeDependencies({ promptGate });
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+    const stream = runtime.resumeSession({
+      runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+      gallerySessionId: '00000000-0000-4000-8000-000000000100',
+      toolCallId: '00000000-0000-4000-8000-000000000333',
+      approvalDecision: 'denied',
+    })[Symbol.asyncIterator]();
+
+    assert.equal((await stream.next()).value.type, 'assistant-message-delta');
+
+    await runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
+
+    const next = await withTimeout(stream.next());
+    assert.deepEqual(next, {
+      done: false,
+      value: {
+        type: 'runner-error',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        message: 'Runner session disposed',
+      },
+    });
+    await waitForCondition(() => calls.sessionAborted === 1);
+    assert.equal((await withTimeout(stream.next())).done, true);
+    assert.equal(calls.unsubscribed, 1);
+    assert.equal(calls.disposed, 1);
+
+    promptGate.resolve();
   });
 
   it('resumes the Pi agent after tool approval and streams the continued response', async () => {
