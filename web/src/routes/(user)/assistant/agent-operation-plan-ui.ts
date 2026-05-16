@@ -70,7 +70,7 @@ export const buildGroupEnabledState = (
 export const buildApprovedOperationIds = (model: OperationReviewModel) =>
   model.plan.operations
     .map((operation) => model.operationsById.get(operation.id))
-    .filter((operation): operation is OperationReviewItem => Boolean(operation))
+    .filter((operation): operation is OperationReviewItem => operation !== undefined)
     .filter((operation) => operation.enabled && !operation.blocked)
     .map((operation) => operation.id);
 
