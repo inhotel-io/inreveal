@@ -1,9 +1,15 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { AgentRunnerMcpController } from 'src/controllers/agent-runner-mcp.controller';
 import { AgentRunnerToolGuard } from 'src/controllers/agent-runner-tool.controller';
-import { AgentToolName } from 'src/enum';
+import {
+  AgentOperationRiskLevel,
+  AgentOperationTargetKind,
+  AgentOperationType,
+  AgentToolName,
+} from 'src/enum';
 import { AgentMcpService } from 'src/services/agent-mcp.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
+import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import type { AgentMcpHandleResponse } from 'src/types/agent-mcp.types';
@@ -219,6 +225,7 @@ describe(AgentRunnerMcpController.name, () => {
 
   describe('with the real MCP service', () => {
     let realCtx: ControllerContext;
+    const realOperationPlanService = automock(AgentOperationPlanService, { strict: false });
     const realToolService = automock(AgentToolService, { strict: false });
 
     beforeAll(async () => {
@@ -307,6 +314,60 @@ describe(AgentRunnerMcpController.name, () => {
       expect(body).toEqual({
         jsonrpc: '2.0',
         id: 'call-1',
+        result: {
+          content: [{ type: 'text', text: JSON.stringify(serviceResult) }],
+          structuredContent: serviceResult,
+        },
+      });
+    });
+
+    it('passes runner auth and session id through for planning tools/call', async () => {
+      const serviceResult = {
+        status: 'success',
+        plan: { id: factory.uuid(), revision: 1, operations: [] },
+        toolCall: null,
+        summary: 'Plan revision 1 is ready for review.',
+      };
+      const body = {
+        summary: 'Create Portugal highlights.',
+        operations: [
+          {
+            type: AgentOperationType.AlbumCreate,
+            summary: 'Create Portugal highlights.',
+            targetKind: AgentOperationTargetKind.NewAlbum,
+            temporaryTargetId: 'tmp-portugal',
+            riskLevel: AgentOperationRiskLevel.Low,
+            enabled: true,
+            payload: { albumName: 'Portugal highlights', description: '' },
+          },
+        ],
+      };
+      realOperationPlanService.proposeAlbumOperations.mockResolvedValue(serviceResult as never);
+
+      const { status, body: responseBody } = await request(realCtx.getHttpServer())
+        .post(`/agent/internal/mcp/sessions/${sessionId}`)
+        .set('Authorization', authorization)
+        .send({
+          jsonrpc: '2.0',
+          id: 'planning-call-1',
+          method: 'tools/call',
+          params: {
+            name: AgentToolName.ProposeAlbumOperations,
+            arguments: body,
+          },
+        });
+
+      expect(status).toBe(200);
+      expect(tokenService.verify).toHaveBeenCalledWith(token);
+      expect(realCtx.authenticate).not.toHaveBeenCalled();
+      expect(realOperationPlanService.proposeAlbumOperations).toHaveBeenCalledWith(
+        expect.objectContaining({ user: { id: userId } }),
+        sessionId,
+        body,
+      );
+      expect(responseBody).toEqual({
+        jsonrpc: '2.0',
+        id: 'planning-call-1',
         result: {
           content: [{ type: 'text', text: JSON.stringify(serviceResult) }],
           structuredContent: serviceResult,
