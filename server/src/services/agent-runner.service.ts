@@ -13,6 +13,9 @@ import { AgentRunnerCreateSessionInput, AgentRunnerStreamEvent } from 'src/types
 
 const RUNNER_STATUS_CACHE_MS = 15_000;
 
+const buildMcpSessionUrl = (mcpGatewayBaseUrl: string, sessionId: string) =>
+  new URL(`sessions/${encodeURIComponent(sessionId)}`, `${mcpGatewayBaseUrl.replace(/\/+$/, '')}/`).toString();
+
 @Injectable()
 export class AgentRunnerService {
   private static readonly completionActiveStatuses = [
@@ -41,9 +44,10 @@ export class AgentRunnerService {
       throw new BadRequestException('Agent runner is not configured');
     }
 
-    const toolGateway = toolGatewayUrl
+    const mcpGatewayBaseUrl = toolGatewayUrl;
+    const mcpGateway = mcpGatewayBaseUrl
       ? {
-          url: toolGatewayUrl,
+          url: buildMcpSessionUrl(mcpGatewayBaseUrl, body.gallerySessionId),
           token: this.toolTokenService.create({
             sessionId: body.gallerySessionId,
             userId,
@@ -57,7 +61,7 @@ export class AgentRunnerService {
     const result = await this.agentRunnerRepository.createSession({
       url: runnerUrl,
       timeoutMs: runnerHealthTimeoutMs,
-      body: { ...body, toolGateway },
+      body: { ...body, mcpGateway },
     });
 
     return {
