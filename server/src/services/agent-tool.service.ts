@@ -202,7 +202,7 @@ export class AgentToolService {
     await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Running });
     if (session.runnerSessionId) {
       void this.resumeRunnerAfterApprovalDecision(auth, session, transitioned, dto.decision).catch(() =>
-        this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Interrupted }).catch(() => {}),
+        this.sessionRepository.markInterruptedFromActive(auth.user.id, session.id).catch(() => {}),
       );
     }
 
