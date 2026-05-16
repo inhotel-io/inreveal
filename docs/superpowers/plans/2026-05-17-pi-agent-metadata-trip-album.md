@@ -51,13 +51,28 @@ Do not touch the unrelated untracked file `server/src/services/agent-runner-flow
 In `agent-runner/src/pi-runtime.test.mjs`, in the existing test named `constructs the Pi resource loader with concrete runtime paths`, add these assertions after the existing assertion for `mcp_gallery_proposeAlbumOperations`:
 
 ```js
-    assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only trip album requests'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_searchAssets with location and taken-date metadata'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_readAssetMetadata for candidate assets'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('do not call mcp_gallery_readAssetPreviews or mcp_gallery_readAssetOriginals'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('If a metadata-only trip search returns more than 250 candidate assets'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('ask one concise follow-up question to narrow the date range or location'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('A chat-only answer is not enough for album creation requests'), true);
+assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only trip album requests'), true);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('use mcp_gallery_searchAssets with location and taken-date metadata'),
+  true,
+);
+assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_readAssetMetadata for candidate assets'), true);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('do not call mcp_gallery_readAssetPreviews or mcp_gallery_readAssetOriginals'),
+  true,
+);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('If a metadata-only trip search returns more than 250 candidate assets'),
+  true,
+);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('ask one concise follow-up question to narrow the date range or location'),
+  true,
+);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('A chat-only answer is not enough for album creation requests'),
+  true,
+);
 ```
 
 - [ ] **Step 2: Run the runner prompt test and verify it fails**
@@ -119,30 +134,30 @@ EOF
 In `server/src/services/agent-mcp-tool-registry.service.spec.ts`, add this test near the existing `tools/list` or tool definition tests:
 
 ```ts
-  it('advertises trip-album metadata filters on searchAssets', () => {
-    const searchTool = sut.listTools().find((tool) => tool.name === AgentToolName.SearchAssets);
+it('advertises trip-album metadata filters on searchAssets', () => {
+  const searchTool = sut.listTools().find((tool) => tool.name === AgentToolName.SearchAssets);
 
-    expect(searchTool).toBeDefined();
-    expect(searchTool?.description).toContain('date');
-    expect(searchTool?.description).toContain('place');
-    expect(searchTool?.inputSchema).toEqual(
-      expect.objectContaining({
-        properties: expect.objectContaining({
-          filters: expect.objectContaining({
-            properties: expect.objectContaining({
-              takenAfter: expect.any(Object),
-              takenBefore: expect.any(Object),
-              city: expect.any(Object),
-              state: expect.any(Object),
-              country: expect.any(Object),
-              isNotInAlbum: expect.any(Object),
-            }),
+  expect(searchTool).toBeDefined();
+  expect(searchTool?.description).toContain('date');
+  expect(searchTool?.description).toContain('place');
+  expect(searchTool?.inputSchema).toEqual(
+    expect.objectContaining({
+      properties: expect.objectContaining({
+        filters: expect.objectContaining({
+          properties: expect.objectContaining({
+            takenAfter: expect.any(Object),
+            takenBefore: expect.any(Object),
+            city: expect.any(Object),
+            state: expect.any(Object),
+            country: expect.any(Object),
+            isNotInAlbum: expect.any(Object),
           }),
-          limit: expect.any(Object),
         }),
+        limit: expect.any(Object),
       }),
-    );
-  });
+    }),
+  );
+});
 ```
 
 If this test already passes without production changes, keep it as a contract test. If it fails only because the description lacks one of the words, apply Step 3. If it fails because the schema lacks filters, stop and investigate the DTO schema before changing the registry.
