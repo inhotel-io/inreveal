@@ -89,7 +89,7 @@ const startAssistantSession = async (page: Page, accessToken: string) => {
 
   await page.getByLabel('Provider credential').selectOption({ label: credentialLabel });
   await page.getByLabel('Model').fill(model);
-  await page.getByLabel('Permission preset').selectOption(AgentPermissionPreset.Careful);
+  await page.getByLabel('Permission preset', { exact: true }).selectOption(AgentPermissionPreset.Careful);
   await page.getByLabel('Approval mode').selectOption(AgentApprovalMode.PlanOnly);
   await page.getByRole('button', { name: 'Start session' }).click();
 
@@ -159,12 +159,15 @@ test.describe('Assistant album organizer', () => {
     await expect(page.getByRole('status')).toContainText('Applied 2 operations. 0 failed.');
     const appliedPlan = await waitForCurrentPlan(admin.accessToken, session.id, AgentOperationPlanStatus.Applied);
     await expect
-      .poll(async () => {
-        const updatedSession = await getAgentSession({ id: session.id }, authOptions(admin.accessToken));
-        return updatedSession.status;
-      }, {
-        timeout: 10_000,
-      })
+      .poll(
+        async () => {
+          const updatedSession = await getAgentSession({ id: session.id }, authOptions(admin.accessToken));
+          return updatedSession.status;
+        },
+        {
+          timeout: 10_000,
+        },
+      )
       .toBe(AgentSessionStatus.Completed);
 
     const createOperation = appliedPlan.operations.find(

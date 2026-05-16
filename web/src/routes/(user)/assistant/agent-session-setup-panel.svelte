@@ -148,7 +148,9 @@
     {/if}
 
     {#if credentials.length === 0}
-      <div class="mt-5 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 dark:border-gray-700 dark:bg-neutral-900">
+      <div
+        class="mt-5 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 dark:border-gray-700 dark:bg-neutral-900"
+      >
         <h3 class="text-base font-medium">{$t('assistant_credentials_empty_title')}</h3>
         <Text size="small" color="muted" class="mt-1">{$t('assistant_credentials_empty_description')}</Text>
         <div class="mt-4">
@@ -203,7 +205,9 @@
 
       <div class="grid gap-2">
         <div class="flex items-center gap-1.5">
-          <label class="text-sm font-medium" for="assistant-permission-preset">{$t('assistant_permission_preset')}</label>
+          <label class="text-sm font-medium" for="assistant-permission-preset"
+            >{$t('assistant_permission_preset')}</label
+          >
           <button
             type="button"
             class="inline-flex h-5 w-5 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-black dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
@@ -215,7 +219,9 @@
           </button>
         </div>
         {#if activeHelp === 'permission'}
-          <div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-100">
+          <div
+            class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-100"
+          >
             <div class="font-medium">{$t(selectedPermissionPresetOption.labelKey)}</div>
             <div class="mt-1">{$t(selectedPermissionPresetOption.descriptionKey)}</div>
           </div>
@@ -248,7 +254,9 @@
           </button>
         </div>
         {#if activeHelp === 'approval'}
-          <div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-100">
+          <div
+            class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-100"
+          >
             <div class="font-medium">{$t(selectedApprovalModeOption.labelKey)}</div>
             <div class="mt-1">{$t(selectedApprovalModeOption.descriptionKey)}</div>
           </div>
