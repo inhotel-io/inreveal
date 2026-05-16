@@ -171,28 +171,33 @@ export class AgentOperationPlanService {
       throw new NotFoundException('Agent operation plan not found');
     }
 
-    await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Applying });
+    try {
+      await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Applying });
 
-    const selectedOperationIds = new Set(dto.operationIds);
-    const applyUpdates = await this.applyClaimedPlan(auth, session, claimedPlan, selectedOperationIds);
-    const appliedPlan = await this.planRepository.completeApply(claimedPlan.id, applyUpdates);
-    const response = this.buildApplyResponse(this.mapPlan(appliedPlan), selectedOperationIds);
+      const selectedOperationIds = new Set(dto.operationIds);
+      const applyUpdates = await this.applyClaimedPlan(auth, session, claimedPlan, selectedOperationIds);
+      const appliedPlan = await this.planRepository.completeApply(claimedPlan.id, applyUpdates);
+      const response = this.buildApplyResponse(this.mapPlan(appliedPlan), selectedOperationIds);
 
-    await this.sessionRepository.update(auth.user.id, session.id, {
-      status: AgentSessionStatus.Completed,
-      endedAt: new Date(),
-    });
-    this.websocketRepository.clientSend('on_agent_session_event', auth.user.id, {
-      type: 'operation-plan-applied',
-      sessionId: session.id,
-      planId: appliedPlan.id,
-      status: response.status,
-      appliedCount: response.appliedOperationIds.length,
-      skippedCount: response.skippedOperationIds.length,
-      failedCount: response.failedOperationIds.length,
-    });
+      await this.sessionRepository.update(auth.user.id, session.id, {
+        status: AgentSessionStatus.Completed,
+        endedAt: new Date(),
+      });
+      this.websocketRepository.clientSend('on_agent_session_event', auth.user.id, {
+        type: 'operation-plan-applied',
+        sessionId: session.id,
+        planId: appliedPlan.id,
+        status: response.status,
+        appliedCount: response.appliedOperationIds.length,
+        skippedCount: response.skippedOperationIds.length,
+        failedCount: response.failedOperationIds.length,
+      });
 
-    return response;
+      return response;
+    } catch (error) {
+      await this.tryMarkApplySessionFailed(auth, session);
+      throw error;
+    }
   }
 
   private async runPlanningTool(
@@ -446,6 +451,17 @@ export class AgentOperationPlanService {
       planId: plan.id,
       revision: plan.revision,
     });
+  }
+
+  private async tryMarkApplySessionFailed(auth: AuthDto, session: AgentSession) {
+    try {
+      await this.sessionRepository.update(auth.user.id, session.id, {
+        status: AgentSessionStatus.Failed,
+        endedAt: new Date(),
+      });
+    } catch {
+      // Preserve the original post-claim apply error.
+    }
   }
 
   private validateApplyOperationIds(plan: AgentOperationPlanWithOperations, operationIds: string[]) {
