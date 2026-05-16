@@ -947,6 +947,17 @@ export type AgentUserMessageContent = {
 export type AgentMessageCreateDto = {
     content: AgentUserMessageContent;
 };
+export type AgentOperationPlanApplyRequestDto = {
+    operationIds: string[];
+};
+export type AgentOperationPlanApplyResponseDto = {
+    appliedOperationIds: string[];
+    failedOperationIds: string[];
+    plan: AgentOperationPlanResponseDto;
+    skippedOperationIds: string[];
+    status: AgentOperationApplyStatus;
+    summary: string;
+};
 export type AgentToolApprovalDto = {
     decision: AgentToolApprovalDecision;
     reason?: string;
@@ -5147,6 +5158,23 @@ export function proposeAlbumOperations({ id, agentProposeAlbumOperationsDto }: {
         ...opts,
         method: "POST",
         body: agentProposeAlbumOperationsDto
+    })));
+}
+/**
+ * Apply approved agent album operations
+ */
+export function applyApprovedOperations({ id, planId, agentOperationPlanApplyRequestDto }: {
+    id: string;
+    planId: string;
+    agentOperationPlanApplyRequestDto: AgentOperationPlanApplyRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentOperationPlanApplyResponseDto;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/operation-plan/${encodeURIComponent(planId)}/apply`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentOperationPlanApplyRequestDto
     })));
 }
 /**
@@ -9665,6 +9693,11 @@ export enum AgentMessageRole {
     Assistant = "assistant",
     System = "system",
     Tool = "tool"
+}
+export enum AgentOperationApplyStatus {
+    Applied = "applied",
+    PartiallyApplied = "partially_applied",
+    Failed = "failed"
 }
 export enum AlbumUserRole {
     Editor = "editor",
