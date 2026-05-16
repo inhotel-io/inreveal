@@ -332,6 +332,10 @@ export class AgentRunnerService {
         throw new RunnerReportedError(event.message);
       }
 
+      if (event.type === 'tool-approval-needed') {
+        return;
+      }
+
       completedEvent = event;
     }
 
