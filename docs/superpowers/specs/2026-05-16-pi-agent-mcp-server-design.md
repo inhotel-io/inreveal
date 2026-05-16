@@ -174,17 +174,17 @@ notify the UI. They should therefore not be marked read-only.
 
 `tools/call` delegates to the existing services:
 
-| MCP tool | Existing service method |
-|---|---|
-| `searchAssets` | `AgentToolService.searchAssets()` |
-| `readAssetMetadata` | `AgentToolService.readAssetMetadata()` |
-| `readAssetPreviews` | `AgentToolService.readAssetPreviews()` |
-| `readAssetOriginals` | `AgentToolService.readAssetOriginals()` |
-| `listAlbums` | `AgentToolService.listAlbums()` |
-| `readAlbum` | `AgentToolService.readAlbum()` |
-| `proposeAlbumOperations` | `AgentOperationPlanService.proposeAlbumOperations()` |
+| MCP tool                   | Existing service method                                |
+| -------------------------- | ------------------------------------------------------ |
+| `searchAssets`             | `AgentToolService.searchAssets()`                      |
+| `readAssetMetadata`        | `AgentToolService.readAssetMetadata()`                 |
+| `readAssetPreviews`        | `AgentToolService.readAssetPreviews()`                 |
+| `readAssetOriginals`       | `AgentToolService.readAssetOriginals()`                |
+| `listAlbums`               | `AgentToolService.listAlbums()`                        |
+| `readAlbum`                | `AgentToolService.readAlbum()`                         |
+| `proposeAlbumOperations`   | `AgentOperationPlanService.proposeAlbumOperations()`   |
 | `reviseProposedOperations` | `AgentOperationPlanService.reviseProposedOperations()` |
-| `summarizePlan` | `AgentOperationPlanService.summarizePlan()` |
+| `summarizePlan`            | `AgentOperationPlanService.summarizePlan()`            |
 
 MCP tool results should include both:
 

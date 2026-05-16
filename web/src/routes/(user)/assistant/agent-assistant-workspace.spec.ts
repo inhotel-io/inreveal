@@ -556,7 +556,9 @@ describe(AgentAssistantWorkspace.name, () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Add API key' }));
-    await user.click(within(screen.getByRole('dialog', { name: 'API keys' })).getByRole('button', { name: 'Add API key' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'API keys' })).getByRole('button', { name: 'Add API key' }),
+    );
     await user.selectOptions(screen.getByLabelText('Provider'), 'ollama');
 
     expect(screen.queryByLabelText('API key')).not.toBeInTheDocument();

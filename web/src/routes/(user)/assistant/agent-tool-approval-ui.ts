@@ -21,10 +21,10 @@ const toolNameLabelKeys: Record<AgentToolName, Translations> = {
 };
 
 const dataClassLabelKeys: Record<AgentToolDataClass, Translations> = {
-  [AgentToolDataClass.Metadata]: 'assistant_agent_tool_data_class_metadata',
-  [AgentToolDataClass.Previews]: 'assistant_agent_tool_data_class_previews',
-  [AgentToolDataClass.Originals]: 'assistant_agent_tool_data_class_originals',
-  [AgentToolDataClass.Plan]: 'assistant_agent_tool_data_class_plan',
+  metadata: 'assistant_agent_tool_data_class_metadata',
+  previews: 'assistant_agent_tool_data_class_previews',
+  originals: 'assistant_agent_tool_data_class_originals',
+  plan: 'assistant_agent_tool_data_class_plan',
 };
 
 const handledStatuses = new Set<AgentToolCallStatus>([
@@ -41,12 +41,12 @@ export const getAgentToolDataClassLabelKey = (dataClass: AgentToolDataClass) =>
 export const getPendingToolCalls = (toolCalls: AgentToolCallResponseDto[]) =>
   toolCalls
     .filter((toolCall) => toolCall.status === AgentToolCallStatus.PendingApproval)
-    .toSorted((first, second) => first.startedAt.localeCompare(second.startedAt) || first.id.localeCompare(second.id));
+    .sort((first, second) => first.startedAt.localeCompare(second.startedAt) || first.id.localeCompare(second.id));
 
 export const getRecentToolCalls = (toolCalls: AgentToolCallResponseDto[]) =>
   toolCalls
     .filter((toolCall) => handledStatuses.has(toolCall.status))
-    .toSorted((first, second) => {
+    .sort((first, second) => {
       const firstTime = first.completedAt ?? first.startedAt;
       const secondTime = second.completedAt ?? second.startedAt;
       return secondTime.localeCompare(firstTime) || second.id.localeCompare(first.id);

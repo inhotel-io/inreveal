@@ -178,29 +178,29 @@ Syntactically invalid JSON is rejected by the existing Express JSON parser befor
 
 ## Edge Case Matrix
 
-| Edge Case | Expected Result | Test Location |
-|---|---|---|
-| Missing bearer token | HTTP `401`, service not called | `agent-runner-mcp.controller.spec.ts` |
-| `Basic` auth | HTTP `401`, token verifier not called | `agent-runner-mcp.controller.spec.ts` |
-| Empty `Bearer` token | HTTP `401`, token verifier not called | `agent-runner-mcp.controller.spec.ts` |
-| Extra bearer parts | HTTP `401`, token verifier not called | `agent-runner-mcp.controller.spec.ts` |
-| Token verifier throws expired/invalid | HTTP `401`, service not called | `agent-runner-mcp.controller.spec.ts` |
-| Wrong-signature token | HTTP `401`, covered by token verifier regression | `agent-runner-tool-token.service.spec.ts` |
-| Token claims session differs from route `:id` | HTTP `401`, service not called | `agent-runner-mcp.controller.spec.ts` |
-| Valid token and `initialize` | HTTP `200`, JSON-RPC initialize response | Both specs |
-| Repeated requests reuse the same valid token without widening access | HTTP `200` for each same-session request | `agent-runner-mcp.controller.spec.ts` |
-| Normal Gallery `AuthGuard` would otherwise run | `ctx.authenticate` is not called | `agent-runner-mcp.controller.spec.ts` |
-| Request body is not syntactically valid JSON | HTTP `400`, MCP service not called | `agent-runner-mcp.controller.spec.ts` |
-| Parsed body is `null` | JSON-RPC `-32600`, id `null` | `agent-mcp.service.spec.ts` |
-| Parsed body is an array batch | JSON-RPC `-32600`, id `null`, unsupported batch message | `agent-mcp.service.spec.ts` |
-| Missing `jsonrpc` | JSON-RPC `-32600` | `agent-mcp.service.spec.ts` |
-| Missing `id` | JSON-RPC `-32600`, id `null` | `agent-mcp.service.spec.ts` |
-| Unsupported `id` type | JSON-RPC `-32600`, id `null` | `agent-mcp.service.spec.ts` |
-| Missing `method` | JSON-RPC `-32600` | `agent-mcp.service.spec.ts` |
-| Unknown method | JSON-RPC `-32601` with method in `data` | `agent-mcp.service.spec.ts` |
-| `tools/list` before slice 2 | JSON-RPC `-32601` | `agent-mcp.service.spec.ts` |
-| `tools/call` before slice 3 | JSON-RPC `-32601` | `agent-mcp.service.spec.ts` |
-| Accidental domain service wiring | `rg` verification finds no `AgentToolService` or `AgentOperationPlanService` in MCP slice files | Final verification |
+| Edge Case                                                            | Expected Result                                                                                 | Test Location                             |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| Missing bearer token                                                 | HTTP `401`, service not called                                                                  | `agent-runner-mcp.controller.spec.ts`     |
+| `Basic` auth                                                         | HTTP `401`, token verifier not called                                                           | `agent-runner-mcp.controller.spec.ts`     |
+| Empty `Bearer` token                                                 | HTTP `401`, token verifier not called                                                           | `agent-runner-mcp.controller.spec.ts`     |
+| Extra bearer parts                                                   | HTTP `401`, token verifier not called                                                           | `agent-runner-mcp.controller.spec.ts`     |
+| Token verifier throws expired/invalid                                | HTTP `401`, service not called                                                                  | `agent-runner-mcp.controller.spec.ts`     |
+| Wrong-signature token                                                | HTTP `401`, covered by token verifier regression                                                | `agent-runner-tool-token.service.spec.ts` |
+| Token claims session differs from route `:id`                        | HTTP `401`, service not called                                                                  | `agent-runner-mcp.controller.spec.ts`     |
+| Valid token and `initialize`                                         | HTTP `200`, JSON-RPC initialize response                                                        | Both specs                                |
+| Repeated requests reuse the same valid token without widening access | HTTP `200` for each same-session request                                                        | `agent-runner-mcp.controller.spec.ts`     |
+| Normal Gallery `AuthGuard` would otherwise run                       | `ctx.authenticate` is not called                                                                | `agent-runner-mcp.controller.spec.ts`     |
+| Request body is not syntactically valid JSON                         | HTTP `400`, MCP service not called                                                              | `agent-runner-mcp.controller.spec.ts`     |
+| Parsed body is `null`                                                | JSON-RPC `-32600`, id `null`                                                                    | `agent-mcp.service.spec.ts`               |
+| Parsed body is an array batch                                        | JSON-RPC `-32600`, id `null`, unsupported batch message                                         | `agent-mcp.service.spec.ts`               |
+| Missing `jsonrpc`                                                    | JSON-RPC `-32600`                                                                               | `agent-mcp.service.spec.ts`               |
+| Missing `id`                                                         | JSON-RPC `-32600`, id `null`                                                                    | `agent-mcp.service.spec.ts`               |
+| Unsupported `id` type                                                | JSON-RPC `-32600`, id `null`                                                                    | `agent-mcp.service.spec.ts`               |
+| Missing `method`                                                     | JSON-RPC `-32600`                                                                               | `agent-mcp.service.spec.ts`               |
+| Unknown method                                                       | JSON-RPC `-32601` with method in `data`                                                         | `agent-mcp.service.spec.ts`               |
+| `tools/list` before slice 2                                          | JSON-RPC `-32601`                                                                               | `agent-mcp.service.spec.ts`               |
+| `tools/call` before slice 3                                          | JSON-RPC `-32601`                                                                               | `agent-mcp.service.spec.ts`               |
+| Accidental domain service wiring                                     | `rg` verification finds no `AgentToolService` or `AgentOperationPlanService` in MCP slice files | Final verification                        |
 
 The design's closed, deleted, or wrong-owner `agent_session` edge cases are not
 loaded by this protocol skeleton. They remain covered by the existing service
@@ -650,9 +650,9 @@ describe(AgentRunnerMcpController.name, () => {
   it.each([undefined, '', 'Basic abc', 'Bearer ', 'Bearer token extra'])(
     'rejects missing or invalid bearer auth %s without verifying the token',
     async (header) => {
-      const requestBuilder = request(ctx.getHttpServer()).post(`/agent/internal/mcp/sessions/${sessionId}`).send(
-        initializeRequest,
-      );
+      const requestBuilder = request(ctx.getHttpServer())
+        .post(`/agent/internal/mcp/sessions/${sessionId}`)
+        .send(initializeRequest);
       if (header !== undefined) {
         requestBuilder.set('Authorization', header);
       }

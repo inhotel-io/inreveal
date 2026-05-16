@@ -66,7 +66,7 @@ Slice 3 supports these MCP `tools/call` names:
   AgentToolName.ReadAssetOriginals,
   AgentToolName.ListAlbums,
   AgentToolName.ReadAlbum,
-]
+];
 ```
 
 Each supported tool delegates to the existing service method:
@@ -150,6 +150,7 @@ Each behavior bundle starts with failing tests. Do not edit production files for
 ### Task 1: Write Failing MCP Service Tests For Read Tool Calls
 
 **Files:**
+
 - Modify: `server/src/services/agent-mcp.service.spec.ts`
 
 - [ ] **Step 1: Add imports and test setup for read-tool calls**
@@ -168,30 +169,30 @@ import { automock, type AutoMocked } from 'test/utils';
 Update the setup:
 
 ```ts
-  let registry: AgentMcpToolRegistryService;
-  let toolService: AutoMocked<AgentToolService>;
-  let sut: AgentMcpService;
+let registry: AgentMcpToolRegistryService;
+let toolService: AutoMocked<AgentToolService>;
+let sut: AgentMcpService;
 
-  const sessionId = factory.uuid();
-  const userId = factory.uuid();
-  const auth = { user: { id: userId } } as AuthDto;
+const sessionId = factory.uuid();
+const userId = factory.uuid();
+const auth = { user: { id: userId } } as AuthDto;
 
-  beforeEach(() => {
-    registry = new AgentMcpToolRegistryService();
-    toolService = automock(AgentToolService, { strict: false });
-    sut = new AgentMcpService(registry, toolService);
-  });
+beforeEach(() => {
+  registry = new AgentMcpToolRegistryService();
+  toolService = automock(AgentToolService, { strict: false });
+  sut = new AgentMcpService(registry, toolService);
+});
 ```
 
 Change every existing `sut.handle(request)` assertion in this spec to `await sut.handle(auth, sessionId, request)` and mark the containing tests `async`. For the initialized notification test, use:
 
 ```ts
-    await expect(
-      sut.handle(auth, sessionId, {
-        jsonrpc: '2.0',
-        method: 'notifications/initialized',
-      }),
-    ).resolves.toBeUndefined();
+await expect(
+  sut.handle(auth, sessionId, {
+    jsonrpc: '2.0',
+    method: 'notifications/initialized',
+  }),
+).resolves.toBeUndefined();
 ```
 
 Update the existing unsupported-method parameterized test to remove `tools/call`; after Slice 3 it should continue to check only truly unsupported methods such as `resources/list`. Malformed `tools/call` params coverage is added in Task 3.
@@ -201,85 +202,92 @@ Update the existing unsupported-method parameterized test to remove `tools/call`
 Append these tests after the existing `tools/list` tests:
 
 ```ts
-  const makeToolCallRequest = (toolName: AgentToolName, args: unknown) => ({
-    jsonrpc: '2.0',
-    id: `${toolName}-call`,
-    method: 'tools/call',
-    params: {
-      name: toolName,
-      arguments: args,
-    },
+const makeToolCallRequest = (toolName: AgentToolName, args: unknown) => ({
+  jsonrpc: '2.0',
+  id: `${toolName}-call`,
+  method: 'tools/call',
+  params: {
+    name: toolName,
+    arguments: args,
+  },
+});
+
+const expectToolResult = (response: AgentMcpSuccessResponse, structuredContent: unknown) => {
+  const result = response.result as AgentMcpToolCallResult;
+
+  expect(result).toEqual({
+    content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
+    structuredContent,
   });
+};
 
-  const expectToolResult = (response: AgentMcpSuccessResponse, structuredContent: unknown) => {
-    const result = response.result as AgentMcpToolCallResult;
-
-    expect(result).toEqual({
-      content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
-      structuredContent,
-    });
-  };
-
-  it.each([
-    {
-      toolName: AgentToolName.SearchAssets,
-      args: { filters: { isFavorite: true }, limit: 5 },
-      serviceMethod: 'searchAssets' as const,
-      serviceResult: { status: 'success', toolCall: null, assets: [], nextPage: null },
-    },
-    {
-      toolName: AgentToolName.ReadAssetMetadata,
-      args: { assetIds: [factory.uuid()] },
-      serviceMethod: 'readAssetMetadata' as const,
-      serviceResult: { status: 'success', toolCall: null, assets: [] },
-    },
-    {
-      toolName: AgentToolName.ReadAssetPreviews,
-      args: { assetIds: [factory.uuid()] },
-      serviceMethod: 'readAssetPreviews' as const,
-      serviceResult: { status: 'success', toolCall: null, previews: [] },
-    },
-    {
-      toolName: AgentToolName.ReadAssetOriginals,
-      args: { assetIds: [factory.uuid()] },
-      serviceMethod: 'readAssetOriginals' as const,
-      serviceResult: { status: 'success', toolCall: null, originals: [] },
-    },
-    {
-      toolName: AgentToolName.ListAlbums,
-      args: {},
-      serviceMethod: 'listAlbums' as const,
-      serviceResult: { status: 'success', toolCall: null, albums: [] },
-    },
-    {
-      toolName: AgentToolName.ReadAlbum,
-      args: { albumId: factory.uuid() },
-      serviceMethod: 'readAlbum' as const,
-      serviceResult: { status: 'success', toolCall: null, album: { id: factory.uuid(), assetIds: [] } },
-    },
-  ])('delegates $toolName to AgentToolService and wraps the result', async ({ toolName, args, serviceMethod, serviceResult }) => {
+it.each([
+  {
+    toolName: AgentToolName.SearchAssets,
+    args: { filters: { isFavorite: true }, limit: 5 },
+    serviceMethod: 'searchAssets' as const,
+    serviceResult: { status: 'success', toolCall: null, assets: [], nextPage: null },
+  },
+  {
+    toolName: AgentToolName.ReadAssetMetadata,
+    args: { assetIds: [factory.uuid()] },
+    serviceMethod: 'readAssetMetadata' as const,
+    serviceResult: { status: 'success', toolCall: null, assets: [] },
+  },
+  {
+    toolName: AgentToolName.ReadAssetPreviews,
+    args: { assetIds: [factory.uuid()] },
+    serviceMethod: 'readAssetPreviews' as const,
+    serviceResult: { status: 'success', toolCall: null, previews: [] },
+  },
+  {
+    toolName: AgentToolName.ReadAssetOriginals,
+    args: { assetIds: [factory.uuid()] },
+    serviceMethod: 'readAssetOriginals' as const,
+    serviceResult: { status: 'success', toolCall: null, originals: [] },
+  },
+  {
+    toolName: AgentToolName.ListAlbums,
+    args: {},
+    serviceMethod: 'listAlbums' as const,
+    serviceResult: { status: 'success', toolCall: null, albums: [] },
+  },
+  {
+    toolName: AgentToolName.ReadAlbum,
+    args: { albumId: factory.uuid() },
+    serviceMethod: 'readAlbum' as const,
+    serviceResult: { status: 'success', toolCall: null, album: { id: factory.uuid(), assetIds: [] } },
+  },
+])(
+  'delegates $toolName to AgentToolService and wraps the result',
+  async ({ toolName, args, serviceMethod, serviceResult }) => {
     toolService[serviceMethod].mockResolvedValue(serviceResult as never);
-
-    const response = (await sut.handle(auth, sessionId, makeToolCallRequest(toolName, args))) as AgentMcpSuccessResponse;
-
-    expect(toolService[serviceMethod]).toHaveBeenCalledTimes(1);
-    expect(toolService[serviceMethod]).toHaveBeenCalledWith(auth, sessionId, args);
-    expectToolResult(response, serviceResult);
-  });
-
-  it('delegates DTO-transformed search defaults instead of raw search arguments', async () => {
-    const serviceResult = { status: 'success', toolCall: null, assets: [], nextPage: null };
-    toolService.searchAssets.mockResolvedValue(serviceResult as never);
 
     const response = (await sut.handle(
       auth,
       sessionId,
-      makeToolCallRequest(AgentToolName.SearchAssets, {}),
+      makeToolCallRequest(toolName, args),
     )) as AgentMcpSuccessResponse;
 
-    expect(toolService.searchAssets).toHaveBeenCalledWith(auth, sessionId, { filters: {}, limit: 10_000 });
+    expect(toolService[serviceMethod]).toHaveBeenCalledTimes(1);
+    expect(toolService[serviceMethod]).toHaveBeenCalledWith(auth, sessionId, args);
     expectToolResult(response, serviceResult);
-  });
+  },
+);
+
+it('delegates DTO-transformed search defaults instead of raw search arguments', async () => {
+  const serviceResult = { status: 'success', toolCall: null, assets: [], nextPage: null };
+  toolService.searchAssets.mockResolvedValue(serviceResult as never);
+
+  const response = (await sut.handle(
+    auth,
+    sessionId,
+    makeToolCallRequest(AgentToolName.SearchAssets, {}),
+  )) as AgentMcpSuccessResponse;
+
+  expect(toolService.searchAssets).toHaveBeenCalledWith(auth, sessionId, { filters: {}, limit: 10_000 });
+  expectToolResult(response, serviceResult);
+});
 ```
 
 - [ ] **Step 3: Add approval, denial, and retry result tests**
@@ -287,55 +295,55 @@ Append these tests after the existing `tools/list` tests:
 Append:
 
 ```ts
-  it('returns approval-required read responses as normal MCP tool results', async () => {
-    const serviceResult = {
-      status: 'approval-required',
-      toolCall: { id: factory.uuid(), status: 'pending-approval' },
-    };
-    toolService.readAssetPreviews.mockResolvedValue(serviceResult as never);
+it('returns approval-required read responses as normal MCP tool results', async () => {
+  const serviceResult = {
+    status: 'approval-required',
+    toolCall: { id: factory.uuid(), status: 'pending-approval' },
+  };
+  toolService.readAssetPreviews.mockResolvedValue(serviceResult as never);
 
-    const response = (await sut.handle(
-      auth,
-      sessionId,
-      makeToolCallRequest(AgentToolName.ReadAssetPreviews, { assetIds: [factory.uuid()] }),
-    )) as AgentMcpSuccessResponse;
+  const response = (await sut.handle(
+    auth,
+    sessionId,
+    makeToolCallRequest(AgentToolName.ReadAssetPreviews, { assetIds: [factory.uuid()] }),
+  )) as AgentMcpSuccessResponse;
 
-    expectToolResult(response, serviceResult);
-    expect((response.result as AgentMcpToolCallResult).isError).toBeUndefined();
-  });
+  expectToolResult(response, serviceResult);
+  expect((response.result as AgentMcpToolCallResult).isError).toBeUndefined();
+});
 
-  it('returns denied read responses as normal MCP tool results', async () => {
-    const serviceResult = {
-      status: 'denied',
-      reason: 'User denied access',
-      toolCall: { id: factory.uuid(), status: 'completed' },
-    };
-    toolService.readAssetOriginals.mockResolvedValue(serviceResult as never);
+it('returns denied read responses as normal MCP tool results', async () => {
+  const serviceResult = {
+    status: 'denied',
+    reason: 'User denied access',
+    toolCall: { id: factory.uuid(), status: 'completed' },
+  };
+  toolService.readAssetOriginals.mockResolvedValue(serviceResult as never);
 
-    const response = (await sut.handle(
-      auth,
-      sessionId,
-      makeToolCallRequest(AgentToolName.ReadAssetOriginals, { assetIds: [factory.uuid()] }),
-    )) as AgentMcpSuccessResponse;
+  const response = (await sut.handle(
+    auth,
+    sessionId,
+    makeToolCallRequest(AgentToolName.ReadAssetOriginals, { assetIds: [factory.uuid()] }),
+  )) as AgentMcpSuccessResponse;
 
-    expectToolResult(response, serviceResult);
-    expect((response.result as AgentMcpToolCallResult).isError).toBeUndefined();
-  });
+  expectToolResult(response, serviceResult);
+  expect((response.result as AgentMcpToolCallResult).isError).toBeUndefined();
+});
 
-  it('passes retry toolCallId arguments through to the read service', async () => {
-    const toolCallId = factory.uuid();
-    const serviceResult = { status: 'success', toolCall: { id: toolCallId }, previews: [] };
-    toolService.readAssetPreviews.mockResolvedValue(serviceResult as never);
+it('passes retry toolCallId arguments through to the read service', async () => {
+  const toolCallId = factory.uuid();
+  const serviceResult = { status: 'success', toolCall: { id: toolCallId }, previews: [] };
+  toolService.readAssetPreviews.mockResolvedValue(serviceResult as never);
 
-    const response = (await sut.handle(
-      auth,
-      sessionId,
-      makeToolCallRequest(AgentToolName.ReadAssetPreviews, { toolCallId }),
-    )) as AgentMcpSuccessResponse;
+  const response = (await sut.handle(
+    auth,
+    sessionId,
+    makeToolCallRequest(AgentToolName.ReadAssetPreviews, { toolCallId }),
+  )) as AgentMcpSuccessResponse;
 
-    expect(toolService.readAssetPreviews).toHaveBeenCalledWith(auth, sessionId, { toolCallId });
-    expectToolResult(response, serviceResult);
-  });
+  expect(toolService.readAssetPreviews).toHaveBeenCalledWith(auth, sessionId, { toolCallId });
+  expectToolResult(response, serviceResult);
+});
 ```
 
 - [ ] **Step 4: Run service tests to verify they fail**
@@ -351,6 +359,7 @@ Expected: FAIL because `AgentMcpService` does not accept `auth`, `sessionId`, or
 ### Task 2: Implement Read Tool Delegation And MCP Result Wrapping
 
 **Files:**
+
 - Modify: `server/src/types/agent-mcp.types.ts`
 - Modify: `server/src/services/agent-mcp.service.ts`
 
@@ -400,9 +409,9 @@ Change the constructor and `handle` signature:
 Add this branch after the `tools/list` branch:
 
 ```ts
-    if (request.method === 'tools/call') {
-      return this.handleToolCall(auth, sessionId, request.id, request.params);
-    }
+if (request.method === 'tools/call') {
+  return this.handleToolCall(auth, sessionId, request.id, request.params);
+}
 ```
 
 Change `AgentMcpRequest` to include params:
@@ -532,13 +541,13 @@ Add this helper near `error()`:
 Replace the inline initialize and tools/list success response objects with `this.success(request.id, ...)`:
 
 ```ts
-      return this.success(request.id, this.initializeResult());
+return this.success(request.id, this.initializeResult());
 ```
 
 ```ts
-      return this.success(request.id, {
-        tools: this.toolRegistry.listTools(),
-      });
+return this.success(request.id, {
+  tools: this.toolRegistry.listTools(),
+});
 ```
 
 - [ ] **Step 5: Run service tests to verify the valid read-tool path passes**
@@ -563,6 +572,7 @@ git commit -m "feat: delegate mcp read tool calls"
 ### Task 3: Add Failing Edge-Case Tests For Validation And Protocol Errors
 
 **Files:**
+
 - Modify: `server/src/services/agent-mcp.service.spec.ts`
 
 - [ ] **Step 1: Add validation-result assertion helper**
@@ -570,17 +580,17 @@ git commit -m "feat: delegate mcp read tool calls"
 In `server/src/services/agent-mcp.service.spec.ts`, add:
 
 ```ts
-  const expectToolValidationError = (response: AgentMcpSuccessResponse, path: string) => {
-    const result = response.result as AgentMcpToolCallResult;
+const expectToolValidationError = (response: AgentMcpSuccessResponse, path: string) => {
+  const result = response.result as AgentMcpToolCallResult;
 
-    expect(result.isError).toBe(true);
-    expect(result.structuredContent).toMatchObject({
-      status: 'error',
-      error: 'Invalid tool arguments',
-      issues: expect.arrayContaining([expect.objectContaining({ path })]),
-    });
-    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
-  };
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent).toMatchObject({
+    status: 'error',
+    error: 'Invalid tool arguments',
+    issues: expect.arrayContaining([expect.objectContaining({ path })]),
+  });
+  expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+};
 ```
 
 - [ ] **Step 2: Add malformed-argument tests**
@@ -588,70 +598,70 @@ In `server/src/services/agent-mcp.service.spec.ts`, add:
 Append:
 
 ```ts
-  it.each([
-    {
-      name: 'missing arguments',
-      args: undefined,
-      expectedPath: 'arguments',
-    },
-    {
-      name: 'arguments array',
-      args: [factory.uuid()],
-      expectedPath: 'arguments',
-    },
-    {
-      name: 'unknown strict DTO field',
-      args: { filters: {}, unexpected: true },
-      expectedPath: '',
-    },
-    {
-      name: 'missing metadata assetIds or toolCallId',
-      args: {},
-      expectedPath: '',
-      toolName: AgentToolName.ReadAssetMetadata,
-    },
-    {
-      name: 'empty asset id array',
-      args: { assetIds: [] },
-      expectedPath: 'assetIds',
-      toolName: AgentToolName.ReadAssetMetadata,
-    },
-    {
-      name: 'invalid asset id',
-      args: { assetIds: ['not-a-uuid'] },
-      expectedPath: 'assetIds.0',
-      toolName: AgentToolName.ReadAssetMetadata,
-    },
-    {
-      name: 'invalid album id',
-      args: { albumId: 'not-a-uuid' },
-      expectedPath: 'albumId',
-      toolName: AgentToolName.ReadAlbum,
-    },
-    {
-      name: 'wrong primitive search limit',
-      args: { limit: 'ten' },
-      expectedPath: 'limit',
-      toolName: AgentToolName.SearchAssets,
-    },
-    {
-      name: 'excessive search limit',
-      args: { limit: 10_001 },
-      expectedPath: 'limit',
-      toolName: AgentToolName.SearchAssets,
-    },
-  ])('returns isError tool result for malformed arguments: $name', async ({ args, expectedPath, toolName }) => {
-    const response = (await sut.handle(
-      auth,
-      sessionId,
-      makeToolCallRequest(toolName ?? AgentToolName.SearchAssets, args),
-    )) as AgentMcpSuccessResponse;
+it.each([
+  {
+    name: 'missing arguments',
+    args: undefined,
+    expectedPath: 'arguments',
+  },
+  {
+    name: 'arguments array',
+    args: [factory.uuid()],
+    expectedPath: 'arguments',
+  },
+  {
+    name: 'unknown strict DTO field',
+    args: { filters: {}, unexpected: true },
+    expectedPath: '',
+  },
+  {
+    name: 'missing metadata assetIds or toolCallId',
+    args: {},
+    expectedPath: '',
+    toolName: AgentToolName.ReadAssetMetadata,
+  },
+  {
+    name: 'empty asset id array',
+    args: { assetIds: [] },
+    expectedPath: 'assetIds',
+    toolName: AgentToolName.ReadAssetMetadata,
+  },
+  {
+    name: 'invalid asset id',
+    args: { assetIds: ['not-a-uuid'] },
+    expectedPath: 'assetIds.0',
+    toolName: AgentToolName.ReadAssetMetadata,
+  },
+  {
+    name: 'invalid album id',
+    args: { albumId: 'not-a-uuid' },
+    expectedPath: 'albumId',
+    toolName: AgentToolName.ReadAlbum,
+  },
+  {
+    name: 'wrong primitive search limit',
+    args: { limit: 'ten' },
+    expectedPath: 'limit',
+    toolName: AgentToolName.SearchAssets,
+  },
+  {
+    name: 'excessive search limit',
+    args: { limit: 10_001 },
+    expectedPath: 'limit',
+    toolName: AgentToolName.SearchAssets,
+  },
+])('returns isError tool result for malformed arguments: $name', async ({ args, expectedPath, toolName }) => {
+  const response = (await sut.handle(
+    auth,
+    sessionId,
+    makeToolCallRequest(toolName ?? AgentToolName.SearchAssets, args),
+  )) as AgentMcpSuccessResponse;
 
-    expectToolValidationError(response, expectedPath);
-    expect(toolService.searchAssets).not.toHaveBeenCalled();
-    expect(toolService.readAssetMetadata).not.toHaveBeenCalled();
-    expect(toolService.readAlbum).not.toHaveBeenCalled();
-  });
+  expectToolValidationError(response, expectedPath);
+  expect(toolService.searchAssets).not.toHaveBeenCalled();
+  expect(toolService.readAssetMetadata).not.toHaveBeenCalled();
+  expect(toolService.readAlbum).not.toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 3: Add protocol-error and internal-error tests**
@@ -659,104 +669,100 @@ Append:
 Append:
 
 ```ts
-  it.each([
-    ['missing params', undefined],
-    ['params is not object', 'bad-params'],
-    ['missing name', { arguments: {} }],
-    ['non-string name', { name: 12, arguments: {} }],
-  ] as const)('returns invalid params for tools/call when %s', async (_name, params) => {
-    await expect(
-      sut.handle(auth, sessionId, {
-        jsonrpc: '2.0',
-        id: 'bad-call',
-        method: 'tools/call',
-        params,
-      }),
-    ).resolves.toEqual({
+it.each([
+  ['missing params', undefined],
+  ['params is not object', 'bad-params'],
+  ['missing name', { arguments: {} }],
+  ['non-string name', { name: 12, arguments: {} }],
+] as const)('returns invalid params for tools/call when %s', async (_name, params) => {
+  await expect(
+    sut.handle(auth, sessionId, {
       jsonrpc: '2.0',
       id: 'bad-call',
-      error: {
-        code: -32_602,
-        message: 'Invalid params',
-      },
-    });
+      method: 'tools/call',
+      params,
+    }),
+  ).resolves.toEqual({
+    jsonrpc: '2.0',
+    id: 'bad-call',
+    error: {
+      code: -32_602,
+      message: 'Invalid params',
+    },
   });
+});
 
-  it('returns a protocol error for an unknown tool name', async () => {
-    await expect(
-      sut.handle(auth, sessionId, {
-        jsonrpc: '2.0',
-        id: 'unknown-tool',
-        method: 'tools/call',
-        params: { name: 'deleteEverything', arguments: {} },
-      }),
-    ).resolves.toEqual({
+it('returns a protocol error for an unknown tool name', async () => {
+  await expect(
+    sut.handle(auth, sessionId, {
       jsonrpc: '2.0',
       id: 'unknown-tool',
-      error: {
-        code: -32_602,
-        message: 'Unknown tool',
-        data: { toolName: 'deleteEverything' },
-      },
-    });
+      method: 'tools/call',
+      params: { name: 'deleteEverything', arguments: {} },
+    }),
+  ).resolves.toEqual({
+    jsonrpc: '2.0',
+    id: 'unknown-tool',
+    error: {
+      code: -32_602,
+      message: 'Unknown tool',
+      data: { toolName: 'deleteEverything' },
+    },
   });
+});
 
-  it('returns a protocol error for planning tools until slice 4', async () => {
-    await expect(
-      sut.handle(auth, sessionId, {
-        jsonrpc: '2.0',
-        id: 'planning-tool',
-        method: 'tools/call',
-        params: { name: AgentToolName.ProposeAlbumOperations, arguments: { summary: 'Plan', operations: [] } },
-      }),
-    ).resolves.toEqual({
+it('returns a protocol error for planning tools until slice 4', async () => {
+  await expect(
+    sut.handle(auth, sessionId, {
       jsonrpc: '2.0',
       id: 'planning-tool',
-      error: {
-        code: -32_602,
-        message: 'Tool not supported in this slice',
-        data: { toolName: AgentToolName.ProposeAlbumOperations },
-      },
-    });
+      method: 'tools/call',
+      params: { name: AgentToolName.ProposeAlbumOperations, arguments: { summary: 'Plan', operations: [] } },
+    }),
+  ).resolves.toEqual({
+    jsonrpc: '2.0',
+    id: 'planning-tool',
+    error: {
+      code: -32_602,
+      message: 'Tool not supported in this slice',
+      data: { toolName: AgentToolName.ProposeAlbumOperations },
+    },
   });
+});
 
-  it('converts unexpected service failures to redacted JSON-RPC internal errors', async () => {
-    toolService.readAssetMetadata.mockRejectedValue(
-      new Error('secret bearer token abc /srv/gallery/provider-request.json stacktrace'),
-    );
+it('converts unexpected service failures to redacted JSON-RPC internal errors', async () => {
+  toolService.readAssetMetadata.mockRejectedValue(
+    new Error('secret bearer token abc /srv/gallery/provider-request.json stacktrace'),
+  );
 
-    await expect(
-      sut.handle(
-        auth,
-        sessionId,
-        makeToolCallRequest(AgentToolName.ReadAssetMetadata, { assetIds: [factory.uuid()] }),
-      ),
-    ).resolves.toEqual({
-      jsonrpc: '2.0',
-      id: `${AgentToolName.ReadAssetMetadata}-call`,
-      error: {
-        code: -32_603,
-        message: 'Internal error',
-      },
-    });
+  await expect(
+    sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.ReadAssetMetadata, { assetIds: [factory.uuid()] })),
+  ).resolves.toEqual({
+    jsonrpc: '2.0',
+    id: `${AgentToolName.ReadAssetMetadata}-call`,
+    error: {
+      code: -32_603,
+      message: 'Internal error',
+    },
   });
+});
 
-  it('converts rejected retry toolCallId failures to redacted JSON-RPC internal errors', async () => {
-    const toolCallId = factory.uuid();
-    toolService.readAssetMetadata.mockRejectedValue(new Error('Agent tool call not found for another session'));
+it('converts rejected retry toolCallId failures to redacted JSON-RPC internal errors', async () => {
+  const toolCallId = factory.uuid();
+  toolService.readAssetMetadata.mockRejectedValue(new Error('Agent tool call not found for another session'));
 
-    await expect(
-      sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.ReadAssetMetadata, { toolCallId })),
-    ).resolves.toEqual({
-      jsonrpc: '2.0',
-      id: `${AgentToolName.ReadAssetMetadata}-call`,
-      error: {
-        code: -32_603,
-        message: 'Internal error',
-      },
-    });
-    expect(toolService.readAssetMetadata).toHaveBeenCalledWith(auth, sessionId, { toolCallId });
+  await expect(
+    sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.ReadAssetMetadata, { toolCallId })),
+  ).resolves.toEqual({
+    jsonrpc: '2.0',
+    id: `${AgentToolName.ReadAssetMetadata}-call`,
+    error: {
+      code: -32_603,
+      message: 'Internal error',
+    },
   });
+  expect(toolService.readAssetMetadata).toHaveBeenCalledWith(auth, sessionId, { toolCallId });
+});
 ```
 
 - [ ] **Step 4: Run service tests to verify edge tests fail**
@@ -772,6 +778,7 @@ Expected: FAIL because missing and non-object `arguments` still surface generic 
 ### Task 4: Implement Validation And Protocol Error Handling
 
 **Files:**
+
 - Modify: `server/src/services/agent-mcp.service.ts`
 
 - [ ] **Step 1: Add argument validation before schema parsing**
@@ -779,12 +786,12 @@ Expected: FAIL because missing and non-object `arguments` still surface generic 
 In `invokeReadTool`, replace the direct `schema.safeParse(args)` call with:
 
 ```ts
-    const argumentValidation = this.validateToolArguments(args);
-    if (!argumentValidation.valid) {
-      return this.success(id, this.argumentErrorResult(argumentValidation.path, argumentValidation.message));
-    }
+const argumentValidation = this.validateToolArguments(args);
+if (!argumentValidation.valid) {
+  return this.success(id, this.argumentErrorResult(argumentValidation.path, argumentValidation.message));
+}
 
-    const parsed = schema.safeParse(argumentValidation.value);
+const parsed = schema.safeParse(argumentValidation.value);
 ```
 
 Add this helper:
@@ -849,6 +856,7 @@ git commit -m "feat: validate mcp read tool calls"
 ### Task 5: Add Controller Auth Context Tests And Wiring
 
 **Files:**
+
 - Modify: `server/src/controllers/agent-runner-mcp.controller.spec.ts`
 - Modify: `server/src/controllers/agent-runner-mcp.controller.ts`
 - Modify: `server/src/services/agent-mcp.service.spec.ts`
@@ -858,56 +866,52 @@ git commit -m "feat: validate mcp read tool calls"
 In `server/src/controllers/agent-runner-mcp.controller.spec.ts`, update the mocked-service setup:
 
 ```ts
-    service.handle.mockResolvedValue(initializeResponse);
+service.handle.mockResolvedValue(initializeResponse);
 ```
 
 Update existing mocked-service expectations from:
 
 ```ts
-    expect(service.handle).toHaveBeenCalledWith(initializeRequest);
+expect(service.handle).toHaveBeenCalledWith(initializeRequest);
 ```
 
 to:
 
 ```ts
-    expect(service.handle).toHaveBeenCalledWith(
-      expect.objectContaining({ user: { id: userId } }),
-      sessionId,
-      initializeRequest,
-    );
+expect(service.handle).toHaveBeenCalledWith(
+  expect.objectContaining({ user: { id: userId } }),
+  sessionId,
+  initializeRequest,
+);
 ```
 
 Update the repeated-request expectations:
 
 ```ts
-    expect(service.handle).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ user: { id: userId } }),
-      sessionId,
-      initializeRequest,
-    );
-    expect(service.handle).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ user: { id: userId } }),
-      sessionId,
-      secondRequest,
-    );
+expect(service.handle).toHaveBeenNthCalledWith(
+  1,
+  expect.objectContaining({ user: { id: userId } }),
+  sessionId,
+  initializeRequest,
+);
+expect(service.handle).toHaveBeenNthCalledWith(
+  2,
+  expect.objectContaining({ user: { id: userId } }),
+  sessionId,
+  secondRequest,
+);
 ```
 
 For notification test setup, use:
 
 ```ts
-    service.handle.mockResolvedValue(undefined);
+service.handle.mockResolvedValue(undefined);
 ```
 
 Update the notification expectation to:
 
 ```ts
-    expect(service.handle).toHaveBeenCalledWith(
-      expect.objectContaining({ user: { id: userId } }),
-      sessionId,
-      notification,
-    );
+expect(service.handle).toHaveBeenCalledWith(expect.objectContaining({ user: { id: userId } }), sessionId, notification);
 ```
 
 - [ ] **Step 2: Add real-service controller test for read `tools/call`**
@@ -921,7 +925,7 @@ import { AgentToolService } from 'src/services/agent-tool.service';
 Inside `describe('with the real MCP service', ...)`, add:
 
 ```ts
-    const realToolService = automock(AgentToolService, { strict: false });
+const realToolService = automock(AgentToolService, { strict: false });
 ```
 
 Add `AgentToolService` to the real controller setup:
@@ -933,47 +937,47 @@ Add `AgentToolService` to the real controller setup:
 Reset it in the nested `beforeEach`:
 
 ```ts
-      realToolService.resetAllMocks();
+realToolService.resetAllMocks();
 ```
 
 Append this test:
 
 ```ts
-    it('passes runner auth and session id through for read tools/call', async () => {
-      const assetId = factory.uuid();
-      const serviceResult = { status: 'success', toolCall: null, assets: [], nextPage: null };
-      realToolService.searchAssets.mockResolvedValue(serviceResult as never);
+it('passes runner auth and session id through for read tools/call', async () => {
+  const assetId = factory.uuid();
+  const serviceResult = { status: 'success', toolCall: null, assets: [], nextPage: null };
+  realToolService.searchAssets.mockResolvedValue(serviceResult as never);
 
-      const { status, body } = await request(realCtx.getHttpServer())
-        .post(`/agent/internal/mcp/sessions/${sessionId}`)
-        .set('Authorization', authorization)
-        .send({
-          jsonrpc: '2.0',
-          id: 'call-1',
-          method: 'tools/call',
-          params: {
-            name: AgentToolName.SearchAssets,
-            arguments: { filters: { tagIds: [assetId] }, limit: 10 },
-          },
-        });
-
-      expect(status).toBe(200);
-      expect(tokenService.verify).toHaveBeenCalledWith(token);
-      expect(realCtx.authenticate).not.toHaveBeenCalled();
-      expect(realToolService.searchAssets).toHaveBeenCalledWith(
-        expect.objectContaining({ user: { id: userId } }),
-        sessionId,
-        { filters: { tagIds: [assetId] }, limit: 10 },
-      );
-      expect(body).toEqual({
-        jsonrpc: '2.0',
-        id: 'call-1',
-        result: {
-          content: [{ type: 'text', text: JSON.stringify(serviceResult) }],
-          structuredContent: serviceResult,
-        },
-      });
+  const { status, body } = await request(realCtx.getHttpServer())
+    .post(`/agent/internal/mcp/sessions/${sessionId}`)
+    .set('Authorization', authorization)
+    .send({
+      jsonrpc: '2.0',
+      id: 'call-1',
+      method: 'tools/call',
+      params: {
+        name: AgentToolName.SearchAssets,
+        arguments: { filters: { tagIds: [assetId] }, limit: 10 },
+      },
     });
+
+  expect(status).toBe(200);
+  expect(tokenService.verify).toHaveBeenCalledWith(token);
+  expect(realCtx.authenticate).not.toHaveBeenCalled();
+  expect(realToolService.searchAssets).toHaveBeenCalledWith(
+    expect.objectContaining({ user: { id: userId } }),
+    sessionId,
+    { filters: { tagIds: [assetId] }, limit: 10 },
+  );
+  expect(body).toEqual({
+    jsonrpc: '2.0',
+    id: 'call-1',
+    result: {
+      content: [{ type: 'text', text: JSON.stringify(serviceResult) }],
+      structuredContent: serviceResult,
+    },
+  });
+});
 ```
 
 - [ ] **Step 3: Run controller tests to verify they fail**
@@ -1047,6 +1051,7 @@ git commit -m "feat: pass mcp auth context to read tools"
 ### Task 6: Final Verification And Review
 
 **Files:**
+
 - Verify only
 
 - [ ] **Step 1: Run full Slice 3 focused server suite**

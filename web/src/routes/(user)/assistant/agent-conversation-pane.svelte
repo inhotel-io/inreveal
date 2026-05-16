@@ -18,7 +18,10 @@
 
   let { session, title = null, onNewChat, onTitleDiscovered, onSessionUpdated }: Props = $props();
 
-  let detailsOpen = $state(false);
+  let detailsOpen = $derived.by(() => {
+    void session.id;
+    return false;
+  });
   let pendingApprovalCount = $state(0);
   let cancelBusy = $state(false);
   let lifecycleError = $state<string | null>(null);
@@ -27,9 +30,7 @@
   let destroyed = false;
 
   const composerState = $derived(getAgentSessionComposerState(session.status, { pendingApprovalCount }));
-  const composerDisabledReason = $derived(
-    composerState.disabledReasonKey ? $t(composerState.disabledReasonKey) : null,
-  );
+  const composerDisabledReason = $derived(composerState.disabledReasonKey ? $t(composerState.disabledReasonKey) : null);
   const terminalActionLabel = $derived(
     composerState.terminalActionLabelKey ? $t(composerState.terminalActionLabelKey) : undefined,
   );
@@ -92,11 +93,6 @@
   const cancelHandler = $derived(isAgentSessionCancellable(session.status) ? cancelSelectedSession : null);
 
   $effect(() => {
-    detailsOpen = false;
-  });
-
-  $effect(() => {
-    session.id;
     pendingApprovalCount = 0;
     lifecycleError = null;
     cancelBusy = false;
@@ -145,7 +141,7 @@
         {session}
         {actionDock}
         composerDisabled={composerState.disabled}
-        composerDisabledReason={composerDisabledReason}
+        {composerDisabledReason}
         composerPlaceholder={$t(composerState.placeholderKey)}
         submitLabel={$t(composerState.submitLabelKey)}
         {terminalActionLabel}

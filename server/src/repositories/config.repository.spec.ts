@@ -166,18 +166,14 @@ describe('getEnv', () => {
     it('should reject the retired tool gateway env name', () => {
       process.env.IMMICH_AGENT_TOOL_GATEWAY_URL = 'http://immich-server:2283/api/agent/internal/tools';
 
-      expect(() => getEnv()).toThrowError(
-        '[IMMICH_AGENT_TOOL_GATEWAY_URL] Use IMMICH_AGENT_MCP_GATEWAY_URL instead',
-      );
+      expect(() => getEnv()).toThrowError('[IMMICH_AGENT_TOOL_GATEWAY_URL] Use IMMICH_AGENT_MCP_GATEWAY_URL instead');
     });
 
     it('should reject the retired tool gateway env name even when the MCP gateway is also set', () => {
       process.env.IMMICH_AGENT_TOOL_GATEWAY_URL = 'http://immich-server:2283/api/agent/internal/tools';
       process.env.IMMICH_AGENT_MCP_GATEWAY_URL = 'http://immich-server:2283/api/agent/internal/mcp';
 
-      expect(() => getEnv()).toThrowError(
-        '[IMMICH_AGENT_TOOL_GATEWAY_URL] Use IMMICH_AGENT_MCP_GATEWAY_URL instead',
-      );
+      expect(() => getEnv()).toThrowError('[IMMICH_AGENT_TOOL_GATEWAY_URL] Use IMMICH_AGENT_MCP_GATEWAY_URL instead');
     });
 
     it('should reject invalid runner URLs', () => {

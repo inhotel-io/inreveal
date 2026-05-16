@@ -291,7 +291,9 @@ describe(AgentOperationPlanController.name, () => {
         plan: {
           ...plan,
           status: AgentOperationPlanStatus.Applied,
-          operations: [{ ...plan.operations[0], status: AgentOperationStatus.Applied, result: { albumId: factory.uuid() } }],
+          operations: [
+            { ...plan.operations[0], status: AgentOperationStatus.Applied, result: { albumId: factory.uuid() } },
+          ],
         },
         appliedOperationIds: [operationId],
         skippedOperationIds: [],
