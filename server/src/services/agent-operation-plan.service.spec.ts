@@ -725,6 +725,48 @@ describe(AgentOperationPlanService.name, () => {
     expect(planRepository.createReplacementRevision).toHaveBeenCalled();
   });
 
+  it('rejects proposed operations when the session stops accepting revisions after validation', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id });
+    const executingToolCall = makeToolCall({ sessionId: session.id, status: AgentToolCallStatus.Executing });
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentLockedIds.mockResolvedValue(new Set());
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+    planRepository.createReplacementRevision.mockResolvedValue(undefined);
+    toolCallRepository.create.mockResolvedValue(executingToolCall);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Late plan.',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add late asset.',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: albumId,
+            assetIds: [assetId],
+            payload: {},
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Agent session is not accepting plan revisions');
+    expect(sessionRepository.update).not.toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.WaitingForPlanReview,
+    });
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      session.id,
+      executingToolCall.id,
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    );
+  });
+
   it('denies locked assets without locked scope and elevated permission', async () => {
     const auth = AuthFactory.create();
     const albumId = newUuid();
@@ -1021,9 +1063,6 @@ describe(AgentOperationPlanService.name, () => {
       failedOperationIds: [],
       plan: { id: plan.id, status: AgentOperationPlanStatus.Applied },
     });
-    expect(sessionRepository.update).toHaveBeenNthCalledWith(1, auth.user.id, session.id, {
-      status: AgentSessionStatus.Applying,
-    });
     expect(albumService.create).toHaveBeenCalledWith(auth, {
       albumName: 'Portugal',
       description: 'Lisbon and Porto',
@@ -1034,7 +1073,7 @@ describe(AgentOperationPlanService.name, () => {
       expect.objectContaining({ id: createOperation.id, status: AgentOperationStatus.Applied }),
       expect.objectContaining({ id: addOperation.id, status: AgentOperationStatus.Applied }),
     ]);
-    expect(sessionRepository.update).toHaveBeenLastCalledWith(auth.user.id, session.id, {
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
       status: AgentSessionStatus.Completed,
       endedAt: expect.any(Date),
     });
@@ -1155,10 +1194,7 @@ describe(AgentOperationPlanService.name, () => {
     await expect(
       sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] }),
     ).rejects.toBe(error);
-    expect(sessionRepository.update).toHaveBeenNthCalledWith(1, auth.user.id, session.id, {
-      status: AgentSessionStatus.Applying,
-    });
-    expect(sessionRepository.update).toHaveBeenLastCalledWith(auth.user.id, session.id, {
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
       status: AgentSessionStatus.Failed,
       endedAt: expect.any(Date),
     });
