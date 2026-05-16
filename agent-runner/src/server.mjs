@@ -1,8 +1,9 @@
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
+import { createE2eRuntime } from './e2e-runtime.mjs';
 import { createPiRuntime } from './pi-runtime.mjs';
 
-const capabilities = {
+const defaultCapabilities = {
   protocolVersion: '2026-05-14',
   streaming: true,
   tools: [],
@@ -47,6 +48,37 @@ const decodeRunnerSessionId = (encodedRunnerSessionId) => {
   }
 };
 
+export const createRuntimeFromEnv = (env = process.env) =>
+  env.GALLERY_AGENT_RUNNER_RUNTIME === 'e2e' ? createE2eRuntime() : createPiRuntime();
+
+const normalizeCapabilities = (capabilities) => {
+  if (
+    !capabilities ||
+    typeof capabilities !== 'object' ||
+    typeof capabilities.protocolVersion !== 'string' ||
+    typeof capabilities.streaming !== 'boolean' ||
+    !Array.isArray(capabilities.tools) ||
+    !Array.isArray(capabilities.models)
+  ) {
+    throw new Error('invalid runtime capabilities');
+  }
+
+  const normalizedCapabilities = {
+    protocolVersion: capabilities.protocolVersion,
+    streaming: capabilities.streaming,
+    tools: capabilities.tools,
+    models: capabilities.models,
+  };
+  if (typeof capabilities.runtime === 'string') {
+    normalizedCapabilities.runtime = capabilities.runtime;
+  }
+
+  return normalizedCapabilities;
+};
+
+const getRuntimeCapabilities = (runtime) =>
+  typeof runtime.getCapabilities === 'function' ? normalizeCapabilities(runtime.getCapabilities()) : defaultCapabilities;
+
 const validateCreateSessionBody = (body) => {
   if (typeof body?.gallerySessionId !== 'string') {
     return 'gallerySessionId is required';
@@ -82,32 +114,13 @@ const validateCreateSessionBody = (body) => {
 };
 
 const normalizeRuntimeCreateSessionResponse = (runnerSession) => {
-  const capabilities = runnerSession?.capabilities;
-  if (
-    typeof runnerSession?.runnerSessionId !== 'string' ||
-    !capabilities ||
-    typeof capabilities !== 'object' ||
-    typeof capabilities.protocolVersion !== 'string' ||
-    typeof capabilities.streaming !== 'boolean' ||
-    !Array.isArray(capabilities.tools) ||
-    !Array.isArray(capabilities.models)
-  ) {
+  if (typeof runnerSession?.runnerSessionId !== 'string') {
     throw new Error('invalid runtime session response');
-  }
-
-  const normalizedCapabilities = {
-    protocolVersion: capabilities.protocolVersion,
-    streaming: capabilities.streaming,
-    tools: capabilities.tools,
-    models: capabilities.models,
-  };
-  if (typeof capabilities.runtime === 'string') {
-    normalizedCapabilities.runtime = capabilities.runtime;
   }
 
   return {
     runnerSessionId: runnerSession.runnerSessionId,
-    capabilities: normalizedCapabilities,
+    capabilities: normalizeCapabilities(runnerSession.capabilities),
   };
 };
 
@@ -130,7 +143,7 @@ const validateMessageBody = (body) => {
 export const startServer = ({
   port = Number(process.env.PORT ?? 4477),
   host = process.env.HOST ?? '127.0.0.1',
-  runtime = createPiRuntime(),
+  runtime = createRuntimeFromEnv(),
 } = {}) => {
   const runnerSessions = new Map();
 
@@ -138,7 +151,7 @@ export const startServer = ({
     const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
 
     if (request.method === 'GET' && url.pathname === '/health') {
-      sendJson(response, 200, { status: 'ok', version: '0.1.0', capabilities });
+      sendJson(response, 200, { status: 'ok', version: '0.1.0', capabilities: getRuntimeCapabilities(runtime) });
       return;
     }
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { startServer } from './server.mjs';
+import { createRuntimeFromEnv, startServer } from './server.mjs';
 
 const parseSse = (body) =>
   body
@@ -120,6 +120,15 @@ describe('agent runner server', () => {
     }
   });
 
+  it('selects the e2e runtime from environment', async () => {
+    const runtime = createRuntimeFromEnv({ GALLERY_AGENT_RUNNER_RUNTIME: 'e2e' });
+
+    const session = await runtime.createSession(createSessionBody({ toolGateway: null }));
+
+    assert.equal(session.runnerSessionId, 'e2e-00000000-0000-4000-8000-000000000100');
+    assert.equal(session.capabilities.runtime, 'e2e');
+  });
+
   it('returns health capabilities', async () => {
     await withServer(createRuntime(), async (baseUrl) => {
       const response = await fetch(`${baseUrl}/health`);
@@ -133,6 +142,36 @@ describe('agent runner server', () => {
           tools: [],
           models: [],
           runtime: 'pi',
+        },
+      });
+    });
+  });
+
+  it('returns runtime-aware health capabilities', async () => {
+    const runtime = {
+      ...createRuntime(),
+      getCapabilities: () => ({
+        protocolVersion: '2026-05-14',
+        streaming: true,
+        tools: ['proposeAlbumOperations'],
+        models: ['e2e-album-organizer'],
+        runtime: 'e2e',
+      }),
+    };
+
+    await withServer(runtime, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/health`);
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), {
+        status: 'ok',
+        version: '0.1.0',
+        capabilities: {
+          protocolVersion: '2026-05-14',
+          streaming: true,
+          tools: ['proposeAlbumOperations'],
+          models: ['e2e-album-organizer'],
+          runtime: 'e2e',
         },
       });
     });
