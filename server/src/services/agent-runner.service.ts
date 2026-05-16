@@ -271,7 +271,7 @@ export class AgentRunnerService {
         gallerySessionId: sessionId,
         ...(toolCallId ? { toolCallId } : {}),
         ...(approvalDecision ? { approvalDecision } : {}),
-        ...(toolResult !== undefined ? { toolResult } : {}),
+        ...(toolResult === undefined ? {} : { toolResult }),
       };
 
       await this.processRunnerStream({
