@@ -28,6 +28,15 @@
     onTitleDiscovered?: (sessionId: string, title: string) => void;
   }
 
+  type AssistantMarkdownInlineSegment = {
+    type: 'text' | 'strong' | 'emphasis';
+    text: string;
+  };
+
+  type AssistantMarkdownBlock =
+    | { type: 'paragraph'; segments: AssistantMarkdownInlineSegment[] }
+    | { type: 'list'; items: AssistantMarkdownInlineSegment[][] };
+
   let {
     session,
     actionDock,
@@ -47,10 +56,14 @@
   let isAssistantActive = $state(false);
   let errorMessage = $state<string | null>(null);
   let streamingText = $state('');
+  let busyFrameIndex = $state(0);
   let lastPublishedTitle: string | null = null;
   let cleanupWebsocketListener: (() => void) | undefined;
 
   const canSend = $derived(draft.trim().length > 0 && !isSending && !isAssistantActive && !composerDisabled);
+  const showAssistantBusyIndicator = $derived((isSending || isAssistantActive) && streamingText.length === 0);
+  const busyFrames = ['-', '\\', '|', '/'];
+  const busyFrame = $derived(busyFrames[busyFrameIndex]);
   const terminalStatuses = new Set<AgentSessionStatus>([
     AgentSessionStatus.Applying,
     AgentSessionStatus.Completed,
@@ -63,6 +76,79 @@
       .filter((block) => block.type === AgentMessageTextBlockType.Text)
       .map((block) => block.text)
       .join('\n');
+
+  const parseAssistantInlineMarkdown = (text: string): AssistantMarkdownInlineSegment[] => {
+    const segments: AssistantMarkdownInlineSegment[] = [];
+    const emphasisPattern = /(\*\*([^*\n]+)\*\*|\*([^*\n]+)\*)/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = emphasisPattern.exec(text))) {
+      if (match.index > lastIndex) {
+        segments.push({ type: 'text', text: text.slice(lastIndex, match.index) });
+      }
+
+      if (match[2]) {
+        segments.push({ type: 'strong', text: match[2] });
+      } else if (match[3]) {
+        segments.push({ type: 'emphasis', text: match[3] });
+      }
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < text.length) {
+      segments.push({ type: 'text', text: text.slice(lastIndex) });
+    }
+
+    return segments.length > 0 ? segments : [{ type: 'text', text }];
+  };
+
+  const parseAssistantMarkdown = (text: string): AssistantMarkdownBlock[] => {
+    const blocks: AssistantMarkdownBlock[] = [];
+    const paragraphLines: string[] = [];
+    let listItems: AssistantMarkdownInlineSegment[][] = [];
+
+    const flushParagraph = () => {
+      if (paragraphLines.length === 0) {
+        return;
+      }
+
+      blocks.push({ type: 'paragraph', segments: parseAssistantInlineMarkdown(paragraphLines.join('\n')) });
+      paragraphLines.length = 0;
+    };
+
+    const flushList = () => {
+      if (listItems.length === 0) {
+        return;
+      }
+
+      blocks.push({ type: 'list', items: listItems });
+      listItems = [];
+    };
+
+    for (const line of text.replaceAll('\r\n', '\n').split('\n')) {
+      const listMatch = line.match(/^-\s+(.+)$/);
+      if (listMatch) {
+        flushParagraph();
+        listItems.push(parseAssistantInlineMarkdown(listMatch[1]));
+        continue;
+      }
+
+      flushList();
+      if (line.trim().length === 0) {
+        flushParagraph();
+        continue;
+      }
+
+      paragraphLines.push(line);
+    }
+
+    flushParagraph();
+    flushList();
+
+    return blocks;
+  };
 
   const mergeMessages = (firstMessages: AgentMessageResponseDto[], secondMessages: AgentMessageResponseDto[]) => {
     const seenIds = new SvelteSet<string>();
@@ -153,6 +239,7 @@
 
     isSending = true;
     errorMessage = null;
+    isAssistantActive = true;
 
     try {
       const message = await appendAgentSessionMessage({
@@ -166,7 +253,6 @@
 
       appendIfNew(message);
       draft = '';
-      isAssistantActive = true;
       notifyMessageSent();
     } catch (error) {
       errorMessage = $t('assistant_message_send_error');
@@ -175,6 +261,15 @@
     } finally {
       isSending = false;
     }
+  };
+
+  const handleComposerKeydown = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey || event.isComposing) {
+      return;
+    }
+
+    event.preventDefault();
+    void sendMessage();
   };
 
   onMount(() => {
@@ -191,10 +286,51 @@
     streamingText = '';
   });
 
+  $effect(() => {
+    if (!showAssistantBusyIndicator) {
+      busyFrameIndex = 0;
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      busyFrameIndex = (busyFrameIndex + 1) % busyFrames.length;
+    }, 160);
+
+    return () => window.clearInterval(interval);
+  });
+
   onDestroy(() => {
     cleanupWebsocketListener?.();
   });
 </script>
+
+{#snippet assistantMarkdownInline(segments: AssistantMarkdownInlineSegment[])}
+  {#each segments as segment}
+    {#if segment.type === 'strong'}
+      <strong class="font-semibold">{segment.text}</strong>
+    {:else if segment.type === 'emphasis'}
+      <em>{segment.text}</em>
+    {:else}
+      {segment.text}
+    {/if}
+  {/each}
+{/snippet}
+
+{#snippet assistantMarkdown(blocks: AssistantMarkdownBlock[])}
+  <div class="space-y-2">
+    {#each blocks as block}
+      {#if block.type === 'paragraph'}
+        <p class="whitespace-pre-wrap">{@render assistantMarkdownInline(block.segments)}</p>
+      {:else}
+        <ul class="list-disc space-y-1 pl-5">
+          {#each block.items as item}
+            <li>{@render assistantMarkdownInline(item)}</li>
+          {/each}
+        </ul>
+      {/if}
+    {/each}
+  </div>
+{/snippet}
 
 <section
   class="relative h-full min-h-0 w-full overflow-hidden text-black dark:text-white"
@@ -211,7 +347,7 @@
     </div>
   {/if}
 
-  <div class="h-full overflow-y-auto" aria-live="polite">
+  <div class="h-full overflow-y-auto" aria-live={showAssistantBusyIndicator ? 'off' : 'polite'}>
     <div class="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 px-4 pb-36 pt-6 md:px-0">
       {#each messages as message (message.id)}
         {@const text = textForMessage(message)}
@@ -224,15 +360,30 @@
                 : 'mr-auto text-slate-950 dark:text-neutral-100',
             ]}
           >
-            {text}
+            {#if message.role === AgentMessageRole.Assistant}
+              {@render assistantMarkdown(parseAssistantMarkdown(text))}
+            {:else}
+              {text}
+            {/if}
           </article>
         {/if}
       {/each}
 
+      {#if showAssistantBusyIndicator}
+        <article
+          class="mr-auto max-w-[80%] px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400"
+          role="status"
+          aria-live="polite"
+        >
+          <span>{$t('assistant_busy_ascii')}</span>
+          <span aria-hidden="true"> {busyFrame}</span>
+        </article>
+      {/if}
+
       {#if streamingText}
         <article class="mr-auto max-w-[80%] rounded-2xl px-4 py-3 text-sm text-slate-950 dark:text-neutral-100">
           <div class="text-xs font-medium text-gray-500 dark:text-gray-400">{$t('assistant_streaming_response')}</div>
-          <div class="mt-1 whitespace-pre-wrap">{streamingText}</div>
+          <div class="mt-1">{@render assistantMarkdown(parseAssistantMarkdown(streamingText))}</div>
         </article>
       {/if}
 
@@ -260,12 +411,13 @@
         bind:value={draft}
         placeholder={composerPlaceholder ?? $t('assistant_message_placeholder')}
         disabled={isSending || isAssistantActive || composerDisabled}
+        onkeydown={handleComposerKeydown}
       ></textarea>
 
       {#if terminalActionLabel && onTerminalAction}
         <Button type="button" onclick={onTerminalAction}>{terminalActionLabel}</Button>
       {:else}
-        <Button type="submit" disabled={!canSend} loading={isSending}>{submitLabel ?? $t('assistant_send')}</Button>
+        <Button type="submit" disabled={!canSend}>{submitLabel ?? $t('assistant_send')}</Button>
       {/if}
     </div>
     <div class="mx-auto w-full max-w-3xl">
