@@ -138,6 +138,39 @@ describe(AgentMcpToolRegistryService.name, () => {
     }
   });
 
+  it('exposes planId in plan-aware planning tool input schemas', () => {
+    const tools = sut.listTools();
+    const revise = tools.find((tool) => tool.name === AgentToolName.ReviseProposedOperations);
+    const summarize = tools.find((tool) => tool.name === AgentToolName.SummarizePlan);
+
+    expect(revise?.inputSchema).toMatchObject({
+      type: 'object',
+      required: expect.arrayContaining(['planId', 'summary', 'operations']),
+      properties: expect.objectContaining({
+        planId: expect.objectContaining({ type: 'string', format: 'uuid' }),
+      }),
+    });
+    expect(summarize?.inputSchema).toMatchObject({
+      type: 'object',
+      required: expect.arrayContaining(['planId']),
+      properties: expect.objectContaining({
+        planId: expect.objectContaining({ type: 'string', format: 'uuid' }),
+      }),
+    });
+  });
+
+  it('does not require planId for proposal input schema', () => {
+    const proposal = sut.listTools().find((tool) => tool.name === AgentToolName.ProposeAlbumOperations);
+
+    expect(proposal?.inputSchema).toMatchObject({
+      type: 'object',
+      required: expect.not.arrayContaining(['planId']),
+      properties: expect.not.objectContaining({
+        planId: expect.anything(),
+      }),
+    });
+  });
+
   it('returns defensive copies of registry metadata', () => {
     const firstList = sut.listTools();
     firstList[0].description = 'mutated description';
