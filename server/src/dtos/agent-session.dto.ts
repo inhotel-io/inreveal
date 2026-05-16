@@ -240,10 +240,17 @@ const AgentSessionCreateSchema = z
   })
   .meta({ id: 'AgentSessionCreateDto' });
 
+const AgentSessionUpdateSchema = z
+  .object({
+    title: z.string().trim().min(1).max(120).nullable(),
+  })
+  .meta({ id: 'AgentSessionUpdateDto' });
+
 const AgentSessionResponseSchema = z
   .object({
     id: z.uuidv4(),
     status: AgentSessionStatusSchema,
+    title: z.string().nullable().optional(),
     providerCredentialId: z.uuidv4().nullable(),
     credentialSnapshot: AgentCredentialSnapshotSchema,
     modelSnapshot: AgentModelSnapshotSchema,
@@ -261,6 +268,7 @@ const AgentSessionResponseSchema = z
   .meta({ id: 'AgentSessionResponseDto' });
 
 export class AgentSessionCreateDto extends createZodDto(AgentSessionCreateSchema) {}
+export class AgentSessionUpdateDto extends createZodDto(AgentSessionUpdateSchema) {}
 export class AgentSessionResponseDto extends createZodDto(AgentSessionResponseSchema) {}
 
 export { AgentPermissionPlanSchema };
