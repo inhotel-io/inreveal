@@ -13,6 +13,7 @@ import { AuthDto } from 'src/dtos/auth.dto';
 import { NotificationDto } from 'src/dtos/notification.dto';
 import { ReleaseEventV1, ServerVersionResponseDto } from 'src/dtos/server.dto';
 import { SyncAssetEditV1, SyncAssetExifV1, SyncAssetV2 } from 'src/dtos/sync.dto';
+import { AgentOperationApplyStatus } from 'src/enum';
 import { AppRestartEvent, ArgsOf, EventRepository } from 'src/repositories/event.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { handlePromiseError } from 'src/utils/misc';
@@ -54,6 +55,15 @@ export type AgentSessionClientEvent =
       sessionId: string;
       planId: string;
       revision: number;
+    }
+  | {
+      type: 'operation-plan-applied';
+      sessionId: string;
+      planId: string;
+      status: AgentOperationApplyStatus;
+      appliedCount: number;
+      skippedCount: number;
+      failedCount: number;
     };
 
 export interface ClientEventMap {
