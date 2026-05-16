@@ -23061,6 +23061,7 @@
           "SharedSpaceFaceMatch",
           "SharedSpaceFaceMatchAll",
           "SharedSpaceFaceMatchPage",
+          "SharedSpaceFaceMatchFromBackfill",
           "SharedSpaceLibraryFaceSync",
           "SharedSpaceIdentityReconciliation",
           "SharedSpacePersonDedup",
