@@ -1095,6 +1095,80 @@ describe(AgentOperationPlanService.name, () => {
     expect(albumService.addAssets).not.toHaveBeenCalled();
   });
 
+  it('keeps the overall apply status applied when only unselected operations are skipped', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+    const selectedOperation = makeOperation({ id: newUuid(), planId: 'plan-id', temporaryTargetId: 'tmp-selected' });
+    const unselectedOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      position: 1,
+      temporaryTargetId: 'tmp-unselected',
+    });
+    const albumId = newUuid();
+    const plan = makePlan({
+      id: 'plan-id',
+      sessionId: session.id,
+      operations: [selectedOperation, unselectedOperation],
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockResolvedValue({
+      ...plan,
+      status: AgentOperationPlanStatus.Applied,
+      operations: [
+        { ...selectedOperation, status: AgentOperationStatus.Applied, result: { albumId } },
+        {
+          ...unselectedOperation,
+          status: AgentOperationStatus.Skipped,
+          result: { skippedReason: 'Operation was not selected for apply' },
+        },
+      ],
+    });
+    albumService.create.mockResolvedValue({ id: albumId } as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [selectedOperation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(result.appliedOperationIds).toEqual([selectedOperation.id]);
+    expect(result.skippedOperationIds).toEqual([unselectedOperation.id]);
+    expect(result.failedOperationIds).toEqual([]);
+  });
+
+  it('marks the session failed and rethrows when completing a claimed apply crashes', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+    const operation = makeOperation({ id: newUuid(), planId: 'plan-id', temporaryTargetId: 'tmp-portugal' });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    const error = new Error('complete apply failed');
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockRejectedValue(error);
+    albumService.create.mockResolvedValue({ id: newUuid() } as never);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] }),
+    ).rejects.toBe(error);
+    expect(sessionRepository.update).toHaveBeenNthCalledWith(1, auth.user.id, session.id, {
+      status: AgentSessionStatus.Applying,
+    });
+    expect(sessionRepository.update).toHaveBeenLastCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.Failed,
+      endedAt: expect.any(Date),
+    });
+    expect(websocketRepository.clientSend).not.toHaveBeenCalledWith(
+      'on_agent_session_event',
+      auth.user.id,
+      expect.objectContaining({ type: 'operation-plan-applied' }),
+    );
+  });
+
   it('rejects unknown operation ids before claiming the plan', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
