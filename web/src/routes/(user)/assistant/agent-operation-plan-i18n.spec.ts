@@ -7,7 +7,8 @@ describe('agent operation plan i18n', () => {
         assistant_operation_apply_applying: 'Applying operations',
         assistant_operation_apply_error: 'Unable to apply proposed operations',
         assistant_operation_apply_selected: 'Apply {count, plural, one {# selected} other {# selected}}',
-        assistant_operation_apply_success: 'Applied {applied, number} operations. {failed, number} failed.',
+        assistant_operation_apply_success:
+          'Applied {applied, plural, one {# operation} other {{applied, number} operations}}. {failed, plural, one {# failed} other {{failed, number} failed}}.',
       }),
     );
   });
