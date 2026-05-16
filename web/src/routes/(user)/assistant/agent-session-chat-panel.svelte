@@ -465,11 +465,11 @@
         <p class="whitespace-pre-wrap">{@render assistantMarkdownInline(block.segments)}</p>
       {:else if block.type === 'heading'}
         {#if block.level === 1}
-          <h3 class="text-base font-semibold">{@render assistantMarkdownInline(block.segments)}</h3>
+          <h3 class="text-xl font-semibold">{@render assistantMarkdownInline(block.segments)}</h3>
         {:else if block.level === 2}
-          <h4 class="text-sm font-semibold">{@render assistantMarkdownInline(block.segments)}</h4>
+          <h4 class="text-lg font-semibold">{@render assistantMarkdownInline(block.segments)}</h4>
         {:else}
-          <h5 class="text-sm font-medium">{@render assistantMarkdownInline(block.segments)}</h5>
+          <h5 class="text-base font-medium">{@render assistantMarkdownInline(block.segments)}</h5>
         {/if}
       {:else if block.type === 'list'}
         <ul class="list-disc space-y-1 pl-5">
