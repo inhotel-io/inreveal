@@ -65,6 +65,12 @@ export type AgentRunnerStreamEvent =
       content: AgentMessageContent;
     }
   | {
+      type: 'tool-approval-needed';
+      sessionId: string;
+      runnerSessionId: string;
+      toolCallId: string;
+    }
+  | {
       type: 'runner-error';
       sessionId: string;
       runnerSessionId: string;
