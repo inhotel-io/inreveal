@@ -42,6 +42,12 @@ export type AgentSessionClientEvent =
       createdAt: string;
     }
   | {
+      type: 'tool-approval-needed';
+      sessionId: string;
+      toolCallId: string;
+      createdAt: string;
+    }
+  | {
       type: 'operation-plan-ready';
       sessionId: string;
       planId: string;
