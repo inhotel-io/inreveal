@@ -9,17 +9,21 @@
     type AgentSessionResponseDto,
   } from '@immich/sdk';
   import { Button } from '@immich/ui';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, type Snippet } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
   import { deriveAgentSessionTitleFromMessages } from './agent-session-workspace-ui';
 
   interface Props {
     session: AgentSessionResponseDto;
+    actionDock?: Snippet;
+    composerDisabled?: boolean;
+    composerDisabledReason?: string | null;
     onTitleDiscovered?: (sessionId: string, title: string) => void;
   }
 
-  let { session, onTitleDiscovered }: Props = $props();
+  let { session, actionDock, composerDisabled = false, composerDisabledReason = null, onTitleDiscovered }: Props =
+    $props();
 
   let messages = $state<AgentMessageResponseDto[]>([]);
   let draft = $state('');
@@ -30,7 +34,7 @@
   let lastPublishedTitle: string | null = null;
   let cleanupWebsocketListener: (() => void) | undefined;
 
-  const canSend = $derived(draft.trim().length > 0 && !isSending && !isAssistantActive);
+  const canSend = $derived(draft.trim().length > 0 && !isSending && !isAssistantActive && !composerDisabled);
 
   const textForMessage = (message: AgentMessageResponseDto) =>
     message.content.blocks
@@ -113,7 +117,7 @@
   const sendMessage = async () => {
     const text = draft.trim();
 
-    if (!text || isSending) {
+    if (!text || isSending || composerDisabled) {
       return;
     }
 
@@ -190,6 +194,12 @@
       {/if}
     </div>
 
+    {#if actionDock}
+      <div class="mt-5">
+        {@render actionDock()}
+      </div>
+    {/if}
+
     <form
       class="mt-5 flex flex-col gap-3"
       onsubmit={(event) => {
@@ -206,8 +216,11 @@
           aria-label={$t('assistant_message')}
           class="min-h-24 w-full resize-y rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-immich-dark-gray"
           bind:value={draft}
-          disabled={isSending || isAssistantActive}
+          disabled={isSending || isAssistantActive || composerDisabled}
         ></textarea>
+        {#if composerDisabled && composerDisabledReason}
+          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400" role="status">{composerDisabledReason}</p>
+        {/if}
       </div>
 
       <div>
