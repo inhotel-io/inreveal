@@ -188,6 +188,22 @@ const validateResumeBody = (body) => {
     return 'gallerySessionId is required';
   }
 
+  if (body.toolCallId !== undefined && typeof body.toolCallId !== 'string') {
+    return 'toolCallId must be a string';
+  }
+
+  if (
+    body.approvalDecision !== undefined &&
+    body.approvalDecision !== 'approved' &&
+    body.approvalDecision !== 'denied'
+  ) {
+    return 'approvalDecision must be approved or denied';
+  }
+
+  if (body.toolResult !== undefined && (body.toolResult === null || typeof body.toolResult !== 'object')) {
+    return 'toolResult must be an object';
+  }
+
   return undefined;
 };
 
@@ -344,6 +360,9 @@ export const startServer = ({
         for await (const event of runtime.resumeSession({
           runnerSessionId,
           gallerySessionId: body.gallerySessionId,
+          toolCallId: body.toolCallId,
+          approvalDecision: body.approvalDecision,
+          toolResult: body.toolResult,
         })) {
           sendSse(response, event.type, event);
         }
