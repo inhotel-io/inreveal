@@ -12,9 +12,14 @@ import { readable } from 'svelte/store';
 import { buildOperationReviewModel } from './agent-operation-plan-ui';
 import AgentPlanDestinationCard from './agent-plan-destination-card.svelte';
 
+vi.mock('$lib/utils', () => ({
+  getAssetMediaUrl: ({ id, size }: { id: string; size: string }) => `/api/assets/${id}/thumbnail?size=${size}`,
+}));
+
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_operation_asset_count: '{count} assets',
+    assistant_operation_asset_selection_summary: '{selected} of {total} photos selected',
     assistant_operation_blocked_by: 'Blocked by {dependencies}',
     assistant_operation_destination_selected_summary: '{selected} of {total} changes selected',
     assistant_operation_destination_toggle: 'Select destination {name}',
@@ -29,6 +34,15 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_thumbnail_overflow_label: '{count} more photos',
     assistant_operation_thumbnail_strip_label: '{count} photo previews',
     assistant_operation_thumbnail_unavailable: 'Preview unavailable',
+    assistant_operation_item_excluded_count: '{count} excluded',
+    assistant_operation_item_overflow: '+{count} not shown',
+    assistant_operation_item_overflow_label: '{count} more affected photos are not shown',
+    assistant_operation_item_reset: 'Reset selection',
+    assistant_operation_item_review_label: 'Review photos for {summary}',
+    assistant_operation_item_selected_count: '{selected} of {total} selected',
+    assistant_operation_item_thumbnail_alt: 'Photo {index} of {count}',
+    assistant_operation_item_thumbnail_unavailable: 'Preview unavailable',
+    assistant_operation_item_toggle: 'Include photo {index}',
     assistant_operation_risk_low: 'Low risk',
     assistant_operation_type_album_add_assets: 'Add assets',
     assistant_operation_type_album_create: 'Create album',
@@ -84,7 +98,7 @@ const plan = (operations: AgentOperationResponseDto[]): AgentOperationPlanRespon
   updatedAt: '2026-05-15T00:00:00.000Z',
 });
 
-const group = (enabledByOperationId = { [createId]: true, [addId]: true }) =>
+const group = (enabledByOperationId = { [createId]: true, [addId]: true }, itemSelectionByOperationId = {}) =>
   buildOperationReviewModel(
     plan([
       operation({
@@ -107,6 +121,7 @@ const group = (enabledByOperationId = { [createId]: true, [addId]: true }) =>
       }),
     ]),
     enabledByOperationId,
+    itemSelectionByOperationId,
   ).groups[0];
 
 describe('AgentPlanDestinationCard', () => {
@@ -117,6 +132,8 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
       },
     });
 
@@ -124,7 +141,7 @@ describe('AgentPlanDestinationCard', () => {
     expect(screen.getByText('Portugal')).toBeInTheDocument();
     expect(screen.getByText('New album')).toBeInTheDocument();
     const compactCounts = screen.getByText('2 of 2 changes selected').parentElement!;
-    expect(within(compactCounts).getByText('2 assets')).toBeInTheDocument();
+    expect(within(compactCounts).getByText('2 of 2 photos selected')).toBeInTheDocument();
     const thumbnailStrip = screen.getByTestId('agent-plan-thumbnail-strip');
     expect(thumbnailStrip).toHaveAttribute('aria-label', '2 photo previews');
     expect(within(thumbnailStrip).getAllByTestId('agent-plan-thumbnail-image')).toHaveLength(2);
@@ -156,6 +173,8 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
       },
     });
 
@@ -173,6 +192,8 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
       },
     });
 
@@ -191,11 +212,57 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup,
         onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
       },
     });
 
     await fireEvent.click(screen.getByRole('checkbox', { name: 'Select destination Portugal' }));
 
     expect(onToggleGroup).toHaveBeenCalledWith(currentGroup, false);
+  });
+
+  it('uses selected asset counts when item selection excludes photos', () => {
+    render(AgentPlanDestinationCard, {
+      props: {
+        group: group(
+          { [createId]: true, [addId]: true },
+          { [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] } },
+        ),
+        canChangeSelection: true,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+      },
+    });
+
+    const compactCounts = screen.getByText('2 of 2 changes selected').parentElement!;
+    expect(within(compactCounts).getByText('1 of 2 photos selected')).toBeInTheDocument();
+  });
+
+  it('threads item selection callbacks through operation rows', async () => {
+    const onToggleItem = vi.fn();
+    const onResetItemSelection = vi.fn();
+    render(AgentPlanDestinationCard, {
+      props: {
+        group: group(
+          { [createId]: true, [addId]: true },
+          { [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] } },
+        ),
+        canChangeSelection: true,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem,
+        onResetItemSelection,
+      },
+    });
+
+    await fireEvent.click(screen.getAllByText('Details')[1]);
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Reset selection' }));
+
+    expect(onToggleItem).toHaveBeenCalledWith(addId, assetB, true);
+    expect(onResetItemSelection).toHaveBeenCalledWith(addId);
   });
 });
