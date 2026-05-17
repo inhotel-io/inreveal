@@ -9,9 +9,12 @@
     canChangeSelection: boolean;
     onToggleGroup: (group: OperationReviewGroup, checked: boolean) => void;
     onToggleOperation: (operationId: string, checked: boolean) => void;
+    onToggleItem: (operationId: string, assetId: string, selected: boolean) => void;
+    onResetItemSelection: (operationId: string) => void;
   }
 
-  let { group, canChangeSelection, onToggleGroup, onToggleOperation }: Props = $props();
+  let { group, canChangeSelection, onToggleGroup, onToggleOperation, onToggleItem, onResetItemSelection }: Props =
+    $props();
 
   const getDestinationTitle = (reviewGroup: OperationReviewGroup) => {
     if (reviewGroup.destination.id && reviewGroup.destination.name === `Existing album ${reviewGroup.destination.id}`) {
@@ -24,6 +27,13 @@
   const destinationTitle = $derived(getDestinationTitle(group));
   const destinationSubtitle = $derived(group.operations[0]?.review.destination.subtitle ?? group.destination.subtitle);
   const enabledOperationCount = $derived(group.operations.filter((operation) => operation.enabled).length);
+  const selectedAssetCount = $derived(
+    new Set(
+      group.operations
+        .filter((operation) => operation.enabled && !operation.blocked)
+        .flatMap((operation) => operation.selectedAssetIds),
+    ).size,
+  );
   const groupSelectionState = $derived({
     checked: enabledOperationCount === group.operations.length,
     mixed: enabledOperationCount > 0 && enabledOperationCount < group.operations.length,
@@ -71,7 +81,11 @@
         })}
       </span>
       {#if group.assetCount > 0}
-        <span>{$t('assistant_operation_asset_count', { values: { count: group.assetCount } })}</span>
+        <span>
+          {$t('assistant_operation_asset_selection_summary', {
+            values: { selected: selectedAssetCount, total: group.assetCount },
+          })}
+        </span>
       {/if}
     </div>
   </div>
@@ -80,7 +94,7 @@
 
   <div class="mt-3 flex flex-col divide-y divide-gray-200 dark:divide-gray-700">
     {#each group.operations as item (item.id)}
-      <AgentPlanOperationRow {item} {canChangeSelection} {onToggleOperation} />
+      <AgentPlanOperationRow {item} {canChangeSelection} {onToggleOperation} {onToggleItem} {onResetItemSelection} />
     {/each}
   </div>
 </section>
