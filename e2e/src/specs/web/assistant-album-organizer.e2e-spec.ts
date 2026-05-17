@@ -142,7 +142,7 @@ test.describe('Assistant album organizer', () => {
     await expect(page.getByText(proposedAddOperation!.id)).toBeVisible();
 
     await portugalDestination.getByRole('checkbox', { name: 'Include photo 2' }).uncheck();
-    await expect(page.getByText('1 of 2 photos selected')).toBeVisible();
+    await expect(portugalDestination.getByText('1 of 2 photos selected')).toBeVisible();
     await page.getByLabel('Set cover photo').uncheck();
     await expect(page.getByRole('button', { name: 'Apply 2 selected' })).toBeEnabled();
 
