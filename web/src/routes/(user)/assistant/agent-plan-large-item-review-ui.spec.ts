@@ -11,6 +11,7 @@ import {
   type AgentPlanItemFilterState,
   type AgentPlanReviewAssetMetadata,
 } from './agent-plan-large-item-review-ui';
+import type { OperationItemSelectionState } from './agent-operation-plan-ui';
 
 const assetIds = (count: number) =>
   Array.from({ length: count }, (_, index) => `asset-${index.toString().padStart(4, '0')}`);
