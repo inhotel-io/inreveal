@@ -19,6 +19,7 @@ import {
   buildSelectionPayload,
   createInitialOperationEnabledState,
   createInitialOperationItemSelectionState,
+  type OperationFieldOverrideState,
   getOperationAssetCount,
   resetOperationItemSelection,
   setOperationItemSelection,
@@ -418,6 +419,186 @@ describe('agent operation plan UI helpers', () => {
         representativeAssetIds: [assetA, assetB],
       }),
     );
+  });
+
+  it('exposes editable field metadata and applies sparse text field overrides to review output', () => {
+    const fieldOverrides: OperationFieldOverrideState = {
+      [createId]: { albumName: 'Portugal highlights', description: 'Lisbon, Porto, and Douro' },
+      [updateId]: { description: 'Existing album notes' },
+    };
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: createId,
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Portugal album',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          payload: { albumName: 'Portugal', description: 'Lisbon and Porto' },
+        }),
+        operation({
+          id: updateId,
+          type: AgentOperationType.AlbumUpdateDetails,
+          summary: 'Update details',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: '00000000-0000-4000-8000-000000000301',
+          payload: { albumName: 'Portugal Archive', description: 'Old notes' },
+        }),
+      ]),
+      { [createId]: true, [updateId]: true },
+      {},
+      fieldOverrides,
+    );
+
+    expect(model.operationsById.get(createId)?.editableFields).toEqual([
+      {
+        key: 'albumName',
+        label: 'Album name',
+        input: 'text',
+        originalValue: 'Portugal',
+        value: 'Portugal highlights',
+        required: true,
+        maxLength: 200,
+      },
+      {
+        key: 'description',
+        label: 'Description',
+        input: 'textarea',
+        originalValue: 'Lisbon and Porto',
+        value: 'Lisbon, Porto, and Douro',
+        required: false,
+        maxLength: 1000,
+      },
+    ]);
+    expect(model.operationsById.get(createId)?.summary).toBe('Create album "Portugal highlights"');
+    expect(model.groups[0]).toEqual(
+      expect.objectContaining({
+        id: 'new-album:album-portugal',
+        title: 'New album "Portugal highlights"',
+      }),
+    );
+    expect(model.operationsById.get(updateId)?.summary).toBe('Rename album to "Portugal Archive"');
+    expect(buildSelectionPayload(model)).toEqual({
+      planId,
+      planRevision: 1,
+      operationIds: [createId, updateId],
+      fieldOverrides: {
+        [createId]: { albumName: 'Portugal highlights', description: 'Lisbon, Porto, and Douro' },
+        [updateId]: { description: 'Existing album notes' },
+      },
+    });
+  });
+
+  it('exposes cover override metadata only for multi-candidate set-cover operations and validates selected covers', () => {
+    const currentPlan = plan([
+      operation({
+        id: coverId,
+        type: AgentOperationType.AlbumSetCover,
+        summary: 'Set cover',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: '00000000-0000-4000-8000-000000000301',
+        assetIds: [assetA, assetB],
+        payload: {},
+      }),
+    ]);
+    const model = buildOperationReviewModel(
+      currentPlan,
+      { [coverId]: true },
+      {},
+      { [coverId]: { albumThumbnailAssetId: assetB } },
+    );
+
+    expect(model.operationsById.get(coverId)?.editableFields).toEqual([
+      {
+        key: 'albumThumbnailAssetId',
+        label: 'Cover photo',
+        input: 'coverAsset',
+        originalValue: assetA,
+        value: assetB,
+        assetIds: [assetA, assetB],
+        required: true,
+      },
+    ]);
+    expect(model.operationsById.get(coverId)?.fieldErrors).toEqual({});
+    expect(buildSelectionPayload(model)).toEqual({
+      planId,
+      planRevision: 1,
+      operationIds: [coverId],
+      fieldOverrides: { [coverId]: { albumThumbnailAssetId: assetB } },
+    });
+
+    const excludedCoverState = setOperationItemSelection({}, coverId, {
+      itemKind: 'asset',
+      mode: 'allExcept',
+      itemIds: [assetB],
+    });
+    const invalidModel = buildOperationReviewModel(
+      currentPlan,
+      { [coverId]: true },
+      excludedCoverState,
+      { [coverId]: { albumThumbnailAssetId: assetB } },
+    );
+
+    expect(invalidModel.operationsById.get(coverId)?.fieldErrors).toEqual({
+      albumThumbnailAssetId: 'Choose a selected cover photo.',
+    });
+    expect(invalidModel.operationsById.get(coverId)?.enabled).toBe(false);
+    expect(buildSelectionPayload(invalidModel)).toEqual({ planId, planRevision: 1, operationIds: [] });
+  });
+
+  it('validates field overrides and omits unchanged, disabled, and blocked field overrides from apply payloads', () => {
+    const tooLongDescription = 'x'.repeat(1001);
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: createId,
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Portugal album',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          payload: { albumName: 'Portugal', description: 'Lisbon and Porto' },
+        }),
+        operation({
+          id: updateId,
+          type: AgentOperationType.AlbumUpdateDetails,
+          summary: 'Update details',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: '00000000-0000-4000-8000-000000000301',
+          payload: { albumName: 'Portugal Archive', description: 'Old notes' },
+        }),
+      ]),
+      { [createId]: false, [updateId]: true },
+      {},
+      {
+        [createId]: { albumName: 'Disabled album' },
+        [updateId]: { albumName: '   ', description: tooLongDescription },
+      },
+    );
+
+    expect(model.operationsById.get(updateId)?.fieldErrors).toEqual({
+      albumName: 'Album name is required.',
+      description: 'Description must be 1,000 characters or fewer.',
+    });
+    expect(model.operationsById.get(updateId)?.enabled).toBe(false);
+    expect(buildSelectionPayload(model)).toEqual({ planId, planRevision: 1, operationIds: [] });
+
+    const unchangedModel = buildOperationReviewModel(
+      plan([
+        operation({
+          id: updateId,
+          type: AgentOperationType.AlbumUpdateDetails,
+          summary: 'Update details',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: '00000000-0000-4000-8000-000000000301',
+          payload: { albumName: 'Portugal Archive', description: 'Old notes' },
+        }),
+      ]),
+      { [updateId]: true },
+      {},
+      { [updateId]: { albumName: 'Portugal Archive', description: 'Old notes' } },
+    );
+
+    expect(buildSelectionPayload(unchangedModel)).toEqual({ planId, planRevision: 1, operationIds: [updateId] });
   });
 
   it('builds sparse allExcept payloads and mixed selection counts after excluding one asset', () => {
