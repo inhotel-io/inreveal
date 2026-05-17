@@ -197,6 +197,22 @@ describe('AgentPlanOperationRow', () => {
     expect(screen.getByText('Blocked by Create Portugal album')).toBeInTheDocument();
   });
 
+  it('renders proposed status for proposed operations', () => {
+    render(AgentPlanOperationRow, {
+      props: {
+        item: model().operationsById.get(addId)!,
+        canChangeSelection: true,
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText('Proposed')).toBeInTheDocument();
+  });
+
   it('keeps technical operation details hidden until the user expands details', async () => {
     render(AgentPlanOperationRow, {
       props: {
