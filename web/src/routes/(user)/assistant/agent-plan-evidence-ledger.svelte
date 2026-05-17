@@ -1,6 +1,8 @@
 <script lang="ts">
   import { t } from 'svelte-i18n';
+  import { AgentOperationPlanStatus } from '@immich/sdk';
   import {
+    buildOperationReviewApplyStateSummary,
     buildOperationReviewImpactSummary,
     type OperationReviewGroup,
     type OperationReviewModel,
@@ -51,6 +53,10 @@
   }: Props = $props();
 
   const impact = $derived(buildOperationReviewImpactSummary(model));
+  const applyStateSummary = $derived(buildOperationReviewApplyStateSummary(model));
+  const effectiveCanChangeSelection = $derived(
+    canChangeSelection && model.plan.status === AgentOperationPlanStatus.Proposed,
+  );
 </script>
 
 <div class="flex flex-col gap-4">
@@ -86,7 +92,7 @@
     {#each model.groups as group (group.id)}
       <AgentPlanDestinationCard
         {group}
-        {canChangeSelection}
+        canChangeSelection={effectiveCanChangeSelection}
         {onToggleGroup}
         {onToggleOperation}
         {onToggleItem}
@@ -123,6 +129,21 @@
       role="status"
     >
       {applyMessage}
+    </p>
+  {/if}
+
+  {#if applyStateSummary.hasFailures || applyStateSummary.skippedCount > 0}
+    <p
+      class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+      role="status"
+    >
+      {$t('assistant_operation_apply_partial_summary', {
+        values: {
+          applied: applyStateSummary.appliedCount,
+          skipped: applyStateSummary.skippedCount,
+          failed: applyStateSummary.failedCount,
+        },
+      })}
     </p>
   {/if}
 

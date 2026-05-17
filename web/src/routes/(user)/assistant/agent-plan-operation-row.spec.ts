@@ -28,15 +28,20 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_detail_id: 'Operation ID',
     assistant_operation_detail_risk: 'Risk',
     assistant_operation_detail_status: 'Status',
-    assistant_operation_detail_toggle: 'Details',
+    assistant_operation_detail_hide: 'Hide technical details',
+    assistant_operation_detail_show: 'Show technical details',
     assistant_operation_detail_type: 'Type',
     assistant_operation_field_cover_option: 'Use photo {index} as cover',
     assistant_operation_field_cover_thumbnail_alt: 'Cover photo option {index}',
     assistant_operation_field_reset: 'Reset {field}',
     assistant_operation_field_thumbnail_unavailable: 'Preview unavailable',
+    assistant_operation_partial_asset_summary: '{applied} applied · {failed} failed',
     assistant_operation_risk_low: 'Low risk',
+    assistant_operation_skipped_reason: 'Skipped: {reason}',
     assistant_operation_status_applied: 'Applied',
     assistant_operation_status_failed: 'Failed',
+    assistant_operation_status_partial: 'Partially applied',
+    assistant_operation_status_proposed: 'Proposed',
     assistant_operation_status_skipped: 'Skipped',
     assistant_operation_item_excluded_count: '{count} excluded',
     assistant_operation_item_exclude_videos: 'Exclude videos',
@@ -77,6 +82,9 @@ vi.mock('svelte-i18n', () => {
         .replace('{total}', String(options?.values?.total ?? ''))
         .replace('{visible}', String(options?.values?.visible ?? ''))
         .replace('{dependencies}', String(options?.values?.dependencies ?? ''))
+        .replace('{applied}', String(options?.values?.applied ?? ''))
+        .replace('{failed}', String(options?.values?.failed ?? ''))
+        .replace('{reason}', String(options?.values?.reason ?? ''))
         .replace('{field}', String(options?.values?.field ?? '')),
     ),
   };
@@ -204,7 +212,7 @@ describe('AgentPlanOperationRow', () => {
 
     expect(screen.queryByText(addId)).not.toBeInTheDocument();
 
-    await fireEvent.click(screen.getByText('Details'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Show technical details' }));
 
     expect(screen.getByText('Operation ID')).toBeInTheDocument();
     expect(screen.getByText(addId)).toBeInTheDocument();
@@ -253,7 +261,7 @@ describe('AgentPlanOperationRow', () => {
       },
     });
 
-    await fireEvent.click(screen.getByText('Details'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Show technical details' }));
 
     const itemReview = screen.getByRole('group', { name: 'Review photos for Add 2 photos' });
     const technicalDetail = screen.getByText('Operation ID');
@@ -283,7 +291,7 @@ describe('AgentPlanOperationRow', () => {
       },
     });
 
-    await fireEvent.click(screen.getByText('Details'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Show technical details' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Exclude visible' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Select all filtered' }));
 
@@ -308,11 +316,84 @@ describe('AgentPlanOperationRow', () => {
     });
 
     await fireEvent.input(screen.getByLabelText('Album name'), { target: { value: 'Madeira' } });
-    await fireEvent.click(screen.getByText('Details'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Show technical details' }));
 
     const field = screen.getByLabelText('Album name');
     const technicalDetail = screen.getByText('Operation ID');
     expect(field.compareDocumentPosition(technicalDetail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(onSetFieldOverride).toHaveBeenCalledWith(createId, 'albumName', 'Madeira');
+  });
+
+  it('renders partially applied for failed operations with successful per-asset results', () => {
+    render(AgentPlanOperationRow, {
+      props: {
+        item: buildOperationReviewModel(
+          plan([
+            operation({
+              id: addId,
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add two assets',
+              targetKind: AgentOperationTargetKind.NewAlbum,
+              temporaryTargetId: 'album-portugal',
+              assetIds: [assetA, assetB],
+              status: AgentOperationStatus.Failed,
+              result: {
+                assetResults: [
+                  { id: assetA, success: true },
+                  { id: assetB, success: false, errorMessage: 'Asset is missing' },
+                ],
+              },
+              error: 'Some assets could not be added',
+              payload: {},
+            }),
+          ]),
+          { [addId]: true },
+          {},
+        ).operationsById.get(addId)!,
+        canChangeSelection: false,
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText('Partially applied')).toBeInTheDocument();
+    expect(screen.getByText('1 applied · 1 failed')).toBeInTheDocument();
+    expect(screen.queryByText('Some assets could not be added')).not.toBeInTheDocument();
+  });
+
+  it('renders skipped reason from the operation result', () => {
+    render(AgentPlanOperationRow, {
+      props: {
+        item: buildOperationReviewModel(
+          plan([
+            operation({
+              id: addId,
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add two assets',
+              targetKind: AgentOperationTargetKind.NewAlbum,
+              temporaryTargetId: 'album-portugal',
+              assetIds: [assetA, assetB],
+              status: AgentOperationStatus.Skipped,
+              result: { skippedReason: 'Dependency was not applied' },
+              payload: {},
+            }),
+          ]),
+          { [addId]: true },
+          {},
+        ).operationsById.get(addId)!,
+        canChangeSelection: false,
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText('Skipped')).toBeInTheDocument();
+    expect(screen.getByText('Skipped: Dependency was not applied')).toBeInTheDocument();
   });
 });
