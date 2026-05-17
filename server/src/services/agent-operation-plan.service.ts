@@ -11,6 +11,7 @@ import {
 } from 'src/dtos/agent-operation.dto';
 import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
+import { AssetEditAction, AssetEditActionItem } from 'src/dtos/editing.dto';
 import {
   AgentOperationApplyStatus,
   AgentOperationPlanStatus,
@@ -23,6 +24,10 @@ import {
   AgentToolDataClass,
   AgentToolName,
   AlbumUserRole,
+  AssetType,
+  AssetVisibility,
+  SharedSpaceRole,
+  UserAvatarColor,
 } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import {
@@ -35,6 +40,9 @@ import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.reposi
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AlbumService } from 'src/services/album.service';
+import { AssetService } from 'src/services/asset.service';
+import { SharedSpaceService } from 'src/services/shared-space.service';
+import { TagService } from 'src/services/tag.service';
 import { AgentAlbumOperationInput, AgentOperationResult } from 'src/types/agent-operation.types';
 import { AgentToolOperationPlanRequestMetadata } from 'src/types/agent-tool.types';
 
@@ -70,12 +78,32 @@ type ApplySelection = {
 };
 
 type AgentOperationFieldOverride = {
-  payload?: { albumName?: string; description?: string };
+  payload?: {
+    albumName?: string;
+    spaceName?: string;
+    description?: string;
+    color?: UserAvatarColor;
+    angle?: 90 | 180 | 270;
+  };
   albumThumbnailAssetId?: string;
+  targetAlbumId?: string;
+  targetSpaceId?: string;
 };
 
 @Injectable()
 export class AgentOperationPlanService {
+  private static readonly legacyWriteScopeDefaults = {
+    removeAssets: false,
+    createSpace: false,
+    addAssetsToSpaces: false,
+    removeAssetsFromSpaces: false,
+    updateSpaceDetails: false,
+    editAssets: false,
+    favoriteAssets: false,
+    archiveAssets: false,
+    tagAssets: false,
+  };
+
   private static readonly activeStatuses = [
     AgentSessionStatus.Created,
     AgentSessionStatus.Running,
@@ -92,6 +120,9 @@ export class AgentOperationPlanService {
     private readonly planRepository: AgentOperationPlanRepository,
     private readonly toolCallRepository: AgentToolCallRepository,
     private readonly websocketRepository: WebsocketRepository,
+    private readonly sharedSpaceService: SharedSpaceService,
+    private readonly assetService: AssetService,
+    private readonly tagService: TagService,
   ) {}
 
   async getCurrentPlan(auth: AuthDto, sessionId: string): Promise<AgentOperationPlanResponseDto | null> {
@@ -109,8 +140,8 @@ export class AgentOperationPlanService {
     const session = await this.getOwnedSession(auth, sessionId, { requireActive: true });
 
     return this.runPlanningTool(auth, session, AgentToolName.ProposeAlbumOperations, dto, async () => {
-      await this.validateNormalAccess(auth, session, dto.operations);
       const operations = this.prepareOperations(session, dto.operations);
+      await this.validateNormalAccess(auth, session, operations);
       const plan = await this.planRepository.createReplacementRevision(session.id, {
         plan: {
           sessionId: session.id,
@@ -138,8 +169,8 @@ export class AgentOperationPlanService {
 
     return this.runPlanningTool(auth, session, AgentToolName.ReviseProposedOperations, { ...dto, planId }, async () => {
       await this.requireCurrentProposedPlan(session.id, planId);
-      await this.validateNormalAccess(auth, session, dto.operations);
       const operations = this.prepareOperations(session, dto.operations);
+      await this.validateNormalAccess(auth, session, operations);
       const replacement = await this.planRepository.createReplacementRevision(session.id, {
         plan: {
           sessionId: session.id,
@@ -304,7 +335,25 @@ export class AgentOperationPlanService {
       throw new BadRequestException('Agent session is not active');
     }
 
-    return session;
+    return {
+      ...session,
+      permissionPlanSnapshot: this.normalizePermissionPlanSnapshot(session.permissionPlanSnapshot),
+    };
+  }
+
+  private normalizePermissionPlanSnapshot(plan: AgentSession['permissionPlanSnapshot']) {
+    return {
+      ...plan,
+      writeScope: {
+        ...AgentOperationPlanService.legacyWriteScopeDefaults,
+        ...plan.writeScope,
+      },
+      limits: {
+        ...plan.limits,
+        maxPreviewsPerSession: plan.limits.maxPreviewsPerSession ?? plan.limits.maxPreviewsPerToolCall,
+        maxOriginalsPerSession: plan.limits.maxOriginalsPerSession ?? plan.limits.maxOriginalsPerToolCall,
+      },
+    };
   }
 
   private async validateNormalAccess(auth: AuthDto, session: AgentSession, operations: AgentAlbumOperationInput[]) {
@@ -320,6 +369,51 @@ export class AgentOperationPlanService {
       }
     }
 
+    const ownerSpaceIds = new Set(
+      operations
+        .filter(
+          (operation) =>
+            operation.type === AgentOperationType.SpaceUpdateDetails &&
+            operation.targetKind === AgentOperationTargetKind.ExistingSpace &&
+            operation.targetId,
+        )
+        .map((operation) => operation.targetId as string),
+    );
+
+    if (ownerSpaceIds.size > 0) {
+      const writableSpaceIds = await this.accessRepository.sharedSpace.checkRoleAccess(
+        auth.user.id,
+        ownerSpaceIds,
+        SharedSpaceRole.Owner,
+      );
+      const requestedWritableSpaceIds = new Set([...writableSpaceIds].filter((id) => ownerSpaceIds.has(id)));
+      if (requestedWritableSpaceIds.size !== ownerSpaceIds.size) {
+        throw new BadRequestException('One or more target spaces are not accessible');
+      }
+    }
+
+    const editorSpaceIds = new Set(
+      operations
+        .filter(
+          (operation) =>
+            operation.type !== AgentOperationType.SpaceUpdateDetails &&
+            operation.targetKind === AgentOperationTargetKind.ExistingSpace &&
+            operation.targetId,
+        )
+        .map((operation) => operation.targetId as string),
+    );
+    if (editorSpaceIds.size > 0) {
+      const writableSpaceIds = await this.accessRepository.sharedSpace.checkRoleAccess(
+        auth.user.id,
+        editorSpaceIds,
+        SharedSpaceRole.Editor,
+      );
+      const requestedWritableSpaceIds = new Set([...writableSpaceIds].filter((id) => editorSpaceIds.has(id)));
+      if (requestedWritableSpaceIds.size !== editorSpaceIds.size) {
+        throw new BadRequestException('One or more target spaces are not accessible');
+      }
+    }
+
     const assetIds = [...new Set(operations.flatMap((operation) => operation.assetIds ?? []))];
     if (assetIds.length > 0) {
       const readableAssetIds = await this.getReadableAssetIds(auth, session, assetIds);
@@ -327,6 +421,44 @@ export class AgentOperationPlanService {
         throw new BadRequestException('One or more assets are not accessible');
       }
     }
+
+    const writableAssetIds = [
+      ...new Set(
+        operations
+          .filter((operation) => this.requiresWritableAssets(operation.type))
+          .flatMap((operation) => operation.assetIds ?? []),
+      ),
+    ];
+    if (writableAssetIds.length > 0) {
+      const allowedAssetIds = await this.getWritableAssetIds(auth, session, writableAssetIds);
+      if (allowedAssetIds.size !== writableAssetIds.length) {
+        throw new BadRequestException('One or more assets are not editable');
+      }
+    }
+
+    const tagIds = new Set(
+      operations.flatMap((operation) => {
+        const payload = this.requireObjectPayload(operation.payload);
+        return typeof payload.tagId === 'string' ? [payload.tagId] : [];
+      }),
+    );
+    if (tagIds.size > 0) {
+      const writableTagIds = await this.accessRepository.tag.checkOwnerAccess(auth.user.id, tagIds);
+      const requestedWritableTagIds = new Set([...writableTagIds].filter((id) => tagIds.has(id)));
+      if (requestedWritableTagIds.size !== tagIds.size) {
+        throw new BadRequestException('One or more tags are not accessible');
+      }
+    }
+  }
+
+  private requiresWritableAssets(type: AgentOperationType) {
+    return [
+      AgentOperationType.AssetRotate,
+      AgentOperationType.AssetSetFavorite,
+      AgentOperationType.AssetSetArchive,
+      AgentOperationType.AssetAddTag,
+      AgentOperationType.AssetRemoveTag,
+    ].includes(type);
   }
 
   private async getWritableAlbumIds(auth: AuthDto, session: AgentSession, albumIds: Set<string>) {
@@ -336,7 +468,9 @@ export class AgentOperationPlanService {
     if (plan.assetScope.owned) {
       const ownerIds = await this.accessRepository.album.checkOwnerAccess(auth.user.id, albumIds);
       for (const id of ownerIds) {
-        writableIds.add(id);
+        if (albumIds.has(id)) {
+          writableIds.add(id);
+        }
       }
     }
 
@@ -347,7 +481,9 @@ export class AgentOperationPlanService {
         AlbumUserRole.Editor,
       );
       for (const id of sharedIds) {
-        writableIds.add(id);
+        if (albumIds.has(id)) {
+          writableIds.add(id);
+        }
       }
     }
 
@@ -367,14 +503,18 @@ export class AgentOperationPlanService {
         allowLockedAssets,
       );
       for (const id of ownerIds) {
-        readableIds.add(id);
+        if (requestedIds.has(id)) {
+          readableIds.add(id);
+        }
       }
     }
 
     if (plan.assetScope.sharedSpaces) {
       const spaceIds = await this.accessRepository.asset.checkSpaceAccess(auth.user.id, requestedIds);
       for (const id of spaceIds) {
-        readableIds.add(id);
+        if (requestedIds.has(id)) {
+          readableIds.add(id);
+        }
       }
 
       if (!allowLockedAssets) {
@@ -395,8 +535,60 @@ export class AgentOperationPlanService {
     return readableIds;
   }
 
+  private async getWritableAssetIds(auth: AuthDto, session: AgentSession, assetIds: string[]) {
+    const requestedIds = new Set(assetIds);
+    const writableIds = new Set<string>();
+    const plan = session.permissionPlanSnapshot;
+    const allowLockedAssets = plan.assetScope.locked && auth.session?.hasElevatedPermission === true;
+
+    if (plan.assetScope.owned) {
+      const ownerIds = await this.accessRepository.asset.checkOwnerAccess(
+        auth.user.id,
+        requestedIds,
+        allowLockedAssets,
+      );
+      for (const id of ownerIds) {
+        if (requestedIds.has(id)) {
+          writableIds.add(id);
+        }
+      }
+    }
+
+    if (plan.assetScope.sharedSpaces) {
+      const spaceIds = await this.accessRepository.asset.checkSpaceEditAccess(auth.user.id, requestedIds);
+      for (const id of spaceIds) {
+        if (requestedIds.has(id)) {
+          writableIds.add(id);
+        }
+      }
+
+      if (!allowLockedAssets) {
+        const lockedIds = await this.assetRepository.getAgentLockedIds(writableIds);
+        for (const id of lockedIds) {
+          writableIds.delete(id);
+        }
+      }
+    }
+
+    const agentReadableIds = await this.assetRepository.getAgentReadableIds(writableIds);
+    for (const id of writableIds) {
+      if (!agentReadableIds.has(id)) {
+        writableIds.delete(id);
+      }
+    }
+
+    return writableIds;
+  }
+
   private prepareOperations(session: AgentSession, operations: AgentAlbumOperationInput[]): AgentAlbumOperationInput[] {
     const createTemporaryTargetIds = new Set<string>();
+    const createSpaceTemporaryTargetIds = new Set<string>();
+    const allCreateSpaceTemporaryTargetIds = new Set(
+      operations
+        .filter((operation) => operation.type === AgentOperationType.SpaceCreate && operation.temporaryTargetId)
+        .map((operation) => operation.temporaryTargetId as string),
+    );
+    const preparedOperations: AgentAlbumOperationInput[] = [];
 
     for (const operation of operations) {
       this.validateWriteScope(session, operation.type);
@@ -412,9 +604,19 @@ export class AgentOperationPlanService {
 
         createTemporaryTargetIds.add(operation.temporaryTargetId);
       }
-    }
 
-    return operations.map((operation) => {
+      if (operation.type === AgentOperationType.SpaceCreate) {
+        if (!operation.temporaryTargetId) {
+          throw new BadRequestException('space.create requires temporaryTargetId');
+        }
+
+        if (createSpaceTemporaryTargetIds.has(operation.temporaryTargetId)) {
+          throw new BadRequestException(`Duplicate space.create temporaryTargetId: ${operation.temporaryTargetId}`);
+        }
+
+        createSpaceTemporaryTargetIds.add(operation.temporaryTargetId);
+      }
+
       if (
         (operation.type === AgentOperationType.AlbumAddAssets || operation.type === AgentOperationType.AlbumSetCover) &&
         operation.targetKind === AgentOperationTargetKind.NewAlbum &&
@@ -425,7 +627,30 @@ export class AgentOperationPlanService {
         );
       }
 
-      return {
+      if (
+        (operation.type === AgentOperationType.SpaceAddAssets ||
+          operation.type === AgentOperationType.SpaceRemoveAssets) &&
+        operation.targetKind === AgentOperationTargetKind.NewSpace &&
+        (!operation.temporaryTargetId || !allCreateSpaceTemporaryTargetIds.has(operation.temporaryTargetId))
+      ) {
+        throw new BadRequestException(
+          `No space.create operation found for temporaryTargetId: ${operation.temporaryTargetId}`,
+        );
+      }
+
+      if (
+        (operation.type === AgentOperationType.SpaceAddAssets ||
+          operation.type === AgentOperationType.SpaceRemoveAssets) &&
+        operation.targetKind === AgentOperationTargetKind.NewSpace &&
+        operation.temporaryTargetId &&
+        !createSpaceTemporaryTargetIds.has(operation.temporaryTargetId)
+      ) {
+        throw new BadRequestException(
+          `${operation.type} references temporaryTargetId before its space.create operation`,
+        );
+      }
+
+      preparedOperations.push({
         type: operation.type,
         summary: operation.summary,
         targetKind: operation.targetKind,
@@ -433,11 +658,13 @@ export class AgentOperationPlanService {
         temporaryTargetId: operation.temporaryTargetId,
         assetIds: operation.assetIds ?? [],
         payload: operation.payload ?? {},
-        dependencyIds: [],
+        dependencyIds: operation.dependencyIds ?? [],
         riskLevel: operation.riskLevel,
         enabled: operation.enabled,
-      };
-    });
+      });
+    }
+
+    return preparedOperations;
   }
 
   private validateWriteScope(session: AgentSession, type: AgentOperationType) {
@@ -450,12 +677,51 @@ export class AgentOperationPlanService {
       throw new BadRequestException('Agent permission policy does not allow adding assets to albums');
     }
 
+    if (type === AgentOperationType.AlbumRemoveAssets && !writeScope.removeAssets) {
+      throw new BadRequestException('Agent permission policy does not allow removing assets from albums');
+    }
+
     if (type === AgentOperationType.AlbumUpdateDetails && !writeScope.updateDetails) {
       throw new BadRequestException('Agent permission policy does not allow updating album details');
     }
 
     if (type === AgentOperationType.AlbumSetCover && !writeScope.setCover) {
       throw new BadRequestException('Agent permission policy does not allow setting album covers');
+    }
+
+    if (type === AgentOperationType.SpaceCreate && !writeScope.createSpace) {
+      throw new BadRequestException('Agent permission policy does not allow creating spaces');
+    }
+
+    if (type === AgentOperationType.SpaceAddAssets && !writeScope.addAssetsToSpaces) {
+      throw new BadRequestException('Agent permission policy does not allow adding assets to spaces');
+    }
+
+    if (type === AgentOperationType.SpaceRemoveAssets && !writeScope.removeAssetsFromSpaces) {
+      throw new BadRequestException('Agent permission policy does not allow removing assets from spaces');
+    }
+
+    if (type === AgentOperationType.SpaceUpdateDetails && !writeScope.updateSpaceDetails) {
+      throw new BadRequestException('Agent permission policy does not allow updating space details');
+    }
+
+    if (type === AgentOperationType.AssetRotate && !writeScope.editAssets) {
+      throw new BadRequestException('Agent permission policy does not allow editing assets');
+    }
+
+    if (type === AgentOperationType.AssetSetFavorite && !writeScope.favoriteAssets) {
+      throw new BadRequestException('Agent permission policy does not allow changing asset favorites');
+    }
+
+    if (type === AgentOperationType.AssetSetArchive && !writeScope.archiveAssets) {
+      throw new BadRequestException('Agent permission policy does not allow archiving assets');
+    }
+
+    if (
+      (type === AgentOperationType.AssetAddTag || type === AgentOperationType.AssetRemoveTag) &&
+      !writeScope.tagAssets
+    ) {
+      throw new BadRequestException('Agent permission policy does not allow tagging assets');
     }
   }
 
@@ -566,7 +832,20 @@ export class AgentOperationPlanService {
       case AgentOperationType.AlbumCreate:
       case AgentOperationType.AlbumUpdateDetails: {
         const payload: AgentOperationFieldOverride['payload'] = {};
+        let targetAlbumId: string | undefined;
         for (const [field, value] of Object.entries(fields)) {
+          if (field === 'targetAlbumId') {
+            if (operation.type === AgentOperationType.AlbumCreate) {
+              throw new BadRequestException('Target overrides are not supported for create operations');
+            }
+            if (typeof value !== 'string') {
+              throw new BadRequestException('targetAlbumId must be a string');
+            }
+
+            targetAlbumId = value;
+            continue;
+          }
+
           if (field !== 'albumName' && field !== 'description') {
             throw new BadRequestException('Unsupported field override for operation type');
           }
@@ -574,7 +853,82 @@ export class AgentOperationPlanService {
           payload[field] = this.normalizeAlbumTextOverride(field, value);
         }
 
-        return { payload };
+        return { payload, targetAlbumId };
+      }
+
+      case AgentOperationType.AlbumAddAssets:
+      case AgentOperationType.AlbumRemoveAssets: {
+        const fieldNames = Object.keys(fields);
+        if (fieldNames.some((field) => field !== 'targetAlbumId')) {
+          throw new BadRequestException('Unsupported field override for operation type');
+        }
+
+        const targetAlbumId = fields.targetAlbumId;
+        if (typeof targetAlbumId !== 'string') {
+          throw new BadRequestException('targetAlbumId must be a string');
+        }
+
+        return { targetAlbumId };
+      }
+
+      case AgentOperationType.SpaceCreate:
+      case AgentOperationType.SpaceUpdateDetails: {
+        const payload: AgentOperationFieldOverride['payload'] = {};
+        let targetSpaceId: string | undefined;
+        for (const [field, value] of Object.entries(fields)) {
+          if (field === 'targetSpaceId') {
+            if (operation.type === AgentOperationType.SpaceCreate) {
+              throw new BadRequestException('Target overrides are not supported for create operations');
+            }
+            if (typeof value !== 'string') {
+              throw new BadRequestException('targetSpaceId must be a string');
+            }
+            targetSpaceId = value;
+            continue;
+          }
+
+          if (field === 'color') {
+            payload.color = this.normalizeSpaceColorOverride(value);
+            continue;
+          }
+
+          if (field !== 'spaceName' && field !== 'description') {
+            throw new BadRequestException('Unsupported field override for operation type');
+          }
+
+          payload[field] = this.normalizeSpaceTextOverride(field, value);
+        }
+
+        return { payload, targetSpaceId };
+      }
+
+      case AgentOperationType.SpaceAddAssets:
+      case AgentOperationType.SpaceRemoveAssets: {
+        const fieldNames = Object.keys(fields);
+        if (fieldNames.some((field) => field !== 'targetSpaceId')) {
+          throw new BadRequestException('Unsupported field override for operation type');
+        }
+
+        const targetSpaceId = fields.targetSpaceId;
+        if (typeof targetSpaceId !== 'string') {
+          throw new BadRequestException('targetSpaceId must be a string');
+        }
+
+        return { targetSpaceId };
+      }
+
+      case AgentOperationType.AssetRotate: {
+        const fieldNames = Object.keys(fields);
+        if (fieldNames.some((field) => field !== 'rotationAngle')) {
+          throw new BadRequestException('Unsupported field override for operation type');
+        }
+
+        const rotationAngle = fields.rotationAngle;
+        if (rotationAngle !== 90 && rotationAngle !== 180 && rotationAngle !== 270) {
+          throw new BadRequestException('rotationAngle must be 90, 180, or 270');
+        }
+
+        return { payload: { angle: rotationAngle } };
       }
 
       case AgentOperationType.AlbumSetCover: {
@@ -597,7 +951,7 @@ export class AgentOperationPlanService {
       }
 
       default: {
-        throw new BadRequestException('Field overrides are not supported for operation type');
+        throw new BadRequestException('Unsupported field override for operation type');
       }
     }
   }
@@ -617,6 +971,31 @@ export class AgentOperationPlanService {
     }
 
     return normalized;
+  }
+
+  private normalizeSpaceTextOverride(field: 'spaceName' | 'description', value: unknown): string {
+    if (typeof value !== 'string') {
+      throw new BadRequestException(`${field} must be a string`);
+    }
+
+    const normalized = value.trim();
+    if (field === 'spaceName' && (normalized.length < 1 || normalized.length > 100)) {
+      throw new BadRequestException('spaceName must be 1-100 characters');
+    }
+
+    if (field === 'description' && normalized.length > 500) {
+      throw new BadRequestException('description must be 500 characters or fewer');
+    }
+
+    return normalized;
+  }
+
+  private normalizeSpaceColorOverride(value: unknown): UserAvatarColor {
+    if (typeof value !== 'string' || !Object.values(UserAvatarColor).includes(value as UserAvatarColor)) {
+      throw new BadRequestException('color must be a valid space color');
+    }
+
+    return value as UserAvatarColor;
   }
 
   private resolveSelectedAssetIds(
@@ -661,6 +1040,7 @@ export class AgentOperationPlanService {
     const { selectedOperationIds, selectedAssetIdsByOperationId, fieldOverridesByOperationId } = applySelection;
     const appliedOperationIds = new Set<string>();
     const createdAlbumIdByTemporaryTargetId = new Map<string, string>();
+    const createdSpaceIdByTemporaryTargetId = new Map<string, string>();
     const updates: AgentOperationApplyUpdate[] = [];
 
     for (const operation of plan.operations) {
@@ -669,26 +1049,20 @@ export class AgentOperationPlanService {
         continue;
       }
 
-      const dependencyApplied = operation.dependencyIds.every((dependencyId) => appliedOperationIds.has(dependencyId));
-      if (!dependencyApplied) {
-        updates.push(this.skippedOperation(operation.id, 'Dependency was not applied'));
-        continue;
-      }
-
       const selectedAssetIds = selectedAssetIdsByOperationId.get(operation.id);
       const fieldOverride = fieldOverridesByOperationId.get(operation.id);
       const operationForApply =
         selectedAssetIds === undefined && !fieldOverride
           ? operation
-          : {
-              ...operation,
-              assetIds: fieldOverride?.albumThumbnailAssetId
-                ? [fieldOverride.albumThumbnailAssetId]
-                : (selectedAssetIds ?? operation.assetIds),
-              payload: fieldOverride?.payload
-                ? { ...this.requireObjectPayload(operation.payload), ...fieldOverride.payload }
-                : operation.payload,
-            };
+          : this.applyOperationOverrides(operation, selectedAssetIds, fieldOverride, plan.operations);
+
+      const dependencyApplied = operationForApply.dependencyIds.every((dependencyId) =>
+        appliedOperationIds.has(dependencyId),
+      );
+      if (!dependencyApplied) {
+        updates.push(this.skippedOperation(operation.id, 'Dependency was not applied'));
+        continue;
+      }
 
       if (selectedAssetIds?.length === 0) {
         updates.push(this.skippedOperation(operation.id, 'No selected items for operation'));
@@ -697,7 +1071,12 @@ export class AgentOperationPlanService {
 
       try {
         await this.validateApplyAccess(auth, session, operationForApply);
-        const update = await this.applySingleOperation(auth, operationForApply, createdAlbumIdByTemporaryTargetId);
+        const update = await this.applySingleOperation(
+          auth,
+          operationForApply,
+          createdAlbumIdByTemporaryTargetId,
+          createdSpaceIdByTemporaryTargetId,
+        );
         updates.push(update);
         if (update.status === AgentOperationStatus.Applied) {
           appliedOperationIds.add(operation.id);
@@ -713,6 +1092,61 @@ export class AgentOperationPlanService {
     }
 
     return updates;
+  }
+
+  private applyOperationOverrides(
+    operation: AgentOperationPlanWithOperations['operations'][number],
+    selectedAssetIds: string[] | undefined,
+    fieldOverride: AgentOperationFieldOverride | undefined,
+    operations: AgentOperationPlanWithOperations['operations'],
+  ): AgentOperationPlanWithOperations['operations'][number] {
+    const overriddenOperation: AgentOperationPlanWithOperations['operations'][number] = {
+      ...operation,
+      assetIds: fieldOverride?.albumThumbnailAssetId
+        ? [fieldOverride.albumThumbnailAssetId]
+        : (selectedAssetIds ?? operation.assetIds),
+      payload: fieldOverride?.payload
+        ? { ...this.requireObjectPayload(operation.payload), ...fieldOverride.payload }
+        : operation.payload,
+    };
+
+    if (fieldOverride?.targetAlbumId) {
+      return {
+        ...overriddenOperation,
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: fieldOverride.targetAlbumId,
+        temporaryTargetId: null,
+        dependencyIds: this.retainNonTargetDependencies(operation, operations, AgentOperationType.AlbumCreate),
+      };
+    }
+
+    if (fieldOverride?.targetSpaceId) {
+      return {
+        ...overriddenOperation,
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: fieldOverride.targetSpaceId,
+        temporaryTargetId: null,
+        dependencyIds: this.retainNonTargetDependencies(operation, operations, AgentOperationType.SpaceCreate),
+      };
+    }
+
+    return overriddenOperation;
+  }
+
+  private retainNonTargetDependencies(
+    operation: AgentOperationPlanWithOperations['operations'][number],
+    operations: AgentOperationPlanWithOperations['operations'],
+    createType: AgentOperationType.AlbumCreate | AgentOperationType.SpaceCreate,
+  ) {
+    if (!operation.temporaryTargetId || operation.dependencyIds.length === 0) {
+      return operation.dependencyIds;
+    }
+
+    const operationById = new Map(operations.map((candidate) => [candidate.id, candidate]));
+    return operation.dependencyIds.filter((dependencyId) => {
+      const dependency = operationById.get(dependencyId);
+      return dependency?.type !== createType || dependency.temporaryTargetId !== operation.temporaryTargetId;
+    });
   }
 
   private async validateApplyAccess(
@@ -740,6 +1174,7 @@ export class AgentOperationPlanService {
     auth: AuthDto,
     operation: AgentOperationPlanWithOperations['operations'][number],
     createdAlbumIdByTemporaryTargetId: Map<string, string>,
+    createdSpaceIdByTemporaryTargetId: Map<string, string>,
   ): Promise<AgentOperationApplyUpdate> {
     switch (operation.type) {
       case AgentOperationType.AlbumCreate: {
@@ -778,6 +1213,12 @@ export class AgentOperationPlanService {
         return this.appliedOperation(operation.id, this.assetResult(albumId, successfulAssetIds, results));
       }
 
+      case AgentOperationType.AlbumRemoveAssets: {
+        const albumId = this.resolveTargetAlbumId(operation, createdAlbumIdByTemporaryTargetId);
+        const results = await this.albumService.removeAssets(auth, albumId, { ids: operation.assetIds });
+        return this.bulkAssetOperationResult(operation.id, { albumId }, 'remove', results);
+      }
+
       case AgentOperationType.AlbumUpdateDetails: {
         const payload = this.requireAlbumPayload(operation.payload, operation.summary);
         const albumId = this.resolveTargetAlbumId(operation, createdAlbumIdByTemporaryTargetId);
@@ -798,6 +1239,99 @@ export class AgentOperationPlanService {
 
         const album = await this.albumService.update(auth, albumId, { albumThumbnailAssetId });
         return this.appliedOperation(operation.id, { albumId: album.id, assetIds: [albumThumbnailAssetId] });
+      }
+
+      case AgentOperationType.SpaceCreate: {
+        const payload = this.requireSpacePayload(operation.payload, operation.summary);
+        if (!payload.spaceName) {
+          throw new BadRequestException('space.create requires spaceName');
+        }
+
+        const dto: { name: string; description?: string; color?: UserAvatarColor } = { name: payload.spaceName };
+        if (payload.description !== undefined) {
+          dto.description = payload.description;
+        }
+        if (payload.color !== undefined) {
+          dto.color = payload.color;
+        }
+
+        const space = await this.sharedSpaceService.create(auth, dto);
+        if (operation.temporaryTargetId) {
+          createdSpaceIdByTemporaryTargetId.set(operation.temporaryTargetId, space.id);
+        }
+
+        return this.appliedOperation(operation.id, { spaceId: space.id });
+      }
+
+      case AgentOperationType.SpaceAddAssets: {
+        const spaceId = this.resolveTargetSpaceId(operation, createdSpaceIdByTemporaryTargetId);
+        await this.sharedSpaceService.addAssets(auth, spaceId, { assetIds: operation.assetIds });
+        return this.appliedOperation(operation.id, { spaceId, assetIds: operation.assetIds });
+      }
+
+      case AgentOperationType.SpaceRemoveAssets: {
+        const spaceId = this.resolveTargetSpaceId(operation, createdSpaceIdByTemporaryTargetId);
+        await this.sharedSpaceService.removeAssets(auth, spaceId, { assetIds: operation.assetIds });
+        return this.appliedOperation(operation.id, { spaceId, assetIds: operation.assetIds });
+      }
+
+      case AgentOperationType.SpaceUpdateDetails: {
+        const payload = this.requireSpacePayload(operation.payload, operation.summary);
+        const spaceId = this.resolveTargetSpaceId(operation, createdSpaceIdByTemporaryTargetId);
+        const dto: { name?: string; description?: string; color?: UserAvatarColor } = {};
+        if (payload.spaceName !== undefined) {
+          dto.name = payload.spaceName;
+        }
+        if (payload.description !== undefined) {
+          dto.description = payload.description;
+        }
+        if (payload.color !== undefined) {
+          dto.color = payload.color;
+        }
+
+        const space = await this.sharedSpaceService.update(auth, spaceId, dto);
+
+        return this.appliedOperation(operation.id, { spaceId: space.id });
+      }
+
+      case AgentOperationType.AssetSetFavorite: {
+        const payload = this.requireBooleanPayload(operation.payload, 'favorite');
+        await this.assetService.updateAll(auth, { ids: operation.assetIds, isFavorite: payload.favorite });
+        return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
+      }
+
+      case AgentOperationType.AssetSetArchive: {
+        const payload = this.requireBooleanPayload(operation.payload, 'archived');
+        await this.assetService.updateAll(auth, {
+          ids: operation.assetIds,
+          visibility: payload.archived ? AssetVisibility.Archive : AssetVisibility.Timeline,
+        });
+        return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
+      }
+
+      case AgentOperationType.AssetAddTag: {
+        const payload = this.requireTagPayload(operation.payload);
+        const tagId = payload.tagId ?? (await this.upsertTag(auth, payload.tagName));
+        const results = await this.tagService.addAssets(auth, tagId, { ids: operation.assetIds });
+        return this.bulkAssetOperationResult(operation.id, { tagId }, 'tag', results);
+      }
+
+      case AgentOperationType.AssetRemoveTag: {
+        const payload = this.requireTagPayload(operation.payload);
+        if (!payload.tagId) {
+          throw new BadRequestException('asset.removeTag requires tagId');
+        }
+
+        const results = await this.tagService.removeAssets(auth, payload.tagId, { ids: operation.assetIds });
+        return this.bulkAssetOperationResult(operation.id, { tagId: payload.tagId }, 'untag', results);
+      }
+
+      case AgentOperationType.AssetRotate: {
+        return this.applyRotateOperation(auth, operation);
+      }
+
+      default: {
+        throw new BadRequestException(`${operation.type} is not supported for apply yet`);
       }
     }
   }
@@ -828,6 +1362,32 @@ export class AgentOperationPlanService {
     };
   }
 
+  private bulkAssetOperationResult(
+    id: string,
+    target: { albumId?: string; tagId?: string },
+    verb: string,
+    results: BulkIdResponseDto[],
+  ): AgentOperationApplyUpdate {
+    const successfulAssetIds = results.filter((result) => result.success).map((result) => result.id);
+    const failedAssetCount = results.length - successfulAssetIds.length;
+    const result = {
+      ...target,
+      assetIds: successfulAssetIds,
+      assetResults: results.map(({ id, success, error, errorMessage }) => ({ id, success, error, errorMessage })),
+    };
+
+    if (failedAssetCount > 0) {
+      return {
+        id,
+        status: AgentOperationStatus.Failed,
+        result,
+        error: `Failed to ${verb} ${failedAssetCount} asset(s)`,
+      };
+    }
+
+    return this.appliedOperation(id, result);
+  }
+
   private resolveTargetAlbumId(
     operation: AgentOperationPlanWithOperations['operations'][number],
     createdAlbumIdByTemporaryTargetId: Map<string, string>,
@@ -846,6 +1406,24 @@ export class AgentOperationPlanService {
     throw new BadRequestException(`No applied album exists for operation ${operation.id}`);
   }
 
+  private resolveTargetSpaceId(
+    operation: AgentOperationPlanWithOperations['operations'][number],
+    createdSpaceIdByTemporaryTargetId: Map<string, string>,
+  ) {
+    if (operation.targetId) {
+      return operation.targetId;
+    }
+
+    if (operation.temporaryTargetId) {
+      const spaceId = createdSpaceIdByTemporaryTargetId.get(operation.temporaryTargetId);
+      if (spaceId) {
+        return spaceId;
+      }
+    }
+
+    throw new BadRequestException(`No applied space exists for operation ${operation.id}`);
+  }
+
   private requireAlbumPayload(payload: unknown, summary: string): { albumName?: string; description?: string } {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new BadRequestException(`Invalid album payload for ${summary}`);
@@ -856,6 +1434,168 @@ export class AgentOperationPlanService {
       albumName: typeof albumName === 'string' ? albumName : undefined,
       description: typeof description === 'string' ? description : undefined,
     };
+  }
+
+  private requireSpacePayload(
+    payload: unknown,
+    summary: string,
+  ): { spaceName?: string; description?: string; color?: UserAvatarColor } {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new BadRequestException(`Invalid space payload for ${summary}`);
+    }
+
+    const { spaceName, description, color } = payload as {
+      spaceName?: unknown;
+      description?: unknown;
+      color?: unknown;
+    };
+    const normalizedSpaceName = typeof spaceName === 'string' ? spaceName.trim() : undefined;
+    const normalizedDescription = typeof description === 'string' ? description : undefined;
+    if (normalizedSpaceName !== undefined && (normalizedSpaceName.length === 0 || normalizedSpaceName.length > 100)) {
+      throw new BadRequestException(`Invalid space payload for ${summary}`);
+    }
+    if (normalizedDescription !== undefined && normalizedDescription.length > 500) {
+      throw new BadRequestException(`Invalid space payload for ${summary}`);
+    }
+    if (color !== undefined && !Object.values(UserAvatarColor).includes(color as UserAvatarColor)) {
+      throw new BadRequestException(`Invalid space payload for ${summary}`);
+    }
+
+    return {
+      spaceName: normalizedSpaceName,
+      description: normalizedDescription,
+      color: color as UserAvatarColor | undefined,
+    };
+  }
+
+  private requireBooleanPayload(payload: unknown, key: 'favorite' | 'archived'): { favorite?: boolean; archived?: boolean } {
+    const objectPayload = this.requireObjectPayload(payload);
+    const value = objectPayload[key];
+    if (typeof value !== 'boolean') {
+      throw new BadRequestException(`asset operation requires boolean ${key}`);
+    }
+
+    return { [key]: value };
+  }
+
+  private requireTagPayload(payload: unknown): { tagId?: string; tagName?: string } {
+    const objectPayload = this.requireObjectPayload(payload);
+    return {
+      tagId: typeof objectPayload.tagId === 'string' ? objectPayload.tagId : undefined,
+      tagName: typeof objectPayload.tagName === 'string' ? objectPayload.tagName : undefined,
+    };
+  }
+
+  private async upsertTag(auth: AuthDto, tagName: string | undefined) {
+    if (!tagName) {
+      throw new BadRequestException('asset.addTag requires tagId or tagName');
+    }
+
+    const [tag] = await this.tagService.upsert(auth, { tags: [tagName] });
+    if (!tag) {
+      throw new BadRequestException('Tag upsert did not return a tag');
+    }
+
+    return tag.id;
+  }
+
+  private async applyRotateOperation(
+    auth: AuthDto,
+    operation: AgentOperationPlanWithOperations['operations'][number],
+  ): Promise<AgentOperationApplyUpdate> {
+    const angle = this.requireRotationPayload(operation.payload);
+    const assetResults: BulkIdResponseDto[] = [];
+    const successfulAssetIds: string[] = [];
+
+    for (const assetId of operation.assetIds) {
+      try {
+        const editableAsset = await this.assetRepository.getForEdit(assetId);
+        if (!editableAsset) {
+          throw new BadRequestException('Asset not found');
+        }
+        if (editableAsset.type !== AssetType.Image) {
+          throw new BadRequestException('Only images can be edited');
+        }
+
+        const { edits } = await this.assetService.getAssetEdits(auth, assetId);
+        const mergedEdits = this.mergeRotationEdits(
+          edits.map(({ action, parameters }) => ({ action, parameters }) as AssetEditActionItem),
+          angle,
+        );
+        if (mergedEdits.length === 0) {
+          await this.assetService.removeAssetEdits(auth, assetId);
+        } else {
+          await this.assetService.editAsset(auth, assetId, { edits: mergedEdits });
+        }
+
+        successfulAssetIds.push(assetId);
+        assetResults.push({ id: assetId, success: true });
+      } catch (error) {
+        assetResults.push({
+          id: assetId,
+          success: false,
+          errorMessage: error instanceof Error ? error.message : 'Failed to rotate asset',
+        });
+      }
+    }
+
+    const failedAssetCount = assetResults.length - successfulAssetIds.length;
+    const result = {
+      assetIds: successfulAssetIds,
+      assetResults: assetResults.map(({ id, success, error, errorMessage }) => ({ id, success, error, errorMessage })),
+    };
+
+    if (failedAssetCount > 0) {
+      return {
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        result,
+        error: `Failed to rotate ${failedAssetCount} asset(s)`,
+      };
+    }
+
+    return this.appliedOperation(operation.id, result);
+  }
+
+  private requireRotationPayload(payload: unknown): 90 | 180 | 270 {
+    const objectPayload = this.requireObjectPayload(payload);
+    const angle = objectPayload.angle;
+    if (angle !== 90 && angle !== 180 && angle !== 270) {
+      throw new BadRequestException('asset.rotate requires angle 90, 180, or 270');
+    }
+
+    return angle;
+  }
+
+  private mergeRotationEdits(edits: AssetEditActionItem[], relativeAngle: 90 | 180 | 270): AssetEditActionItem[] {
+    let inserted = false;
+    let currentAngle = 0;
+    const nextEdits: AssetEditActionItem[] = [];
+
+    for (const edit of edits) {
+      if (edit.action === AssetEditAction.Rotate) {
+        const angle = edit.parameters.angle;
+        currentAngle = typeof angle === 'number' ? angle : 0;
+        const netAngle = this.normalizeRotationAngle(currentAngle + relativeAngle);
+        if (netAngle !== 0) {
+          nextEdits.push({ action: AssetEditAction.Rotate, parameters: { angle: netAngle } });
+        }
+        inserted = true;
+        continue;
+      }
+
+      nextEdits.push({ action: edit.action, parameters: edit.parameters } as AssetEditActionItem);
+    }
+
+    if (!inserted) {
+      nextEdits.push({ action: AssetEditAction.Rotate, parameters: { angle: relativeAngle } });
+    }
+
+    return nextEdits;
+  }
+
+  private normalizeRotationAngle(angle: number) {
+    return ((angle % 360) + 360) % 360;
   }
 
   private requireObjectPayload(payload: unknown): Record<string, unknown> {
@@ -881,6 +1621,21 @@ export class AgentOperationPlanService {
           .map((operation) => operation.targetId as string),
       ),
     ];
+    const spaceIds = [
+      ...new Set(
+        operations
+          .filter((operation) => operation.targetKind === AgentOperationTargetKind.ExistingSpace && operation.targetId)
+          .map((operation) => operation.targetId as string),
+      ),
+    ];
+    const tagIds = [
+      ...new Set(
+        operations.flatMap((operation) => {
+          const payload = this.requireObjectPayload(operation.payload);
+          return typeof payload.tagId === 'string' ? [payload.tagId] : [];
+        }),
+      ),
+    ];
 
     return this.toolCallRepository.create({
       sessionId: session.id,
@@ -892,7 +1647,12 @@ export class AgentOperationPlanService {
           ? `Summarize operation plan ${request.planId}`
           : `Store ${operations.length} proposed album operation(s)`,
       responseSummary: result.responseSummary,
-      redactedRequestMetadata: this.redactRequestMetadata(toolName, request, operations, albumIds, assetIds),
+      redactedRequestMetadata: this.redactRequestMetadata(toolName, request, operations, {
+        albumIds,
+        spaceIds,
+        tagIds,
+        assetIds,
+      }),
       redactedResponseMetadata: result.redactedResponseMetadata,
       dataClass: AgentToolDataClass.Plan,
       assetCount: assetIds.length,
@@ -942,16 +1702,25 @@ export class AgentOperationPlanService {
     _toolName: AgentToolName,
     request: PlanningRequest,
     operations: AgentAlbumOperationInput[],
-    albumIds: string[],
-    assetIds: string[],
+    ids: { albumIds: string[]; spaceIds: string[]; tagIds: string[]; assetIds: string[] },
   ): AgentToolOperationPlanRequestMetadata {
-    return {
+    const metadata: AgentToolOperationPlanRequestMetadata = {
       planId: request.planId,
       operationCount: operations.length,
       operationTypes: operations.map((operation) => operation.type),
-      albumIds,
-      assetIds,
+      albumIds: ids.albumIds,
+      assetIds: ids.assetIds,
     };
+
+    if (ids.spaceIds.length > 0) {
+      metadata.spaceIds = ids.spaceIds;
+    }
+
+    if (ids.tagIds.length > 0) {
+      metadata.tagIds = ids.tagIds;
+    }
+
+    return metadata;
   }
 
   private mapPlan(plan: AgentOperationPlanWithOperations): AgentOperationPlanResponseDto {

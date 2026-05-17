@@ -37,6 +37,8 @@ export type AgentToolOperationPlanRequestMetadata = {
   operationCount: number;
   operationTypes: string[];
   albumIds: string[];
+  spaceIds?: string[];
+  tagIds?: string[];
   assetIds: string[];
 };
 

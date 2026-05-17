@@ -36,8 +36,17 @@ export type AgentPermissionPlanSnapshot = {
   writeScope: {
     createAlbum: boolean;
     addAssets: boolean;
+    removeAssets?: boolean;
     updateDetails: boolean;
     setCover: boolean;
+    createSpace?: boolean;
+    addAssetsToSpaces?: boolean;
+    removeAssetsFromSpaces?: boolean;
+    updateSpaceDetails?: boolean;
+    editAssets?: boolean;
+    favoriteAssets?: boolean;
+    archiveAssets?: boolean;
+    tagAssets?: boolean;
   };
   limits: {
     maxAssetsPerToolCall: number;
@@ -47,6 +56,24 @@ export type AgentPermissionPlanSnapshot = {
     maxOriginalsPerToolCall: number;
     maxOriginalsPerSession?: number;
     expiresInMinutes: number | null;
+  };
+};
+
+export type AgentNormalizedPermissionPlanSnapshot = Omit<AgentPermissionPlanSnapshot, 'writeScope'> & {
+  writeScope: {
+    createAlbum: boolean;
+    addAssets: boolean;
+    removeAssets: boolean;
+    updateDetails: boolean;
+    setCover: boolean;
+    createSpace: boolean;
+    addAssetsToSpaces: boolean;
+    removeAssetsFromSpaces: boolean;
+    updateSpaceDetails: boolean;
+    editAssets: boolean;
+    favoriteAssets: boolean;
+    archiveAssets: boolean;
+    tagAssets: boolean;
   };
 };
 
