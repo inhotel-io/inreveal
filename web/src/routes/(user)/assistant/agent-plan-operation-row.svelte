@@ -81,9 +81,7 @@
           {/if}
         </span>
       {/if}
-      {#if item.applyState.kind !== 'proposed'}
-        <span>{$t(statusLabelKey)}</span>
-      {/if}
+      <span>{$t(statusLabelKey)}</span>
       {#if item.applyState.kind === 'partial'}
         <span>
           {$t('assistant_operation_partial_asset_summary', {
