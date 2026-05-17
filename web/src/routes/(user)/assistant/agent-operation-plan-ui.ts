@@ -144,6 +144,7 @@ const riskLabelKeys = {
 const fallbackTypeLabelKey = 'assistant_operation_type_unknown' as Translations;
 const fallbackRiskLabelKey = 'assistant_operation_risk_unknown' as Translations;
 const representativeAssetLimit = 12;
+export const AGENT_PLAN_ITEM_REVIEW_VISIBLE_LIMIT = 48;
 export const AGENT_PLAN_THUMBNAIL_STRIP_DEFAULT_LIMIT = 6;
 export const AGENT_PLAN_THUMBNAIL_STRIP_MAX_LIMIT = 12;
 
@@ -309,6 +310,32 @@ export const buildAgentPlanThumbnailStrip = (
     hasMore: overflowCount > 0,
     hasThumbnails: assetIds.length > 0,
   };
+};
+
+export const buildAgentPlanItemReviewAssetIds = (
+  item: OperationReviewItem,
+  requestedLimit = AGENT_PLAN_ITEM_REVIEW_VISIBLE_LIMIT,
+) => item.operation.assetIds.slice(0, Math.max(0, Math.floor(requestedLimit)));
+
+export const isAssetSelectedForOperation = (item: OperationReviewItem, assetId: string) => {
+  const selection = item.review.selection;
+  if (!selection.supportsItemSelection) {
+    return item.enabled;
+  }
+
+  if (selection.mode === 'all') {
+    return true;
+  }
+
+  if (selection.mode === 'allExcept') {
+    return !(selection.itemIds ?? []).includes(assetId);
+  }
+
+  if (selection.mode === 'only') {
+    return (selection.itemIds ?? []).includes(assetId);
+  }
+
+  return false;
 };
 
 export const buildOperationReviewModel = (
