@@ -197,6 +197,8 @@ jobs:
         working-directory: ./open-api/typescript-sdk
       - name: Install deps
         run: pnpm install --frozen-lockfile
+      - name: Build typescript-sdk
+        run: pnpm --dir ../open-api/typescript-sdk build
       # Skip linter & formatter in Windows test.
       - name: Run tsc
         run: pnpm check
