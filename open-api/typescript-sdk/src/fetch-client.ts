@@ -711,6 +711,9 @@ export type AgentOperationPlanToolResponseDto = {
     summary: string;
     toolCall: (AgentToolCallResponseDto) | null;
 };
+export type AgentOperationFieldOverride = {
+    [key: string]: any;
+};
 export type AgentOperationItemSelection = {
     itemKind: AgentOperationItemKind;
     mode: Mode;
@@ -729,6 +732,9 @@ export type AgentOperationItemSelection = {
     itemIds?: string[];
 };
 export type AgentOperationPlanApplyRequestDto = {
+    fieldOverrides?: {
+        [key: string]: AgentOperationFieldOverride;
+    };
     itemSelections?: {
         [key: string]: AgentOperationItemSelection;
     };
