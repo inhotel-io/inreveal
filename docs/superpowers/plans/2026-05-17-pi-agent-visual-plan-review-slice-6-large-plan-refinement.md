@@ -148,6 +148,7 @@ This plan must add coverage for:
 ## Task 1: Pure Virtual Window And Filter Helpers
 
 **Files:**
+
 - Create: `web/src/routes/(user)/assistant/agent-plan-large-item-review-ui.ts`
 - Create: `web/src/routes/(user)/assistant/agent-plan-large-item-review-ui.spec.ts`
 
@@ -166,7 +167,8 @@ import {
   type AgentPlanReviewAssetMetadata,
 } from './agent-plan-large-item-review-ui';
 
-const assetIds = (count: number) => Array.from({ length: count }, (_, index) => `asset-${String(index).padStart(4, '0')}`);
+const assetIds = (count: number) =>
+  Array.from({ length: count }, (_, index) => `asset-${String(index).padStart(4, '0')}`);
 
 const defaultFilter: AgentPlanItemFilterState = {
   query: '',
@@ -418,29 +420,29 @@ const metadataAssets = (): AgentPlanReviewAssetMetadata[] => [
 
 describe('filterAgentPlanReviewAssets', () => {
   it('matches query across id, label, filename, album, people, tags, and location', () => {
-    expect(filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, query: 'maya' }).map((asset) => asset.id)).toEqual([
-      'asset-1',
-    ]);
-    expect(filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, query: 'screen shot' }).map((asset) => asset.id)).toEqual([
-      'asset-2',
-    ]);
-    expect(filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, query: 'lisbon' }).map((asset) => asset.id)).toEqual([
-      'asset-1',
-    ]);
-    expect(filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, query: 'asset-3' }).map((asset) => asset.id)).toEqual([
-      'asset-3',
-    ]);
+    expect(
+      filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, query: 'maya' }).map((asset) => asset.id),
+    ).toEqual(['asset-1']);
+    expect(
+      filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, query: 'screen shot' }).map(
+        (asset) => asset.id,
+      ),
+    ).toEqual(['asset-2']);
+    expect(
+      filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, query: 'lisbon' }).map((asset) => asset.id),
+    ).toEqual(['asset-1']);
+    expect(
+      filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, query: 'asset-3' }).map((asset) => asset.id),
+    ).toEqual(['asset-3']);
   });
 
   it('filters by media kind and leaves unknown assets only in the all view', () => {
-    expect(filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, kind: 'video' }).map((asset) => asset.id)).toEqual([
-      'asset-3',
-      'asset-4',
-    ]);
-    expect(filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, kind: 'image' }).map((asset) => asset.id)).toEqual([
-      'asset-1',
-      'asset-2',
-    ]);
+    expect(
+      filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, kind: 'video' }).map((asset) => asset.id),
+    ).toEqual(['asset-3', 'asset-4']);
+    expect(
+      filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, kind: 'image' }).map((asset) => asset.id),
+    ).toEqual(['asset-1', 'asset-2']);
     expect(filterAgentPlanReviewAssets(metadataAssets(), defaultFilter).map((asset) => asset.id)).toContain('asset-5');
   });
 
@@ -460,10 +462,14 @@ describe('filterAgentPlanReviewAssets', () => {
 
   it('filters screenshots and duplicate groups with quick filters', () => {
     expect(
-      filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, quickFilter: 'screenshots' }).map((asset) => asset.id),
+      filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, quickFilter: 'screenshots' }).map(
+        (asset) => asset.id,
+      ),
     ).toEqual(['asset-2']);
     expect(
-      filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, quickFilter: 'duplicates' }).map((asset) => asset.id),
+      filterAgentPlanReviewAssets(metadataAssets(), { ...defaultFilter, quickFilter: 'duplicates' }).map(
+        (asset) => asset.id,
+      ),
     ).toEqual(['asset-3', 'asset-4']);
   });
 });
@@ -629,6 +635,7 @@ git commit -m "feat: add agent plan large item helpers"
 ## Task 2: Sparse Bulk Selection Helpers
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-plan-large-item-review-ui.ts`
 - Modify: `web/src/routes/(user)/assistant/agent-plan-large-item-review-ui.spec.ts`
 
@@ -1007,6 +1014,7 @@ git commit -m "feat: add sparse bulk plan item selection"
 ## Task 3: Virtualized Expanded Item Review UI
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-plan-item-review.svelte`
 - Modify: `web/src/routes/(user)/assistant/agent-plan-item-review.spec.ts`
 - Modify: `web/src/lib/i18n/en.json`
@@ -1429,6 +1437,7 @@ git commit -m "feat: virtualize agent plan item review"
 ## Task 4: Wire Bulk Selection Through The Review Panel
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-plan-operation-row.svelte`
 - Modify: `web/src/routes/(user)/assistant/agent-plan-operation-row.spec.ts`
 - Modify: `web/src/routes/(user)/assistant/agent-plan-destination-card.svelte`
@@ -1762,6 +1771,7 @@ git commit -m "feat: wire agent plan bulk item refinement"
 ## Task 5: Large-Plan Regression Coverage And Verification
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-plan-destination-card.spec.ts`
 - Modify: `web/src/routes/(user)/assistant/agent-operation-plan-review-panel.spec.ts`
 
