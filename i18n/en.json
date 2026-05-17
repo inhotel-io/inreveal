@@ -848,7 +848,6 @@
   "assistant_operation_item_selected_count": "{selected, number} of {total, number} selected",
   "assistant_operation_item_thumbnail_alt": "Photo {index, number} of {count, number}",
   "assistant_operation_item_thumbnail_unavailable": "Preview unavailable",
-  "assistant_operation_item_toolbar_label": "Photo review controls",
   "assistant_operation_item_toggle": "Include photo {index, number}",
   "assistant_operation_item_toolbar_label": "Photo review controls",
   "assistant_operation_item_virtual_summary": "Showing {visible, number} of {total, number} {total, plural, one {photo} other {photos}}",
