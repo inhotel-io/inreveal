@@ -82,26 +82,32 @@ const waitForCurrentPlan = async (
   return plan!;
 };
 
-const startAssistantSession = async (page: Page, accessToken: string) => {
-  await page.goto('/assistant');
-  await expect(page.getByRole('heading', { name: 'Session setup' })).toBeVisible();
+const configureAssistantDefaults = async (page: Page) => {
+  await page.getByTestId('assistant-settings-menu').click();
+  const settingsDialog = page.getByRole('dialog', { name: 'Assistant settings' });
+  await expect(settingsDialog).toBeVisible();
 
-  await page.getByLabel('Provider credential').selectOption({ label: credentialLabel });
-  await page.getByLabel('Model').fill(model);
-  await page.getByLabel('Permission preset', { exact: true }).selectOption(AgentPermissionPreset.Careful);
-  await page.getByLabel('Approval mode', { exact: true }).selectOption(AgentApprovalMode.PlanOnly);
-  await page.getByRole('button', { name: 'Start session' }).click();
-
-  await expect(page.getByRole('heading', { name: 'Created session' })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
-  await expect(page.getByText('No proposed album plan yet.')).toBeVisible();
-
-  return waitForLatestSession(accessToken, AgentSessionStatus.Running);
+  await settingsDialog.getByLabel('Permission preset', { exact: true }).selectOption(AgentPermissionPreset.Careful);
+  await settingsDialog.getByLabel('Approval mode', { exact: true }).selectOption(AgentApprovalMode.PlanOnly);
+  await settingsDialog.getByRole('button', { name: 'Close' }).click();
+  await expect(settingsDialog).toBeHidden();
 };
 
 const sendAssistantPrompt = async (page: Page, prompt: string) => {
   await page.getByRole('textbox', { name: 'Message' }).fill(prompt);
   await page.getByRole('button', { name: 'Send' }).click();
+};
+
+const startAssistantSession = async (page: Page, accessToken: string, prompt: string) => {
+  await page.goto('/assistant');
+  await expect(page.getByRole('heading', { name: 'New chat' })).toBeVisible();
+  await configureAssistantDefaults(page);
+
+  await sendAssistantPrompt(page, prompt);
+
+  const session = await waitForLatestSession(accessToken, AgentSessionStatus.Running);
+  await expect(page.getByRole('heading', { name: prompt })).toBeVisible({ timeout: 15_000 });
+  return session;
 };
 
 test.describe('Assistant album organizer', () => {
@@ -133,8 +139,11 @@ test.describe('Assistant album organizer', () => {
     ]);
     await utils.setAuthCookies(context, admin.accessToken);
 
-    const session = await startAssistantSession(page, admin.accessToken);
-    await sendAssistantPrompt(page, 'Create a Portugal trip album from my loose photos.');
+    const session = await startAssistantSession(
+      page,
+      admin.accessToken,
+      'Create a Portugal trip album from my loose photos.',
+    );
 
     await expect(page.getByText('I proposed a Portugal Trip album.')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('heading', { name: 'Plan review' })).toBeVisible();
@@ -197,8 +206,11 @@ test.describe('Assistant album organizer', () => {
     await utils.createAsset(admin.accessToken);
     await utils.setAuthCookies(context, admin.accessToken);
 
-    const session = await startAssistantSession(page, admin.accessToken);
-    await sendAssistantPrompt(page, 'Create a denied test album with an inaccessible photo.');
+    const session = await startAssistantSession(
+      page,
+      admin.accessToken,
+      'Create a denied test album with an inaccessible photo.',
+    );
 
     await expect(page.getByText(/Gallery denied the album organization request/)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('No proposed album plan yet.')).toBeVisible();
