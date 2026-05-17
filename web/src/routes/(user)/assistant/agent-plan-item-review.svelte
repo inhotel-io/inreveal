@@ -56,13 +56,14 @@
   const filteredAssetIds = $derived(filteredAssets.map((asset) => asset.id));
   const facets = $derived(getAgentPlanAvailableFilterFacets(reviewAssets));
   const videoAssetIds = $derived(reviewAssets.filter((asset) => asset.kind === 'video').map((asset) => asset.id));
+  const virtualColumnCount = $derived(Math.max(1, Math.floor(columnCount)));
   const virtualWindow = $derived(
     buildAgentPlanItemVirtualWindow({
       assetIds: filteredAssetIds,
       scrollTop,
       viewportHeight,
       itemSize,
-      columnCount,
+      columnCount: virtualColumnCount,
       overscanRows,
     }),
   );
@@ -258,9 +259,9 @@
       {/if}
       <div style={`height: ${virtualWindow.beforeHeight}px;`}></div>
       <div
-        class="grid grid-cols-[repeat(auto-fill,minmax(5.5rem,1fr))] gap-2"
+        class="grid gap-2"
         data-testid="agent-plan-item-review-tile-grid"
-        style={`grid-auto-rows: ${itemSize}px;`}
+        style={`grid-template-columns: repeat(${virtualColumnCount}, minmax(0, 1fr)); grid-auto-rows: ${itemSize}px;`}
       >
         {#each virtualWindow.visibleAssetIds as assetId, visibleIndex (assetId)}
           {@const selected = isAssetSelectedForOperation(item, assetId)}
