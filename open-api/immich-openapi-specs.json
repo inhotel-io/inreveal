@@ -24125,6 +24125,10 @@
         ],
         "type": "string"
       },
+      "AgentOperationFieldOverride": {
+        "additionalProperties": {},
+        "type": "object"
+      },
       "AgentOperationItemKind": {
         "enum": [
           "asset"
@@ -24262,6 +24266,12 @@
       "AgentOperationPlanApplyRequestDto": {
         "additionalProperties": false,
         "properties": {
+          "fieldOverrides": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AgentOperationFieldOverride"
+            },
+            "type": "object"
+          },
           "itemSelections": {
             "additionalProperties": {
               "$ref": "#/components/schemas/AgentOperationItemSelection"
@@ -24942,7 +24952,7 @@
                     },
                     "assetIds": {
                       "minItems": 1,
-                      "maxItems": 1,
+                      "maxItems": 500,
                       "type": "array",
                       "items": {
                         "type": "string",
@@ -25736,7 +25746,7 @@
                     },
                     "assetIds": {
                       "minItems": 1,
-                      "maxItems": 1,
+                      "maxItems": 500,
                       "type": "array",
                       "items": {
                         "type": "string",
