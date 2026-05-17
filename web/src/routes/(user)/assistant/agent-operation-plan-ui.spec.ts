@@ -10,6 +10,7 @@ import {
 import {
   buildApprovedOperationIds,
   buildGroupEnabledState,
+  buildOperationReviewImpactSummary,
   buildOperationReviewModel,
   buildSelectionPayload,
   createInitialOperationEnabledState,
@@ -332,6 +333,92 @@ describe('agent operation plan UI helpers', () => {
         representativeAssetIds: [assetA, assetB],
       }),
     );
+  });
+
+  it('summarizes selected destinations, changes, and assets for the evidence ledger shell', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: createId,
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Portugal album',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          payload: { albumName: 'Portugal' },
+        }),
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add two assets',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          assetIds: [assetA, assetB],
+          dependencyIds: [createId],
+          payload: {},
+        }),
+        operation({
+          id: updateId,
+          type: AgentOperationType.AlbumUpdateDetails,
+          summary: 'Update existing Portugal description',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: '00000000-0000-4000-8000-000000000301',
+          payload: { description: 'Updated trip notes' },
+        }),
+      ]),
+      { [createId]: true, [addId]: true, [updateId]: true },
+    );
+
+    expect(buildOperationReviewImpactSummary(model)).toEqual({
+      destinationCount: 2,
+      totalOperationCount: 3,
+      selectedOperationCount: 3,
+      blockedOperationCount: 0,
+      totalAssetCount: 2,
+      selectedAssetCount: 2,
+    });
+  });
+
+  it('excludes disabled and blocked operations from selected evidence ledger impact counts', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: createId,
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Portugal album',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          payload: { albumName: 'Portugal' },
+        }),
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add two assets',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          assetIds: [assetA, assetB],
+          dependencyIds: [createId],
+          payload: {},
+        }),
+        operation({
+          id: updateId,
+          type: AgentOperationType.AlbumUpdateDetails,
+          summary: 'Update existing Portugal description',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: '00000000-0000-4000-8000-000000000301',
+          payload: { description: 'Updated trip notes' },
+        }),
+      ]),
+      { [createId]: false, [addId]: true, [updateId]: true },
+    );
+
+    expect(buildOperationReviewImpactSummary(model)).toEqual({
+      destinationCount: 2,
+      totalOperationCount: 3,
+      selectedOperationCount: 1,
+      blockedOperationCount: 1,
+      totalAssetCount: 2,
+      selectedAssetCount: 0,
+    });
   });
 
   it('groups new-album operations by temporary target and keeps operation order', () => {
