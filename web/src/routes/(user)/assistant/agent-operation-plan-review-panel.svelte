@@ -59,7 +59,9 @@
   let destroyed = false;
 
   const model = $derived(
-    plan ? buildOperationReviewModel(plan, enabledByOperationId, itemSelectionByOperationId, fieldOverrideByOperationId) : null,
+    plan
+      ? buildOperationReviewModel(plan, enabledByOperationId, itemSelectionByOperationId, fieldOverrideByOperationId)
+      : null,
   );
   const selectionPayload = $derived(model ? buildSelectionPayload(model) : null);
   const selectedOperationIds = $derived(selectionPayload?.operationIds ?? []);
@@ -225,12 +227,7 @@
       enabledByOperationId = createInitialOperationEnabledState(response.plan);
       itemSelectionByOperationId = createInitialOperationItemSelectionState(response.plan);
       fieldOverrideByOperationId = createInitialOperationFieldOverrideState(response.plan);
-      publishSelection(
-        response.plan,
-        enabledByOperationId,
-        itemSelectionByOperationId,
-        fieldOverrideByOperationId,
-      );
+      publishSelection(response.plan, enabledByOperationId, itemSelectionByOperationId, fieldOverrideByOperationId);
       applyMessage = $t('assistant_operation_apply_success', {
         values: {
           applied: response.appliedOperationIds.length,

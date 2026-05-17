@@ -17,15 +17,15 @@ import {
   buildOperationReviewImpactSummary,
   buildOperationReviewModel,
   buildSelectionPayload,
-  createInitialOperationFieldOverrideState,
   createInitialOperationEnabledState,
+  createInitialOperationFieldOverrideState,
   createInitialOperationItemSelectionState,
-  type OperationFieldOverrideState,
   getOperationAssetCount,
   resetOperationFieldOverride,
   resetOperationItemSelection,
   setOperationFieldOverride,
   setOperationItemSelection,
+  type OperationFieldOverrideState,
 } from './agent-operation-plan-ui';
 
 const planId = '00000000-0000-4000-8000-000000000100';
@@ -539,12 +539,9 @@ describe('agent operation plan UI helpers', () => {
       mode: 'allExcept',
       itemIds: [assetB],
     });
-    const invalidModel = buildOperationReviewModel(
-      currentPlan,
-      { [coverId]: true },
-      excludedCoverState,
-      { [coverId]: { albumThumbnailAssetId: assetB } },
-    );
+    const invalidModel = buildOperationReviewModel(currentPlan, { [coverId]: true }, excludedCoverState, {
+      [coverId]: { albumThumbnailAssetId: assetB },
+    });
 
     expect(invalidModel.operationsById.get(coverId)?.fieldErrors).toEqual({
       albumThumbnailAssetId: 'Choose a selected cover photo.',
