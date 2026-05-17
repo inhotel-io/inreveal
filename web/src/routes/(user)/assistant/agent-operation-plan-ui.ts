@@ -9,9 +9,19 @@ import type { Translations } from 'svelte-i18n';
 
 export type OperationEnabledState = Record<string, boolean>;
 
+export type OperationItemSelectionState = Record<string, AgentOperationItemSelectionPayload>;
+
+export type AgentOperationItemSelectionPayload = {
+  itemKind: AgentReviewItemKind;
+  mode: AgentReviewSelectionMode;
+  itemIds?: string[];
+};
+
 export type AgentOperationSelectionPayload = {
   planId: string;
+  planRevision: number;
   operationIds: string[];
+  itemSelections?: Record<string, AgentOperationItemSelectionPayload>;
 };
 
 export type AgentReviewDestinationKind = 'album' | 'space' | 'assetBatch' | 'library' | 'imageEditBatch';
@@ -74,10 +84,13 @@ export type OperationReviewItem = {
   selected: boolean;
   enabled: boolean;
   blocked: boolean;
+  mixed: boolean;
   blockedBy: string[];
   typeLabelKey: Translations;
   riskLabelKey: Translations;
   assetCount: number;
+  excludedAssetCount: number;
+  selectedAssetIds: string[];
   representativeAssetIds: string[];
 };
 
@@ -137,6 +150,85 @@ export const AGENT_PLAN_THUMBNAIL_STRIP_MAX_LIMIT = 12;
 export const createInitialOperationEnabledState = (plan: AgentOperationPlanResponseDto): OperationEnabledState =>
   Object.fromEntries(plan.operations.map((operation) => [operation.id, operation.enabled]));
 
+export const createInitialOperationItemSelectionState = (
+  _plan: AgentOperationPlanResponseDto,
+): OperationItemSelectionState => ({});
+
+export const setOperationItemSelection = (
+  state: OperationItemSelectionState,
+  operationId: string,
+  selection: AgentOperationItemSelectionPayload,
+): OperationItemSelectionState => ({
+  ...state,
+  [operationId]: normalizeSelection(selection),
+});
+
+export const resetOperationItemSelection = (
+  state: OperationItemSelectionState,
+  operationId: string,
+): OperationItemSelectionState => {
+  const { [operationId]: _removed, ...remaining } = state;
+  return remaining;
+};
+
+export const buildOperationItemSelectionState = (
+  plan: AgentOperationPlanResponseDto,
+  state: OperationItemSelectionState,
+  operationId: string,
+  assetId: string,
+  selected: boolean,
+): OperationItemSelectionState => {
+  const operation = plan.operations.find((candidate) => candidate.id === operationId);
+  if (!operation || !operation.assetIds.includes(assetId)) {
+    return state;
+  }
+
+  const currentSelection = state[operationId] ?? { itemKind: 'asset', mode: 'all' };
+  const currentItemIds = currentSelection.itemIds ?? [];
+
+  if (currentSelection.mode === 'all') {
+    return selected
+      ? state
+      : setOperationItemSelection(state, operationId, {
+          itemKind: 'asset',
+          mode: 'allExcept',
+          itemIds: [assetId],
+        });
+  }
+
+  if (currentSelection.mode === 'allExcept') {
+    const nextItemIds = selected
+      ? currentItemIds.filter((itemId) => itemId !== assetId)
+      : normalizeItemIds([...currentItemIds, assetId]);
+
+    return nextItemIds.length === 0
+      ? resetOperationItemSelection(state, operationId)
+      : setOperationItemSelection(state, operationId, {
+          itemKind: 'asset',
+          mode: 'allExcept',
+          itemIds: nextItemIds,
+        });
+  }
+
+  if (currentSelection.mode === 'only') {
+    const nextItemIds = selected
+      ? normalizeItemIds([...currentItemIds, assetId])
+      : currentItemIds.filter((itemId) => itemId !== assetId);
+
+    return nextItemIds.length === 0
+      ? setOperationItemSelection(state, operationId, { itemKind: 'asset', mode: 'none' })
+      : setOperationItemSelection(state, operationId, {
+          itemKind: 'asset',
+          mode: 'only',
+          itemIds: nextItemIds,
+        });
+  }
+
+  return selected
+    ? setOperationItemSelection(state, operationId, { itemKind: 'asset', mode: 'only', itemIds: [assetId] })
+    : state;
+};
+
 export const getOperationAssetCount = (operations: Pick<AgentOperationResponseDto, 'assetIds'>[]) =>
   new Set(operations.flatMap((operation) => operation.assetIds)).size;
 
@@ -156,10 +248,31 @@ export const buildApprovedOperationIds = (model: OperationReviewModel) =>
     .filter((operation) => operation.enabled && !operation.blocked)
     .map((operation) => operation.id);
 
-export const buildSelectionPayload = (model: OperationReviewModel): AgentOperationSelectionPayload => ({
-  planId: model.plan.id,
-  operationIds: buildApprovedOperationIds(model),
-});
+export const buildSelectionPayload = (model: OperationReviewModel): AgentOperationSelectionPayload => {
+  const operationIds = buildApprovedOperationIds(model);
+  const itemSelections = Object.fromEntries(
+    operationIds
+      .map((operationId) => model.operationsById.get(operationId))
+      .filter((operation): operation is OperationReviewItem => operation !== undefined)
+      .filter((operation) => operation.review.selection.supportsItemSelection)
+      .filter((operation) => operation.review.selection.mode !== 'all')
+      .map((operation) => [
+        operation.id,
+        {
+          itemKind: operation.review.selection.itemKind,
+          mode: operation.review.selection.mode,
+          ...(operation.review.selection.itemIds ? { itemIds: operation.review.selection.itemIds } : {}),
+        },
+      ]),
+  );
+
+  return {
+    planId: model.plan.id,
+    planRevision: model.plan.revision,
+    operationIds,
+    ...(Object.keys(itemSelections).length > 0 ? { itemSelections } : {}),
+  };
+};
 
 export const buildOperationReviewImpactSummary = (model: OperationReviewModel): OperationReviewImpactSummary => {
   const selectedOperations = model.plan.operations
@@ -173,7 +286,7 @@ export const buildOperationReviewImpactSummary = (model: OperationReviewModel): 
     selectedOperationCount: selectedOperations.length,
     blockedOperationCount: [...model.operationsById.values()].filter((operation) => operation.blocked).length,
     totalAssetCount: getOperationAssetCount(model.plan.operations),
-    selectedAssetCount: getOperationAssetCount(selectedOperations.map(({ operation }) => operation)),
+    selectedAssetCount: new Set(selectedOperations.flatMap((operation) => operation.selectedAssetIds)).size,
   };
 };
 
@@ -201,9 +314,27 @@ export const buildAgentPlanThumbnailStrip = (
 export const buildOperationReviewModel = (
   plan: AgentOperationPlanResponseDto,
   enabledByOperationId: OperationEnabledState,
+  itemSelectionByOperationId: OperationItemSelectionState = {},
 ): OperationReviewModel => {
   const operationById = new Map(plan.operations.map((operation) => [operation.id, operation]));
   const blockedByCache = new Map<string, string[]>();
+
+  const getBaseSelection = (operation: AgentOperationResponseDto) =>
+    buildOperationReviewSelection(
+      operation,
+      enabledByOperationId[operation.id] ?? operation.enabled,
+      itemSelectionByOperationId[operation.id],
+    );
+
+  const isOperationRequested = (operation: AgentOperationResponseDto) => {
+    const enabled = enabledByOperationId[operation.id] ?? operation.enabled;
+    if (!enabled) {
+      return false;
+    }
+
+    const selection = getBaseSelection(operation);
+    return selection.supportsItemSelection ? selection.selectedCount > 0 : true;
+  };
 
   const collectBlockingDependencySummaries = (
     operation: AgentOperationResponseDto,
@@ -230,9 +361,7 @@ export const buildOperationReviewModel = (
       }
 
       const dependencyBlockedBy = collectBlockingDependencySummaries(dependency, nextVisitedOperationIds);
-      const dependencyEnabled = enabledByOperationId[dependency.id] ?? dependency.enabled;
-
-      if (!dependencyEnabled || dependencyBlockedBy.length > 0) {
+      if (!isOperationRequested(dependency) || dependencyBlockedBy.length > 0) {
         blockedBy.push(dependency.summary);
       }
     }
@@ -252,6 +381,7 @@ export const buildOperationReviewModel = (
       (dependency) => collectBlockingDependencySummaries(dependency).length > 0,
       selected,
       blocked,
+      itemSelectionByOperationId[operation.id],
     );
 
     return {
@@ -261,12 +391,18 @@ export const buildOperationReviewModel = (
       summary: review.summary,
       risk: review.riskLevel,
       selected,
-      enabled: !blocked && selected,
+      enabled: !blocked && selected && (!review.selection.supportsItemSelection || review.selection.selectedCount > 0),
       blocked,
+      mixed:
+        review.selection.supportsItemSelection &&
+        review.selection.selectedCount > 0 &&
+        review.selection.selectedCount < review.selection.totalCount,
       blockedBy,
       typeLabelKey: typeLabelKeys[operation.type] ?? fallbackTypeLabelKey,
       riskLabelKey: riskLabelKeys[operation.riskLevel] ?? fallbackRiskLabelKey,
       assetCount: review.selection.totalCount,
+      excludedAssetCount: Math.max(review.selection.totalCount - review.selection.selectedCount, 0),
+      selectedAssetIds: getSelectedAssetIds(operation, review.selection),
       representativeAssetIds: review.thumbnails.representativeAssetIds,
     };
   });
@@ -317,13 +453,14 @@ const buildOperationReview = (
   isOperationBlocked: (operation: AgentOperationResponseDto) => boolean,
   selected: boolean,
   blocked: boolean,
+  itemSelection?: AgentOperationItemSelectionPayload,
 ): AgentOperationReview => ({
   operationId: operation.id,
   operationType: operation.type,
   destination: getReviewDestination(operation, operationById),
   summary: getOperationReviewSummary(operation),
   riskLevel: operation.riskLevel,
-  selection: buildOperationReviewSelection(operation, selected && !blocked),
+  selection: buildOperationReviewSelection(operation, selected && !blocked, itemSelection),
   thumbnails: getThumbnailSummary([operation]),
   dependencies: operation.dependencyIds.map((operationId) => {
     const dependency = operationById.get(operationId);
@@ -341,16 +478,108 @@ const buildOperationReview = (
 const buildOperationReviewSelection = (
   operation: Pick<AgentOperationResponseDto, 'assetIds'>,
   included: boolean,
+  itemSelection?: AgentOperationItemSelectionPayload,
 ): AgentReviewSelection => {
-  const totalCount = getOperationAssetCount([operation]);
+  const assetIds = [...new Set(operation.assetIds)];
+  const totalCount = assetIds.length;
+  const supportsItemSelection = totalCount > 0;
+
+  if (!included) {
+    return {
+      itemKind: 'asset',
+      totalCount,
+      selectedCount: 0,
+      mode: 'none',
+      supportsItemSelection,
+    };
+  }
+
+  if (!supportsItemSelection) {
+    return {
+      itemKind: 'asset',
+      totalCount,
+      selectedCount: 0,
+      mode: 'all',
+      supportsItemSelection: false,
+    };
+  }
+
+  const selection = itemSelection ?? { itemKind: 'asset', mode: 'all' as const };
+  const itemIds = (selection.itemIds ?? []).filter((itemId) => assetIds.includes(itemId));
+
+  if (selection.mode === 'allExcept') {
+    return {
+      itemKind: 'asset',
+      totalCount,
+      selectedCount: Math.max(totalCount - itemIds.length, 0),
+      mode: 'allExcept',
+      itemIds,
+      supportsItemSelection: true,
+    };
+  }
+
+  if (selection.mode === 'only') {
+    return {
+      itemKind: 'asset',
+      totalCount,
+      selectedCount: itemIds.length,
+      mode: 'only',
+      itemIds,
+      supportsItemSelection: true,
+    };
+  }
+
+  if (selection.mode === 'none') {
+    return {
+      itemKind: 'asset',
+      totalCount,
+      selectedCount: 0,
+      mode: 'none',
+      supportsItemSelection: true,
+    };
+  }
 
   return {
     itemKind: 'asset',
     totalCount,
-    selectedCount: included ? totalCount : 0,
-    mode: included ? 'all' : 'none',
-    supportsItemSelection: false,
+    selectedCount: totalCount,
+    mode: 'all',
+    supportsItemSelection: true,
   };
+};
+
+const getSelectedAssetIds = (
+  operation: Pick<AgentOperationResponseDto, 'assetIds'>,
+  selection: AgentReviewSelection,
+) => {
+  const assetIds = [...new Set(operation.assetIds)];
+
+  if (!selection.supportsItemSelection) {
+    return assetIds;
+  }
+
+  if (selection.mode === 'all') {
+    return assetIds;
+  }
+
+  if (selection.mode === 'allExcept') {
+    const excludedAssetIds = new Set(selection.itemIds ?? []);
+    return assetIds.filter((assetId) => !excludedAssetIds.has(assetId));
+  }
+
+  if (selection.mode === 'only') {
+    const includedAssetIds = new Set(selection.itemIds ?? []);
+    return assetIds.filter((assetId) => includedAssetIds.has(assetId));
+  }
+
+  return [];
+};
+
+const normalizeItemIds = (itemIds: string[]) => [...new Set(itemIds)];
+
+const normalizeSelection = (selection: AgentOperationItemSelectionPayload): AgentOperationItemSelectionPayload => {
+  const itemIds = selection.itemIds ? normalizeItemIds(selection.itemIds) : undefined;
+  return itemIds ? { ...selection, itemIds } : selection;
 };
 
 const getThumbnailSummary = (
