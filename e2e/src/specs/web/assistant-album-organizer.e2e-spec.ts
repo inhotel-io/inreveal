@@ -100,7 +100,9 @@ const sendAssistantPrompt = async (page: Page, prompt: string) => {
 
 const startAssistantSession = async (page: Page, accessToken: string, prompt: string) => {
   await page.goto('/assistant');
-  await expect(page.getByRole('heading', { name: 'New chat' })).toBeVisible();
+  await expect(
+    page.getByTestId('assistant-empty-chat-surface').getByRole('heading', { name: 'New chat' }),
+  ).toBeVisible();
   await configureAssistantDefaults(page);
 
   await sendAssistantPrompt(page, prompt);
