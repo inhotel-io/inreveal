@@ -39,14 +39,28 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_status_failed: 'Failed',
     assistant_operation_status_skipped: 'Skipped',
     assistant_operation_item_excluded_count: '{count} excluded',
+    assistant_operation_item_exclude_videos: 'Exclude videos',
+    assistant_operation_item_exclude_visible: 'Exclude visible',
+    assistant_operation_item_filter_label: 'Filter photos',
+    assistant_operation_item_filter_placeholder: 'Filter photos',
+    assistant_operation_item_include_only_videos: 'Include only videos',
+    assistant_operation_item_include_visible: 'Include visible',
+    assistant_operation_item_media_all: 'All',
+    assistant_operation_item_media_photos: 'Photos',
+    assistant_operation_item_media_videos: 'Videos',
     assistant_operation_item_overflow: '+{count} not shown',
     assistant_operation_item_overflow_label: '{count} more affected photos are not shown',
+    assistant_operation_item_quick_duplicates: 'Duplicates',
+    assistant_operation_item_quick_screenshots: 'Screenshots',
     assistant_operation_item_reset: 'Reset selection',
     assistant_operation_item_review_label: 'Review photos for {summary}',
+    assistant_operation_item_select_all_filtered: 'Select all filtered',
     assistant_operation_item_selected_count: '{selected} of {total} selected',
     assistant_operation_item_thumbnail_alt: 'Photo {index} of {count}',
     assistant_operation_item_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_item_toggle: 'Include photo {index}',
+    assistant_operation_item_deselect_all_filtered: 'Deselect all filtered',
+    assistant_operation_item_virtual_summary: 'Showing {visible} of {total} photos',
     assistant_operation_type_album_add_assets: 'Add assets',
     assistant_operation_type_album_create: 'Create album',
     assistant_operation_type_album_set_cover: 'Set cover',
@@ -61,6 +75,7 @@ vi.mock('svelte-i18n', () => {
         .replace('{selected}', String(options?.values?.selected ?? ''))
         .replace('{summary}', String(options?.values?.summary ?? ''))
         .replace('{total}', String(options?.values?.total ?? ''))
+        .replace('{visible}', String(options?.values?.visible ?? ''))
         .replace('{dependencies}', String(options?.values?.dependencies ?? ''))
         .replace('{field}', String(options?.values?.field ?? '')),
     ),
@@ -249,6 +264,31 @@ describe('AgentPlanOperationRow', () => {
 
     expect(onToggleItem).toHaveBeenCalledWith(addId, assetB, true);
     expect(onResetItemSelection).toHaveBeenCalledWith(addId);
+  });
+
+  it('threads bulk item callbacks from the item review controls', async () => {
+    const onBulkSetItems = vi.fn();
+    const onSetOnlyItems = vi.fn();
+    render(AgentPlanOperationRow, {
+      props: {
+        item: model().operationsById.get(addId)!,
+        canChangeSelection: true,
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onBulkSetItems,
+        onSetOnlyItems,
+        onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(screen.getByText('Details'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Exclude visible' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Select all filtered' }));
+
+    expect(onBulkSetItems).toHaveBeenCalledWith(addId, [assetA, assetB], false);
+    expect(onSetOnlyItems).toHaveBeenCalledWith(addId, [assetA, assetB]);
   });
 
   it('renders inline field editors above technical details and threads field callbacks', async () => {

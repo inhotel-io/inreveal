@@ -43,14 +43,28 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_field_reset: 'Reset {field}',
     assistant_operation_field_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_item_excluded_count: '{count} excluded',
+    assistant_operation_item_exclude_videos: 'Exclude videos',
+    assistant_operation_item_exclude_visible: 'Exclude visible',
+    assistant_operation_item_filter_label: 'Filter photos',
+    assistant_operation_item_filter_placeholder: 'Filter photos',
+    assistant_operation_item_include_only_videos: 'Include only videos',
+    assistant_operation_item_include_visible: 'Include visible',
+    assistant_operation_item_media_all: 'All',
+    assistant_operation_item_media_photos: 'Photos',
+    assistant_operation_item_media_videos: 'Videos',
     assistant_operation_item_overflow: '+{count} not shown',
     assistant_operation_item_overflow_label: '{count} more affected photos are not shown',
+    assistant_operation_item_quick_duplicates: 'Duplicates',
+    assistant_operation_item_quick_screenshots: 'Screenshots',
     assistant_operation_item_reset: 'Reset selection',
     assistant_operation_item_review_label: 'Review photos for {summary}',
+    assistant_operation_item_select_all_filtered: 'Select all filtered',
     assistant_operation_item_selected_count: '{selected} of {total} selected',
+    assistant_operation_item_deselect_all_filtered: 'Deselect all filtered',
     assistant_operation_item_thumbnail_alt: 'Photo {index} of {count}',
     assistant_operation_item_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_item_toggle: 'Include photo {index}',
+    assistant_operation_item_virtual_summary: 'Showing {visible} of {total} photos',
     assistant_operation_plan_empty: 'No proposed album plan yet.',
     assistant_operation_plan_error: 'Unable to load proposed album plan',
     assistant_operation_plan_loading: 'Loading proposed album plan',
@@ -88,6 +102,7 @@ vi.mock('svelte-i18n', () => {
         .replace('{selected}', String(options?.values?.selected ?? ''))
         .replace('{total}', String(options?.values?.total ?? ''))
         .replace('{summary}', String(options?.values?.summary ?? ''))
+        .replace('{visible}', String(options?.values?.visible ?? ''))
         .replace('{index}', String(options?.values?.index ?? '')),
     ),
   };
@@ -486,6 +501,114 @@ describe('AgentOperationPlanReviewPanel', () => {
           [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
         },
         planRevision: 1,
+      },
+    });
+  });
+
+  it('applies visible bulk exclusion as a bounded allExcept item selection', async () => {
+    const largeAssetIds = Array.from({ length: 1000 }, (_, index) => `large-asset-${index + 1}`);
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(
+      plan([
+        operation({
+          id: createId,
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Portugal album',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          payload: { albumName: 'Portugal' },
+        }),
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add one thousand assets',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          assetIds: largeAssetIds,
+          dependencyIds: [createId],
+          payload: {},
+        }),
+      ]),
+    );
+    sdkMock.applyApprovedOperations.mockResolvedValue({
+      status: AgentOperationApplyStatus.Applied,
+      plan: appliedPlan(),
+      appliedOperationIds: [createId, addId],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 2 operation(s), skipped 0, failed 0.',
+    });
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    const detailsButtons = await screen.findAllByText('Details');
+    await fireEvent.click(detailsButtons[1]);
+    await fireEvent.click(screen.getByRole('button', { name: 'Exclude visible' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply 2 selected' }));
+
+    const itemSelection =
+      sdkMock.applyApprovedOperations.mock.calls[0][0].agentOperationPlanApplyRequestDto.itemSelections?.[addId];
+    expect(itemSelection).toMatchObject({ itemKind: 'asset', mode: 'allExcept' });
+    expect(itemSelection?.itemIds).toEqual(expect.arrayContaining(largeAssetIds.slice(0, 42)));
+    expect(itemSelection?.itemIds).toHaveLength(42);
+    expect(itemSelection?.itemIds?.length).toBeLessThan(80);
+  });
+
+  it('preserves bulk item selection after closing and reopening row details', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(
+      plan([
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add three assets',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: '00000000-0000-4000-8000-000000000301',
+          assetIds: ['asset-1', 'asset-2', 'asset-3'],
+          payload: {},
+        }),
+      ]),
+    );
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    const details = await screen.findByText('Details');
+    await fireEvent.click(details);
+    await fireEvent.click(screen.getByRole('button', { name: 'Exclude visible' }));
+    await fireEvent.click(details);
+    await fireEvent.click(details);
+
+    expect(screen.getByText('0 of 3 selected')).toBeInTheDocument();
+  });
+
+  it('publishes only the filtered assets when selecting all filtered items', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(
+      plan([
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add three assets',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: '00000000-0000-4000-8000-000000000301',
+          assetIds: ['asset-1', 'asset-2', 'asset-3'],
+          payload: {},
+        }),
+      ]),
+    );
+    const onSelectionChange = vi.fn();
+
+    render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
+
+    await fireEvent.click(await screen.findByText('Details'));
+    await fireEvent.input(screen.getByRole('searchbox', { name: 'Filter photos' }), {
+      target: { value: 'asset-2' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Select all filtered' }));
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      planId,
+      planRevision: 1,
+      operationIds: [addId],
+      itemSelections: {
+        [addId]: { itemKind: 'asset', mode: 'only', itemIds: ['asset-2'] },
       },
     });
   });
