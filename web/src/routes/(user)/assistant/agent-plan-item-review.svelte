@@ -143,11 +143,7 @@
 
       {#if facets.hasKind}
         <div class="flex rounded-md border border-gray-200 bg-white p-0.5 dark:border-gray-700 dark:bg-gray-900">
-          {#each [
-            ['all', 'assistant_operation_item_media_all'],
-            ['image', 'assistant_operation_item_media_photos'],
-            ['video', 'assistant_operation_item_media_videos'],
-          ] as [kind, labelKey]}
+          {#each [['all', 'assistant_operation_item_media_all'], ['image', 'assistant_operation_item_media_photos'], ['video', 'assistant_operation_item_media_videos']] as [kind, labelKey]}
             <button
               type="button"
               class="rounded px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 aria-pressed:bg-immich-primary/10 aria-pressed:text-immich-primary dark:text-gray-300 dark:hover:bg-gray-800 dark:aria-pressed:bg-immich-dark-primary/10 dark:aria-pressed:text-immich-dark-primary"
