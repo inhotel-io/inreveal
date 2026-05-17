@@ -962,7 +962,7 @@ export class AgentOperationPlanService {
     }
 
     const normalized = value.trim();
-    if (field === 'albumName' && (normalized.length < 1 || normalized.length > 200)) {
+    if (field === 'albumName' && (normalized.length === 0 || normalized.length > 200)) {
       throw new BadRequestException('albumName must be 1-200 characters');
     }
 
@@ -979,7 +979,7 @@ export class AgentOperationPlanService {
     }
 
     const normalized = value.trim();
-    if (field === 'spaceName' && (normalized.length < 1 || normalized.length > 100)) {
+    if (field === 'spaceName' && (normalized.length === 0 || normalized.length > 100)) {
       throw new BadRequestException('spaceName must be 1-100 characters');
     }
 
@@ -1468,7 +1468,10 @@ export class AgentOperationPlanService {
     };
   }
 
-  private requireBooleanPayload(payload: unknown, key: 'favorite' | 'archived'): { favorite?: boolean; archived?: boolean } {
+  private requireBooleanPayload(
+    payload: unknown,
+    key: 'favorite' | 'archived',
+  ): { favorite?: boolean; archived?: boolean } {
     const objectPayload = this.requireObjectPayload(payload);
     const value = objectPayload[key];
     if (typeof value !== 'boolean') {
@@ -1522,11 +1525,9 @@ export class AgentOperationPlanService {
           edits.map(({ action, parameters }) => ({ action, parameters }) as AssetEditActionItem),
           angle,
         );
-        if (mergedEdits.length === 0) {
-          await this.assetService.removeAssetEdits(auth, assetId);
-        } else {
-          await this.assetService.editAsset(auth, assetId, { edits: mergedEdits });
-        }
+        await (mergedEdits.length === 0
+          ? this.assetService.removeAssetEdits(auth, assetId)
+          : this.assetService.editAsset(auth, assetId, { edits: mergedEdits }));
 
         successfulAssetIds.push(assetId);
         assetResults.push({ id: assetId, success: true });
@@ -1569,13 +1570,12 @@ export class AgentOperationPlanService {
 
   private mergeRotationEdits(edits: AssetEditActionItem[], relativeAngle: 90 | 180 | 270): AssetEditActionItem[] {
     let inserted = false;
-    let currentAngle = 0;
     const nextEdits: AssetEditActionItem[] = [];
 
     for (const edit of edits) {
       if (edit.action === AssetEditAction.Rotate) {
         const angle = edit.parameters.angle;
-        currentAngle = typeof angle === 'number' ? angle : 0;
+        const currentAngle = typeof angle === 'number' ? angle : 0;
         const netAngle = this.normalizeRotationAngle(currentAngle + relativeAngle);
         if (netAngle !== 0) {
           nextEdits.push({ action: AssetEditAction.Rotate, parameters: { angle: netAngle } });
