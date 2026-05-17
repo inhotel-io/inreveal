@@ -15,6 +15,7 @@
   const DEFAULT_VIEWPORT_HEIGHT = 420;
   const DEFAULT_ITEM_SIZE = 104;
   const DEFAULT_COLUMN_COUNT = 6;
+  const GRID_GAP = 8;
   const DEFAULT_OVERSCAN_ROWS = 2;
 
   interface Props {
@@ -41,13 +42,14 @@
     metadataByAssetId = {},
     viewportHeight = DEFAULT_VIEWPORT_HEIGHT,
     itemSize = DEFAULT_ITEM_SIZE,
-    columnCount = DEFAULT_COLUMN_COUNT,
+    columnCount,
     overscanRows = DEFAULT_OVERSCAN_ROWS,
   }: Props = $props();
 
   let failedAssetIds = $state(new Set<string>());
   let filter = $state<AgentPlanItemFilterState>({ query: '', kind: 'all' });
   let scrollTop = $state(0);
+  let measuredGridWidth = $state(0);
   let gridElement: HTMLDivElement | undefined = $state();
 
   const reviewAssets = $derived(buildAgentPlanReviewAssets(item.operation.assetIds, metadataByAssetId));
@@ -56,7 +58,13 @@
   const filteredAssetIds = $derived(filteredAssets.map((asset) => asset.id));
   const facets = $derived(getAgentPlanAvailableFilterFacets(reviewAssets));
   const videoAssetIds = $derived(reviewAssets.filter((asset) => asset.kind === 'video').map((asset) => asset.id));
-  const virtualColumnCount = $derived(Math.max(1, Math.floor(columnCount)));
+  const configuredColumnCount = $derived(columnCount === undefined ? undefined : Math.max(1, Math.floor(columnCount)));
+  const measuredColumnCount = $derived(
+    measuredGridWidth > 0
+      ? Math.min(DEFAULT_COLUMN_COUNT, Math.max(1, Math.floor((measuredGridWidth + GRID_GAP) / (itemSize + GRID_GAP))))
+      : DEFAULT_COLUMN_COUNT,
+  );
+  const virtualColumnCount = $derived(configuredColumnCount ?? measuredColumnCount);
   const virtualWindow = $derived(
     buildAgentPlanItemVirtualWindow({
       assetIds: filteredAssetIds,
@@ -82,6 +90,29 @@
 
   const setQuery = (query: string) => setFilter({ ...filter, query });
   const setKind = (kind: AgentPlanItemFilterState['kind']) => setFilter({ ...filter, kind });
+
+  const measureGrid = (node: HTMLDivElement) => {
+    const setMeasuredWidth = (width: number) => {
+      measuredGridWidth = Math.max(0, Math.floor(width));
+    };
+
+    setMeasuredWidth(node.clientWidth);
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) {
+        setMeasuredWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(node);
+
+    return {
+      destroy: () => observer.disconnect(),
+    };
+  };
 
   const toggleQuickFilter = (quickFilter: NonNullable<AgentPlanItemFilterState['quickFilter']>) =>
     setFilter({ ...filter, quickFilter: filter.quickFilter === quickFilter ? undefined : quickFilter });
@@ -247,6 +278,7 @@
 
     <div
       bind:this={gridElement}
+      use:measureGrid
       class="mt-2 max-h-[min(65vh,28rem)] overflow-y-auto rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
       data-testid="agent-plan-item-review-grid"
       style={viewportHeight === DEFAULT_VIEWPORT_HEIGHT ? undefined : `max-height: ${viewportHeight}px;`}

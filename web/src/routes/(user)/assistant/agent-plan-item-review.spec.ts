@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import type { ComponentProps } from 'svelte';
+import { tick } from 'svelte';
 import { readable } from 'svelte/store';
 import type { OperationReviewItem } from './agent-operation-plan-ui';
 import AgentPlanItemReview from './agent-plan-item-review.svelte';
@@ -82,7 +83,44 @@ const defaultProps = (
   ...props,
 });
 
+const stubMeasuredGridWidth = () => {
+  let resize: ResizeObserverCallback | undefined;
+
+  vi.stubGlobal(
+    'ResizeObserver',
+    vi.fn(function (callback: ResizeObserverCallback) {
+      resize = callback;
+
+      return {
+        disconnect: vi.fn(),
+        observe: vi.fn(),
+        unobserve: vi.fn(),
+      };
+    }),
+  );
+
+  return async (width: number) => {
+    if (!resize) {
+      throw new Error('ResizeObserver was not attached');
+    }
+
+    resize(
+      [
+        {
+          contentRect: { width },
+        } as ResizeObserverEntry,
+      ],
+      {} as ResizeObserver,
+    );
+    await tick();
+  };
+};
+
 describe('AgentPlanItemReview', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('renders selectable thumbnails and dispatches item toggles', async () => {
     const onToggleItem = vi.fn();
     render(AgentPlanItemReview, {
@@ -155,6 +193,50 @@ describe('AgentPlanItemReview', () => {
     expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(2, minmax(0, 1fr))' });
     expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(10);
     expect(screen.getByText('Showing 10 of 100 photos')).toBeInTheDocument();
+  });
+
+  it('uses measured narrow width for default virtual math and rendered grid columns', async () => {
+    const setMeasuredWidth = stubMeasuredGridWidth();
+    const assetIds = Array.from({ length: 100 }, (_, index) => `asset-${index.toString().padStart(4, '0')}`);
+    render(AgentPlanItemReview, {
+      props: defaultProps({
+        item: item(assetIds),
+        viewportHeight: 360,
+        itemSize: 96,
+        overscanRows: 1,
+      }),
+    });
+
+    await setMeasuredWidth(220);
+
+    const grid = screen.getByTestId('agent-plan-item-review-grid');
+    const tileGrid = within(grid).getByTestId('agent-plan-item-review-tile-grid');
+
+    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(2, minmax(0, 1fr))' });
+    expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(10);
+    expect(screen.getByText('Showing 10 of 100 photos')).toBeInTheDocument();
+  });
+
+  it('caps measured wide layouts at the desktop default column count', async () => {
+    const setMeasuredWidth = stubMeasuredGridWidth();
+    const assetIds = Array.from({ length: 100 }, (_, index) => `asset-${index.toString().padStart(4, '0')}`);
+    render(AgentPlanItemReview, {
+      props: defaultProps({
+        item: item(assetIds),
+        viewportHeight: 360,
+        itemSize: 96,
+        overscanRows: 1,
+      }),
+    });
+
+    await setMeasuredWidth(1200);
+
+    const grid = screen.getByTestId('agent-plan-item-review-grid');
+    const tileGrid = within(grid).getByTestId('agent-plan-item-review-tile-grid');
+
+    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(6, minmax(0, 1fr))' });
+    expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(30);
+    expect(screen.getByText('Showing 30 of 100 photos')).toBeInTheDocument();
   });
 
   it('shows excluded counts and reset action for partial selection', async () => {
