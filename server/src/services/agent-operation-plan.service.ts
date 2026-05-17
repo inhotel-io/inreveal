@@ -553,7 +553,7 @@ export class AgentOperationPlanService {
     plan: AgentOperationPlanWithOperations,
     applySelection: ApplySelection,
   ): Promise<AgentOperationApplyUpdate[]> {
-    const { selectedOperationIds } = applySelection;
+    const { selectedOperationIds, selectedAssetIdsByOperationId } = applySelection;
     const appliedOperationIds = new Set<string>();
     const createdAlbumIdByTemporaryTargetId = new Map<string, string>();
     const updates: AgentOperationApplyUpdate[] = [];
@@ -570,9 +570,23 @@ export class AgentOperationPlanService {
         continue;
       }
 
+      const selectedAssetIds = selectedAssetIdsByOperationId.get(operation.id);
+      const operationForApply =
+        selectedAssetIds === undefined
+          ? operation
+          : {
+              ...operation,
+              assetIds: selectedAssetIds,
+            };
+
+      if (selectedAssetIds?.length === 0) {
+        updates.push(this.skippedOperation(operation.id, 'No selected items for operation'));
+        continue;
+      }
+
       try {
-        await this.validateApplyAccess(auth, session, operation);
-        const update = await this.applySingleOperation(auth, operation, createdAlbumIdByTemporaryTargetId);
+        await this.validateApplyAccess(auth, session, operationForApply);
+        const update = await this.applySingleOperation(auth, operationForApply, createdAlbumIdByTemporaryTargetId);
         updates.push(update);
         if (update.status === AgentOperationStatus.Applied) {
           appliedOperationIds.add(operation.id);
