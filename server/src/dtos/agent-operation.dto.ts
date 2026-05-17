@@ -8,6 +8,7 @@ import {
   AgentOperationTargetKind,
   AgentOperationType,
   AgentToolName,
+  UserAvatarColorSchema,
 } from 'src/enum';
 import { isoDatetimeToDate } from 'src/validation';
 import z from 'zod';
@@ -94,7 +95,9 @@ const AgentOperationTypeSchema = z.enum(AgentOperationType).meta({ id: 'AgentOpe
 const AgentOperationTargetKindSchema = z.enum(AgentOperationTargetKind).meta({ id: 'AgentOperationTargetKind' });
 const AgentOperationRiskLevelSchema = z.enum(AgentOperationRiskLevel).meta({ id: 'AgentOperationRiskLevel' });
 const AgentOperationStatusSchema = z.enum(AgentOperationStatus).meta({ id: 'AgentOperationStatus' });
-const AgentOperationItemKindSchema = z.literal('asset').meta({ id: 'AgentOperationItemKind' });
+const AgentOperationItemKindSchema = z
+  .enum(['asset', 'album', 'space', 'person', 'tag'])
+  .meta({ id: 'AgentOperationItemKind' });
 
 const AgentOperationItemSelectionSchema = z
   .discriminatedUnion('mode', [
@@ -125,28 +128,27 @@ const operationDefaults = {
   riskLevel: AgentOperationRiskLevelSchema.optional().default(AgentOperationRiskLevel.Low),
   enabled: z.boolean().optional().default(true),
 };
-const AlbumCreateOperationTypeSchema = z
-  .literal(AgentOperationType.AlbumCreate)
-  .meta({ id: 'AgentAlbumCreateOperationType' });
-const AlbumAddAssetsOperationTypeSchema = z
-  .literal(AgentOperationType.AlbumAddAssets)
-  .meta({ id: 'AgentAlbumAddAssetsOperationType' });
-const AlbumUpdateDetailsOperationTypeSchema = z
-  .literal(AgentOperationType.AlbumUpdateDetails)
-  .meta({ id: 'AgentAlbumUpdateDetailsOperationType' });
-const AlbumSetCoverOperationTypeSchema = z
-  .literal(AgentOperationType.AlbumSetCover)
-  .meta({ id: 'AgentAlbumSetCoverOperationType' });
 const NewAlbumTargetKindSchema = z
   .literal(AgentOperationTargetKind.NewAlbum)
   .meta({ id: 'AgentOperationNewAlbumTargetKind' });
 const ExistingAlbumTargetKindSchema = z
   .literal(AgentOperationTargetKind.ExistingAlbum)
   .meta({ id: 'AgentOperationExistingAlbumTargetKind' });
+const NewSpaceTargetKindSchema = z
+  .literal(AgentOperationTargetKind.NewSpace)
+  .meta({ id: 'AgentOperationNewSpaceTargetKind' });
+const ExistingSpaceTargetKindSchema = z
+  .literal(AgentOperationTargetKind.ExistingSpace)
+  .meta({ id: 'AgentOperationExistingSpaceTargetKind' });
+const spaceDetailsPayload = z.strictObject({
+  spaceName: z.string().trim().min(1).max(100).optional(),
+  description: z.string().max(500).optional(),
+  color: UserAvatarColorSchema.optional(),
+});
 
 const createAlbumOperationSchema = z
   .strictObject({
-    type: AlbumCreateOperationTypeSchema,
+    type: z.literal(AgentOperationType.AlbumCreate).meta({ id: 'AgentAlbumCreateOperationType' }),
     summary,
     targetKind: NewAlbumTargetKindSchema,
     temporaryTargetId: temporaryTargetId.optional(),
@@ -169,7 +171,7 @@ const createAlbumOperationSchema = z
 
 const addAssetsOperationSchema = z
   .strictObject({
-    type: AlbumAddAssetsOperationTypeSchema,
+    type: z.literal(AgentOperationType.AlbumAddAssets).meta({ id: 'AgentAlbumAddAssetsOperationType' }),
     summary,
     targetKind: AgentOperationTargetKindSchema,
     targetId: uuid.optional(),
@@ -179,11 +181,25 @@ const addAssetsOperationSchema = z
     enabled: operationDefaults.enabled,
     payload: emptyPayload,
   })
-  .superRefine(validateTarget);
+  .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx, [AgentOperationTargetKind.NewAlbum]));
+
+const removeAssetsOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AlbumRemoveAssets).meta({ id: 'AgentAlbumRemoveAssetsOperationType' }),
+    summary,
+    targetKind: AgentOperationTargetKindSchema,
+    targetId: uuid.optional(),
+    temporaryTargetId: temporaryTargetId.optional(),
+    assetIds: uniqueAssetIds,
+    riskLevel: operationDefaults.riskLevel,
+    enabled: operationDefaults.enabled,
+    payload: emptyPayload,
+  })
+  .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx));
 
 const updateDetailsOperationSchema = z
   .strictObject({
-    type: AlbumUpdateDetailsOperationTypeSchema,
+    type: z.literal(AgentOperationType.AlbumUpdateDetails).meta({ id: 'AgentAlbumUpdateDetailsOperationType' }),
     summary,
     targetKind: ExistingAlbumTargetKindSchema,
     targetId: uuid.optional(),
@@ -198,11 +214,11 @@ const updateDetailsOperationSchema = z
         message: 'Provide albumName or description',
       }),
   })
-  .superRefine(validateTarget);
+  .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx));
 
 const setCoverOperationSchema = z
   .strictObject({
-    type: AlbumSetCoverOperationTypeSchema,
+    type: z.literal(AgentOperationType.AlbumSetCover).meta({ id: 'AgentAlbumSetCoverOperationType' }),
     summary,
     targetKind: AgentOperationTargetKindSchema,
     targetId: uuid.optional(),
@@ -212,21 +228,151 @@ const setCoverOperationSchema = z
     enabled: operationDefaults.enabled,
     payload: emptyPayload,
   })
-  .superRefine(validateTarget);
+  .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx, [AgentOperationTargetKind.NewAlbum]));
 
-const AgentAlbumOperationInputSchema = z.discriminatedUnion('type', [
+const createSpaceOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.SpaceCreate).meta({ id: 'AgentSpaceCreateOperationType' }),
+    summary,
+    targetKind: NewSpaceTargetKindSchema,
+    temporaryTargetId: temporaryTargetId.optional(),
+    riskLevel: operationDefaults.riskLevel,
+    enabled: operationDefaults.enabled,
+    payload: spaceDetailsPayload.extend({
+      spaceName: z.string().trim().min(1).max(100),
+    }),
+  })
+  .superRefine((operation, ctx) => {
+    if (!operation.temporaryTargetId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['temporaryTargetId'],
+        message: 'Required',
+      });
+    }
+  });
+
+const spaceAssetsOperationSchema = (type: AgentOperationType.SpaceAddAssets | AgentOperationType.SpaceRemoveAssets) =>
+  z
+    .strictObject({
+      type: z.literal(type),
+      summary,
+      targetKind: AgentOperationTargetKindSchema,
+      targetId: uuid.optional(),
+      temporaryTargetId: temporaryTargetId.optional(),
+      assetIds: uniqueAssetIds,
+      riskLevel: operationDefaults.riskLevel,
+      enabled: operationDefaults.enabled,
+      payload: emptyPayload,
+    })
+    .superRefine((operation, ctx) => validateSpaceTarget(operation, ctx, [AgentOperationTargetKind.NewSpace]));
+
+const updateSpaceDetailsOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.SpaceUpdateDetails).meta({ id: 'AgentSpaceUpdateDetailsOperationType' }),
+    summary,
+    targetKind: ExistingSpaceTargetKindSchema,
+    targetId: uuid.optional(),
+    riskLevel: operationDefaults.riskLevel,
+    enabled: operationDefaults.enabled,
+    payload: spaceDetailsPayload.refine(
+      (payload) => payload.spaceName !== undefined || payload.description !== undefined || payload.color !== undefined,
+      { message: 'Provide spaceName, description, or color' },
+    ),
+  })
+  .superRefine((operation, ctx) => validateSpaceTarget(operation, ctx));
+
+const assetBatchBase = {
+  summary,
+  targetKind: AgentOperationTargetKindSchema,
+  targetId: uuid.optional(),
+  temporaryTargetId: temporaryTargetId.optional(),
+  assetIds: uniqueAssetIds,
+  riskLevel: operationDefaults.riskLevel,
+  enabled: operationDefaults.enabled,
+};
+
+const rotateOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetRotate).meta({ id: 'AgentAssetRotateOperationType' }),
+    ...assetBatchBase,
+    payload: z.strictObject({ angle: z.literal([90, 180, 270]) }),
+  })
+  .superRefine((operation, ctx) =>
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.ImageEditBatch, AgentOperationType.AssetRotate),
+  );
+
+const setFavoriteOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetSetFavorite).meta({ id: 'AgentAssetSetFavoriteOperationType' }),
+    ...assetBatchBase,
+    payload: z.strictObject({ favorite: z.boolean() }),
+  })
+  .superRefine((operation, ctx) =>
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetSetFavorite),
+  );
+
+const setArchiveOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetSetArchive).meta({ id: 'AgentAssetSetArchiveOperationType' }),
+    ...assetBatchBase,
+    payload: z.strictObject({ archived: z.boolean() }),
+  })
+  .superRefine((operation, ctx) =>
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetSetArchive),
+  );
+
+const addTagOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetAddTag).meta({ id: 'AgentAssetAddTagOperationType' }),
+    ...assetBatchBase,
+    payload: z
+      .strictObject({
+        tagId: uuid.optional(),
+        tagName: z.string().trim().min(1).max(200).optional(),
+      })
+      .refine((payload) => Number(payload.tagId !== undefined) + Number(payload.tagName !== undefined) === 1, {
+        message: 'Provide exactly one of tagId or tagName',
+      }),
+  })
+  .superRefine((operation, ctx) =>
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetAddTag),
+  );
+
+const removeTagOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetRemoveTag).meta({ id: 'AgentAssetRemoveTagOperationType' }),
+    ...assetBatchBase,
+    payload: z.strictObject({ tagId: uuid }),
+  })
+  .superRefine((operation, ctx) =>
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetRemoveTag),
+  );
+
+const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   createAlbumOperationSchema,
   addAssetsOperationSchema,
+  removeAssetsOperationSchema,
   updateDetailsOperationSchema,
   setCoverOperationSchema,
+  createSpaceOperationSchema,
+  spaceAssetsOperationSchema(AgentOperationType.SpaceAddAssets),
+  spaceAssetsOperationSchema(AgentOperationType.SpaceRemoveAssets),
+  updateSpaceDetailsOperationSchema,
+  rotateOperationSchema,
+  setFavoriteOperationSchema,
+  setArchiveOperationSchema,
+  addTagOperationSchema,
+  removeTagOperationSchema,
 ]);
 
 const operationRequest = (schemaId: string) =>
   z
     .strictObject({
       summary,
-      operations: z.array(AgentAlbumOperationInputSchema).min(1).max(500),
+      operations: z.array(AgentGalleryOperationInputSchema).min(1).max(500),
     })
+    .superRefine(validateTemporaryTargetReferences)
     .meta({ id: schemaId });
 
 const AgentProposeAlbumOperationsSchema = operationRequest('AgentProposeAlbumOperationsDto');
@@ -331,14 +477,35 @@ const AgentOperationPlanApplyResponseSchema = z
   })
   .meta({ id: 'AgentOperationPlanApplyResponseDto' });
 
-function validateTarget(
+function validateAlbumTarget(
   operation: {
     targetKind: AgentOperationTargetKind;
     targetId?: string;
     temporaryTargetId?: string;
   },
   ctx: z.RefinementCtx,
+  allowedNewTargets: AgentOperationTargetKind[] = [],
 ) {
+  if (
+    operation.targetKind !== AgentOperationTargetKind.ExistingAlbum &&
+    operation.targetKind !== AgentOperationTargetKind.NewAlbum
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['targetKind'],
+      message: 'album operations require an album target',
+    });
+    return;
+  }
+
+  if (operation.targetKind === AgentOperationTargetKind.NewAlbum && !allowedNewTargets.includes(operation.targetKind)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['targetKind'],
+      message: 'new album targets are not valid for this operation',
+    });
+  }
+
   if (operation.targetKind === AgentOperationTargetKind.ExistingAlbum && !operation.targetId) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -370,6 +537,173 @@ function validateTarget(
       message: 'targetId is only valid for existing album targets',
     });
   }
+}
+
+function validateSpaceTarget(
+  operation: {
+    targetKind: AgentOperationTargetKind;
+    targetId?: string;
+    temporaryTargetId?: string;
+  },
+  ctx: z.RefinementCtx,
+  allowedNewTargets: AgentOperationTargetKind[] = [],
+) {
+  if (
+    operation.targetKind !== AgentOperationTargetKind.ExistingSpace &&
+    operation.targetKind !== AgentOperationTargetKind.NewSpace
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['targetKind'],
+      message: 'space operations require a space target',
+    });
+    return;
+  }
+
+  if (operation.targetKind === AgentOperationTargetKind.NewSpace && !allowedNewTargets.includes(operation.targetKind)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['targetKind'],
+      message: 'new space targets are not valid for this operation',
+    });
+  }
+
+  if (operation.targetKind === AgentOperationTargetKind.ExistingSpace && !operation.targetId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['targetId'],
+      message: 'targetId is required for existing space targets',
+    });
+  }
+
+  if (operation.targetKind === AgentOperationTargetKind.ExistingSpace && operation.temporaryTargetId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['temporaryTargetId'],
+      message: 'temporaryTargetId is only valid for new space targets',
+    });
+  }
+
+  if (operation.targetKind === AgentOperationTargetKind.NewSpace && !operation.temporaryTargetId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['temporaryTargetId'],
+      message: 'temporaryTargetId is required for new space targets',
+    });
+  }
+
+  if (operation.targetKind === AgentOperationTargetKind.NewSpace && operation.targetId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['targetId'],
+      message: 'targetId is only valid for existing space targets',
+    });
+  }
+}
+
+function validateStandaloneTarget(
+  operation: {
+    type: AgentOperationType;
+    targetKind: AgentOperationTargetKind;
+    targetId?: string;
+    temporaryTargetId?: string;
+  },
+  ctx: z.RefinementCtx,
+  expectedTargetKind: AgentOperationTargetKind,
+  operationType: AgentOperationType,
+) {
+  if (operation.targetKind !== expectedTargetKind) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['targetKind'],
+      message: `${operationType} requires an ${expectedTargetKind} target`,
+    });
+  }
+
+  if (operation.targetId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['targetId'],
+      message: 'targetId is not valid for asset batch targets',
+    });
+  }
+
+  if (operation.temporaryTargetId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['temporaryTargetId'],
+      message: 'temporaryTargetId is not valid for asset batch targets',
+    });
+  }
+}
+
+function validateTemporaryTargetReferences(
+  value: {
+    operations: Array<{ type: AgentOperationType; targetKind: AgentOperationTargetKind; temporaryTargetId?: string }>;
+  },
+  ctx: z.RefinementCtx,
+) {
+  const createdAlbumTargetIds = new Set<string>();
+  const createdSpaceTargetIds = new Set<string>();
+
+  for (const [index, operation] of value.operations.entries()) {
+    if (operation.type === AgentOperationType.AlbumCreate && operation.temporaryTargetId) {
+      addUniqueTemporaryTargetId(createdAlbumTargetIds, operation.temporaryTargetId, index, ctx);
+      continue;
+    }
+
+    if (operation.type === AgentOperationType.SpaceCreate && operation.temporaryTargetId) {
+      addUniqueTemporaryTargetId(createdSpaceTargetIds, operation.temporaryTargetId, index, ctx);
+      continue;
+    }
+
+    const requiresAlbumDependency =
+      (operation.type === AgentOperationType.AlbumAddAssets || operation.type === AgentOperationType.AlbumSetCover) &&
+      operation.targetKind === AgentOperationTargetKind.NewAlbum;
+    const requiresSpaceDependency =
+      (operation.type === AgentOperationType.SpaceAddAssets ||
+        operation.type === AgentOperationType.SpaceRemoveAssets) &&
+      operation.targetKind === AgentOperationTargetKind.NewSpace;
+
+    if (
+      requiresAlbumDependency &&
+      (!operation.temporaryTargetId || !createdAlbumTargetIds.has(operation.temporaryTargetId))
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['operations', index, 'temporaryTargetId'],
+        message: 'No matching create operation for temporaryTargetId',
+      });
+    }
+
+    if (
+      requiresSpaceDependency &&
+      (!operation.temporaryTargetId || !createdSpaceTargetIds.has(operation.temporaryTargetId))
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['operations', index, 'temporaryTargetId'],
+        message: 'No matching create operation for temporaryTargetId',
+      });
+    }
+  }
+}
+
+function addUniqueTemporaryTargetId(
+  temporaryTargetIds: Set<string>,
+  targetId: string,
+  operationIndex: number,
+  ctx: z.RefinementCtx,
+) {
+  if (temporaryTargetIds.has(targetId)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['operations', operationIndex, 'temporaryTargetId'],
+      message: 'temporaryTargetId must be unique for create operations',
+    });
+  }
+
+  temporaryTargetIds.add(targetId);
 }
 
 export class AgentProposeAlbumOperationsDto extends createZodDto(AgentProposeAlbumOperationsSchema) {}

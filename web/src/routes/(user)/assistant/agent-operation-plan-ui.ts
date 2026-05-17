@@ -192,12 +192,12 @@ export type AgentPlanThumbnailStripModel = {
   hasThumbnails: boolean;
 };
 
-const typeLabelKeys = {
+const typeLabelKeys: Partial<Record<AgentOperationType, Translations>> = {
   [AgentOperationType.AlbumCreate]: 'assistant_operation_type_album_create' as Translations,
   [AgentOperationType.AlbumAddAssets]: 'assistant_operation_type_album_add_assets' as Translations,
   [AgentOperationType.AlbumUpdateDetails]: 'assistant_operation_type_album_update_details' as Translations,
   [AgentOperationType.AlbumSetCover]: 'assistant_operation_type_album_set_cover' as Translations,
-} satisfies Record<AgentOperationType, Translations>;
+};
 
 const riskLabelKeys = {
   [AgentOperationRiskLevel.Low]: 'assistant_operation_risk_low' as Translations,

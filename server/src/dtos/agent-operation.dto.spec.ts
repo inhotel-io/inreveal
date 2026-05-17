@@ -50,6 +50,14 @@ const makePlanningToolRequest = () => ({
   operations: [makeCreateAlbumOperation()],
 });
 
+const makeSpaceCreateOperation = (temporaryTargetId = 'tmp-family-space') => ({
+  type: AgentOperationType.SpaceCreate,
+  summary: 'Create Family space.',
+  targetKind: AgentOperationTargetKind.NewSpace,
+  temporaryTargetId,
+    payload: { spaceName: 'Family', description: 'Shared family photos.', color: 'blue' },
+});
+
 describe('Agent operation DTOs', () => {
   it('accepts a create album operation proposal and defaults enabled/risk fields', () => {
     const result = AgentProposeAlbumOperationsDto.schema.safeParse({
@@ -97,6 +105,347 @@ describe('Agent operation DTOs', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it('accepts one valid sample for each expanded operation type', () => {
+    const albumId = factory.uuid();
+    const existingSpaceId = factory.uuid();
+    const firstAssetId = factory.uuid();
+    const secondAssetId = factory.uuid();
+    const tagId = factory.uuid();
+
+    const result = AgentProposeAlbumOperationsDto.schema.safeParse({
+      summary: 'Organize spaces and asset batches.',
+      operations: [
+        {
+          type: AgentOperationType.AlbumRemoveAssets,
+          summary: 'Remove a duplicate from an album.',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          assetIds: [firstAssetId],
+          payload: {},
+        },
+        makeSpaceCreateOperation(),
+        {
+          type: AgentOperationType.SpaceAddAssets,
+          summary: 'Add a photo to the new space.',
+          targetKind: AgentOperationTargetKind.NewSpace,
+          temporaryTargetId: 'tmp-family-space',
+          assetIds: [firstAssetId],
+          payload: {},
+        },
+        {
+          type: AgentOperationType.SpaceAddAssets,
+          summary: 'Add a photo to an existing space.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: existingSpaceId,
+          assetIds: [secondAssetId],
+        },
+        {
+          type: AgentOperationType.SpaceRemoveAssets,
+          summary: 'Remove a photo from an existing space.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: existingSpaceId,
+          assetIds: [firstAssetId],
+        },
+        {
+          type: AgentOperationType.SpaceUpdateDetails,
+          summary: 'Rename an existing space.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: existingSpaceId,
+          payload: { spaceName: 'Family 2026', description: 'Updated highlights.', color: 'amber' },
+        },
+        {
+          type: AgentOperationType.AssetRotate,
+          summary: 'Rotate one image.',
+          targetKind: AgentOperationTargetKind.ImageEditBatch,
+          assetIds: [firstAssetId],
+          payload: { angle: 90 },
+        },
+        {
+          type: AgentOperationType.AssetSetFavorite,
+          summary: 'Favorite one image.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds: [firstAssetId],
+          payload: { favorite: true },
+        },
+        {
+          type: AgentOperationType.AssetSetArchive,
+          summary: 'Archive one image.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds: [secondAssetId],
+          payload: { archived: true },
+        },
+        {
+          type: AgentOperationType.AssetAddTag,
+          summary: 'Add an existing tag.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds: [firstAssetId],
+          payload: { tagId },
+        },
+        {
+          type: AgentOperationType.AssetRemoveTag,
+          summary: 'Remove an existing tag.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds: [secondAssetId],
+          payload: { tagId },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts asset.addTag with a new tag name', () => {
+    const result = AgentProposeAlbumOperationsDto.schema.safeParse({
+      summary: 'Tag receipts.',
+      operations: [
+        {
+          type: AgentOperationType.AssetAddTag,
+          summary: 'Add Receipts tag.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds: [factory.uuid()],
+          payload: { tagName: 'Receipts' },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid expanded operation target combinations', () => {
+    const existingAlbumId = factory.uuid();
+    const existingSpaceId = factory.uuid();
+
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Invalid space create.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceCreate,
+            summary: 'Create without temp id.',
+            targetKind: AgentOperationTargetKind.NewSpace,
+            payload: { spaceName: 'Family' },
+          },
+        ],
+      }),
+      ['operations', 0, 'temporaryTargetId'],
+      'Required',
+    );
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Missing new album dependency.',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add to missing new album.',
+            targetKind: AgentOperationTargetKind.NewAlbum,
+            temporaryTargetId: 'tmp-missing-album',
+            assetIds: [factory.uuid()],
+          },
+        ],
+      }),
+      ['operations', 0, 'temporaryTargetId'],
+      'No matching create operation for temporaryTargetId',
+    );
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Missing new space dependency.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceAddAssets,
+            summary: 'Add to missing new space.',
+            targetKind: AgentOperationTargetKind.NewSpace,
+            temporaryTargetId: 'tmp-missing-space',
+            assetIds: [factory.uuid()],
+          },
+        ],
+      }),
+      ['operations', 0, 'temporaryTargetId'],
+      'No matching create operation for temporaryTargetId',
+    );
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Existing space missing target id.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceRemoveAssets,
+            summary: 'Remove without target id.',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            assetIds: [factory.uuid()],
+          },
+        ],
+      }),
+      ['operations', 0, 'targetId'],
+      'targetId is required for existing space targets',
+    );
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Asset batch cannot target albums.',
+        operations: [
+          {
+            type: AgentOperationType.AssetSetFavorite,
+            summary: 'Favorite with album target.',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: existingAlbumId,
+            assetIds: [factory.uuid()],
+            payload: { favorite: true },
+          },
+        ],
+      }),
+      ['operations', 0, 'targetKind'],
+      'asset.setFavorite requires an asset_batch target',
+    );
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Image edit cannot target spaces.',
+        operations: [
+          {
+            type: AgentOperationType.AssetRotate,
+            summary: 'Rotate with space target.',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: existingSpaceId,
+            assetIds: [factory.uuid()],
+            payload: { angle: 90 },
+          },
+        ],
+      }),
+      ['operations', 0, 'targetKind'],
+      'asset.rotate requires an image_edit_batch target',
+    );
+  });
+
+  it('rejects invalid expanded operation payloads and bounds', () => {
+    const assetId = factory.uuid();
+
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Empty asset batch.',
+        operations: [
+          {
+            type: AgentOperationType.AssetSetFavorite,
+            summary: 'Favorite nothing.',
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds: [],
+            payload: { favorite: true },
+          },
+        ],
+      }),
+      ['operations', 0, 'assetIds'],
+      'Too small',
+    );
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Duplicate asset batch.',
+        operations: [
+          {
+            type: AgentOperationType.AssetSetArchive,
+            summary: 'Archive duplicates.',
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds: [assetId, assetId],
+            payload: { archived: true },
+          },
+        ],
+      }),
+      ['operations', 0, 'assetIds'],
+      'assetIds must be unique',
+    );
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Invalid rotate.',
+        operations: [
+          {
+            type: AgentOperationType.AssetRotate,
+            summary: 'Rotate badly.',
+            targetKind: AgentOperationTargetKind.ImageEditBatch,
+            assetIds: [factory.uuid()],
+            payload: { angle: 45 },
+          },
+        ],
+      }),
+      ['operations', 0, 'payload', 'angle'],
+      'Invalid option',
+    );
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Missing favorite boolean.',
+        operations: [
+          {
+            type: AgentOperationType.AssetSetFavorite,
+            summary: 'Favorite without boolean.',
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds: [factory.uuid()],
+            payload: {},
+          },
+        ],
+      }),
+      ['operations', 0, 'payload', 'favorite'],
+      'Invalid input',
+    );
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Missing archive boolean.',
+        operations: [
+          {
+            type: AgentOperationType.AssetSetArchive,
+            summary: 'Archive without boolean.',
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds: [factory.uuid()],
+            payload: {},
+          },
+        ],
+      }),
+      ['operations', 0, 'payload', 'archived'],
+      'Invalid input',
+    );
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Missing tag.',
+        operations: [
+          {
+            type: AgentOperationType.AssetAddTag,
+            summary: 'Add no tag.',
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds: [factory.uuid()],
+            payload: {},
+          },
+        ],
+      }),
+      ['operations', 0, 'payload'],
+      'Provide exactly one of tagId or tagName',
+    );
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Both tag fields.',
+        operations: [
+          {
+            type: AgentOperationType.AssetAddTag,
+            summary: 'Add ambiguous tag.',
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds: [factory.uuid()],
+            payload: { tagId: factory.uuid(), tagName: 'Receipts' },
+          },
+        ],
+      }),
+      ['operations', 0, 'payload'],
+      'Provide exactly one of tagId or tagName',
+    );
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Remove missing tag.',
+        operations: [
+          {
+            type: AgentOperationType.AssetRemoveTag,
+            summary: 'Remove no tag.',
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds: [factory.uuid()],
+            payload: {},
+          },
+        ],
+      }),
+      ['operations', 0, 'payload', 'tagId'],
+      'Invalid input',
+    );
   });
 
   it('rejects create album operations without a temporary target id', () => {
@@ -551,6 +900,39 @@ describe('Agent operation DTOs', () => {
     expect(result.error?.issues).toEqual([expect.objectContaining({ message: 'itemIds must be unique' })]);
   });
 
+  it('rejects sparse item selections with more than 10000 item ids', () => {
+    const operationId = factory.uuid();
+
+    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+      operationIds: [operationId],
+      itemSelections: {
+        [operationId]: {
+          itemKind: 'asset',
+          mode: 'only',
+          itemIds: Array.from({ length: 10_001 }, () => factory.uuid()),
+        },
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([expect.objectContaining({ message: expect.stringContaining('Too big') })]);
+  });
+
+  it('accepts expanded sparse item kinds', () => {
+    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+      operationIds: [factory.uuid(), factory.uuid(), factory.uuid(), factory.uuid(), factory.uuid()],
+      itemSelections: {
+        [factory.uuid()]: { itemKind: 'asset', mode: 'none' },
+        [factory.uuid()]: { itemKind: 'album', mode: 'none' },
+        [factory.uuid()]: { itemKind: 'space', mode: 'none' },
+        [factory.uuid()]: { itemKind: 'person', mode: 'none' },
+        [factory.uuid()]: { itemKind: 'tag', mode: 'none' },
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it('rejects unsupported sparse item kinds', () => {
     const operationId = factory.uuid();
 
@@ -650,7 +1032,7 @@ describe('Agent operation DTOs', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.data?.operations[0].assetIds).toEqual([coverAssetId, alternateCoverAssetId]);
+    expect(result.data?.operations[0]).toMatchObject({ assetIds: [coverAssetId, alternateCoverAssetId] });
   });
 
   it('rejects duplicate set-cover candidate asset ids', () => {

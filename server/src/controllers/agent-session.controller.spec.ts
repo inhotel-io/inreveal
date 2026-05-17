@@ -2,13 +2,13 @@ import { AgentSessionController } from 'src/controllers/agent-session.controller
 import { AgentSessionCreateDto, AgentSessionResponseDto } from 'src/dtos/agent-session.dto';
 import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType, AgentSessionStatus, Permission } from 'src/enum';
 import { AgentSessionService } from 'src/services/agent-session.service';
-import type { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
+import type { AgentNormalizedPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import request from 'supertest';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { factory } from 'test/small.factory';
 import { automock, ControllerContext, controllerSetup } from 'test/utils';
 
-const makePermissionPlan = (): AgentPermissionPlanSnapshot => ({
+const makePermissionPlan = (): AgentNormalizedPermissionPlanSnapshot => ({
   read: {
     metadata: true,
     previews: true,
@@ -28,8 +28,17 @@ const makePermissionPlan = (): AgentPermissionPlanSnapshot => ({
   writeScope: {
     createAlbum: true,
     addAssets: true,
+    removeAssets: true,
     updateDetails: true,
     setCover: true,
+    createSpace: true,
+    addAssetsToSpaces: true,
+    removeAssetsFromSpaces: true,
+    updateSpaceDetails: true,
+    editAssets: true,
+    favoriteAssets: true,
+    archiveAssets: true,
+    tagAssets: true,
   },
   limits: {
     maxAssetsPerToolCall: 20,
