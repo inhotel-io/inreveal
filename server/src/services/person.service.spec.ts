@@ -4,6 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import { DiskStorageBackend } from 'src/backends/disk-storage.backend';
 import { BulkIdErrorReason } from 'src/dtos/asset-ids.response.dto';
 import { mapFaces, mapPerson } from 'src/dtos/person.dto';
+import { QueueStatisticsDto } from 'src/dtos/queue.dto';
 import {
   AssetFileType,
   AssetVisibility,
@@ -95,6 +96,35 @@ describe(PersonService.name, () => {
     );
     expect(queuedBatchJobNames()).not.toContain(JobName.FacialRecognitionQueueAll);
     expect(queuedBatchJobNames()).not.toContain(JobName.FacialRecognition);
+  };
+
+  const recognitionCounts = (overrides: Partial<QueueStatisticsDto> = {}) =>
+    factory.queueStatistics({
+      active: 1,
+      waiting: 0,
+      delayed: 0,
+      paused: 0,
+      completed: 0,
+      failed: 0,
+      ...overrides,
+    });
+
+  const expectNoRecognitionCoordinatorMutation = () => {
+    expect(mocks.job.empty).not.toHaveBeenCalled();
+    expect(mocks.database.prewarm).not.toHaveBeenCalled();
+    expect(mocks.person.unassignFaces).not.toHaveBeenCalled();
+    expect(mocks.faceIdentity.unlinkFacesBySourceType).not.toHaveBeenCalled();
+    expect(mocks.sharedSpace.deleteAllPersonFaces).not.toHaveBeenCalled();
+    expect(mocks.sharedSpace.deleteAllPersons).not.toHaveBeenCalled();
+    expect((mocks.faceIdentity as any).deleteUnreferencedIdentities).not.toHaveBeenCalled();
+    expect(mocks.person.vacuum).not.toHaveBeenCalled();
+    expect(mocks.job.queueAll).not.toHaveBeenCalled();
+    expect(mocks.job.queue).not.toHaveBeenCalledWith({
+      name: JobName.FaceIdentityMaintenanceAfterRecognition,
+      data: expect.anything(),
+    });
+    expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
+    expect(mocks.systemMetadata.set).not.toHaveBeenCalled();
   };
 
   it('should be defined', () => {
@@ -1310,6 +1340,24 @@ describe(PersonService.name, () => {
       await expect(sut.handleQueueRecognizeFaces({})).resolves.toBe(JobStatus.Skipped);
       expect(mocks.job.queueAll).not.toHaveBeenCalled();
       expect(mocks.systemMetadata.set).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['scheduled non-force nightly', { force: false, nightly: true }],
+      ['defensive force+nightly payload', { force: true, nightly: true }],
+    ] as const)('skips %s before prerequisite waits or destructive reset when no new faces exist', async (_label, data) => {
+      const lastRun = new Date('2026-05-17T02:00:00.000Z');
+      mocks.systemMetadata.get.mockResolvedValue({ lastRun: lastRun.toISOString() });
+      mocks.person.getLatestFaceDate.mockResolvedValue(new Date(lastRun.getTime() - 1_000).toISOString());
+      mocks.job.getJobCounts.mockResolvedValue(recognitionCounts({ waiting: 25_000, delayed: 1_000, paused: 3 }));
+
+      await expect(sut.handleQueueRecognizeFaces(data)).resolves.toBe(JobStatus.Skipped);
+
+      expect(mocks.systemMetadata.get).toHaveBeenCalledWith(SystemMetadataKey.FacialRecognitionState);
+      expect(mocks.person.getLatestFaceDate).toHaveBeenCalledOnce();
+      expect(mocks.job.waitForQueueCompletion).not.toHaveBeenCalled();
+      expect(mocks.person.getAllFaces).not.toHaveBeenCalled();
+      expectNoRecognitionCoordinatorMutation();
     });
 
     it('should queue missing assets', async () => {

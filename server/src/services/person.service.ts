@@ -780,8 +780,6 @@ export class PersonService extends BaseService {
       return JobStatus.Skipped;
     }
 
-    await this.jobRepository.waitForQueueCompletion(QueueName.ThumbnailGeneration, QueueName.FaceDetection);
-
     if (nightly) {
       const [state, latestFaceDate] = await Promise.all([
         this.systemMetadataRepository.get(SystemMetadataKey.FacialRecognitionState),
@@ -793,6 +791,8 @@ export class PersonService extends BaseService {
         return JobStatus.Skipped;
       }
     }
+
+    await this.jobRepository.waitForQueueCompletion(QueueName.ThumbnailGeneration, QueueName.FaceDetection);
 
     if (force) {
       await this.jobRepository.empty(QueueName.FacialRecognition, true);
