@@ -412,6 +412,38 @@ describe('AgentPlanOperationRow', () => {
     expect(screen.queryByText('Some assets could not be added')).not.toBeInTheDocument();
   });
 
+  it('announces failed operation errors as alerts', () => {
+    render(AgentPlanOperationRow, {
+      props: {
+        item: buildOperationReviewModel(
+          plan([
+            operation({
+              id: addId,
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add two assets',
+              targetKind: AgentOperationTargetKind.NewAlbum,
+              temporaryTargetId: 'album-portugal',
+              assetIds: [assetA, assetB],
+              status: AgentOperationStatus.Failed,
+              error: 'Album no longer exists',
+              payload: {},
+            }),
+          ]),
+          { [addId]: true },
+          {},
+        ).operationsById.get(addId)!,
+        canChangeSelection: false,
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+      },
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Album no longer exists');
+  });
+
   it('renders skipped reason from the operation result', () => {
     render(AgentPlanOperationRow, {
       props: {
