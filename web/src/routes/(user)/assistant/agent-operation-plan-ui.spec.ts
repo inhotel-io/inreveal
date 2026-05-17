@@ -233,7 +233,7 @@ describe('agent operation plan UI helpers', () => {
 
   it('exposes bounded thumbnail summaries for large operations and groups', () => {
     const assetIds = Array.from(
-      { length: 1_000 },
+      { length: 1000 },
       (_, index) => `00000000-0000-4000-8000-${index.toString().padStart(12, '0')}`,
     );
     const model = buildOperationReviewModel(
@@ -252,12 +252,12 @@ describe('agent operation plan UI helpers', () => {
     );
 
     expect(model.operationsById.get(addId)?.review.thumbnails).toEqual({
-      totalCount: 1_000,
+      totalCount: 1000,
       representativeAssetIds: assetIds.slice(0, 12),
       hasMore: true,
     });
     expect(model.groups[0].thumbnailSummary).toEqual({
-      totalCount: 1_000,
+      totalCount: 1000,
       representativeAssetIds: assetIds.slice(0, 12),
       hasMore: true,
     });
@@ -557,7 +557,7 @@ describe('agent operation plan UI helpers', () => {
 
   it('keeps large operations sparse without creating an eager selected id list', () => {
     const assetIds = Array.from(
-      { length: 1_000 },
+      { length: 1000 },
       (_, index) => `00000000-0000-4000-8000-${index.toString().padStart(12, '0')}`,
     );
     const currentPlan = plan([

@@ -108,7 +108,7 @@ describe('AgentPlanItemReview', () => {
   });
 
   it('renders only a bounded number of thumbnails for large operations', () => {
-    const assetIds = Array.from({ length: 1_000 }, (_, index) => `asset-${index + 1}`);
+    const assetIds = Array.from({ length: 1000 }, (_, index) => `asset-${index + 1}`);
     render(AgentPlanItemReview, {
       props: {
         item: item(assetIds),

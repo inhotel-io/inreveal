@@ -162,7 +162,7 @@ describe('AgentPlanThumbnailStrip', () => {
   it('does not mount every thumbnail for a 1,000-photo plan', () => {
     render(AgentPlanThumbnailStrip, {
       props: {
-        group: group(1_000),
+        group: group(1000),
       },
     });
 
