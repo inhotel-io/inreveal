@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from 'svelte-i18n';
+  import { t, type Translations } from 'svelte-i18n';
   import type { OperationReviewItem } from './agent-operation-plan-ui';
   import AgentPlanInlineFieldEditor from './agent-plan-inline-field-editor.svelte';
   import AgentPlanItemReview from './agent-plan-item-review.svelte';
@@ -37,10 +37,10 @@
 
   const statusLabelKey = $derived.by(() => {
     if (item.applyState.kind === 'partial') {
-      return 'assistant_operation_status_partial';
+      return 'assistant_operation_status_partial' as Translations;
     }
 
-    return `assistant_operation_status_${item.applyState.kind}`;
+    return `assistant_operation_status_${item.applyState.kind}` as Translations;
   });
 
   const setMixedCheckbox = (node: HTMLInputElement, state: { checked: boolean; mixed: boolean }) => {

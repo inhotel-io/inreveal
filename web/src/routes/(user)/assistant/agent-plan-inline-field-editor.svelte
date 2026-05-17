@@ -79,7 +79,7 @@
             aria-describedby={errors[field.key] ? `${item.id}-${field.key}-error` : undefined}
             oninput={(event) => setFieldOverride(field.key, event.currentTarget.value)}
           ></textarea>
-        {:else}
+        {:else if field.input === 'coverAsset'}
           <div class="text-xs font-medium text-gray-600 dark:text-gray-300">{field.label}</div>
           <div class="flex flex-wrap gap-2">
             {#each field.assetIds as assetId, index (assetId)}

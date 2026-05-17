@@ -230,8 +230,8 @@ test.describe('Assistant album organizer', () => {
     const excludedAssetId = proposedAddOperation!.assetIds[1];
     expect(excludedAssetId).toEqual(expect.any(String));
 
-    await portugalDestination.getByLabel('Album name').fill('Portugal Favorites');
     await portugalDestination.getByLabel('Description').fill('Curated favorites from the trip.');
+    await portugalDestination.getByLabel('Album name').fill('Portugal Favorites');
     await expect(portugalDestination.getByText('Create album "Portugal Favorites"')).toBeVisible();
 
     await expect(page.getByText(proposedAddOperation!.id)).toHaveCount(0);
@@ -537,7 +537,7 @@ test.describe('Assistant album organizer', () => {
     try {
       await expect(page.getByText(addOperation.id)).toHaveCount(0);
       await page.getByRole('button', { name: 'Apply 3 selected' }).click();
-      await expect(page.getByText('Applied 1 operations. 1 failed.')).toBeVisible();
+      await expect(page.getByText('Applied 1 operation. 1 failed.')).toBeVisible();
       await expect(page.getByText('1 applied · 1 skipped · 1 failed. Review details before continuing.')).toBeVisible();
       await expect(getPortugalDestination(page).getByText('Applied')).toBeVisible();
       await expect(getPortugalDestination(page).getByText('Partially applied')).toBeVisible();
