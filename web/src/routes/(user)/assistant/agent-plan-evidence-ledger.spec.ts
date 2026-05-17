@@ -19,6 +19,7 @@ vi.mock('$lib/utils', () => ({
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_operation_apply_applying: 'Applying operations',
+    assistant_operation_apply_bar_label: 'Review selected plan actions',
     assistant_operation_apply_partial_summary:
       '{applied} applied · {skipped} skipped · {failed} failed. Review details before continuing.',
     assistant_operation_apply_selected: 'Apply {count} selected',
@@ -193,6 +194,8 @@ describe('AgentPlanEvidenceLedger', () => {
       },
     });
 
+    const reviewRegion = screen.getByRole('region', { name: 'Plan review' });
+    expect(reviewRegion).toHaveAttribute('aria-labelledby', 'assistant-operation-plan-title');
     expect(screen.getByRole('heading', { name: 'Plan review' })).toBeInTheDocument();
     expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
     expect(screen.getByText('2 destinations')).toBeInTheDocument();
@@ -208,6 +211,32 @@ describe('AgentPlanEvidenceLedger', () => {
     expect(screen.queryByText('Better notes')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeInTheDocument();
     expect(screen.getByText('3 changes · 2 assets selected')).toBeInTheDocument();
+  });
+
+  it('uses alert and status live roles for operation plan messages', () => {
+    render(AgentPlanEvidenceLedger, {
+      props: {
+        model: model(),
+        selectedOperationIds: [createId, addId, updateId],
+        canChangeSelection: true,
+        canApply: true,
+        applying: false,
+        errorMessage: 'Unable to refresh plan',
+        applyErrorMessage: 'Unable to apply selected changes',
+        applyMessage: 'Applied selected changes',
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onApply: vi.fn(),
+      },
+    });
+
+    const alerts = screen.getAllByRole('alert');
+    expect(alerts).toHaveLength(2);
+    expect(alerts[0]).toHaveTextContent('Unable to refresh plan');
+    expect(alerts[1]).toHaveTextContent('Unable to apply selected changes');
+    expect(screen.getByRole('status')).toHaveTextContent('Applied selected changes');
   });
 
   it('dispatches apply from the sticky apply bar', async () => {
