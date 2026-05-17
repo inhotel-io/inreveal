@@ -921,6 +921,8 @@ export enum JobName {
   FaceRepairScan = 'FaceRepairScan',
   PersonSuggestionScanQueueAll = 'PersonSuggestionScanQueueAll',
   PersonSuggestionScan = 'PersonSuggestionScan',
+  SpacePersonSuggestionScanQueueAll = 'SpacePersonSuggestionScanQueueAll',
+  SpacePersonSuggestionScan = 'SpacePersonSuggestionScan',
 
   FileDelete = 'FileDelete',
   FileMigrationQueueAll = 'FileMigrationQueueAll',
