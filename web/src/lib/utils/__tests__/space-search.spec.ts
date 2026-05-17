@@ -8,6 +8,14 @@ import {
   mapSmartSearchFacetsToFilterSuggestions,
   SEARCH_FILTER_DEBOUNCE_MS,
 } from '$lib/utils/space-search';
+<<<<<<< ours
+||||||| base
+import { AssetOrder, AssetTypeEnum, Type } from '@immich/sdk';
+import { describe, expect, it } from 'vitest';
+=======
+import { AssetOrder, AssetTypeEnum, Type5 as Type } from '@immich/sdk';
+import { describe, expect, it } from 'vitest';
+>>>>>>> theirs
 
 const baseFilters: FilterState = {
   personIds: [],
