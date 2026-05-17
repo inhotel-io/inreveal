@@ -1996,6 +1996,19 @@ describe(PersonService.name, () => {
       expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
     });
 
+    it('requeues itself with a delay when FacialRecognition has paused jobs', async () => {
+      mocks.job.getJobCounts.mockResolvedValue(recognitionCounts({ active: 1, paused: 2 }));
+
+      await expect(sut.handleFaceIdentityMaintenanceAfterRecognition({})).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.FaceIdentityMaintenanceAfterRecognition,
+        data: { delay: 10_000 },
+      });
+      expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
+      expect(mocks.job.searchJobs).not.toHaveBeenCalled();
+    });
+
     it('requeues itself with a delay when FacialRecognition has delayed jobs', async () => {
       mocks.job.getJobCounts.mockResolvedValue({
         active: 1,
@@ -2034,19 +2047,33 @@ describe(PersonService.name, () => {
       expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
     });
 
-    it('does not queue duplicate FaceIdentityBackfill if PeopleBackfill already has one active/waiting/delayed/paused', async () => {
-      mocks.job.getJobCounts.mockResolvedValue({
-        active: 1,
-        waiting: 0,
-        paused: 0,
-        completed: 0,
-        failed: 0,
-        delayed: 0,
+    it('ignores failed recognition jobs when deciding whether the queue has drained', async () => {
+      mocks.job.getJobCounts.mockResolvedValue(recognitionCounts({ active: 1, failed: 12 }));
+      mocks.job.searchJobs.mockResolvedValue([]);
+
+      await expect(sut.handleFaceIdentityMaintenanceAfterRecognition({})).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
+      expect(mocks.job.queue).not.toHaveBeenCalledWith({
+        name: JobName.FaceIdentityMaintenanceAfterRecognition,
+        data: expect.anything(),
       });
+    });
+
+    it('does not queue duplicate FaceIdentityBackfill if PeopleBackfill already has one active, waiting, delayed, or paused', async () => {
+      mocks.job.getJobCounts.mockResolvedValue(recognitionCounts());
       mocks.job.searchJobs.mockResolvedValue([{ id: '1', name: JobName.FaceIdentityBackfill, timestamp: 0, data: {} }]);
 
       await expect(sut.handleFaceIdentityMaintenanceAfterRecognition({})).resolves.toBe(JobStatus.Skipped);
 
+      expect(mocks.job.searchJobs).toHaveBeenCalledWith(QueueName.PeopleBackfill, {
+        status: [
+          QueueJobStatus.Active,
+          QueueJobStatus.Delayed,
+          QueueJobStatus.Paused,
+          QueueJobStatus.Waiting,
+        ],
+      });
       expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
     });
   });
