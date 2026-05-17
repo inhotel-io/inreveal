@@ -1,3 +1,5 @@
+import type { AgentOperationItemSelectionPayload, OperationItemSelectionState } from './agent-operation-plan-ui';
+
 export type AgentPlanReviewAssetKind = 'image' | 'video' | 'unknown';
 
 export type AgentPlanReviewAssetMetadata = {
@@ -171,6 +173,76 @@ export const getAgentPlanAvailableFilterFacets = (
   };
 };
 
+export const getAgentPlanSparseSelectedCount = (
+  totalAssetCount: number,
+  selection?: AgentOperationItemSelectionPayload,
+): number => {
+  const total = Math.max(0, Math.floor(totalAssetCount));
+
+  if (!selection || selection.mode === 'all') {
+    return total;
+  }
+
+  if (selection.mode === 'none') {
+    return 0;
+  }
+
+  const itemCount = selection.itemIds?.length ?? 0;
+  const selectedCount = selection.mode === 'allExcept' ? total - itemCount : itemCount;
+
+  return Math.min(Math.max(selectedCount, 0), total);
+};
+
+export const applyAgentPlanBulkItemSelection = ({
+  state,
+  operationId,
+  allAssetIds,
+  targetAssetIds,
+  selected,
+}: {
+  state: OperationItemSelectionState;
+  operationId: string;
+  allAssetIds: string[];
+  targetAssetIds: string[];
+  selected: boolean;
+}): OperationItemSelectionState => {
+  const knownAssetIds = dedupePreservingOrder(allAssetIds);
+  const targetIds = filterKnownAssetIds(targetAssetIds, knownAssetIds);
+
+  if (targetIds.length === 0) {
+    return state;
+  }
+
+  const selectedIds = getSelectedIdsFromSparseSelection(knownAssetIds, state[operationId]);
+
+  for (const assetId of targetIds) {
+    if (selected) {
+      selectedIds.add(assetId);
+    } else {
+      selectedIds.delete(assetId);
+    }
+  }
+
+  return setNormalizedSparseSelection(state, operationId, knownAssetIds, selectedIds);
+};
+
+export const setAgentPlanOnlyItemSelection = ({
+  state,
+  operationId,
+  allAssetIds,
+  targetAssetIds,
+}: {
+  state: OperationItemSelectionState;
+  operationId: string;
+  allAssetIds: string[];
+  targetAssetIds: string[];
+}): OperationItemSelectionState => {
+  const knownAssetIds = dedupePreservingOrder(allAssetIds);
+  const targetIds = filterKnownAssetIds(targetAssetIds, knownAssetIds);
+
+  return setNormalizedSparseSelection(state, operationId, knownAssetIds, new Set(targetIds));
+};
+
 const getSearchableAssetText = (asset: AgentPlanReviewAssetMetadata): string[] => [
   asset.id,
   asset.label ?? '',
@@ -193,4 +265,72 @@ const getDuplicateCounts = (assets: AgentPlanReviewAssetMetadata[]) => {
   }
 
   return counts;
+};
+
+const dedupePreservingOrder = (assetIds: string[]) => [...new Set(assetIds)];
+
+const filterKnownAssetIds = (assetIds: string[], knownAssetIds: string[]) => {
+  const knownAssetIdSet = new Set(knownAssetIds);
+
+  return dedupePreservingOrder(assetIds).filter((assetId) => knownAssetIdSet.has(assetId));
+};
+
+const getSelectedIdsFromSparseSelection = (
+  knownAssetIds: string[],
+  selection?: AgentOperationItemSelectionPayload,
+): Set<string> => {
+  if (!selection || selection.mode === 'all') {
+    return new Set(knownAssetIds);
+  }
+
+  if (selection.mode === 'none') {
+    return new Set();
+  }
+
+  const selectionIds = filterKnownAssetIds(selection.itemIds ?? [], knownAssetIds);
+
+  if (selection.mode === 'allExcept') {
+    const excludedAssetIds = new Set(selectionIds);
+    return new Set(knownAssetIds.filter((assetId) => !excludedAssetIds.has(assetId)));
+  }
+
+  return new Set(selectionIds);
+};
+
+const setNormalizedSparseSelection = (
+  state: OperationItemSelectionState,
+  operationId: string,
+  knownAssetIds: string[],
+  selectedIds: Set<string>,
+): OperationItemSelectionState => {
+  const orderedSelectedIds = knownAssetIds.filter((assetId) => selectedIds.has(assetId));
+  const totalCount = knownAssetIds.length;
+
+  if (orderedSelectedIds.length === totalCount) {
+    return removeSparseSelection(state, operationId);
+  }
+
+  if (orderedSelectedIds.length === 0) {
+    return {
+      ...state,
+      [operationId]: { itemKind: 'asset', mode: 'none' },
+    };
+  }
+
+  const selectedIdSet = new Set(orderedSelectedIds);
+  const orderedUnselectedIds = knownAssetIds.filter((assetId) => !selectedIdSet.has(assetId));
+  const selection: AgentOperationItemSelectionPayload =
+    orderedUnselectedIds.length < orderedSelectedIds.length
+      ? { itemKind: 'asset', mode: 'allExcept', itemIds: orderedUnselectedIds }
+      : { itemKind: 'asset', mode: 'only', itemIds: orderedSelectedIds };
+
+  return {
+    ...state,
+    [operationId]: selection,
+  };
+};
+
+const removeSparseSelection = (state: OperationItemSelectionState, operationId: string): OperationItemSelectionState => {
+  const { [operationId]: _, ...remaining } = state;
+  return remaining;
 };

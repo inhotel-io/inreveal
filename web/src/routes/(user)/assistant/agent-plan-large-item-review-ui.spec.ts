@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyAgentPlanBulkItemSelection,
   buildAgentPlanItemVirtualWindow,
   buildAgentPlanReviewAssets,
   filterAgentPlanReviewAssets,
   getAgentPlanAvailableFilterFacets,
+  getAgentPlanSparseSelectedCount,
+  setAgentPlanOnlyItemSelection,
   type AgentPlanItemFilterState,
   type AgentPlanReviewAssetMetadata,
 } from './agent-plan-large-item-review-ui';
+import type { OperationItemSelectionState } from './agent-operation-plan-ui';
 
 const assetIds = (count: number) =>
   Array.from({ length: count }, (_, index) => `asset-${index.toString().padStart(4, '0')}`);
@@ -213,6 +217,160 @@ describe('agent plan large item review UI helpers', () => {
       hasLocations: false,
       hasScreenshots: false,
       hasDuplicates: false,
+    });
+  });
+
+  it('excludes visible assets from implicit all selection', () => {
+    const allAssetIds = assetIds(10);
+    const state = applyAgentPlanBulkItemSelection({
+      state: {},
+      operationId: 'operation-1',
+      allAssetIds,
+      targetAssetIds: ['asset-0001', 'asset-0002'],
+      selected: false,
+    });
+
+    expect(state['operation-1']).toEqual({
+      itemKind: 'asset',
+      mode: 'allExcept',
+      itemIds: ['asset-0001', 'asset-0002'],
+    });
+    expect(getAgentPlanSparseSelectedCount(allAssetIds.length, state['operation-1'])).toBe(8);
+  });
+
+  it('includes exclusions back into allExcept selection', () => {
+    const allAssetIds = assetIds(10);
+    const initialState: OperationItemSelectionState = {
+      'operation-1': { itemKind: 'asset', mode: 'allExcept', itemIds: ['asset-0001', 'asset-0002'] },
+    };
+    const state = applyAgentPlanBulkItemSelection({
+      state: initialState,
+      operationId: 'operation-1',
+      allAssetIds,
+      targetAssetIds: ['asset-0001', 'asset-0002'],
+      selected: true,
+    });
+
+    expect(state['operation-1']).toBeUndefined();
+    expect(getAgentPlanSparseSelectedCount(allAssetIds.length, state['operation-1'])).toBe(10);
+  });
+
+  it('selects a subset from none selection', () => {
+    const allAssetIds = assetIds(10);
+    const state = applyAgentPlanBulkItemSelection({
+      state: { 'operation-1': { itemKind: 'asset', mode: 'none' } },
+      operationId: 'operation-1',
+      allAssetIds,
+      targetAssetIds: ['asset-0004', 'asset-0005'],
+      selected: true,
+    });
+
+    expect(state['operation-1']).toEqual({
+      itemKind: 'asset',
+      mode: 'only',
+      itemIds: ['asset-0004', 'asset-0005'],
+    });
+    expect(getAgentPlanSparseSelectedCount(allAssetIds.length, state['operation-1'])).toBe(2);
+  });
+
+  it('deselects every asset', () => {
+    const allAssetIds = assetIds(10);
+    const state = applyAgentPlanBulkItemSelection({
+      state: {},
+      operationId: 'operation-1',
+      allAssetIds,
+      targetAssetIds: allAssetIds,
+      selected: false,
+    });
+
+    expect(state['operation-1']).toEqual({ itemKind: 'asset', mode: 'none' });
+    expect(getAgentPlanSparseSelectedCount(allAssetIds.length, state['operation-1'])).toBe(0);
+  });
+
+  it('ignores unknown target ids and deduplicates incoming target ids', () => {
+    const state = applyAgentPlanBulkItemSelection({
+      state: {},
+      operationId: 'operation-1',
+      allAssetIds: assetIds(10),
+      targetAssetIds: ['asset-0001', 'asset-0001', 'asset-9999'],
+      selected: false,
+    });
+
+    expect(state['operation-1']).toEqual({
+      itemKind: 'asset',
+      mode: 'allExcept',
+      itemIds: ['asset-0001'],
+    });
+  });
+
+  it('deduplicates operation asset ids before building sparse state', () => {
+    const state = applyAgentPlanBulkItemSelection({
+      state: {},
+      operationId: 'operation-1',
+      allAssetIds: ['asset-0001', 'asset-0001', 'asset-0002'],
+      targetAssetIds: ['asset-0001'],
+      selected: false,
+    });
+
+    expect(state['operation-1']).toEqual({
+      itemKind: 'asset',
+      mode: 'only',
+      itemIds: ['asset-0002'],
+    });
+  });
+
+  it('replaces current selection with only filtered target ids', () => {
+    const state = setAgentPlanOnlyItemSelection({
+      state: {},
+      operationId: 'operation-1',
+      allAssetIds: assetIds(10),
+      targetAssetIds: ['asset-0004', 'asset-0005'],
+    });
+
+    expect(state['operation-1']).toEqual({
+      itemKind: 'asset',
+      mode: 'only',
+      itemIds: ['asset-0004', 'asset-0005'],
+    });
+  });
+
+  it('clears sparse state when only replacement target is every known asset', () => {
+    const allAssetIds = assetIds(10);
+    const state = setAgentPlanOnlyItemSelection({
+      state: { 'operation-1': { itemKind: 'asset', mode: 'only', itemIds: ['asset-0004'] } },
+      operationId: 'operation-1',
+      allAssetIds,
+      targetAssetIds: allAssetIds,
+    });
+
+    expect(state['operation-1']).toBeUndefined();
+  });
+
+  it('stores none when only replacement target has no known assets', () => {
+    const state = setAgentPlanOnlyItemSelection({
+      state: {},
+      operationId: 'operation-1',
+      allAssetIds: assetIds(10),
+      targetAssetIds: ['asset-9999'],
+    });
+
+    expect(state['operation-1']).toEqual({ itemKind: 'asset', mode: 'none' });
+  });
+
+  it('keeps allExcept compact when excluding a small subset from implicit all', () => {
+    const allAssetIds = assetIds(100);
+    const state = applyAgentPlanBulkItemSelection({
+      state: {},
+      operationId: 'operation-1',
+      allAssetIds,
+      targetAssetIds: ['asset-0001', 'asset-0002', 'asset-0003'],
+      selected: false,
+    });
+
+    expect(state['operation-1']).toEqual({
+      itemKind: 'asset',
+      mode: 'allExcept',
+      itemIds: ['asset-0001', 'asset-0002', 'asset-0003'],
     });
   });
 });
