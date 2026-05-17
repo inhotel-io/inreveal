@@ -13,6 +13,8 @@ export type OperationEnabledState = Record<string, boolean>;
 
 export type OperationItemSelectionState = Record<string, AgentOperationItemSelectionPayload>;
 
+export type OperationFieldOverrideState = Record<string, Record<string, unknown>>;
+
 export type AgentOperationItemSelectionPayload = {
   itemKind: AgentReviewItemKind;
   mode: AgentReviewSelectionMode;
@@ -24,6 +26,7 @@ export type AgentOperationSelectionPayload = {
   planRevision: number;
   operationIds: string[];
   itemSelections?: Record<string, AgentOperationItemSelectionPayload>;
+  fieldOverrides?: OperationFieldOverrideState;
 };
 
 export type AgentReviewDestinationKind = 'album' | 'space' | 'assetBatch' | 'library' | 'imageEditBatch';
@@ -61,6 +64,26 @@ export type AgentReviewDependency = {
   blocked: boolean;
 };
 
+export type AgentOperationEditableField =
+  | {
+      key: 'albumName' | 'description';
+      label: string;
+      input: 'text' | 'textarea';
+      originalValue: string;
+      value: string;
+      required: boolean;
+      maxLength: number;
+    }
+  | {
+      key: 'albumThumbnailAssetId';
+      label: string;
+      input: 'coverAsset';
+      originalValue: string | undefined;
+      value: string | undefined;
+      assetIds: string[];
+      required: boolean;
+    };
+
 export type AgentOperationReview = {
   operationId: string;
   operationType: string;
@@ -94,6 +117,9 @@ export type OperationReviewItem = {
   excludedAssetCount: number;
   selectedAssetIds: string[];
   representativeAssetIds: string[];
+  editableFields: AgentOperationEditableField[];
+  fieldErrors: Record<string, string>;
+  fieldOverrides: Record<string, unknown>;
 };
 
 export type OperationReviewGroup = {
@@ -268,12 +294,20 @@ export const buildSelectionPayload = (model: OperationReviewModel): AgentOperati
         },
       ]),
   );
+  const fieldOverrides = Object.fromEntries(
+    operationIds
+      .map((operationId) => model.operationsById.get(operationId))
+      .filter((operation): operation is OperationReviewItem => operation !== undefined)
+      .filter((operation) => Object.keys(operation.fieldOverrides).length > 0)
+      .map((operation) => [operation.id, operation.fieldOverrides]),
+  );
 
   return {
     planId: model.plan.id,
     planRevision: model.plan.revision,
     operationIds,
     ...(Object.keys(itemSelections).length > 0 ? { itemSelections } : {}),
+    ...(Object.keys(fieldOverrides).length > 0 ? { fieldOverrides } : {}),
   };
 };
 
@@ -362,8 +396,14 @@ export const buildOperationReviewModel = (
   plan: AgentOperationPlanResponseDto,
   enabledByOperationId: OperationEnabledState,
   itemSelectionByOperationId: OperationItemSelectionState = {},
+  fieldOverrideByOperationId: OperationFieldOverrideState = {},
 ): OperationReviewModel => {
-  const operationById = new Map(plan.operations.map((operation) => [operation.id, operation]));
+  const operationById = new Map(
+    plan.operations.map((operation) => [
+      operation.id,
+      applyOperationFieldOverrides(operation, fieldOverrideByOperationId[operation.id]),
+    ]),
+  );
   const blockedByCache = new Map<string, string[]>();
 
   const getBaseSelection = (operation: AgentOperationResponseDto) =>
@@ -421,8 +461,9 @@ export const buildOperationReviewModel = (
     const blockedBy = collectBlockingDependencySummaries(operation);
     const blocked = blockedBy.length > 0;
     const selected = enabledByOperationId[operation.id] ?? operation.enabled;
+    const effectiveOperation = operationById.get(operation.id) ?? operation;
     const review = buildOperationReview(
-      operation,
+      effectiveOperation,
       operationById,
       enabledByOperationId,
       (dependency) => collectBlockingDependencySummaries(dependency).length > 0,
@@ -430,6 +471,14 @@ export const buildOperationReviewModel = (
       blocked,
       itemSelectionByOperationId[operation.id],
     );
+    const editableFields = buildEditableFields(operation, fieldOverrideByOperationId[operation.id]);
+    const selectedAssetIds = getSelectedAssetIds(operation, review.selection);
+    const fieldErrors = validateEditableFields(editableFields, selectedAssetIds);
+    const enabled =
+      !blocked &&
+      selected &&
+      Object.keys(fieldErrors).length === 0 &&
+      (!review.selection.supportsItemSelection || review.selection.selectedCount > 0);
 
     return {
       id: operation.id,
@@ -438,7 +487,7 @@ export const buildOperationReviewModel = (
       summary: review.summary,
       risk: review.riskLevel,
       selected,
-      enabled: !blocked && selected && (!review.selection.supportsItemSelection || review.selection.selectedCount > 0),
+      enabled,
       blocked,
       mixed:
         review.selection.supportsItemSelection &&
@@ -449,8 +498,11 @@ export const buildOperationReviewModel = (
       riskLabelKey: riskLabelKeys[operation.riskLevel] ?? fallbackRiskLabelKey,
       assetCount: review.selection.totalCount,
       excludedAssetCount: Math.max(review.selection.totalCount - review.selection.selectedCount, 0),
-      selectedAssetIds: getSelectedAssetIds(operation, review.selection),
+      selectedAssetIds,
       representativeAssetIds: review.thumbnails.representativeAssetIds,
+      editableFields,
+      fieldErrors,
+      fieldOverrides: buildSparseOperationFieldOverrides(editableFields),
     };
   });
 
@@ -460,7 +512,7 @@ export const buildOperationReviewModel = (
     const groupId = getGroupId(item.operation);
     const group = groupsById.get(groupId) ?? {
       id: groupId,
-      title: getGroupTitle(item.operation),
+      title: getReviewGroupTitle(item),
       subtitle: '',
       destination: getDestination(item.operation, operationById, ''),
       assetCount: 0,
@@ -493,6 +545,14 @@ export const buildOperationReviewModel = (
   };
 };
 
+const getReviewGroupTitle = (item: Pick<OperationReviewItem, 'operation' | 'review'>) => {
+  if (item.operation.targetKind === AgentOperationTargetKind.NewAlbum) {
+    return `New album "${item.review.destination.name}"`;
+  }
+
+  return getGroupTitle(item.operation);
+};
+
 const buildOperationReview = (
   operation: AgentOperationResponseDto,
   operationById: Map<string, AgentOperationResponseDto>,
@@ -521,6 +581,130 @@ const buildOperationReview = (
     };
   }),
 });
+
+const buildEditableFields = (
+  operation: AgentOperationResponseDto,
+  fieldOverrides: Record<string, unknown> | undefined,
+): AgentOperationEditableField[] => {
+  if (operation.type === AgentOperationType.AlbumCreate || operation.type === AgentOperationType.AlbumUpdateDetails) {
+    const albumName = getRawStringPayloadValue(operation, 'albumName');
+    const description = getRawStringPayloadValue(operation, 'description');
+
+    return [
+      {
+        key: 'albumName',
+        label: 'Album name',
+        input: 'text',
+        originalValue: albumName,
+        value: getStringOverride(fieldOverrides, 'albumName') ?? albumName,
+        required: true,
+        maxLength: 200,
+      },
+      {
+        key: 'description',
+        label: 'Description',
+        input: 'textarea',
+        originalValue: description,
+        value: getStringOverride(fieldOverrides, 'description') ?? description,
+        required: false,
+        maxLength: 1000,
+      },
+    ];
+  }
+
+  if (operation.type === AgentOperationType.AlbumSetCover && operation.assetIds.length > 1) {
+    const originalValue = operation.assetIds[0];
+    const overrideValue = getStringOverride(fieldOverrides, 'albumThumbnailAssetId');
+
+    return [
+      {
+        key: 'albumThumbnailAssetId',
+        label: 'Cover photo',
+        input: 'coverAsset',
+        originalValue,
+        value: overrideValue ?? originalValue,
+        assetIds: [...new Set(operation.assetIds)],
+        required: true,
+      },
+    ];
+  }
+
+  return [];
+};
+
+const validateEditableFields = (
+  editableFields: AgentOperationEditableField[],
+  selectedAssetIds: string[],
+): Record<string, string> => {
+  const errors: Record<string, string> = {};
+
+  for (const field of editableFields) {
+    if (field.key === 'albumName') {
+      const trimmedValue = field.value.trim();
+      const shouldValidateBlankName = field.originalValue.trim().length > 0 || field.value !== field.originalValue;
+      if (trimmedValue.length === 0 && shouldValidateBlankName) {
+        errors[field.key] = 'Album name is required.';
+      } else if (trimmedValue.length > field.maxLength) {
+        errors[field.key] = 'Album name must be 200 characters or fewer.';
+      }
+      continue;
+    }
+
+    if (field.key === 'description' && field.value.trim().length > field.maxLength) {
+      errors[field.key] = 'Description must be 1,000 characters or fewer.';
+      continue;
+    }
+
+    if (field.key === 'albumThumbnailAssetId' && (!field.value || !selectedAssetIds.includes(field.value))) {
+      errors[field.key] = 'Choose a selected cover photo.';
+    }
+  }
+
+  return errors;
+};
+
+const buildSparseOperationFieldOverrides = (editableFields: AgentOperationEditableField[]): Record<string, unknown> =>
+  Object.fromEntries(
+    editableFields
+      .filter((field) => field.value !== field.originalValue)
+      .map((field) => [
+        field.key,
+        field.input === 'textarea' || field.input === 'text' ? field.value.trim() : field.value,
+      ]),
+  );
+
+const applyOperationFieldOverrides = (operation: AgentOperationResponseDto, fieldOverrides: Record<string, unknown> | undefined) => {
+  if (
+    !fieldOverrides ||
+    (operation.type !== AgentOperationType.AlbumCreate && operation.type !== AgentOperationType.AlbumUpdateDetails)
+  ) {
+    return operation;
+  }
+
+  const payload = { ...operation.payload };
+  const albumName = getStringOverride(fieldOverrides, 'albumName');
+  const description = getStringOverride(fieldOverrides, 'description');
+
+  if (albumName !== undefined) {
+    payload.albumName = albumName;
+  }
+
+  if (description !== undefined) {
+    payload.description = description;
+  }
+
+  return { ...operation, payload };
+};
+
+const getStringOverride = (fieldOverrides: Record<string, unknown> | undefined, key: string) => {
+  const value = fieldOverrides?.[key];
+  return typeof value === 'string' ? value : undefined;
+};
+
+const getRawStringPayloadValue = (operation: AgentOperationResponseDto, key: string) => {
+  const value = operation.payload[key];
+  return typeof value === 'string' ? value : '';
+};
 
 const buildOperationReviewSelection = (
   operation: Pick<AgentOperationResponseDto, 'assetIds'>,
