@@ -366,6 +366,14 @@ Svelte components should render the view model and dispatch user intent. They sh
 
 Implementation should be test-driven. Each slice should start with failing tests that describe user-visible behavior and model rules.
 
+For every implementation slice:
+
+- Write the failing tests first.
+- Confirm the tests fail for the intended reason before implementation.
+- Implement the smallest behavior needed to make them pass.
+- Keep regression tests focused on the slice's public contract, not incidental DOM or styling details.
+- Treat the slice as incomplete until unit, component, API, and end-to-end coverage relevant to that slice is green.
+
 ### View Model Tests
 
 Cover:
@@ -431,6 +439,27 @@ Edge cases:
 - Unknown item kind.
 - Huge selection payload is bounded or rejected with a clear error.
 - Operation changed between plan creation and apply.
+
+### End-To-End Flow Tests
+
+Cover:
+
+- User receives a visual plan after asking Pi to organize photos.
+- Plan preview shows destination cards, representative thumbnails, and a clear apply action.
+- User disables an operation and the apply request excludes it.
+- User expands an operation, excludes individual photos, and the apply request includes sparse item-selection overrides.
+- User applies the selected plan and sees applied/skipped/failed operation status in chat.
+- User asks Pi to revise the plan instead of applying it and the old plan is no longer applied accidentally.
+- User opens technical details only on demand; operation IDs and raw payloads are hidden by default.
+- Large plan with hundreds or thousands of photos remains usable without rendering every item.
+
+Edge cases:
+
+- Apply fails after some operations succeed.
+- Plan becomes stale before apply.
+- User lacks permission for one destination or asset.
+- Network failure while loading thumbnails or applying the plan.
+- User changes selection, collapses the card, reopens it, and selection state is preserved.
 
 ### Performance Tests
 
