@@ -38,6 +38,10 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_detail_status: 'Status',
     assistant_operation_detail_toggle: 'Details',
     assistant_operation_detail_type: 'Type',
+    assistant_operation_field_cover_option: 'Use photo {index} as cover',
+    assistant_operation_field_cover_thumbnail_alt: 'Cover photo option {index}',
+    assistant_operation_field_reset: 'Reset {field}',
+    assistant_operation_field_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_item_excluded_count: '{count} excluded',
     assistant_operation_item_overflow: '+{count} not shown',
     assistant_operation_item_overflow_label: '{count} more affected photos are not shown',
@@ -76,6 +80,7 @@ vi.mock('svelte-i18n', () => {
         .replace('{count}', String(options?.values?.count ?? ''))
         .replace('{applied}', String(options?.values?.applied ?? ''))
         .replace('{failed}', String(options?.values?.failed ?? ''))
+        .replace('{field}', String(options?.values?.field ?? ''))
         .replace('{dependencies}', String(options?.values?.dependencies ?? ''))
         .replace('{assets}', String(options?.values?.assets ?? ''))
         .replace('{changes}', String(options?.values?.changes ?? ''))
@@ -482,6 +487,102 @@ describe('AgentOperationPlanReviewPanel', () => {
         },
         planRevision: 1,
       },
+    });
+  });
+
+  it('publishes and applies sparse field overrides after an inline album-name edit', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+    sdkMock.applyApprovedOperations.mockResolvedValue({
+      status: AgentOperationApplyStatus.Applied,
+      plan: appliedPlan(),
+      appliedOperationIds: [createId, addId, existingId],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 3 operation(s), skipped 0, failed 0.',
+    });
+    const onSelectionChange = vi.fn();
+
+    render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
+
+    await screen.findByRole('region', { name: 'Portugal' });
+    await fireEvent.input(screen.getAllByLabelText('Album name')[0], { target: { value: 'Madeira' } });
+
+    expect(screen.getByRole('region', { name: 'Madeira' })).toBeInTheDocument();
+    expect(screen.getByText('Create album "Madeira"')).toBeInTheDocument();
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      planId,
+      planRevision: 1,
+      operationIds: [createId, addId, existingId],
+      fieldOverrides: {
+        [createId]: { albumName: 'Madeira' },
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply 3 selected' }));
+
+    expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith({
+      id: session.id,
+      planId,
+      agentOperationPlanApplyRequestDto: {
+        operationIds: [createId, addId, existingId],
+        fieldOverrides: {
+          [createId]: { albumName: 'Madeira' },
+        },
+        planRevision: 1,
+      },
+    });
+  });
+
+  it('disables apply and publishes invalid field overrides while an inline field has validation errors', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+    const onSelectionChange = vi.fn();
+
+    render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
+
+    await screen.findByRole('region', { name: 'Portugal' });
+    await fireEvent.input(screen.getAllByLabelText('Album name')[0], { target: { value: '' } });
+
+    expect(screen.getByText('Album name is required.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apply 2 selected' })).toBeDisabled();
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      planId,
+      planRevision: 1,
+      operationIds: [addId, existingId],
+      fieldOverrides: {
+        [createId]: { albumName: '' },
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply 2 selected' }));
+
+    expect(sdkMock.applyApprovedOperations).not.toHaveBeenCalled();
+  });
+
+  it('clears field override state after a successful apply response', async () => {
+    const updatedAppliedPlan = appliedPlan();
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+    sdkMock.applyApprovedOperations.mockResolvedValue({
+      status: AgentOperationApplyStatus.Applied,
+      plan: updatedAppliedPlan,
+      appliedOperationIds: [createId, addId, existingId],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 3 operation(s), skipped 0, failed 0.',
+    });
+    const onSelectionChange = vi.fn();
+
+    render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
+
+    await screen.findByRole('region', { name: 'Portugal' });
+    await fireEvent.input(screen.getAllByLabelText('Album name')[0], { target: { value: 'Madeira' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply 3 selected' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
+    expect(screen.queryByRole('region', { name: 'Madeira' })).not.toBeInTheDocument();
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      planId,
+      planRevision: 1,
+      operationIds: [createId, addId, existingId],
     });
   });
 

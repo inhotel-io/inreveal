@@ -11,10 +11,20 @@
     onToggleOperation: (operationId: string, checked: boolean) => void;
     onToggleItem: (operationId: string, assetId: string, selected: boolean) => void;
     onResetItemSelection: (operationId: string) => void;
+    onSetFieldOverride: (operationId: string, fieldKey: string, value: string | undefined) => void;
+    onResetFieldOverride: (operationId: string, fieldKey: string) => void;
   }
 
-  let { group, canChangeSelection, onToggleGroup, onToggleOperation, onToggleItem, onResetItemSelection }: Props =
-    $props();
+  let {
+    group,
+    canChangeSelection,
+    onToggleGroup,
+    onToggleOperation,
+    onToggleItem,
+    onResetItemSelection,
+    onSetFieldOverride,
+    onResetFieldOverride,
+  }: Props = $props();
 
   const getDestinationTitle = (reviewGroup: OperationReviewGroup) => {
     if (reviewGroup.destination.id && reviewGroup.destination.name === `Existing album ${reviewGroup.destination.id}`) {
@@ -94,7 +104,15 @@
 
   <div class="mt-3 flex flex-col divide-y divide-gray-200 dark:divide-gray-700">
     {#each group.operations as item (item.id)}
-      <AgentPlanOperationRow {item} {canChangeSelection} {onToggleOperation} {onToggleItem} {onResetItemSelection} />
+      <AgentPlanOperationRow
+        {item}
+        {canChangeSelection}
+        {onToggleOperation}
+        {onToggleItem}
+        {onResetItemSelection}
+        {onSetFieldOverride}
+        {onResetFieldOverride}
+      />
     {/each}
   </div>
 </section>
