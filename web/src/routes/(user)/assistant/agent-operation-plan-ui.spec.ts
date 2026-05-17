@@ -8,7 +8,10 @@ import {
   type AgentOperationResponseDto,
 } from '@immich/sdk';
 import {
+  AGENT_PLAN_THUMBNAIL_STRIP_DEFAULT_LIMIT,
+  AGENT_PLAN_THUMBNAIL_STRIP_MAX_LIMIT,
   buildApprovedOperationIds,
+  buildAgentPlanThumbnailStrip,
   buildGroupEnabledState,
   buildOperationReviewImpactSummary,
   buildOperationReviewModel,
@@ -24,6 +27,9 @@ const coverId = '00000000-0000-4000-8000-000000000103';
 const updateId = '00000000-0000-4000-8000-000000000104';
 const assetA = '00000000-0000-4000-8000-000000000201';
 const assetB = '00000000-0000-4000-8000-000000000202';
+
+const manyAssetIds = (count: number) =>
+  Array.from({ length: count }, (_, index) => `asset-${String(index + 1).padStart(3, '0')}`);
 
 const baseOperation = {
   planId,
@@ -58,6 +64,22 @@ const plan = (operations: AgentOperationResponseDto[]): AgentOperationPlanRespon
   createdAt: '2026-05-15T00:00:00.000Z',
   updatedAt: '2026-05-15T00:00:00.000Z',
 });
+
+const thumbnailGroup = (assetCount: number) =>
+  buildOperationReviewModel(
+    plan([
+      operation({
+        id: addId,
+        type: AgentOperationType.AlbumAddAssets,
+        summary: `Add ${assetCount} assets`,
+        targetKind: AgentOperationTargetKind.NewAlbum,
+        temporaryTargetId: 'album-portugal',
+        assetIds: manyAssetIds(assetCount),
+        payload: {},
+      }),
+    ]),
+    { [addId]: true },
+  ).groups[0];
 
 describe('agent operation plan UI helpers', () => {
   it('builds spec-shaped review metadata for album operations', () => {
@@ -234,6 +256,65 @@ describe('agent operation plan UI helpers', () => {
       totalCount: 1_000,
       representativeAssetIds: assetIds.slice(0, 12),
       hasMore: true,
+    });
+  });
+
+  describe('buildAgentPlanThumbnailStrip', () => {
+    it('returns a bounded collapsed thumbnail set and overflow count for large plans', () => {
+      const strip = buildAgentPlanThumbnailStrip(thumbnailGroup(20), 4);
+
+      expect(strip).toEqual({
+        totalCount: 20,
+        assetIds: ['asset-001', 'asset-002', 'asset-003', 'asset-004'],
+        overflowCount: 16,
+        hasMore: true,
+        hasThumbnails: true,
+      });
+    });
+
+    it('uses the default collapsed strip limit and never exceeds the maximum supported strip size', () => {
+      const defaultStrip = buildAgentPlanThumbnailStrip(thumbnailGroup(20));
+      const oversizedStrip = buildAgentPlanThumbnailStrip(thumbnailGroup(20), 200);
+
+      expect(defaultStrip.assetIds).toHaveLength(AGENT_PLAN_THUMBNAIL_STRIP_DEFAULT_LIMIT);
+      expect(oversizedStrip.assetIds).toHaveLength(AGENT_PLAN_THUMBNAIL_STRIP_MAX_LIMIT);
+      expect(oversizedStrip.overflowCount).toBe(8);
+    });
+
+    it('handles zero and negative limits without rendering thumbnails', () => {
+      expect(buildAgentPlanThumbnailStrip(thumbnailGroup(5), 0)).toEqual({
+        totalCount: 5,
+        assetIds: [],
+        overflowCount: 0,
+        hasMore: false,
+        hasThumbnails: false,
+      });
+
+      expect(buildAgentPlanThumbnailStrip(thumbnailGroup(5), -4).assetIds).toHaveLength(0);
+    });
+
+    it('returns a no-preview model when assets exist but representative thumbnail IDs are unavailable', () => {
+      const group = thumbnailGroup(7);
+      const strip = buildAgentPlanThumbnailStrip(
+        {
+          ...group,
+          representativeAssetIds: [],
+          thumbnailSummary: {
+            totalCount: 7,
+            representativeAssetIds: [],
+            hasMore: true,
+          },
+        },
+        6,
+      );
+
+      expect(strip).toEqual({
+        totalCount: 7,
+        assetIds: [],
+        overflowCount: 0,
+        hasMore: false,
+        hasThumbnails: false,
+      });
     });
   });
 
