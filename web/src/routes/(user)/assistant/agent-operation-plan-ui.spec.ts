@@ -15,7 +15,9 @@ import {
   buildGroupEnabledState,
   buildOperationItemSelectionState,
   buildOperationReviewImpactSummary,
+  buildOperationReviewApplyStateSummary,
   buildOperationReviewModel,
+  buildOperationTechnicalDetails,
   buildSelectionPayload,
   createInitialOperationEnabledState,
   createInitialOperationFieldOverrideState,
@@ -33,6 +35,7 @@ const createId = '00000000-0000-4000-8000-000000000101';
 const addId = '00000000-0000-4000-8000-000000000102';
 const coverId = '00000000-0000-4000-8000-000000000103';
 const updateId = '00000000-0000-4000-8000-000000000104';
+const albumId = '00000000-0000-4000-8000-000000000301';
 const assetA = '00000000-0000-4000-8000-000000000201';
 const assetB = '00000000-0000-4000-8000-000000000202';
 
@@ -907,6 +910,222 @@ describe('agent operation plan UI helpers', () => {
       totalAssetCount: 2,
       selectedAssetCount: 0,
     });
+  });
+
+  it('summarizes partial apply states without treating failed per-asset rows as success', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: createId,
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Portugal album',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          status: AgentOperationStatus.Applied,
+          result: { albumId },
+          payload: { albumName: 'Portugal' },
+        }),
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add two assets',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          assetIds: [assetA, assetB],
+          status: AgentOperationStatus.Failed,
+          result: {
+            albumId,
+            assetIds: [assetA],
+            assetResults: [
+              { id: assetA, success: true },
+              { id: assetB, success: false, errorMessage: 'Asset no longer exists' },
+            ],
+          },
+          error: 'Failed to add 1 asset(s)',
+          payload: {},
+        }),
+      ]),
+      { [createId]: true, [addId]: true },
+      {},
+    );
+
+    expect(buildOperationReviewApplyStateSummary(model)).toEqual({
+      appliedCount: 1,
+      skippedCount: 0,
+      failedCount: 1,
+      partialCount: 1,
+      hasFailures: true,
+    });
+    expect(model.operationsById.get(addId)?.applyState).toMatchObject({
+      kind: 'partial',
+      appliedAssetCount: 1,
+      failedAssetCount: 1,
+    });
+  });
+
+  it('builds sanitized technical details with bounded arrays', () => {
+    const item = buildOperationReviewModel(
+      plan([
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add many assets',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          assetIds: Array.from({ length: 1000 }, (_, index) => `asset-${index}`),
+          payload: {},
+        }),
+      ]),
+      { [addId]: true },
+      {},
+    ).operationsById.get(addId)!;
+
+    expect(buildOperationTechnicalDetails(item)).toMatchObject({
+      operationId: addId,
+      operationType: AgentOperationType.AlbumAddAssets,
+      assetIdPreview: expect.arrayContaining(['asset-0']),
+      assetOverflowCount: 980,
+    });
+  });
+
+  it('keeps skipped apply states and sanitized skipped reasons separate from failures', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add two assets',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          assetIds: [assetA, assetB],
+          status: AgentOperationStatus.Skipped,
+          result: { skippedReason: 'Dependency was disabled' },
+          payload: {},
+        }),
+      ]),
+      { [addId]: true },
+    );
+    const item = model.operationsById.get(addId)!;
+
+    expect(item.applyState).toEqual({ kind: 'skipped', reason: 'Dependency was disabled' });
+    expect(buildOperationReviewApplyStateSummary(model)).toEqual({
+      appliedCount: 0,
+      skippedCount: 1,
+      failedCount: 0,
+      partialCount: 0,
+      hasFailures: false,
+    });
+    expect(buildOperationTechnicalDetails(item)).toMatchObject({
+      resultSkippedReason: 'Dependency was disabled',
+    });
+  });
+
+  it('treats failed operations with no per-asset results as failed instead of partial', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add two assets',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          assetIds: [assetA, assetB],
+          status: AgentOperationStatus.Failed,
+          result: { albumId },
+          error: 'Album no longer exists',
+          payload: {},
+        }),
+      ]),
+      { [addId]: true },
+    );
+
+    expect(model.operationsById.get(addId)?.applyState).toEqual({ kind: 'failed', error: 'Album no longer exists' });
+    expect(buildOperationReviewApplyStateSummary(model)).toMatchObject({
+      failedCount: 1,
+      partialCount: 0,
+      hasFailures: true,
+    });
+  });
+
+  it('sanitizes unknown future result shapes without exposing raw payloads', () => {
+    const item = buildOperationReviewModel(
+      plan([
+        operation({
+          id: updateId,
+          type: 'album.future_operation' as AgentOperationType,
+          summary: 'Future operation',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          status: AgentOperationStatus.Applied,
+          result: {
+            albumId,
+            nested: { unsafe: '<script>alert(1)</script>' },
+            ids: Array.from({ length: 50 }, (_, index) => `future-${index}`),
+          },
+          payload: { nested: { unsafe: '<script>alert(1)</script>' } },
+        }),
+      ]),
+      { [updateId]: true },
+    ).operationsById.get(updateId)!;
+
+    expect(buildOperationTechnicalDetails(item)).toEqual(
+      expect.objectContaining({
+        operationId: updateId,
+        operationType: 'album.future_operation',
+        status: AgentOperationStatus.Applied,
+        resultAlbumId: albumId,
+      }),
+    );
+    expect(buildOperationTechnicalDetails(item)).not.toHaveProperty('payload');
+    expect(buildOperationTechnicalDetails(item)).not.toHaveProperty('result');
+    expect(buildOperationTechnicalDetails(item)).not.toHaveProperty('ids');
+  });
+
+  it('handles empty asset ids in technical details', () => {
+    const item = buildOperationReviewModel(
+      plan([
+        operation({
+          id: updateId,
+          type: AgentOperationType.AlbumUpdateDetails,
+          summary: 'Update details',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          assetIds: [],
+          payload: { description: 'Updated trip notes' },
+        }),
+      ]),
+      { [updateId]: true },
+    ).operationsById.get(updateId)!;
+
+    expect(buildOperationTechnicalDetails(item)).toMatchObject({
+      assetIdPreview: [],
+      assetOverflowCount: 0,
+    });
+  });
+
+  it('keeps existing field errors disabling apply while exposing proposed apply state', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: updateId,
+          type: AgentOperationType.AlbumUpdateDetails,
+          summary: 'Update details',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          payload: { albumName: 'Portugal Archive' },
+        }),
+      ]),
+      { [updateId]: true },
+      {},
+      { [updateId]: { albumName: '   ' } },
+    );
+
+    expect(model.operationsById.get(updateId)).toMatchObject({
+      enabled: false,
+      applyState: { kind: 'proposed' },
+      fieldErrors: { albumName: 'Album name is required.' },
+    });
+    expect(buildSelectionPayload(model)).toEqual({ planId, planRevision: 1, operationIds: [] });
   });
 
   it('groups new-album operations by temporary target and keeps operation order', () => {
