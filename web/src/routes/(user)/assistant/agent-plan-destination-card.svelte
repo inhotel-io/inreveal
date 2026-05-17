@@ -2,6 +2,7 @@
   import { t } from 'svelte-i18n';
   import type { OperationReviewGroup } from './agent-operation-plan-ui';
   import AgentPlanOperationRow from './agent-plan-operation-row.svelte';
+  import AgentPlanThumbnailStrip from './agent-plan-thumbnail-strip.svelte';
 
   interface Props {
     group: OperationReviewGroup;
@@ -74,6 +75,8 @@
       {/if}
     </div>
   </div>
+
+  <AgentPlanThumbnailStrip {group} />
 
   <div class="mt-3 flex flex-col divide-y divide-gray-200 dark:divide-gray-700">
     {#each group.operations as item (item.id)}

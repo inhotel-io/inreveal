@@ -23,6 +23,12 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_detail_status: 'Status',
     assistant_operation_detail_toggle: 'Details',
     assistant_operation_detail_type: 'Type',
+    assistant_operation_thumbnail_alt: 'Photo preview {index} of {count}',
+    assistant_operation_thumbnail_empty: '{count} photos without previews',
+    assistant_operation_thumbnail_overflow: '+{count}',
+    assistant_operation_thumbnail_overflow_label: '{count} more photos',
+    assistant_operation_thumbnail_strip_label: '{count} photo previews',
+    assistant_operation_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_risk_low: 'Low risk',
     assistant_operation_type_album_add_assets: 'Add assets',
     assistant_operation_type_album_create: 'Create album',
@@ -32,6 +38,7 @@ vi.mock('svelte-i18n', () => {
     t: readable((key: string, options?: { values?: Record<string, string | number> }) =>
       (messages[key] ?? key)
         .replace('{count}', String(options?.values?.count ?? ''))
+        .replace('{index}', String(options?.values?.index ?? ''))
         .replace('{selected}', String(options?.values?.selected ?? ''))
         .replace('{total}', String(options?.values?.total ?? ''))
         .replace('{name}', String(options?.values?.name ?? ''))
@@ -118,8 +125,45 @@ describe('AgentPlanDestinationCard', () => {
     expect(screen.getByText('New album')).toBeInTheDocument();
     const compactCounts = screen.getByText('2 of 2 changes selected').parentElement!;
     expect(within(compactCounts).getByText('2 assets')).toBeInTheDocument();
+    const thumbnailStrip = screen.getByTestId('agent-plan-thumbnail-strip');
+    expect(thumbnailStrip).toHaveAttribute('aria-label', '2 photo previews');
+    expect(within(thumbnailStrip).getAllByTestId('agent-plan-thumbnail-image')).toHaveLength(2);
+    expect(within(thumbnailStrip).queryByText(/\+\d+/)).not.toBeInTheDocument();
     expect(screen.getByText('Create album "Portugal"')).toBeInTheDocument();
     expect(screen.getByText('Add 2 photos')).toBeInTheDocument();
+  });
+
+  it('renders bounded thumbnails for a destination with 1,000 affected photos', () => {
+    const largeAssetIds = Array.from({ length: 1_000 }, (_, index) => `large-asset-${index + 1}`);
+    const largeGroup = buildOperationReviewModel(
+      plan([
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add one thousand assets',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          assetIds: largeAssetIds,
+          payload: {},
+        }),
+      ]),
+      { [addId]: true },
+    ).groups[0];
+
+    render(AgentPlanDestinationCard, {
+      props: {
+        group: largeGroup,
+        canChangeSelection: true,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+      },
+    });
+
+    const thumbnailStrip = screen.getByTestId('agent-plan-thumbnail-strip');
+    expect(within(thumbnailStrip).getAllByTestId('agent-plan-thumbnail-image')).toHaveLength(6);
+    expect(within(thumbnailStrip).getByText('+994')).toBeInTheDocument();
+    expect(screen.queryByText('large-asset-7')).not.toBeInTheDocument();
+    expect(screen.queryByText('large-asset-13')).not.toBeInTheDocument();
   });
 
   it('sets mixed state when only some operations are selected', () => {
