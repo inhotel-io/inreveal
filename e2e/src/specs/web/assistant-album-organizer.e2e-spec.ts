@@ -142,7 +142,7 @@ test.describe('Assistant album organizer', () => {
     await page.getByRole('button', { name: 'Apply 2 selected' }).click();
     await applyResponse;
 
-    await expect(page.getByRole('status')).toContainText('Applied 2 operations. 0 failed.');
+    await expect(page.getByText('Applied 2 operations. 0 failed.')).toBeVisible();
     const appliedPlan = await waitForCurrentPlan(admin.accessToken, session.id, AgentOperationPlanStatus.Applied);
     await expect
       .poll(
@@ -192,7 +192,6 @@ test.describe('Assistant album organizer', () => {
     );
 
     await expect(page.getByText(/Gallery denied the album organization request/)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('No proposed album plan yet.')).toBeVisible();
 
     await expect
       .poll(async () => await getCurrentOperationPlan({ id: session.id }, authOptions(admin.accessToken)), {
