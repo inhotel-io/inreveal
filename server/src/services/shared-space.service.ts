@@ -1723,6 +1723,12 @@ export class SharedSpaceService extends BaseService {
     });
   }
 
+  private async resolveMovedSpacePersonFaces(faceIds: Array<{ assetFaceId: string }>): Promise<void> {
+    for (const { assetFaceId } of faceIds) {
+      await this.personFaceSuggestionRepository.resolveAssignedFace(assetFaceId);
+    }
+  }
+
   async mergeSpacePeople(
     auth: AuthDto,
     spaceId: string,
@@ -1761,6 +1767,13 @@ export class SharedSpaceService extends BaseService {
     // holds the instance-wide advisory lock, and reading config there would query a second pool connection a
     // saturated pool cannot grant, deadlocking every merge (#595). The authorizer gets an already-resolved value.
     const { server } = await this.getConfig({ withCache: false });
+    // Capture the source people's face ids before the merge so any pending suggestions for
+    // those faces can be resolved once the merge reassigns them to the target person.
+    const movedFaceIds: Array<{ assetFaceId: string }> = [];
+    for (const source of sources) {
+      movedFaceIds.push(...(await this.sharedSpaceRepository.getFaceIdsForPerson(source.id)));
+    }
+
     await this.identityMergePropagationService.mergeSpacePeople(
       auth,
       spaceId,
@@ -1768,6 +1781,8 @@ export class SharedSpaceService extends BaseService {
       dto.ids,
       createCrossOwnerMergeAuthorizer(() => Promise.resolve(server), dto),
     );
+
+    await this.resolveMovedSpacePersonFaces(movedFaceIds);
     await this.sharedSpaceRepository.logActivity({
       spaceId,
       userId: auth.user.id,
@@ -2408,7 +2423,9 @@ export class SharedSpaceService extends BaseService {
       );
 
       // Reassign faces and migrate aliases
+      const movedFaceIds = await this.sharedSpaceRepository.getFaceIdsForPerson(source.id);
       await this.sharedSpaceRepository.reassignPersonFacesSafe(source.id, target.id);
+      await this.resolveMovedSpacePersonFaces(movedFaceIds);
       await this.sharedSpaceRepository.migrateAliases(source.id, target.id);
 
       const candidateIdentityIds = [target.identityId, source.identityId].filter(
