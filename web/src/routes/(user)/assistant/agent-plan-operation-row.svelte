@@ -2,6 +2,7 @@
   import { AgentOperationStatus } from '@immich/sdk';
   import { t } from 'svelte-i18n';
   import type { OperationReviewItem } from './agent-operation-plan-ui';
+  import AgentPlanInlineFieldEditor from './agent-plan-inline-field-editor.svelte';
   import AgentPlanItemReview from './agent-plan-item-review.svelte';
 
   interface Props {
@@ -10,9 +11,19 @@
     onToggleOperation: (operationId: string, checked: boolean) => void;
     onToggleItem: (operationId: string, assetId: string, selected: boolean) => void;
     onResetItemSelection: (operationId: string) => void;
+    onSetFieldOverride?: (operationId: string, fieldKey: string, value: string | undefined) => void;
+    onResetFieldOverride?: (operationId: string, fieldKey: string) => void;
   }
 
-  let { item, canChangeSelection, onToggleOperation, onToggleItem, onResetItemSelection }: Props = $props();
+  let {
+    item,
+    canChangeSelection,
+    onToggleOperation,
+    onToggleItem,
+    onResetItemSelection,
+    onSetFieldOverride = () => {},
+    onResetFieldOverride = () => {},
+  }: Props = $props();
   let detailsOpen = $state(false);
 
   const checkboxState = $derived({
@@ -78,6 +89,8 @@
         {item.operation.error}
       </span>
     {/if}
+
+    <AgentPlanInlineFieldEditor {item} {canChangeSelection} {onSetFieldOverride} {onResetFieldOverride} />
 
     <details class="mt-2 text-xs text-gray-500 dark:text-gray-400" bind:open={detailsOpen}>
       <summary class="cursor-pointer select-none">{$t('assistant_operation_detail_toggle')}</summary>
