@@ -41,14 +41,28 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_plan_selected_asset_count: '{count} selected assets',
     assistant_operation_plan_selected_change_count: '{count} selected changes',
     assistant_operation_item_excluded_count: '{count} excluded',
+    assistant_operation_item_exclude_videos: 'Exclude videos',
+    assistant_operation_item_exclude_visible: 'Exclude visible',
+    assistant_operation_item_filter_label: 'Filter photos',
+    assistant_operation_item_filter_placeholder: 'Filter photos',
+    assistant_operation_item_include_only_videos: 'Include only videos',
+    assistant_operation_item_include_visible: 'Include visible',
+    assistant_operation_item_media_all: 'All',
+    assistant_operation_item_media_photos: 'Photos',
+    assistant_operation_item_media_videos: 'Videos',
     assistant_operation_item_overflow: '+{count} not shown',
     assistant_operation_item_overflow_label: '{count} more affected photos are not shown',
+    assistant_operation_item_quick_duplicates: 'Duplicates',
+    assistant_operation_item_quick_screenshots: 'Screenshots',
     assistant_operation_item_reset: 'Reset selection',
     assistant_operation_item_review_label: 'Review photos for {summary}',
+    assistant_operation_item_select_all_filtered: 'Select all filtered',
     assistant_operation_item_selected_count: '{selected} of {total} selected',
+    assistant_operation_item_deselect_all_filtered: 'Deselect all filtered',
     assistant_operation_item_thumbnail_alt: 'Photo {index} of {count}',
     assistant_operation_item_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_item_toggle: 'Include photo {index}',
+    assistant_operation_item_virtual_summary: 'Showing {visible} of {total} photos',
     assistant_operation_risk_low: 'Low risk',
     assistant_operation_type_album_add_assets: 'Add assets',
     assistant_operation_type_album_create: 'Create album',
@@ -66,7 +80,8 @@ vi.mock('svelte-i18n', () => {
         .replace('{field}', String(options?.values?.field ?? ''))
         .replace('{name}', String(options?.values?.name ?? ''))
         .replace('{selected}', String(options?.values?.selected ?? ''))
-        .replace('{total}', String(options?.values?.total ?? '')),
+        .replace('{total}', String(options?.values?.total ?? ''))
+        .replace('{visible}', String(options?.values?.visible ?? '')),
     ),
   };
 });
@@ -287,6 +302,37 @@ describe('AgentPlanEvidenceLedger', () => {
 
     expect(onToggleItem).toHaveBeenCalledWith(addId, assetB, true);
     expect(onResetItemSelection).toHaveBeenCalledWith(addId);
+  });
+
+  it('threads bulk item callbacks through destination cards', async () => {
+    const onBulkSetItems = vi.fn();
+    const onSetOnlyItems = vi.fn();
+    render(AgentPlanEvidenceLedger, {
+      props: {
+        model: model(),
+        selectedOperationIds: [createId, addId, updateId],
+        canChangeSelection: true,
+        canApply: true,
+        applying: false,
+        errorMessage: null,
+        applyErrorMessage: null,
+        applyMessage: null,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onBulkSetItems,
+        onSetOnlyItems,
+        onResetItemSelection: vi.fn(),
+        onApply: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(screen.getAllByText('Details')[1]);
+    await fireEvent.click(screen.getByRole('button', { name: 'Exclude visible' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Select all filtered' }));
+
+    expect(onBulkSetItems).toHaveBeenCalledWith(addId, [assetA, assetB], false);
+    expect(onSetOnlyItems).toHaveBeenCalledWith(addId, [assetA, assetB]);
   });
 
   it('disables apply when an inline field is invalid and threads field callbacks', async () => {
