@@ -364,7 +364,7 @@ describe('Agent operation DTOs', () => {
         ],
       }),
       ['operations', 0, 'payload', 'angle'],
-      'Invalid option',
+      'angle must be 90, 180, or 270',
     );
     expectIssue(
       AgentProposeAlbumOperationsDto.schema.safeParse({
@@ -860,7 +860,7 @@ describe('Agent operation DTOs', () => {
     const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
       operationIds: [operationId],
       fieldOverrides: {
-        [operationId]: Object.fromEntries(Array.from({ length: 21 }, (_, index) => [`field${index}`, index])),
+        [operationId]: Object.fromEntries(Array.from({ length: 21 }, (_, index) => [`field${index}`, `${index}`])),
       },
     });
 

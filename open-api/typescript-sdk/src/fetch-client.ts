@@ -760,7 +760,7 @@ export type AgentProposeAlbumOperationsDto = {
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload: {
-            angle: Angle;
+            angle: number;
         };
     } | {
         "type": AgentAssetSetFavoriteOperationType;
@@ -836,7 +836,7 @@ export type AgentOperationPlanToolResponseDto = {
     toolCall: (AgentToolCallResponseDto) | null;
 };
 export type AgentOperationFieldOverride = {
-    [key: string]: any;
+    [key: string]: string;
 };
 export type AgentOperationItemSelection = {
     itemKind: AgentOperationItemKind;
@@ -981,7 +981,7 @@ export type AgentReviseAlbumOperationsDto = {
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload: {
-            angle: Angle;
+            angle: number;
         };
     } | {
         "type": AgentAssetSetFavoriteOperationType;
@@ -9816,11 +9816,6 @@ export enum AgentOperationExistingSpaceTargetKind {
 }
 export enum AgentAssetRotateOperationType {
     AssetRotate = "asset.rotate"
-}
-export enum Angle {
-    $90 = 90,
-    $180 = 180,
-    $270 = 270
 }
 export enum AgentAssetSetFavoriteOperationType {
     AssetSetFavorite = "asset.setFavorite"

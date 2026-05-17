@@ -1,0 +1,11 @@
+--- agent_operation_plan_apply_request_dto.dart
++++ agent_operation_plan_apply_request_dto.dart
+@@ -75,7 +75,7 @@
+       final json = value.cast<String, dynamic>();
+ 
+       return AgentOperationPlanApplyRequestDto(
+-        fieldOverrides: mapCastOfType<String, dynamic>(json, r'fieldOverrides') ?? const {},
++        fieldOverrides: mapCastOfType<String, Map<String, String>>(json, r'fieldOverrides') ?? const {},
+         itemSelections: AgentOperationItemSelection.mapFromJson(json[r'itemSelections']),
+         operationIds: json[r'operationIds'] is Iterable
+             ? (json[r'operationIds'] as Iterable).cast<String>().toList(growable: false)
