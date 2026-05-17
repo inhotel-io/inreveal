@@ -19,7 +19,7 @@ class AgentOperationPlanApplyRequestDto {
     this.planRevision,
   });
 
-  Map<String, Map<String, Object>> fieldOverrides;
+  Map<String, Map<String, String>> fieldOverrides;
 
   Map<String, AgentOperationItemSelection> itemSelections;
 
@@ -75,7 +75,7 @@ class AgentOperationPlanApplyRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentOperationPlanApplyRequestDto(
-        fieldOverrides: Object.mapFromJson(json[r'fieldOverrides']),
+        fieldOverrides: mapCastOfType<String, Map<String, String>>(json, r'fieldOverrides') ?? const {},
         itemSelections: AgentOperationItemSelection.mapFromJson(json[r'itemSelections']),
         operationIds: json[r'operationIds'] is Iterable
             ? (json[r'operationIds'] as Iterable).cast<String>().toList(growable: false)

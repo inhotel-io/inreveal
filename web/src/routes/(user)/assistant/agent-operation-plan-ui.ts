@@ -228,13 +228,14 @@ export const setOperationFieldOverride = (
   operationId: string,
   fieldKey: string,
   value: unknown,
-): OperationFieldOverrideState => ({
-  ...state,
-  [operationId]: {
-    ...(state[operationId] ?? {}),
-    [fieldKey]: value,
-  },
-});
+): OperationFieldOverrideState => {
+  const currentFields = state[operationId];
+
+  return {
+    ...state,
+    [operationId]: currentFields ? { ...currentFields, [fieldKey]: value } : { [fieldKey]: value },
+  };
+};
 
 export const resetOperationFieldOverride = (
   state: OperationFieldOverrideState,
@@ -246,7 +247,8 @@ export const resetOperationFieldOverride = (
     return remaining;
   }
 
-  const nextFields = { ...(state[operationId] ?? {}) };
+  const currentFields = state[operationId];
+  const nextFields = currentFields ? { ...currentFields } : {};
   delete nextFields[fieldKey];
   const { [operationId]: _, ...remaining } = state;
 
