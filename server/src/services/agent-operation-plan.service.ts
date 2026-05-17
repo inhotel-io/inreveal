@@ -534,16 +534,19 @@ export class AgentOperationPlanService {
     }
 
     switch (selection.mode) {
-      case 'all':
+      case 'all': {
         return affectedAssetIds;
+      }
       case 'allExcept': {
         const excludedAssetIds = new Set(itemIds);
         return affectedAssetIds.filter((assetId) => !excludedAssetIds.has(assetId));
       }
-      case 'only':
+      case 'only': {
         return affectedAssetIds.filter((assetId) => itemIds.includes(assetId));
-      case 'none':
+      }
+      case 'none': {
         return [];
+      }
     }
   }
 
