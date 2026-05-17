@@ -14,22 +14,81 @@ export type AgentOperationSelectionPayload = {
   operationIds: string[];
 };
 
+export type AgentReviewDestinationKind = 'album' | 'space' | 'assetBatch' | 'library' | 'imageEditBatch';
+
+export type AgentReviewDestination = {
+  kind: AgentReviewDestinationKind;
+  id?: string;
+  temporaryId?: string;
+  name: string;
+  subtitle?: string;
+};
+
+export type AgentReviewItemKind = 'asset' | 'album' | 'space' | 'person' | 'tag';
+
+export type AgentReviewSelectionMode = 'all' | 'allExcept' | 'only' | 'none';
+
+export type AgentReviewSelection = {
+  itemKind: AgentReviewItemKind;
+  totalCount: number;
+  selectedCount: number;
+  mode: AgentReviewSelectionMode;
+  itemIds?: string[];
+  supportsItemSelection: boolean;
+};
+
+export type AgentReviewThumbnailSummary = {
+  totalCount: number;
+  representativeAssetIds: string[];
+  hasMore: boolean;
+};
+
+export type AgentReviewDependency = {
+  operationId: string;
+  summary: string;
+  blocked: boolean;
+};
+
+export type AgentOperationReview = {
+  operationId: string;
+  operationType: string;
+  destination: AgentReviewDestination;
+  summary: string;
+  riskLevel: AgentOperationRiskLevel | string;
+  selection: AgentReviewSelection;
+  thumbnails: AgentReviewThumbnailSummary;
+  dependencies: AgentReviewDependency[];
+};
+
+export type OperationReviewDestination = AgentReviewDestination & {
+  title: string;
+  subtitle: string;
+};
+
 export type OperationReviewItem = {
   id: string;
   operation: AgentOperationResponseDto;
+  review: AgentOperationReview;
+  summary: string;
+  risk: AgentOperationRiskLevel | string;
+  selected: boolean;
   enabled: boolean;
   blocked: boolean;
   blockedBy: string[];
   typeLabelKey: Translations;
   riskLabelKey: Translations;
   assetCount: number;
+  representativeAssetIds: string[];
 };
 
 export type OperationReviewGroup = {
   id: string;
   title: string;
   subtitle: string;
+  destination: OperationReviewDestination;
   assetCount: number;
+  thumbnailSummary: AgentReviewThumbnailSummary;
+  representativeAssetIds: string[];
   operations: OperationReviewItem[];
 };
 
@@ -51,6 +110,10 @@ const riskLabelKeys = {
   [AgentOperationRiskLevel.Medium]: 'assistant_operation_risk_medium' as Translations,
   [AgentOperationRiskLevel.High]: 'assistant_operation_risk_high' as Translations,
 } satisfies Record<AgentOperationRiskLevel, Translations>;
+
+const fallbackTypeLabelKey = 'assistant_operation_type_unknown' as Translations;
+const fallbackRiskLabelKey = 'assistant_operation_risk_unknown' as Translations;
+const representativeAssetLimit = 12;
 
 export const createInitialOperationEnabledState = (plan: AgentOperationPlanResponseDto): OperationEnabledState =>
   Object.fromEntries(plan.operations.map((operation) => [operation.id, operation.enabled]));
@@ -125,16 +188,30 @@ export const buildOperationReviewModel = (
   const items = plan.operations.map((operation) => {
     const blockedBy = collectBlockingDependencySummaries(operation);
     const blocked = blockedBy.length > 0;
+    const selected = enabledByOperationId[operation.id] ?? operation.enabled;
+    const review = buildOperationReview(
+      operation,
+      operationById,
+      enabledByOperationId,
+      (dependency) => collectBlockingDependencySummaries(dependency).length > 0,
+      selected,
+      blocked,
+    );
 
     return {
       id: operation.id,
       operation,
-      enabled: !blocked && (enabledByOperationId[operation.id] ?? operation.enabled),
+      review,
+      summary: review.summary,
+      risk: review.riskLevel,
+      selected,
+      enabled: !blocked && selected,
       blocked,
       blockedBy,
-      typeLabelKey: typeLabelKeys[operation.type],
-      riskLabelKey: riskLabelKeys[operation.riskLevel],
-      assetCount: getOperationAssetCount([operation]),
+      typeLabelKey: typeLabelKeys[operation.type] ?? fallbackTypeLabelKey,
+      riskLabelKey: riskLabelKeys[operation.riskLevel] ?? fallbackRiskLabelKey,
+      assetCount: review.selection.totalCount,
+      representativeAssetIds: review.thumbnails.representativeAssetIds,
     };
   });
 
@@ -146,15 +223,26 @@ export const buildOperationReviewModel = (
       id: groupId,
       title: getGroupTitle(item.operation),
       subtitle: '',
+      destination: getDestination(item.operation, operationById, ''),
       assetCount: 0,
+      thumbnailSummary: { totalCount: 0, representativeAssetIds: [], hasMore: false },
+      representativeAssetIds: [],
       operations: [],
     };
 
     const operations = [...group.operations, item];
+    const subtitle = `${operations.length} ${operations.length === 1 ? 'operation' : 'operations'}`;
+    const thumbnailSummary = getThumbnailSummary(operations.map(({ operation }) => operation));
     groupsById.set(groupId, {
       ...group,
-      subtitle: `${operations.length} ${operations.length === 1 ? 'operation' : 'operations'}`,
+      subtitle,
+      destination: {
+        ...group.destination,
+        subtitle,
+      },
       assetCount: getOperationAssetCount(operations.map(({ operation }) => operation)),
+      thumbnailSummary,
+      representativeAssetIds: thumbnailSummary.representativeAssetIds,
       operations,
     });
   }
@@ -164,6 +252,94 @@ export const buildOperationReviewModel = (
     groups: [...groupsById.values()],
     operationsById: new Map(items.map((item) => [item.id, item])),
   };
+};
+
+const buildOperationReview = (
+  operation: AgentOperationResponseDto,
+  operationById: Map<string, AgentOperationResponseDto>,
+  enabledByOperationId: OperationEnabledState,
+  isOperationBlocked: (operation: AgentOperationResponseDto) => boolean,
+  selected: boolean,
+  blocked: boolean,
+): AgentOperationReview => ({
+  operationId: operation.id,
+  operationType: operation.type,
+  destination: getReviewDestination(operation, operationById),
+  summary: getOperationReviewSummary(operation),
+  riskLevel: operation.riskLevel,
+  selection: buildOperationReviewSelection(operation, selected && !blocked),
+  thumbnails: getThumbnailSummary([operation]),
+  dependencies: operation.dependencyIds.map((operationId) => {
+    const dependency = operationById.get(operationId);
+    const dependencySelected = dependency ? (enabledByOperationId[dependency.id] ?? dependency.enabled) : false;
+    const dependencyBlocked = dependency ? isOperationBlocked(dependency) : false;
+
+    return {
+      operationId,
+      summary: dependency?.summary ?? 'Missing dependency',
+      blocked: dependency === undefined || !dependencySelected || dependencyBlocked,
+    };
+  }),
+});
+
+const buildOperationReviewSelection = (
+  operation: Pick<AgentOperationResponseDto, 'assetIds'>,
+  included: boolean,
+): AgentReviewSelection => {
+  const totalCount = getOperationAssetCount([operation]);
+
+  return {
+    itemKind: 'asset',
+    totalCount,
+    selectedCount: included ? totalCount : 0,
+    mode: included ? 'all' : 'none',
+    supportsItemSelection: false,
+  };
+};
+
+const getThumbnailSummary = (operations: Pick<AgentOperationResponseDto, 'assetIds'>[]): AgentReviewThumbnailSummary => {
+  const totalCount = getOperationAssetCount(operations);
+  const representativeAssetIds = getRepresentativeAssetIds(operations);
+
+  return {
+    totalCount,
+    representativeAssetIds,
+    hasMore: totalCount > representativeAssetIds.length,
+  };
+};
+
+const getRepresentativeAssetIds = (operations: Pick<AgentOperationResponseDto, 'assetIds'>[]) => {
+  const representativeAssetIds: string[] = [];
+  const seenAssetIds = new Set<string>();
+
+  for (const [operationIndex, operation] of operations.entries()) {
+    if (representativeAssetIds.length >= representativeAssetLimit) {
+      break;
+    }
+
+    const remainingOperationsWithAssets = operations
+      .slice(operationIndex + 1)
+      .filter((operation) => operation.assetIds.length > 0).length;
+    const remainingSlots = representativeAssetLimit - representativeAssetIds.length;
+    const assetLimit = Math.max(1, remainingSlots - remainingOperationsWithAssets);
+    let addedAssetCount = 0;
+
+    for (const assetId of operation.assetIds) {
+      if (representativeAssetIds.length >= representativeAssetLimit || addedAssetCount >= assetLimit) {
+        break;
+      }
+
+      if (seenAssetIds.has(assetId)) {
+        continue;
+      }
+
+      seenAssetIds.add(assetId);
+      representativeAssetIds.push(assetId);
+      addedAssetCount++;
+    }
+  }
+
+  return representativeAssetIds;
 };
 
 const getGroupId = (operation: AgentOperationResponseDto) => {
@@ -189,6 +365,85 @@ const getGroupTitle = (operation: AgentOperationResponseDto) => {
 
   return operation.summary;
 };
+
+const getOperationReviewSummary = (operation: AgentOperationResponseDto) => {
+  switch (operation.type) {
+    case AgentOperationType.AlbumCreate:
+      return `Create album "${getAlbumName(operation) ?? operation.temporaryTargetId ?? 'Untitled album'}"`;
+    case AgentOperationType.AlbumAddAssets:
+      return `Add ${formatPhotoCount(getOperationAssetCount([operation]))}`;
+    case AgentOperationType.AlbumSetCover:
+      return 'Set cover photo';
+    case AgentOperationType.AlbumUpdateDetails: {
+      const albumName = getAlbumName(operation);
+      if (albumName) {
+        return `Rename album to "${albumName}"`;
+      }
+
+      return 'Update album details';
+    }
+    default:
+      return operation.summary;
+  }
+};
+
+const formatPhotoCount = (count: number) => `${count} ${count === 1 ? 'photo' : 'photos'}`;
+
+const getReviewDestination = (
+  operation: AgentOperationResponseDto,
+  operationById: Map<string, AgentOperationResponseDto>,
+): AgentReviewDestination => {
+  if (
+    operation.targetKind === AgentOperationTargetKind.NewAlbum ||
+    operation.targetKind === AgentOperationTargetKind.ExistingAlbum
+  ) {
+    const createOperation =
+      operation.temporaryTargetId === null
+        ? undefined
+        : [...operationById.values()].find(
+            (candidate) =>
+              candidate.type === AgentOperationType.AlbumCreate &&
+              candidate.temporaryTargetId === operation.temporaryTargetId,
+          );
+    const albumName = getAlbumName(operation) ?? (createOperation ? getAlbumName(createOperation) : undefined);
+    const destination: AgentReviewDestination = {
+      kind: 'album',
+      name: albumName ?? getGroupTitle(operation),
+      subtitle: operation.targetKind === AgentOperationTargetKind.NewAlbum ? 'New album' : 'Existing album',
+    };
+
+    if (operation.targetId) {
+      destination.id = operation.targetId;
+    }
+
+    if (operation.temporaryTargetId) {
+      destination.temporaryId = operation.temporaryTargetId;
+    }
+
+    return destination;
+  }
+
+  const rawTargetKind = String(operation.targetKind);
+  if (rawTargetKind.includes('space')) {
+    return { kind: 'space', name: operation.summary };
+  }
+
+  if (rawTargetKind.includes('asset') || rawTargetKind.includes('image')) {
+    return { kind: rawTargetKind.includes('image') ? 'imageEditBatch' : 'assetBatch', name: operation.summary };
+  }
+
+  return { kind: 'library', name: operation.summary };
+};
+
+const getDestination = (
+  operation: AgentOperationResponseDto,
+  operationById: Map<string, AgentOperationResponseDto>,
+  subtitle: string,
+): OperationReviewDestination => ({
+  ...getReviewDestination(operation, operationById),
+  title: getGroupTitle(operation),
+  subtitle,
+});
 
 const getAlbumName = (operation: AgentOperationResponseDto) => {
   const albumName = operation.payload.albumName;
