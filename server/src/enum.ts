@@ -148,13 +148,27 @@ export enum AgentOperationApplyStatus {
 export enum AgentOperationType {
   AlbumCreate = 'album.create',
   AlbumAddAssets = 'album.addAssets',
+  AlbumRemoveAssets = 'album.removeAssets',
   AlbumUpdateDetails = 'album.updateDetails',
   AlbumSetCover = 'album.setCover',
+  SpaceCreate = 'space.create',
+  SpaceAddAssets = 'space.addAssets',
+  SpaceRemoveAssets = 'space.removeAssets',
+  SpaceUpdateDetails = 'space.updateDetails',
+  AssetRotate = 'asset.rotate',
+  AssetSetFavorite = 'asset.setFavorite',
+  AssetSetArchive = 'asset.setArchive',
+  AssetAddTag = 'asset.addTag',
+  AssetRemoveTag = 'asset.removeTag',
 }
 
 export enum AgentOperationTargetKind {
   NewAlbum = 'new_album',
   ExistingAlbum = 'existing_album',
+  NewSpace = 'new_space',
+  ExistingSpace = 'existing_space',
+  AssetBatch = 'asset_batch',
+  ImageEditBatch = 'image_edit_batch',
 }
 
 export enum AgentOperationRiskLevel {

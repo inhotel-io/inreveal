@@ -1,14 +1,47 @@
-import { AgentPermissionPlanSchema, AgentSessionCreateDto, AgentSessionUpdateDto } from 'src/dtos/agent-session.dto';
-import { AgentApprovalMode, AgentPermissionPreset } from 'src/enum';
-import type { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import {
+  AgentPermissionPlanSchema,
+  AgentSessionCreateDto,
+  AgentSessionResponseDto,
+  AgentSessionUpdateDto,
+} from 'src/dtos/agent-session.dto';
+import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType, AgentSessionStatus } from 'src/enum';
+import type { AgentNormalizedPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import type z from 'zod';
 
 type AgentSessionCreateInput = z.input<typeof AgentSessionCreateDto.schema>;
 
 const providerCredentialId = '3fe388e4-2078-44d7-b36c-000000000001';
 const maxInitialContextBytes = 16_384;
+const fullWriteScope = {
+  createAlbum: true,
+  addAssets: true,
+  updateDetails: true,
+  setCover: true,
+  removeAssets: true,
+  createSpace: true,
+  addAssetsToSpaces: true,
+  removeAssetsFromSpaces: true,
+  updateSpaceDetails: true,
+  editAssets: true,
+  favoriteAssets: true,
+  archiveAssets: true,
+  tagAssets: true,
+};
+const expandedWriteScopeKeys = [
+  'removeAssets',
+  'createSpace',
+  'addAssetsToSpaces',
+  'removeAssetsFromSpaces',
+  'updateSpaceDetails',
+  'editAssets',
+  'favoriteAssets',
+  'archiveAssets',
+  'tagAssets',
+];
 
-const makePermissionPlan = (): AgentPermissionPlanSnapshot => ({
+const makePermissionPlan = (): AgentNormalizedPermissionPlanSnapshot => ({
   read: {
     metadata: true,
     previews: true,
@@ -26,10 +59,7 @@ const makePermissionPlan = (): AgentPermissionPlanSnapshot => ({
     locked: false,
   },
   writeScope: {
-    createAlbum: true,
-    addAssets: true,
-    updateDetails: true,
-    setCover: true,
+    ...fullWriteScope,
   },
   limits: {
     maxAssetsPerToolCall: 20,
@@ -85,6 +115,42 @@ const expectIssue = (input: AgentSessionCreateInput, path: (string | number)[], 
 };
 
 describe('AgentPermissionPlanSchema', () => {
+  it('requires custom permission plans to include every write-scope key', () => {
+    const missingArchiveAssets = {
+      ...fullWriteScope,
+      archiveAssets: undefined,
+    };
+
+    const result = AgentPermissionPlanSchema.safeParse({
+      read: { metadata: true, previews: true, originals: true },
+      providerExposure: {
+        metadata: true,
+        previews: true,
+        originals: true,
+        allowOriginalsForExternalProviders: false,
+      },
+      assetScope: { owned: true, sharedSpaces: true, locked: false },
+      writeScope: missingArchiveAssets,
+      limits: {
+        maxAssetsPerToolCall: 500,
+        maxAssetsPerSession: 5000,
+        maxPreviewsPerToolCall: 100,
+        maxPreviewsPerSession: 500,
+        maxOriginalsPerToolCall: 25,
+        maxOriginalsPerSession: 50,
+        expiresInMinutes: 120,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        path: ['writeScope', 'archiveAssets'],
+        message: 'Invalid input: expected boolean, received undefined',
+      }),
+    ]);
+  });
+
   it('accepts preview and original per-session limits when matching reads are enabled', () => {
     const result = AgentPermissionPlanSchema.safeParse({
       read: { metadata: true, previews: true, originals: true },
@@ -95,7 +161,7 @@ describe('AgentPermissionPlanSchema', () => {
         allowOriginalsForExternalProviders: false,
       },
       assetScope: { owned: true, sharedSpaces: true, locked: false },
-      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      writeScope: fullWriteScope,
       limits: {
         maxAssetsPerToolCall: 500,
         maxAssetsPerSession: 5000,
@@ -120,7 +186,7 @@ describe('AgentPermissionPlanSchema', () => {
         allowOriginalsForExternalProviders: false,
       },
       assetScope: { owned: true, sharedSpaces: true, locked: false },
-      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      writeScope: fullWriteScope,
       limits: {
         maxAssetsPerToolCall: 500,
         maxAssetsPerSession: 5000,
@@ -143,7 +209,7 @@ describe('AgentPermissionPlanSchema', () => {
         allowOriginalsForExternalProviders: false,
       },
       assetScope: { owned: true, sharedSpaces: true, locked: false },
-      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      writeScope: fullWriteScope,
       limits: {
         maxAssetsPerToolCall: 100,
         maxAssetsPerSession: 100,
@@ -174,7 +240,7 @@ describe('AgentPermissionPlanSchema', () => {
         allowOriginalsForExternalProviders: false,
       },
       assetScope: { owned: true, sharedSpaces: true, locked: false },
-      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      writeScope: fullWriteScope,
       limits: {
         maxAssetsPerToolCall: 100,
         maxAssetsPerSession: 100,
@@ -205,7 +271,7 @@ describe('AgentPermissionPlanSchema', () => {
         allowOriginalsForExternalProviders: false,
       },
       assetScope: { owned: true, sharedSpaces: true, locked: false },
-      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      writeScope: fullWriteScope,
       limits: {
         maxAssetsPerToolCall: 100,
         maxAssetsPerSession: 100,
@@ -224,6 +290,104 @@ describe('AgentPermissionPlanSchema', () => {
         'original session limit must be at least the original per-tool-call limit',
       ]),
     );
+  });
+});
+
+describe('Generated agent permission contracts', () => {
+  it('marks expanded write-scope keys as required in the generated OpenAPI contract', () => {
+    const openApi = JSON.parse(
+      readFileSync(resolve(process.cwd(), '../open-api/immich-openapi-specs.json'), 'utf8'),
+    ) as {
+      components: {
+        schemas: {
+          AgentPermissionPlan: {
+            properties: { writeScope: { required: string[] } };
+          };
+        };
+      };
+    };
+
+    expect(openApi.components.schemas.AgentPermissionPlan.properties.writeScope.required).toEqual(
+      expect.arrayContaining([...Object.keys(fullWriteScope)]),
+    );
+  });
+
+  it('exposes expanded write-scope fields and operation enums in the generated TypeScript SDK', () => {
+    const sdk = readFileSync(resolve(process.cwd(), '../open-api/typescript-sdk/src/fetch-client.ts'), 'utf8');
+
+    for (const key of expandedWriteScopeKeys) {
+      expect(sdk).toContain(`${key}: boolean`);
+    }
+
+    expect(sdk).toContain('AlbumRemoveAssets = "album.removeAssets"');
+    expect(sdk).toContain('SpaceCreate = "space.create"');
+    expect(sdk).toContain('SpaceAddAssets = "space.addAssets"');
+    expect(sdk).toContain('SpaceRemoveAssets = "space.removeAssets"');
+    expect(sdk).toContain('SpaceUpdateDetails = "space.updateDetails"');
+    expect(sdk).toContain('AssetRotate = "asset.rotate"');
+    expect(sdk).toContain('AssetSetFavorite = "asset.setFavorite"');
+    expect(sdk).toContain('AssetSetArchive = "asset.setArchive"');
+    expect(sdk).toContain('AssetAddTag = "asset.addTag"');
+    expect(sdk).toContain('AssetRemoveTag = "asset.removeTag"');
+    expect(sdk).toContain('NewSpace = "new_space"');
+    expect(sdk).toContain('ExistingSpace = "existing_space"');
+    expect(sdk).toContain('AssetBatch = "asset_batch"');
+    expect(sdk).toContain('ImageEditBatch = "image_edit_batch"');
+    expect(sdk).toContain('Album = "album"');
+    expect(sdk).toContain('Space = "space"');
+    expect(sdk).toContain('Person = "person"');
+    expect(sdk).toContain('Tag = "tag"');
+  });
+});
+
+describe('AgentSessionResponseDto', () => {
+  it('normalizes legacy permission snapshots with missing expanded write-scope keys to false', () => {
+    const now = '2026-05-17T12:00:00.000Z';
+    const result = AgentSessionResponseDto.schema.safeParse({
+      id: '3fe388e4-2078-44d7-b36c-000000000010',
+      status: AgentSessionStatus.Running,
+      title: null,
+      providerCredentialId,
+      credentialSnapshot: {
+        id: providerCredentialId,
+        providerType: AgentProviderType.OpenAI,
+        label: 'OpenAI personal',
+        baseUrl: null,
+        models: ['gpt-5'],
+        defaultModel: 'gpt-5',
+      },
+      modelSnapshot: { providerCredentialId, model: 'gpt-5' },
+      permissionPreset: AgentPermissionPreset.Careful,
+      permissionPlanSnapshot: {
+        ...makePermissionPlan(),
+        writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      },
+      approvalMode: AgentApprovalMode.Strict,
+      runnerEndpoint: null,
+      runnerSessionId: null,
+      runnerCapabilitiesSnapshot: null,
+      initialContextSnapshot: {},
+      createdAt: now,
+      updatedAt: now,
+      endedAt: null,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.permissionPlanSnapshot.writeScope).toMatchObject({
+      createAlbum: true,
+      addAssets: true,
+      updateDetails: true,
+      setCover: true,
+      removeAssets: false,
+      createSpace: false,
+      addAssetsToSpaces: false,
+      removeAssetsFromSpaces: false,
+      updateSpaceDetails: false,
+      editAssets: false,
+      favoriteAssets: false,
+      archiveAssets: false,
+      tagAssets: false,
+    });
   });
 });
 

@@ -535,9 +535,18 @@ export type AgentPermissionPlan = {
     };
     writeScope: {
         addAssets: boolean;
+        addAssetsToSpaces: boolean;
+        archiveAssets: boolean;
         createAlbum: boolean;
+        createSpace: boolean;
+        editAssets: boolean;
+        favoriteAssets: boolean;
+        removeAssets: boolean;
+        removeAssetsFromSpaces: boolean;
         setCover: boolean;
+        tagAssets: boolean;
         updateDetails: boolean;
+        updateSpaceDetails: boolean;
     };
 };
 export type AgentRunnerCapabilitiesSnapshot = {
@@ -667,6 +676,16 @@ export type AgentProposeAlbumOperationsDto = {
         enabled?: boolean;
         payload?: {};
     } | {
+        "type": AgentAlbumRemoveAssetsOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {};
+    } | {
         "type": AgentAlbumUpdateDetailsOperationType;
         summary: string;
         targetKind: AgentOperationExistingAlbumTargetKind;
@@ -687,6 +706,111 @@ export type AgentProposeAlbumOperationsDto = {
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload?: {};
+    } | {
+        "type": AgentSpaceCreateOperationType;
+        summary: string;
+        targetKind: AgentOperationNewSpaceTargetKind;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            spaceName: string;
+            description?: string;
+            color?: string;
+        };
+    } | {
+        "type": Type;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {};
+    } | {
+        "type": Type2;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {};
+    } | {
+        "type": AgentSpaceUpdateDetailsOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingSpaceTargetKind;
+        targetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            spaceName?: string;
+            description?: string;
+            color?: string;
+        };
+    } | {
+        "type": AgentAssetRotateOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            angle: Angle;
+        };
+    } | {
+        "type": AgentAssetSetFavoriteOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            favorite: boolean;
+        };
+    } | {
+        "type": AgentAssetSetArchiveOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            archived: boolean;
+        };
+    } | {
+        "type": AgentAssetAddTagOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            tagId?: string;
+            tagName?: string;
+        };
+    } | {
+        "type": AgentAssetRemoveTagOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            tagId: string;
+        };
     })[];
     summary: string;
 };
@@ -773,6 +897,16 @@ export type AgentReviseAlbumOperationsDto = {
         enabled?: boolean;
         payload?: {};
     } | {
+        "type": AgentAlbumRemoveAssetsOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {};
+    } | {
         "type": AgentAlbumUpdateDetailsOperationType;
         summary: string;
         targetKind: AgentOperationExistingAlbumTargetKind;
@@ -793,6 +927,111 @@ export type AgentReviseAlbumOperationsDto = {
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload?: {};
+    } | {
+        "type": AgentSpaceCreateOperationType;
+        summary: string;
+        targetKind: AgentOperationNewSpaceTargetKind;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            spaceName: string;
+            description?: string;
+            color?: string;
+        };
+    } | {
+        "type": Type3;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {};
+    } | {
+        "type": Type4;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {};
+    } | {
+        "type": AgentSpaceUpdateDetailsOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingSpaceTargetKind;
+        targetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            spaceName?: string;
+            description?: string;
+            color?: string;
+        };
+    } | {
+        "type": AgentAssetRotateOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            angle: Angle;
+        };
+    } | {
+        "type": AgentAssetSetFavoriteOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            favorite: boolean;
+        };
+    } | {
+        "type": AgentAssetSetArchiveOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            archived: boolean;
+        };
+    } | {
+        "type": AgentAssetAddTagOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            tagId?: string;
+            tagName?: string;
+        };
+    } | {
+        "type": AgentAssetRemoveTagOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetIds: string[];
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            tagId: string;
+        };
     })[];
     summary: string;
 };
@@ -9508,13 +9747,27 @@ export enum AgentOperationStatus {
 }
 export enum AgentOperationTargetKind {
     NewAlbum = "new_album",
-    ExistingAlbum = "existing_album"
+    ExistingAlbum = "existing_album",
+    NewSpace = "new_space",
+    ExistingSpace = "existing_space",
+    AssetBatch = "asset_batch",
+    ImageEditBatch = "image_edit_batch"
 }
 export enum AgentOperationType {
     AlbumCreate = "album.create",
     AlbumAddAssets = "album.addAssets",
+    AlbumRemoveAssets = "album.removeAssets",
     AlbumUpdateDetails = "album.updateDetails",
-    AlbumSetCover = "album.setCover"
+    AlbumSetCover = "album.setCover",
+    SpaceCreate = "space.create",
+    SpaceAddAssets = "space.addAssets",
+    SpaceRemoveAssets = "space.removeAssets",
+    SpaceUpdateDetails = "space.updateDetails",
+    AssetRotate = "asset.rotate",
+    AssetSetFavorite = "asset.setFavorite",
+    AssetSetArchive = "asset.setArchive",
+    AssetAddTag = "asset.addTag",
+    AssetRemoveTag = "asset.removeTag"
 }
 export enum AgentOperationPlanStatus {
     Proposed = "proposed",
@@ -9531,6 +9784,9 @@ export enum AgentOperationNewAlbumTargetKind {
 export enum AgentAlbumAddAssetsOperationType {
     AlbumAddAssets = "album.addAssets"
 }
+export enum AgentAlbumRemoveAssetsOperationType {
+    AlbumRemoveAssets = "album.removeAssets"
+}
 export enum AgentAlbumUpdateDetailsOperationType {
     AlbumUpdateDetails = "album.updateDetails"
 }
@@ -9539,6 +9795,48 @@ export enum AgentOperationExistingAlbumTargetKind {
 }
 export enum AgentAlbumSetCoverOperationType {
     AlbumSetCover = "album.setCover"
+}
+export enum AgentSpaceCreateOperationType {
+    SpaceCreate = "space.create"
+}
+export enum AgentOperationNewSpaceTargetKind {
+    NewSpace = "new_space"
+}
+export enum Type {
+    SpaceAddAssets = "space.addAssets",
+    UserPerson = "user-person",
+    SpacePerson = "space-person"
+}
+export enum Type2 {
+    SpaceRemoveAssets = "space.removeAssets",
+    Person = "person",
+    SpacePerson = "space-person"
+}
+export enum AgentSpaceUpdateDetailsOperationType {
+    SpaceUpdateDetails = "space.updateDetails"
+}
+export enum AgentOperationExistingSpaceTargetKind {
+    ExistingSpace = "existing_space"
+}
+export enum AgentAssetRotateOperationType {
+    AssetRotate = "asset.rotate"
+}
+export enum Angle {
+    $90 = 90,
+    $180 = 180,
+    $270 = 270
+}
+export enum AgentAssetSetFavoriteOperationType {
+    AssetSetFavorite = "asset.setFavorite"
+}
+export enum AgentAssetSetArchiveOperationType {
+    AssetSetArchive = "asset.setArchive"
+}
+export enum AgentAssetAddTagOperationType {
+    AssetAddTag = "asset.addTag"
+}
+export enum AgentAssetRemoveTagOperationType {
+    AssetRemoveTag = "asset.removeTag"
 }
 export enum Status {
     Success = "success"
@@ -9573,7 +9871,11 @@ export enum AgentToolName {
     SummarizePlan = "summarizePlan"
 }
 export enum AgentOperationItemKind {
-    Asset = "asset"
+    Asset = "asset",
+    Album = "album",
+    Space = "space",
+    Person = "person",
+    Tag = "tag"
 }
 export enum Mode {
     All = "all"
@@ -9591,6 +9893,12 @@ export enum AgentOperationApplyStatus {
     Applied = "applied",
     PartiallyApplied = "partially_applied",
     Failed = "failed"
+}
+export enum Type3 {
+    SpaceAddAssets = "space.addAssets"
+}
+export enum Type4 {
+    SpaceRemoveAssets = "space.removeAssets"
 }
 export enum Status2 {
     ApprovalRequired = "approval-required"
@@ -9867,7 +10175,7 @@ export enum SourceType {
     Exif = "exif",
     Manual = "manual"
 }
-export enum Type {
+export enum Type5 {
     UserPerson = "user-person",
     SpacePerson = "space-person"
 }
@@ -9945,7 +10253,7 @@ export enum PartnerDirection {
     SharedBy = "shared-by",
     SharedWith = "shared-with"
 }
-export enum Type2 {
+export enum Type6 {
     Person = "person",
     SpacePerson = "space-person"
 }
