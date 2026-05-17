@@ -449,6 +449,78 @@ describe('Agent operation DTOs', () => {
     });
   });
 
+  it('accepts sparse field overrides with item selections and a numeric plan revision', () => {
+    const operationId = factory.uuid();
+    const assetId = factory.uuid();
+
+    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+      operationIds: [operationId],
+      itemSelections: {
+        [operationId]: {
+          itemKind: 'asset',
+          mode: 'allExcept',
+          itemIds: [assetId],
+        },
+      },
+      fieldOverrides: {
+        [operationId]: {
+          albumName: 'Portugal highlights',
+          description: '',
+        },
+      },
+      planRevision: 3,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({
+      operationIds: [operationId],
+      itemSelections: {
+        [operationId]: {
+          itemKind: 'asset',
+          mode: 'allExcept',
+          itemIds: [assetId],
+        },
+      },
+      fieldOverrides: {
+        [operationId]: {
+          albumName: 'Portugal highlights',
+          description: '',
+        },
+      },
+      planRevision: 3,
+    });
+  });
+
+  it('rejects empty field override objects', () => {
+    const operationId = factory.uuid();
+
+    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+      operationIds: [operationId],
+      fieldOverrides: {
+        [operationId]: {},
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([expect.objectContaining({ message: 'fieldOverrides must not be empty' })]);
+  });
+
+  it('rejects field override objects with too many fields', () => {
+    const operationId = factory.uuid();
+
+    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+      operationIds: [operationId],
+      fieldOverrides: {
+        [operationId]: Object.fromEntries(Array.from({ length: 21 }, (_, index) => [`field${index}`, index])),
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({ message: 'fieldOverrides may contain at most 20 fields per operation' }),
+    ]);
+  });
+
   it('rejects duplicate apply operation ids', () => {
     const operationId = factory.uuid();
 
@@ -558,6 +630,47 @@ describe('Agent operation DTOs', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it('accepts multiple set-cover candidate asset ids', () => {
+    const coverAssetId = factory.uuid();
+    const alternateCoverAssetId = factory.uuid();
+
+    const result = AgentProposeAlbumOperationsDto.schema.safeParse({
+      summary: 'Pick a cover.',
+      operations: [
+        {
+          type: AgentOperationType.AlbumSetCover,
+          summary: 'Set cover',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: factory.uuid(),
+          assetIds: [coverAssetId, alternateCoverAssetId],
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.operations[0].assetIds).toEqual([coverAssetId, alternateCoverAssetId]);
+  });
+
+  it('rejects duplicate set-cover candidate asset ids', () => {
+    const coverAssetId = factory.uuid();
+
+    const result = AgentProposeAlbumOperationsDto.schema.safeParse({
+      summary: 'Pick a cover.',
+      operations: [
+        {
+          type: AgentOperationType.AlbumSetCover,
+          summary: 'Set cover',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: factory.uuid(),
+          assetIds: [coverAssetId, coverAssetId],
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([expect.objectContaining({ message: 'assetIds must be unique' })]);
   });
 
   describe('MCP planning tool request schemas', () => {
