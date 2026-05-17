@@ -93,7 +93,7 @@ For each touched spec file, temporarily change one expected `QueueName`, `JobNam
 - Force recognition unassigns and unlinks only machine-learning faces, queues only ML face jobs, suppresses per-face shared-space matching, queues enabled-space full rebuild jobs, queues the terminal maintenance marker, and writes last-run state: Task 3 and Task 6.
 - Maintenance marker requeues while recognition work is waiting, delayed, paused, or still active; queues backfill only after the queue is drained and no backfill is active/pending: Task 4.
 - Failed or paused stable coordinator jobs do not permanently block legitimate future coordinator work: Task 5.
-- Force recognition over populated DB state preserves manual/EXIF asset faces and identity links, clears only intended ML assignment/link state, wipes shared-space people by design, and is idempotent over repeated force runs: Task 6.
+- Force recognition over populated DB state preserves manual/EXIF asset faces and identity links, clears only intended ML assignment/link state, wipes shared-space people by design, and idempotently queues the coordinator rebuild handoff over repeated force runs: Task 6.
 - Cross-slice overnight chains with library scan and EXIF import remain Slice 8. Per-face recognition assignment remains Slice 4.
 
 ## Shared Small-Spec Helpers
@@ -134,6 +134,7 @@ const expectNoRecognitionCoordinatorMutation = () => {
     name: JobName.FaceIdentityMaintenanceAfterRecognition,
     data: expect.anything(),
   });
+  expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
   expect(mocks.systemMetadata.set).not.toHaveBeenCalled();
 };
 ```
@@ -293,6 +294,7 @@ it('does not expand a large stuck nightly queue or clear shared-space people', a
     name: JobName.FaceIdentityMaintenanceAfterRecognition,
     data: expect.anything(),
   });
+  expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
   expect(mocks.sharedSpace.deleteAllPersonFaces).not.toHaveBeenCalled();
   expect(mocks.sharedSpace.deleteAllPersons).not.toHaveBeenCalled();
   expect(mocks.systemMetadata.set).not.toHaveBeenCalled();
@@ -419,7 +421,57 @@ it('force recognition waits for thumbnail, face detection, and people backfill b
 
 This prevents force recognition from wiping shared-space people while identity backfill still has work in flight.
 
-- [ ] **Step 2: Add ML-only force fan-out scope coverage**
+- [ ] **Step 2: Add full reset collaborator contract coverage**
+
+In the same `describe`, add:
+
+```ts
+it('force recognition performs the full ML reset and maintenance handoff contract', async () => {
+  const mlFace = AssetFaceFactory.from({ sourceType: SourceType.MachineLearning }).person().build();
+  const orphan = PersonFactory.create();
+  mocks.job.getJobCounts.mockResolvedValue(recognitionCounts());
+  mocks.person.getAllFaces.mockReturnValue(makeStream([mlFace]));
+  mocks.person.getAllWithoutFaces.mockResolvedValue([orphan]);
+  mocks.sharedSpace.deleteAllPersonFaces.mockResolvedValue(void 0 as any);
+  mocks.sharedSpace.deleteAllPersons.mockResolvedValue(void 0 as any);
+  mocks.sharedSpace.getSpaceIdsWithFaceRecognitionEnabled.mockResolvedValue(['enabled-space']);
+
+  await expect(sut.handleQueueRecognizeFaces({ force: true })).resolves.toBe(JobStatus.Success);
+
+  expect(mocks.job.empty).toHaveBeenCalledWith(QueueName.FacialRecognition, true);
+  expect(mocks.person.unassignFaces).toHaveBeenCalledWith({ sourceType: SourceType.MachineLearning });
+  expect(mocks.faceIdentity.unlinkFacesBySourceType).toHaveBeenCalledWith(SourceType.MachineLearning);
+  expect(mocks.person.delete).toHaveBeenCalledWith([orphan.id]);
+  expect(mocks.job.queue).toHaveBeenCalledWith({
+    name: JobName.FileDelete,
+    data: { files: [orphan.thumbnailPath] },
+  });
+  expect(mocks.person.vacuum).toHaveBeenCalledWith({ reindexVectors: false });
+  expect(mocks.sharedSpace.deleteAllPersonFaces).toHaveBeenCalledOnce();
+  expect(mocks.sharedSpace.deleteAllPersons).toHaveBeenCalledOnce();
+  expect((mocks.faceIdentity as any).deleteUnreferencedIdentities).toHaveBeenCalledOnce();
+  expect(mocks.job.queueAll).toHaveBeenCalledWith([
+    {
+      name: JobName.FacialRecognition,
+      data: { id: mlFace.id, deferred: false, skipSharedSpaceMatch: true },
+    },
+  ]);
+  expect(mocks.job.queueAll).toHaveBeenCalledWith([
+    { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: 'enabled-space' } },
+  ]);
+  expect(mocks.job.queue).toHaveBeenCalledWith({
+    name: JobName.FaceIdentityMaintenanceAfterRecognition,
+    data: {},
+  });
+  expect(mocks.systemMetadata.set).toHaveBeenCalledWith(SystemMetadataKey.FacialRecognitionState, {
+    lastRun: expect.any(String),
+  });
+});
+```
+
+This test pins the complete force reset collaborator contract in the fast unit suite. The medium tests in Task 6 then prove the same reset does not destroy preserved DB evidence.
+
+- [ ] **Step 3: Add ML-only force fan-out scope coverage**
 
 In the same `describe`, add:
 
@@ -446,7 +498,7 @@ it('force recognition queues only machine-learning faces and suppresses per-face
 });
 ```
 
-- [ ] **Step 3: Add enabled-space-only full rebuild coverage**
+- [ ] **Step 4: Add enabled-space-only full rebuild coverage**
 
 In the same `describe`, add:
 
@@ -479,17 +531,17 @@ it('force recognition queues SharedSpaceFaceMatchAll only for enabled spaces aft
 });
 ```
 
-- [ ] **Step 4: Run focused tests and observe expected failures**
+- [ ] **Step 5: Run focused tests and observe expected failures**
 
 Run:
 
 ```bash
-pnpm --config.verify-deps-before-run=false --filter immich exec vitest --config test/vitest.config.mjs run src/services/person.service.spec.ts -t "force recognition waits|queues only machine-learning faces|enabled spaces"
+pnpm --config.verify-deps-before-run=false --filter immich exec vitest --config test/vitest.config.mjs run src/services/person.service.spec.ts -t "force recognition waits|full ML reset|queues only machine-learning faces|enabled spaces"
 ```
 
-Expected on current `origin/main`: FAIL for the `PeopleBackfill` prerequisite and ML-only `getAllFaces` scope if those production fixes are not present.
+Expected on current `origin/main`: FAIL for the `PeopleBackfill` prerequisite, ML-only `getAllFaces` scope, or full reset collaborator contract if those production fixes are not present.
 
-- [ ] **Step 5: Make the minimal production fix**
+- [ ] **Step 6: Make the minimal production fix**
 
 In `server/src/services/person.service.ts`, update the prerequisite wait:
 
@@ -511,21 +563,21 @@ const facePagination = this.personRepository.getAllFaces(
 
 Do not change per-face `FacialRecognition` handler behavior in this task.
 
-- [ ] **Step 6: Re-run focused tests**
+- [ ] **Step 7: Re-run focused tests**
 
 Run:
 
 ```bash
-pnpm --config.verify-deps-before-run=false --filter immich exec vitest --config test/vitest.config.mjs run src/services/person.service.spec.ts -t "force recognition waits|queues only machine-learning faces|enabled spaces"
+pnpm --config.verify-deps-before-run=false --filter immich exec vitest --config test/vitest.config.mjs run src/services/person.service.spec.ts -t "force recognition waits|full ML reset|queues only machine-learning faces|enabled spaces"
 ```
 
 Expected: PASS.
 
-- [ ] **Step 7: Prove the assertion can fail**
+- [ ] **Step 8: Prove the assertion can fail**
 
-Temporarily change the expected `QueueName.PeopleBackfill` to `QueueName.BackgroundTask`, run the focused selector, confirm it fails, then restore `QueueName.PeopleBackfill`.
+Temporarily change the expected `QueueName.PeopleBackfill` to `QueueName.BackgroundTask`, run the focused selector, confirm it fails, then restore `QueueName.PeopleBackfill`. Then temporarily change the full reset test's `reindexVectors: false` assertion to `reindexVectors: true`, run the focused selector, confirm it fails, and restore `reindexVectors: false`.
 
-- [ ] **Step 8: Commit Task 3**
+- [ ] **Step 9: Commit Task 3**
 
 Run:
 
@@ -716,6 +768,8 @@ If no production file changed, omit it from `git add`.
 
 - Modify: `server/test/medium/specs/services/person.service.spec.ts`
 - Modify only if a DB-backed test proves a bug: `server/src/services/person.service.ts`
+
+These medium tests intentionally stop at the coordinator boundary. They prove destructive DB side effects and queued rebuild handoffs, but they do not execute the queued per-face recognition or shared-space rematch jobs; final assignment and projection rebuild behavior remains covered by Slice 4 and the cross-queue Slice 8 chain.
 
 - [ ] **Step 1: Add a recognition-specific medium setup helper**
 
@@ -908,6 +962,8 @@ describe('handleQueueRecognizeFaces safety', () => {
 });
 ```
 
+This test proves the force coordinator preserves manual/EXIF evidence while resetting ML-owned state and queueing the rebuild work. It must not assert final rebuilt ML assignments or final shared-space projections, because those jobs are queued but not executed in this slice.
+
 - [ ] **Step 4: Add repeated-force idempotency medium test**
 
 Inside the same `describe`, add:
@@ -1075,8 +1131,9 @@ Before opening a PR, confirm these statements are true from test names and asser
 - Force recognition queues `FacialRecognition` jobs only for ML faces and always sets `skipSharedSpaceMatch: true`.
 - Force recognition queues `SharedSpaceFaceMatchAll` only for enabled shared spaces and only after personal recognition jobs.
 - The maintenance marker waits for waiting, delayed, paused, and extra active recognition work before queueing `FaceIdentityBackfill`.
-- Medium tests prove manual and EXIF asset faces and identity links survive force recognition.
-- Medium tests prove repeated force recognition does not duplicate shared-space person rows or delete preserved manual/EXIF evidence.
+- Medium tests prove manual and EXIF asset faces and identity links survive the force-recognition coordinator reset.
+- Medium tests prove repeated force-recognition coordinator runs do not duplicate shared-space person rows, delete preserved manual/EXIF evidence, or enqueue disabled-space rebuild jobs.
+- Medium tests do not claim final ML assignment or shared-space projection rebuilds are complete until the queued recognition and shared-space jobs run in later slices.
 
 - [ ] **Step 7: Commit final verification notes only if a tracked file changed**
 
