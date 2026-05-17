@@ -257,7 +257,7 @@ describe(AgentSessionChatPanel.name, () => {
       makeMessage(
         'message-assistant',
         AgentMessageRole.Assistant,
-        'Use this:\n```python\ndef hello(name):\n    return f\"Hello, {name}!\"\n```\nThen save it.',
+        'Use this:\n```python\ndef hello(name):\n    return f"Hello, {name}!"\n```\nThen save it.',
       ),
     ]);
 
@@ -283,7 +283,7 @@ describe(AgentSessionChatPanel.name, () => {
     handler?.({
       type: 'assistant-message-delta',
       sessionId: session.id,
-      delta: '```ts\nconst album = \"Favorites\";\nconsole.log(album);\n```',
+      delta: '```ts\nconst album = "Favorites";\nconsole.log(album);\n```',
       sequence: 1,
       createdAt: '2026-05-14T00:00:01.000Z',
     });
@@ -437,7 +437,8 @@ describe(AgentSessionChatPanel.name, () => {
       createdAt: '2026-05-14T00:00:01.000Z',
     });
 
-    expect((await screen.findByText('Albums')).tagName).toBe('STRONG');
+    const albumsText = await screen.findByText('Albums');
+    expect(albumsText.tagName).toBe('STRONG');
     expect(screen.getByText('Travel').closest('li')).toBeInTheDocument();
     expect(screen.getByText('Family').closest('li')).toBeInTheDocument();
   });
