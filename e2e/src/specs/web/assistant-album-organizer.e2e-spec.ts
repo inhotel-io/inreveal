@@ -15,7 +15,7 @@ import {
   getAllAlbums,
   getCurrentOperationPlan,
   getToolCalls,
-  type AgentOperationPlanResponseDto,
+  type AgentOperationPlanApplyResponseDto,
   type LoginResponseDto,
 } from '@immich/sdk';
 import { expect, test, type Page } from '@playwright/test';
@@ -40,26 +40,6 @@ const createE2eCredential = (accessToken: string) =>
     },
     authOptions(accessToken),
   );
-
-const waitForCurrentPlan = async (
-  accessToken: string,
-  sessionId: string,
-  expectedStatus: AgentOperationPlanStatus,
-): Promise<AgentOperationPlanResponseDto> => {
-  let plan: AgentOperationPlanResponseDto | null = null;
-
-  await expect
-    .poll(
-      async () => {
-        plan = await getCurrentOperationPlan({ id: sessionId }, authOptions(accessToken));
-        return plan?.status;
-      },
-      { timeout: 10_000 },
-    )
-    .toBe(expectedStatus);
-
-  return plan!;
-};
 
 const sendAssistantPrompt = async (page: Page, prompt: string) => {
   await page.getByRole('textbox', { name: 'Message' }).fill(prompt);
@@ -133,17 +113,18 @@ test.describe('Assistant album organizer', () => {
     await page.getByLabel('Use first photo as Portugal Trip cover').uncheck();
     await expect(page.getByRole('button', { name: 'Apply 2 selected' })).toBeEnabled();
 
-    const applyResponse = page.waitForResponse(
+    const applyResponsePromise = page.waitForResponse(
       (response) =>
         response.url().includes(`/api/agent/sessions/${session.id}/operation-plan/`) &&
         response.url().endsWith('/apply') &&
         response.status() === 201,
     );
     await page.getByRole('button', { name: 'Apply 2 selected' }).click();
-    await applyResponse;
+    const applyResponse = await applyResponsePromise;
+    const { plan: appliedPlan } = (await applyResponse.json()) as AgentOperationPlanApplyResponseDto;
 
     await expect(page.getByText('Applied 2 operations. 0 failed.')).toBeVisible();
-    const appliedPlan = await waitForCurrentPlan(admin.accessToken, session.id, AgentOperationPlanStatus.Applied);
+    expect(appliedPlan.status).toBe(AgentOperationPlanStatus.Applied);
     await expect
       .poll(
         async () => {
@@ -197,7 +178,7 @@ test.describe('Assistant album organizer', () => {
       .poll(async () => await getCurrentOperationPlan({ id: session.id }, authOptions(admin.accessToken)), {
         timeout: 5000,
       })
-      .toBeNull();
+      .toBeFalsy();
 
     const toolCalls = await getToolCalls({ id: session.id }, authOptions(admin.accessToken));
     const proposalToolCall = toolCalls.find((toolCall) => toolCall.toolName === AgentToolName.ProposeAlbumOperations);
