@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { AgentOperationStatus } from '@immich/sdk';
   import { t } from 'svelte-i18n';
   import type { OperationReviewItem } from './agent-operation-plan-ui';
   import AgentPlanInlineFieldEditor from './agent-plan-inline-field-editor.svelte';
   import AgentPlanItemReview from './agent-plan-item-review.svelte';
+  import AgentPlanTechnicalDetails from './agent-plan-technical-details.svelte';
 
   interface Props {
     item: OperationReviewItem;
@@ -28,11 +28,19 @@
     onSetFieldOverride = () => {},
     onResetFieldOverride = () => {},
   }: Props = $props();
-  let detailsOpen = $state(false);
+  let itemReviewOpen = $state(false);
 
   const checkboxState = $derived({
     checked: item.enabled,
     mixed: item.mixed,
+  });
+
+  const statusLabelKey = $derived.by(() => {
+    if (item.applyState.kind === 'partial') {
+      return 'assistant_operation_status_partial';
+    }
+
+    return `assistant_operation_status_${item.applyState.kind}`;
   });
 
   const setMixedCheckbox = (node: HTMLInputElement, state: { checked: boolean; mixed: boolean }) => {
@@ -73,12 +81,17 @@
           {/if}
         </span>
       {/if}
-      {#if item.operation.status === AgentOperationStatus.Applied}
-        <span>{$t('assistant_operation_status_applied')}</span>
-      {:else if item.operation.status === AgentOperationStatus.Failed}
-        <span>{$t('assistant_operation_status_failed')}</span>
-      {:else if item.operation.status === AgentOperationStatus.Skipped}
-        <span>{$t('assistant_operation_status_skipped')}</span>
+      {#if item.applyState.kind !== 'proposed'}
+        <span>{$t(statusLabelKey)}</span>
+      {/if}
+      {#if item.applyState.kind === 'partial'}
+        <span>
+          {$t('assistant_operation_partial_asset_summary', {
+            values: { applied: item.applyState.appliedAssetCount, failed: item.applyState.failedAssetCount },
+          })}
+        </span>
+      {:else if item.applyState.kind === 'skipped' && item.applyState.reason}
+        <span>{$t('assistant_operation_skipped_reason', { values: { reason: item.applyState.reason } })}</span>
       {/if}
     </div>
 
@@ -88,17 +101,19 @@
       </span>
     {/if}
 
-    {#if item.operation.error}
-      <span class="mt-1 block text-sm text-red-700 dark:text-red-300">
-        {item.operation.error}
-      </span>
-    {/if}
-
     <AgentPlanInlineFieldEditor {item} {canChangeSelection} {onSetFieldOverride} {onResetFieldOverride} />
 
-    <details class="mt-2 text-xs text-gray-500 dark:text-gray-400" bind:open={detailsOpen}>
-      <summary class="cursor-pointer select-none">{$t('assistant_operation_detail_toggle')}</summary>
-      {#if detailsOpen}
+    <div class="mt-2">
+      <button
+        type="button"
+        class="text-xs font-medium text-gray-600 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-immich-primary dark:text-gray-300"
+        aria-expanded={itemReviewOpen}
+        onclick={() => (itemReviewOpen = !itemReviewOpen)}
+      >
+        {$t(itemReviewOpen ? 'assistant_operation_detail_hide' : 'assistant_operation_detail_show')}
+      </button>
+
+      {#if itemReviewOpen}
         <AgentPlanItemReview
           {item}
           {canChangeSelection}
@@ -107,17 +122,9 @@
           {onSetOnlyItems}
           onResetSelection={onResetItemSelection}
         />
-        <dl class="mt-2 grid gap-1 sm:grid-cols-[max-content_1fr]">
-          <dt class="font-medium">{$t('assistant_operation_detail_type')}</dt>
-          <dd>{$t(item.typeLabelKey)}</dd>
-          <dt class="font-medium">{$t('assistant_operation_detail_risk')}</dt>
-          <dd>{$t(item.riskLabelKey)}</dd>
-          <dt class="font-medium">{$t('assistant_operation_detail_status')}</dt>
-          <dd>{item.operation.status}</dd>
-          <dt class="font-medium">{$t('assistant_operation_detail_id')}</dt>
-          <dd class="break-all">{item.id}</dd>
-        </dl>
       {/if}
-    </details>
+    </div>
+
+    <AgentPlanTechnicalDetails {item} expanded={itemReviewOpen} showToggle={false} />
   </div>
 </div>
