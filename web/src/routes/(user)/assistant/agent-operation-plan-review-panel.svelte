@@ -3,17 +3,17 @@
   import { handleError } from '$lib/utils/handle-error';
   import {
     AgentOperationPlanStatus,
-    AgentOperationStatus,
     applyApprovedOperations,
     getCurrentOperationPlan,
     type AgentOperationPlanResponseDto,
     type AgentSessionResponseDto,
   } from '@immich/sdk';
-  import { Button } from '@immich/ui';
   import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
+  import AgentPlanEvidenceLedger from './agent-plan-evidence-ledger.svelte';
   import {
     buildGroupEnabledState,
+    buildOperationReviewImpactSummary,
     buildOperationReviewModel,
     buildSelectionPayload,
     createInitialOperationEnabledState,
@@ -71,7 +71,6 @@
       ? 'rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-immich-dark-gray'
       : 'rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-immich-dark-gray',
   );
-  const cardBodyClass = $derived(variant === 'dock' ? 'px-4 pb-4' : '');
   const headerClass = $derived(variant === 'dock' ? 'flex cursor-pointer list-none flex-col gap-2 p-4' : 'list-none');
 
   const publishSelection = (
@@ -83,26 +82,6 @@
     }
 
     onSelectionChange?.(buildSelectionPayload(buildOperationReviewModel(nextPlan, nextEnabledByOperationId)));
-  };
-
-  const getGroupSelectionState = (group: OperationReviewGroup) => {
-    const enabledOperationCount = group.operations.filter((operation) => operation.enabled).length;
-
-    return {
-      checked: enabledOperationCount === group.operations.length,
-      mixed: enabledOperationCount > 0 && enabledOperationCount < group.operations.length,
-    };
-  };
-
-  const setMixedCheckbox = (node: HTMLInputElement, state: { checked: boolean; mixed: boolean }) => {
-    const update = ({ checked, mixed }: { checked: boolean; mixed: boolean }) => {
-      node.indeterminate = mixed;
-      node.setAttribute('aria-checked', mixed ? 'mixed' : String(checked));
-    };
-
-    update(state);
-
-    return { update };
   };
 
   const loadPlan = async () => {
@@ -273,133 +252,51 @@
     </section>
   {/if}
 {:else}
-  <section class={rootClass} aria-labelledby="assistant-operation-plan-title">
+  {@const impact = buildOperationReviewImpactSummary(model)}
+  <section class={rootClass} aria-label={$t('assistant_operation_plan_review')}>
     <details class={cardClass} bind:open={planExpanded}>
       <summary class={headerClass}>
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 id="assistant-operation-plan-title" class="text-lg font-semibold">
-              {$t('assistant_operation_plan_review')}
-            </h2>
+            <h2 class="text-lg font-semibold">{$t('assistant_operation_plan_review')}</h2>
             <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">{model.plan.summary}</p>
+            <div class="mt-2 flex flex-wrap gap-2 text-sm text-gray-500 dark:text-gray-400">
+              <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
+                {$t('assistant_operation_plan_destination_count', { values: { count: impact.destinationCount } })}
+              </span>
+              <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
+                {$t('assistant_operation_plan_selected_change_count', {
+                  values: { count: impact.selectedOperationCount },
+                })}
+              </span>
+              <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
+                {$t('assistant_operation_plan_selected_asset_count', { values: { count: impact.selectedAssetCount } })}
+              </span>
+            </div>
           </div>
-          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">
-            {$t('assistant_operation_selected_count', { values: { count: selectedOperationIds.length } })}
+          <div class="flex flex-col gap-1 text-sm font-medium text-gray-600 dark:text-gray-300 sm:text-right">
+            <span>{$t('assistant_operation_plan_no_destructive_changes')}</span>
+            <span>{$t('assistant_operation_selected_count', { values: { count: selectedOperationIds.length } })}</span>
           </div>
         </div>
       </summary>
 
       {#if planExpanded}
-        <div class={`${cardBodyClass} flex flex-col gap-4`}>
-          {#each model.groups as group (group.id)}
-            {@const groupSelectionState = getGroupSelectionState(group)}
-            <section class="rounded-lg border border-gray-200 p-4 dark:border-gray-700" aria-label={group.title}>
-              <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                <div class="flex gap-3">
-                  <input
-                    class="mt-1 size-4"
-                    type="checkbox"
-                    aria-label={group.title}
-                    checked={groupSelectionState.checked}
-                    disabled={!canChangeSelection}
-                    use:setMixedCheckbox={groupSelectionState}
-                    onchange={(event) => toggleGroup(group, event.currentTarget.checked)}
-                  />
-                  <div>
-                    <h3 class="font-medium">{group.title}</h3>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">{group.subtitle}</p>
-                  </div>
-                </div>
-                <div class="text-sm text-gray-500 dark:text-gray-400">
-                  {$t('assistant_operation_asset_count', { values: { count: group.assetCount } })}
-                </div>
-              </div>
-
-              <div class="mt-3 flex flex-col divide-y divide-gray-200 dark:divide-gray-700">
-                {#each group.operations as item (item.id)}
-                  <label class="flex gap-3 py-3">
-                    <input
-                      class="mt-1 size-4"
-                      type="checkbox"
-                      aria-label={item.operation.summary}
-                      checked={item.enabled}
-                      disabled={!canChangeSelection || item.blocked}
-                      onchange={(event) => toggleOperation(item.id, event.currentTarget.checked)}
-                    />
-                    <span class="min-w-0 flex-1">
-                      <span class="block font-medium">{item.operation.summary}</span>
-                      <span class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
-                        <span>{$t(item.typeLabelKey)}</span>
-                        <span>{$t(item.riskLabelKey)}</span>
-                        {#if item.assetCount > 0}
-                          <span>{$t('assistant_operation_asset_count', { values: { count: item.assetCount } })}</span>
-                        {/if}
-                        {#if item.operation.status === AgentOperationStatus.Applied}
-                          <span>{$t('assistant_operation_status_applied')}</span>
-                        {:else if item.operation.status === AgentOperationStatus.Failed}
-                          <span>{$t('assistant_operation_status_failed')}</span>
-                        {:else if item.operation.status === AgentOperationStatus.Skipped}
-                          <span>{$t('assistant_operation_status_skipped')}</span>
-                        {/if}
-                      </span>
-                      {#if item.blocked}
-                        <span class="mt-1 block text-sm text-amber-700 dark:text-amber-300">
-                          {$t('assistant_operation_blocked_by', {
-                            values: { dependencies: item.blockedBy.join(', ') },
-                          })}
-                        </span>
-                      {/if}
-                      {#if item.operation.error}
-                        <span class="mt-1 block text-sm text-red-700 dark:text-red-300">
-                          {item.operation.error}
-                        </span>
-                      {/if}
-                    </span>
-                  </label>
-                {/each}
-              </div>
-            </section>
-          {/each}
-          {#if errorMessage}
-            <p
-              class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-              role="alert"
-            >
-              {errorMessage}
-            </p>
-          {/if}
-
-          {#if applyErrorMessage}
-            <p
-              class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-              role="alert"
-            >
-              {applyErrorMessage}
-            </p>
-          {/if}
-
-          {#if applyMessage}
-            <p
-              class="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-200"
-              role="status"
-            >
-              {applyMessage}
-            </p>
-          {/if}
-
-          <div
-            class="sticky bottom-0 -mx-4 mt-1 flex flex-col gap-3 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-immich-dark-gray sm:flex-row sm:items-center sm:justify-between"
-            data-testid="agent-operation-plan-sticky-actions"
-          >
-            <div class="text-sm font-medium text-gray-600 dark:text-gray-300">
-              {$t('assistant_operation_selected_count', { values: { count: selectedOperationIds.length } })}
-            </div>
-            <Button type="button" disabled={!canApply} onclick={applySelectedOperations}>
-              {applying
-                ? $t('assistant_operation_apply_applying')
-                : $t('assistant_operation_apply_selected', { values: { count: selectedOperationIds.length } })}
-            </Button>
-          </div>
+        <div class={variant === 'dock' ? 'px-4 pb-4' : ''}>
+          <AgentPlanEvidenceLedger
+            {model}
+            {selectedOperationIds}
+            {canChangeSelection}
+            {canApply}
+            {applying}
+            {errorMessage}
+            {applyErrorMessage}
+            {applyMessage}
+            showHeader={false}
+            onToggleGroup={toggleGroup}
+            onToggleOperation={toggleOperation}
+            onApply={applySelectedOperations}
+          />
         </div>
       {/if}
     </details>
