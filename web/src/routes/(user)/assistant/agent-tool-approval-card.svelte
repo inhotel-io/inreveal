@@ -55,7 +55,9 @@
   </div>
 
   {#if detailsOpen}
-    <div class="mt-4 rounded-md border border-amber-200/80 bg-white/70 p-3 dark:border-amber-800 dark:bg-neutral-950/80">
+    <div
+      class="mt-4 rounded-md border border-amber-200/80 bg-white/70 p-3 dark:border-amber-800 dark:bg-neutral-950/80"
+    >
       <p class="break-words text-sm text-gray-800 dark:text-gray-200">{toolCall.requestSummary}</p>
       <dl class="mt-3 grid gap-2 text-xs text-gray-600 sm:grid-cols-2 dark:text-gray-300">
         <div>
