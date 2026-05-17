@@ -1113,6 +1113,51 @@ describe(AgentOperationPlanService.name, () => {
     expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
   });
 
+  it('rejects field overrides for operation ids outside the current plan before selected-set validation', async () => {
+    const auth = AuthFactory.create();
+    const { session, operation, plan } = makeAddAssetsPlan(auth, [newUuid()]);
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [operation.id],
+        fieldOverrides: {
+          [newUuid()]: { albumName: 'Portugal highlights' },
+        },
+      }),
+    ).rejects.toThrow('One or more field override operation ids are not in the current plan');
+
+    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+  });
+
+  it('rejects field overrides for operation ids outside the selected operation set', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+    const selectedOperation = makeOperation({ id: newUuid(), planId: 'plan-id' });
+    const unselectedOperation = makeOperation({ id: newUuid(), planId: 'plan-id', position: 1 });
+    const plan = makePlan({
+      id: 'plan-id',
+      sessionId: session.id,
+      operations: [selectedOperation, unselectedOperation],
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [selectedOperation.id],
+        fieldOverrides: {
+          [unselectedOperation.id]: { albumName: 'Portugal highlights' },
+        },
+      }),
+    ).rejects.toThrow('One or more field override operation ids are not selected');
+
+    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+  });
+
   it('rejects sparse selections containing asset ids outside the operation affected set', async () => {
     const auth = AuthFactory.create();
     const assetId = newUuid();
@@ -1430,6 +1475,200 @@ describe(AgentOperationPlanService.name, () => {
       skippedCount: 0,
       failedCount: 0,
     });
+  });
+
+  it('applies normalized album create field overrides before calling AlbumService.create', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+    const albumId = newUuid();
+    const createOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      payload: { albumName: 'Portugal', description: 'Original description' },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [createOperation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockResolvedValue({
+      ...plan,
+      status: AgentOperationPlanStatus.Applied,
+      operations: [{ ...createOperation, status: AgentOperationStatus.Applied, result: { albumId } }],
+    });
+    albumService.create.mockResolvedValue({ id: albumId } as never);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [createOperation.id],
+        fieldOverrides: {
+          [createOperation.id]: { albumName: '  Portugal highlights  ', description: '  Lisbon and Porto  ' },
+        },
+      }),
+    ).resolves.toMatchObject({ status: AgentOperationApplyStatus.Applied });
+
+    expect(albumService.create).toHaveBeenCalledWith(auth, {
+      albumName: 'Portugal highlights',
+      description: 'Lisbon and Porto',
+      assetIds: [],
+    });
+  });
+
+  it('applies normalized album update detail field overrides before calling AlbumService.update', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+    const albumId = newUuid();
+    const updateOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AlbumUpdateDetails,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: albumId,
+      temporaryTargetId: null,
+      payload: { albumName: 'Portugal', description: 'Original description' },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [updateOperation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockResolvedValue({
+      ...plan,
+      status: AgentOperationPlanStatus.Applied,
+      operations: [{ ...updateOperation, status: AgentOperationStatus.Applied, result: { albumId } }],
+    });
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    albumService.update.mockResolvedValue({ id: albumId } as never);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [updateOperation.id],
+        fieldOverrides: {
+          [updateOperation.id]: { albumName: '  Portugal highlights  ', description: '' },
+        },
+      }),
+    ).resolves.toMatchObject({ status: AgentOperationApplyStatus.Applied });
+
+    expect(albumService.update).toHaveBeenCalledWith(auth, albumId, {
+      albumName: 'Portugal highlights',
+      description: '',
+    });
+  });
+
+  it('applies set-cover field overrides after sparse item selections and uses the override for access checks', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+    const albumId = newUuid();
+    const firstCandidateId = newUuid();
+    const overrideCandidateId = newUuid();
+    const coverOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AlbumSetCover,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: albumId,
+      temporaryTargetId: null,
+      assetIds: [firstCandidateId, overrideCandidateId],
+      payload: {},
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [coverOperation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockResolvedValue({
+      ...plan,
+      status: AgentOperationPlanStatus.Applied,
+      operations: [
+        {
+          ...coverOperation,
+          status: AgentOperationStatus.Applied,
+          result: { albumId, assetIds: [overrideCandidateId] },
+        },
+      ],
+    });
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([overrideCandidateId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([overrideCandidateId]));
+    albumService.update.mockResolvedValue({ id: albumId } as never);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [coverOperation.id],
+        itemSelections: {
+          [coverOperation.id]: { itemKind: 'asset', mode: 'allExcept', itemIds: [firstCandidateId] },
+        },
+        fieldOverrides: {
+          [coverOperation.id]: { albumThumbnailAssetId: overrideCandidateId },
+        },
+      }),
+    ).resolves.toMatchObject({ status: AgentOperationApplyStatus.Applied });
+
+    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalledWith(
+      auth.user.id,
+      new Set([overrideCandidateId]),
+      false,
+    );
+    expect(albumService.update).toHaveBeenCalledWith(auth, albumId, { albumThumbnailAssetId: overrideCandidateId });
+  });
+
+  it('rejects invalid field overrides before claiming the plan', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+    const createOperation = makeOperation({ id: newUuid(), planId: 'plan-id' });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [createOperation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [createOperation.id],
+        fieldOverrides: {
+          [createOperation.id]: { albumName: '   ' },
+        },
+      }),
+    ).rejects.toThrow('albumName must be 1-200 characters');
+
+    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+    expect(albumService.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects set-cover overrides that are not selected cover candidates before claiming the plan', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+    const albumId = newUuid();
+    const selectedCandidateId = newUuid();
+    const excludedCandidateId = newUuid();
+    const coverOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AlbumSetCover,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: albumId,
+      temporaryTargetId: null,
+      assetIds: [selectedCandidateId, excludedCandidateId],
+      payload: {},
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [coverOperation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [coverOperation.id],
+        itemSelections: {
+          [coverOperation.id]: { itemKind: 'asset', mode: 'only', itemIds: [selectedCandidateId] },
+        },
+        fieldOverrides: {
+          [coverOperation.id]: { albumThumbnailAssetId: excludedCandidateId },
+        },
+      }),
+    ).rejects.toThrow('albumThumbnailAssetId must be one of the selected cover candidates');
+
+    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+    expect(albumService.update).not.toHaveBeenCalled();
   });
 
   it('skips unselected operations and selected dependents whose dependency was not applied', async () => {
