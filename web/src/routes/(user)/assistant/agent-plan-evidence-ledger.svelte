@@ -22,6 +22,8 @@
     onToggleOperation: (operationId: string, checked: boolean) => void;
     onToggleItem?: (operationId: string, assetId: string, selected: boolean) => void;
     onResetItemSelection?: (operationId: string) => void;
+    onSetFieldOverride?: (operationId: string, fieldKey: string, value: string | undefined) => void;
+    onResetFieldOverride?: (operationId: string, fieldKey: string) => void;
     onApply: () => void;
   }
 
@@ -39,6 +41,8 @@
     onToggleOperation,
     onToggleItem = () => {},
     onResetItemSelection = () => {},
+    onSetFieldOverride = () => {},
+    onResetFieldOverride = () => {},
     onApply,
   }: Props = $props();
 
@@ -83,6 +87,8 @@
         {onToggleOperation}
         {onToggleItem}
         {onResetItemSelection}
+        {onSetFieldOverride}
+        {onResetFieldOverride}
       />
     {/each}
   </div>

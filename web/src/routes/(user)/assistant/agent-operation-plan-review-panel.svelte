@@ -18,11 +18,15 @@
     buildSelectionPayload,
     toAgentOperationItemSelections,
     buildOperationItemSelectionState,
+    createInitialOperationFieldOverrideState,
     createInitialOperationEnabledState,
     createInitialOperationItemSelectionState,
+    resetOperationFieldOverride,
     resetOperationItemSelection,
+    setOperationFieldOverride,
     type AgentOperationSelectionPayload,
     type OperationEnabledState,
+    type OperationFieldOverrideState,
     type OperationItemSelectionState,
     type OperationReviewGroup,
   } from './agent-operation-plan-ui';
@@ -39,6 +43,7 @@
   let plan = $state<AgentOperationPlanResponseDto | null>(null);
   let enabledByOperationId = $state<OperationEnabledState>({});
   let itemSelectionByOperationId = $state<OperationItemSelectionState>({});
+  let fieldOverrideByOperationId = $state<OperationFieldOverrideState>({});
   let loading = $state(true);
   let errorMessage = $state<string | null>(null);
   let applying = $state(false);
@@ -54,14 +59,14 @@
   let destroyed = false;
 
   const model = $derived(
-    plan ? buildOperationReviewModel(plan, enabledByOperationId, itemSelectionByOperationId) : null,
+    plan ? buildOperationReviewModel(plan, enabledByOperationId, itemSelectionByOperationId, fieldOverrideByOperationId) : null,
   );
   const selectionPayload = $derived(model ? buildSelectionPayload(model) : null);
   const selectedOperationIds = $derived(selectionPayload?.operationIds ?? []);
   const canChangeSelection = $derived(
     model !== null && model.plan.status === AgentOperationPlanStatus.Proposed && !applying,
   );
-  const canApply = $derived(canChangeSelection && selectedOperationIds.length > 0);
+  const canApply = $derived(canChangeSelection && selectedOperationIds.length > 0 && model.fieldErrors.length === 0);
   const rootClass = $derived(
     variant === 'dock'
       ? 'flex w-full flex-col gap-3 text-black dark:text-white'
@@ -82,18 +87,43 @@
   );
   const headerClass = $derived(variant === 'dock' ? 'flex cursor-pointer list-none flex-col gap-2 p-4' : 'list-none');
 
+  const buildPublishedSelectionPayload = (
+    nextPlan: AgentOperationPlanResponseDto,
+    nextEnabledByOperationId: OperationEnabledState,
+    nextItemSelectionByOperationId: OperationItemSelectionState,
+    nextFieldOverrideByOperationId: OperationFieldOverrideState,
+  ) => {
+    const nextPayload = buildSelectionPayload(
+      buildOperationReviewModel(
+        nextPlan,
+        nextEnabledByOperationId,
+        nextItemSelectionByOperationId,
+        nextFieldOverrideByOperationId,
+      ),
+    );
+    const fieldOverrides = Object.fromEntries(
+      Object.entries(nextFieldOverrideByOperationId).filter(([, fields]) => Object.keys(fields).length > 0),
+    );
+
+    return Object.keys(fieldOverrides).length > 0 ? { ...nextPayload, fieldOverrides } : nextPayload;
+  };
+
   const publishSelection = (
     nextPlan: AgentOperationPlanResponseDto,
     nextEnabledByOperationId: OperationEnabledState,
     nextItemSelectionByOperationId: OperationItemSelectionState,
+    nextFieldOverrideByOperationId: OperationFieldOverrideState,
   ) => {
     if (destroyed) {
       return;
     }
 
     onSelectionChange?.(
-      buildSelectionPayload(
-        buildOperationReviewModel(nextPlan, nextEnabledByOperationId, nextItemSelectionByOperationId),
+      buildPublishedSelectionPayload(
+        nextPlan,
+        nextEnabledByOperationId,
+        nextItemSelectionByOperationId,
+        nextFieldOverrideByOperationId,
       ),
     );
   };
@@ -113,13 +143,20 @@
 
       const nextEnabledByOperationId = nextPlan ? createInitialOperationEnabledState(nextPlan) : {};
       const nextItemSelectionByOperationId = nextPlan ? createInitialOperationItemSelectionState(nextPlan) : {};
+      const nextFieldOverrideByOperationId = nextPlan ? createInitialOperationFieldOverrideState(nextPlan) : {};
       plan = nextPlan;
       enabledByOperationId = nextEnabledByOperationId;
       itemSelectionByOperationId = nextItemSelectionByOperationId;
+      fieldOverrideByOperationId = nextFieldOverrideByOperationId;
       planExpanded = true;
 
       if (nextPlan) {
-        publishSelection(nextPlan, nextEnabledByOperationId, nextItemSelectionByOperationId);
+        publishSelection(
+          nextPlan,
+          nextEnabledByOperationId,
+          nextItemSelectionByOperationId,
+          nextFieldOverrideByOperationId,
+        );
       }
     } catch (error) {
       if (destroyed || sequence !== loadSequence) {
@@ -180,12 +217,20 @@
         agentOperationPlanApplyRequestDto: {
           operationIds: selectionPayload.operationIds,
           ...(itemSelections ? { itemSelections } : {}),
+          ...(selectionPayload.fieldOverrides ? { fieldOverrides: selectionPayload.fieldOverrides } : {}),
           planRevision: selectionPayload.planRevision,
         },
       });
       plan = response.plan;
       enabledByOperationId = createInitialOperationEnabledState(response.plan);
       itemSelectionByOperationId = createInitialOperationItemSelectionState(response.plan);
+      fieldOverrideByOperationId = createInitialOperationFieldOverrideState(response.plan);
+      publishSelection(
+        response.plan,
+        enabledByOperationId,
+        itemSelectionByOperationId,
+        fieldOverrideByOperationId,
+      );
       applyMessage = $t('assistant_operation_apply_success', {
         values: {
           applied: response.appliedOperationIds.length,
@@ -220,7 +265,7 @@
 
     const nextEnabledByOperationId = { ...enabledByOperationId, [operationId]: checked };
     enabledByOperationId = nextEnabledByOperationId;
-    publishSelection(plan, nextEnabledByOperationId, itemSelectionByOperationId);
+    publishSelection(plan, nextEnabledByOperationId, itemSelectionByOperationId, fieldOverrideByOperationId);
   };
 
   const toggleGroup = (group: OperationReviewGroup, checked: boolean) => {
@@ -230,7 +275,7 @@
 
     const nextEnabledByOperationId = buildGroupEnabledState(enabledByOperationId, group, checked);
     enabledByOperationId = nextEnabledByOperationId;
-    publishSelection(plan, nextEnabledByOperationId, itemSelectionByOperationId);
+    publishSelection(plan, nextEnabledByOperationId, itemSelectionByOperationId, fieldOverrideByOperationId);
   };
 
   const toggleItem = (operationId: string, assetId: string, selected: boolean) => {
@@ -246,7 +291,7 @@
       selected,
     );
     itemSelectionByOperationId = nextItemSelectionByOperationId;
-    publishSelection(plan, enabledByOperationId, nextItemSelectionByOperationId);
+    publishSelection(plan, enabledByOperationId, nextItemSelectionByOperationId, fieldOverrideByOperationId);
   };
 
   const resetItemSelection = (operationId: string) => {
@@ -256,7 +301,36 @@
 
     const nextItemSelectionByOperationId = resetOperationItemSelection(itemSelectionByOperationId, operationId);
     itemSelectionByOperationId = nextItemSelectionByOperationId;
-    publishSelection(plan, enabledByOperationId, nextItemSelectionByOperationId);
+    publishSelection(plan, enabledByOperationId, nextItemSelectionByOperationId, fieldOverrideByOperationId);
+  };
+
+  const setFieldOverride = (operationId: string, fieldKey: string, value: string | undefined) => {
+    if (!plan || !canChangeSelection) {
+      return;
+    }
+
+    const nextFieldOverrideByOperationId = setOperationFieldOverride(
+      fieldOverrideByOperationId,
+      operationId,
+      fieldKey,
+      value,
+    );
+    fieldOverrideByOperationId = nextFieldOverrideByOperationId;
+    publishSelection(plan, enabledByOperationId, itemSelectionByOperationId, nextFieldOverrideByOperationId);
+  };
+
+  const resetFieldOverride = (operationId: string, fieldKey: string) => {
+    if (!plan || !canChangeSelection) {
+      return;
+    }
+
+    const nextFieldOverrideByOperationId = resetOperationFieldOverride(
+      fieldOverrideByOperationId,
+      operationId,
+      fieldKey,
+    );
+    fieldOverrideByOperationId = nextFieldOverrideByOperationId;
+    publishSelection(plan, enabledByOperationId, itemSelectionByOperationId, nextFieldOverrideByOperationId);
   };
 
   onMount(() => {
@@ -345,6 +419,8 @@
             onToggleOperation={toggleOperation}
             onToggleItem={toggleItem}
             onResetItemSelection={resetItemSelection}
+            onSetFieldOverride={setFieldOverride}
+            onResetFieldOverride={resetFieldOverride}
             onApply={applySelectedOperations}
           />
         </div>

@@ -9,7 +9,7 @@ import {
 } from '@immich/sdk';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
-import { buildOperationReviewModel } from './agent-operation-plan-ui';
+import { buildOperationReviewModel, setOperationFieldOverride } from './agent-operation-plan-ui';
 import AgentPlanEvidenceLedger from './agent-plan-evidence-ledger.svelte';
 
 vi.mock('$lib/utils', () => ({
@@ -31,6 +31,10 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_detail_status: 'Status',
     assistant_operation_detail_toggle: 'Details',
     assistant_operation_detail_type: 'Type',
+    assistant_operation_field_cover_option: 'Use photo {index} as cover',
+    assistant_operation_field_cover_thumbnail_alt: 'Cover photo option {index}',
+    assistant_operation_field_reset: 'Reset {field}',
+    assistant_operation_field_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_plan_destination_count: '{count} destinations',
     assistant_operation_plan_no_destructive_changes: 'No photos will be deleted',
     assistant_operation_plan_review: 'Plan review',
@@ -59,6 +63,7 @@ vi.mock('svelte-i18n', () => {
         .replace('{count}', String(options?.values?.count ?? ''))
         .replace('{dependencies}', String(options?.values?.dependencies ?? ''))
         .replace('{index}', String(options?.values?.index ?? ''))
+        .replace('{field}', String(options?.values?.field ?? ''))
         .replace('{name}', String(options?.values?.name ?? ''))
         .replace('{selected}', String(options?.values?.selected ?? ''))
         .replace('{total}', String(options?.values?.total ?? '')),
@@ -282,5 +287,55 @@ describe('AgentPlanEvidenceLedger', () => {
 
     expect(onToggleItem).toHaveBeenCalledWith(addId, assetB, true);
     expect(onResetItemSelection).toHaveBeenCalledWith(addId);
+  });
+
+  it('disables apply when an inline field is invalid and threads field callbacks', async () => {
+    const onApply = vi.fn();
+    const onSetFieldOverride = vi.fn();
+    const onResetFieldOverride = vi.fn();
+    render(AgentPlanEvidenceLedger, {
+      props: {
+        model: buildOperationReviewModel(
+          plan([
+            operation({
+              id: createId,
+              type: AgentOperationType.AlbumCreate,
+              summary: 'Create Portugal album',
+              targetKind: AgentOperationTargetKind.NewAlbum,
+              temporaryTargetId: 'album-portugal',
+              payload: { albumName: 'Portugal' },
+            }),
+          ]),
+          { [createId]: true },
+          {},
+          setOperationFieldOverride({}, createId, 'albumName', ''),
+        ),
+        selectedOperationIds: [createId],
+        canChangeSelection: true,
+        canApply: false,
+        applying: false,
+        errorMessage: null,
+        applyErrorMessage: null,
+        applyMessage: null,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onSetFieldOverride,
+        onResetFieldOverride,
+        onApply,
+      },
+    });
+
+    expect(screen.getByText('Album name is required.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apply 1 selected' })).toBeDisabled();
+
+    await fireEvent.input(screen.getByLabelText('Album name'), { target: { value: 'Madeira' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Reset Album name' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply 1 selected' }));
+
+    expect(onSetFieldOverride).toHaveBeenCalledWith(createId, 'albumName', 'Madeira');
+    expect(onResetFieldOverride).toHaveBeenCalledWith(createId, 'albumName');
+    expect(onApply).not.toHaveBeenCalled();
   });
 });

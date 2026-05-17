@@ -11,7 +11,9 @@ import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import {
   buildOperationReviewModel,
+  setOperationFieldOverride,
   type OperationEnabledState,
+  type OperationFieldOverrideState,
   type OperationItemSelectionState,
 } from './agent-operation-plan-ui';
 import AgentPlanDestinationCard from './agent-plan-destination-card.svelte';
@@ -32,6 +34,10 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_detail_status: 'Status',
     assistant_operation_detail_toggle: 'Details',
     assistant_operation_detail_type: 'Type',
+    assistant_operation_field_cover_option: 'Use photo {index} as cover',
+    assistant_operation_field_cover_thumbnail_alt: 'Cover photo option {index}',
+    assistant_operation_field_reset: 'Reset {field}',
+    assistant_operation_field_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_thumbnail_alt: 'Photo preview {index} of {count}',
     assistant_operation_thumbnail_empty: '{count} photos without previews',
     assistant_operation_thumbnail_overflow: '+{count}',
@@ -57,6 +63,7 @@ vi.mock('svelte-i18n', () => {
       (messages[key] ?? key)
         .replace('{count}', String(options?.values?.count ?? ''))
         .replace('{index}', String(options?.values?.index ?? ''))
+        .replace('{field}', String(options?.values?.field ?? ''))
         .replace('{selected}', String(options?.values?.selected ?? ''))
         .replace('{total}', String(options?.values?.total ?? ''))
         .replace('{name}', String(options?.values?.name ?? ''))
@@ -105,6 +112,7 @@ const plan = (operations: AgentOperationResponseDto[]): AgentOperationPlanRespon
 const group = (
   enabledByOperationId?: OperationEnabledState,
   itemSelectionByOperationId?: OperationItemSelectionState,
+  fieldOverrideByOperationId?: OperationFieldOverrideState,
 ) =>
   buildOperationReviewModel(
     plan([
@@ -129,6 +137,7 @@ const group = (
     ]),
     enabledByOperationId ?? { [createId]: true, [addId]: true },
     itemSelectionByOperationId ?? {},
+    fieldOverrideByOperationId ?? {},
   ).groups[0];
 
 describe('AgentPlanDestinationCard', () => {
@@ -271,5 +280,36 @@ describe('AgentPlanDestinationCard', () => {
 
     expect(onToggleItem).toHaveBeenCalledWith(addId, assetB, true);
     expect(onResetItemSelection).toHaveBeenCalledWith(addId);
+  });
+
+  it('updates the destination title from album-name overrides and threads field callbacks through rows', async () => {
+    const onSetFieldOverride = vi.fn();
+    const onResetFieldOverride = vi.fn();
+    render(AgentPlanDestinationCard, {
+      props: {
+        group: group(
+          undefined,
+          undefined,
+          setOperationFieldOverride({}, createId, 'albumName', 'Madeira'),
+        ),
+        canChangeSelection: true,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onSetFieldOverride,
+        onResetFieldOverride,
+      },
+    });
+
+    expect(screen.getByRole('region', { name: 'Madeira' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Select destination Madeira' })).toBeInTheDocument();
+    expect(screen.getByText('Create album "Madeira"')).toBeInTheDocument();
+
+    await fireEvent.input(screen.getByLabelText('Album name'), { target: { value: 'Azores' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Reset Album name' }));
+
+    expect(onSetFieldOverride).toHaveBeenCalledWith(createId, 'albumName', 'Azores');
+    expect(onResetFieldOverride).toHaveBeenCalledWith(createId, 'albumName');
   });
 });
