@@ -1360,6 +1360,45 @@ describe(PersonService.name, () => {
       expectNoRecognitionCoordinatorMutation();
     });
 
+    it.each([
+      ['waiting jobs', { waiting: 87_000 }],
+      ['delayed jobs', { delayed: 42 }],
+      ['paused jobs', { paused: 9 }],
+      ['another active job besides the coordinator', { active: 2 }],
+    ] as const)('skips non-force recognition when FacialRecognition has %s', async (_label, counts) => {
+      mocks.job.getJobCounts.mockResolvedValue(recognitionCounts(counts));
+      mocks.person.getAllFaces.mockReturnValue(makeStream([AssetFaceFactory.create()]));
+
+      await expect(sut.handleQueueRecognizeFaces({ force: false })).resolves.toBe(JobStatus.Skipped);
+
+      expect(mocks.job.waitForQueueCompletion).toHaveBeenCalledWith(
+        QueueName.ThumbnailGeneration,
+        QueueName.FaceDetection,
+      );
+      expectNoRecognitionCoordinatorMutation();
+    });
+
+    it('does not expand a large stuck nightly queue or clear shared-space people', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ lastRun: '2026-05-16T00:00:00.000Z' });
+      mocks.person.getLatestFaceDate.mockResolvedValue('2026-05-17T00:00:00.000Z');
+      mocks.job.getJobCounts.mockResolvedValue(recognitionCounts({ waiting: 87_000 }));
+      mocks.person.getAllFaces.mockReturnValue(makeStream([AssetFaceFactory.create()]));
+
+      await expect(sut.handleQueueRecognizeFaces({ force: false, nightly: true })).resolves.toBe(JobStatus.Skipped);
+
+      expect(mocks.job.queueAll).not.toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ name: JobName.FacialRecognition })]),
+      );
+      expect(mocks.job.queue).not.toHaveBeenCalledWith({
+        name: JobName.FaceIdentityMaintenanceAfterRecognition,
+        data: expect.anything(),
+      });
+      expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
+      expect(mocks.sharedSpace.deleteAllPersonFaces).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.deleteAllPersons).not.toHaveBeenCalled();
+      expect(mocks.systemMetadata.set).not.toHaveBeenCalled();
+    });
+
     it('should queue missing assets', async () => {
       const face = AssetFaceFactory.create();
       mocks.job.getJobCounts.mockResolvedValue({
