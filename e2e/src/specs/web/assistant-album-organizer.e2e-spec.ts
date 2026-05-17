@@ -16,7 +16,6 @@ import {
   getCurrentOperationPlan,
   getToolCalls,
   type AgentOperationPlanResponseDto,
-  type AgentSessionResponseDto,
   type LoginResponseDto,
 } from '@immich/sdk';
 import { expect, test, type Page } from '@playwright/test';
