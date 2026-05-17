@@ -352,198 +352,213 @@ describe(PersonService.name, () => {
 
   describe('handleQueueRecognizeFaces safety', () => {
     it('preserves manual and EXIF identity evidence while force recognition resets ML assignments and queues rebuilds', async () => {
-      const { sut, ctx } = setupFaceRecognition(await getKyselyDB());
-      const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
-      const systemMetadataMock = ctx.getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(
-        SystemMetadataRepository,
-      );
-      const { user } = await ctx.newUser();
-      const asset = await createAssetReadyForFaceDetection(ctx, user.id);
+      const db = await getKyselyDB();
+      try {
+        const { sut, ctx } = setupFaceRecognition(db);
+        const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+        const systemMetadataMock = ctx.getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(
+          SystemMetadataRepository,
+        );
+        const { user } = await ctx.newUser();
+        const asset = await createAssetReadyForFaceDetection(ctx, user.id);
 
-      const ml = await createPersonFaceIdentity(ctx, {
-        ownerId: user.id,
-        assetId: asset.id,
-        name: 'Machine',
-        sourceType: SourceType.MachineLearning,
-        linkSource: 'ml',
-      });
-      const manual = await createPersonFaceIdentity(ctx, {
-        ownerId: user.id,
-        assetId: asset.id,
-        name: 'Manual',
-        sourceType: SourceType.Manual,
-        linkSource: 'manual',
-      });
-      const exif = await createPersonFaceIdentity(ctx, {
-        ownerId: user.id,
-        assetId: asset.id,
-        name: 'Exif',
-        sourceType: SourceType.Exif,
-        linkSource: 'import',
-      });
+        const ml = await createPersonFaceIdentity(ctx, {
+          ownerId: user.id,
+          assetId: asset.id,
+          name: 'Machine',
+          sourceType: SourceType.MachineLearning,
+          linkSource: 'ml',
+        });
+        const manual = await createPersonFaceIdentity(ctx, {
+          ownerId: user.id,
+          assetId: asset.id,
+          name: 'Manual',
+          sourceType: SourceType.Manual,
+          linkSource: 'manual',
+        });
+        const exif = await createPersonFaceIdentity(ctx, {
+          ownerId: user.id,
+          assetId: asset.id,
+          name: 'Exif',
+          sourceType: SourceType.Exif,
+          linkSource: 'import',
+        });
 
-      const { space: enabledSpace } = await ctx.newSharedSpace({
-        createdById: user.id,
-        faceRecognitionEnabled: true,
-      });
-      const { space: disabledSpace } = await ctx.newSharedSpace({
-        createdById: user.id,
-        faceRecognitionEnabled: false,
-      });
-      await ctx.newSharedSpaceMember({ spaceId: enabledSpace.id, userId: user.id, role: SharedSpaceRole.Owner });
-      await ctx.newSharedSpaceMember({ spaceId: disabledSpace.id, userId: user.id, role: SharedSpaceRole.Owner });
-      await ctx.newSharedSpaceAsset({ spaceId: enabledSpace.id, assetId: asset.id, addedById: user.id });
-      await ctx.newSharedSpaceAsset({ spaceId: disabledSpace.id, assetId: asset.id, addedById: user.id });
-      await createSpacePersonFace(ctx, {
-        spaceId: enabledSpace.id,
-        identityId: ml.identity.id,
-        assetFaceId: ml.assetFace.id,
-        name: 'Machine Enabled Space',
-      });
-      await createSpacePersonFace(ctx, {
-        spaceId: enabledSpace.id,
-        identityId: manual.identity.id,
-        assetFaceId: manual.assetFace.id,
-        name: 'Manual Enabled Space',
-      });
-      await createSpacePersonFace(ctx, {
-        spaceId: disabledSpace.id,
-        identityId: exif.identity.id,
-        assetFaceId: exif.assetFace.id,
-        name: 'Exif Disabled Space',
-      });
+        const { space: enabledSpace } = await ctx.newSharedSpace({
+          createdById: user.id,
+          faceRecognitionEnabled: true,
+        });
+        const { space: disabledSpace } = await ctx.newSharedSpace({
+          createdById: user.id,
+          faceRecognitionEnabled: false,
+        });
+        await ctx.newSharedSpaceMember({ spaceId: enabledSpace.id, userId: user.id, role: SharedSpaceRole.Owner });
+        await ctx.newSharedSpaceMember({ spaceId: disabledSpace.id, userId: user.id, role: SharedSpaceRole.Owner });
+        await ctx.newSharedSpaceAsset({ spaceId: enabledSpace.id, assetId: asset.id, addedById: user.id });
+        await ctx.newSharedSpaceAsset({ spaceId: disabledSpace.id, assetId: asset.id, addedById: user.id });
+        await createSpacePersonFace(ctx, {
+          spaceId: enabledSpace.id,
+          identityId: ml.identity.id,
+          assetFaceId: ml.assetFace.id,
+          name: 'Machine Enabled Space',
+        });
+        await createSpacePersonFace(ctx, {
+          spaceId: enabledSpace.id,
+          identityId: manual.identity.id,
+          assetFaceId: manual.assetFace.id,
+          name: 'Manual Enabled Space',
+        });
+        await createSpacePersonFace(ctx, {
+          spaceId: disabledSpace.id,
+          identityId: exif.identity.id,
+          assetFaceId: exif.assetFace.id,
+          name: 'Exif Disabled Space',
+        });
 
-      await expect(sut.handleQueueRecognizeFaces({ force: true })).resolves.toBe(JobStatus.Success);
+        await expect(sut.handleQueueRecognizeFaces({ force: true })).resolves.toBe(JobStatus.Success);
 
-      await expect(getAssetFaces(ctx, asset.id)).resolves.toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ id: ml.assetFace.id, personId: null, sourceType: SourceType.MachineLearning }),
-          expect.objectContaining({
-            id: manual.assetFace.id,
-            personId: manual.person.id,
-            sourceType: SourceType.Manual,
-          }),
-          expect.objectContaining({ id: exif.assetFace.id, personId: exif.person.id, sourceType: SourceType.Exif }),
-        ]),
-      );
-      await expect(getIdentityLinks(ctx, [ml.assetFace.id, manual.assetFace.id, exif.assetFace.id])).resolves.toEqual(
-        expect.arrayContaining([
-          { assetFaceId: manual.assetFace.id, identityId: manual.identity.id, source: 'manual' },
-          { assetFaceId: exif.assetFace.id, identityId: exif.identity.id, source: 'import' },
-        ]),
-      );
-      await expect(getIdentityLinks(ctx, [ml.assetFace.id])).resolves.toEqual([]);
-      await expect(getPeopleByIds(ctx, [manual.person.id, exif.person.id])).resolves.toEqual([
-        { id: exif.person.id, name: 'Exif' },
-        { id: manual.person.id, name: 'Manual' },
-      ]);
-      await expect(getSpacePeople(ctx, [enabledSpace.id, disabledSpace.id])).resolves.toEqual([]);
+        await expect(getAssetFaces(ctx, asset.id)).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: ml.assetFace.id, personId: null, sourceType: SourceType.MachineLearning }),
+            expect.objectContaining({
+              id: manual.assetFace.id,
+              personId: manual.person.id,
+              sourceType: SourceType.Manual,
+            }),
+            expect.objectContaining({ id: exif.assetFace.id, personId: exif.person.id, sourceType: SourceType.Exif }),
+          ]),
+        );
+        await expect(getIdentityLinks(ctx, [ml.assetFace.id, manual.assetFace.id, exif.assetFace.id])).resolves.toEqual(
+          expect.arrayContaining([
+            { assetFaceId: manual.assetFace.id, identityId: manual.identity.id, source: 'manual' },
+            { assetFaceId: exif.assetFace.id, identityId: exif.identity.id, source: 'import' },
+          ]),
+        );
+        await expect(getIdentityLinks(ctx, [ml.assetFace.id])).resolves.toEqual([]);
+        await expect(getPeopleByIds(ctx, [ml.person.id, manual.person.id, exif.person.id])).resolves.toEqual([
+          { id: exif.person.id, name: 'Exif' },
+          { id: manual.person.id, name: 'Manual' },
+        ]);
+        await expect(getSpacePeople(ctx, [enabledSpace.id, disabledSpace.id])).resolves.toEqual([]);
 
-      const queuedJobs = jobMock.queueAll.mock.calls.flatMap(([jobs]) => jobs);
-      expect(jobMock.waitForQueueCompletion).toHaveBeenCalledWith(
-        QueueName.ThumbnailGeneration,
-        QueueName.FaceDetection,
-        QueueName.PeopleBackfill,
-      );
-      expect(jobMock.empty).toHaveBeenCalledWith(QueueName.FacialRecognition, true);
-      expect(jobMock.queueAll).toHaveBeenCalledWith([
-        {
-          name: JobName.FacialRecognition,
-          data: { id: ml.assetFace.id, deferred: false, skipSharedSpaceMatch: true },
-        },
-      ]);
-      expect(jobMock.queueAll).toHaveBeenCalledWith([
-        { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: enabledSpace.id } },
-      ]);
-      expect(queuedJobs).not.toContainEqual({
-        name: JobName.SharedSpaceFaceMatchAll,
-        data: { spaceId: disabledSpace.id },
-      });
-      expect(jobMock.queue).toHaveBeenCalledWith({
-        name: JobName.FaceIdentityMaintenanceAfterRecognition,
-        data: {},
-      });
-      expect(systemMetadataMock.set).toHaveBeenCalledWith(SystemMetadataKey.FacialRecognitionState, {
-        lastRun: expect.any(String),
-      });
+        const queuedJobs = jobMock.queueAll.mock.calls.flatMap(([jobs]) => jobs);
+        expect(jobMock.waitForQueueCompletion).toHaveBeenCalledWith(
+          QueueName.ThumbnailGeneration,
+          QueueName.FaceDetection,
+          QueueName.PeopleBackfill,
+        );
+        expect(jobMock.empty).toHaveBeenCalledWith(QueueName.FacialRecognition, true);
+        expect(jobMock.queueAll).toHaveBeenCalledWith([
+          {
+            name: JobName.FacialRecognition,
+            data: { id: ml.assetFace.id, deferred: false, skipSharedSpaceMatch: true },
+          },
+        ]);
+        expect(jobMock.queueAll).toHaveBeenCalledWith([
+          { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: enabledSpace.id } },
+        ]);
+        expect(queuedJobs).not.toContainEqual({
+          name: JobName.SharedSpaceFaceMatchAll,
+          data: { spaceId: disabledSpace.id },
+        });
+        expect(jobMock.queue).toHaveBeenCalledWith({
+          name: JobName.FaceIdentityMaintenanceAfterRecognition,
+          data: {},
+        });
+        expect(systemMetadataMock.set).toHaveBeenCalledWith(SystemMetadataKey.FacialRecognitionState, {
+          lastRun: expect.any(String),
+        });
+      } finally {
+        await db.destroy();
+      }
     });
 
     it('keeps force recognition idempotent over repeated runs with populated manual and EXIF evidence', async () => {
-      const { sut, ctx } = setupFaceRecognition(await getKyselyDB());
-      const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
-      const { user } = await ctx.newUser();
-      const asset = await createAssetReadyForFaceDetection(ctx, user.id);
-      const ml = await createPersonFaceIdentity(ctx, {
-        ownerId: user.id,
-        assetId: asset.id,
-        name: 'Machine',
-        sourceType: SourceType.MachineLearning,
-        linkSource: 'ml',
-      });
-      const manual = await createPersonFaceIdentity(ctx, {
-        ownerId: user.id,
-        assetId: asset.id,
-        name: 'Manual',
-        sourceType: SourceType.Manual,
-        linkSource: 'manual',
-      });
-      const exif = await createPersonFaceIdentity(ctx, {
-        ownerId: user.id,
-        assetId: asset.id,
-        name: 'Exif',
-        sourceType: SourceType.Exif,
-        linkSource: 'import',
-      });
-      const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
-      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
-      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
-      await createSpacePersonFace(ctx, {
-        spaceId: space.id,
-        identityId: ml.identity.id,
-        assetFaceId: ml.assetFace.id,
-        name: 'Machine Space',
-      });
+      const db = await getKyselyDB();
+      try {
+        const { sut, ctx } = setupFaceRecognition(db);
+        const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+        const { user } = await ctx.newUser();
+        const asset = await createAssetReadyForFaceDetection(ctx, user.id);
+        const ml = await createPersonFaceIdentity(ctx, {
+          ownerId: user.id,
+          assetId: asset.id,
+          name: 'Machine',
+          sourceType: SourceType.MachineLearning,
+          linkSource: 'ml',
+        });
+        const manual = await createPersonFaceIdentity(ctx, {
+          ownerId: user.id,
+          assetId: asset.id,
+          name: 'Manual',
+          sourceType: SourceType.Manual,
+          linkSource: 'manual',
+        });
+        const exif = await createPersonFaceIdentity(ctx, {
+          ownerId: user.id,
+          assetId: asset.id,
+          name: 'Exif',
+          sourceType: SourceType.Exif,
+          linkSource: 'import',
+        });
+        const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+        await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+        await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+        await createSpacePersonFace(ctx, {
+          spaceId: space.id,
+          identityId: ml.identity.id,
+          assetFaceId: ml.assetFace.id,
+          name: 'Machine Space',
+        });
 
-      await expect(sut.handleQueueRecognizeFaces({ force: true })).resolves.toBe(JobStatus.Success);
-      jobMock.queue.mockClear();
-      jobMock.queueAll.mockClear();
-      jobMock.empty.mockClear();
+        await expect(sut.handleQueueRecognizeFaces({ force: true })).resolves.toBe(JobStatus.Success);
+        jobMock.queue.mockClear();
+        jobMock.queueAll.mockClear();
+        jobMock.empty.mockClear();
 
-      await expect(sut.handleQueueRecognizeFaces({ force: true })).resolves.toBe(JobStatus.Success);
+        await expect(sut.handleQueueRecognizeFaces({ force: true })).resolves.toBe(JobStatus.Success);
 
-      await expect(getAssetFaces(ctx, asset.id)).resolves.toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ id: ml.assetFace.id, personId: null, sourceType: SourceType.MachineLearning }),
-          expect.objectContaining({
-            id: manual.assetFace.id,
-            personId: manual.person.id,
-            sourceType: SourceType.Manual,
-          }),
-          expect.objectContaining({ id: exif.assetFace.id, personId: exif.person.id, sourceType: SourceType.Exif }),
-        ]),
-      );
-      await expect(getIdentityLinks(ctx, [ml.assetFace.id, manual.assetFace.id, exif.assetFace.id])).resolves.toEqual(
-        expect.arrayContaining([
-          { assetFaceId: manual.assetFace.id, identityId: manual.identity.id, source: 'manual' },
-          { assetFaceId: exif.assetFace.id, identityId: exif.identity.id, source: 'import' },
-        ]),
-      );
-      await expect(getIdentityLinks(ctx, [ml.assetFace.id])).resolves.toEqual([]);
-      await expect(getSpacePeople(ctx, [space.id])).resolves.toEqual([]);
-      expect(jobMock.empty).toHaveBeenCalledTimes(1);
-      expect(jobMock.queueAll).toHaveBeenCalledWith([
-        {
-          name: JobName.FacialRecognition,
-          data: { id: ml.assetFace.id, deferred: false, skipSharedSpaceMatch: true },
-        },
-      ]);
-      expect(jobMock.queueAll).toHaveBeenCalledWith([
-        { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: space.id } },
-      ]);
-      expect(jobMock.queue).toHaveBeenCalledWith({
-        name: JobName.FaceIdentityMaintenanceAfterRecognition,
-        data: {},
-      });
+        await expect(getAssetFaces(ctx, asset.id)).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: ml.assetFace.id, personId: null, sourceType: SourceType.MachineLearning }),
+            expect.objectContaining({
+              id: manual.assetFace.id,
+              personId: manual.person.id,
+              sourceType: SourceType.Manual,
+            }),
+            expect.objectContaining({ id: exif.assetFace.id, personId: exif.person.id, sourceType: SourceType.Exif }),
+          ]),
+        );
+        await expect(getIdentityLinks(ctx, [ml.assetFace.id, manual.assetFace.id, exif.assetFace.id])).resolves.toEqual(
+          expect.arrayContaining([
+            { assetFaceId: manual.assetFace.id, identityId: manual.identity.id, source: 'manual' },
+            { assetFaceId: exif.assetFace.id, identityId: exif.identity.id, source: 'import' },
+          ]),
+        );
+        await expect(getIdentityLinks(ctx, [ml.assetFace.id])).resolves.toEqual([]);
+        await expect(getSpacePeople(ctx, [space.id])).resolves.toEqual([]);
+        expect(jobMock.empty).toHaveBeenCalledTimes(1);
+        expect(jobMock.queueAll).toHaveBeenCalledWith([
+          {
+            name: JobName.FacialRecognition,
+            data: { id: ml.assetFace.id, deferred: false, skipSharedSpaceMatch: true },
+          },
+        ]);
+        expect(jobMock.queueAll).toHaveBeenCalledWith([
+          { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: space.id } },
+        ]);
+        expect(
+          jobMock.queue.mock.calls.filter(
+            ([job]) => job.name === JobName.FaceIdentityMaintenanceAfterRecognition,
+          ),
+        ).toHaveLength(1);
+        expect(jobMock.queue).toHaveBeenCalledWith({
+          name: JobName.FaceIdentityMaintenanceAfterRecognition,
+          data: {},
+        });
+      } finally {
+        await db.destroy();
+      }
     });
   });
 
