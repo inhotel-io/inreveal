@@ -21,6 +21,8 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_item_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_item_filter_label: 'Filter photos',
     assistant_operation_item_filter_placeholder: 'Filter photos',
+    assistant_operation_item_empty_filter: 'No matching photos',
+    assistant_operation_item_toolbar_label: 'Photo review controls',
     assistant_operation_item_media_all: 'All',
     assistant_operation_item_media_photos: 'Photos',
     assistant_operation_item_media_videos: 'Videos',
@@ -98,6 +100,41 @@ describe('AgentPlanItemReview', () => {
     await fireEvent.click(within(review).getByRole('checkbox', { name: 'Include photo 2' }));
 
     expect(onToggleItem).toHaveBeenCalledWith('operation-1', 'asset-2', false);
+  });
+
+  it('exposes mobile review hooks and keeps toolbar controls grouped on narrow layouts', () => {
+    render(AgentPlanItemReview, {
+      props: defaultProps({
+        item: item(['asset-1', 'asset-2']),
+      }),
+    });
+
+    const grid = screen.getByTestId('agent-plan-item-review-grid');
+    const toolbar = screen.getByTestId('agent-plan-item-review-toolbar');
+
+    expect(grid).toBeInTheDocument();
+    expect(toolbar).toHaveAttribute('role', 'toolbar');
+    expect(toolbar).toHaveAccessibleName('Photo review controls');
+    expect(toolbar).toHaveClass('flex', 'flex-wrap', 'items-start', 'gap-2');
+    expect(within(toolbar).getByRole('searchbox', { name: 'Filter photos' })).toHaveClass('min-w-0');
+    expect(within(toolbar).getByRole('button', { name: 'Exclude visible' })).toBeInTheDocument();
+  });
+
+  it('uses responsive virtual grid sizing instead of desktop-only fixed dimensions', () => {
+    render(AgentPlanItemReview, {
+      props: defaultProps({
+        item: item(['asset-1', 'asset-2', 'asset-3']),
+      }),
+    });
+
+    const grid = screen.getByTestId('agent-plan-item-review-grid');
+    const tileGrid = within(grid).getByTestId('agent-plan-item-review-tile-grid');
+    const firstTile = within(grid).getAllByRole('checkbox')[0].parentElement!;
+
+    expect(grid).toHaveClass('max-h-[min(65vh,28rem)]');
+    expect(grid).not.toHaveStyle({ height: '420px' });
+    expect(tileGrid).toHaveClass('grid-cols-[repeat(auto-fill,minmax(5.5rem,1fr))]');
+    expect(firstTile).toHaveClass('aspect-square');
   });
 
   it('shows excluded counts and reset action for partial selection', async () => {
@@ -187,6 +224,28 @@ describe('AgentPlanItemReview', () => {
     expect(screen.queryByAltText('city.jpg')).not.toBeInTheDocument();
   });
 
+  it('renders an empty filter result and disables filtered bulk actions', async () => {
+    render(AgentPlanItemReview, {
+      props: defaultProps({
+        item: item(['asset-1', 'asset-2']),
+        metadataByAssetId: {
+          'asset-1': { id: 'asset-1', filename: 'family-beach.jpg' },
+          'asset-2': { id: 'asset-2', filename: 'city.jpg' },
+        },
+      }),
+    });
+
+    await fireEvent.input(screen.getByRole('searchbox', { name: 'Filter photos' }), {
+      target: { value: 'missing' },
+    });
+
+    expect(screen.getByText('No matching photos')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Exclude visible' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Include visible' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Select all filtered' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Deselect all filtered' })).toBeDisabled();
+  });
+
   it('shows a Videos media filter when media metadata is available', () => {
     render(AgentPlanItemReview, {
       props: defaultProps({
@@ -264,14 +323,22 @@ describe('AgentPlanItemReview', () => {
   });
 
   it('shows a per-thumbnail fallback when an image fails', async () => {
+    const onToggleItem = vi.fn();
     render(AgentPlanItemReview, {
       props: defaultProps({
-        item: item(['asset-1']),
+        item: item(['asset-1', 'asset-2']),
+        onToggleItem,
       }),
     });
 
-    await fireEvent.error(screen.getByTestId('agent-plan-item-review-image'));
+    await fireEvent.error(screen.getAllByTestId('agent-plan-item-review-image')[0]);
 
     expect(screen.getByText('Preview unavailable')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 1' }));
+
+    expect(onToggleItem).toHaveBeenCalledWith('operation-1', 'asset-1', false);
+    expect(screen.getByRole('button', { name: 'Exclude visible' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Select all filtered' })).toBeEnabled();
   });
 });
