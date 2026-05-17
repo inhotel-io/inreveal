@@ -1154,6 +1154,205 @@ describe(AgentOperationPlanService.name, () => {
     expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
   });
 
+  it('applies add-assets operations with filtered allExcept asset ids', async () => {
+    const auth = AuthFactory.create();
+    const keptAssetId = newUuid();
+    const excludedAssetId = newUuid();
+    const { session, albumId, operation, plan } = makeAddAssetsPlan(auth, [keptAssetId, excludedAssetId]);
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockResolvedValue({
+      ...plan,
+      status: AgentOperationPlanStatus.Applied,
+      operations: [
+        {
+          ...operation,
+          status: AgentOperationStatus.Applied,
+          result: { albumId, assetIds: [keptAssetId], assetResults: [{ id: keptAssetId, success: true }] },
+        },
+      ],
+    });
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([keptAssetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([keptAssetId]));
+    albumService.addAssets.mockResolvedValue([{ id: keptAssetId, success: true }]);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {
+        [operation.id]: { itemKind: 'asset', mode: 'allExcept', itemIds: [excludedAssetId] },
+      },
+      planRevision: plan.revision,
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([keptAssetId]), false);
+    expect(albumService.addAssets).toHaveBeenCalledWith(auth, albumId, { ids: [keptAssetId] });
+  });
+
+  it('skips an asset operation when sparse selection leaves no selected assets', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const { session, operation, plan } = makeAddAssetsPlan(auth, [assetId]);
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockResolvedValue({
+      ...plan,
+      status: AgentOperationPlanStatus.Applied,
+      operations: [
+        {
+          ...operation,
+          status: AgentOperationStatus.Skipped,
+          result: { skippedReason: 'No selected items for operation' },
+        },
+      ],
+    });
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {
+        [operation.id]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetId] },
+      },
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(result.skippedOperationIds).toEqual([operation.id]);
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        status: AgentOperationStatus.Skipped,
+        result: { skippedReason: 'No selected items for operation' },
+      }),
+    ]);
+    expect(albumService.addAssets).not.toHaveBeenCalled();
+  });
+
+  it('skips a cover operation when its cover asset is excluded', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const albumId = newUuid();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+    const coverOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AlbumSetCover,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: albumId,
+      temporaryTargetId: null,
+      assetIds: [assetId],
+      payload: {},
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [coverOperation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockResolvedValue({
+      ...plan,
+      status: AgentOperationPlanStatus.Applied,
+      operations: [
+        {
+          ...coverOperation,
+          status: AgentOperationStatus.Skipped,
+          result: { skippedReason: 'No selected items for operation' },
+        },
+      ],
+    });
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [coverOperation.id],
+      itemSelections: {
+        [coverOperation.id]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetId] },
+      },
+    });
+
+    expect(result.skippedOperationIds).toEqual([coverOperation.id]);
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: coverOperation.id,
+        status: AgentOperationStatus.Skipped,
+        result: { skippedReason: 'No selected items for operation' },
+      }),
+    ]);
+    expect(albumService.update).not.toHaveBeenCalled();
+  });
+
+  it('skips a dependent operation when its dependency has no selected items', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+    const addOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AlbumAddAssets,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: newUuid(),
+      temporaryTargetId: null,
+      assetIds: [assetId],
+      payload: {},
+    });
+    const coverOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      position: 1,
+      type: AgentOperationType.AlbumSetCover,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: addOperation.targetId,
+      temporaryTargetId: null,
+      assetIds: [assetId],
+      payload: {},
+      dependencyIds: [addOperation.id],
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [addOperation, coverOperation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockResolvedValue({
+      ...plan,
+      status: AgentOperationPlanStatus.Applied,
+      operations: [
+        {
+          ...addOperation,
+          status: AgentOperationStatus.Skipped,
+          result: { skippedReason: 'No selected items for operation' },
+        },
+        {
+          ...coverOperation,
+          status: AgentOperationStatus.Skipped,
+          result: { skippedReason: 'Dependency was not applied' },
+        },
+      ],
+    });
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [addOperation.id, coverOperation.id],
+      itemSelections: {
+        [addOperation.id]: { itemKind: 'asset', mode: 'none' },
+      },
+    });
+
+    expect(result.skippedOperationIds).toEqual([addOperation.id, coverOperation.id]);
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: addOperation.id,
+        status: AgentOperationStatus.Skipped,
+        result: { skippedReason: 'No selected items for operation' },
+      }),
+      expect.objectContaining({
+        id: coverOperation.id,
+        status: AgentOperationStatus.Skipped,
+        result: { skippedReason: 'Dependency was not applied' },
+      }),
+    ]);
+    expect(albumService.addAssets).not.toHaveBeenCalled();
+    expect(albumService.update).not.toHaveBeenCalled();
+  });
+
   it('applies selected album operations in stored order and marks the session completed', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
