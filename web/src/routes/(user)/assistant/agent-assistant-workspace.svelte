@@ -143,7 +143,7 @@
     assistantPermissionPreset = session.permissionPreset;
     assistantApprovalMode = session.approvalMode;
     persistAssistantDefaults({
-      credentialId: session.providerCredentialId,
+      credentialId: session.providerCredentialId ?? undefined,
       model: session.modelSnapshot.model,
       permissionPreset: session.permissionPreset,
       approvalMode: session.approvalMode,
