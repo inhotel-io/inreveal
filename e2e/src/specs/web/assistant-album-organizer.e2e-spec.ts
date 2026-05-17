@@ -86,6 +86,28 @@ const createLooseAssets = async (accessToken: string) =>
     }),
   ]);
 
+const makeThumbnailUnavailable = async (assetId: string) => {
+  const db = await utils.connectDatabase();
+  await expect
+    .poll(
+      async () => {
+        const result = await db.query(
+          `SELECT 1 FROM "asset_file" WHERE "assetId" = $1 AND "type" = 'thumbnail' AND "isEdited" = false`,
+          [assetId],
+        );
+        return result.rowCount;
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(1);
+
+  const result = await db.query(
+    `UPDATE "asset_file" SET "path" = $1 WHERE "assetId" = $2 AND "type" = 'thumbnail' AND "isEdited" = false`,
+    [`/test-assets/albums/missing-thumbnail-${assetId}.webp`, assetId],
+  );
+  expect(result.rowCount).toBe(1);
+};
+
 const startPortugalPlan = async (page: Page, accessToken: string, providerCredentialId: string) => {
   const session = await startAssistantSession(
     page,
@@ -413,33 +435,17 @@ test.describe('Assistant album organizer', () => {
     context,
     page,
   }) => {
-    await createLooseAssets(admin.accessToken);
+    const [assetWithMissingThumbnail] = await createLooseAssets(admin.accessToken);
+    await makeThumbnailUnavailable(assetWithMissingThumbnail.id);
     await utils.setAuthCookies(context, admin.accessToken);
 
-    let failedOneThumbnail = false;
-    const thumbnailRoute = '**/api/assets/*/thumbnail?*';
-    const thumbnailHandler = async (route: Route) => {
-      if (!failedOneThumbnail) {
-        failedOneThumbnail = true;
-        await route.fulfill({ status: 404, body: 'thumbnail missing' });
-        return;
-      }
+    const { session } = await startPortugalPlan(page, admin.accessToken, providerCredentialId);
+    const portugalDestination = getPortugalDestination(page);
+    await expect(portugalDestination.getByText('Preview unavailable')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Apply 3 selected' })).toBeEnabled();
 
-      await route.continue();
-    };
-    await page.route(thumbnailRoute, thumbnailHandler);
-
-    try {
-      const { session } = await startPortugalPlan(page, admin.accessToken, providerCredentialId);
-      const portugalDestination = getPortugalDestination(page);
-      await expect(portugalDestination.getByText('Preview unavailable')).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Apply 3 selected' })).toBeEnabled();
-
-      await applySelectedOperations(page, session.id, 'Apply 3 selected');
-      await expect(page.getByText('Applied 3 operations. 0 failed.')).toBeVisible();
-    } finally {
-      await page.unroute(thumbnailRoute, thumbnailHandler);
-    }
+    await applySelectedOperations(page, session.id, 'Apply 3 selected');
+    await expect(page.getByText('Applied 3 operations. 0 failed.')).toBeVisible();
   });
 
   test('keeps the visible plan after a stale apply response and tells the user to review the latest plan', async ({
