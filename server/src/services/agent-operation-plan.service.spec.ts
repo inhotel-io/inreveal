@@ -16,9 +16,15 @@ import {
   AgentToolCallStatus,
   AgentToolDataClass,
   AgentToolName,
+  AssetType,
+  AssetVisibility,
+  SharedSpaceRole,
+  UserAvatarColor,
 } from 'src/enum';
+import { AssetEditAction } from 'src/dtos/editing.dto';
 import { AccessRepository } from 'src/repositories/access.repository';
 import {
+  AgentOperationApplyUpdate,
   AgentOperationPlanRepository,
   AgentOperationPlanWithOperations,
 } from 'src/repositories/agent-operation-plan.repository';
@@ -28,6 +34,9 @@ import { AssetRepository } from 'src/repositories/asset.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AlbumService } from 'src/services/album.service';
+import { AssetService } from 'src/services/asset.service';
+import { SharedSpaceService } from 'src/services/shared-space.service';
+import { TagService } from 'src/services/tag.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { newAccessRepositoryMock } from 'test/repositories/access.repository.mock';
@@ -54,6 +63,25 @@ const permissionPlanSnapshot: AgentPermissionPlanSnapshot = {
     maxOriginalsPerToolCall: 0,
     expiresInMinutes: 60,
   },
+};
+
+const expandedWriteScope = {
+  ...permissionPlanSnapshot.writeScope,
+  removeAssets: true,
+  createSpace: true,
+  addAssetsToSpaces: true,
+  removeAssetsFromSpaces: true,
+  updateSpaceDetails: true,
+  editAssets: true,
+  favoriteAssets: true,
+  archiveAssets: true,
+  tagAssets: true,
+};
+
+const expandedPermissionPlanSnapshot: AgentPermissionPlanSnapshot = {
+  ...permissionPlanSnapshot,
+  assetScope: { owned: true, sharedSpaces: true, locked: false },
+  writeScope: expandedWriteScope,
 };
 
 const makeSession = (overrides: Partial<AgentSession> = {}): AgentSession => {
@@ -132,6 +160,18 @@ const makePlan = (
   return { ...plan, operations: overrides.operations ?? [makeOperation({ planId: plan.id })] };
 };
 
+const applyUpdatesToPlan = (
+  plan: AgentOperationPlanWithOperations,
+  updates: AgentOperationApplyUpdate[],
+): AgentOperationPlanWithOperations => ({
+  ...plan,
+  status: AgentOperationPlanStatus.Applied,
+  operations: plan.operations.map((operation) => {
+    const update = updates.find((candidate) => candidate.id === operation.id);
+    return update ? { ...operation, ...update } : operation;
+  }),
+});
+
 const makeAddAssetsPlan = (auth: ReturnType<typeof AuthFactory.create>, assetIds: string[]) => {
   const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
   const albumId = newUuid();
@@ -181,6 +221,9 @@ describe(AgentOperationPlanService.name, () => {
   let accessRepository: ReturnType<typeof newAccessRepositoryMock>;
   let assetRepository: ReturnType<typeof newAssetRepositoryMock>;
   let albumService: ReturnType<typeof automock<AlbumService>>;
+  let sharedSpaceService: ReturnType<typeof automock<SharedSpaceService>>;
+  let assetService: ReturnType<typeof automock<AssetService>>;
+  let tagService: ReturnType<typeof automock<TagService>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
   let planRepository: ReturnType<typeof automock<AgentOperationPlanRepository>>;
   let toolCallRepository: ReturnType<typeof automock<AgentToolCallRepository>>;
@@ -190,6 +233,9 @@ describe(AgentOperationPlanService.name, () => {
     accessRepository = newAccessRepositoryMock();
     assetRepository = newAssetRepositoryMock();
     albumService = mockBaseService(AlbumService);
+    sharedSpaceService = mockBaseService(SharedSpaceService);
+    assetService = mockBaseService(AssetService);
+    tagService = mockBaseService(TagService);
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
     planRepository = automock(AgentOperationPlanRepository, { args: [{} as never] });
     toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
@@ -204,7 +250,7 @@ describe(AgentOperationPlanService.name, () => {
         }),
       ),
     );
-    sut = new AgentOperationPlanService(
+    sut = new (AgentOperationPlanService as unknown as new (...args: unknown[]) => AgentOperationPlanService)(
       accessRepository as unknown as AccessRepository,
       assetRepository as unknown as AssetRepository,
       albumService,
@@ -212,6 +258,9 @@ describe(AgentOperationPlanService.name, () => {
       planRepository,
       toolCallRepository,
       websocketRepository,
+      sharedSpaceService,
+      assetService,
+      tagService,
     );
   });
 
@@ -232,7 +281,6 @@ describe(AgentOperationPlanService.name, () => {
           temporaryTargetId: 'tmp-portugal',
           assetIds: [assetId],
           payload: {},
-          dependencyIds: [newUuid()],
         }),
       ],
     });
@@ -573,6 +621,157 @@ describe(AgentOperationPlanService.name, () => {
         ],
       }),
     ).rejects.toThrow('Agent permission policy does not allow adding assets to albums');
+  });
+
+  it('normalizes missing expanded write-scope keys to false before operation permission checks', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const assetId = newUuid();
+    const legacyPermissionPlan: AgentPermissionPlanSnapshot = {
+      ...permissionPlanSnapshot,
+      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+    };
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: legacyPermissionPlan });
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    toolCallRepository.create.mockResolvedValue(
+      makeToolCall({ sessionId: session.id, status: AgentToolCallStatus.Denied }),
+    );
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Denied plan.',
+        operations: [
+          {
+            type: AgentOperationType.AlbumRemoveAssets,
+            summary: 'Remove from existing album.',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: albumId,
+            assetIds: [assetId],
+            payload: {},
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Agent permission policy does not allow removing assets from albums');
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      field: 'createSpace',
+      operation: {
+        type: AgentOperationType.SpaceCreate,
+        summary: 'Create space.',
+        targetKind: AgentOperationTargetKind.NewSpace,
+        temporaryTargetId: 'tmp-space',
+        payload: { spaceName: 'Trip' },
+      },
+      error: 'Agent permission policy does not allow creating spaces',
+    },
+    {
+      field: 'addAssetsToSpaces',
+      operation: {
+        type: AgentOperationType.SpaceAddAssets,
+        summary: 'Add to space.',
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: newUuid(),
+        assetIds: [newUuid()],
+        payload: {},
+      },
+      error: 'Agent permission policy does not allow adding assets to spaces',
+    },
+    {
+      field: 'removeAssetsFromSpaces',
+      operation: {
+        type: AgentOperationType.SpaceRemoveAssets,
+        summary: 'Remove from space.',
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: newUuid(),
+        assetIds: [newUuid()],
+        payload: {},
+      },
+      error: 'Agent permission policy does not allow removing assets from spaces',
+    },
+    {
+      field: 'updateSpaceDetails',
+      operation: {
+        type: AgentOperationType.SpaceUpdateDetails,
+        summary: 'Rename space.',
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: newUuid(),
+        payload: { spaceName: 'Trip' },
+      },
+      error: 'Agent permission policy does not allow updating space details',
+    },
+    {
+      field: 'editAssets',
+      operation: {
+        type: AgentOperationType.AssetRotate,
+        summary: 'Rotate.',
+        targetKind: AgentOperationTargetKind.ImageEditBatch,
+        assetIds: [newUuid()],
+        payload: { angle: 90 },
+      },
+      error: 'Agent permission policy does not allow editing assets',
+    },
+    {
+      field: 'favoriteAssets',
+      operation: {
+        type: AgentOperationType.AssetSetFavorite,
+        summary: 'Favorite.',
+        targetKind: AgentOperationTargetKind.AssetBatch,
+        assetIds: [newUuid()],
+        payload: { favorite: true },
+      },
+      error: 'Agent permission policy does not allow changing asset favorites',
+    },
+    {
+      field: 'archiveAssets',
+      operation: {
+        type: AgentOperationType.AssetSetArchive,
+        summary: 'Archive.',
+        targetKind: AgentOperationTargetKind.AssetBatch,
+        assetIds: [newUuid()],
+        payload: { archived: true },
+      },
+      error: 'Agent permission policy does not allow archiving assets',
+    },
+    {
+      field: 'tagAssets',
+      operation: {
+        type: AgentOperationType.AssetAddTag,
+        summary: 'Tag.',
+        targetKind: AgentOperationTargetKind.AssetBatch,
+        assetIds: [newUuid()],
+        payload: { tagName: 'Receipts' },
+      },
+      error: 'Agent permission policy does not allow tagging assets',
+    },
+  ])('rejects %s write-scope disabled operation type', async ({ field, operation, error }) => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedWriteScope, [field]: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.create.mockResolvedValue(
+      makeToolCall({ sessionId: session.id, status: AgentToolCallStatus.Denied }),
+    );
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Denied plan.',
+        operations: [{ ...operation, enabled: true, riskLevel: AgentOperationRiskLevel.Low } as never],
+      }),
+    ).rejects.toThrow(error);
+
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
   });
 
   it('revises only a proposed current plan owned by the session and stores a replacement revision', async () => {
@@ -1555,6 +1754,50 @@ describe(AgentOperationPlanService.name, () => {
     });
   });
 
+  it('applies album update target and text overrides together', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+    const originalAlbumId = newUuid();
+    const overrideAlbumId = newUuid();
+    const updateOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AlbumUpdateDetails,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: originalAlbumId,
+      temporaryTargetId: null,
+      payload: { albumName: 'Original album', description: 'Original description' },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [updateOperation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([overrideAlbumId]));
+    albumService.update.mockResolvedValue({ id: overrideAlbumId } as never);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [updateOperation.id],
+        fieldOverrides: {
+          [updateOperation.id]: {
+            targetAlbumId: overrideAlbumId,
+            albumName: '  Portugal highlights  ',
+            description: '  Lisbon and Porto  ',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({ status: AgentOperationApplyStatus.Applied });
+
+    expect(albumService.update).toHaveBeenCalledWith(auth, overrideAlbumId, {
+      albumName: 'Portugal highlights',
+      description: 'Lisbon and Porto',
+    });
+  });
+
   it('applies set-cover field overrides after sparse item selections and uses the override for access checks', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
@@ -2198,6 +2441,743 @@ describe(AgentOperationPlanService.name, () => {
 
     expect(result.status).toBe(AgentOperationApplyStatus.Failed);
     expect(albumService.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects duplicate space temporary ids and missing new-space dependencies before persisting', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.create.mockResolvedValue(makeToolCall({ sessionId: session.id }));
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Broken spaces.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceCreate,
+            summary: 'Create one.',
+            targetKind: AgentOperationTargetKind.NewSpace,
+            temporaryTargetId: 'tmp-space',
+            payload: { spaceName: 'One' },
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+          {
+            type: AgentOperationType.SpaceCreate,
+            summary: 'Create two.',
+            targetKind: AgentOperationTargetKind.NewSpace,
+            temporaryTargetId: 'tmp-space',
+            payload: { spaceName: 'Two' },
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Duplicate space.create temporaryTargetId: tmp-space');
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Missing space.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceAddAssets,
+            summary: 'Add to missing space.',
+            targetKind: AgentOperationTargetKind.NewSpace,
+            temporaryTargetId: 'tmp-missing',
+            assetIds: [newUuid()],
+            payload: {},
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+        ],
+      }),
+    ).rejects.toThrow('No space.create operation found for temporaryTargetId: tmp-missing');
+
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('rejects new-space references before the corresponding create operation', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.create.mockResolvedValue(makeToolCall({ sessionId: session.id }));
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Out of order space plan.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceAddAssets,
+            summary: 'Add too early.',
+            targetKind: AgentOperationTargetKind.NewSpace,
+            temporaryTargetId: 'tmp-space',
+            assetIds: [assetId],
+            payload: {},
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+          {
+            type: AgentOperationType.SpaceCreate,
+            summary: 'Create later.',
+            targetKind: AgentOperationTargetKind.NewSpace,
+            temporaryTargetId: 'tmp-space',
+            payload: { spaceName: 'Later' },
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+        ],
+      }),
+    ).rejects.toThrow('space.addAssets references temporaryTargetId before its space.create operation');
+
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('validates existing spaces, tag ids, editable assets, and redacts expanded audit metadata', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const tagId = newUuid();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const plan = makePlan({ sessionId: session.id });
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([spaceId]));
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sessionRepository.update.mockResolvedValue({ ...session, status: AgentSessionStatus.WaitingForPlanReview });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.tag.checkOwnerAccess.mockResolvedValue(new Set([tagId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+    planRepository.createReplacementRevision.mockResolvedValue(plan);
+    toolCallRepository.create.mockResolvedValue(makeToolCall({ sessionId: session.id }));
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Space and tag plan.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceUpdateDetails,
+            summary: 'Rename space.',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: spaceId,
+            payload: { spaceName: 'Private trip', description: 'Do not leak me' },
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+          {
+            type: AgentOperationType.AssetRemoveTag,
+            summary: 'Remove tag.',
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds: [assetId],
+            payload: { tagId },
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+          {
+            type: AgentOperationType.AssetRotate,
+            summary: 'Rotate.',
+            targetKind: AgentOperationTargetKind.ImageEditBatch,
+            assetIds: [assetId],
+            payload: { angle: 90 },
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({ status: 'success' });
+
+    expect(accessRepository.sharedSpace.checkRoleAccess).toHaveBeenCalledWith(
+      auth.user.id,
+      new Set([spaceId]),
+      SharedSpaceRole.Owner,
+    );
+    expect(accessRepository.asset.checkSpaceEditAccess).toHaveBeenCalledWith(auth.user.id, new Set([assetId]));
+    expect(accessRepository.tag.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([tagId]));
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        redactedRequestMetadata: expect.objectContaining({
+          spaceIds: [spaceId],
+          tagIds: [tagId],
+          assetIds: [assetId],
+        }),
+      }),
+    );
+    expect(toolCallRepository.create).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        redactedRequestMetadata: expect.objectContaining({ payload: expect.anything() }),
+      }),
+    );
+  });
+
+  it('denies existing space operations without editor or owner access', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set());
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.create.mockResolvedValue(
+      makeToolCall({ sessionId: session.id, status: AgentToolCallStatus.Executing }),
+    );
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Denied space.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceRemoveAssets,
+            summary: 'Remove from inaccessible space.',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: spaceId,
+            assetIds: [newUuid()],
+            payload: {},
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+        ],
+      }),
+    ).rejects.toThrow('One or more target spaces are not accessible');
+
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('requires owner access when changing existing space details', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set());
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.create.mockResolvedValue(makeToolCall({ sessionId: session.id }));
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Rename space.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceUpdateDetails,
+            summary: 'Rename.',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: spaceId,
+            payload: { spaceName: 'Owners only' },
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+        ],
+      }),
+    ).rejects.toThrow('One or more target spaces are not accessible');
+
+    expect(accessRepository.sharedSpace.checkRoleAccess).toHaveBeenCalledWith(
+      auth.user.id,
+      new Set([spaceId]),
+      SharedSpaceRole.Owner,
+    );
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('applies expanded album, space, asset, and tag operations with sparse selections and target overrides', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const existingAlbumId = newUuid();
+    const overrideAlbumId = newUuid();
+    const createdSpaceId = newUuid();
+    const existingSpaceId = newUuid();
+    const overrideSpaceId = newUuid();
+    const tagId = newUuid();
+    const upsertedTagId = newUuid();
+    const assetA = newUuid();
+    const assetB = newUuid();
+    const assetC = newUuid();
+    const operations = [
+      makeOperation({
+        id: newUuid(),
+        planId: 'plan-id',
+        type: AgentOperationType.AlbumRemoveAssets,
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: existingAlbumId,
+        assetIds: [assetA, assetB],
+        payload: {},
+      }),
+      makeOperation({
+        id: newUuid(),
+        planId: 'plan-id',
+        position: 1,
+        type: AgentOperationType.SpaceCreate,
+        targetKind: AgentOperationTargetKind.NewSpace,
+        temporaryTargetId: 'tmp-space',
+        payload: { spaceName: 'Original', description: 'Old' },
+      }),
+      makeOperation({
+        id: newUuid(),
+        planId: 'plan-id',
+        position: 2,
+        type: AgentOperationType.SpaceAddAssets,
+        targetKind: AgentOperationTargetKind.NewSpace,
+        temporaryTargetId: 'tmp-space',
+        assetIds: [assetA, assetB],
+        payload: {},
+        dependencyIds: [],
+      }),
+      makeOperation({
+        id: newUuid(),
+        planId: 'plan-id',
+        position: 3,
+        type: AgentOperationType.SpaceRemoveAssets,
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: existingSpaceId,
+        assetIds: [assetA],
+        payload: {},
+      }),
+      makeOperation({
+        id: newUuid(),
+        planId: 'plan-id',
+        position: 4,
+        type: AgentOperationType.SpaceUpdateDetails,
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: existingSpaceId,
+        payload: { spaceName: 'Original space' },
+      }),
+      makeOperation({
+        id: newUuid(),
+        planId: 'plan-id',
+        position: 5,
+        type: AgentOperationType.AssetSetFavorite,
+        targetKind: AgentOperationTargetKind.AssetBatch,
+        targetId: null,
+        assetIds: [assetA],
+        payload: { favorite: true },
+      }),
+      makeOperation({
+        id: newUuid(),
+        planId: 'plan-id',
+        position: 6,
+        type: AgentOperationType.AssetSetArchive,
+        targetKind: AgentOperationTargetKind.AssetBatch,
+        targetId: null,
+        assetIds: [assetB],
+        payload: { archived: true },
+      }),
+      makeOperation({
+        id: newUuid(),
+        planId: 'plan-id',
+        position: 7,
+        type: AgentOperationType.AssetAddTag,
+        targetKind: AgentOperationTargetKind.AssetBatch,
+        targetId: null,
+        assetIds: [assetA],
+        payload: { tagName: 'Receipts' },
+      }),
+      makeOperation({
+        id: newUuid(),
+        planId: 'plan-id',
+        position: 8,
+        type: AgentOperationType.AssetAddTag,
+        targetKind: AgentOperationTargetKind.AssetBatch,
+        targetId: null,
+        assetIds: [assetB],
+        payload: { tagId },
+      }),
+      makeOperation({
+        id: newUuid(),
+        planId: 'plan-id',
+        position: 9,
+        type: AgentOperationType.AssetRemoveTag,
+        targetKind: AgentOperationTargetKind.AssetBatch,
+        targetId: null,
+        assetIds: [assetC],
+        payload: { tagId },
+      }),
+    ];
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations });
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([existingSpaceId, overrideSpaceId]));
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([existingAlbumId, overrideAlbumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetA, assetB, assetC]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([assetA, assetB, assetC]));
+    accessRepository.tag.checkOwnerAccess.mockResolvedValue(new Set([tagId]));
+    assetRepository.getAgentReadableIds.mockImplementation((ids: Set<string>) => Promise.resolve(new Set(ids)));
+    albumService.removeAssets.mockResolvedValue([{ id: assetB, success: true }]);
+    sharedSpaceService.create.mockResolvedValue({ id: createdSpaceId } as never);
+    sharedSpaceService.addAssets.mockResolvedValue(undefined as never);
+    sharedSpaceService.removeAssets.mockResolvedValue(undefined as never);
+    sharedSpaceService.update.mockResolvedValue({ id: overrideSpaceId } as never);
+    assetService.updateAll.mockResolvedValue(undefined as never);
+    tagService.upsert.mockResolvedValue([{ id: upsertedTagId }] as never);
+    tagService.addAssets.mockResolvedValue([{ id: assetA, success: true }] as never);
+    tagService.removeAssets.mockResolvedValue([{ id: assetC, success: true }] as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: operations.map((operation) => operation.id),
+      itemSelections: {
+        [operations[0].id]: { itemKind: 'asset', mode: 'only', itemIds: [assetB] },
+        [operations[2].id]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
+      },
+      fieldOverrides: {
+        [operations[0].id]: { targetAlbumId: overrideAlbumId },
+        [operations[1].id]: { spaceName: '  New space  ', description: '  Fresh  ' },
+        [operations[4].id]: { targetSpaceId: overrideSpaceId, description: 'Updated description', color: UserAvatarColor.Blue },
+      },
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(albumService.removeAssets).toHaveBeenCalledWith(auth, overrideAlbumId, { ids: [assetB] });
+    expect(sharedSpaceService.create).toHaveBeenCalledWith(auth, { name: 'New space', description: 'Fresh' });
+    expect(sharedSpaceService.addAssets).toHaveBeenCalledWith(auth, createdSpaceId, { assetIds: [assetA] });
+    expect(sharedSpaceService.removeAssets).toHaveBeenCalledWith(auth, existingSpaceId, { assetIds: [assetA] });
+    expect(sharedSpaceService.update).toHaveBeenCalledWith(auth, overrideSpaceId, {
+      name: 'Original space',
+      description: 'Updated description',
+      color: UserAvatarColor.Blue,
+    });
+    expect(assetService.updateAll).toHaveBeenNthCalledWith(1, auth, { ids: [assetA], isFavorite: true });
+    expect(assetService.updateAll).toHaveBeenNthCalledWith(2, auth, {
+      ids: [assetB],
+      visibility: AssetVisibility.Archive,
+    });
+    expect(tagService.upsert).toHaveBeenCalledWith(auth, { tags: ['Receipts'] });
+    expect(tagService.addAssets).toHaveBeenNthCalledWith(1, auth, upsertedTagId, { ids: [assetA] });
+    expect(tagService.addAssets).toHaveBeenNthCalledWith(2, auth, tagId, { ids: [assetB] });
+    expect(tagService.removeAssets).toHaveBeenCalledWith(auth, tagId, { ids: [assetC] });
+  });
+
+  it('rejects invalid space field overrides before claiming the plan', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.SpaceUpdateDetails,
+      targetKind: AgentOperationTargetKind.ExistingSpace,
+      targetId: newUuid(),
+      payload: { spaceName: 'Original' },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [operation.id],
+        fieldOverrides: { [operation.id]: { spaceName: 'x'.repeat(101) } },
+      }),
+    ).rejects.toThrow('spaceName must be 1-100 characters');
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [operation.id],
+        fieldOverrides: { [operation.id]: { description: 'x'.repeat(501) } },
+      }),
+    ).rejects.toThrow('description must be 500 characters or fewer');
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [operation.id],
+        fieldOverrides: { [operation.id]: { color: '#80c7ff' } },
+      }),
+    ).rejects.toThrow('color must be a valid space color');
+
+    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported new operation field overrides before claiming the plan', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetRotate,
+      targetKind: AgentOperationTargetKind.ImageEditBatch,
+      targetId: null,
+      assetIds: [newUuid()],
+      payload: { angle: 90 },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [operation.id],
+        fieldOverrides: { [operation.id]: { targetAlbumId: newUuid() } },
+      }),
+    ).rejects.toThrow('Unsupported field override for operation type');
+
+    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      type: AgentOperationType.AlbumCreate,
+      targetKind: AgentOperationTargetKind.NewAlbum,
+      temporaryTargetId: 'tmp-album',
+      payload: { albumName: 'Trip' },
+      fields: { targetAlbumId: newUuid() },
+    },
+    {
+      type: AgentOperationType.SpaceCreate,
+      targetKind: AgentOperationTargetKind.NewSpace,
+      temporaryTargetId: 'tmp-space',
+      payload: { spaceName: 'Trip' },
+      fields: { targetSpaceId: newUuid() },
+    },
+  ])('rejects target overrides for create operations before claiming the plan', async (operationInput) => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      ...operationInput,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [operation.id],
+        fieldOverrides: { [operation.id]: operationInput.fields },
+      }),
+    ).rejects.toThrow('Target overrides are not supported for create operations');
+
+    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+    expect(albumService.create).not.toHaveBeenCalled();
+    expect(sharedSpaceService.create).not.toHaveBeenCalled();
+  });
+
+  it('keeps non-target dependencies when overriding a target', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const dependencyOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AlbumAddAssets,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: newUuid(),
+      assetIds: [newUuid()],
+      payload: {},
+    });
+    const targetOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      position: 1,
+      type: AgentOperationType.AlbumAddAssets,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: newUuid(),
+      assetIds: [newUuid()],
+      payload: {},
+      dependencyIds: [dependencyOperation.id],
+    });
+    const plan = makePlan({
+      id: 'plan-id',
+      sessionId: session.id,
+      operations: [dependencyOperation, targetOperation],
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [dependencyOperation.id, targetOperation.id],
+      itemSelections: {
+        [dependencyOperation.id]: { itemKind: 'asset', mode: 'only', itemIds: [] },
+      },
+      fieldOverrides: { [targetOperation.id]: { targetAlbumId: newUuid() } },
+    });
+
+    expect(result.skippedOperationIds).toEqual([dependencyOperation.id, targetOperation.id]);
+    expect(albumService.addAssets).not.toHaveBeenCalled();
+  });
+
+  it('fails stale expanded apply targets before calling downstream services', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const spaceId = newUuid();
+    const tagId = newUuid();
+    const staleAssetId = newUuid();
+    const inaccessibleAssetId = newUuid();
+    const operations = [
+      makeOperation({
+        id: newUuid(),
+        planId: 'plan-id',
+        type: AgentOperationType.SpaceUpdateDetails,
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: spaceId,
+        payload: { spaceName: 'Stale' },
+      }),
+      makeOperation({
+        id: newUuid(),
+        planId: 'plan-id',
+        position: 1,
+        type: AgentOperationType.AssetAddTag,
+        targetKind: AgentOperationTargetKind.AssetBatch,
+        targetId: null,
+        assetIds: [inaccessibleAssetId],
+        payload: { tagId },
+      }),
+      makeOperation({
+        id: newUuid(),
+        planId: 'plan-id',
+        position: 2,
+        type: AgentOperationType.AssetSetFavorite,
+        targetKind: AgentOperationTargetKind.AssetBatch,
+        targetId: null,
+        assetIds: [staleAssetId],
+        payload: { favorite: true },
+      }),
+    ];
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([inaccessibleAssetId, staleAssetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([inaccessibleAssetId, staleAssetId]));
+    accessRepository.tag.checkOwnerAccess.mockResolvedValue(new Set());
+    assetRepository.getAgentReadableIds.mockImplementation((ids: Set<string>) =>
+      Promise.resolve(new Set([...ids].filter((id) => id !== staleAssetId))),
+    );
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: operations.map((operation) => operation.id),
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(result.failedOperationIds).toEqual(operations.map((operation) => operation.id));
+    expect(sharedSpaceService.update).not.toHaveBeenCalled();
+    expect(tagService.addAssets).not.toHaveBeenCalled();
+    expect(assetService.updateAll).not.toHaveBeenCalled();
+  });
+
+  it('rotates selected editable images by merging existing spatial edits and reporting per-asset failures', async () => {
+    const auth = AuthFactory.create();
+    const editableAssetId = newUuid();
+    const netZeroAssetId = newUuid();
+    const videoAssetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetRotate,
+      targetKind: AgentOperationTargetKind.ImageEditBatch,
+      targetId: null,
+      assetIds: [editableAssetId, netZeroAssetId, videoAssetId],
+      payload: { angle: 90 },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([editableAssetId, netZeroAssetId, videoAssetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([editableAssetId, netZeroAssetId, videoAssetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([editableAssetId, netZeroAssetId, videoAssetId]));
+    assetRepository.getForEdit.mockImplementation((id: string) =>
+      Promise.resolve({
+        type: id === videoAssetId ? AssetType.Video : AssetType.Image,
+        livePhotoVideoId: null,
+        originalPath: '/photos/image.jpg',
+        originalFileName: 'image.jpg',
+        duration: null,
+        exifImageWidth: 400,
+        exifImageHeight: 300,
+        orientation: null,
+        projectionType: null,
+      }),
+    );
+    assetService.getAssetEdits.mockImplementation((_: typeof auth, id: string) =>
+      Promise.resolve({
+        assetId: id,
+        edits:
+          id === editableAssetId
+            ? [
+                { id: newUuid(), action: AssetEditAction.Crop, parameters: { x: 0, y: 0, width: 200, height: 200 } },
+                { id: newUuid(), action: AssetEditAction.Rotate, parameters: { angle: 90 } },
+                { id: newUuid(), action: AssetEditAction.Mirror, parameters: { axis: 'horizontal' } },
+              ]
+            : [{ id: newUuid(), action: AssetEditAction.Rotate, parameters: { angle: 180 } }],
+      } as never),
+    );
+    assetService.editAsset.mockResolvedValue({ assetId: editableAssetId, edits: [] } as never);
+    assetService.removeAssetEdits.mockResolvedValue(undefined as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      fieldOverrides: { [operation.id]: { rotationAngle: 180 } },
+      itemSelections: { [operation.id]: { itemKind: 'asset', mode: 'all', itemIds: [] } },
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(assetService.editAsset).toHaveBeenCalledWith(auth, editableAssetId, {
+      edits: [
+        { action: AssetEditAction.Crop, parameters: { x: 0, y: 0, width: 200, height: 200 } },
+        { action: AssetEditAction.Rotate, parameters: { angle: 270 } },
+        { action: AssetEditAction.Mirror, parameters: { axis: 'horizontal' } },
+      ],
+    });
+    expect(assetService.removeAssetEdits).toHaveBeenCalledWith(auth, netZeroAssetId);
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        result: expect.objectContaining({
+          assetIds: [editableAssetId, netZeroAssetId],
+          assetResults: expect.arrayContaining([
+            expect.objectContaining({ id: editableAssetId, success: true }),
+            expect.objectContaining({ id: netZeroAssetId, success: true }),
+            expect.objectContaining({ id: videoAssetId, success: false, errorMessage: 'Only images can be edited' }),
+          ]),
+        }),
+        error: 'Failed to rotate 1 asset(s)',
+      }),
+    ]);
   });
 
   it('does not expose an apply path to the runner planning tools', () => {

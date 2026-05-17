@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Kysely, NotNull, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
-import { AlbumUserRole, AssetVisibility } from 'src/enum';
+import { AlbumUserRole, AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { DB } from 'src/schema';
 import { asUuid } from 'src/utils/database';
 
@@ -743,6 +743,30 @@ class SharedSpaceAccess {
       .select('shared_space_member.spaceId')
       .where('shared_space_member.spaceId', 'in', [...spaceIds])
       .where('shared_space_member.userId', '=', userId)
+      .execute()
+      .then((rows) => new Set(rows.map((row) => row.spaceId)));
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID_SET, DummyValue.STRING] })
+  @ChunkedSet({ paramIndex: 1 })
+  async checkRoleAccess(userId: string, spaceIds: Set<string>, role: SharedSpaceRole) {
+    if (spaceIds.size === 0) {
+      return new Set<string>();
+    }
+
+    const allowedRoles =
+      role === SharedSpaceRole.Owner
+        ? [SharedSpaceRole.Owner]
+        : role === SharedSpaceRole.Editor
+          ? [SharedSpaceRole.Owner, SharedSpaceRole.Editor]
+          : [SharedSpaceRole.Owner, SharedSpaceRole.Editor, SharedSpaceRole.Viewer];
+
+    return this.db
+      .selectFrom('shared_space_member')
+      .select('shared_space_member.spaceId')
+      .where('shared_space_member.spaceId', 'in', [...spaceIds])
+      .where('shared_space_member.userId', '=', userId)
+      .where('shared_space_member.role', 'in', allowedRoles)
       .execute()
       .then((rows) => new Set(rows.map((row) => row.spaceId)));
   }

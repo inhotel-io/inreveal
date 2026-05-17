@@ -1,6 +1,6 @@
 import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.dto';
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
-import { AgentToolName } from 'src/enum';
+import { AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import z from 'zod';
 
@@ -216,6 +216,26 @@ describe(AgentMcpToolRegistryService.name, () => {
         planId: expect.anything(),
       }),
     });
+  });
+
+  it('advertises expanded operation types and target kinds in planning tool schemas', () => {
+    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+    const planningSchemaJson = JSON.stringify(toolsByName.get(AgentToolName.ProposeAlbumOperations)?.inputSchema);
+
+    expect(planningSchemaJson).toContain(AgentOperationType.AlbumRemoveAssets);
+    expect(planningSchemaJson).toContain(AgentOperationType.SpaceCreate);
+    expect(planningSchemaJson).toContain(AgentOperationType.SpaceAddAssets);
+    expect(planningSchemaJson).toContain(AgentOperationType.SpaceRemoveAssets);
+    expect(planningSchemaJson).toContain(AgentOperationType.SpaceUpdateDetails);
+    expect(planningSchemaJson).toContain(AgentOperationType.AssetRotate);
+    expect(planningSchemaJson).toContain(AgentOperationType.AssetSetFavorite);
+    expect(planningSchemaJson).toContain(AgentOperationType.AssetSetArchive);
+    expect(planningSchemaJson).toContain(AgentOperationType.AssetAddTag);
+    expect(planningSchemaJson).toContain(AgentOperationType.AssetRemoveTag);
+    expect(planningSchemaJson).toContain(AgentOperationTargetKind.NewSpace);
+    expect(planningSchemaJson).toContain(AgentOperationTargetKind.ExistingSpace);
+    expect(planningSchemaJson).toContain(AgentOperationTargetKind.AssetBatch);
+    expect(planningSchemaJson).toContain(AgentOperationTargetKind.ImageEditBatch);
   });
 
   it('returns defensive copies of registry metadata', () => {
