@@ -308,7 +308,7 @@ describe('Generated agent permission contracts', () => {
     };
 
     expect(openApi.components.schemas.AgentPermissionPlan.properties.writeScope.required).toEqual(
-      expect.arrayContaining([...Object.keys(fullWriteScope)]),
+      expect.arrayContaining(Object.keys(fullWriteScope)),
     );
   });
 

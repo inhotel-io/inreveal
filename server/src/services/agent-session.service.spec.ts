@@ -334,7 +334,7 @@ describe(AgentSessionService.name, () => {
     });
   });
 
-  it('preset permission snapshots include the expanded write-scope decisions', async () => {
+  it('preset permission snapshots include the expanded write-scope decisions', () => {
     expect(AgentSessionService.permissionPresets[AgentPermissionPreset.Careful].writeScope).toEqual(carefulWriteScope);
     expect(AgentSessionService.permissionPresets[AgentPermissionPreset.VisualOrganizer].writeScope).toEqual(
       expandedWriteScope,
