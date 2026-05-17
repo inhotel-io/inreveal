@@ -920,6 +920,8 @@ export enum JobName {
   FaceIdentityMaintenanceAfterRecognition = 'FaceIdentityMaintenanceAfterRecognition',
   PersonSuggestionScanQueueAll = 'PersonSuggestionScanQueueAll',
   PersonSuggestionScan = 'PersonSuggestionScan',
+  SpacePersonSuggestionScanQueueAll = 'SpacePersonSuggestionScanQueueAll',
+  SpacePersonSuggestionScan = 'SpacePersonSuggestionScan',
 
   FileDelete = 'FileDelete',
   FileMigrationQueueAll = 'FileMigrationQueueAll',
