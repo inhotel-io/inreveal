@@ -1,7 +1,14 @@
 import {
+  AgentAlbumAddAssetsOperationType,
+  AgentAlbumCreateOperationType,
+  AgentAlbumSetCoverOperationType,
   AgentApprovalMode,
+  AgentOperationApplyStatus,
+  AgentOperationNewAlbumTargetKind,
   AgentOperationPlanStatus,
+  AgentOperationRiskLevel,
   AgentOperationStatus,
+  AgentOperationTargetKind,
   AgentOperationType,
   AgentPermissionPreset,
   AgentSessionStatus,
@@ -15,10 +22,12 @@ import {
   getAllAlbums,
   getCurrentOperationPlan,
   getToolCalls,
+  reviseProposedOperations,
   type AgentOperationPlanApplyResponseDto,
+  type AgentOperationPlanResponseDto,
   type LoginResponseDto,
 } from '@immich/sdk';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import { asBearerAuth, utils } from 'src/utils';
 
 const credentialLabel = 'E2E deterministic runner';
@@ -65,6 +74,90 @@ const startAssistantSession = async (page: Page, accessToken: string, providerCr
   return session;
 };
 
+const createLooseAssets = async (accessToken: string) =>
+  await Promise.all([
+    utils.createAsset(accessToken, {
+      fileCreatedAt: '2026-05-01T10:00:00.000Z',
+      fileModifiedAt: '2026-05-01T10:00:00.000Z',
+    }),
+    utils.createAsset(accessToken, {
+      fileCreatedAt: '2026-05-02T10:00:00.000Z',
+      fileModifiedAt: '2026-05-02T10:00:00.000Z',
+    }),
+  ]);
+
+const startPortugalPlan = async (page: Page, accessToken: string, providerCredentialId: string) => {
+  const session = await startAssistantSession(
+    page,
+    accessToken,
+    providerCredentialId,
+    'Create a Portugal trip album from my loose photos.',
+  );
+
+  await expect(page.getByText('I proposed a Portugal Trip album.')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('heading', { name: 'Plan review' })).toBeVisible();
+
+  const currentPlan = await getCurrentOperationPlan({ id: session.id }, authOptions(accessToken));
+  if (!currentPlan) {
+    throw new Error('Expected the runner to create an operation plan');
+  }
+
+  return { session, currentPlan };
+};
+
+const getPortugalDestination = (page: Page) =>
+  page.getByTestId('agent-session-chat-transcript').getByRole('region', { name: 'Portugal Trip' });
+
+const findOperation = (plan: AgentOperationPlanResponseDto, type: AgentOperationType) => {
+  const operation = plan.operations.find((operation) => operation.type === type);
+  if (!operation) {
+    throw new Error(`Expected plan to include ${type}`);
+  }
+
+  return operation;
+};
+
+const waitForApplyRequest = (page: Page, sessionId: string) =>
+  page.waitForRequest(
+    (request) =>
+      request.method() === 'POST' &&
+      request.url().includes(`/api/agent/sessions/${sessionId}/operation-plan/`) &&
+      request.url().endsWith('/apply'),
+  );
+
+const waitForApplyResponse = (page: Page, sessionId: string, status = 201) =>
+  page.waitForResponse(
+    (response) =>
+      response.url().includes(`/api/agent/sessions/${sessionId}/operation-plan/`) &&
+      response.url().endsWith('/apply') &&
+      response.status() === status,
+  );
+
+const applySelectedOperations = async (page: Page, sessionId: string, label: string) => {
+  const applyRequestPromise = waitForApplyRequest(page, sessionId);
+  const applyResponsePromise = waitForApplyResponse(page, sessionId);
+  await page.getByRole('button', { name: label }).click();
+
+  return {
+    request: await applyRequestPromise,
+    response: await applyResponsePromise,
+  };
+};
+
+const clonePlan = (plan: AgentOperationPlanResponseDto): AgentOperationPlanResponseDto => structuredClone(plan);
+
+const fulfillStaleApplyResponse = async (route: Route) => {
+  await route.fulfill({
+    status: 409,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      statusCode: 409,
+      message: 'Agent operation plan revision is stale',
+      error: 'Conflict',
+    }),
+  });
+};
+
 test.describe('Assistant album organizer', () => {
   let admin: LoginResponseDto;
   let providerCredentialId: string;
@@ -84,34 +177,16 @@ test.describe('Assistant album organizer', () => {
     context,
     page,
   }) => {
-    await Promise.all([
-      utils.createAsset(admin.accessToken, {
-        fileCreatedAt: '2026-05-01T10:00:00.000Z',
-        fileModifiedAt: '2026-05-01T10:00:00.000Z',
-      }),
-      utils.createAsset(admin.accessToken, {
-        fileCreatedAt: '2026-05-02T10:00:00.000Z',
-        fileModifiedAt: '2026-05-02T10:00:00.000Z',
-      }),
-    ]);
+    await createLooseAssets(admin.accessToken);
     await utils.setAuthCookies(context, admin.accessToken);
 
-    const session = await startAssistantSession(
-      page,
-      admin.accessToken,
-      providerCredentialId,
-      'Create a Portugal trip album from my loose photos.',
-    );
+    const { session, currentPlan } = await startPortugalPlan(page, admin.accessToken, providerCredentialId);
 
-    await expect(page.getByText('I proposed a Portugal Trip album.')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('heading', { name: 'Plan review' })).toBeVisible();
     await expect(page.getByText('Create Portugal Trip and add 2 loose assets.')).toBeVisible();
     await expect(page.getByText('1 destination')).toBeVisible();
     await expect(page.getByText('3 selected changes')).toBeVisible();
 
-    const portugalDestination = page
-      .getByTestId('agent-session-chat-transcript')
-      .getByRole('region', { name: 'Portugal Trip' });
+    const portugalDestination = getPortugalDestination(page);
     await expect(portugalDestination).toBeVisible();
     const thumbnailStrip = portugalDestination.getByTestId('agent-plan-thumbnail-strip');
     await expect(thumbnailStrip).toBeVisible();
@@ -126,20 +201,9 @@ test.describe('Assistant album organizer', () => {
     await expect(page.getByText('Add selected photos to Portugal Trip')).toHaveCount(0);
     await expect(page.getByText('Use first photo as Portugal Trip cover')).toHaveCount(0);
 
-    const currentPlan = await getCurrentOperationPlan({ id: session.id }, authOptions(admin.accessToken));
-    if (!currentPlan) {
-      throw new Error('Expected the runner to create an operation plan');
-    }
-    const proposedAddOperation = currentPlan.operations.find(
-      (operation) => operation.type === AgentOperationType.AlbumAddAssets,
-    );
-    const proposedCreateOperation = currentPlan.operations.find(
-      (operation) => operation.type === AgentOperationType.AlbumCreate,
-    );
+    const proposedAddOperation = findOperation(currentPlan, AgentOperationType.AlbumAddAssets);
+    const proposedCreateOperation = findOperation(currentPlan, AgentOperationType.AlbumCreate);
     expect(proposedAddOperation?.id).toEqual(expect.any(String));
-    if (!proposedCreateOperation) {
-      throw new Error('Expected the runner to propose an album create operation');
-    }
     expect(proposedCreateOperation.id).toEqual(expect.any(String));
     const excludedAssetId = proposedAddOperation!.assetIds[1];
     expect(excludedAssetId).toEqual(expect.any(String));
@@ -149,7 +213,7 @@ test.describe('Assistant album organizer', () => {
     await expect(portugalDestination.getByText('Create album "Portugal Favorites"')).toBeVisible();
 
     await expect(page.getByText(proposedAddOperation!.id)).toHaveCount(0);
-    await portugalDestination.getByText('Details').nth(1).click();
+    await portugalDestination.getByRole('button', { name: 'Show technical details' }).nth(1).click();
     await expect(page.getByText(proposedAddOperation!.id)).toBeVisible();
 
     await portugalDestination.getByRole('checkbox', { name: 'Include photo 2' }).uncheck();
@@ -157,20 +221,11 @@ test.describe('Assistant album organizer', () => {
     await page.getByLabel('Set cover photo').uncheck();
     await expect(page.getByRole('button', { name: 'Apply 2 selected' })).toBeEnabled();
 
-    const applyRequestPromise = page.waitForRequest(
-      (request) =>
-        request.method() === 'POST' &&
-        request.url().includes(`/api/agent/sessions/${session.id}/operation-plan/`) &&
-        request.url().endsWith('/apply'),
+    const { request: applyRequest, response: applyResponse } = await applySelectedOperations(
+      page,
+      session.id,
+      'Apply 2 selected',
     );
-    const applyResponsePromise = page.waitForResponse(
-      (response) =>
-        response.url().includes(`/api/agent/sessions/${session.id}/operation-plan/`) &&
-        response.url().endsWith('/apply') &&
-        response.status() === 201,
-    );
-    await page.getByRole('button', { name: 'Apply 2 selected' }).click();
-    const applyRequest = await applyRequestPromise;
     expect(applyRequest.postDataJSON()).toMatchObject({
       operationIds: expect.arrayContaining([proposedAddOperation!.id]),
       itemSelections: {
@@ -188,10 +243,12 @@ test.describe('Assistant album organizer', () => {
       },
       planRevision: currentPlan.revision,
     });
-    const applyResponse = await applyResponsePromise;
     const { plan: appliedPlan } = (await applyResponse.json()) as AgentOperationPlanApplyResponseDto;
 
     await expect(page.getByText('Applied 2 operations. 0 failed.')).toBeVisible();
+    await expect(portugalDestination.getByText('Applied')).toBeVisible();
+    await expect(portugalDestination.getByText('Skipped')).toBeVisible();
+    await expect(page.getByText('0 failed')).toBeVisible();
     expect(appliedPlan.status).toBe(AgentOperationPlanStatus.Applied);
     await expect
       .poll(
@@ -227,6 +284,265 @@ test.describe('Assistant album organizer', () => {
     expect(album.albumName).toBe('Portugal Favorites');
     expect(album.description).toBe('Curated favorites from the trip.');
     expect(album.assetCount).toBe(1);
+  });
+
+  test('keeps technical operation details hidden until the user opens details', async ({ context, page }) => {
+    await createLooseAssets(admin.accessToken);
+    await utils.setAuthCookies(context, admin.accessToken);
+
+    const { currentPlan } = await startPortugalPlan(page, admin.accessToken, providerCredentialId);
+    const addOperation = findOperation(currentPlan, AgentOperationType.AlbumAddAssets);
+    const portugalDestination = getPortugalDestination(page);
+
+    await expect(page.getByText(addOperation.id)).toHaveCount(0);
+    await portugalDestination.getByRole('button', { name: 'Show technical details' }).nth(1).click();
+    await expect(page.getByText(addOperation.id)).toBeVisible();
+    await portugalDestination.getByRole('button', { name: 'Hide technical details' }).click();
+    await expect(page.getByText(addOperation.id)).toHaveCount(0);
+  });
+
+  test('supports mobile item review expansion, excluding one photo, and applying a sparse selection', async ({
+    context,
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await createLooseAssets(admin.accessToken);
+    await utils.setAuthCookies(context, admin.accessToken);
+
+    const { session, currentPlan } = await startPortugalPlan(page, admin.accessToken, providerCredentialId);
+    const addOperation = findOperation(currentPlan, AgentOperationType.AlbumAddAssets);
+    const excludedAssetId = addOperation.assetIds[1];
+    const portugalDestination = getPortugalDestination(page);
+
+    await portugalDestination.getByRole('button', { name: 'Show technical details' }).nth(1).click();
+    await expect(portugalDestination.getByRole('checkbox', { name: 'Include photo 2' })).toBeVisible();
+    await portugalDestination.getByRole('checkbox', { name: 'Include photo 2' }).uncheck();
+    await expect(portugalDestination.getByText('1 of 2 photos selected')).toHaveCount(2);
+    await page.getByLabel('Set cover photo').uncheck();
+    await expect(page.getByRole('button', { name: 'Apply 2 selected' })).toBeEnabled();
+
+    const { request: applyRequest } = await applySelectedOperations(page, session.id, 'Apply 2 selected');
+
+    expect(applyRequest.postDataJSON()).toMatchObject({
+      operationIds: expect.arrayContaining([addOperation.id]),
+      itemSelections: {
+        [addOperation.id]: {
+          itemKind: 'asset',
+          mode: 'allExcept',
+          itemIds: [excludedAssetId],
+        },
+      },
+      planRevision: currentPlan.revision,
+    });
+    await expect(page.getByText('Applied 2 operations. 0 failed.')).toBeVisible();
+  });
+
+  test('supersedes an older plan revision and applies only the latest revised plan', async ({ context, page }) => {
+    await createLooseAssets(admin.accessToken);
+    await utils.setAuthCookies(context, admin.accessToken);
+
+    const { session, currentPlan: oldPlan } = await startPortugalPlan(page, admin.accessToken, providerCredentialId);
+    const oldAddOperation = findOperation(oldPlan, AgentOperationType.AlbumAddAssets);
+    const [coverAssetId] = oldAddOperation.assetIds;
+
+    await reviseProposedOperations(
+      {
+        id: session.id,
+        planId: oldPlan.id,
+        agentReviseAlbumOperationsDto: {
+          summary: 'Create Portugal Highlights and add 2 loose assets.',
+          feedback: 'Use a shorter album name before applying.',
+          operations: [
+            {
+              type: AgentAlbumCreateOperationType.AlbumCreate,
+              summary: 'Create Portugal Highlights',
+              targetKind: AgentOperationNewAlbumTargetKind.NewAlbum,
+              temporaryTargetId: 'portugal-highlights',
+              riskLevel: AgentOperationRiskLevel.Low,
+              enabled: true,
+              payload: {
+                albumName: 'Portugal Highlights',
+                description: 'Revised by the deterministic e2e assistant.',
+              },
+            },
+            {
+              type: AgentAlbumAddAssetsOperationType.AlbumAddAssets,
+              summary: 'Add selected photos to Portugal Highlights',
+              targetKind: AgentOperationTargetKind.NewAlbum,
+              temporaryTargetId: 'portugal-highlights',
+              assetIds: oldAddOperation.assetIds,
+              riskLevel: AgentOperationRiskLevel.Medium,
+              enabled: true,
+              payload: {},
+            },
+            {
+              type: AgentAlbumSetCoverOperationType.AlbumSetCover,
+              summary: 'Use first photo as Portugal Highlights cover',
+              targetKind: AgentOperationTargetKind.NewAlbum,
+              temporaryTargetId: 'portugal-highlights',
+              assetIds: [coverAssetId],
+              riskLevel: AgentOperationRiskLevel.Low,
+              enabled: true,
+              payload: {},
+            },
+          ],
+        },
+      },
+      authOptions(admin.accessToken),
+    );
+
+    await expect(page.getByText('Create Portugal Highlights and add 2 loose assets.')).toBeVisible();
+    await expect(page.getByText('Create Portugal Trip and add 2 loose assets.')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Apply 3 selected' })).toBeEnabled();
+
+    const latestPlan = await getCurrentOperationPlan({ id: session.id }, authOptions(admin.accessToken));
+    if (!latestPlan) {
+      throw new Error('Expected a revised operation plan');
+    }
+    expect(latestPlan.id).not.toBe(oldPlan.id);
+    expect(latestPlan.revision).toBeGreaterThan(oldPlan.revision);
+
+    const { request: applyRequest } = await applySelectedOperations(page, session.id, 'Apply 3 selected');
+    expect(applyRequest.url()).toContain(`/operation-plan/${latestPlan.id}/apply`);
+    expect(applyRequest.url()).not.toContain(`/operation-plan/${oldPlan.id}/apply`);
+    expect(applyRequest.postDataJSON()).toMatchObject({ planRevision: latestPlan.revision });
+    await expect(page.getByText('Applied 3 operations. 0 failed.')).toBeVisible();
+  });
+
+  test('shows thumbnail fallback when a mounted thumbnail request fails while keeping the plan applicable', async ({
+    context,
+    page,
+  }) => {
+    await createLooseAssets(admin.accessToken);
+    await utils.setAuthCookies(context, admin.accessToken);
+
+    let failedOneThumbnail = false;
+    const thumbnailRoute = '**/api/assets/*/thumbnail?*';
+    const thumbnailHandler = async (route: Route) => {
+      if (!failedOneThumbnail) {
+        failedOneThumbnail = true;
+        await route.fulfill({ status: 404, body: 'thumbnail missing' });
+        return;
+      }
+
+      await route.continue();
+    };
+    await page.route(thumbnailRoute, thumbnailHandler);
+
+    try {
+      const { session } = await startPortugalPlan(page, admin.accessToken, providerCredentialId);
+      const portugalDestination = getPortugalDestination(page);
+      await expect(portugalDestination.getByText('Preview unavailable')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Apply 3 selected' })).toBeEnabled();
+
+      await applySelectedOperations(page, session.id, 'Apply 3 selected');
+      await expect(page.getByText('Applied 3 operations. 0 failed.')).toBeVisible();
+    } finally {
+      await page.unroute(thumbnailRoute, thumbnailHandler);
+    }
+  });
+
+  test('keeps the visible plan after a stale apply response and tells the user to review the latest plan', async ({
+    context,
+    page,
+  }) => {
+    await createLooseAssets(admin.accessToken);
+    await utils.setAuthCookies(context, admin.accessToken);
+
+    const { session } = await startPortugalPlan(page, admin.accessToken, providerCredentialId);
+    const applyRoute = `**/api/agent/sessions/${session.id}/operation-plan/*/apply`;
+    const applyHandler = fulfillStaleApplyResponse;
+    await page.route(applyRoute, applyHandler);
+
+    try {
+      const applyResponsePromise = waitForApplyResponse(page, session.id, 409);
+      await page.getByRole('button', { name: 'Apply 3 selected' }).click();
+      await applyResponsePromise;
+
+      await expect(page.getByText('This plan changed. Review the latest plan before applying.')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Plan review' })).toBeVisible();
+      await expect(page.getByText('Create Portugal Trip and add 2 loose assets.')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Apply 3 selected' })).toBeEnabled();
+    } finally {
+      await page.unroute(applyRoute, applyHandler);
+    }
+  });
+
+  test('renders partial apply states while keeping operation IDs hidden until details are opened', async ({
+    context,
+    page,
+  }) => {
+    await createLooseAssets(admin.accessToken);
+    await utils.setAuthCookies(context, admin.accessToken);
+
+    const { session, currentPlan } = await startPortugalPlan(page, admin.accessToken, providerCredentialId);
+    const createOperation = findOperation(currentPlan, AgentOperationType.AlbumCreate);
+    const addOperation = findOperation(currentPlan, AgentOperationType.AlbumAddAssets);
+    const coverOperation = findOperation(currentPlan, AgentOperationType.AlbumSetCover);
+    const partialPlan = clonePlan(currentPlan);
+    partialPlan.status = AgentOperationPlanStatus.Applied;
+    partialPlan.operations = partialPlan.operations.map((operation) => {
+      if (operation.id === createOperation.id) {
+        return { ...operation, status: AgentOperationStatus.Applied, result: { albumId: 'partial-album-id' } };
+      }
+
+      if (operation.id === addOperation.id) {
+        return {
+          ...operation,
+          status: AgentOperationStatus.Failed,
+          error: 'One photo could not be added',
+          result: {
+            assetResults: [
+              { id: addOperation.assetIds[0], success: true },
+              { id: addOperation.assetIds[1], success: false, error: 'Asset write failed' },
+            ],
+          },
+        };
+      }
+
+      if (operation.id === coverOperation.id) {
+        return {
+          ...operation,
+          status: AgentOperationStatus.Skipped,
+          result: { skippedReason: 'Skipped after add-assets failure' },
+        };
+      }
+
+      return operation;
+    });
+
+    const applyRoute = `**/api/agent/sessions/${session.id}/operation-plan/${currentPlan.id}/apply`;
+    const applyHandler = async (route: Route) => {
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: AgentOperationApplyStatus.PartiallyApplied,
+          summary: 'Applied 1 operation. Skipped 1. Failed 1.',
+          appliedOperationIds: [createOperation.id],
+          skippedOperationIds: [coverOperation.id],
+          failedOperationIds: [addOperation.id],
+          plan: partialPlan,
+        } satisfies AgentOperationPlanApplyResponseDto),
+      });
+    };
+    await page.route(applyRoute, applyHandler);
+
+    try {
+      await expect(page.getByText(addOperation.id)).toHaveCount(0);
+      await page.getByRole('button', { name: 'Apply 3 selected' }).click();
+      await expect(page.getByText('Applied 1 operations. 1 failed.')).toBeVisible();
+      await expect(page.getByText('1 applied · 1 skipped · 1 failed. Review details before continuing.')).toBeVisible();
+      await expect(getPortugalDestination(page).getByText('Applied')).toBeVisible();
+      await expect(getPortugalDestination(page).getByText('Partially applied')).toBeVisible();
+      await expect(getPortugalDestination(page).getByText('Skipped')).toBeVisible();
+      await expect(page.getByText(addOperation.id)).toHaveCount(0);
+
+      await getPortugalDestination(page).getByRole('button', { name: 'Show technical details' }).nth(1).click();
+      await expect(page.getByText(addOperation.id)).toBeVisible();
+    } finally {
+      await page.unroute(applyRoute, applyHandler);
+    }
   });
 
   test('surfaces and audits a denied runner proposal without creating a plan or album', async ({ context, page }) => {
