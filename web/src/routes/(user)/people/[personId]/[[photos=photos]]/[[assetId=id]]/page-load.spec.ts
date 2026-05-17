@@ -13,7 +13,7 @@ vi.mock('$lib/utils/i18n', () => ({ getFormatter }));
 <<<<<<< ours
 ||||||| base
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
-import { Type, type PersonResponseDto } from '@immich/sdk';
+import { Type5 as Type, type PersonResponseDto } from '@immich/sdk';
 import { load } from './+page';
 
 =======
