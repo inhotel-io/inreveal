@@ -17,11 +17,14 @@ import {
   buildOperationReviewImpactSummary,
   buildOperationReviewModel,
   buildSelectionPayload,
+  createInitialOperationFieldOverrideState,
   createInitialOperationEnabledState,
   createInitialOperationItemSelectionState,
   type OperationFieldOverrideState,
   getOperationAssetCount,
+  resetOperationFieldOverride,
   resetOperationItemSelection,
+  setOperationFieldOverride,
   setOperationItemSelection,
 } from './agent-operation-plan-ui';
 
@@ -475,6 +478,10 @@ describe('agent operation plan UI helpers', () => {
       expect.objectContaining({
         id: 'new-album:album-portugal',
         title: 'New album "Portugal highlights"',
+        destination: expect.objectContaining({
+          name: 'Portugal highlights',
+          title: 'Portugal highlights',
+        }),
       }),
     );
     expect(model.operationsById.get(updateId)?.summary).toBe('Rename album to "Portugal Archive"');
@@ -579,6 +586,14 @@ describe('agent operation plan UI helpers', () => {
       albumName: 'Album name is required.',
       description: 'Description must be 1,000 characters or fewer.',
     });
+    expect(model.fieldErrors).toEqual([
+      { operationId: updateId, fieldKey: 'albumName', message: 'Album name is required.' },
+      {
+        operationId: updateId,
+        fieldKey: 'description',
+        message: 'Description must be 1,000 characters or fewer.',
+      },
+    ]);
     expect(model.operationsById.get(updateId)?.enabled).toBe(false);
     expect(buildSelectionPayload(model)).toEqual({ planId, planRevision: 1, operationIds: [] });
 
@@ -599,6 +614,51 @@ describe('agent operation plan UI helpers', () => {
     );
 
     expect(buildSelectionPayload(unchangedModel)).toEqual({ planId, planRevision: 1, operationIds: [updateId] });
+  });
+
+  it('builds and resets sparse field override state', () => {
+    const currentPlan = plan([
+      operation({
+        id: createId,
+        type: AgentOperationType.AlbumCreate,
+        summary: 'Create Portugal album',
+        targetKind: AgentOperationTargetKind.NewAlbum,
+        temporaryTargetId: 'album-portugal',
+        payload: { albumName: 'Portugal', description: 'Lisbon and Porto' },
+      }),
+      operation({
+        id: updateId,
+        type: AgentOperationType.AlbumUpdateDetails,
+        summary: 'Update details',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: '00000000-0000-4000-8000-000000000301',
+        payload: { albumName: 'Portugal Archive' },
+      }),
+    ]);
+    const initialState = createInitialOperationFieldOverrideState(currentPlan);
+    const editedState = setOperationFieldOverride(
+      setOperationFieldOverride(
+        setOperationFieldOverride(initialState, createId, 'albumName', 'Portugal highlights'),
+        createId,
+        'description',
+        'Edited description',
+      ),
+      updateId,
+      'description',
+      'Keep this override',
+    );
+
+    expect(editedState).toEqual({
+      [createId]: { albumName: 'Portugal highlights', description: 'Edited description' },
+      [updateId]: { description: 'Keep this override' },
+    });
+    expect(resetOperationFieldOverride(editedState, createId, 'description')).toEqual({
+      [createId]: { albumName: 'Portugal highlights' },
+      [updateId]: { description: 'Keep this override' },
+    });
+    expect(resetOperationFieldOverride(editedState, createId)).toEqual({
+      [updateId]: { description: 'Keep this override' },
+    });
   });
 
   it('builds sparse allExcept payloads and mixed selection counts after excluding one asset', () => {
