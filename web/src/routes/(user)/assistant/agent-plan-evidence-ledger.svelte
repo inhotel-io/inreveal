@@ -59,7 +59,11 @@
   );
 </script>
 
-<div class="flex flex-col gap-4">
+<div
+  class="flex flex-col gap-4"
+  role={showHeader ? 'region' : undefined}
+  aria-labelledby={showHeader ? 'assistant-operation-plan-title' : undefined}
+>
   {#if showHeader}
     <header class="flex flex-col gap-3 border-b border-gray-200 pb-4 dark:border-gray-800">
       <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
