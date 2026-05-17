@@ -248,6 +248,7 @@ DELETE FROM "migration_overrides"
    'trigger_face_identity_updatedAt',
    'trigger_library_after_insert',
    'trigger_library_user_delete_after_audit',
+   'trigger_person_face_suggestion_updatedAt',
    'trigger_shared_space_face_match_backfill_target_updatedAt',
    'trigger_shared_space_asset_delete_audit',
    'trigger_shared_space_asset_updatedAt',
@@ -387,6 +388,7 @@ DELETE FROM "kysely_migrations"
    '1783100000000-AddAlbumSpaceAssetSyncAndAudit',
    '1783628194057-DisablePostgresJit',
    '1783700000000-FixSharedSpaceMemberJoinGrantCreateId',
+   '1779000000000-AddSpacePersonFaceSuggestion',
    '1784800000000-RepairSharedSpaceAlbumGrantDrift',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
