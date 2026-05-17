@@ -1,7 +1,7 @@
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
-import { Type, type PersonResponseDto, type PersonStatisticsResponseDto } from '@immich/sdk';
+import { Type5 as Type, type PersonResponseDto, type PersonStatisticsResponseDto } from '@immich/sdk';
 import { modalManager } from '@immich/ui';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';

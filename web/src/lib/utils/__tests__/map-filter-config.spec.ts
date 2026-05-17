@@ -1,5 +1,5 @@
 import { buildMapFilterConfig } from '$lib/utils/map-filter-config';
-import { getFilterSuggestions, getSearchSuggestions, Type } from '@immich/sdk';
+import { getFilterSuggestions, getSearchSuggestions, Type5 as Type } from '@immich/sdk';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@immich/sdk', async (importOriginal) => {

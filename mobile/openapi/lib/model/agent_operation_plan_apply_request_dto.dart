@@ -13,10 +13,13 @@ part of openapi.api;
 class AgentOperationPlanApplyRequestDto {
   /// Returns a new [AgentOperationPlanApplyRequestDto] instance.
   AgentOperationPlanApplyRequestDto({
+    this.fieldOverrides = const {},
     this.itemSelections = const {},
     this.operationIds = const [],
     this.planRevision,
   });
+
+  Map<String, Map<String, Object>> fieldOverrides;
 
   Map<String, AgentOperationItemSelection> itemSelections;
 
@@ -34,6 +37,7 @@ class AgentOperationPlanApplyRequestDto {
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentOperationPlanApplyRequestDto &&
+    _deepEquality.equals(other.fieldOverrides, fieldOverrides) &&
     _deepEquality.equals(other.itemSelections, itemSelections) &&
     _deepEquality.equals(other.operationIds, operationIds) &&
     other.planRevision == planRevision;
@@ -41,15 +45,17 @@ class AgentOperationPlanApplyRequestDto {
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
+    (fieldOverrides.hashCode) +
     (itemSelections.hashCode) +
     (operationIds.hashCode) +
     (planRevision == null ? 0 : planRevision!.hashCode);
 
   @override
-  String toString() => 'AgentOperationPlanApplyRequestDto[itemSelections=$itemSelections, operationIds=$operationIds, planRevision=$planRevision]';
+  String toString() => 'AgentOperationPlanApplyRequestDto[fieldOverrides=$fieldOverrides, itemSelections=$itemSelections, operationIds=$operationIds, planRevision=$planRevision]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+      json[r'fieldOverrides'] = this.fieldOverrides;
       json[r'itemSelections'] = this.itemSelections;
       json[r'operationIds'] = this.operationIds;
     if (this.planRevision != null) {
@@ -69,6 +75,7 @@ class AgentOperationPlanApplyRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentOperationPlanApplyRequestDto(
+        fieldOverrides: Object.mapFromJson(json[r'fieldOverrides']),
         itemSelections: AgentOperationItemSelection.mapFromJson(json[r'itemSelections']),
         operationIds: json[r'operationIds'] is Iterable
             ? (json[r'operationIds'] as Iterable).cast<String>().toList(growable: false)

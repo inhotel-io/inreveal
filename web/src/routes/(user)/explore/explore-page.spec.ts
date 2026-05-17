@@ -1,5 +1,5 @@
 import TestWrapper from '$lib/components/TestWrapper.svelte';
-import { Type, type PersonResponseDto, type SearchExploreResponseDto } from '@immich/sdk';
+import { Type5 as Type, type PersonResponseDto, type SearchExploreResponseDto } from '@immich/sdk';
 import { personFactory } from '@test-data/factories/person-factory';
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/svelte';

@@ -24,10 +24,18 @@ class AgentOperationItemKind {
   String toJson() => value;
 
   static const asset = AgentOperationItemKind._(r'asset');
+  static const album = AgentOperationItemKind._(r'album');
+  static const space = AgentOperationItemKind._(r'space');
+  static const person = AgentOperationItemKind._(r'person');
+  static const tag = AgentOperationItemKind._(r'tag');
 
   /// List of all possible values in this [enum][AgentOperationItemKind].
   static const values = <AgentOperationItemKind>[
     asset,
+    album,
+    space,
+    person,
+    tag,
   ];
 
   static AgentOperationItemKind? fromJson(dynamic value) => AgentOperationItemKindTypeTransformer().decode(value);
@@ -67,6 +75,10 @@ class AgentOperationItemKindTypeTransformer {
     if (data != null) {
       switch (data) {
         case r'asset': return AgentOperationItemKind.asset;
+        case r'album': return AgentOperationItemKind.album;
+        case r'space': return AgentOperationItemKind.space;
+        case r'person': return AgentOperationItemKind.person;
+        case r'tag': return AgentOperationItemKind.tag;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');

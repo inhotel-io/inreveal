@@ -23,17 +23,37 @@ class AgentOperationType {
 
   String toJson() => value;
 
-  static const create = AgentOperationType._(r'album.create');
-  static const addAssets = AgentOperationType._(r'album.addAssets');
-  static const updateDetails = AgentOperationType._(r'album.updateDetails');
-  static const setCover = AgentOperationType._(r'album.setCover');
+  static const albumPeriodCreate = AgentOperationType._(r'album.create');
+  static const albumPeriodAddAssets = AgentOperationType._(r'album.addAssets');
+  static const albumPeriodRemoveAssets = AgentOperationType._(r'album.removeAssets');
+  static const albumPeriodUpdateDetails = AgentOperationType._(r'album.updateDetails');
+  static const albumPeriodSetCover = AgentOperationType._(r'album.setCover');
+  static const spacePeriodCreate = AgentOperationType._(r'space.create');
+  static const spacePeriodAddAssets = AgentOperationType._(r'space.addAssets');
+  static const spacePeriodRemoveAssets = AgentOperationType._(r'space.removeAssets');
+  static const spacePeriodUpdateDetails = AgentOperationType._(r'space.updateDetails');
+  static const assetPeriodRotate = AgentOperationType._(r'asset.rotate');
+  static const assetPeriodSetFavorite = AgentOperationType._(r'asset.setFavorite');
+  static const assetPeriodSetArchive = AgentOperationType._(r'asset.setArchive');
+  static const assetPeriodAddTag = AgentOperationType._(r'asset.addTag');
+  static const assetPeriodRemoveTag = AgentOperationType._(r'asset.removeTag');
 
   /// List of all possible values in this [enum][AgentOperationType].
   static const values = <AgentOperationType>[
-    create,
-    addAssets,
-    updateDetails,
-    setCover,
+    albumPeriodCreate,
+    albumPeriodAddAssets,
+    albumPeriodRemoveAssets,
+    albumPeriodUpdateDetails,
+    albumPeriodSetCover,
+    spacePeriodCreate,
+    spacePeriodAddAssets,
+    spacePeriodRemoveAssets,
+    spacePeriodUpdateDetails,
+    assetPeriodRotate,
+    assetPeriodSetFavorite,
+    assetPeriodSetArchive,
+    assetPeriodAddTag,
+    assetPeriodRemoveTag,
   ];
 
   static AgentOperationType? fromJson(dynamic value) => AgentOperationTypeTypeTransformer().decode(value);
@@ -72,10 +92,20 @@ class AgentOperationTypeTypeTransformer {
   AgentOperationType? decode(dynamic data, {bool allowNull = true}) {
     if (data != null) {
       switch (data) {
-        case r'album.create': return AgentOperationType.create;
-        case r'album.addAssets': return AgentOperationType.addAssets;
-        case r'album.updateDetails': return AgentOperationType.updateDetails;
-        case r'album.setCover': return AgentOperationType.setCover;
+        case r'album.create': return AgentOperationType.albumPeriodCreate;
+        case r'album.addAssets': return AgentOperationType.albumPeriodAddAssets;
+        case r'album.removeAssets': return AgentOperationType.albumPeriodRemoveAssets;
+        case r'album.updateDetails': return AgentOperationType.albumPeriodUpdateDetails;
+        case r'album.setCover': return AgentOperationType.albumPeriodSetCover;
+        case r'space.create': return AgentOperationType.spacePeriodCreate;
+        case r'space.addAssets': return AgentOperationType.spacePeriodAddAssets;
+        case r'space.removeAssets': return AgentOperationType.spacePeriodRemoveAssets;
+        case r'space.updateDetails': return AgentOperationType.spacePeriodUpdateDetails;
+        case r'asset.rotate': return AgentOperationType.assetPeriodRotate;
+        case r'asset.setFavorite': return AgentOperationType.assetPeriodSetFavorite;
+        case r'asset.setArchive': return AgentOperationType.assetPeriodSetArchive;
+        case r'asset.addTag': return AgentOperationType.assetPeriodAddTag;
+        case r'asset.removeTag': return AgentOperationType.assetPeriodRemoveTag;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');

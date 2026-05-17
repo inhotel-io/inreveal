@@ -6,7 +6,7 @@ import {
   mapSmartSearchFacetsToFilterSuggestions,
   SEARCH_FILTER_DEBOUNCE_MS,
 } from '$lib/utils/space-search';
-import { AssetOrder, AssetTypeEnum, Type } from '@immich/sdk';
+import { AssetOrder, AssetTypeEnum, Type5 as Type } from '@immich/sdk';
 import { describe, expect, it } from 'vitest';
 
 const baseFilters: FilterState = {
