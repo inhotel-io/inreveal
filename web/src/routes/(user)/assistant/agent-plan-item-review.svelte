@@ -3,23 +3,87 @@
   import { AssetMediaSize } from '@immich/sdk';
   import { t } from 'svelte-i18n';
   import {
-    buildAgentPlanItemReviewAssetIds,
-    isAssetSelectedForOperation,
-    type OperationReviewItem,
-  } from './agent-operation-plan-ui';
+    buildAgentPlanItemVirtualWindow,
+    buildAgentPlanReviewAssets,
+    filterAgentPlanReviewAssets,
+    getAgentPlanAvailableFilterFacets,
+    type AgentPlanItemFilterState,
+    type AgentPlanReviewAssetMetadata,
+  } from './agent-plan-large-item-review-ui';
+  import { isAssetSelectedForOperation, type OperationReviewItem } from './agent-operation-plan-ui';
+
+  const DEFAULT_VIEWPORT_HEIGHT = 420;
+  const DEFAULT_ITEM_SIZE = 104;
+  const DEFAULT_COLUMN_COUNT = 6;
+  const DEFAULT_OVERSCAN_ROWS = 2;
 
   interface Props {
     item: OperationReviewItem;
     canChangeSelection: boolean;
     onToggleItem: (operationId: string, assetId: string, selected: boolean) => void;
+    onBulkSetItems: (operationId: string, assetIds: string[], selected: boolean) => void;
+    onSetOnlyItems: (operationId: string, assetIds: string[]) => void;
     onResetSelection: (operationId: string) => void;
+    metadataByAssetId?: Record<string, AgentPlanReviewAssetMetadata>;
+    viewportHeight?: number;
+    itemSize?: number;
+    columnCount?: number;
+    overscanRows?: number;
   }
 
-  let { item, canChangeSelection, onToggleItem, onResetSelection }: Props = $props();
-  let failedAssetIds = $state(new Set<string>());
+  let {
+    item,
+    canChangeSelection,
+    onToggleItem,
+    onBulkSetItems = () => undefined,
+    onSetOnlyItems = () => undefined,
+    onResetSelection,
+    metadataByAssetId = {},
+    viewportHeight = DEFAULT_VIEWPORT_HEIGHT,
+    itemSize = DEFAULT_ITEM_SIZE,
+    columnCount = DEFAULT_COLUMN_COUNT,
+    overscanRows = DEFAULT_OVERSCAN_ROWS,
+  }: Props = $props();
 
-  const visibleAssetIds = $derived(buildAgentPlanItemReviewAssetIds(item));
-  const overflowCount = $derived(Math.max(item.review.selection.totalCount - visibleAssetIds.length, 0));
+  let failedAssetIds = $state(new Set<string>());
+  let filter = $state<AgentPlanItemFilterState>({ query: '', kind: 'all' });
+  let scrollTop = $state(0);
+  let gridElement: HTMLDivElement | undefined = $state();
+
+  const reviewAssets = $derived(buildAgentPlanReviewAssets(item.operation.assetIds, metadataByAssetId));
+  const reviewAssetById = $derived(new Map(reviewAssets.map((asset) => [asset.id, asset])));
+  const filteredAssets = $derived(filterAgentPlanReviewAssets(reviewAssets, filter));
+  const filteredAssetIds = $derived(filteredAssets.map((asset) => asset.id));
+  const facets = $derived(getAgentPlanAvailableFilterFacets(reviewAssets));
+  const videoAssetIds = $derived(reviewAssets.filter((asset) => asset.kind === 'video').map((asset) => asset.id));
+  const virtualWindow = $derived(
+    buildAgentPlanItemVirtualWindow({
+      assetIds: filteredAssetIds,
+      scrollTop,
+      viewportHeight,
+      itemSize,
+      columnCount,
+      overscanRows,
+    }),
+  );
+
+  const resetGridScroll = () => {
+    scrollTop = 0;
+    if (gridElement) {
+      gridElement.scrollTop = 0;
+    }
+  };
+
+  const setFilter = (nextFilter: AgentPlanItemFilterState) => {
+    filter = nextFilter;
+    resetGridScroll();
+  };
+
+  const setQuery = (query: string) => setFilter({ ...filter, query });
+  const setKind = (kind: AgentPlanItemFilterState['kind']) => setFilter({ ...filter, kind });
+
+  const toggleQuickFilter = (quickFilter: NonNullable<AgentPlanItemFilterState['quickFilter']>) =>
+    setFilter({ ...filter, quickFilter: filter.quickFilter === quickFilter ? undefined : quickFilter });
 
   const markFailed = (assetId: string) => {
     if (failedAssetIds.has(assetId)) {
@@ -27,6 +91,11 @@
     }
 
     failedAssetIds = new Set([...failedAssetIds, assetId]);
+  };
+
+  const getAssetAlt = (assetId: string) => {
+    const asset = reviewAssetById.get(assetId);
+    return asset?.filename ?? asset?.label ?? assetId;
   };
 </script>
 
@@ -62,50 +131,165 @@
       {/if}
     </div>
 
-    <div class="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8">
-      {#each visibleAssetIds as assetId, index (assetId)}
-        {@const selected = isAssetSelectedForOperation(item, assetId)}
-        <label
-          class="group relative aspect-square overflow-hidden rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
-        >
-          <img
-            class="size-full object-cover opacity-100"
-            class:opacity-40={!selected}
-            data-testid="agent-plan-item-review-image"
-            src={getAssetMediaUrl({ id: assetId, size: AssetMediaSize.Thumbnail })}
-            alt={$t('assistant_operation_item_thumbnail_alt', {
-              values: { index: index + 1, count: item.review.selection.totalCount },
-            })}
-            loading="lazy"
-            draggable="false"
-            onerror={() => markFailed(assetId)}
-          />
-          {#if failedAssetIds.has(assetId)}
-            <span
-              class="absolute inset-0 flex items-center justify-center bg-gray-200 px-1 text-center text-[10px] leading-tight text-gray-600 dark:bg-gray-800 dark:text-gray-300"
-            >
-              {$t('assistant_operation_item_thumbnail_unavailable')}
-            </span>
-          {/if}
-          <input
-            class="absolute left-1.5 top-1.5 size-4"
-            type="checkbox"
-            aria-label={$t('assistant_operation_item_toggle', { values: { index: index + 1 } })}
-            checked={selected}
-            disabled={!canChangeSelection}
-            onchange={(event) => onToggleItem(item.id, assetId, event.currentTarget.checked)}
-          />
-        </label>
-      {/each}
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+      <input
+        class="min-w-48 flex-1 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 placeholder:text-gray-400 focus:border-immich-primary focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
+        type="search"
+        aria-label={$t('assistant_operation_item_filter_label')}
+        placeholder={$t('assistant_operation_item_filter_placeholder')}
+        value={filter.query}
+        oninput={(event) => setQuery(event.currentTarget.value)}
+      />
 
-      {#if overflowCount > 0}
-        <div
-          class="flex aspect-square items-center justify-center rounded-md border border-gray-200 bg-gray-100 px-2 text-center text-sm font-medium text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-          aria-label={$t('assistant_operation_item_overflow_label', { values: { count: overflowCount } })}
-        >
-          {$t('assistant_operation_item_overflow', { values: { count: overflowCount } })}
+      {#if facets.hasKind}
+        <div class="flex rounded-md border border-gray-200 bg-white p-0.5 dark:border-gray-700 dark:bg-gray-900">
+          {#each [
+            ['all', 'assistant_operation_item_media_all'],
+            ['image', 'assistant_operation_item_media_photos'],
+            ['video', 'assistant_operation_item_media_videos'],
+          ] as [kind, labelKey]}
+            <button
+              type="button"
+              class="rounded px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 aria-pressed:bg-immich-primary/10 aria-pressed:text-immich-primary dark:text-gray-300 dark:hover:bg-gray-800 dark:aria-pressed:bg-immich-dark-primary/10 dark:aria-pressed:text-immich-dark-primary"
+              aria-pressed={filter.kind === kind}
+              onclick={() => setKind(kind)}
+            >
+              {$t(labelKey)}
+            </button>
+          {/each}
         </div>
       {/if}
+
+      {#if facets.hasScreenshots}
+        <button
+          type="button"
+          class="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 aria-pressed:border-immich-primary aria-pressed:text-immich-primary dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:aria-pressed:border-immich-dark-primary dark:aria-pressed:text-immich-dark-primary"
+          aria-pressed={filter.quickFilter === 'screenshots'}
+          onclick={() => toggleQuickFilter('screenshots')}
+        >
+          {$t('assistant_operation_item_quick_screenshots')}
+        </button>
+      {/if}
+
+      {#if facets.hasDuplicates}
+        <button
+          type="button"
+          class="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 aria-pressed:border-immich-primary aria-pressed:text-immich-primary dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:aria-pressed:border-immich-dark-primary dark:aria-pressed:text-immich-dark-primary"
+          aria-pressed={filter.quickFilter === 'duplicates'}
+          onclick={() => toggleQuickFilter('duplicates')}
+        >
+          {$t('assistant_operation_item_quick_duplicates')}
+        </button>
+      {/if}
+    </div>
+
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+      {#if facets.hasKind && videoAssetIds.length > 0}
+        <button
+          type="button"
+          class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
+          disabled={!canChangeSelection || videoAssetIds.length === 0}
+          onclick={() => onBulkSetItems(item.id, videoAssetIds, false)}
+        >
+          {$t('assistant_operation_item_exclude_videos')}
+        </button>
+        <button
+          type="button"
+          class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
+          disabled={!canChangeSelection || videoAssetIds.length === 0}
+          onclick={() => onSetOnlyItems(item.id, videoAssetIds)}
+        >
+          {$t('assistant_operation_item_include_only_videos')}
+        </button>
+      {/if}
+
+      <button
+        type="button"
+        class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
+        disabled={!canChangeSelection || virtualWindow.visibleAssetIds.length === 0}
+        onclick={() => onBulkSetItems(item.id, virtualWindow.visibleAssetIds, false)}
+      >
+        {$t('assistant_operation_item_exclude_visible')}
+      </button>
+      <button
+        type="button"
+        class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
+        disabled={!canChangeSelection || virtualWindow.visibleAssetIds.length === 0}
+        onclick={() => onBulkSetItems(item.id, virtualWindow.visibleAssetIds, true)}
+      >
+        {$t('assistant_operation_item_include_visible')}
+      </button>
+      <button
+        type="button"
+        class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
+        disabled={!canChangeSelection || filteredAssetIds.length === 0}
+        onclick={() => onSetOnlyItems(item.id, filteredAssetIds)}
+      >
+        {$t('assistant_operation_item_select_all_filtered')}
+      </button>
+      <button
+        type="button"
+        class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
+        disabled={!canChangeSelection || filteredAssetIds.length === 0}
+        onclick={() => onBulkSetItems(item.id, filteredAssetIds, false)}
+      >
+        {$t('assistant_operation_item_deselect_all_filtered')}
+      </button>
+    </div>
+
+    <div class="mt-3 text-sm text-gray-600 dark:text-gray-300">
+      {$t('assistant_operation_item_virtual_summary', {
+        values: { visible: virtualWindow.visibleAssetIds.length, total: filteredAssetIds.length },
+      })}
+    </div>
+
+    <div
+      bind:this={gridElement}
+      class="mt-2 overflow-y-auto rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
+      data-testid="agent-plan-item-review-grid"
+      style={`height: ${viewportHeight}px;`}
+      onscroll={(event) => (scrollTop = event.currentTarget.scrollTop)}
+    >
+      <div style={`height: ${virtualWindow.beforeHeight}px;`}></div>
+      <div
+        class="grid"
+        style={`grid-template-columns: repeat(${columnCount}, minmax(0, 1fr)); grid-auto-rows: ${itemSize}px; column-gap: 0.5rem; row-gap: 0;`}
+      >
+        {#each virtualWindow.visibleAssetIds as assetId, visibleIndex (assetId)}
+          {@const selected = isAssetSelectedForOperation(item, assetId)}
+          {@const absoluteIndex = virtualWindow.startIndex + visibleIndex + 1}
+          <label
+            class="group relative overflow-hidden rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
+          >
+            <img
+              class="size-full object-cover opacity-100"
+              class:opacity-40={!selected}
+              data-testid="agent-plan-item-review-image"
+              src={getAssetMediaUrl({ id: assetId, size: AssetMediaSize.Thumbnail })}
+              alt={getAssetAlt(assetId)}
+              loading="lazy"
+              draggable="false"
+              onerror={() => markFailed(assetId)}
+            />
+            {#if failedAssetIds.has(assetId)}
+              <span
+                class="absolute inset-0 flex items-center justify-center bg-gray-200 px-1 text-center text-[10px] leading-tight text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+              >
+                {$t('assistant_operation_item_thumbnail_unavailable')}
+              </span>
+            {/if}
+            <input
+              class="absolute left-1.5 top-1.5 size-4"
+              type="checkbox"
+              aria-label={$t('assistant_operation_item_toggle', { values: { index: absoluteIndex } })}
+              checked={selected}
+              disabled={!canChangeSelection}
+              onchange={(event) => onToggleItem(item.id, assetId, event.currentTarget.checked)}
+            />
+          </label>
+        {/each}
+      </div>
+      <div style={`height: ${virtualWindow.afterHeight}px;`}></div>
     </div>
   </section>
 {/if}
