@@ -113,6 +113,10 @@ test.describe('Assistant album organizer', () => {
       .getByTestId('agent-session-chat-transcript')
       .getByRole('region', { name: 'Portugal Trip' });
     await expect(portugalDestination).toBeVisible();
+    const thumbnailStrip = portugalDestination.getByTestId('agent-plan-thumbnail-strip');
+    await expect(thumbnailStrip).toBeVisible();
+    await expect(thumbnailStrip.getByTestId('agent-plan-thumbnail-image')).toHaveCount(2);
+    await expect(thumbnailStrip.getByText(/\+\d+/)).toHaveCount(0);
     await expect(page.getByText('New album')).toBeVisible();
     await expect(page.getByLabel('Create album "Portugal Trip"')).toBeChecked();
     await expect(page.getByLabel('Add 2 photos')).toBeChecked();
