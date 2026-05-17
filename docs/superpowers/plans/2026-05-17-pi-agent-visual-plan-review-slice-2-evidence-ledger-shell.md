@@ -24,6 +24,7 @@ This slice covers:
 - Compact plan and destination impact counts.
 - Sticky apply bar that summarizes selected changes/assets.
 - Technical operation IDs hidden by default behind a details disclosure.
+- Raw target IDs, raw operation summaries, raw payloads, and DTO-shaped labels remain hidden by default.
 - Existing apply payload remains `{ operationIds }`.
 - Existing loading, empty, error, apply success, websocket refresh, and dock/standalone modes remain working.
 
@@ -66,6 +67,8 @@ This slice does not cover:
 - Modify `web/src/routes/(user)/assistant/agent-operation-plan-review-panel.spec.ts`
   - Update expectations to the new human-facing labels.
   - Add shell assertions for hidden technical IDs and Evidence Ledger impact counts.
+- Modify `e2e/src/specs/web/assistant-album-organizer.e2e-spec.ts`
+  - Update the full browser flow to assert destination cards, human row labels, hidden technical details, and unchanged apply behavior.
 - Modify `i18n/en.json`
   - Add labels for Evidence Ledger counts, destination toggles, details disclosure, and selected apply summary.
 
@@ -379,6 +382,7 @@ describe('AgentPlanOperationRow', () => {
 
     expect(screen.getByText('Add 2 photos')).toBeInTheDocument();
     expect(screen.getByText('2 assets')).toBeInTheDocument();
+    expect(screen.queryByText('Add two assets')).not.toBeInTheDocument();
     expect(screen.queryByText(addId)).not.toBeInTheDocument();
     expect(onToggleOperation).toHaveBeenCalledWith(addId, false);
   });
@@ -444,6 +448,7 @@ Create `web/src/routes/(user)/assistant/agent-plan-operation-row.svelte`:
   }
 
   let { item, canChangeSelection, onToggleOperation }: Props = $props();
+  let detailsOpen = $state(false);
 </script>
 
 <div class="flex gap-3 py-3">
@@ -486,18 +491,20 @@ Create `web/src/routes/(user)/assistant/agent-plan-operation-row.svelte`:
       </span>
     {/if}
 
-    <details class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+    <details class="mt-2 text-xs text-gray-500 dark:text-gray-400" bind:open={detailsOpen}>
       <summary class="cursor-pointer select-none">{$t('assistant_operation_detail_toggle')}</summary>
-      <dl class="mt-2 grid gap-1 sm:grid-cols-[max-content_1fr]">
-        <dt class="font-medium">{$t('assistant_operation_detail_type')}</dt>
-        <dd>{$t(item.typeLabelKey)}</dd>
-        <dt class="font-medium">{$t('assistant_operation_detail_risk')}</dt>
-        <dd>{$t(item.riskLabelKey)}</dd>
-        <dt class="font-medium">{$t('assistant_operation_detail_status')}</dt>
-        <dd>{item.operation.status}</dd>
-        <dt class="font-medium">{$t('assistant_operation_detail_id')}</dt>
-        <dd class="break-all">{item.id}</dd>
-      </dl>
+      {#if detailsOpen}
+        <dl class="mt-2 grid gap-1 sm:grid-cols-[max-content_1fr]">
+          <dt class="font-medium">{$t('assistant_operation_detail_type')}</dt>
+          <dd>{$t(item.typeLabelKey)}</dd>
+          <dt class="font-medium">{$t('assistant_operation_detail_risk')}</dt>
+          <dd>{$t(item.riskLabelKey)}</dd>
+          <dt class="font-medium">{$t('assistant_operation_detail_status')}</dt>
+          <dd>{item.operation.status}</dd>
+          <dt class="font-medium">{$t('assistant_operation_detail_id')}</dt>
+          <dd class="break-all">{item.id}</dd>
+        </dl>
+      {/if}
     </details>
   </div>
 </div>
@@ -975,6 +982,8 @@ describe('AgentPlanEvidenceLedger', () => {
     expect(screen.getByText('2 selected assets')).toBeInTheDocument();
     expect(screen.getByText('No photos will be deleted')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Portugal' })).toBeInTheDocument();
+    expect(screen.queryByText('Update description')).not.toBeInTheDocument();
+    expect(screen.queryByText('00000000-0000-4000-8000-000000000301')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeInTheDocument();
     expect(screen.getByText('3 changes · 2 assets selected')).toBeInTheDocument();
   });
@@ -1000,6 +1009,29 @@ describe('AgentPlanEvidenceLedger', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Apply 3 selected' }));
 
     expect(onApply).toHaveBeenCalledOnce();
+  });
+
+  it('can omit the ledger header when embedded inside the collapsible review panel', () => {
+    render(AgentPlanEvidenceLedger, {
+      props: {
+        model: model(),
+        selectedOperationIds: [createId, addId, updateId],
+        canChangeSelection: true,
+        canApply: true,
+        applying: false,
+        showHeader: false,
+        errorMessage: null,
+        applyErrorMessage: null,
+        applyMessage: null,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onApply: vi.fn(),
+      },
+    });
+
+    expect(screen.queryByRole('heading', { name: 'Plan review' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Portugal' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeInTheDocument();
   });
 
   it('renders an empty ledger shell without destination cards or an enabled apply action', () => {
@@ -1097,6 +1129,7 @@ Create `web/src/routes/(user)/assistant/agent-plan-evidence-ledger.svelte`:
     canChangeSelection: boolean;
     canApply: boolean;
     applying: boolean;
+    showHeader?: boolean;
     errorMessage: string | null;
     applyErrorMessage: string | null;
     applyMessage: string | null;
@@ -1111,6 +1144,7 @@ Create `web/src/routes/(user)/assistant/agent-plan-evidence-ledger.svelte`:
     canChangeSelection,
     canApply,
     applying,
+    showHeader = true,
     errorMessage,
     applyErrorMessage,
     applyMessage,
@@ -1123,31 +1157,33 @@ Create `web/src/routes/(user)/assistant/agent-plan-evidence-ledger.svelte`:
 </script>
 
 <div class="flex flex-col gap-4">
-  <header class="flex flex-col gap-3 border-b border-gray-200 pb-4 dark:border-gray-800">
-    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <h2 id="assistant-operation-plan-title" class="text-lg font-semibold">
-          {$t('assistant_operation_plan_review')}
-        </h2>
-        <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">{model.plan.summary}</p>
+  {#if showHeader}
+    <header class="flex flex-col gap-3 border-b border-gray-200 pb-4 dark:border-gray-800">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 id="assistant-operation-plan-title" class="text-lg font-semibold">
+            {$t('assistant_operation_plan_review')}
+          </h2>
+          <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">{model.plan.summary}</p>
+        </div>
+        <p class="text-sm font-medium text-gray-600 dark:text-gray-300">
+          {$t('assistant_operation_plan_no_destructive_changes')}
+        </p>
       </div>
-      <p class="text-sm font-medium text-gray-600 dark:text-gray-300">
-        {$t('assistant_operation_plan_no_destructive_changes')}
-      </p>
-    </div>
 
-    <div class="flex flex-wrap gap-2 text-sm text-gray-500 dark:text-gray-400">
-      <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
-        {$t('assistant_operation_plan_destination_count', { values: { count: impact.destinationCount } })}
-      </span>
-      <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
-        {$t('assistant_operation_plan_selected_change_count', { values: { count: impact.selectedOperationCount } })}
-      </span>
-      <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
-        {$t('assistant_operation_plan_selected_asset_count', { values: { count: impact.selectedAssetCount } })}
-      </span>
-    </div>
-  </header>
+      <div class="flex flex-wrap gap-2 text-sm text-gray-500 dark:text-gray-400">
+        <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
+          {$t('assistant_operation_plan_destination_count', { values: { count: impact.destinationCount } })}
+        </span>
+        <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
+          {$t('assistant_operation_plan_selected_change_count', { values: { count: impact.selectedOperationCount } })}
+        </span>
+        <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
+          {$t('assistant_operation_plan_selected_asset_count', { values: { count: impact.selectedAssetCount } })}
+        </span>
+      </div>
+    </header>
+  {/if}
 
   <div class="flex flex-col gap-3">
     {#each model.groups as group (group.id)}
@@ -1258,6 +1294,9 @@ expect(within(region).getByText('Create album "Portugal"')).toBeInTheDocument();
 expect(within(region).getByText('Add 2 photos')).toBeInTheDocument();
 expect(within(region).getByText('Update album details')).toBeInTheDocument();
 expect(within(region).queryByText(addId)).not.toBeInTheDocument();
+expect(within(region).queryByText('Add two assets')).not.toBeInTheDocument();
+expect(within(region).queryByText('00000000-0000-4000-8000-000000000301')).not.toBeInTheDocument();
+expect(within(region).getAllByRole('heading', { name: 'Plan review' })).toHaveLength(1);
 expect(within(region).getByText('3 changes · 2 assets selected')).toBeInTheDocument();
 await waitFor(() =>
   expect(onSelectionChange).toHaveBeenLastCalledWith({
@@ -1344,12 +1383,17 @@ Add:
 import AgentPlanEvidenceLedger from './agent-plan-evidence-ledger.svelte';
 ```
 
+Also add `buildOperationReviewImpactSummary` to the existing import list from `./agent-operation-plan-ui`.
+
 Remove `cardBodyClass`, `getGroupSelectionState`, and `setMixedCheckbox` from the script because those move into child components.
+
+Do not render two visible `Plan review` headers after expansion. The outer panel `<summary>` is the plan header, so it owns the title, plain-language summary, and compact impact chips. The embedded ledger should receive `showHeader={false}`.
 
 Replace the `{:else}` block from the `<section ...>` body with:
 
 ```svelte
 {:else}
+  {@const impact = buildOperationReviewImpactSummary(model)}
   <section class={rootClass} aria-label={$t('assistant_operation_plan_review')}>
     <details class={cardClass} bind:open={planExpanded}>
       <summary class={headerClass}>
@@ -1357,6 +1401,19 @@ Replace the `{:else}` block from the `<section ...>` body with:
           <div>
             <h2 class="text-lg font-semibold">{$t('assistant_operation_plan_review')}</h2>
             <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">{model.plan.summary}</p>
+            <div class="mt-2 flex flex-wrap gap-2 text-sm text-gray-500 dark:text-gray-400">
+              <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
+                {$t('assistant_operation_plan_destination_count', { values: { count: impact.destinationCount } })}
+              </span>
+              <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
+                {$t('assistant_operation_plan_selected_change_count', {
+                  values: { count: impact.selectedOperationCount },
+                })}
+              </span>
+              <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
+                {$t('assistant_operation_plan_selected_asset_count', { values: { count: impact.selectedAssetCount } })}
+              </span>
+            </div>
           </div>
           <div class="text-sm font-medium text-gray-600 dark:text-gray-300">
             {$t('assistant_operation_selected_count', { values: { count: selectedOperationIds.length } })}
@@ -1375,6 +1432,7 @@ Replace the `{:else}` block from the `<section ...>` body with:
             {errorMessage}
             {applyErrorMessage}
             {applyMessage}
+            showHeader={false}
             onToggleGroup={toggleGroup}
             onToggleOperation={toggleOperation}
             onApply={applySelectedOperations}
@@ -1407,7 +1465,95 @@ git commit -m "feat: render pi plan evidence ledger"
 
 ---
 
-### Task 6: Run Slice Verification
+### Task 6: Update The Browser Flow Coverage
+
+**Files:**
+
+- Modify: `e2e/src/specs/web/assistant-album-organizer.e2e-spec.ts`
+
+- [ ] **Step 1: Write the failing browser assertions**
+
+In `e2e/src/specs/web/assistant-album-organizer.e2e-spec.ts`, update the happy-path plan preview assertions after the deterministic runner proposes the plan:
+
+```ts
+await expect(page.getByText('I proposed a Portugal Trip album.')).toBeVisible({ timeout: 10_000 });
+await expect(page.getByRole('heading', { name: 'Plan review' })).toBeVisible();
+await expect(page.getByText('Create Portugal Trip and add 2 loose assets.')).toBeVisible();
+await expect(page.getByText('1 destination')).toBeVisible();
+await expect(page.getByText('3 selected changes')).toBeVisible();
+await expect(page.getByRole('region', { name: 'Portugal Trip' })).toBeVisible();
+await expect(page.getByText('New album')).toBeVisible();
+await expect(page.getByLabel('Create album "Portugal Trip"')).toBeChecked();
+await expect(page.getByLabel('Add 2 photos')).toBeChecked();
+await expect(page.getByLabel('Set cover photo')).toBeChecked();
+```
+
+Then assert the old technical-facing labels are gone:
+
+```ts
+await expect(page.getByText('Create Portugal Trip', { exact: true })).toHaveCount(0);
+await expect(page.getByText('Add selected photos to Portugal Trip')).toHaveCount(0);
+await expect(page.getByText('Use first photo as Portugal Trip cover')).toHaveCount(0);
+```
+
+After the plan is visible, fetch the current plan through the SDK and assert raw operation IDs are hidden until details are expanded:
+
+```ts
+const currentPlan = await getCurrentOperationPlan({ id: session.id }, authOptions(admin.accessToken));
+if (!currentPlan) {
+  throw new Error('Expected the runner to create an operation plan');
+}
+const addOperation = currentPlan.operations.find((operation) => operation.type === AgentOperationType.AlbumAddAssets);
+expect(addOperation?.id).toEqual(expect.any(String));
+
+await expect(page.getByText(addOperation!.id)).toHaveCount(0);
+await page.getByText('Details').nth(1).click();
+await expect(page.getByText(addOperation!.id)).toBeVisible();
+```
+
+Update the toggle step to use the human-facing row label:
+
+```ts
+await page.getByLabel('Set cover photo').uncheck();
+await expect(page.getByRole('button', { name: 'Apply 2 selected' })).toBeEnabled();
+```
+
+Keep the existing apply response assertion and album verification unchanged. This preserves the key end-to-end behavior: selection is still operation based and the apply request still excludes the unchecked operation.
+
+- [ ] **Step 2: Run the E2E spec and verify RED**
+
+Run:
+
+```bash
+pnpm --dir e2e test:web -- assistant-album-organizer.e2e-spec.ts
+```
+
+Expected: FAIL until the new Evidence Ledger shell is wired into the browser flow.
+
+- [ ] **Step 3: Implement only the E2E expectation updates needed for Slice 2**
+
+Do not add thumbnail assertions in this slice. Slice 3 owns representative thumbnail rendering and large-plan thumbnail behavior.
+
+- [ ] **Step 4: Run the E2E spec and verify GREEN**
+
+Run:
+
+```bash
+pnpm --dir e2e test:web -- assistant-album-organizer.e2e-spec.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit this task**
+
+```bash
+git add e2e/src/specs/web/assistant-album-organizer.e2e-spec.ts
+git commit -m "test: cover pi plan evidence ledger browser flow"
+```
+
+---
+
+### Task 7: Run Slice Verification
 
 **Files:**
 
@@ -1417,6 +1563,7 @@ git commit -m "feat: render pi plan evidence ledger"
 - Verify: `web/src/routes/(user)/assistant/agent-plan-evidence-ledger.spec.ts`
 - Verify: `web/src/routes/(user)/assistant/agent-operation-plan-review-panel.spec.ts`
 - Verify: `web/src/routes/(user)/assistant/agent-session-action-dock.spec.ts`
+- Verify: `e2e/src/specs/web/assistant-album-organizer.e2e-spec.ts`
 - Verify: web TypeScript
 - Verify: web Svelte check
 
@@ -1436,7 +1583,17 @@ pnpm --dir web test --run \
 
 Expected: all listed test files pass.
 
-- [ ] **Step 2: Run TypeScript**
+- [ ] **Step 2: Run the browser E2E flow**
+
+Run:
+
+```bash
+pnpm --dir e2e test:web -- assistant-album-organizer.e2e-spec.ts
+```
+
+Expected: the updated Assistant album organizer browser flow passes.
+
+- [ ] **Step 3: Run TypeScript**
 
 Run:
 
@@ -1446,7 +1603,7 @@ pnpm --dir web check:typescript
 
 Expected: TypeScript exits 0.
 
-- [ ] **Step 3: Run Svelte check**
+- [ ] **Step 4: Run Svelte check**
 
 Run:
 
@@ -1456,7 +1613,7 @@ pnpm --dir web check:svelte
 
 Expected: Svelte check exits 0.
 
-- [ ] **Step 4: Run formatting check for changed files**
+- [ ] **Step 5: Run formatting check for changed files**
 
 Run:
 
@@ -1474,16 +1631,17 @@ pnpm --dir web exec prettier --check \
   "src/routes/(user)/assistant/agent-operation-plan-review-panel.svelte" \
   "src/routes/(user)/assistant/agent-operation-plan-review-panel.spec.ts" \
   "../i18n/en.json"
+pnpm --dir e2e exec prettier --check "src/specs/web/assistant-album-organizer.e2e-spec.ts"
 ```
 
 Expected: Prettier exits 0.
 
-- [ ] **Step 5: Commit verification-only fixes if needed**
+- [ ] **Step 6: Commit verification-only fixes if needed**
 
 If verification exposes type, Svelte, formatting, or compatibility fixes, apply the smallest fix and commit it:
 
 ```bash
-git add i18n/en.json web/src/routes/\(user\)/assistant/agent-operation-plan-ui.ts web/src/routes/\(user\)/assistant/agent-operation-plan-ui.spec.ts web/src/routes/\(user\)/assistant/agent-plan-operation-row.svelte web/src/routes/\(user\)/assistant/agent-plan-operation-row.spec.ts web/src/routes/\(user\)/assistant/agent-plan-destination-card.svelte web/src/routes/\(user\)/assistant/agent-plan-destination-card.spec.ts web/src/routes/\(user\)/assistant/agent-plan-apply-bar.svelte web/src/routes/\(user\)/assistant/agent-plan-evidence-ledger.svelte web/src/routes/\(user\)/assistant/agent-plan-evidence-ledger.spec.ts web/src/routes/\(user\)/assistant/agent-operation-plan-review-panel.svelte web/src/routes/\(user\)/assistant/agent-operation-plan-review-panel.spec.ts
+git add i18n/en.json web/src/routes/\(user\)/assistant/agent-operation-plan-ui.ts web/src/routes/\(user\)/assistant/agent-operation-plan-ui.spec.ts web/src/routes/\(user\)/assistant/agent-plan-operation-row.svelte web/src/routes/\(user\)/assistant/agent-plan-operation-row.spec.ts web/src/routes/\(user\)/assistant/agent-plan-destination-card.svelte web/src/routes/\(user\)/assistant/agent-plan-destination-card.spec.ts web/src/routes/\(user\)/assistant/agent-plan-apply-bar.svelte web/src/routes/\(user\)/assistant/agent-plan-evidence-ledger.svelte web/src/routes/\(user\)/assistant/agent-plan-evidence-ledger.spec.ts web/src/routes/\(user\)/assistant/agent-operation-plan-review-panel.svelte web/src/routes/\(user\)/assistant/agent-operation-plan-review-panel.spec.ts e2e/src/specs/web/assistant-album-organizer.e2e-spec.ts
 git commit -m "fix: verify pi plan evidence ledger shell"
 ```
 
@@ -1496,11 +1654,14 @@ If no fixes were needed, do not create an empty commit.
 - [ ] Evidence Ledger shell renders inside `AgentOperationPlanReviewPanel`.
 - [ ] Destination cards render destination title, destination subtitle, selected/total operation count, and asset count.
 - [ ] Operation rows render `item.review.summary`, not raw operation summaries.
-- [ ] Operation IDs are hidden by default and visible only after expanding row details.
+- [ ] Operation IDs, raw target IDs, raw operation summaries, raw payloads, and DTO-shaped labels are hidden by default.
+- [ ] Operation IDs are visible only after expanding row details.
+- [ ] Expanded panel does not duplicate the `Plan review` header inside the embedded ledger.
 - [ ] Operation-level toggles and destination-level toggles still update selection state.
 - [ ] Mixed destination checkbox state is accessible with `aria-checked="mixed"`.
 - [ ] Sticky apply bar shows selected change/asset counts and keeps the legacy apply button behavior.
 - [ ] Existing apply request still sends `{ operationIds }`.
+- [ ] Browser E2E covers the destination-card review flow, hidden technical details, operation toggle, and apply behavior.
 - [ ] Existing loading, empty, error, success, websocket refresh, collapse, dock mode, and read-only applied states still work.
 - [ ] No thumbnails, item-level selection, sparse apply payload, inline overrides, or server API changes were introduced.
 - [ ] All Slice 2 test files pass.
