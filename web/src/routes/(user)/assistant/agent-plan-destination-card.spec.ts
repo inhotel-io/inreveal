@@ -9,7 +9,11 @@ import {
 } from '@immich/sdk';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
-import { buildOperationReviewModel } from './agent-operation-plan-ui';
+import {
+  buildOperationReviewModel,
+  type OperationEnabledState,
+  type OperationItemSelectionState,
+} from './agent-operation-plan-ui';
 import AgentPlanDestinationCard from './agent-plan-destination-card.svelte';
 
 vi.mock('$lib/utils', () => ({
@@ -98,7 +102,10 @@ const plan = (operations: AgentOperationResponseDto[]): AgentOperationPlanRespon
   updatedAt: '2026-05-15T00:00:00.000Z',
 });
 
-const group = (enabledByOperationId = { [createId]: true, [addId]: true }, itemSelectionByOperationId = {}) =>
+const group = (
+  enabledByOperationId?: OperationEnabledState,
+  itemSelectionByOperationId?: OperationItemSelectionState,
+) =>
   buildOperationReviewModel(
     plan([
       operation({
@@ -120,8 +127,8 @@ const group = (enabledByOperationId = { [createId]: true, [addId]: true }, itemS
         payload: {},
       }),
     ]),
-    enabledByOperationId,
-    itemSelectionByOperationId,
+    enabledByOperationId ?? { [createId]: true, [addId]: true },
+    itemSelectionByOperationId ?? {},
   ).groups[0];
 
 describe('AgentPlanDestinationCard', () => {
@@ -151,7 +158,7 @@ describe('AgentPlanDestinationCard', () => {
   });
 
   it('renders bounded thumbnails for a destination with 1,000 affected photos', () => {
-    const largeAssetIds = Array.from({ length: 1_000 }, (_, index) => `large-asset-${index + 1}`);
+    const largeAssetIds = Array.from({ length: 1000 }, (_, index) => `large-asset-${index + 1}`);
     const largeGroup = buildOperationReviewModel(
       plan([
         operation({

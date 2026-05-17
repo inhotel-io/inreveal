@@ -455,7 +455,8 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
 
-    await fireEvent.click((await screen.findAllByText('Details'))[1]);
+    const detailsButtons = await screen.findAllByText('Details');
+    await fireEvent.click(detailsButtons[1]);
     await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
 
     expect(onSelectionChange).toHaveBeenLastCalledWith({
