@@ -650,7 +650,9 @@ export type OperationReviewGroup = {
 Replace the current representative-only helper with:
 
 ```ts
-const getThumbnailSummary = (operations: Pick<AgentOperationResponseDto, 'assetIds'>[]): AgentReviewThumbnailSummary => {
+const getThumbnailSummary = (
+  operations: Pick<AgentOperationResponseDto, 'assetIds'>[],
+): AgentReviewThumbnailSummary => {
   const totalCount = getOperationAssetCount(operations);
   const representativeAssetIds = getRepresentativeAssetIds(operations);
 

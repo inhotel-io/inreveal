@@ -13,26 +13,50 @@ part of openapi.api;
 class AgentOperationPlanApplyRequestDto {
   /// Returns a new [AgentOperationPlanApplyRequestDto] instance.
   AgentOperationPlanApplyRequestDto({
+    this.itemSelections = const {},
     this.operationIds = const [],
+    this.planRevision,
   });
+
+  Map<String, AgentOperationItemSelection> itemSelections;
 
   List<String> operationIds;
 
+  /// Minimum value: 1
+  /// Maximum value: 9007199254740991
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  int? planRevision;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentOperationPlanApplyRequestDto &&
-    _deepEquality.equals(other.operationIds, operationIds);
+    _deepEquality.equals(other.itemSelections, itemSelections) &&
+    _deepEquality.equals(other.operationIds, operationIds) &&
+    other.planRevision == planRevision;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (operationIds.hashCode);
+    (itemSelections.hashCode) +
+    (operationIds.hashCode) +
+    (planRevision == null ? 0 : planRevision!.hashCode);
 
   @override
-  String toString() => 'AgentOperationPlanApplyRequestDto[operationIds=$operationIds]';
+  String toString() => 'AgentOperationPlanApplyRequestDto[itemSelections=$itemSelections, operationIds=$operationIds, planRevision=$planRevision]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+      json[r'itemSelections'] = this.itemSelections;
       json[r'operationIds'] = this.operationIds;
+    if (this.planRevision != null) {
+      json[r'planRevision'] = this.planRevision;
+    } else {
+    //  json[r'planRevision'] = null;
+    }
     return json;
   }
 
@@ -45,9 +69,11 @@ class AgentOperationPlanApplyRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentOperationPlanApplyRequestDto(
+        itemSelections: AgentOperationItemSelection.mapFromJson(json[r'itemSelections']),
         operationIds: json[r'operationIds'] is Iterable
             ? (json[r'operationIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],
+        planRevision: mapValueOfType<int>(json, r'planRevision'),
       );
     }
     return null;

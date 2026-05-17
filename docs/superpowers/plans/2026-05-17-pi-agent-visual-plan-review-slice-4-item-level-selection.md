@@ -1077,7 +1077,9 @@ Extend `OperationReviewItem` with:
 Add these helpers near `createInitialOperationEnabledState`:
 
 ```ts
-export const createInitialOperationItemSelectionState = (_plan: AgentOperationPlanResponseDto): OperationItemSelectionState => ({});
+export const createInitialOperationItemSelectionState = (
+  _plan: AgentOperationPlanResponseDto,
+): OperationItemSelectionState => ({});
 
 export const setOperationItemSelection = (
   state: OperationItemSelectionState,
@@ -1112,11 +1114,13 @@ export const buildOperationItemSelectionState = (
   const currentItemIds = currentSelection.itemIds ?? [];
 
   if (currentSelection.mode === 'all') {
-    return selected ? state : setOperationItemSelection(state, operationId, {
-      itemKind: 'asset',
-      mode: 'allExcept',
-      itemIds: [assetId],
-    });
+    return selected
+      ? state
+      : setOperationItemSelection(state, operationId, {
+          itemKind: 'asset',
+          mode: 'allExcept',
+          itemIds: [assetId],
+        });
   }
 
   if (currentSelection.mode === 'allExcept') {
@@ -1175,22 +1179,22 @@ export const buildOperationReviewModel = (
 Before `collectBlockingDependencySummaries`, add:
 
 ```ts
-  const getBaseSelection = (operation: AgentOperationResponseDto) =>
-    buildOperationReviewSelection(
-      operation,
-      enabledByOperationId[operation.id] ?? operation.enabled,
-      itemSelectionByOperationId[operation.id],
-    );
+const getBaseSelection = (operation: AgentOperationResponseDto) =>
+  buildOperationReviewSelection(
+    operation,
+    enabledByOperationId[operation.id] ?? operation.enabled,
+    itemSelectionByOperationId[operation.id],
+  );
 
-  const isOperationRequested = (operation: AgentOperationResponseDto) => {
-    const enabled = enabledByOperationId[operation.id] ?? operation.enabled;
-    if (!enabled) {
-      return false;
-    }
+const isOperationRequested = (operation: AgentOperationResponseDto) => {
+  const enabled = enabledByOperationId[operation.id] ?? operation.enabled;
+  if (!enabled) {
+    return false;
+  }
 
-    const selection = getBaseSelection(operation);
-    return selection.supportsItemSelection ? selection.selectedCount > 0 : true;
-  };
+  const selection = getBaseSelection(operation);
+  return selection.supportsItemSelection ? selection.selectedCount > 0 : true;
+};
 ```
 
 Inside `collectBlockingDependencySummaries`, replace:
@@ -1875,16 +1879,16 @@ Destructure those props.
 Add a checkbox action:
 
 ```ts
-  const setMixedCheckbox = (node: HTMLInputElement, state: { checked: boolean; mixed: boolean }) => {
-    const update = ({ checked, mixed }: { checked: boolean; mixed: boolean }) => {
-      node.indeterminate = mixed;
-      node.setAttribute('aria-checked', mixed ? 'mixed' : String(checked));
-    };
-
-    update(state);
-
-    return { update };
+const setMixedCheckbox = (node: HTMLInputElement, state: { checked: boolean; mixed: boolean }) => {
+  const update = ({ checked, mixed }: { checked: boolean; mixed: boolean }) => {
+    node.indeterminate = mixed;
+    node.setAttribute('aria-checked', mixed ? 'mixed' : String(checked));
   };
+
+  update(state);
+
+  return { update };
+};
 ```
 
 Update the operation checkbox:
@@ -2205,9 +2209,9 @@ Expected output includes:
 
 ```ts
 export type AgentOperationPlanApplyRequestDto = {
-    itemSelections?: { [key: string]: AgentOperationItemSelection };
-    operationIds: string[];
-    planRevision?: number;
+  itemSelections?: { [key: string]: AgentOperationItemSelection };
+  operationIds: string[];
+  planRevision?: number;
 };
 ```
 
