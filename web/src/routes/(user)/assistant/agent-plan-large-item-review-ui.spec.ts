@@ -1,0 +1,229 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildAgentPlanItemVirtualWindow,
+  buildAgentPlanReviewAssets,
+  filterAgentPlanReviewAssets,
+  getAgentPlanAvailableFilterFacets,
+  type AgentPlanItemFilterState,
+  type AgentPlanReviewAssetMetadata,
+} from './agent-plan-large-item-review-ui';
+
+const assetIds = (count: number) =>
+  Array.from({ length: count }, (_, index) => `asset-${index.toString().padStart(4, '0')}`);
+
+const emptyFilter = (overrides: Partial<AgentPlanItemFilterState> = {}): AgentPlanItemFilterState => ({
+  query: '',
+  kind: 'all',
+  ...overrides,
+});
+
+describe('agent plan large item review UI helpers', () => {
+  it('builds a virtual window for 1,000 assets at the top', () => {
+    const window = buildAgentPlanItemVirtualWindow({
+      assetIds: assetIds(1000),
+      scrollTop: 0,
+      viewportHeight: 360,
+      itemSize: 96,
+      columnCount: 6,
+      overscanRows: 1,
+    });
+
+    expect(window.totalAssetCount).toBe(1000);
+    expect(window.totalRows).toBe(167);
+    expect(window.startIndex).toBe(0);
+    expect(window.endIndex).toBe(30);
+    expect(window.visibleAssetIds).toHaveLength(30);
+    expect(window.beforeHeight).toBe(0);
+    expect(window.afterHeight).toBe((167 - 5) * 96);
+  });
+
+  it('builds a virtual window after scrolling', () => {
+    const window = buildAgentPlanItemVirtualWindow({
+      assetIds: assetIds(1000),
+      scrollTop: 960,
+      viewportHeight: 360,
+      itemSize: 96,
+      columnCount: 6,
+      overscanRows: 1,
+    });
+
+    expect(window.startIndex).toBe(54);
+    expect(window.endIndex).toBe(90);
+    expect(window.visibleAssetIds[0]).toBe('asset-0054');
+    expect(window.beforeHeight).toBe(9 * 96);
+  });
+
+  it('clamps negative and oversized scroll for short lists', () => {
+    const ids = assetIds(10);
+    const baseInput = {
+      assetIds: ids,
+      viewportHeight: 360,
+      itemSize: 96,
+      columnCount: 6,
+      overscanRows: 1,
+    };
+
+    expect(buildAgentPlanItemVirtualWindow({ ...baseInput, scrollTop: -96 })).toMatchObject({
+      startIndex: 0,
+      endIndex: 10,
+      visibleAssetIds: ids,
+      beforeHeight: 0,
+      afterHeight: 0,
+    });
+    expect(buildAgentPlanItemVirtualWindow({ ...baseInput, scrollTop: 100_000 })).toMatchObject({
+      startIndex: 0,
+      endIndex: 10,
+      visibleAssetIds: ids,
+      beforeHeight: 0,
+      afterHeight: 0,
+    });
+  });
+
+  it('builds review assets without letting metadata overwrite source ids', () => {
+    expect(
+      buildAgentPlanReviewAssets(['asset-1', 'asset-2'], {
+        'asset-1': { id: 'metadata-id', label: 'Cover image' },
+      }),
+    ).toEqual([{ id: 'asset-1', label: 'Cover image' }, { id: 'asset-2' }]);
+  });
+
+  it('matches query across all searchable text fields', () => {
+    const assets = buildAgentPlanReviewAssets(
+      ['asset-id', 'asset-label', 'asset-file', 'asset-album', 'asset-person', 'asset-tag', 'asset-place'],
+      {
+        'asset-label': { id: 'asset-label', label: 'Birthday Cake' },
+        'asset-file': { id: 'asset-file', filename: 'IMG_1234.JPG' },
+        'asset-album': { id: 'asset-album', sourceAlbumName: 'Family Archive' },
+        'asset-person': { id: 'asset-person', personNames: ['Ada Lovelace'] },
+        'asset-tag': { id: 'asset-tag', tagNames: ['Receipts'] },
+        'asset-place': { id: 'asset-place', locationLabel: 'Berlin Mitte' },
+      },
+    );
+
+    expect(filterAgentPlanReviewAssets(assets, emptyFilter({ query: 'ASSET-ID' })).map(({ id }) => id)).toEqual([
+      'asset-id',
+    ]);
+    expect(filterAgentPlanReviewAssets(assets, emptyFilter({ query: 'cake' })).map(({ id }) => id)).toEqual([
+      'asset-label',
+    ]);
+    expect(filterAgentPlanReviewAssets(assets, emptyFilter({ query: '1234' })).map(({ id }) => id)).toEqual([
+      'asset-file',
+    ]);
+    expect(filterAgentPlanReviewAssets(assets, emptyFilter({ query: 'archive' })).map(({ id }) => id)).toEqual([
+      'asset-album',
+    ]);
+    expect(filterAgentPlanReviewAssets(assets, emptyFilter({ query: 'ada' })).map(({ id }) => id)).toEqual([
+      'asset-person',
+    ]);
+    expect(filterAgentPlanReviewAssets(assets, emptyFilter({ query: 'receipt' })).map(({ id }) => id)).toEqual([
+      'asset-tag',
+    ]);
+    expect(filterAgentPlanReviewAssets(assets, emptyFilter({ query: 'mitte' })).map(({ id }) => id)).toEqual([
+      'asset-place',
+    ]);
+  });
+
+  it('filters by kind while keeping unknown assets only in all', () => {
+    const assets = buildAgentPlanReviewAssets(['image-1', 'video-1', 'unknown-1'], {
+      'image-1': { id: 'image-1', kind: 'image' },
+      'video-1': { id: 'video-1', kind: 'video' },
+      'unknown-1': { id: 'unknown-1', kind: 'unknown' },
+    });
+
+    expect(filterAgentPlanReviewAssets(assets, emptyFilter({ kind: 'all' })).map(({ id }) => id)).toEqual([
+      'image-1',
+      'video-1',
+      'unknown-1',
+    ]);
+    expect(filterAgentPlanReviewAssets(assets, emptyFilter({ kind: 'image' })).map(({ id }) => id)).toEqual([
+      'image-1',
+    ]);
+    expect(filterAgentPlanReviewAssets(assets, emptyFilter({ kind: 'video' })).map(({ id }) => id)).toEqual([
+      'video-1',
+    ]);
+  });
+
+  it('applies inclusive date, album, people, tag, and location filters', () => {
+    const assets = buildAgentPlanReviewAssets(['before', 'match-start', 'match-end', 'after', 'wrong-album'], {
+      before: richMetadata({ id: 'before', createdAt: '2026-04-30T23:59:59.000Z' }),
+      'match-start': richMetadata({ id: 'match-start', createdAt: '2026-05-01T00:00:00.000Z' }),
+      'match-end': richMetadata({ id: 'match-end', createdAt: '2026-05-31T23:59:59.000Z' }),
+      after: richMetadata({ id: 'after', createdAt: '2026-06-01T00:00:00.000Z' }),
+      'wrong-album': richMetadata({ id: 'wrong-album', sourceAlbumName: 'Inbox' }),
+    });
+
+    expect(
+      filterAgentPlanReviewAssets(
+        assets,
+        emptyFilter({
+          dateFrom: '2026-05-01',
+          dateTo: '2026-05-31',
+          sourceAlbumName: 'Camera Roll',
+          personName: 'Ada Lovelace',
+          tagName: 'Receipt',
+          locationLabel: 'Berlin',
+        }),
+      ).map(({ id }) => id),
+    ).toEqual(['match-start', 'match-end']);
+  });
+
+  it('applies screenshot and duplicate quick filters', () => {
+    const assets = buildAgentPlanReviewAssets(['screenshot', 'duplicate-a', 'duplicate-b', 'single'], {
+      screenshot: { id: 'screenshot', isScreenshot: true },
+      'duplicate-a': { id: 'duplicate-a', duplicateKey: 'dup-1' },
+      'duplicate-b': { id: 'duplicate-b', duplicateKey: 'dup-1' },
+      single: { id: 'single', duplicateKey: 'single-1' },
+    });
+
+    expect(
+      filterAgentPlanReviewAssets(assets, emptyFilter({ quickFilter: 'screenshots' })).map(({ id }) => id),
+    ).toEqual(['screenshot']);
+    expect(filterAgentPlanReviewAssets(assets, emptyFilter({ quickFilter: 'duplicates' })).map(({ id }) => id)).toEqual(
+      ['duplicate-a', 'duplicate-b'],
+    );
+  });
+
+  it('returns available facet booleans for rich metadata', () => {
+    const assets = buildAgentPlanReviewAssets(['image-1', 'video-1', 'duplicate-a', 'duplicate-b'], {
+      'image-1': richMetadata({ id: 'image-1', kind: 'image', isScreenshot: true, duplicateKey: 'single' }),
+      'video-1': richMetadata({ id: 'video-1', kind: 'video' }),
+      'duplicate-a': richMetadata({ id: 'duplicate-a', duplicateKey: 'dup-1' }),
+      'duplicate-b': richMetadata({ id: 'duplicate-b', duplicateKey: 'dup-1' }),
+    });
+
+    expect(getAgentPlanAvailableFilterFacets(assets)).toEqual({
+      hasKind: true,
+      hasDates: true,
+      hasSourceAlbums: true,
+      hasPeople: true,
+      hasTags: true,
+      hasLocations: true,
+      hasScreenshots: true,
+      hasDuplicates: true,
+    });
+  });
+
+  it('returns unavailable facet booleans for ID-only assets', () => {
+    expect(getAgentPlanAvailableFilterFacets(buildAgentPlanReviewAssets(['asset-1', 'asset-2']))).toEqual({
+      hasKind: false,
+      hasDates: false,
+      hasSourceAlbums: false,
+      hasPeople: false,
+      hasTags: false,
+      hasLocations: false,
+      hasScreenshots: false,
+      hasDuplicates: false,
+    });
+  });
+});
+
+const richMetadata = (overrides: Partial<AgentPlanReviewAssetMetadata>): AgentPlanReviewAssetMetadata => ({
+  id: 'asset-1',
+  kind: 'image',
+  createdAt: '2026-05-15T12:00:00.000Z',
+  sourceAlbumName: 'Camera Roll',
+  personNames: ['Ada Lovelace'],
+  tagNames: ['Receipt'],
+  locationLabel: 'Berlin',
+  ...overrides,
+});
