@@ -32,6 +32,8 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_detail_id: 'Operation ID',
     assistant_operation_detail_risk: 'Risk',
     assistant_operation_detail_status: 'Status',
+    assistant_operation_detail_hide: 'Details',
+    assistant_operation_detail_show: 'Details',
     assistant_operation_detail_toggle: 'Details',
     assistant_operation_detail_type: 'Type',
     assistant_operation_field_cover_option: 'Use photo {index} as cover',
@@ -168,7 +170,9 @@ describe('AgentPlanDestinationCard', () => {
       },
     });
 
-    expect(screen.getByRole('region', { name: 'Portugal' })).toBeInTheDocument();
+    const destinationRegion = screen.getByRole('region', { name: 'Portugal' });
+    expect(destinationRegion).toBeInTheDocument();
+    expect(destinationRegion).toHaveAttribute('role', 'region');
     expect(screen.getByText('Portugal')).toBeInTheDocument();
     expect(screen.getByText('New album')).toBeInTheDocument();
     const compactCounts = screen.getByText('2 of 2 changes selected').parentElement!;
