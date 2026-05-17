@@ -61,6 +61,13 @@ type PlanningAuditCreate = {
   error: null;
 };
 
+type SparseItemSelection = NonNullable<AgentOperationPlanApplyRequestDto['itemSelections']>[string];
+
+type ApplySelection = {
+  selectedOperationIds: Set<string>;
+  selectedAssetIdsByOperationId: Map<string, string[]>;
+};
+
 @Injectable()
 export class AgentOperationPlanService {
   private static readonly activeStatuses = [
@@ -170,7 +177,7 @@ export class AgentOperationPlanService {
     }
 
     const currentPlan = await this.requireCurrentProposedPlan(session.id, planId);
-    this.validateApplyOperationIds(currentPlan, dto.operationIds);
+    const applySelection = this.validateApplySelection(currentPlan, dto);
 
     const claimedPlan = await this.planRepository.claimCurrentForApply(session.id, planId);
     if (!claimedPlan) {
@@ -178,10 +185,9 @@ export class AgentOperationPlanService {
     }
 
     try {
-      const selectedOperationIds = new Set(dto.operationIds);
-      const applyUpdates = await this.applyClaimedPlan(auth, session, claimedPlan, selectedOperationIds);
+      const applyUpdates = await this.applyClaimedPlan(auth, session, claimedPlan, applySelection);
       const appliedPlan = await this.planRepository.completeApply(claimedPlan.id, applyUpdates);
-      const response = this.buildApplyResponse(this.mapPlan(appliedPlan), selectedOperationIds);
+      const response = this.buildApplyResponse(this.mapPlan(appliedPlan), applySelection.selectedOperationIds);
 
       await this.sessionRepository.update(auth.user.id, session.id, {
         status: AgentSessionStatus.Completed,
@@ -480,12 +486,74 @@ export class AgentOperationPlanService {
     }
   }
 
+  private validateApplySelection(
+    plan: AgentOperationPlanWithOperations,
+    dto: AgentOperationPlanApplyRequestDto,
+  ): ApplySelection {
+    if (dto.planRevision !== undefined && dto.planRevision !== plan.revision) {
+      throw new BadRequestException('Agent operation plan revision is stale');
+    }
+
+    this.validateApplyOperationIds(plan, dto.operationIds);
+
+    const selectedOperationIds = new Set(dto.operationIds);
+    const operationById = new Map(plan.operations.map((operation) => [operation.id, operation]));
+    const selectedAssetIdsByOperationId = new Map<string, string[]>();
+
+    for (const [operationId, selection] of Object.entries(dto.itemSelections ?? {})) {
+      if (!selectedOperationIds.has(operationId)) {
+        throw new BadRequestException('One or more item selection operation ids are not selected');
+      }
+
+      const operation = operationById.get(operationId);
+      if (!operation) {
+        throw new BadRequestException('One or more item selection operation ids are not in the current plan');
+      }
+
+      const selectedAssetIds = this.resolveSelectedAssetIds(operation, selection);
+      selectedAssetIdsByOperationId.set(operationId, selectedAssetIds);
+    }
+
+    return { selectedOperationIds, selectedAssetIdsByOperationId };
+  }
+
+  private resolveSelectedAssetIds(
+    operation: AgentOperationPlanWithOperations['operations'][number],
+    selection: SparseItemSelection,
+  ): string[] {
+    if (selection.itemKind !== 'asset' || operation.assetIds.length === 0) {
+      throw new BadRequestException('Item selection is not supported for one or more operations');
+    }
+
+    const affectedAssetIds = [...new Set(operation.assetIds)];
+    const affectedAssetIdSet = new Set(affectedAssetIds);
+    const itemIds = selection.itemIds ?? [];
+
+    if (itemIds.some((itemId) => !affectedAssetIdSet.has(itemId))) {
+      throw new BadRequestException('One or more selected item ids are not affected by the operation');
+    }
+
+    switch (selection.mode) {
+      case 'all':
+        return affectedAssetIds;
+      case 'allExcept': {
+        const excludedAssetIds = new Set(itemIds);
+        return affectedAssetIds.filter((assetId) => !excludedAssetIds.has(assetId));
+      }
+      case 'only':
+        return affectedAssetIds.filter((assetId) => itemIds.includes(assetId));
+      case 'none':
+        return [];
+    }
+  }
+
   private async applyClaimedPlan(
     auth: AuthDto,
     session: AgentSession,
     plan: AgentOperationPlanWithOperations,
-    selectedOperationIds: Set<string>,
+    applySelection: ApplySelection,
   ): Promise<AgentOperationApplyUpdate[]> {
+    const { selectedOperationIds } = applySelection;
     const appliedOperationIds = new Set<string>();
     const createdAlbumIdByTemporaryTargetId = new Map<string, string>();
     const updates: AgentOperationApplyUpdate[] = [];
