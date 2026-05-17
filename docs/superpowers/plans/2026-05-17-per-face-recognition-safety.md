@@ -458,7 +458,7 @@ git commit -m "test: cover recognition assignment paths"
 In the first `describe('handleRecognizeFaces')` block, add this test after `should not assign person to deferred non-core face with no matching person`:
 
 ```ts
-    it.each([AssetVisibility.Archive, AssetVisibility.Hidden])(
+    it.each([AssetVisibility.Archive, AssetVisibility.Hidden, AssetVisibility.Locked])(
       'does not create a core person or queue shared-space matching for deferred %s assets without a person',
       async (visibility) => {
         const asset = AssetFactory.create({ visibility });
@@ -597,10 +597,9 @@ In the first `describe('handleRecognizeFaces')` block, add this test after `skip
         sourceIdentityIds: [sourceIdentityId],
       });
       expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
-      expect(mocks.job.queue).not.toHaveBeenCalledWith({
-        name: JobName.SharedSpacePersonMetadataBackfill,
-        data: { identityId: targetIdentityId },
-      });
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpacePersonMetadataBackfill }),
+      );
     });
 ```
 
@@ -735,8 +734,11 @@ Add this test immediately after the strengthened pass case:
         expect.objectContaining({ id: memberConflictPerson.id, ownerId: fx.member.id, identityId: targetIdentity.id }),
       ]),
     );
+    expect(targetProfiles.map((profile) => profile.id)).not.toContain(uploadedPerson.id);
   });
 ```
+
+This test exercises the repository-side strict guard that prevents an accessible shared identity from being offered to a new private upload when that target identity already has a profile for the uploader. It complements the small Task 5 mocked conflict tests, which directly prove `getMergeConflicts()` blocks automatic merges when a same-owner or same-space conflict is reported after a candidate match is found.
 
 - [ ] **Step 3: Add repeated-recognition idempotency medium coverage**
 
@@ -867,8 +869,8 @@ Expected: TypeScript check passes.
 Run:
 
 ```bash
-git diff --stat HEAD
-git diff -- server/src/services/person.service.ts server/src/services/person.service.spec.ts server/test/medium/specs/services/people-identity-rbac.spec.ts
+git diff --stat @{upstream}...HEAD
+git diff @{upstream}...HEAD -- server/src/services/person.service.ts server/src/services/person.service.spec.ts server/test/medium/specs/services/people-identity-rbac.spec.ts
 ```
 
 Expected: diff contains only Slice 4 recognition safety tests and the minimal service helper/guard required by those tests.
@@ -897,7 +899,7 @@ If there are no formatting changes, do not create an empty commit.
 - [ ] Existing person match reassigns without creating a person: Task 3.
 - [ ] Accessible shared identity match can merge only after conflict checks pass: Tasks 5 and 6.
 - [ ] Same-owner and same-space conflicts prevent automatic identity merge: Tasks 5 and 6.
-- [ ] Archive or hidden visibility does not create core people unexpectedly: Task 4.
+- [ ] Archive, hidden, or locked visibility does not create core people unexpectedly: Task 4.
 - [ ] Spaces for the asset queue `SharedSpaceFaceMatch` exactly once per space for successful incremental recognition: Task 2.
 - [ ] Member private upload after joining a space merges with accessible shared evidence only when strict conflict guards pass: Task 6.
 - [ ] Repeated recognition of already assigned faces does not create duplicate people or duplicate identity links: Task 6.
