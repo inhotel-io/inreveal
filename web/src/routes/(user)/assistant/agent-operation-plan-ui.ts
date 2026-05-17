@@ -107,6 +107,14 @@ export type OperationReviewImpactSummary = {
   selectedAssetCount: number;
 };
 
+export type AgentPlanThumbnailStripModel = {
+  totalCount: number;
+  assetIds: string[];
+  overflowCount: number;
+  hasMore: boolean;
+  hasThumbnails: boolean;
+};
+
 const typeLabelKeys = {
   [AgentOperationType.AlbumCreate]: 'assistant_operation_type_album_create' as Translations,
   [AgentOperationType.AlbumAddAssets]: 'assistant_operation_type_album_add_assets' as Translations,
@@ -123,6 +131,8 @@ const riskLabelKeys = {
 const fallbackTypeLabelKey = 'assistant_operation_type_unknown' as Translations;
 const fallbackRiskLabelKey = 'assistant_operation_risk_unknown' as Translations;
 const representativeAssetLimit = 12;
+export const AGENT_PLAN_THUMBNAIL_STRIP_DEFAULT_LIMIT = 6;
+export const AGENT_PLAN_THUMBNAIL_STRIP_MAX_LIMIT = 12;
 
 export const createInitialOperationEnabledState = (plan: AgentOperationPlanResponseDto): OperationEnabledState =>
   Object.fromEntries(plan.operations.map((operation) => [operation.id, operation.enabled]));
@@ -164,6 +174,27 @@ export const buildOperationReviewImpactSummary = (model: OperationReviewModel): 
     blockedOperationCount: [...model.operationsById.values()].filter((operation) => operation.blocked).length,
     totalAssetCount: getOperationAssetCount(model.plan.operations),
     selectedAssetCount: getOperationAssetCount(selectedOperations.map(({ operation }) => operation)),
+  };
+};
+
+const normalizeThumbnailStripLimit = (requestedLimit: number) =>
+  Math.min(AGENT_PLAN_THUMBNAIL_STRIP_MAX_LIMIT, Math.max(0, Math.floor(requestedLimit)));
+
+export const buildAgentPlanThumbnailStrip = (
+  group: OperationReviewGroup,
+  requestedLimit = AGENT_PLAN_THUMBNAIL_STRIP_DEFAULT_LIMIT,
+): AgentPlanThumbnailStripModel => {
+  const visibleLimit = normalizeThumbnailStripLimit(requestedLimit);
+  const totalCount = group.thumbnailSummary.totalCount;
+  const assetIds = group.thumbnailSummary.representativeAssetIds.slice(0, visibleLimit);
+  const overflowCount = assetIds.length > 0 ? Math.max(totalCount - assetIds.length, 0) : 0;
+
+  return {
+    totalCount,
+    assetIds,
+    overflowCount,
+    hasMore: overflowCount > 0,
+    hasThumbnails: assetIds.length > 0,
   };
 };
 
