@@ -142,9 +142,7 @@ test.describe('Assistant album organizer', () => {
     await expect(page.getByText(proposedAddOperation!.id)).toBeVisible();
 
     await portugalDestination.getByRole('checkbox', { name: 'Include photo 2' }).uncheck();
-    await expect(
-      portugalDestination.getByRole('group', { name: 'Review photos for Add selected photos to Portugal Trip' }),
-    ).toContainText('1 of 2 selected');
+    await expect(portugalDestination.getByText('1 of 2 photos selected')).toHaveCount(2);
     await page.getByLabel('Set cover photo').uncheck();
     await expect(page.getByRole('button', { name: 'Apply 2 selected' })).toBeEnabled();
 
