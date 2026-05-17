@@ -91,6 +91,9 @@ String parameterToString(dynamic value) {
   if (value is AgentOperationExistingAlbumTargetKind) {
     return AgentOperationExistingAlbumTargetKindTypeTransformer().encode(value).toString();
   }
+  if (value is AgentOperationItemKind) {
+    return AgentOperationItemKindTypeTransformer().encode(value).toString();
+  }
   if (value is AgentOperationNewAlbumTargetKind) {
     return AgentOperationNewAlbumTargetKindTypeTransformer().encode(value).toString();
   }
