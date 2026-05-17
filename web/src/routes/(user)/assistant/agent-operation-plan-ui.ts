@@ -14,7 +14,7 @@ export type OperationEnabledState = Record<string, boolean>;
 
 export type OperationItemSelectionState = Record<string, AgentOperationItemSelectionPayload>;
 
-export type OperationFieldOverrideState = Record<string, Record<string, unknown>>;
+export type OperationFieldOverrideState = Record<string, Record<string, string>>;
 
 export type AgentOperationItemSelectionPayload = {
   itemKind: AgentReviewItemKind;
@@ -227,7 +227,7 @@ export const setOperationFieldOverride = (
   state: OperationFieldOverrideState,
   operationId: string,
   fieldKey: string,
-  value: unknown,
+  value: string,
 ): OperationFieldOverrideState => {
   const currentFields = state[operationId];
 
@@ -736,7 +736,7 @@ const buildOperationReview = (
 
 const buildEditableFields = (
   operation: AgentOperationResponseDto,
-  fieldOverrides: Record<string, unknown> | undefined,
+  fieldOverrides: Record<string, string> | undefined,
 ): AgentOperationEditableField[] => {
   if (operation.type === AgentOperationType.AlbumCreate || operation.type === AgentOperationType.AlbumUpdateDetails) {
     const albumName = getRawStringPayloadValue(operation, 'albumName');
@@ -881,7 +881,7 @@ const getAssetResultDetails = (value: unknown) => {
   return results.length > 0 ? results : undefined;
 };
 
-const buildSparseOperationFieldOverrides = (editableFields: AgentOperationEditableField[]): Record<string, unknown> =>
+const buildSparseOperationFieldOverrides = (editableFields: AgentOperationEditableField[]): Record<string, string> =>
   Object.fromEntries(
     editableFields
       .filter((field) => field.value !== field.originalValue)
@@ -893,7 +893,7 @@ const buildSparseOperationFieldOverrides = (editableFields: AgentOperationEditab
 
 const applyOperationFieldOverrides = (
   operation: AgentOperationResponseDto,
-  fieldOverrides: Record<string, unknown> | undefined,
+  fieldOverrides: Record<string, string> | undefined,
 ) => {
   if (
     !fieldOverrides ||
@@ -917,7 +917,7 @@ const applyOperationFieldOverrides = (
   return { ...operation, payload };
 };
 
-const getStringOverride = (fieldOverrides: Record<string, unknown> | undefined, key: string) => {
+const getStringOverride = (fieldOverrides: Record<string, string> | undefined, key: string) => {
   const value = fieldOverrides?.[key];
   return typeof value === 'string' ? value : undefined;
 };
