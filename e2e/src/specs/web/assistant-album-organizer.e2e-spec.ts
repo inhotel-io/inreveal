@@ -134,14 +134,24 @@ test.describe('Assistant album organizer', () => {
       (operation) => operation.type === AgentOperationType.AlbumAddAssets,
     );
     expect(proposedAddOperation?.id).toEqual(expect.any(String));
+    const excludedAssetId = proposedAddOperation!.assetIds[1];
+    expect(excludedAssetId).toEqual(expect.any(String));
 
     await expect(page.getByText(proposedAddOperation!.id)).toHaveCount(0);
     await portugalDestination.getByText('Details').nth(1).click();
     await expect(page.getByText(proposedAddOperation!.id)).toBeVisible();
 
+    await portugalDestination.getByRole('checkbox', { name: 'Include photo 2' }).uncheck();
+    await expect(page.getByText('1 of 2 photos selected')).toBeVisible();
     await page.getByLabel('Set cover photo').uncheck();
     await expect(page.getByRole('button', { name: 'Apply 2 selected' })).toBeEnabled();
 
+    const applyRequestPromise = page.waitForRequest(
+      (request) =>
+        request.method() === 'POST' &&
+        request.url().includes(`/api/agent/sessions/${session.id}/operation-plan/`) &&
+        request.url().endsWith('/apply'),
+    );
     const applyResponsePromise = page.waitForResponse(
       (response) =>
         response.url().includes(`/api/agent/sessions/${session.id}/operation-plan/`) &&
@@ -149,6 +159,18 @@ test.describe('Assistant album organizer', () => {
         response.status() === 201,
     );
     await page.getByRole('button', { name: 'Apply 2 selected' }).click();
+    const applyRequest = await applyRequestPromise;
+    expect(applyRequest.postDataJSON()).toMatchObject({
+      operationIds: expect.arrayContaining([proposedAddOperation!.id]),
+      itemSelections: {
+        [proposedAddOperation!.id]: {
+          itemKind: 'asset',
+          mode: 'allExcept',
+          itemIds: [excludedAssetId],
+        },
+      },
+      planRevision: currentPlan.revision,
+    });
     const applyResponse = await applyResponsePromise;
     const { plan: appliedPlan } = (await applyResponse.json()) as AgentOperationPlanApplyResponseDto;
 
@@ -187,7 +209,7 @@ test.describe('Assistant album organizer', () => {
     const album = await getAlbumInfo({ id: albumId as string }, authOptions(admin.accessToken));
     expect(album.albumName).toBe('Portugal Trip');
     expect(album.description).toBe('Organized by the deterministic e2e assistant.');
-    expect(album.assetCount).toBe(2);
+    expect(album.assetCount).toBe(1);
   });
 
   test('surfaces and audits a denied runner proposal without creating a plan or album', async ({ context, page }) => {
