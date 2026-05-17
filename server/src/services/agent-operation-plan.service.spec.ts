@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AgentSession, AgentToolCall } from 'src/database';
 import { BulkIdErrorReason } from 'src/dtos/asset-ids.response.dto';
+import { AssetEditAction } from 'src/dtos/editing.dto';
 import {
   AgentApprovalMode,
   AgentOperationApplyStatus,
@@ -21,7 +22,6 @@ import {
   SharedSpaceRole,
   UserAvatarColor,
 } from 'src/enum';
-import { AssetEditAction } from 'src/dtos/editing.dto';
 import { AccessRepository } from 'src/repositories/access.repository';
 import {
   AgentOperationApplyUpdate,
@@ -2825,7 +2825,11 @@ describe(AgentOperationPlanService.name, () => {
       fieldOverrides: {
         [operations[0].id]: { targetAlbumId: overrideAlbumId },
         [operations[1].id]: { spaceName: '  New space  ', description: '  Fresh  ' },
-        [operations[4].id]: { targetSpaceId: overrideSpaceId, description: 'Updated description', color: UserAvatarColor.Blue },
+        [operations[4].id]: {
+          targetSpaceId: overrideSpaceId,
+          description: 'Updated description',
+          color: UserAvatarColor.Blue,
+        },
       },
     });
 
@@ -3117,7 +3121,9 @@ describe(AgentOperationPlanService.name, () => {
       Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
     );
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([editableAssetId, netZeroAssetId, videoAssetId]));
-    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([editableAssetId, netZeroAssetId, videoAssetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(
+      new Set([editableAssetId, netZeroAssetId, videoAssetId]),
+    );
     assetRepository.getAgentReadableIds.mockResolvedValue(new Set([editableAssetId, netZeroAssetId, videoAssetId]));
     assetRepository.getForEdit.mockImplementation((id: string) =>
       Promise.resolve({
