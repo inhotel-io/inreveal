@@ -59,6 +59,8 @@ const album = (ownerId: string): AgentAlbumSummary => ({
   albumThumbnailAssetId: null,
 });
 
+const resolveZero = () => Promise.resolve(0);
+
 class InMemoryAgentSessionRepository {
   sessions = new Map<string, AgentSession>();
 
@@ -209,21 +211,21 @@ class InMemoryAgentToolCallRepository {
     Promise.resolve(this.toolCalls.find((toolCall) => toolCall.sessionId === sessionId && toolCall.id === id)),
   );
 
-  getCountedAssetCountBySession = vi.fn(() => Promise.resolve(0));
-  getCountedAssetCountBySessionAndDataClass = vi.fn(() => Promise.resolve(0));
+  getCountedAssetCountBySession = vi.fn(resolveZero);
+  getCountedAssetCountBySessionAndDataClass = vi.fn(resolveZero);
 
   transition = vi.fn(
-    async (sessionId: string, id: string, expectedStatus: AgentToolCallStatus, dto: Partial<AgentToolCall>) => {
+    (sessionId: string, id: string, expectedStatus: AgentToolCallStatus, dto: Partial<AgentToolCall>) => {
       const index = this.toolCalls.findIndex(
         (toolCall) => toolCall.sessionId === sessionId && toolCall.id === id && toolCall.status === expectedStatus,
       );
       if (index === -1) {
-        return;
+        return Promise.resolve();
       }
 
       const updated = { ...this.toolCalls[index], ...dto };
       this.toolCalls[index] = updated;
-      return updated;
+      return Promise.resolve(updated);
     },
   );
 
