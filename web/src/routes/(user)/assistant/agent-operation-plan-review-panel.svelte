@@ -408,12 +408,14 @@
   {/if}
 {:else}
   {@const impact = buildOperationReviewImpactSummary(model)}
-  <section class={rootClass} aria-label={$t('assistant_operation_plan_review')}>
+  <div class={rootClass} role="region" aria-labelledby="assistant-operation-plan-title">
     <details class={cardClass} bind:open={planExpanded}>
       <summary class={headerClass}>
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 class="text-lg font-semibold">{$t('assistant_operation_plan_review')}</h2>
+            <h2 id="assistant-operation-plan-title" class="text-lg font-semibold">
+              {$t('assistant_operation_plan_review')}
+            </h2>
             <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">{model.plan.summary}</p>
             <div class="mt-2 flex flex-wrap gap-2 text-sm text-gray-500 dark:text-gray-400">
               <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
@@ -461,5 +463,5 @@
         </div>
       {/if}
     </details>
-  </section>
+  </div>
 {/if}
