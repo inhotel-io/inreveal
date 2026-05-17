@@ -28,7 +28,10 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_apply_applying: 'Applying operations',
     assistant_operation_apply_bar_label: 'Review selected plan actions',
     assistant_operation_apply_error: 'Unable to apply proposed operations',
+    assistant_operation_apply_forbidden:
+      'These changes cannot be applied with the current permissions or target ownership. Review the plan and try again.',
     assistant_operation_apply_selected: 'Apply {count} selected',
+    assistant_operation_apply_stale: 'This plan changed. Review the latest plan before applying.',
     assistant_operation_apply_summary: '{changes} changes · {assets} assets selected',
     assistant_operation_apply_success: 'Applied {applied} operations. {failed} failed.',
     assistant_operation_blocked_by: 'Blocked by {dependencies}',
@@ -246,6 +249,28 @@ const completedPlan = (): AgentOperationPlanResponseDto => ({
   })),
 });
 
+const partiallyAppliedPlan = (): AgentOperationPlanResponseDto => ({
+  ...samplePlan(),
+  status: AgentOperationPlanStatus.Applied,
+  operations: samplePlan().operations.map((operation, index) => ({
+    ...operation,
+    status:
+      index === 0
+        ? AgentOperationStatus.Applied
+        : index === 1
+          ? AgentOperationStatus.Skipped
+          : AgentOperationStatus.Failed,
+    result: index === 0 ? { albumId: '00000000-0000-4000-8000-000000000400' } : null,
+    error: index === 2 ? 'Album owner changed before apply' : null,
+  })),
+});
+
+const httpError = (statusCode: number, message: string) =>
+  ({
+    message,
+    data: { statusCode, message },
+  }) as Error;
+
 describe('AgentOperationPlanReviewPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -347,6 +372,33 @@ describe('AgentOperationPlanReviewPanel', () => {
     await fireEvent.click(screen.getByText('Organize Portugal holiday'));
     expect(screen.getByRole('checkbox', { name: 'Update album details' })).not.toBeChecked();
     expect(screen.getByRole('button', { name: 'Apply 2 selected' })).toBeInTheDocument();
+  });
+
+  it('preserves disabled operations, sparse selections, and field overrides after collapse while hiding raw IDs again', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+
+    render(AgentOperationPlanReviewPanel, { props: { session, variant: 'dock' } });
+
+    await screen.findByRole('region', { name: 'Portugal' });
+    await fireEvent.input(screen.getAllByLabelText('Album name')[0], { target: { value: 'Madeira' } });
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Update album details' }));
+
+    const detailsButtons = screen.getAllByText('Details');
+    await fireEvent.click(detailsButtons[1]);
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
+
+    expect(screen.getByText(addId)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Madeira' })).toBeInTheDocument();
+    expect(screen.getAllByText('1 of 2 photos selected')).toHaveLength(2);
+
+    await fireEvent.click(screen.getByText('Organize Portugal holiday'));
+    expect(screen.queryByRole('checkbox', { name: 'Update album details' })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByText('Organize Portugal holiday'));
+    expect(screen.getByRole('checkbox', { name: 'Update album details' })).not.toBeChecked();
+    expect(screen.getByRole('region', { name: 'Madeira' })).toBeInTheDocument();
+    expect(screen.getAllByText('1 of 2 photos selected')).toHaveLength(2);
+    expect(screen.queryByText(addId)).not.toBeInTheDocument();
   });
 
   it('keeps the apply action in a sticky area with the selected count', async () => {
@@ -751,6 +803,33 @@ describe('AgentOperationPlanReviewPanel', () => {
     });
   });
 
+  it('resets local edits to the applied partial plan and disables further mutation', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+    sdkMock.applyApprovedOperations.mockResolvedValue({
+      status: AgentOperationApplyStatus.PartiallyApplied,
+      plan: partiallyAppliedPlan(),
+      appliedOperationIds: [createId],
+      skippedOperationIds: [addId],
+      failedOperationIds: [existingId],
+      summary: 'Applied 1 operation(s), skipped 1, failed 1.',
+    });
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    await screen.findByRole('region', { name: 'Portugal' });
+    await fireEvent.input(screen.getAllByLabelText('Album name')[0], { target: { value: 'Madeira' } });
+    await fireEvent.click(screen.getAllByText('Details')[1]);
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply 3 selected' }));
+
+    expect(await screen.findByText('Applied 1 operations. 1 failed.')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Madeira' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Portugal' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Create album "Portugal"' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Update album details' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeDisabled();
+  });
+
   it('applies the current approved operation selection', async () => {
     sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
     sdkMock.applyApprovedOperations.mockResolvedValue({
@@ -972,6 +1051,59 @@ describe('AgentOperationPlanReviewPanel', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to apply proposed operations');
+    expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
+  });
+
+  it('shows stale apply rejection copy and reloads the latest plan when available', async () => {
+    sdkMock.getCurrentOperationPlan
+      .mockResolvedValueOnce(samplePlan())
+      .mockResolvedValueOnce({ ...samplePlan(), revision: 2, summary: 'Updated Portugal plan' });
+    sdkMock.applyApprovedOperations.mockRejectedValue(
+      httpError(409, 'This operation plan has changed. Review the latest revision before applying.'),
+    );
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This plan changed. Review the latest plan before applying.',
+    );
+    expect(screen.getByText('Updated Portugal plan')).toBeInTheDocument();
+    expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the current plan and selections visible after an apply network failure', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+    sdkMock.applyApprovedOperations.mockRejectedValue(new Error('network timeout'));
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    await screen.findByRole('region', { name: 'Portugal' });
+    await fireEvent.input(screen.getAllByLabelText('Album name')[0], { target: { value: 'Madeira' } });
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Update album details' }));
+    await fireEvent.click(screen.getAllByText('Details')[1]);
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply 2 selected' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to apply proposed operations');
+    expect(screen.getByRole('region', { name: 'Madeira' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Update album details' })).not.toBeChecked();
+    expect(screen.getAllByText('1 of 2 photos selected')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Apply 2 selected' })).toBeInTheDocument();
+  });
+
+  it('shows permission and target ownership rejection copy without clearing the loaded plan', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+    sdkMock.applyApprovedOperations.mockRejectedValue(httpError(403, 'Target album is not owned by the user'));
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'These changes cannot be applied with the current permissions or target ownership. Review the plan and try again.',
+    );
     expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
   });
 

@@ -6,7 +6,10 @@ describe('agent operation plan i18n', () => {
       expect.objectContaining({
         assistant_operation_apply_applying: 'Applying operations',
         assistant_operation_apply_error: 'Unable to apply proposed operations',
+        assistant_operation_apply_forbidden:
+          'These changes cannot be applied with the current permissions or target ownership. Review the plan and try again.',
         assistant_operation_apply_selected: 'Apply {count, plural, one {# selected} other {# selected}}',
+        assistant_operation_apply_stale: 'This plan changed. Review the latest plan before applying.',
         assistant_operation_apply_success:
           'Applied {applied, plural, one {# operation} other {{applied, number} operations}}. {failed, plural, one {# failed} other {{failed, number} failed}}.',
       }),
