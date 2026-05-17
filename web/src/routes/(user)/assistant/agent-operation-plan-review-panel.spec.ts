@@ -27,23 +27,37 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_apply_applying: 'Applying operations',
     assistant_operation_apply_error: 'Unable to apply proposed operations',
     assistant_operation_apply_selected: 'Apply {count} selected',
+    assistant_operation_apply_summary: '{changes} changes · {assets} assets selected',
     assistant_operation_apply_success: 'Applied {applied} operations. {failed} failed.',
     assistant_operation_blocked_by: 'Blocked by {dependencies}',
+    assistant_operation_destination_selected_summary: '{selected} of {total} changes selected',
+    assistant_operation_destination_toggle: 'Select destination {name}',
+    assistant_operation_detail_id: 'Operation ID',
+    assistant_operation_detail_risk: 'Risk',
+    assistant_operation_detail_status: 'Status',
+    assistant_operation_detail_toggle: 'Details',
+    assistant_operation_detail_type: 'Type',
     assistant_operation_plan_empty: 'No proposed album plan yet.',
     assistant_operation_plan_error: 'Unable to load proposed album plan',
     assistant_operation_plan_loading: 'Loading proposed album plan',
+    assistant_operation_plan_destination_count: '{count} destinations',
+    assistant_operation_plan_no_destructive_changes: 'No photos will be deleted',
     assistant_operation_plan_review: 'Plan review',
+    assistant_operation_plan_selected_asset_count: '{count} selected assets',
+    assistant_operation_plan_selected_change_count: '{count} selected changes',
     assistant_operation_status_applied: 'Applied',
     assistant_operation_status_failed: 'Failed',
     assistant_operation_status_skipped: 'Skipped',
     assistant_operation_risk_high: 'High risk',
     assistant_operation_risk_low: 'Low risk',
     assistant_operation_risk_medium: 'Medium risk',
+    assistant_operation_risk_unknown: 'Unknown risk',
     assistant_operation_selected_count: '{count} selected',
     assistant_operation_type_album_add_assets: 'Add assets',
     assistant_operation_type_album_create: 'Create album',
     assistant_operation_type_album_set_cover: 'Set cover',
     assistant_operation_type_album_update_details: 'Update details',
+    assistant_operation_type_unknown: 'Review change',
   };
 
   return {
@@ -52,7 +66,12 @@ vi.mock('svelte-i18n', () => {
         .replace('{count}', String(options?.values?.count ?? ''))
         .replace('{applied}', String(options?.values?.applied ?? ''))
         .replace('{failed}', String(options?.values?.failed ?? ''))
-        .replace('{dependencies}', String(options?.values?.dependencies ?? '')),
+        .replace('{dependencies}', String(options?.values?.dependencies ?? ''))
+        .replace('{assets}', String(options?.values?.assets ?? ''))
+        .replace('{changes}', String(options?.values?.changes ?? ''))
+        .replace('{name}', String(options?.values?.name ?? ''))
+        .replace('{selected}', String(options?.values?.selected ?? ''))
+        .replace('{total}', String(options?.values?.total ?? '')),
     ),
   };
 });
@@ -228,17 +247,39 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     const region = await screen.findByRole('region', { name: 'Plan review' });
     expect(within(region).getByText('Organize Portugal holiday')).toBeInTheDocument();
-    expect(within(region).getByText('New album "Portugal"')).toBeInTheDocument();
-    expect(within(region).getByText('Create Portugal album')).toBeInTheDocument();
-    expect(within(region).getByText('Add two assets')).toBeInTheDocument();
-    expect(within(region).getByText('Update existing album description')).toBeInTheDocument();
-    expect(within(region).getAllByText('3 selected')).not.toHaveLength(0);
+    expect(within(region).getByText('2 destinations')).toBeInTheDocument();
+    expect(within(region).getByText('3 selected changes')).toBeInTheDocument();
+    expect(within(region).getByText('2 selected assets')).toBeInTheDocument();
+    expect(within(region).getByText('No photos will be deleted')).toBeInTheDocument();
+    expect(within(region).getByRole('region', { name: 'Portugal' })).toBeInTheDocument();
+    expect(within(region).getByText('Create album "Portugal"')).toBeInTheDocument();
+    expect(within(region).getByText('Add 2 photos')).toBeInTheDocument();
+    expect(within(region).getByText('Update album details')).toBeInTheDocument();
+    expect(within(region).queryByText(addId)).not.toBeInTheDocument();
+    expect(within(region).queryByText('Add two assets')).not.toBeInTheDocument();
+    expect(within(region).queryByText('00000000-0000-4000-8000-000000000301')).not.toBeInTheDocument();
+    expect(within(region).getAllByRole('heading', { name: 'Plan review' })).toHaveLength(1);
+    expect(within(region).getByText('3 changes · 2 assets selected')).toBeInTheDocument();
     await waitFor(() =>
       expect(onSelectionChange).toHaveBeenLastCalledWith({
         planId,
         operationIds: [createId, addId, existingId],
       }),
     );
+  });
+
+  it('reveals technical operation identifiers only inside the row details disclosure', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    const region = await screen.findByRole('region', { name: 'Plan review' });
+    expect(within(region).queryByText(addId)).not.toBeInTheDocument();
+
+    await fireEvent.click(within(region).getAllByText('Details')[1]);
+
+    expect(within(region).getByText('Operation ID')).toBeInTheDocument();
+    expect(within(region).getByText(addId)).toBeInTheDocument();
   });
 
   it('renders dock mode without the standalone page shell', async () => {
@@ -255,16 +296,16 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     render(AgentOperationPlanReviewPanel, { props: { session, variant: 'dock' } });
 
-    await fireEvent.click(await screen.findByRole('checkbox', { name: 'Update existing album description' }));
+    await fireEvent.click(await screen.findByRole('checkbox', { name: 'Update album details' }));
     expect(screen.getByRole('button', { name: 'Apply 2 selected' })).toBeInTheDocument();
 
     await fireEvent.click(screen.getByText('Organize Portugal holiday'));
-    expect(screen.queryByRole('checkbox', { name: 'Update existing album description' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Update album details' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Apply 2 selected' })).not.toBeInTheDocument();
     expect(screen.getByText('2 selected')).toBeInTheDocument();
 
     await fireEvent.click(screen.getByText('Organize Portugal holiday'));
-    expect(screen.getByRole('checkbox', { name: 'Update existing album description' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Update album details' })).not.toBeChecked();
     expect(screen.getByRole('button', { name: 'Apply 2 selected' })).toBeInTheDocument();
   });
 
@@ -276,7 +317,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(await screen.findByRole('button', { name: 'Apply 3 selected' })).toBeInTheDocument();
     const applyArea = container.querySelector('[data-testid="agent-operation-plan-sticky-actions"]');
     expect(applyArea).toHaveClass('sticky');
-    expect(applyArea).toHaveTextContent('3 selected');
+    expect(applyArea).toHaveTextContent('3 changes · 2 assets selected');
   });
 
   it('reopens the plan card when an apply error arrives after collapse', async () => {
@@ -312,7 +353,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(within(region).getByText('Asset permissions changed before apply')).toBeInTheDocument();
     expect(within(region).queryByText(/albumId/)).not.toBeInTheDocument();
     expect(within(region).queryByText(/\{/)).not.toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Create Portugal album' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Create album "Portugal"' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeDisabled();
   });
 
@@ -341,10 +382,10 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
 
-    const createToggle = await screen.findByRole('checkbox', { name: 'Create Portugal album' });
+    const createToggle = await screen.findByRole('checkbox', { name: 'Create album "Portugal"' });
     await fireEvent.click(createToggle);
 
-    const addToggle = screen.getByRole('checkbox', { name: 'Add two assets' });
+    const addToggle = screen.getByRole('checkbox', { name: 'Add 2 photos' });
     expect(addToggle).toBeDisabled();
     expect(screen.getByText('Blocked by Create Portugal album')).toBeInTheDocument();
     expect(onSelectionChange).toHaveBeenLastCalledWith({
@@ -359,12 +400,12 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
 
-    const groupToggle = await screen.findByRole('checkbox', { name: 'New album "Portugal"' });
+    const groupToggle = await screen.findByRole('checkbox', { name: 'Select destination Portugal' });
     await fireEvent.click(groupToggle);
 
-    expect(screen.getByRole('checkbox', { name: 'Create Portugal album' })).not.toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Add two assets' })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: 'Update existing album description' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Create album "Portugal"' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Add 2 photos' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Update album details' })).toBeChecked();
     expect(onSelectionChange).toHaveBeenLastCalledWith({
       planId,
       operationIds: [existingId],
@@ -376,10 +417,10 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     render(AgentOperationPlanReviewPanel, { props: { session } });
 
-    const addToggle = await screen.findByRole('checkbox', { name: 'Add two assets' });
+    const addToggle = await screen.findByRole('checkbox', { name: 'Add 2 photos' });
     await fireEvent.click(addToggle);
 
-    const groupToggle = screen.getByRole('checkbox', { name: 'New album "Portugal"' }) as HTMLInputElement;
+    const groupToggle = screen.getByRole('checkbox', { name: 'Select destination Portugal' }) as HTMLInputElement;
     expect(groupToggle).not.toBeChecked();
     expect(groupToggle.indeterminate).toBe(true);
     expect(groupToggle).toHaveAttribute('aria-checked', 'mixed');
@@ -543,9 +584,9 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
 
-    expect(screen.getByRole('checkbox', { name: 'New album "Portugal"' })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: 'Create Portugal album' })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: 'Update existing album description' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Select destination Portugal' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Create album "Portugal"' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Update album details' })).toBeDisabled();
 
     resolveApply!({
       status: AgentOperationApplyStatus.Applied,
@@ -557,9 +598,9 @@ describe('AgentOperationPlanReviewPanel', () => {
     });
 
     expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
-    expect(screen.getByRole('checkbox', { name: 'New album "Portugal"' })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: 'Create Portugal album' })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: 'Update existing album description' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Select destination Portugal' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Create album "Portugal"' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Update album details' })).toBeDisabled();
   });
 
   it('sends only enabled and unblocked operation ids when applying', async () => {
@@ -575,7 +616,7 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     render(AgentOperationPlanReviewPanel, { props: { session } });
 
-    await fireEvent.click(await screen.findByRole('checkbox', { name: 'New album "Portugal"' }));
+    await fireEvent.click(await screen.findByRole('checkbox', { name: 'Select destination Portugal' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Apply 1 selected' }));
 
     expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith(
@@ -590,8 +631,8 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     render(AgentOperationPlanReviewPanel, { props: { session } });
 
-    await fireEvent.click(await screen.findByRole('checkbox', { name: 'New album "Portugal"' }));
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Update existing album description' }));
+    await fireEvent.click(await screen.findByRole('checkbox', { name: 'Select destination Portugal' }));
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Update album details' }));
 
     expect(screen.getByRole('button', { name: 'Apply 0 selected' })).toBeDisabled();
     expect(sdkMock.applyApprovedOperations).not.toHaveBeenCalled();
