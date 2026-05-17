@@ -106,11 +106,36 @@ test.describe('Assistant album organizer', () => {
     await expect(page.getByText('I proposed a Portugal Trip album.')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('heading', { name: 'Plan review' })).toBeVisible();
     await expect(page.getByText('Create Portugal Trip and add 2 loose assets.')).toBeVisible();
-    await expect(page.getByLabel('Create Portugal Trip')).toBeChecked();
-    await expect(page.getByLabel('Add selected photos to Portugal Trip')).toBeChecked();
-    await expect(page.getByLabel('Use first photo as Portugal Trip cover')).toBeChecked();
+    await expect(page.getByText('1 destination')).toBeVisible();
+    await expect(page.getByText('3 selected changes')).toBeVisible();
 
-    await page.getByLabel('Use first photo as Portugal Trip cover').uncheck();
+    const portugalDestination = page
+      .getByTestId('agent-session-chat-transcript')
+      .getByRole('region', { name: 'Portugal Trip' });
+    await expect(portugalDestination).toBeVisible();
+    await expect(page.getByText('New album')).toBeVisible();
+    await expect(page.getByLabel('Create album "Portugal Trip"')).toBeChecked();
+    await expect(page.getByLabel('Add 2 photos')).toBeChecked();
+    await expect(page.getByLabel('Set cover photo')).toBeChecked();
+
+    await expect(page.getByText('Create Portugal Trip', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Add selected photos to Portugal Trip')).toHaveCount(0);
+    await expect(page.getByText('Use first photo as Portugal Trip cover')).toHaveCount(0);
+
+    const currentPlan = await getCurrentOperationPlan({ id: session.id }, authOptions(admin.accessToken));
+    if (!currentPlan) {
+      throw new Error('Expected the runner to create an operation plan');
+    }
+    const proposedAddOperation = currentPlan.operations.find(
+      (operation) => operation.type === AgentOperationType.AlbumAddAssets,
+    );
+    expect(proposedAddOperation?.id).toEqual(expect.any(String));
+
+    await expect(page.getByText(proposedAddOperation!.id)).toHaveCount(0);
+    await portugalDestination.getByText('Details').nth(1).click();
+    await expect(page.getByText(proposedAddOperation!.id)).toBeVisible();
+
+    await page.getByLabel('Set cover photo').uncheck();
     await expect(page.getByRole('button', { name: 'Apply 2 selected' })).toBeEnabled();
 
     const applyResponsePromise = page.waitForResponse(
