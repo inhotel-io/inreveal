@@ -86,6 +86,18 @@ describe(PersonService.name, () => {
     expect(mocks.asset.upsertJobStatus).not.toHaveBeenCalled();
   };
 
+  const expectNoRecognitionMutation = () => {
+    expect(mocks.search.searchFaces).not.toHaveBeenCalled();
+    expect(mocks.person.create).not.toHaveBeenCalled();
+    expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
+    expect(mocks.faceIdentity.ensurePersonIdentity).not.toHaveBeenCalled();
+    expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
+    expect(mocks.faceIdentity.getMergeConflicts).not.toHaveBeenCalled();
+    expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+    expect(mocks.sharedSpace.getSpaceIdsForAsset).not.toHaveBeenCalled();
+    expect(mocks.job.queue).not.toHaveBeenCalled();
+  };
+
   const queuedBatchJobs = () => mocks.job.queueAll.mock.calls.flatMap(([jobs]) => jobs);
   const queuedBatchJobNames = () => queuedBatchJobs().map((job) => job.name);
 
@@ -2874,18 +2886,6 @@ describe(PersonService.name, () => {
         spaceProfileConflictCount: 0,
       });
     });
-
-    const expectNoRecognitionMutation = () => {
-      expect(mocks.search.searchFaces).not.toHaveBeenCalled();
-      expect(mocks.person.create).not.toHaveBeenCalled();
-      expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
-      expect(mocks.faceIdentity.ensurePersonIdentity).not.toHaveBeenCalled();
-      expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
-      expect(mocks.faceIdentity.getMergeConflicts).not.toHaveBeenCalled();
-      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
-      expect(mocks.sharedSpace.getSpaceIdsForAsset).not.toHaveBeenCalled();
-      expect(mocks.job.queue).not.toHaveBeenCalled();
-    };
 
     it('should fail if face does not exist', async () => {
       expect(await sut.handleRecognizeFaces({ id: 'unknown-face' })).toBe(JobStatus.Failed);
