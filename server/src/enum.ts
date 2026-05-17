@@ -491,6 +491,7 @@ export enum ManualJobName {
   IntegrityUntrackedFilesDeleteAll = `integrity-untracked-files-delete-all`,
   IntegrityChecksumFilesDeleteAll = `integrity-checksum-mismatch-delete-all`,
   FaceIdentityBackfill = 'face-identity-backfill',
+  FaceSuggestionMaintenance = 'face-suggestion-maintenance',
   SharedSpacePersonMetadataBackfill = 'shared-space-person-metadata-backfill',
 }
 
@@ -919,6 +920,7 @@ export enum JobName {
   FaceIdentityBackfill = 'FaceIdentityBackfill',
   FaceIdentityMaintenanceAfterRecognition = 'FaceIdentityMaintenanceAfterRecognition',
   FaceRepairScan = 'FaceRepairScan',
+  FaceSuggestionMaintenance = 'FaceSuggestionMaintenance',
   PersonSuggestionScanQueueAll = 'PersonSuggestionScanQueueAll',
   PersonSuggestionScan = 'PersonSuggestionScan',
   SpacePersonSuggestionScanQueueAll = 'SpacePersonSuggestionScanQueueAll',
