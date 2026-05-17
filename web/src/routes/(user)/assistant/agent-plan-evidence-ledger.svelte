@@ -20,6 +20,8 @@
     applyMessage: string | null;
     onToggleGroup: (group: OperationReviewGroup, checked: boolean) => void;
     onToggleOperation: (operationId: string, checked: boolean) => void;
+    onToggleItem?: (operationId: string, assetId: string, selected: boolean) => void;
+    onResetItemSelection?: (operationId: string) => void;
     onApply: () => void;
   }
 
@@ -35,6 +37,8 @@
     applyMessage,
     onToggleGroup,
     onToggleOperation,
+    onToggleItem = () => {},
+    onResetItemSelection = () => {},
     onApply,
   }: Props = $props();
 
@@ -72,7 +76,14 @@
 
   <div class="flex flex-col gap-3">
     {#each model.groups as group (group.id)}
-      <AgentPlanDestinationCard {group} {canChangeSelection} {onToggleGroup} {onToggleOperation} />
+      <AgentPlanDestinationCard
+        {group}
+        {canChangeSelection}
+        {onToggleGroup}
+        {onToggleOperation}
+        {onToggleItem}
+        {onResetItemSelection}
+      />
     {/each}
   </div>
 
