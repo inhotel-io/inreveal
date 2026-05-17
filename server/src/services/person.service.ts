@@ -939,15 +939,9 @@ export class PersonService extends BaseService {
         return JobStatus.Skipped;
       }
 
-      // Still queue space face matching — this face may belong to a space
-      // that was created/linked after the face was originally recognized.
-      const spaceIds = await this.sharedSpaceRepository.getSpaceIdsForAsset(face.assetId);
-      for (const { spaceId } of spaceIds) {
-        await this.jobRepository.queue({
-          name: JobName.SharedSpaceFaceMatch,
-          data: { spaceId, assetId: face.assetId },
-        });
-      }
+      // Still queue space face matching because this face may belong to a space
+      // that was created or linked after the face was originally recognized.
+      await this.queueSharedSpaceFaceMatchesForAsset(face.assetId);
 
       return JobStatus.Skipped;
     }
@@ -1037,20 +1031,33 @@ export class PersonService extends BaseService {
       });
     }
 
+    if (!personId) {
+      this.logger.debug(`Face ${id} did not resolve to a person, skipping shared-space face matching`);
+      return JobStatus.Skipped;
+    }
+
     if (skipSharedSpaceMatch) {
       return JobStatus.Success;
     }
 
-    // Queue shared space face matching for any spaces containing this asset
-    const spaceIds = await this.sharedSpaceRepository.getSpaceIdsForAsset(face.assetId);
-    for (const { spaceId } of spaceIds) {
-      await this.jobRepository.queue({
-        name: JobName.SharedSpaceFaceMatch,
-        data: { spaceId, assetId: face.assetId },
-      });
-    }
+    await this.queueSharedSpaceFaceMatchesForAsset(face.assetId);
 
     return JobStatus.Success;
+  }
+
+  private async queueSharedSpaceFaceMatchesForAsset(assetId: string): Promise<void> {
+    const spaceIds = await this.sharedSpaceRepository.getSpaceIdsForAsset(assetId);
+    const queuedSpaceIds = new Set<string>();
+    for (const { spaceId } of spaceIds) {
+      if (queuedSpaceIds.has(spaceId)) {
+        continue;
+      }
+      queuedSpaceIds.add(spaceId);
+      await this.jobRepository.queue({
+        name: JobName.SharedSpaceFaceMatch,
+        data: { spaceId, assetId },
+      });
+    }
   }
 
   private async replaceFaceIdentity(

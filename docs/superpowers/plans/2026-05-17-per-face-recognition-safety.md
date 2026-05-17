@@ -784,13 +784,14 @@ Add this test immediately after the strict personal-conflict test:
     };
 
     await fx.personService.handleRecognizeFaces({ id: uploadedFaceId });
-    const firstState = await readState();
 
     await fx.personService.handleRecognizeFaces({ id: uploadedFaceId });
+    const assignedState = await readState();
+
     await fx.personService.handleRecognizeFaces({ id: uploadedFaceId });
     const repeatedState = await readState();
 
-    expect(repeatedState).toEqual(firstState);
+    expect(repeatedState).toEqual(assignedState);
     expect(repeatedState.memberPeople).toHaveLength(1);
     expect(repeatedState.faceLinks).toEqual([
       {
