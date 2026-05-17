@@ -82,7 +82,7 @@
         onchange={(event) => onToggleGroup(group, event.currentTarget.checked)}
       />
       <div class="min-w-0">
-        <h3 class="truncate font-medium leading-5">{destinationTitle}</h3>
+        <h3 class="break-words font-medium leading-5 whitespace-normal">{destinationTitle}</h3>
         {#if destinationSubtitle}
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{destinationSubtitle}</p>
         {/if}

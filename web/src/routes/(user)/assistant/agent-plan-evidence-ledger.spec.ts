@@ -68,8 +68,10 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_item_select_all_filtered: 'Select all filtered',
     assistant_operation_item_selected_count: '{selected} of {total} selected',
     assistant_operation_item_deselect_all_filtered: 'Deselect all filtered',
+    assistant_operation_item_empty_filter: 'No matching photos',
     assistant_operation_item_thumbnail_alt: 'Photo {index} of {count}',
     assistant_operation_item_thumbnail_unavailable: 'Preview unavailable',
+    assistant_operation_item_toolbar_label: 'Photo review controls',
     assistant_operation_item_toggle: 'Include photo {index}',
     assistant_operation_item_virtual_summary: 'Showing {visible} of {total} photos',
     assistant_operation_risk_low: 'Low risk',
@@ -262,6 +264,32 @@ describe('AgentPlanEvidenceLedger', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Apply 3 selected' }));
 
     expect(onApply).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the sticky apply bar compatible with narrow screens and the same apply button name', () => {
+    render(AgentPlanEvidenceLedger, {
+      props: {
+        model: model(),
+        selectedOperationIds: [createId, addId, updateId],
+        canChangeSelection: true,
+        canApply: true,
+        applying: false,
+        errorMessage: null,
+        applyErrorMessage: null,
+        applyMessage: null,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onApply: vi.fn(),
+      },
+    });
+
+    const applyRegion = screen.getByTestId('agent-operation-plan-sticky-actions');
+
+    expect(applyRegion).toHaveClass('sticky', 'bottom-0', 'flex', 'flex-col', 'gap-3');
+    expect(applyRegion).toHaveClass('sm:flex-row');
+    expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeInTheDocument();
   });
 
   it('can omit the ledger header when embedded inside the collapsible review panel', () => {

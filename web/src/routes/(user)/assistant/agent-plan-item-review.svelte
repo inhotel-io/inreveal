@@ -131,9 +131,14 @@
       {/if}
     </div>
 
-    <div class="mt-3 flex flex-wrap items-center gap-2">
+    <div
+      class="mt-3 flex flex-wrap items-start gap-2"
+      data-testid="agent-plan-item-review-toolbar"
+      role="toolbar"
+      aria-label={$t('assistant_operation_item_toolbar_label')}
+    >
       <input
-        class="min-w-48 flex-1 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 placeholder:text-gray-400 focus:border-immich-primary focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
+        class="min-w-0 flex-1 basis-48 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 placeholder:text-gray-400 focus:border-immich-primary focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
         type="search"
         aria-label={$t('assistant_operation_item_filter_label')}
         placeholder={$t('assistant_operation_item_filter_placeholder')}
@@ -177,60 +182,60 @@
           {$t('assistant_operation_item_quick_duplicates')}
         </button>
       {/if}
-    </div>
 
-    <div class="mt-3 flex flex-wrap items-center gap-2">
-      {#if facets.hasKind && videoAssetIds.length > 0}
+      <div class="flex min-w-0 flex-wrap gap-2">
+        {#if facets.hasKind && videoAssetIds.length > 0}
+          <button
+            type="button"
+            class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
+            disabled={!canChangeSelection || videoAssetIds.length === 0}
+            onclick={() => onBulkSetItems(item.id, videoAssetIds, false)}
+          >
+            {$t('assistant_operation_item_exclude_videos')}
+          </button>
+          <button
+            type="button"
+            class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
+            disabled={!canChangeSelection || videoAssetIds.length === 0}
+            onclick={() => onSetOnlyItems(item.id, videoAssetIds)}
+          >
+            {$t('assistant_operation_item_include_only_videos')}
+          </button>
+        {/if}
+
         <button
           type="button"
           class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
-          disabled={!canChangeSelection || videoAssetIds.length === 0}
-          onclick={() => onBulkSetItems(item.id, videoAssetIds, false)}
+          disabled={!canChangeSelection || virtualWindow.visibleAssetIds.length === 0}
+          onclick={() => onBulkSetItems(item.id, virtualWindow.visibleAssetIds, false)}
         >
-          {$t('assistant_operation_item_exclude_videos')}
+          {$t('assistant_operation_item_exclude_visible')}
         </button>
         <button
           type="button"
           class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
-          disabled={!canChangeSelection || videoAssetIds.length === 0}
-          onclick={() => onSetOnlyItems(item.id, videoAssetIds)}
+          disabled={!canChangeSelection || virtualWindow.visibleAssetIds.length === 0}
+          onclick={() => onBulkSetItems(item.id, virtualWindow.visibleAssetIds, true)}
         >
-          {$t('assistant_operation_item_include_only_videos')}
+          {$t('assistant_operation_item_include_visible')}
         </button>
-      {/if}
-
-      <button
-        type="button"
-        class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
-        disabled={!canChangeSelection || virtualWindow.visibleAssetIds.length === 0}
-        onclick={() => onBulkSetItems(item.id, virtualWindow.visibleAssetIds, false)}
-      >
-        {$t('assistant_operation_item_exclude_visible')}
-      </button>
-      <button
-        type="button"
-        class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
-        disabled={!canChangeSelection || virtualWindow.visibleAssetIds.length === 0}
-        onclick={() => onBulkSetItems(item.id, virtualWindow.visibleAssetIds, true)}
-      >
-        {$t('assistant_operation_item_include_visible')}
-      </button>
-      <button
-        type="button"
-        class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
-        disabled={!canChangeSelection || filteredAssetIds.length === 0}
-        onclick={() => onSetOnlyItems(item.id, filteredAssetIds)}
-      >
-        {$t('assistant_operation_item_select_all_filtered')}
-      </button>
-      <button
-        type="button"
-        class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
-        disabled={!canChangeSelection || filteredAssetIds.length === 0}
-        onclick={() => onBulkSetItems(item.id, filteredAssetIds, false)}
-      >
-        {$t('assistant_operation_item_deselect_all_filtered')}
-      </button>
+        <button
+          type="button"
+          class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
+          disabled={!canChangeSelection || filteredAssetIds.length === 0}
+          onclick={() => onSetOnlyItems(item.id, filteredAssetIds)}
+        >
+          {$t('assistant_operation_item_select_all_filtered')}
+        </button>
+        <button
+          type="button"
+          class="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
+          disabled={!canChangeSelection || filteredAssetIds.length === 0}
+          onclick={() => onBulkSetItems(item.id, filteredAssetIds, false)}
+        >
+          {$t('assistant_operation_item_deselect_all_filtered')}
+        </button>
+      </div>
     </div>
 
     <div class="mt-3 text-sm text-gray-600 dark:text-gray-300">
@@ -241,21 +246,27 @@
 
     <div
       bind:this={gridElement}
-      class="mt-2 overflow-y-auto rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
+      class="mt-2 max-h-[min(65vh,28rem)] overflow-y-auto rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
       data-testid="agent-plan-item-review-grid"
-      style={`height: ${viewportHeight}px;`}
+      style={viewportHeight === DEFAULT_VIEWPORT_HEIGHT ? undefined : `max-height: ${viewportHeight}px;`}
       onscroll={(event) => (scrollTop = event.currentTarget.scrollTop)}
     >
+      {#if filteredAssetIds.length === 0}
+        <div class="flex min-h-32 items-center justify-center px-3 text-sm text-gray-500 dark:text-gray-400">
+          {$t('assistant_operation_item_empty_filter')}
+        </div>
+      {/if}
       <div style={`height: ${virtualWindow.beforeHeight}px;`}></div>
       <div
-        class="grid"
-        style={`grid-template-columns: repeat(${columnCount}, minmax(0, 1fr)); grid-auto-rows: ${itemSize}px; column-gap: 0.5rem; row-gap: 0;`}
+        class="grid grid-cols-[repeat(auto-fill,minmax(5.5rem,1fr))] gap-2"
+        data-testid="agent-plan-item-review-tile-grid"
+        style={`grid-auto-rows: ${itemSize}px;`}
       >
         {#each virtualWindow.visibleAssetIds as assetId, visibleIndex (assetId)}
           {@const selected = isAssetSelectedForOperation(item, assetId)}
           {@const absoluteIndex = virtualWindow.startIndex + visibleIndex + 1}
           <label
-            class="group relative overflow-hidden rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
+            class="group relative aspect-square overflow-hidden rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
           >
             <img
               class="size-full object-cover opacity-100"

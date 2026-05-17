@@ -65,8 +65,10 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_item_select_all_filtered: 'Select all filtered',
     assistant_operation_item_selected_count: '{selected} of {total} selected',
     assistant_operation_item_deselect_all_filtered: 'Deselect all filtered',
+    assistant_operation_item_empty_filter: 'No matching photos',
     assistant_operation_item_thumbnail_alt: 'Photo {index} of {count}',
     assistant_operation_item_thumbnail_unavailable: 'Preview unavailable',
+    assistant_operation_item_toolbar_label: 'Photo review controls',
     assistant_operation_item_toggle: 'Include photo {index}',
     assistant_operation_item_virtual_summary: 'Showing {visible} of {total} photos',
     assistant_operation_risk_low: 'Low risk',
@@ -350,5 +352,31 @@ describe('AgentPlanDestinationCard', () => {
 
     expect(onSetFieldOverride).toHaveBeenCalledWith(createId, 'albumName', 'Azores');
     expect(onResetFieldOverride).toHaveBeenCalledWith(createId, 'albumName');
+  });
+
+  it('wraps long destination names without truncating them into controls', () => {
+    const longName =
+      'Shared space and tag collection with a very long human-readable destination name for mobile review';
+
+    render(AgentPlanDestinationCard, {
+      props: {
+        group: group(undefined, undefined, setOperationFieldOverride({}, createId, 'albumName', longName)),
+        canChangeSelection: true,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+      },
+    });
+
+    const destinationRegion = screen.getByRole('region', { name: longName });
+    const title = within(destinationRegion).getByRole('heading', { name: longName });
+    const checkbox = within(destinationRegion).getByRole('checkbox', { name: `Select destination ${longName}` });
+
+    expect(title).toHaveClass('break-words', 'whitespace-normal');
+    expect(title).not.toHaveClass('truncate');
+    expect(checkbox).toHaveClass('shrink-0');
   });
 });
