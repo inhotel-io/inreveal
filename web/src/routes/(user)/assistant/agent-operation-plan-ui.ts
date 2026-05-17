@@ -1,6 +1,7 @@
 import {
   AgentOperationItemKind,
   AgentOperationRiskLevel,
+  AgentOperationStatus,
   AgentOperationTargetKind,
   AgentOperationType,
   type AgentOperationItemSelection,
@@ -95,6 +96,39 @@ export type AgentOperationReview = {
   dependencies: AgentReviewDependency[];
 };
 
+export type OperationApplyState =
+  | { kind: 'proposed' }
+  | { kind: 'applied'; appliedAssetCount?: number }
+  | { kind: 'partial'; appliedAssetCount: number; failedAssetCount: number; error?: string }
+  | { kind: 'failed'; error?: string }
+  | { kind: 'skipped'; reason?: string };
+
+export type OperationReviewApplyStateSummary = {
+  appliedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  partialCount: number;
+  hasFailures: boolean;
+};
+
+export type OperationTechnicalDetails = {
+  operationId: string;
+  operationType: string;
+  status: AgentOperationStatus | string;
+  targetKind: AgentOperationTargetKind | string;
+  targetId?: string;
+  temporaryTargetId?: string;
+  error?: string;
+  assetIdPreview: string[];
+  assetOverflowCount: number;
+  resultAlbumId?: string;
+  resultAssetIdPreview?: string[];
+  resultAssetOverflowCount?: number;
+  resultAssetResultsPreview?: { id: string; success: boolean; errorMessage?: string }[];
+  resultAssetResultsOverflowCount?: number;
+  resultSkippedReason?: string;
+};
+
 export type OperationReviewDestination = AgentReviewDestination & {
   title: string;
   subtitle: string;
@@ -120,6 +154,7 @@ export type OperationReviewItem = {
   editableFields: AgentOperationEditableField[];
   fieldErrors: Record<string, string>;
   fieldOverrides: Record<string, unknown>;
+  applyState: OperationApplyState;
 };
 
 export type OperationReviewGroup = {
@@ -380,6 +415,77 @@ export const buildOperationReviewImpactSummary = (model: OperationReviewModel): 
   };
 };
 
+export const buildOperationReviewApplyStateSummary = (
+  model: OperationReviewModel,
+): OperationReviewApplyStateSummary => {
+  const summary: OperationReviewApplyStateSummary = {
+    appliedCount: 0,
+    skippedCount: 0,
+    failedCount: 0,
+    partialCount: 0,
+    hasFailures: false,
+  };
+
+  for (const operation of model.operationsById.values()) {
+    if (operation.applyState.kind === 'applied') {
+      summary.appliedCount++;
+      continue;
+    }
+
+    if (operation.applyState.kind === 'skipped') {
+      summary.skippedCount++;
+      continue;
+    }
+
+    if (operation.applyState.kind === 'partial') {
+      summary.partialCount++;
+      summary.failedCount++;
+      continue;
+    }
+
+    if (operation.applyState.kind === 'failed') {
+      summary.failedCount++;
+    }
+  }
+
+  summary.hasFailures = summary.failedCount > 0;
+  return summary;
+};
+
+const technicalDetailsVisibleLimit = 20;
+
+export const buildOperationTechnicalDetails = (item: OperationReviewItem): OperationTechnicalDetails => {
+  const result = isRecord(item.operation.result) ? item.operation.result : undefined;
+  const resultAssetIds = getStringArray(result?.assetIds);
+  const resultAssetResults = getAssetResultDetails(result?.assetResults);
+
+  return {
+    operationId: item.operation.id,
+    operationType: item.operation.type,
+    status: item.operation.status,
+    targetKind: item.operation.targetKind,
+    ...(item.operation.targetId ? { targetId: item.operation.targetId } : {}),
+    ...(item.operation.temporaryTargetId ? { temporaryTargetId: item.operation.temporaryTargetId } : {}),
+    ...(item.operation.error ? { error: item.operation.error } : {}),
+    assetIdPreview: item.operation.assetIds.slice(0, technicalDetailsVisibleLimit),
+    assetOverflowCount: Math.max(item.operation.assetIds.length - technicalDetailsVisibleLimit, 0),
+    ...(typeof result?.albumId === 'string' ? { resultAlbumId: result.albumId } : {}),
+    ...(resultAssetIds
+      ? {
+          resultAssetIdPreview: resultAssetIds.slice(0, technicalDetailsVisibleLimit),
+          resultAssetOverflowCount: Math.max(resultAssetIds.length - technicalDetailsVisibleLimit, 0),
+        }
+      : {}),
+    ...(resultAssetResults
+      ? {
+          resultAssetResultsPreview: resultAssetResults.slice(0, technicalDetailsVisibleLimit),
+          resultAssetResultsOverflowCount: Math.max(resultAssetResults.length - technicalDetailsVisibleLimit, 0),
+        }
+      : {}),
+    ...(typeof result?.skippedReason === 'string' ? { resultSkippedReason: result.skippedReason } : {}),
+  };
+};
+
 const normalizeThumbnailStripLimit = (requestedLimit: number) =>
   Math.min(AGENT_PLAN_THUMBNAIL_STRIP_MAX_LIMIT, Math.max(0, Math.floor(requestedLimit)));
 
@@ -538,6 +644,7 @@ export const buildOperationReviewModel = (
       editableFields,
       fieldErrors,
       fieldOverrides: buildSparseOperationFieldOverrides(editableFields),
+      applyState: buildOperationApplyState(operation),
     };
   });
 
@@ -704,6 +811,72 @@ const validateEditableFields = (
   }
 
   return errors;
+};
+
+const buildOperationApplyState = (operation: AgentOperationResponseDto): OperationApplyState => {
+  if (operation.status === AgentOperationStatus.Applied) {
+    return {
+      kind: 'applied',
+      ...(operation.assetIds.length > 0 ? { appliedAssetCount: operation.assetIds.length } : {}),
+    };
+  }
+
+  if (operation.status === AgentOperationStatus.Skipped) {
+    const result = isRecord(operation.result) ? operation.result : undefined;
+    return {
+      kind: 'skipped',
+      ...(typeof result?.skippedReason === 'string' ? { reason: result.skippedReason } : {}),
+    };
+  }
+
+  if (operation.status === AgentOperationStatus.Failed) {
+    const assetResults = isRecord(operation.result) ? getAssetResultDetails(operation.result.assetResults) : undefined;
+    const appliedAssetCount = assetResults?.filter((result) => result.success).length ?? 0;
+
+    if (assetResults && appliedAssetCount > 0) {
+      return {
+        kind: 'partial',
+        appliedAssetCount,
+        failedAssetCount: assetResults.filter((result) => !result.success).length,
+        ...(operation.error ? { error: operation.error } : {}),
+      };
+    }
+
+    return {
+      kind: 'failed',
+      ...(operation.error ? { error: operation.error } : {}),
+    };
+  }
+
+  return { kind: 'proposed' };
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const getStringArray = (value: unknown) =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : undefined;
+
+const getAssetResultDetails = (value: unknown) => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const results = value.flatMap((item) => {
+    if (!isRecord(item) || typeof item.id !== 'string' || typeof item.success !== 'boolean') {
+      return [];
+    }
+
+    return [
+      {
+        id: item.id,
+        success: item.success,
+        ...(typeof item.errorMessage === 'string' ? { errorMessage: item.errorMessage } : {}),
+      },
+    ];
+  });
+
+  return results.length > 0 ? results : undefined;
 };
 
 const buildSparseOperationFieldOverrides = (editableFields: AgentOperationEditableField[]): Record<string, unknown> =>
