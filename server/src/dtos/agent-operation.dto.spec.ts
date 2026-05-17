@@ -55,7 +55,7 @@ const makeSpaceCreateOperation = (temporaryTargetId = 'tmp-family-space') => ({
   summary: 'Create Family space.',
   targetKind: AgentOperationTargetKind.NewSpace,
   temporaryTargetId,
-    payload: { spaceName: 'Family', description: 'Shared family photos.', color: 'blue' },
+  payload: { spaceName: 'Family', description: 'Shared family photos.', color: 'blue' },
 });
 
 describe('Agent operation DTOs', () => {
