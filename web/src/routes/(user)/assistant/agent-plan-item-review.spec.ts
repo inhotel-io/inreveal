@@ -120,7 +120,7 @@ describe('AgentPlanItemReview', () => {
     expect(within(toolbar).getByRole('button', { name: 'Exclude visible' })).toBeInTheDocument();
   });
 
-  it('uses responsive virtual grid sizing instead of desktop-only fixed dimensions', () => {
+  it('uses configured virtual grid sizing instead of desktop-only fixed dimensions', () => {
     render(AgentPlanItemReview, {
       props: defaultProps({
         item: item(['asset-1', 'asset-2', 'asset-3']),
@@ -133,8 +133,28 @@ describe('AgentPlanItemReview', () => {
 
     expect(grid).toHaveClass('max-h-[min(65vh,28rem)]');
     expect(grid).not.toHaveStyle({ height: '420px' });
-    expect(tileGrid).toHaveClass('grid-cols-[repeat(auto-fill,minmax(5.5rem,1fr))]');
+    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(6, minmax(0, 1fr))' });
     expect(firstTile).toHaveClass('aspect-square');
+  });
+
+  it('uses the same configured column count for virtual math and rendered grid columns', () => {
+    const assetIds = Array.from({ length: 100 }, (_, index) => `asset-${index.toString().padStart(4, '0')}`);
+    render(AgentPlanItemReview, {
+      props: defaultProps({
+        item: item(assetIds),
+        viewportHeight: 360,
+        itemSize: 96,
+        columnCount: 2,
+        overscanRows: 1,
+      }),
+    });
+
+    const grid = screen.getByTestId('agent-plan-item-review-grid');
+    const tileGrid = within(grid).getByTestId('agent-plan-item-review-tile-grid');
+
+    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(2, minmax(0, 1fr))' });
+    expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(10);
+    expect(screen.getByText('Showing 10 of 100 photos')).toBeInTheDocument();
   });
 
   it('shows excluded counts and reset action for partial selection', async () => {
