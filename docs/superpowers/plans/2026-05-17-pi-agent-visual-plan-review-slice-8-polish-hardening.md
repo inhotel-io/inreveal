@@ -621,7 +621,8 @@ Use the deterministic runner and existing helper style for the happy, mobile, th
 
 ```ts
 await page.route(
-  (url) => url.pathname.includes(`/api/agent/sessions/${session.id}/operation-plan/`) && url.pathname.endsWith('/apply'),
+  (url) =>
+    url.pathname.includes(`/api/agent/sessions/${session.id}/operation-plan/`) && url.pathname.endsWith('/apply'),
   async (route) =>
     route.fulfill({
       status: 409,
