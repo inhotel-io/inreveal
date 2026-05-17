@@ -9,6 +9,7 @@ import {
 } from '@immich/sdk';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
+import { tick } from 'svelte';
 import { readable } from 'svelte/store';
 import {
   buildOperationReviewModel,
@@ -157,7 +158,44 @@ const model = (
     itemSelectionByOperationId ?? {},
   );
 
+const stubMeasuredGridWidth = () => {
+  let resize: ResizeObserverCallback | undefined;
+
+  vi.stubGlobal(
+    'ResizeObserver',
+    vi.fn(function (callback: ResizeObserverCallback) {
+      resize = callback;
+
+      return {
+        disconnect: vi.fn(),
+        observe: vi.fn(),
+        unobserve: vi.fn(),
+      };
+    }),
+  );
+
+  return async (width: number) => {
+    if (!resize) {
+      throw new Error('ResizeObserver was not attached');
+    }
+
+    resize(
+      [
+        {
+          contentRect: { width },
+        } as ResizeObserverEntry,
+      ],
+      {} as ResizeObserver,
+    );
+    await tick();
+  };
+};
+
 describe('AgentPlanOperationRow', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('renders a human operation summary and dispatches operation toggle changes', async () => {
     const onToggleOperation = vi.fn();
     render(AgentPlanOperationRow, {
@@ -345,6 +383,52 @@ describe('AgentPlanOperationRow', () => {
 
     expect(onBulkSetItems).toHaveBeenCalledWith(addId, [assetA, assetB], false);
     expect(onSetOnlyItems).toHaveBeenCalledWith(addId, [assetA, assetB]);
+  });
+
+  it('uses the responsive item review column contract from the operation row path', async () => {
+    const setMeasuredWidth = stubMeasuredGridWidth();
+    const assetIds = Array.from(
+      { length: 100 },
+      (_, index) => `00000000-0000-4000-8000-${(300 + index).toString().padStart(12, '0')}`,
+    );
+    const item = buildOperationReviewModel(
+      plan([
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add many assets',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          assetIds,
+          payload: {},
+        }),
+      ]),
+      { [addId]: true },
+      {},
+    ).operationsById.get(addId)!;
+
+    render(AgentPlanOperationRow, {
+      props: {
+        item,
+        canChangeSelection: true,
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onBulkSetItems: vi.fn(),
+        onSetOnlyItems: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show technical details' }));
+    await setMeasuredWidth(220);
+
+    expect(screen.getByTestId('agent-plan-item-review-tile-grid')).toHaveStyle({
+      'grid-template-columns': 'repeat(2, minmax(0, 1fr))',
+    });
+    expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(14);
+    expect(screen.getByText('Showing 14 of 100 photos')).toBeInTheDocument();
   });
 
   it('renders inline field editors above technical details and threads field callbacks', async () => {
