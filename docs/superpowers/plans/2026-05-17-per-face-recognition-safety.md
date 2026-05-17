@@ -94,6 +94,7 @@ Adjust the staged paths to the files touched by the task.
 ## Task 1: Safe Early Exits
 
 **Files:**
+
 - Modify: `server/src/services/person.service.spec.ts`
 
 - [ ] **Step 1: Add a local no-mutation assertion helper**
@@ -101,17 +102,17 @@ Adjust the staged paths to the files touched by the task.
 In the first `describe('handleRecognizeFaces')` block near `server/src/services/person.service.spec.ts:2864`, add this helper immediately after the `beforeEach()` block:
 
 ```ts
-    const expectNoRecognitionMutation = () => {
-      expect(mocks.search.searchFaces).not.toHaveBeenCalled();
-      expect(mocks.person.create).not.toHaveBeenCalled();
-      expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
-      expect(mocks.faceIdentity.ensurePersonIdentity).not.toHaveBeenCalled();
-      expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
-      expect(mocks.faceIdentity.getMergeConflicts).not.toHaveBeenCalled();
-      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
-      expect(mocks.sharedSpace.getSpaceIdsForAsset).not.toHaveBeenCalled();
-      expect(mocks.job.queue).not.toHaveBeenCalled();
-    };
+const expectNoRecognitionMutation = () => {
+  expect(mocks.search.searchFaces).not.toHaveBeenCalled();
+  expect(mocks.person.create).not.toHaveBeenCalled();
+  expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
+  expect(mocks.faceIdentity.ensurePersonIdentity).not.toHaveBeenCalled();
+  expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
+  expect(mocks.faceIdentity.getMergeConflicts).not.toHaveBeenCalled();
+  expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+  expect(mocks.sharedSpace.getSpaceIdsForAsset).not.toHaveBeenCalled();
+  expect(mocks.job.queue).not.toHaveBeenCalled();
+};
 ```
 
 - [ ] **Step 2: Strengthen the missing face and missing asset tests**
@@ -119,20 +120,20 @@ In the first `describe('handleRecognizeFaces')` block near `server/src/services/
 Update the existing tests named `should fail if face does not exist` and `should fail if face does not have asset` to call the helper:
 
 ```ts
-    it('should fail if face does not exist', async () => {
-      expect(await sut.handleRecognizeFaces({ id: 'unknown-face' })).toBe(JobStatus.Failed);
+it('should fail if face does not exist', async () => {
+  expect(await sut.handleRecognizeFaces({ id: 'unknown-face' })).toBe(JobStatus.Failed);
 
-      expectNoRecognitionMutation();
-    });
+  expectNoRecognitionMutation();
+});
 
-    it('should fail if face does not have asset', async () => {
-      const face = AssetFaceFactory.create();
-      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(face, null));
+it('should fail if face does not have asset', async () => {
+  const face = AssetFaceFactory.create();
+  mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(face, null));
 
-      expect(await sut.handleRecognizeFaces({ id: face.id })).toBe(JobStatus.Failed);
+  expect(await sut.handleRecognizeFaces({ id: face.id })).toBe(JobStatus.Failed);
 
-      expectNoRecognitionMutation();
-    });
+  expectNoRecognitionMutation();
+});
 ```
 
 - [ ] **Step 3: Add safe source and missing-embedding tests to the same recognition block**
@@ -140,29 +141,29 @@ Update the existing tests named `should fail if face does not exist` and `should
 Add these tests immediately after the missing-asset test:
 
 ```ts
-    it('skips non-machine-learning faces without mutating identities or queues', async () => {
-      const asset = AssetFactory.create();
-      const face = AssetFaceFactory.create({ assetId: asset.id, sourceType: SourceType.Exif });
-      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(face, asset));
+it('skips non-machine-learning faces without mutating identities or queues', async () => {
+  const asset = AssetFactory.create();
+  const face = AssetFaceFactory.create({ assetId: asset.id, sourceType: SourceType.Exif });
+  mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(face, asset));
 
-      expect(await sut.handleRecognizeFaces({ id: face.id })).toBe(JobStatus.Skipped);
+  expect(await sut.handleRecognizeFaces({ id: face.id })).toBe(JobStatus.Skipped);
 
-      expectNoRecognitionMutation();
-    });
+  expectNoRecognitionMutation();
+});
 
-    it('fails when a machine-learning face has no embedding without mutating identities or queues', async () => {
-      const asset = AssetFactory.create();
-      const face = AssetFaceFactory.create({ assetId: asset.id });
-      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue({
-        ...face,
-        asset,
-        faceSearch: null,
-      } as any);
+it('fails when a machine-learning face has no embedding without mutating identities or queues', async () => {
+  const asset = AssetFactory.create();
+  const face = AssetFaceFactory.create({ assetId: asset.id });
+  mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue({
+    ...face,
+    asset,
+    faceSearch: null,
+  } as any);
 
-      expect(await sut.handleRecognizeFaces({ id: face.id })).toBe(JobStatus.Failed);
+  expect(await sut.handleRecognizeFaces({ id: face.id })).toBe(JobStatus.Failed);
 
-      expectNoRecognitionMutation();
-    });
+  expectNoRecognitionMutation();
+});
 ```
 
 - [ ] **Step 4: Run the focused safe-exit tests**
@@ -185,6 +186,7 @@ git commit -m "test: cover safe recognition early exits"
 ## Task 2: Shared-Space Fanout Is Suppressed Or Deduped
 
 **Files:**
+
 - Modify: `server/src/services/person.service.spec.ts`
 - Modify when red: `server/src/services/person.service.ts`
 
@@ -193,27 +195,27 @@ git commit -m "test: cover safe recognition early exits"
 In the first `describe('handleRecognizeFaces')` block, add this test after `should queue space face matching even when face already has a person assigned`:
 
 ```ts
-    it('queues shared-space face matching exactly once per space after repairing an assigned face', async () => {
-      const asset = AssetFactory.create();
-      const face = AssetFaceFactory.from({ assetId: asset.id }).person().build();
-      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(face, asset));
-      mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identity-1' } as any);
-      mocks.sharedSpace.getSpaceIdsForAsset.mockResolvedValue([
-        { spaceId: 'space-1' },
-        { spaceId: 'space-1' },
-        { spaceId: 'space-2' },
-      ]);
+it('queues shared-space face matching exactly once per space after repairing an assigned face', async () => {
+  const asset = AssetFactory.create();
+  const face = AssetFaceFactory.from({ assetId: asset.id }).person().build();
+  mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(face, asset));
+  mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identity-1' } as any);
+  mocks.sharedSpace.getSpaceIdsForAsset.mockResolvedValue([
+    { spaceId: 'space-1' },
+    { spaceId: 'space-1' },
+    { spaceId: 'space-2' },
+  ]);
 
-      expect(await sut.handleRecognizeFaces({ id: face.id })).toBe(JobStatus.Skipped);
+  expect(await sut.handleRecognizeFaces({ id: face.id })).toBe(JobStatus.Skipped);
 
-      const sharedSpaceJobs = mocks.job.queue.mock.calls
-        .map(([job]) => job)
-        .filter((job) => job.name === JobName.SharedSpaceFaceMatch);
-      expect(sharedSpaceJobs).toEqual([
-        { name: JobName.SharedSpaceFaceMatch, data: { spaceId: 'space-1', assetId: face.assetId } },
-        { name: JobName.SharedSpaceFaceMatch, data: { spaceId: 'space-2', assetId: face.assetId } },
-      ]);
-    });
+  const sharedSpaceJobs = mocks.job.queue.mock.calls
+    .map(([job]) => job)
+    .filter((job) => job.name === JobName.SharedSpaceFaceMatch);
+  expect(sharedSpaceJobs).toEqual([
+    { name: JobName.SharedSpaceFaceMatch, data: { spaceId: 'space-1', assetId: face.assetId } },
+    { name: JobName.SharedSpaceFaceMatch, data: { spaceId: 'space-2', assetId: face.assetId } },
+  ]);
+});
 ```
 
 - [ ] **Step 2: Add a red test for deduped fanout after successful incremental assignment**
@@ -221,37 +223,37 @@ In the first `describe('handleRecognizeFaces')` block, add this test after `shou
 Add this test after `should queue SharedSpaceFaceMatch for spaces containing the asset`:
 
 ```ts
-    it('queues one SharedSpaceFaceMatch job per unique space after assigning a face', async () => {
-      const asset = AssetFactory.create();
-      const [noPerson, primaryFace] = [
-        AssetFaceFactory.create({ assetId: asset.id }),
-        AssetFaceFactory.from().person().build(),
-      ];
-      const faces = [
-        { ...noPerson, distance: 0 },
-        { ...primaryFace, distance: 0.2 },
-      ] as FaceSearchResult[];
+it('queues one SharedSpaceFaceMatch job per unique space after assigning a face', async () => {
+  const asset = AssetFactory.create();
+  const [noPerson, primaryFace] = [
+    AssetFaceFactory.create({ assetId: asset.id }),
+    AssetFaceFactory.from().person().build(),
+  ];
+  const faces = [
+    { ...noPerson, distance: 0 },
+    { ...primaryFace, distance: 0.2 },
+  ] as FaceSearchResult[];
 
-      mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
-      mocks.search.searchFaces.mockResolvedValue(faces);
-      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
-      mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identity-1' } as any);
-      mocks.sharedSpace.getSpaceIdsForAsset.mockResolvedValue([
-        { spaceId: 'space-1' },
-        { spaceId: 'space-2' },
-        { spaceId: 'space-1' },
-      ]);
+  mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
+  mocks.search.searchFaces.mockResolvedValue(faces);
+  mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
+  mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identity-1' } as any);
+  mocks.sharedSpace.getSpaceIdsForAsset.mockResolvedValue([
+    { spaceId: 'space-1' },
+    { spaceId: 'space-2' },
+    { spaceId: 'space-1' },
+  ]);
 
-      expect(await sut.handleRecognizeFaces({ id: noPerson.id })).toBe(JobStatus.Success);
+  expect(await sut.handleRecognizeFaces({ id: noPerson.id })).toBe(JobStatus.Success);
 
-      const sharedSpaceJobs = mocks.job.queue.mock.calls
-        .map(([job]) => job)
-        .filter((job) => job.name === JobName.SharedSpaceFaceMatch);
-      expect(sharedSpaceJobs).toEqual([
-        { name: JobName.SharedSpaceFaceMatch, data: { spaceId: 'space-1', assetId: noPerson.assetId } },
-        { name: JobName.SharedSpaceFaceMatch, data: { spaceId: 'space-2', assetId: noPerson.assetId } },
-      ]);
-    });
+  const sharedSpaceJobs = mocks.job.queue.mock.calls
+    .map(([job]) => job)
+    .filter((job) => job.name === JobName.SharedSpaceFaceMatch);
+  expect(sharedSpaceJobs).toEqual([
+    { name: JobName.SharedSpaceFaceMatch, data: { spaceId: 'space-1', assetId: noPerson.assetId } },
+    { name: JobName.SharedSpaceFaceMatch, data: { spaceId: 'space-2', assetId: noPerson.assetId } },
+  ]);
+});
 ```
 
 - [ ] **Step 3: Run the focused fanout tests and confirm they fail before the helper**
@@ -290,15 +292,15 @@ In `server/src/services/person.service.ts`, add this private helper after `handl
 In the already-assigned branch, replace the loop at `server/src/services/person.service.ts:942-950` with:
 
 ```ts
-      // Still queue space face matching because this face may belong to a space
-      // that was created or linked after the face was originally recognized.
-      await this.queueSharedSpaceFaceMatchesForAsset(face.assetId);
+// Still queue space face matching because this face may belong to a space
+// that was created or linked after the face was originally recognized.
+await this.queueSharedSpaceFaceMatchesForAsset(face.assetId);
 ```
 
 Near the end of `handleRecognizeFaces()`, replace the loop at `server/src/services/person.service.ts:1044-1051` with:
 
 ```ts
-    await this.queueSharedSpaceFaceMatchesForAsset(face.assetId);
+await this.queueSharedSpaceFaceMatchesForAsset(face.assetId);
 ```
 
 - [ ] **Step 6: Re-run the fanout tests**
@@ -321,6 +323,7 @@ git commit -m "test: dedupe recognition shared-space fanout"
 ## Task 3: Assignment Paths Link Identity And Avoid Spurious Work
 
 **Files:**
+
 - Modify: `server/src/services/person.service.spec.ts`
 
 - [ ] **Step 1: Add an explicit min-face self-only threshold test**
@@ -328,22 +331,22 @@ git commit -m "test: dedupe recognition shared-space fanout"
 In the first `describe('handleRecognizeFaces')` block, add this test after `should not queue face with no matches`:
 
 ```ts
-    it('skips self-only matches below the min-face threshold without deferring or assigning', async () => {
-      const asset = AssetFactory.create();
-      const face = AssetFaceFactory.create({ assetId: asset.id });
+it('skips self-only matches below the min-face threshold without deferring or assigning', async () => {
+  const asset = AssetFactory.create();
+  const face = AssetFaceFactory.create({ assetId: asset.id });
 
-      mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 3 } } });
-      mocks.search.searchFaces.mockResolvedValue([{ ...face, distance: 0 }] as FaceSearchResult[]);
-      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(face, asset));
+  mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 3 } } });
+  mocks.search.searchFaces.mockResolvedValue([{ ...face, distance: 0 }] as FaceSearchResult[]);
+  mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(face, asset));
 
-      expect(await sut.handleRecognizeFaces({ id: face.id })).toBe(JobStatus.Skipped);
+  expect(await sut.handleRecognizeFaces({ id: face.id })).toBe(JobStatus.Skipped);
 
-      expect(mocks.search.searchFaces).toHaveBeenCalledTimes(1);
-      expect(mocks.person.create).not.toHaveBeenCalled();
-      expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
-      expect(mocks.job.queue).not.toHaveBeenCalled();
-      expect(mocks.sharedSpace.getSpaceIdsForAsset).not.toHaveBeenCalled();
-    });
+  expect(mocks.search.searchFaces).toHaveBeenCalledTimes(1);
+  expect(mocks.person.create).not.toHaveBeenCalled();
+  expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
+  expect(mocks.job.queue).not.toHaveBeenCalled();
+  expect(mocks.sharedSpace.getSpaceIdsForAsset).not.toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 2: Strengthen the core-person creation test**
@@ -351,44 +354,44 @@ In the first `describe('handleRecognizeFaces')` block, add this test after `shou
 Update the existing test named `should create a new person if the face is a core point with no person` to include thumbnail and identity-link assertions:
 
 ```ts
-    it('should create a new person if the face is a core point with no person', async () => {
-      const asset = AssetFactory.create();
-      const [noPerson1, noPerson2] = [AssetFaceFactory.create({ assetId: asset.id }), AssetFaceFactory.create()];
-      const person = PersonFactory.create({ ownerId: asset.ownerId });
-      const sourceIdentityId = 'created-person-identity';
+it('should create a new person if the face is a core point with no person', async () => {
+  const asset = AssetFactory.create();
+  const [noPerson1, noPerson2] = [AssetFaceFactory.create({ assetId: asset.id }), AssetFaceFactory.create()];
+  const person = PersonFactory.create({ ownerId: asset.ownerId });
+  const sourceIdentityId = 'created-person-identity';
 
-      const faces = [
-        { ...noPerson1, distance: 0 },
-        { ...noPerson2, distance: 0.3 },
-      ] as FaceSearchResult[];
+  const faces = [
+    { ...noPerson1, distance: 0 },
+    { ...noPerson2, distance: 0.3 },
+  ] as FaceSearchResult[];
 
-      mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
-      mocks.search.searchFaces.mockResolvedValueOnce(faces).mockResolvedValueOnce([]);
-      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson1, asset));
-      mocks.person.create.mockResolvedValue(person);
-      mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: sourceIdentityId } as any);
+  mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
+  mocks.search.searchFaces.mockResolvedValueOnce(faces).mockResolvedValueOnce([]);
+  mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson1, asset));
+  mocks.person.create.mockResolvedValue(person);
+  mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: sourceIdentityId } as any);
 
-      expect(await sut.handleRecognizeFaces({ id: noPerson1.id })).toBe(JobStatus.Success);
+  expect(await sut.handleRecognizeFaces({ id: noPerson1.id })).toBe(JobStatus.Success);
 
-      expect(mocks.person.create).toHaveBeenCalledWith({
-        ownerId: asset.ownerId,
-        faceAssetId: noPerson1.id,
-      });
-      expect(mocks.job.queue).toHaveBeenCalledWith({
-        name: JobName.PersonGenerateThumbnail,
-        data: { id: person.id },
-      });
-      expect(mocks.person.reassignFaces).toHaveBeenCalledWith({
-        faceIds: [noPerson1.id],
-        newPersonId: person.id,
-      });
-      expect(mocks.faceIdentity.ensurePersonIdentity).toHaveBeenCalledWith(person.id);
-      expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
-        assetFaceId: noPerson1.id,
-        identityId: sourceIdentityId,
-        source: 'owner-person',
-      });
-    });
+  expect(mocks.person.create).toHaveBeenCalledWith({
+    ownerId: asset.ownerId,
+    faceAssetId: noPerson1.id,
+  });
+  expect(mocks.job.queue).toHaveBeenCalledWith({
+    name: JobName.PersonGenerateThumbnail,
+    data: { id: person.id },
+  });
+  expect(mocks.person.reassignFaces).toHaveBeenCalledWith({
+    faceIds: [noPerson1.id],
+    newPersonId: person.id,
+  });
+  expect(mocks.faceIdentity.ensurePersonIdentity).toHaveBeenCalledWith(person.id);
+  expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
+    assetFaceId: noPerson1.id,
+    identityId: sourceIdentityId,
+    source: 'owner-person',
+  });
+});
 ```
 
 - [ ] **Step 3: Add an existing-person no-thumbnail assertion**
@@ -396,38 +399,36 @@ Update the existing test named `should create a new person if the face is a core
 Add this test after `should link identity after recognition assigns an existing person`:
 
 ```ts
-    it('assigns an existing person without creating a person or thumbnail job', async () => {
-      const asset = AssetFactory.create();
-      const [noPerson, matchedFace] = [
-        AssetFaceFactory.create({ assetId: asset.id }),
-        AssetFaceFactory.from().person().build(),
-      ];
-      const faces = [
-        { ...noPerson, distance: 0 },
-        { ...matchedFace, distance: 0.2 },
-      ] as FaceSearchResult[];
+it('assigns an existing person without creating a person or thumbnail job', async () => {
+  const asset = AssetFactory.create();
+  const [noPerson, matchedFace] = [
+    AssetFaceFactory.create({ assetId: asset.id }),
+    AssetFaceFactory.from().person().build(),
+  ];
+  const faces = [
+    { ...noPerson, distance: 0 },
+    { ...matchedFace, distance: 0.2 },
+  ] as FaceSearchResult[];
 
-      mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
-      mocks.search.searchFaces.mockResolvedValue(faces);
-      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
-      mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'matched-identity' } as any);
+  mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
+  mocks.search.searchFaces.mockResolvedValue(faces);
+  mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
+  mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'matched-identity' } as any);
 
-      expect(await sut.handleRecognizeFaces({ id: noPerson.id })).toBe(JobStatus.Success);
+  expect(await sut.handleRecognizeFaces({ id: noPerson.id })).toBe(JobStatus.Success);
 
-      expect(mocks.person.create).not.toHaveBeenCalled();
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(
-        expect.objectContaining({ name: JobName.PersonGenerateThumbnail }),
-      );
-      expect(mocks.person.reassignFaces).toHaveBeenCalledWith({
-        faceIds: [noPerson.id],
-        newPersonId: matchedFace.person!.id,
-      });
-      expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
-        assetFaceId: noPerson.id,
-        identityId: 'matched-identity',
-        source: 'owner-person',
-      });
-    });
+  expect(mocks.person.create).not.toHaveBeenCalled();
+  expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.PersonGenerateThumbnail }));
+  expect(mocks.person.reassignFaces).toHaveBeenCalledWith({
+    faceIds: [noPerson.id],
+    newPersonId: matchedFace.person!.id,
+  });
+  expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
+    assetFaceId: noPerson.id,
+    identityId: 'matched-identity',
+    source: 'owner-person',
+  });
+});
 ```
 
 - [ ] **Step 4: Run focused assignment-path tests**
@@ -450,6 +451,7 @@ git commit -m "test: cover recognition assignment paths"
 ## Task 4: Non-Core, Archive, And Hidden Faces Never Fan Out Without Assignment
 
 **Files:**
+
 - Modify: `server/src/services/person.service.spec.ts`
 - Modify when red: `server/src/services/person.service.ts`
 
@@ -458,32 +460,34 @@ git commit -m "test: cover recognition assignment paths"
 In the first `describe('handleRecognizeFaces')` block, add this test after `should not assign person to deferred non-core face with no matching person`:
 
 ```ts
-    it.each([AssetVisibility.Archive, AssetVisibility.Hidden, AssetVisibility.Locked])(
-      'does not create a core person or queue shared-space matching for deferred %s assets without a person',
-      async (visibility) => {
-        const asset = AssetFactory.create({ visibility });
-        const face = AssetFaceFactory.create({ assetId: asset.id });
+it.each([AssetVisibility.Archive, AssetVisibility.Hidden, AssetVisibility.Locked])(
+  'does not create a core person or queue shared-space matching for deferred %s assets without a person',
+  async (visibility) => {
+    const asset = AssetFactory.create({ visibility });
+    const face = AssetFaceFactory.create({ assetId: asset.id });
 
-        mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
-        mocks.search.searchFaces.mockResolvedValueOnce([{ ...face, distance: 0 }] as FaceSearchResult[]).mockResolvedValueOnce([]);
-        mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(face, asset));
-        (mocks.faceIdentity as any).findClosestAccessibleIdentityForFace.mockResolvedValue({
-          identityId: 'accessible-space-identity',
-          distance: 0.2,
-        });
-        mocks.sharedSpace.getSpaceIdsForAsset.mockResolvedValue([{ spaceId: 'space-1' }]);
+    mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
+    mocks.search.searchFaces
+      .mockResolvedValueOnce([{ ...face, distance: 0 }] as FaceSearchResult[])
+      .mockResolvedValueOnce([]);
+    mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(face, asset));
+    (mocks.faceIdentity as any).findClosestAccessibleIdentityForFace.mockResolvedValue({
+      identityId: 'accessible-space-identity',
+      distance: 0.2,
+    });
+    mocks.sharedSpace.getSpaceIdsForAsset.mockResolvedValue([{ spaceId: 'space-1' }]);
 
-        expect(await sut.handleRecognizeFaces({ id: face.id, deferred: true })).toBe(JobStatus.Skipped);
+    expect(await sut.handleRecognizeFaces({ id: face.id, deferred: true })).toBe(JobStatus.Skipped);
 
-        expect(mocks.person.create).not.toHaveBeenCalled();
-        expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
-        expect(mocks.faceIdentity.ensurePersonIdentity).not.toHaveBeenCalled();
-        expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
-        expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
-        expect(mocks.sharedSpace.getSpaceIdsForAsset).not.toHaveBeenCalled();
-        expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpaceFaceMatch }));
-      },
-    );
+    expect(mocks.person.create).not.toHaveBeenCalled();
+    expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
+    expect(mocks.faceIdentity.ensurePersonIdentity).not.toHaveBeenCalled();
+    expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
+    expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+    expect(mocks.sharedSpace.getSpaceIdsForAsset).not.toHaveBeenCalled();
+    expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpaceFaceMatch }));
+  },
+);
 ```
 
 - [ ] **Step 2: Run the focused archive/hidden test and confirm it fails before the guard**
@@ -501,40 +505,40 @@ Expected before implementation: FAIL if the current service returns `Success`, q
 In `server/src/services/person.service.ts`, after the `if (personId) { ... }` assignment block and before `if (skipSharedSpaceMatch)`, add:
 
 ```ts
-    if (!personId) {
-      this.logger.debug(`Face ${id} did not resolve to a person, skipping shared-space face matching`);
-      return JobStatus.Skipped;
-    }
+if (!personId) {
+  this.logger.debug(`Face ${id} did not resolve to a person, skipping shared-space face matching`);
+  return JobStatus.Skipped;
+}
 ```
 
 The final branch order must be:
 
 ```ts
-    if (personId) {
-      this.logger.debug(`Assigning face ${id} to person ${personId}`);
-      await this.personRepository.reassignFaces({ faceIds: [id], newPersonId: personId });
-      const sourceIdentityId = await this.replaceFaceIdentity(personId, id, 'owner-person');
-      await this.mergeWithAccessibleSharedIdentity({
-        userId: face.asset.ownerId,
-        embedding: face.faceSearch.embedding,
-        maxDistance: machineLearning.facialRecognition.maxDistance,
-        sourceIdentityId,
-        match: personId === createdPersonId ? accessibleIdentityMatch : undefined,
-      });
-    }
+if (personId) {
+  this.logger.debug(`Assigning face ${id} to person ${personId}`);
+  await this.personRepository.reassignFaces({ faceIds: [id], newPersonId: personId });
+  const sourceIdentityId = await this.replaceFaceIdentity(personId, id, 'owner-person');
+  await this.mergeWithAccessibleSharedIdentity({
+    userId: face.asset.ownerId,
+    embedding: face.faceSearch.embedding,
+    maxDistance: machineLearning.facialRecognition.maxDistance,
+    sourceIdentityId,
+    match: personId === createdPersonId ? accessibleIdentityMatch : undefined,
+  });
+}
 
-    if (!personId) {
-      this.logger.debug(`Face ${id} did not resolve to a person, skipping shared-space face matching`);
-      return JobStatus.Skipped;
-    }
+if (!personId) {
+  this.logger.debug(`Face ${id} did not resolve to a person, skipping shared-space face matching`);
+  return JobStatus.Skipped;
+}
 
-    if (skipSharedSpaceMatch) {
-      return JobStatus.Success;
-    }
+if (skipSharedSpaceMatch) {
+  return JobStatus.Success;
+}
 
-    await this.queueSharedSpaceFaceMatchesForAsset(face.assetId);
+await this.queueSharedSpaceFaceMatchesForAsset(face.assetId);
 
-    return JobStatus.Success;
+return JobStatus.Success;
 ```
 
 - [ ] **Step 4: Re-run non-core/deferred recognition tests**
@@ -557,6 +561,7 @@ git commit -m "test: block recognition fanout without assignment"
 ## Task 5: Accessible Shared Identity Merge Guards
 
 **Files:**
+
 - Modify: `server/src/services/person.service.spec.ts`
 
 - [ ] **Step 1: Add same-space conflict coverage**
@@ -564,43 +569,43 @@ git commit -m "test: block recognition fanout without assignment"
 In the first `describe('handleRecognizeFaces')` block, add this test after `skips accessible shared identity merge when same-owner personal conflicts exist`:
 
 ```ts
-    it('skips accessible shared identity merge when same-space conflicts exist', async () => {
-      const asset = AssetFactory.create();
-      const [noPerson, matchedFace] = [
-        AssetFaceFactory.create({ assetId: asset.id }),
-        AssetFaceFactory.from().person().build(),
-      ];
-      const faces = [
-        { ...noPerson, distance: 0 },
-        { ...matchedFace, distance: 0.2 },
-      ] as FaceSearchResult[];
-      const sourceIdentityId = 'source-identity';
-      const targetIdentityId = 'target-identity';
+it('skips accessible shared identity merge when same-space conflicts exist', async () => {
+  const asset = AssetFactory.create();
+  const [noPerson, matchedFace] = [
+    AssetFaceFactory.create({ assetId: asset.id }),
+    AssetFaceFactory.from().person().build(),
+  ];
+  const faces = [
+    { ...noPerson, distance: 0 },
+    { ...matchedFace, distance: 0.2 },
+  ] as FaceSearchResult[];
+  const sourceIdentityId = 'source-identity';
+  const targetIdentityId = 'target-identity';
 
-      mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
-      mocks.search.searchFaces.mockResolvedValue(faces);
-      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
-      mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: sourceIdentityId } as any);
-      (mocks.faceIdentity as any).findClosestAccessibleIdentityForFace.mockResolvedValue({
-        identityId: targetIdentityId,
-        distance: 0.2,
-      });
-      mocks.faceIdentity.getMergeConflicts.mockResolvedValue({
-        personalProfileConflictCount: 0,
-        spaceProfileConflictCount: 1,
-      });
+  mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
+  mocks.search.searchFaces.mockResolvedValue(faces);
+  mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
+  mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: sourceIdentityId } as any);
+  (mocks.faceIdentity as any).findClosestAccessibleIdentityForFace.mockResolvedValue({
+    identityId: targetIdentityId,
+    distance: 0.2,
+  });
+  mocks.faceIdentity.getMergeConflicts.mockResolvedValue({
+    personalProfileConflictCount: 0,
+    spaceProfileConflictCount: 1,
+  });
 
-      expect(await sut.handleRecognizeFaces({ id: noPerson.id })).toBe(JobStatus.Success);
+  expect(await sut.handleRecognizeFaces({ id: noPerson.id })).toBe(JobStatus.Success);
 
-      expect(mocks.faceIdentity.getMergeConflicts).toHaveBeenCalledWith({
-        targetIdentityId,
-        sourceIdentityIds: [sourceIdentityId],
-      });
-      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(
-        expect.objectContaining({ name: JobName.SharedSpacePersonMetadataBackfill }),
-      );
-    });
+  expect(mocks.faceIdentity.getMergeConflicts).toHaveBeenCalledWith({
+    targetIdentityId,
+    sourceIdentityIds: [sourceIdentityId],
+  });
+  expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+  expect(mocks.job.queue).not.toHaveBeenCalledWith(
+    expect.objectContaining({ name: JobName.SharedSpacePersonMetadataBackfill }),
+  );
+});
 ```
 
 - [ ] **Step 2: Add same-identity no-conflict-query coverage**
@@ -608,35 +613,35 @@ In the first `describe('handleRecognizeFaces')` block, add this test after `skip
 Add this test immediately after the same-space conflict test:
 
 ```ts
-    it('does not run conflict checks when accessible shared evidence already points at the source identity', async () => {
-      const asset = AssetFactory.create();
-      const [noPerson, matchedFace] = [
-        AssetFaceFactory.create({ assetId: asset.id }),
-        AssetFaceFactory.from().person().build(),
-      ];
-      const faces = [
-        { ...noPerson, distance: 0 },
-        { ...matchedFace, distance: 0.2 },
-      ] as FaceSearchResult[];
-      const sourceIdentityId = 'source-identity';
+it('does not run conflict checks when accessible shared evidence already points at the source identity', async () => {
+  const asset = AssetFactory.create();
+  const [noPerson, matchedFace] = [
+    AssetFaceFactory.create({ assetId: asset.id }),
+    AssetFaceFactory.from().person().build(),
+  ];
+  const faces = [
+    { ...noPerson, distance: 0 },
+    { ...matchedFace, distance: 0.2 },
+  ] as FaceSearchResult[];
+  const sourceIdentityId = 'source-identity';
 
-      mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
-      mocks.search.searchFaces.mockResolvedValue(faces);
-      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
-      mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: sourceIdentityId } as any);
-      (mocks.faceIdentity as any).findClosestAccessibleIdentityForFace.mockResolvedValue({
-        identityId: sourceIdentityId,
-        distance: 0.1,
-      });
+  mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
+  mocks.search.searchFaces.mockResolvedValue(faces);
+  mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
+  mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: sourceIdentityId } as any);
+  (mocks.faceIdentity as any).findClosestAccessibleIdentityForFace.mockResolvedValue({
+    identityId: sourceIdentityId,
+    distance: 0.1,
+  });
 
-      expect(await sut.handleRecognizeFaces({ id: noPerson.id })).toBe(JobStatus.Success);
+  expect(await sut.handleRecognizeFaces({ id: noPerson.id })).toBe(JobStatus.Success);
 
-      expect(mocks.faceIdentity.getMergeConflicts).not.toHaveBeenCalled();
-      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(
-        expect.objectContaining({ name: JobName.SharedSpacePersonMetadataBackfill }),
-      );
-    });
+  expect(mocks.faceIdentity.getMergeConflicts).not.toHaveBeenCalled();
+  expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+  expect(mocks.job.queue).not.toHaveBeenCalledWith(
+    expect.objectContaining({ name: JobName.SharedSpacePersonMetadataBackfill }),
+  );
+});
 ```
 
 - [ ] **Step 3: Run focused merge-guard tests**
@@ -659,6 +664,7 @@ git commit -m "test: cover recognition shared identity merge guards"
 ## Task 6: Medium Destructive Identity Tests
 
 **Files:**
+
 - Modify: `server/test/medium/specs/services/people-identity-rbac.spec.ts`
 
 - [ ] **Step 1: Strengthen the existing post-join private upload pass case**
@@ -666,8 +672,8 @@ git commit -m "test: cover recognition shared identity merge guards"
 In the existing test named `links a post-join private upload to a linked-library space identity and preserves owned access after leave`, add this assertion after `uploadedPerson` is loaded:
 
 ```ts
-    const targetIdentity = await fx.faceIdentityRepository.ensurePersonIdentity(fx.face.person.id);
-    expect(uploadedPerson.identityId).toBe(targetIdentity.id);
+const targetIdentity = await fx.faceIdentityRepository.ensurePersonIdentity(fx.face.person.id);
+expect(uploadedPerson.identityId).toBe(targetIdentity.id);
 ```
 
 Expected behavior: a member private upload merges into accessible shared evidence only when the repository conflict guards allow the merge.
@@ -677,65 +683,65 @@ Expected behavior: a member private upload merges into accessible shared evidenc
 Add this test immediately after the strengthened pass case:
 
 ```ts
-  it('does not merge a post-join private upload when strict personal conflict guards fail', async () => {
-    const fx = await createLinkedLibraryIdentityFixture({ personName: 'Library Source' });
-    const embeddingRow = await fx.ctx.database
-      .selectFrom('face_search')
-      .select('embedding')
-      .where('faceId', '=', fx.face.faceId)
-      .executeTakeFirstOrThrow();
-    const targetIdentity = await fx.faceIdentityRepository.ensurePersonIdentity(fx.face.person.id);
+it('does not merge a post-join private upload when strict personal conflict guards fail', async () => {
+  const fx = await createLinkedLibraryIdentityFixture({ personName: 'Library Source' });
+  const embeddingRow = await fx.ctx.database
+    .selectFrom('face_search')
+    .select('embedding')
+    .where('faceId', '=', fx.face.faceId)
+    .executeTakeFirstOrThrow();
+  const targetIdentity = await fx.faceIdentityRepository.ensurePersonIdentity(fx.face.person.id);
 
-    const { result: memberConflictPerson } = await fx.ctx.newPerson({
-      ownerId: fx.member.id,
-      name: 'Member Existing Profile',
-    });
-    const memberConflictIdentity = await fx.faceIdentityRepository.ensurePersonIdentity(memberConflictPerson.id);
-    await fx.faceIdentityRepository.mergeIdentities({
-      targetIdentityId: targetIdentity.id,
-      sourceIdentityIds: [memberConflictIdentity.id],
-      source: 'manual',
-    });
-
-    const { asset } = await fx.ctx.newAsset({ ownerId: fx.member.id, visibility: AssetVisibility.Timeline });
-    const { result: uploadedFaceId } = await fx.ctx.newAssetFace({ assetId: asset.id });
-    await fx.ctx.database
-      .insertInto('face_search')
-      .values({ faceId: uploadedFaceId, embedding: embeddingRow.embedding })
-      .execute();
-
-    await fx.personService.handleRecognizeFaces({ id: uploadedFaceId });
-
-    const uploadedPerson = await fx.ctx.database
-      .selectFrom('asset_face')
-      .innerJoin('person', 'person.id', 'asset_face.personId')
-      .select(['person.id', 'person.identityId'])
-      .where('asset_face.id', '=', uploadedFaceId)
-      .executeTakeFirstOrThrow();
-    const uploadedLinks = await fx.ctx.database
-      .selectFrom('face_identity_face')
-      .select(['assetFaceId', 'identityId', 'source'])
-      .where('assetFaceId', '=', uploadedFaceId)
-      .execute();
-    const targetProfiles = await fx.ctx.database
-      .selectFrom('person')
-      .select(['id', 'ownerId', 'identityId'])
-      .where('identityId', '=', targetIdentity.id)
-      .orderBy('id')
-      .execute();
-
-    expect(uploadedPerson.id).not.toBe(memberConflictPerson.id);
-    expect(uploadedPerson.identityId).not.toBe(targetIdentity.id);
-    expect(uploadedLinks).toEqual([
-      { assetFaceId: uploadedFaceId, identityId: uploadedPerson.identityId, source: 'owner-person' },
-    ]);
-    expect(targetProfiles).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: memberConflictPerson.id, ownerId: fx.member.id, identityId: targetIdentity.id }),
-      ]),
-    );
-    expect(targetProfiles.map((profile) => profile.id)).not.toContain(uploadedPerson.id);
+  const { result: memberConflictPerson } = await fx.ctx.newPerson({
+    ownerId: fx.member.id,
+    name: 'Member Existing Profile',
   });
+  const memberConflictIdentity = await fx.faceIdentityRepository.ensurePersonIdentity(memberConflictPerson.id);
+  await fx.faceIdentityRepository.mergeIdentities({
+    targetIdentityId: targetIdentity.id,
+    sourceIdentityIds: [memberConflictIdentity.id],
+    source: 'manual',
+  });
+
+  const { asset } = await fx.ctx.newAsset({ ownerId: fx.member.id, visibility: AssetVisibility.Timeline });
+  const { result: uploadedFaceId } = await fx.ctx.newAssetFace({ assetId: asset.id });
+  await fx.ctx.database
+    .insertInto('face_search')
+    .values({ faceId: uploadedFaceId, embedding: embeddingRow.embedding })
+    .execute();
+
+  await fx.personService.handleRecognizeFaces({ id: uploadedFaceId });
+
+  const uploadedPerson = await fx.ctx.database
+    .selectFrom('asset_face')
+    .innerJoin('person', 'person.id', 'asset_face.personId')
+    .select(['person.id', 'person.identityId'])
+    .where('asset_face.id', '=', uploadedFaceId)
+    .executeTakeFirstOrThrow();
+  const uploadedLinks = await fx.ctx.database
+    .selectFrom('face_identity_face')
+    .select(['assetFaceId', 'identityId', 'source'])
+    .where('assetFaceId', '=', uploadedFaceId)
+    .execute();
+  const targetProfiles = await fx.ctx.database
+    .selectFrom('person')
+    .select(['id', 'ownerId', 'identityId'])
+    .where('identityId', '=', targetIdentity.id)
+    .orderBy('id')
+    .execute();
+
+  expect(uploadedPerson.id).not.toBe(memberConflictPerson.id);
+  expect(uploadedPerson.identityId).not.toBe(targetIdentity.id);
+  expect(uploadedLinks).toEqual([
+    { assetFaceId: uploadedFaceId, identityId: uploadedPerson.identityId, source: 'owner-person' },
+  ]);
+  expect(targetProfiles).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: memberConflictPerson.id, ownerId: fx.member.id, identityId: targetIdentity.id }),
+    ]),
+  );
+  expect(targetProfiles.map((profile) => profile.id)).not.toContain(uploadedPerson.id);
+});
 ```
 
 This test exercises the repository-side strict guard that prevents an accessible shared identity from being offered to a new private upload when that target identity already has a profile for the uploader. It complements the small Task 5 mocked conflict tests, which directly prove `getMergeConflicts()` blocks automatic merges when a same-owner or same-space conflict is reported after a candidate match is found.
@@ -745,62 +751,62 @@ This test exercises the repository-side strict guard that prevents an accessible
 Add this test immediately after the strict personal-conflict test:
 
 ```ts
-  it('repeated recognition of an already assigned face preserves one person and one identity link', async () => {
-    const fx = await createLinkedLibraryIdentityFixture({ personName: 'Library Source' });
-    const embeddingRow = await fx.ctx.database
-      .selectFrom('face_search')
-      .select('embedding')
-      .where('faceId', '=', fx.face.faceId)
-      .executeTakeFirstOrThrow();
+it('repeated recognition of an already assigned face preserves one person and one identity link', async () => {
+  const fx = await createLinkedLibraryIdentityFixture({ personName: 'Library Source' });
+  const embeddingRow = await fx.ctx.database
+    .selectFrom('face_search')
+    .select('embedding')
+    .where('faceId', '=', fx.face.faceId)
+    .executeTakeFirstOrThrow();
 
-    const { asset } = await fx.ctx.newAsset({ ownerId: fx.member.id, visibility: AssetVisibility.Timeline });
-    const { result: uploadedFaceId } = await fx.ctx.newAssetFace({ assetId: asset.id });
-    await fx.ctx.database
-      .insertInto('face_search')
-      .values({ faceId: uploadedFaceId, embedding: embeddingRow.embedding })
+  const { asset } = await fx.ctx.newAsset({ ownerId: fx.member.id, visibility: AssetVisibility.Timeline });
+  const { result: uploadedFaceId } = await fx.ctx.newAssetFace({ assetId: asset.id });
+  await fx.ctx.database
+    .insertInto('face_search')
+    .values({ faceId: uploadedFaceId, embedding: embeddingRow.embedding })
+    .execute();
+
+  const readState = async () => {
+    const assignedPerson = await fx.ctx.database
+      .selectFrom('asset_face')
+      .innerJoin('person', 'person.id', 'asset_face.personId')
+      .select(['person.id as personId', 'person.identityId as identityId'])
+      .where('asset_face.id', '=', uploadedFaceId)
+      .executeTakeFirstOrThrow();
+    const memberPeople = await fx.ctx.database
+      .selectFrom('person')
+      .select(['id', 'identityId'])
+      .where('ownerId', '=', fx.member.id)
+      .orderBy('id')
+      .execute();
+    const faceLinks = await fx.ctx.database
+      .selectFrom('face_identity_face')
+      .select(['assetFaceId', 'identityId', 'source'])
+      .where('assetFaceId', '=', uploadedFaceId)
+      .orderBy('assetFaceId')
       .execute();
 
-    const readState = async () => {
-      const assignedPerson = await fx.ctx.database
-        .selectFrom('asset_face')
-        .innerJoin('person', 'person.id', 'asset_face.personId')
-        .select(['person.id as personId', 'person.identityId as identityId'])
-        .where('asset_face.id', '=', uploadedFaceId)
-        .executeTakeFirstOrThrow();
-      const memberPeople = await fx.ctx.database
-        .selectFrom('person')
-        .select(['id', 'identityId'])
-        .where('ownerId', '=', fx.member.id)
-        .orderBy('id')
-        .execute();
-      const faceLinks = await fx.ctx.database
-        .selectFrom('face_identity_face')
-        .select(['assetFaceId', 'identityId', 'source'])
-        .where('assetFaceId', '=', uploadedFaceId)
-        .orderBy('assetFaceId')
-        .execute();
+    return { assignedPerson, memberPeople, faceLinks };
+  };
 
-      return { assignedPerson, memberPeople, faceLinks };
-    };
+  await fx.personService.handleRecognizeFaces({ id: uploadedFaceId });
 
-    await fx.personService.handleRecognizeFaces({ id: uploadedFaceId });
+  await fx.personService.handleRecognizeFaces({ id: uploadedFaceId });
+  const assignedState = await readState();
 
-    await fx.personService.handleRecognizeFaces({ id: uploadedFaceId });
-    const assignedState = await readState();
+  await fx.personService.handleRecognizeFaces({ id: uploadedFaceId });
+  const repeatedState = await readState();
 
-    await fx.personService.handleRecognizeFaces({ id: uploadedFaceId });
-    const repeatedState = await readState();
-
-    expect(repeatedState).toEqual(assignedState);
-    expect(repeatedState.memberPeople).toHaveLength(1);
-    expect(repeatedState.faceLinks).toEqual([
-      {
-        assetFaceId: uploadedFaceId,
-        identityId: repeatedState.assignedPerson.identityId,
-        source: 'owner-person',
-      },
-    ]);
-  });
+  expect(repeatedState).toEqual(assignedState);
+  expect(repeatedState.memberPeople).toHaveLength(1);
+  expect(repeatedState.faceLinks).toEqual([
+    {
+      assetFaceId: uploadedFaceId,
+      identityId: repeatedState.assignedPerson.identityId,
+      source: 'owner-person',
+    },
+  ]);
+});
 ```
 
 - [ ] **Step 4: Run focused medium destructive tests**
@@ -823,6 +829,7 @@ git commit -m "test: cover recognition destructive identity cases"
 ## Task 7: Full Slice Verification
 
 **Files:**
+
 - Verify all modified files.
 
 - [ ] **Step 1: Run the full small recognition spec**
