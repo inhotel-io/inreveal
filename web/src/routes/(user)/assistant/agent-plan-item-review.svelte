@@ -300,6 +300,7 @@
           {@const absoluteIndex = virtualWindow.startIndex + visibleIndex + 1}
           <label
             class="group relative aspect-square overflow-hidden rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
+            data-testid="agent-plan-item-thumbnail"
           >
             <img
               class="size-full object-cover opacity-100"

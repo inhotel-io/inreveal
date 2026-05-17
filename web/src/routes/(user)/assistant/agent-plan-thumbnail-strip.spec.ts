@@ -9,8 +9,20 @@ import {
 } from '@immich/sdk';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
-import { buildOperationReviewModel, type OperationReviewGroup } from './agent-operation-plan-ui';
+import {
+  AGENT_PLAN_THUMBNAIL_STRIP_MAX_LIMIT,
+  buildOperationReviewModel,
+  type OperationReviewGroup,
+} from './agent-operation-plan-ui';
 import AgentPlanThumbnailStrip from './agent-plan-thumbnail-strip.svelte';
+
+const getAssetMediaUrlMock = vi.hoisted(() =>
+  vi.fn(({ id, size }: { id: string; size: string }) => `/api/assets/${id}/thumbnail?size=${size}`),
+);
+
+vi.mock('$lib/utils', () => ({
+  getAssetMediaUrl: getAssetMediaUrlMock,
+}));
 
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
@@ -99,6 +111,10 @@ const groupWithoutRepresentatives = (count: number): OperationReviewGroup => {
 };
 
 describe('AgentPlanThumbnailStrip', () => {
+  beforeEach(() => {
+    getAssetMediaUrlMock.mockClear();
+  });
+
   it('renders a bounded thumbnail strip with overflow instead of every affected asset', () => {
     render(AgentPlanThumbnailStrip, {
       props: {
@@ -163,13 +179,18 @@ describe('AgentPlanThumbnailStrip', () => {
     render(AgentPlanThumbnailStrip, {
       props: {
         group: group(1000),
+        maxVisible: 1000,
       },
     });
 
     const strip = screen.getByTestId('agent-plan-thumbnail-strip');
 
-    expect(within(strip).getAllByTestId('agent-plan-thumbnail-image')).toHaveLength(6);
-    expect(within(strip).getByText('+994')).toBeInTheDocument();
+    expect(within(strip).getAllByTestId('agent-plan-thumbnail-image')).toHaveLength(
+      AGENT_PLAN_THUMBNAIL_STRIP_MAX_LIMIT,
+    );
+    expect(getAssetMediaUrlMock).toHaveBeenCalledTimes(AGENT_PLAN_THUMBNAIL_STRIP_MAX_LIMIT);
+    expect(getAssetMediaUrlMock).toHaveBeenLastCalledWith({ id: 'asset-012', size: 'thumbnail' });
+    expect(within(strip).getByText('+988')).toBeInTheDocument();
     expect(screen.queryByText('asset-013')).not.toBeInTheDocument();
     expect(within(strip).queryByAltText('Photo preview 13 of 1000')).not.toBeInTheDocument();
   });
