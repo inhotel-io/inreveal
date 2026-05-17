@@ -10,6 +10,8 @@
     canChangeSelection: boolean;
     onToggleOperation: (operationId: string, checked: boolean) => void;
     onToggleItem: (operationId: string, assetId: string, selected: boolean) => void;
+    onBulkSetItems: (operationId: string, assetIds: string[], selected: boolean) => void;
+    onSetOnlyItems: (operationId: string, assetIds: string[]) => void;
     onResetItemSelection: (operationId: string) => void;
     onSetFieldOverride?: (operationId: string, fieldKey: string, value: string | undefined) => void;
     onResetFieldOverride?: (operationId: string, fieldKey: string) => void;
@@ -20,6 +22,8 @@
     canChangeSelection,
     onToggleOperation,
     onToggleItem,
+    onBulkSetItems,
+    onSetOnlyItems,
     onResetItemSelection,
     onSetFieldOverride = () => {},
     onResetFieldOverride = () => {},
@@ -95,7 +99,14 @@
     <details class="mt-2 text-xs text-gray-500 dark:text-gray-400" bind:open={detailsOpen}>
       <summary class="cursor-pointer select-none">{$t('assistant_operation_detail_toggle')}</summary>
       {#if detailsOpen}
-        <AgentPlanItemReview {item} {canChangeSelection} {onToggleItem} onResetSelection={onResetItemSelection} />
+        <AgentPlanItemReview
+          {item}
+          {canChangeSelection}
+          {onToggleItem}
+          {onBulkSetItems}
+          {onSetOnlyItems}
+          onResetSelection={onResetItemSelection}
+        />
         <dl class="mt-2 grid gap-1 sm:grid-cols-[max-content_1fr]">
           <dt class="font-medium">{$t('assistant_operation_detail_type')}</dt>
           <dd>{$t(item.typeLabelKey)}</dd>

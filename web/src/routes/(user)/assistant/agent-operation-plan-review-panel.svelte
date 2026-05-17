@@ -16,7 +16,6 @@
     buildOperationReviewImpactSummary,
     buildOperationReviewModel,
     buildSelectionPayload,
-    toAgentOperationItemSelections,
     buildOperationItemSelectionState,
     createInitialOperationFieldOverrideState,
     createInitialOperationEnabledState,
@@ -24,12 +23,14 @@
     resetOperationFieldOverride,
     resetOperationItemSelection,
     setOperationFieldOverride,
+    toAgentOperationItemSelections,
     type AgentOperationSelectionPayload,
     type OperationEnabledState,
     type OperationFieldOverrideState,
     type OperationItemSelectionState,
     type OperationReviewGroup,
   } from './agent-operation-plan-ui';
+  import { applyAgentPlanBulkItemSelection, setAgentPlanOnlyItemSelection } from './agent-plan-large-item-review-ui';
 
   interface Props {
     session: AgentSessionResponseDto;
@@ -301,6 +302,41 @@
     publishSelection(plan, enabledByOperationId, nextItemSelectionByOperationId, fieldOverrideByOperationId);
   };
 
+  const bulkSetItems = (operationId: string, assetIds: string[], selected: boolean) => {
+    if (!plan || !canChangeSelection) {
+      return;
+    }
+
+    const operation = plan.operations.find((operation) => operation.id === operationId);
+    const allAssetIds = operation?.assetIds ?? [];
+    const nextItemSelectionByOperationId = applyAgentPlanBulkItemSelection({
+      state: itemSelectionByOperationId,
+      operationId,
+      allAssetIds,
+      targetAssetIds: assetIds,
+      selected,
+    });
+    itemSelectionByOperationId = nextItemSelectionByOperationId;
+    publishSelection(plan, enabledByOperationId, nextItemSelectionByOperationId, fieldOverrideByOperationId);
+  };
+
+  const setOnlyItems = (operationId: string, assetIds: string[]) => {
+    if (!plan || !canChangeSelection) {
+      return;
+    }
+
+    const operation = plan.operations.find((operation) => operation.id === operationId);
+    const allAssetIds = operation?.assetIds ?? [];
+    const nextItemSelectionByOperationId = setAgentPlanOnlyItemSelection({
+      state: itemSelectionByOperationId,
+      operationId,
+      allAssetIds,
+      targetAssetIds: assetIds,
+    });
+    itemSelectionByOperationId = nextItemSelectionByOperationId;
+    publishSelection(plan, enabledByOperationId, nextItemSelectionByOperationId, fieldOverrideByOperationId);
+  };
+
   const setFieldOverride = (operationId: string, fieldKey: string, value: string | undefined) => {
     if (!plan || !canChangeSelection) {
       return;
@@ -415,6 +451,8 @@
             onToggleGroup={toggleGroup}
             onToggleOperation={toggleOperation}
             onToggleItem={toggleItem}
+            onBulkSetItems={bulkSetItems}
+            onSetOnlyItems={setOnlyItems}
             onResetItemSelection={resetItemSelection}
             onSetFieldOverride={setFieldOverride}
             onResetFieldOverride={resetFieldOverride}
