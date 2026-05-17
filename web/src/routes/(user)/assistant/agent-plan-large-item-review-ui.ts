@@ -330,7 +330,10 @@ const setNormalizedSparseSelection = (
   };
 };
 
-const removeSparseSelection = (state: OperationItemSelectionState, operationId: string): OperationItemSelectionState => {
+const removeSparseSelection = (
+  state: OperationItemSelectionState,
+  operationId: string,
+): OperationItemSelectionState => {
   const { [operationId]: _, ...remaining } = state;
   return remaining;
 };
