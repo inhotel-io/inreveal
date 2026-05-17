@@ -30,6 +30,10 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_detail_status: 'Status',
     assistant_operation_detail_toggle: 'Details',
     assistant_operation_detail_type: 'Type',
+    assistant_operation_field_cover_option: 'Use photo {index} as cover',
+    assistant_operation_field_cover_thumbnail_alt: 'Cover photo option {index}',
+    assistant_operation_field_reset: 'Reset {field}',
+    assistant_operation_field_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_risk_low: 'Low risk',
     assistant_operation_status_applied: 'Applied',
     assistant_operation_status_failed: 'Failed',
@@ -57,7 +61,8 @@ vi.mock('svelte-i18n', () => {
         .replace('{selected}', String(options?.values?.selected ?? ''))
         .replace('{summary}', String(options?.values?.summary ?? ''))
         .replace('{total}', String(options?.values?.total ?? ''))
-        .replace('{dependencies}', String(options?.values?.dependencies ?? '')),
+        .replace('{dependencies}', String(options?.values?.dependencies ?? ''))
+        .replace('{field}', String(options?.values?.field ?? '')),
     ),
   };
 });
@@ -138,6 +143,8 @@ describe('AgentPlanOperationRow', () => {
         onToggleOperation,
         onToggleItem: vi.fn(),
         onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
       },
     });
 
@@ -158,6 +165,8 @@ describe('AgentPlanOperationRow', () => {
         onToggleOperation: vi.fn(),
         onToggleItem: vi.fn(),
         onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
       },
     });
 
@@ -173,6 +182,8 @@ describe('AgentPlanOperationRow', () => {
         onToggleOperation: vi.fn(),
         onToggleItem: vi.fn(),
         onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
       },
     });
 
@@ -197,6 +208,8 @@ describe('AgentPlanOperationRow', () => {
         onToggleOperation: vi.fn(),
         onToggleItem: vi.fn(),
         onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
       },
     });
 
@@ -220,6 +233,8 @@ describe('AgentPlanOperationRow', () => {
         onToggleOperation: vi.fn(),
         onToggleItem,
         onResetItemSelection,
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
       },
     });
 
@@ -234,5 +249,30 @@ describe('AgentPlanOperationRow', () => {
 
     expect(onToggleItem).toHaveBeenCalledWith(addId, assetB, true);
     expect(onResetItemSelection).toHaveBeenCalledWith(addId);
+  });
+
+  it('renders inline field editors above technical details and threads field callbacks', async () => {
+    const onSetFieldOverride = vi.fn();
+    const onResetFieldOverride = vi.fn();
+
+    render(AgentPlanOperationRow, {
+      props: {
+        item: model().operationsById.get(createId)!,
+        canChangeSelection: true,
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onSetFieldOverride,
+        onResetFieldOverride,
+      },
+    });
+
+    await fireEvent.input(screen.getByLabelText('Album name'), { target: { value: 'Madeira' } });
+    await fireEvent.click(screen.getByText('Details'));
+
+    const field = screen.getByLabelText('Album name');
+    const technicalDetail = screen.getByText('Operation ID');
+    expect(field.compareDocumentPosition(technicalDetail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(onSetFieldOverride).toHaveBeenCalledWith(createId, 'albumName', 'Madeira');
   });
 });
