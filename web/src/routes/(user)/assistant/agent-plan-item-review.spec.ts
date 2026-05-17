@@ -5,8 +5,12 @@ import { readable } from 'svelte/store';
 import type { OperationReviewItem } from './agent-operation-plan-ui';
 import AgentPlanItemReview from './agent-plan-item-review.svelte';
 
+const getAssetMediaUrlMock = vi.hoisted(() =>
+  vi.fn(({ id, size }: { id: string; size: string }) => `/api/assets/${id}/thumbnail?size=${size}`),
+);
+
 vi.mock('$lib/utils', () => ({
-  getAssetMediaUrl: ({ id, size }: { id: string; size: string }) => `/api/assets/${id}/thumbnail?size=${size}`,
+  getAssetMediaUrl: getAssetMediaUrlMock,
 }));
 
 vi.mock('svelte-i18n', () => {
@@ -117,6 +121,10 @@ const stubMeasuredGridWidth = () => {
 };
 
 describe('AgentPlanItemReview', () => {
+  beforeEach(() => {
+    getAssetMediaUrlMock.mockClear();
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -285,8 +293,66 @@ describe('AgentPlanItemReview', () => {
     });
 
     expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(30);
+    expect(screen.getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(30);
+    expect(getAssetMediaUrlMock).toHaveBeenCalledTimes(30);
+    expect(getAssetMediaUrlMock).toHaveBeenLastCalledWith({ id: 'asset-0029', size: 'thumbnail' });
+    expect(screen.queryByRole('checkbox', { name: 'Include photo 1000' })).not.toBeInTheDocument();
     expect(screen.queryByAltText('asset-0999')).not.toBeInTheDocument();
     expect(screen.getByText('Showing 30 of 1,000 photos')).toBeInTheDocument();
+  });
+
+  it('updates one sparse selection without mounting off-window assets', async () => {
+    const onToggleItem = vi.fn();
+    const assetIds = Array.from({ length: 1000 }, (_, index) => `asset-${index.toString().padStart(4, '0')}`);
+    const baseItem = item(assetIds);
+    const { rerender } = render(AgentPlanItemReview, {
+      props: defaultProps({
+        item: baseItem,
+        viewportHeight: 360,
+        itemSize: 96,
+        columnCount: 6,
+        overscanRows: 1,
+        onToggleItem,
+      }),
+    });
+
+    expect(screen.getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(30);
+
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 30' }));
+
+    expect(onToggleItem).toHaveBeenCalledWith('operation-1', 'asset-0029', false);
+
+    await rerender(
+      defaultProps({
+        item: {
+          ...baseItem,
+          review: {
+            ...baseItem.review,
+            selection: {
+              itemKind: 'asset',
+              totalCount: 1000,
+              selectedCount: 999,
+              mode: 'allExcept',
+              itemIds: ['asset-0029'],
+              supportsItemSelection: true,
+            },
+          },
+          excludedAssetCount: 1,
+        },
+        viewportHeight: 360,
+        itemSize: 96,
+        columnCount: 6,
+        overscanRows: 1,
+        onToggleItem,
+      }),
+    );
+
+    expect(screen.getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(30);
+    expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(30);
+    expect(screen.getByText('999 of 1,000 selected')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Include photo 30' })).not.toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: 'Include photo 1000' })).not.toBeInTheDocument();
+    expect(getAssetMediaUrlMock).toHaveBeenCalledTimes(30);
   });
 
   it('updates mounted thumbnails when the virtual grid scrolls', async () => {
