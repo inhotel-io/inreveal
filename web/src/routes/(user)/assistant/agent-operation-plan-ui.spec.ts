@@ -10,8 +10,8 @@ import {
 import {
   AGENT_PLAN_THUMBNAIL_STRIP_DEFAULT_LIMIT,
   AGENT_PLAN_THUMBNAIL_STRIP_MAX_LIMIT,
-  buildApprovedOperationIds,
   buildAgentPlanThumbnailStrip,
+  buildApprovedOperationIds,
   buildGroupEnabledState,
   buildOperationReviewImpactSummary,
   buildOperationReviewModel,
