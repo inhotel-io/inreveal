@@ -816,7 +816,9 @@ const setupFaceRecognition = (db?: Kysely<DB>) => {
       return undefined as any;
     });
 
-  ctx.getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository).set.mockResolvedValue();
+  ctx
+    .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
+    .set.mockResolvedValue();
 
   return { sut, ctx };
 };
@@ -828,12 +830,7 @@ After `getIdentityLinks`, add:
 
 ```ts
 const getPeopleByIds = (ctx: ReturnType<typeof setupFaceRecognition>['ctx'], ids: string[]) =>
-  ctx.database
-    .selectFrom('person')
-    .select(['id', 'name'])
-    .where('id', 'in', ids)
-    .orderBy('name')
-    .execute();
+  ctx.database.selectFrom('person').select(['id', 'name']).where('id', 'in', ids).orderBy('name').execute();
 
 const getSpacePeople = (ctx: ReturnType<typeof setupFaceRecognition>['ctx'], spaceIds: string[]) =>
   ctx.database
@@ -950,7 +947,10 @@ describe('handleQueueRecognizeFaces safety', () => {
     expect(jobMock.queueAll).toHaveBeenCalledWith([
       { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: enabledSpace.id } },
     ]);
-    expect(queuedJobs).not.toContainEqual({ name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: disabledSpace.id } });
+    expect(queuedJobs).not.toContainEqual({
+      name: JobName.SharedSpaceFaceMatchAll,
+      data: { spaceId: disabledSpace.id },
+    });
     expect(jobMock.queue).toHaveBeenCalledWith({
       name: JobName.FaceIdentityMaintenanceAfterRecognition,
       data: {},
@@ -1034,7 +1034,9 @@ it('keeps force recognition idempotent over repeated runs with populated manual 
       data: { id: ml.assetFace.id, deferred: false, skipSharedSpaceMatch: true },
     },
   ]);
-  expect(jobMock.queueAll).toHaveBeenCalledWith([{ name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: space.id } }]);
+  expect(jobMock.queueAll).toHaveBeenCalledWith([
+    { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: space.id } },
+  ]);
   expect(jobMock.queue).toHaveBeenCalledWith({
     name: JobName.FaceIdentityMaintenanceAfterRecognition,
     data: {},
