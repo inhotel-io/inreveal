@@ -322,7 +322,9 @@ const buildOperationReviewSelection = (
   };
 };
 
-const getThumbnailSummary = (operations: Pick<AgentOperationResponseDto, 'assetIds'>[]): AgentReviewThumbnailSummary => {
+const getThumbnailSummary = (
+  operations: Pick<AgentOperationResponseDto, 'assetIds'>[],
+): AgentReviewThumbnailSummary => {
   const totalCount = getOperationAssetCount(operations);
   const representativeAssetIds = getRepresentativeAssetIds(operations);
 
