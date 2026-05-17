@@ -61,6 +61,9 @@ String parameterToString(dynamic value) {
   if (value is AgentAlbumCreateOperationType) {
     return AgentAlbumCreateOperationTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentAlbumRemoveAssetsOperationType) {
+    return AgentAlbumRemoveAssetsOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentAlbumSetCoverOperationType) {
     return AgentAlbumSetCoverOperationTypeTypeTransformer().encode(value).toString();
   }
@@ -69,6 +72,21 @@ String parameterToString(dynamic value) {
   }
   if (value is AgentApprovalMode) {
     return AgentApprovalModeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAssetAddTagOperationType) {
+    return AgentAssetAddTagOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAssetRemoveTagOperationType) {
+    return AgentAssetRemoveTagOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAssetRotateOperationType) {
+    return AgentAssetRotateOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAssetSetArchiveOperationType) {
+    return AgentAssetSetArchiveOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAssetSetFavoriteOperationType) {
+    return AgentAssetSetFavoriteOperationTypeTypeTransformer().encode(value).toString();
   }
   if (value is AgentMessageAssetBlockType) {
     return AgentMessageAssetBlockTypeTypeTransformer().encode(value).toString();
@@ -91,11 +109,17 @@ String parameterToString(dynamic value) {
   if (value is AgentOperationExistingAlbumTargetKind) {
     return AgentOperationExistingAlbumTargetKindTypeTransformer().encode(value).toString();
   }
+  if (value is AgentOperationExistingSpaceTargetKind) {
+    return AgentOperationExistingSpaceTargetKindTypeTransformer().encode(value).toString();
+  }
   if (value is AgentOperationItemKind) {
     return AgentOperationItemKindTypeTransformer().encode(value).toString();
   }
   if (value is AgentOperationNewAlbumTargetKind) {
     return AgentOperationNewAlbumTargetKindTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentOperationNewSpaceTargetKind) {
+    return AgentOperationNewSpaceTargetKindTypeTransformer().encode(value).toString();
   }
   if (value is AgentOperationPlanStatus) {
     return AgentOperationPlanStatusTypeTransformer().encode(value).toString();
@@ -123,6 +147,12 @@ String parameterToString(dynamic value) {
   }
   if (value is AgentSessionStatus) {
     return AgentSessionStatusTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentSpaceCreateOperationType) {
+    return AgentSpaceCreateOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentSpaceUpdateDetailsOperationType) {
+    return AgentSpaceUpdateDetailsOperationTypeTypeTransformer().encode(value).toString();
   }
   if (value is AgentToolApprovalDecision) {
     return AgentToolApprovalDecisionTypeTransformer().encode(value).toString();
