@@ -2964,7 +2964,7 @@ describe(AgentOperationPlanService.name, () => {
     await expect(
       sut.applyApprovedOperations(auth, session.id, plan.id, {
         operationIds: [operation.id],
-        fieldOverrides: { [operation.id]: operationInput.fields },
+        fieldOverrides: { [operation.id]: operationInput.fields as unknown as Record<string, string> },
       }),
     ).rejects.toThrow('Target overrides are not supported for create operations');
 
@@ -3156,7 +3156,7 @@ describe(AgentOperationPlanService.name, () => {
 
     const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
       operationIds: [operation.id],
-      fieldOverrides: { [operation.id]: { rotationAngle: 180 } },
+      fieldOverrides: { [operation.id]: { rotationAngle: '180' } },
       itemSelections: { [operation.id]: { itemKind: 'asset', mode: 'all', itemIds: [] } },
     });
 
