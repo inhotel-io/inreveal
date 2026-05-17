@@ -13,11 +13,15 @@ import {
   buildAgentPlanThumbnailStrip,
   buildApprovedOperationIds,
   buildGroupEnabledState,
+  buildOperationItemSelectionState,
   buildOperationReviewImpactSummary,
   buildOperationReviewModel,
   buildSelectionPayload,
   createInitialOperationEnabledState,
+  createInitialOperationItemSelectionState,
   getOperationAssetCount,
+  resetOperationItemSelection,
+  setOperationItemSelection,
 } from './agent-operation-plan-ui';
 
 const planId = '00000000-0000-4000-8000-000000000100';
@@ -148,7 +152,7 @@ describe('agent operation plan UI helpers', () => {
         totalCount: 2,
         selectedCount: 2,
         mode: 'all',
-        supportsItemSelection: false,
+        supportsItemSelection: true,
       },
       thumbnails: {
         totalCount: 2,
@@ -355,7 +359,7 @@ describe('agent operation plan UI helpers', () => {
       totalCount: 2,
       selectedCount: 0,
       mode: 'none',
-      supportsItemSelection: false,
+      supportsItemSelection: true,
     });
     expect(model.operationsById.get(addId)?.review.dependencies).toEqual([
       { operationId: createId, summary: 'Create Portugal album', blocked: true },
@@ -368,7 +372,7 @@ describe('agent operation plan UI helpers', () => {
     expect(model.groups).toEqual([]);
     expect(model.operationsById.size).toBe(0);
     expect(buildApprovedOperationIds(model)).toEqual([]);
-    expect(buildSelectionPayload(model)).toEqual({ planId, operationIds: [] });
+    expect(buildSelectionPayload(model)).toEqual({ planId, planRevision: 1, operationIds: [] });
   });
 
   it('keeps legacy operation-id apply payload while exposing the richer review model', () => {
@@ -396,7 +400,7 @@ describe('agent operation plan UI helpers', () => {
       { [createId]: true, [addId]: true },
     );
 
-    expect(buildSelectionPayload(model)).toEqual({ planId, operationIds: [createId, addId] });
+    expect(buildSelectionPayload(model)).toEqual({ planId, planRevision: 1, operationIds: [createId, addId] });
     expect(model.groups[0]).toEqual(
       expect.objectContaining({
         id: 'new-album:album-portugal',
@@ -414,6 +418,171 @@ describe('agent operation plan UI helpers', () => {
         representativeAssetIds: [assetA, assetB],
       }),
     );
+  });
+
+  it('builds sparse allExcept payloads and mixed selection counts after excluding one asset', () => {
+    const currentPlan = plan([
+      operation({
+        id: addId,
+        type: AgentOperationType.AlbumAddAssets,
+        summary: 'Add two assets',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: '00000000-0000-4000-8000-000000000301',
+        assetIds: [assetA, assetB],
+        payload: {},
+      }),
+    ]);
+    const initialItemState = createInitialOperationItemSelectionState(currentPlan);
+    const itemSelectionState = buildOperationItemSelectionState(currentPlan, initialItemState, addId, assetB, false);
+    const model = buildOperationReviewModel(currentPlan, { [addId]: true }, itemSelectionState);
+
+    expect(model.operationsById.get(addId)?.review.selection).toEqual({
+      itemKind: 'asset',
+      totalCount: 2,
+      selectedCount: 1,
+      mode: 'allExcept',
+      itemIds: [assetB],
+      supportsItemSelection: true,
+    });
+    expect(model.operationsById.get(addId)).toEqual(
+      expect.objectContaining({
+        selected: true,
+        enabled: true,
+        mixed: true,
+        excludedAssetCount: 1,
+      }),
+    );
+    expect(buildSelectionPayload(model)).toEqual({
+      planId,
+      planRevision: 1,
+      operationIds: [addId],
+      itemSelections: {
+        [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
+      },
+    });
+  });
+
+  it('omits an operation when all selectable assets are excluded', () => {
+    const currentPlan = plan([
+      operation({
+        id: addId,
+        type: AgentOperationType.AlbumAddAssets,
+        summary: 'Add two assets',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: '00000000-0000-4000-8000-000000000301',
+        assetIds: [assetA, assetB],
+        payload: {},
+      }),
+    ]);
+    const itemSelectionState = setOperationItemSelection({}, addId, {
+      itemKind: 'asset',
+      mode: 'allExcept',
+      itemIds: [assetA, assetB],
+    });
+    const model = buildOperationReviewModel(currentPlan, { [addId]: true }, itemSelectionState);
+
+    expect(model.operationsById.get(addId)).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        mixed: false,
+        excludedAssetCount: 2,
+      }),
+    );
+    expect(buildApprovedOperationIds(model)).toEqual([]);
+    expect(buildSelectionPayload(model)).toEqual({ planId, planRevision: 1, operationIds: [] });
+  });
+
+  it('preserves sparse only selections in the apply payload', () => {
+    const currentPlan = plan([
+      operation({
+        id: addId,
+        type: AgentOperationType.AlbumAddAssets,
+        summary: 'Add two assets',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: '00000000-0000-4000-8000-000000000301',
+        assetIds: [assetA, assetB],
+        payload: {},
+      }),
+    ]);
+    const itemSelectionState = setOperationItemSelection({}, addId, {
+      itemKind: 'asset',
+      mode: 'only',
+      itemIds: [assetA],
+    });
+    const model = buildOperationReviewModel(currentPlan, { [addId]: true }, itemSelectionState);
+
+    expect(model.operationsById.get(addId)?.review.selection.selectedCount).toBe(1);
+    expect(buildSelectionPayload(model)).toEqual({
+      planId,
+      planRevision: 1,
+      operationIds: [addId],
+      itemSelections: {
+        [addId]: { itemKind: 'asset', mode: 'only', itemIds: [assetA] },
+      },
+    });
+  });
+
+  it('resets item selection overrides back to default all selection', () => {
+    const currentPlan = plan([
+      operation({
+        id: addId,
+        type: AgentOperationType.AlbumAddAssets,
+        summary: 'Add two assets',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: '00000000-0000-4000-8000-000000000301',
+        assetIds: [assetA, assetB],
+        payload: {},
+      }),
+    ]);
+    const excludedState = buildOperationItemSelectionState(
+      currentPlan,
+      createInitialOperationItemSelectionState(currentPlan),
+      addId,
+      assetB,
+      false,
+    );
+    const resetState = resetOperationItemSelection(excludedState, addId);
+    const model = buildOperationReviewModel(currentPlan, { [addId]: true }, resetState);
+
+    expect(resetState[addId]).toBeUndefined();
+    expect(model.operationsById.get(addId)?.review.selection).toEqual({
+      itemKind: 'asset',
+      totalCount: 2,
+      selectedCount: 2,
+      mode: 'all',
+      supportsItemSelection: true,
+    });
+    expect(buildSelectionPayload(model)).toEqual({ planId, planRevision: 1, operationIds: [addId] });
+  });
+
+  it('keeps large operations sparse without creating an eager selected id list', () => {
+    const assetIds = Array.from(
+      { length: 1_000 },
+      (_, index) => `00000000-0000-4000-8000-${index.toString().padStart(12, '0')}`,
+    );
+    const currentPlan = plan([
+      operation({
+        id: addId,
+        type: AgentOperationType.AlbumAddAssets,
+        summary: 'Add many assets',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: '00000000-0000-4000-8000-000000000301',
+        assetIds,
+        payload: {},
+      }),
+    ]);
+    const itemSelectionState = buildOperationItemSelectionState(
+      currentPlan,
+      createInitialOperationItemSelectionState(currentPlan),
+      addId,
+      assetIds[999],
+      false,
+    );
+    const model = buildOperationReviewModel(currentPlan, { [addId]: true }, itemSelectionState);
+
+    expect(model.operationsById.get(addId)?.review.selection.selectedCount).toBe(999);
+    expect(model.operationsById.get(addId)?.review.selection.itemIds).toEqual([assetIds[999]]);
+    expect(buildSelectionPayload(model).itemSelections?.[addId].itemIds).toHaveLength(1);
   });
 
   it('summarizes selected destinations, changes, and assets for the evidence ledger shell', () => {
@@ -630,7 +799,7 @@ describe('agent operation plan UI helpers', () => {
     expect(model.operationsById.get(coverId)?.review.dependencies).toEqual([
       { operationId: addId, summary: 'Add two assets', blocked: true },
     ]);
-    expect(buildSelectionPayload(model)).toEqual({ planId, operationIds: [] });
+    expect(buildSelectionPayload(model)).toEqual({ planId, planRevision: 1, operationIds: [] });
   });
 
   it('blocks operations that reference a missing dependency', () => {
@@ -657,7 +826,7 @@ describe('agent operation plan UI helpers', () => {
         blockedBy: ['Missing dependency'],
       }),
     );
-    expect(buildSelectionPayload(model)).toEqual({ planId, operationIds: [] });
+    expect(buildSelectionPayload(model)).toEqual({ planId, planRevision: 1, operationIds: [] });
   });
 
   it('builds group toggle state without changing operations outside the group', () => {
@@ -696,7 +865,7 @@ describe('agent operation plan UI helpers', () => {
     const nextModel = buildOperationReviewModel(initialPlan, nextState);
 
     expect(nextState).toEqual({ [createId]: false, [addId]: false, [updateId]: true });
-    expect(buildSelectionPayload(nextModel)).toEqual({ planId, operationIds: [updateId] });
+    expect(buildSelectionPayload(nextModel)).toEqual({ planId, planRevision: 1, operationIds: [updateId] });
   });
 
   it('preserves independent existing-album operations when a new-album dependency is disabled', () => {
