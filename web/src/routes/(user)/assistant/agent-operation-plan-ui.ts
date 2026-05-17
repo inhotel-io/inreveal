@@ -98,6 +98,15 @@ export type OperationReviewModel = {
   operationsById: Map<string, OperationReviewItem>;
 };
 
+export type OperationReviewImpactSummary = {
+  destinationCount: number;
+  totalOperationCount: number;
+  selectedOperationCount: number;
+  blockedOperationCount: number;
+  totalAssetCount: number;
+  selectedAssetCount: number;
+};
+
 const typeLabelKeys = {
   [AgentOperationType.AlbumCreate]: 'assistant_operation_type_album_create' as Translations,
   [AgentOperationType.AlbumAddAssets]: 'assistant_operation_type_album_add_assets' as Translations,
@@ -141,6 +150,22 @@ export const buildSelectionPayload = (model: OperationReviewModel): AgentOperati
   planId: model.plan.id,
   operationIds: buildApprovedOperationIds(model),
 });
+
+export const buildOperationReviewImpactSummary = (model: OperationReviewModel): OperationReviewImpactSummary => {
+  const selectedOperations = model.plan.operations
+    .map((operation) => model.operationsById.get(operation.id))
+    .filter((operation): operation is OperationReviewItem => operation !== undefined)
+    .filter((operation) => operation.enabled && !operation.blocked);
+
+  return {
+    destinationCount: model.groups.length,
+    totalOperationCount: model.plan.operations.length,
+    selectedOperationCount: selectedOperations.length,
+    blockedOperationCount: [...model.operationsById.values()].filter((operation) => operation.blocked).length,
+    totalAssetCount: getOperationAssetCount(model.plan.operations),
+    selectedAssetCount: getOperationAssetCount(selectedOperations.map(({ operation }) => operation)),
+  };
+};
 
 export const buildOperationReviewModel = (
   plan: AgentOperationPlanResponseDto,
