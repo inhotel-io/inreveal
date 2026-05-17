@@ -349,6 +349,45 @@ describe(AgentOperationPlanController.name, () => {
       expect(service.applyApprovedOperations).toHaveBeenCalledWith(auth, sessionId, planId, dto);
     });
 
+    it('passes field overrides to the operation plan service', async () => {
+      const dto: AgentOperationPlanApplyRequestDto = {
+        operationIds: [operationId],
+        itemSelections: {
+          [operationId]: {
+            itemKind: 'asset',
+            mode: 'only',
+            itemIds: [assetId],
+          },
+        },
+        fieldOverrides: {
+          [operationId]: {
+            albumName: 'Edited Portugal',
+          },
+        },
+        planRevision: 1,
+      };
+
+      service.applyApprovedOperations.mockResolvedValue({
+        status: AgentOperationApplyStatus.Applied,
+        plan: {
+          ...plan,
+          status: AgentOperationPlanStatus.Applied,
+          operations: [{ ...plan.operations[0], status: AgentOperationStatus.Applied }],
+        },
+        appliedOperationIds: [operationId],
+        skippedOperationIds: [],
+        failedOperationIds: [],
+        summary: 'Applied 1 operation(s), skipped 0, failed 0.',
+      });
+
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/agent/sessions/${sessionId}/operation-plan/${planId}/apply`)
+        .send(dto);
+
+      expect(status).toBe(201);
+      expect(service.applyApprovedOperations).toHaveBeenCalledWith(auth, sessionId, planId, dto);
+    });
+
     it('validates apply params and body before calling the service', async () => {
       const { status } = await request(ctx.getHttpServer())
         .post(`/agent/sessions/${sessionId}/operation-plan/not-a-uuid/apply`)

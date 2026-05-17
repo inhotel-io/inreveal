@@ -33,6 +33,18 @@ const uniqueAssetIds = z
       });
     }
   });
+const uniqueCoverAssetIds = z
+  .array(uuid)
+  .min(1)
+  .max(500)
+  .superRefine((assetIds, ctx) => {
+    if (new Set(assetIds).size !== assetIds.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'assetIds must be unique',
+      });
+    }
+  });
 const uniqueOperationIds = z
   .array(uuid)
   .min(1)
@@ -55,6 +67,26 @@ const uniqueSelectionItemIds = (schema = z.array(uuid).max(10_000)) =>
     }
   });
 const requiredUniqueSelectionItemIds = uniqueSelectionItemIds(z.array(uuid).min(1).max(10_000));
+const fieldOverrideValue = z.unknown();
+const AgentOperationFieldOverrideSchema = z
+  .record(z.string().trim().min(1).max(80), fieldOverrideValue)
+  .superRefine((override, ctx) => {
+    const keyCount = Object.keys(override).length;
+    if (keyCount === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'fieldOverrides must not be empty',
+      });
+    }
+
+    if (keyCount > 20) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'fieldOverrides may contain at most 20 fields per operation',
+      });
+    }
+  })
+  .meta({ id: 'AgentOperationFieldOverride' });
 
 const AgentOperationPlanStatusSchema = z.enum(AgentOperationPlanStatus).meta({ id: 'AgentOperationPlanStatus' });
 const AgentOperationApplyStatusSchema = z.enum(AgentOperationApplyStatus).meta({ id: 'AgentOperationApplyStatus' });
@@ -175,7 +207,7 @@ const setCoverOperationSchema = z
     targetKind: AgentOperationTargetKindSchema,
     targetId: uuid.optional(),
     temporaryTargetId: temporaryTargetId.optional(),
-    assetIds: z.array(uuid).length(1),
+    assetIds: uniqueCoverAssetIds,
     riskLevel: operationDefaults.riskLevel,
     enabled: operationDefaults.enabled,
     payload: emptyPayload,
@@ -283,6 +315,7 @@ const AgentOperationPlanApplyRequestSchema = z
   .strictObject({
     operationIds: uniqueOperationIds,
     itemSelections: z.record(uuid, AgentOperationItemSelectionSchema).optional(),
+    fieldOverrides: z.record(uuid, AgentOperationFieldOverrideSchema).optional(),
     planRevision: z.number().int().min(1).optional(),
   })
   .meta({ id: 'AgentOperationPlanApplyRequestDto' });
