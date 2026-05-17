@@ -57,6 +57,32 @@ describe('agent plan large item review UI helpers', () => {
     expect(window.beforeHeight).toBe(9 * 96);
   });
 
+  it('keeps virtual window output bounded and deterministic for 10,000 assets', () => {
+    const ids = assetIds(10_000);
+    const input = {
+      assetIds: ids,
+      scrollTop: 48_000,
+      viewportHeight: 360,
+      itemSize: 96,
+      columnCount: 6,
+      overscanRows: 1,
+    };
+    const firstWindow = buildAgentPlanItemVirtualWindow(input);
+    const secondWindow = buildAgentPlanItemVirtualWindow(input);
+
+    expect(firstWindow).toEqual(secondWindow);
+    expect(firstWindow.totalAssetCount).toBe(10_000);
+    expect(firstWindow.totalRows).toBe(1667);
+    expect(firstWindow.visibleAssetIds).toHaveLength(36);
+    expect(firstWindow.startIndex).toBe(2994);
+    expect(firstWindow.endIndex).toBe(3030);
+    expect(firstWindow.visibleAssetIds[0]).toBe('asset-2994');
+    expect(firstWindow.visibleAssetIds.at(-1)).toBe('asset-3029');
+    expect(firstWindow.beforeHeight).toBe(499 * 96);
+    expect(firstWindow.afterHeight).toBe((1667 - 505) * 96);
+    expect(firstWindow.visibleAssetIds.length).toBeLessThan(50);
+  });
+
   it('clamps negative and oversized scroll for short lists', () => {
     const ids = assetIds(10);
     const baseInput = {
