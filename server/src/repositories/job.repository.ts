@@ -507,6 +507,15 @@ export class JobRepository {
         }
         return { jobId: 'face-identity-maintenance-after-recognition', removeOnFail: true };
       }
+      case JobName.FaceSuggestionMaintenance: {
+        return { jobId: 'face-suggestion-maintenance', removeOnComplete: true, removeOnFail: true };
+      }
+      case JobName.PersonSuggestionScanQueueAll: {
+        return { jobId: 'person-suggestion-scan/all', removeOnComplete: true, removeOnFail: true };
+      }
+      case JobName.SpacePersonSuggestionScanQueueAll: {
+        return { jobId: 'space-person-suggestion-scan/all', removeOnComplete: true, removeOnFail: true };
+      }
       case JobName.VersionCheck: {
         return { deduplication: { id: JobName.VersionCheck } };
       }

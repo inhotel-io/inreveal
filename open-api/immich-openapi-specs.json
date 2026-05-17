@@ -25912,6 +25912,7 @@
           "FacialRecognition",
           "FaceIdentityBackfill",
           "FaceIdentityMaintenanceAfterRecognition",
+          "FaceSuggestionMaintenance",
           "PersonSuggestionScanQueueAll",
           "PersonSuggestionScan",
           "SpacePersonSuggestionScanQueueAll",
@@ -26531,6 +26532,7 @@
           "integrity-untracked-files-delete-all",
           "integrity-checksum-mismatch-delete-all",
           "face-identity-backfill",
+          "face-suggestion-maintenance",
           "shared-space-person-metadata-backfill"
         ],
         "type": "string"
