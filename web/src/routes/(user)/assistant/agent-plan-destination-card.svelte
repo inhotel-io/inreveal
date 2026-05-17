@@ -65,8 +65,9 @@
   };
 </script>
 
-<section
+<div
   class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-immich-dark-gray"
+  role="region"
   aria-label={destinationTitle}
 >
   <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -121,4 +122,4 @@
       />
     {/each}
   </div>
-</section>
+</div>

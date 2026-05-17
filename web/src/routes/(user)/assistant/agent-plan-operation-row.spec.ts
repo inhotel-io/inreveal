@@ -8,6 +8,7 @@ import {
   type AgentOperationResponseDto,
 } from '@immich/sdk';
 import { fireEvent, render, screen } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import { readable } from 'svelte/store';
 import {
   buildOperationReviewModel,
@@ -180,6 +181,35 @@ describe('AgentPlanOperationRow', () => {
     expect(onToggleOperation).toHaveBeenCalledWith(addId, false);
   });
 
+  it('supports keyboard toggling for operation selection and details disclosure', async () => {
+    const user = userEvent.setup();
+    const onToggleOperation = vi.fn();
+    render(AgentPlanOperationRow, {
+      props: {
+        item: model().operationsById.get(addId)!,
+        canChangeSelection: true,
+        onToggleOperation,
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+      },
+    });
+
+    const checkbox = screen.getByRole('checkbox', { name: 'Add 2 photos' });
+    checkbox.focus();
+    await user.keyboard('[Space]');
+
+    expect(onToggleOperation).toHaveBeenCalledWith(addId, false);
+
+    const detailsButton = screen.getByRole('button', { name: 'Show technical details' });
+    detailsButton.focus();
+    await user.keyboard('[Enter]');
+
+    expect(screen.getByRole('button', { name: 'Hide technical details' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Operation ID')).toBeInTheDocument();
+  });
+
   it('disables blocked operations and explains the dependency in user language', () => {
     render(AgentPlanOperationRow, {
       props: {
@@ -193,7 +223,9 @@ describe('AgentPlanOperationRow', () => {
       },
     });
 
-    expect(screen.getByRole('checkbox', { name: 'Add 2 photos' })).toBeDisabled();
+    const checkbox = screen.getByRole('checkbox', { name: 'Add 2 photos' });
+    expect(checkbox).toBeDisabled();
+    expect(checkbox).not.toHaveAttribute('aria-disabled');
     expect(screen.getByText('Blocked by Create Portugal album')).toBeInTheDocument();
   });
 
