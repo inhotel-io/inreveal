@@ -1186,8 +1186,9 @@ fieldOverrides?: Record<string, Record<string, unknown>>;
 Add helpers:
 
 ```ts
-export const createInitialOperationFieldOverrideState = (_plan: AgentOperationPlanResponseDto): OperationFieldOverrideState =>
-  ({});
+export const createInitialOperationFieldOverrideState = (
+  _plan: AgentOperationPlanResponseDto,
+): OperationFieldOverrideState => ({});
 
 export const setOperationFieldOverride = (
   state: OperationFieldOverrideState,
@@ -1276,11 +1277,8 @@ Add album field builders:
 const getPayloadString = (payload: Record<string, unknown>, fieldKey: string) =>
   typeof payload[fieldKey] === 'string' ? payload[fieldKey] : '';
 
-const getOverrideString = (
-  fieldOverride: Record<string, unknown> | undefined,
-  fieldKey: string,
-  fallback: string,
-) => (typeof fieldOverride?.[fieldKey] === 'string' ? fieldOverride[fieldKey] : fallback);
+const getOverrideString = (fieldOverride: Record<string, unknown> | undefined, fieldKey: string, fallback: string) =>
+  typeof fieldOverride?.[fieldKey] === 'string' ? fieldOverride[fieldKey] : fallback;
 
 const validateAlbumNameField = (value: string): Translations | undefined => {
   const length = value.trim().length;
@@ -2048,13 +2046,15 @@ buildOperationReviewModel(
   nextEnabledByOperationId,
   nextItemSelectionByOperationId,
   nextFieldOverrideByOperationId,
-)
+);
 ```
 
 Compute apply eligibility from field validation:
 
 ```ts
-const canApply = $derived(canChangeSelection && selectedOperationIds.length > 0 && (model?.fieldErrors.length ?? 0) === 0);
+const canApply = $derived(
+  canChangeSelection && selectedOperationIds.length > 0 && (model?.fieldErrors.length ?? 0) === 0,
+);
 ```
 
 Add handlers:
