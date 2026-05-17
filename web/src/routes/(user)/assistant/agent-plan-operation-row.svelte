@@ -94,7 +94,7 @@
     </div>
 
     {#if item.applyState.kind === 'failed' && item.applyState.error}
-      <span class="mt-1 block text-sm text-red-700 dark:text-red-300">
+      <span class="mt-1 block text-sm text-red-700 dark:text-red-300" role="alert">
         {item.applyState.error}
       </span>
     {/if}
