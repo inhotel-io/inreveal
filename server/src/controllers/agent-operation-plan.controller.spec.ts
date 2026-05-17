@@ -34,6 +34,7 @@ describe(AgentOperationPlanController.name, () => {
   const sessionId = factory.uuid();
   const planId = factory.uuid();
   const operationId = factory.uuid();
+  const assetId = factory.uuid();
   const createdAt = new Date('2026-05-15T12:00:00.000Z');
   const updatedAt = new Date('2026-05-15T12:00:01.000Z');
   const plan: AgentOperationPlanResponseDto = {
@@ -312,10 +313,84 @@ describe(AgentOperationPlanController.name, () => {
       expect(body.plan.operations[0].createdAt).toBe(createdAt.toISOString());
     });
 
+    it('accepts sparse item selections and plan revision in the apply body', async () => {
+      const dto: AgentOperationPlanApplyRequestDto = {
+        operationIds: [operationId],
+        itemSelections: {
+          [operationId]: {
+            itemKind: 'asset',
+            mode: 'allExcept',
+            itemIds: [assetId],
+          },
+        },
+        planRevision: 1,
+      };
+
+      service.applyApprovedOperations.mockResolvedValue({
+        status: AgentOperationApplyStatus.Applied,
+        plan: {
+          ...plan,
+          status: AgentOperationPlanStatus.Applied,
+          operations: [
+            { ...plan.operations[0], status: AgentOperationStatus.Applied, result: { albumId: factory.uuid() } },
+          ],
+        },
+        appliedOperationIds: [operationId],
+        skippedOperationIds: [],
+        failedOperationIds: [],
+        summary: 'Applied 1 operation(s), skipped 0, failed 0.',
+      });
+
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/agent/sessions/${sessionId}/operation-plan/${planId}/apply`)
+        .send(dto);
+
+      expect(status).toBe(201);
+      expect(service.applyApprovedOperations).toHaveBeenCalledWith(auth, sessionId, planId, dto);
+    });
+
     it('validates apply params and body before calling the service', async () => {
       const { status } = await request(ctx.getHttpServer())
         .post(`/agent/sessions/${sessionId}/operation-plan/not-a-uuid/apply`)
         .send({ operationIds: [] });
+
+      expect(status).toBe(400);
+      expect(service.applyApprovedOperations).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid sparse item selections before calling the service', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/agent/sessions/${sessionId}/operation-plan/${planId}/apply`)
+        .send({
+          operationIds: [operationId],
+          itemSelections: {
+            [operationId]: {
+              itemKind: 'photo',
+              mode: 'allExcept',
+              itemIds: [assetId],
+            },
+          },
+          planRevision: 1,
+        });
+
+      expect(status).toBe(400);
+      expect(service.applyApprovedOperations).not.toHaveBeenCalled();
+    });
+
+    it('rejects duplicate sparse item ids before calling the service', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/agent/sessions/${sessionId}/operation-plan/${planId}/apply`)
+        .send({
+          operationIds: [operationId],
+          itemSelections: {
+            [operationId]: {
+              itemKind: 'asset',
+              mode: 'only',
+              itemIds: [assetId, assetId],
+            },
+          },
+          planRevision: 1,
+        });
 
       expect(status).toBe(400);
       expect(service.applyApprovedOperations).not.toHaveBeenCalled();

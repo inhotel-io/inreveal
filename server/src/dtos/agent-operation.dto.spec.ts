@@ -419,6 +419,36 @@ describe('Agent operation DTOs', () => {
     expect(result.data).toEqual({ operationIds: [firstOperationId, secondOperationId] });
   });
 
+  it('accepts sparse apply item selections and a numeric plan revision', () => {
+    const operationId = factory.uuid();
+    const assetId = factory.uuid();
+
+    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+      operationIds: [operationId],
+      itemSelections: {
+        [operationId]: {
+          itemKind: 'asset',
+          mode: 'allExcept',
+          itemIds: [assetId],
+        },
+      },
+      planRevision: 3,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({
+      operationIds: [operationId],
+      itemSelections: {
+        [operationId]: {
+          itemKind: 'asset',
+          mode: 'allExcept',
+          itemIds: [assetId],
+        },
+      },
+      planRevision: 3,
+    });
+  });
+
   it('rejects duplicate apply operation ids', () => {
     const operationId = factory.uuid();
 
@@ -428,6 +458,41 @@ describe('Agent operation DTOs', () => {
 
     expect(result.success).toBe(false);
     expect(result.error?.issues).toEqual([expect.objectContaining({ message: 'operationIds must be unique' })]);
+  });
+
+  it('rejects duplicate sparse item ids', () => {
+    const operationId = factory.uuid();
+    const assetId = factory.uuid();
+
+    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+      operationIds: [operationId],
+      itemSelections: {
+        [operationId]: {
+          itemKind: 'asset',
+          mode: 'only',
+          itemIds: [assetId, assetId],
+        },
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([expect.objectContaining({ message: 'itemIds must be unique' })]);
+  });
+
+  it('rejects unsupported sparse item kinds', () => {
+    const operationId = factory.uuid();
+
+    const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+      operationIds: [operationId],
+      itemSelections: {
+        [operationId]: {
+          itemKind: 'photo',
+          mode: 'none',
+        },
+      },
+    });
+
+    expect(result.success).toBe(false);
   });
 
   it('rejects an empty apply operation id list', () => {
