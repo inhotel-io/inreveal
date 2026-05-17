@@ -68,7 +68,7 @@ const uniqueSelectionItemIds = (schema = z.array(uuid).max(10_000)) =>
     }
   });
 const requiredUniqueSelectionItemIds = uniqueSelectionItemIds(z.array(uuid).min(1).max(10_000));
-const fieldOverrideValue = z.unknown();
+const fieldOverrideValue = z.string();
 const AgentOperationFieldOverrideSchema = z
   .record(z.string().trim().min(1).max(80), fieldOverrideValue)
   .superRefine((override, ctx) => {
@@ -296,7 +296,14 @@ const rotateOperationSchema = z
   .strictObject({
     type: z.literal(AgentOperationType.AssetRotate).meta({ id: 'AgentAssetRotateOperationType' }),
     ...assetBatchBase,
-    payload: z.strictObject({ angle: z.literal([90, 180, 270]) }),
+    payload: z.strictObject({
+      angle: z
+        .number()
+        .int()
+        .refine((angle): angle is 90 | 180 | 270 => angle === 90 || angle === 180 || angle === 270, {
+          message: 'angle must be 90, 180, or 270',
+        }),
+    }),
   })
   .superRefine((operation, ctx) =>
     validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.ImageEditBatch, AgentOperationType.AssetRotate),
