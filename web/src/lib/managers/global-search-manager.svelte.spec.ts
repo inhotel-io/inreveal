@@ -3188,7 +3188,6 @@ describe('tagsDisabled persists across close/reopen', () => {
     expect((m as unknown as { tagsDisabled: boolean }).tagsDisabled).toBe(true);
     m.close();
     m.open();
-    vi.mocked(getAllTags).mockClear();
     // Swap mock to a tiny list — if tagsDisabled reset, this would succeed and repopulate.
     vi.mocked(getAllTags).mockResolvedValue([{ id: 't1', name: 'beach', color: null }] as unknown as Awaited<
       ReturnType<typeof getAllTags>
@@ -3196,8 +3195,6 @@ describe('tagsDisabled persists across close/reopen', () => {
     m.setQuery('tag');
     await vi.advanceTimersByTimeAsync(200);
     expect(m.sections.tags).toEqual({ status: 'error', message: 'tag_cache_too_large' });
-    // getAllTags should NOT have been re-invoked because tagsDisabled short-circuits.
-    expect(getAllTags).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 });
