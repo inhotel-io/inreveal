@@ -586,6 +586,41 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(screen.getByText('0 of 3 selected')).toBeInTheDocument();
   });
 
+  it('reopens a collapsed large operation with sparse selection and a bounded virtual window', async () => {
+    const largeAssetIds = Array.from({ length: 1000 }, (_, index) => `large-asset-${index + 1}`);
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(
+      plan([
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add one thousand assets',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: '00000000-0000-4000-8000-000000000301',
+          assetIds: largeAssetIds,
+          payload: {},
+        }),
+      ]),
+    );
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    const details = await screen.findByText('Details');
+    await fireEvent.click(details);
+    expect(screen.getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(42);
+
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 1' }));
+    expect(screen.getByText('999 of 1000 selected')).toBeInTheDocument();
+
+    await fireEvent.click(details);
+    expect(screen.queryByTestId('agent-plan-item-review-grid')).not.toBeInTheDocument();
+
+    await fireEvent.click(details);
+    expect(screen.getByText('999 of 1000 selected')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Include photo 1' })).not.toBeChecked();
+    expect(screen.getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(42);
+    expect(screen.queryByRole('checkbox', { name: 'Include photo 1000' })).not.toBeInTheDocument();
+  });
+
   it('publishes only the filtered assets when selecting all filtered items', async () => {
     sdkMock.getCurrentOperationPlan.mockResolvedValue(
       plan([
