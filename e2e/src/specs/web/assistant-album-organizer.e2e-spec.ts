@@ -127,8 +127,8 @@ const startPortugalPlan = async (page: Page, accessToken: string, providerCreden
   return { session, currentPlan };
 };
 
-const getPortugalDestination = (page: Page) =>
-  page.getByTestId('agent-session-chat-transcript').getByRole('region', { name: 'Portugal Trip' });
+const getPortugalDestination = (page: Page, name = 'Portugal Trip') =>
+  page.getByTestId('agent-session-chat-transcript').getByRole('region', { name });
 
 const findOperation = (plan: AgentOperationPlanResponseDto, type: AgentOperationType) => {
   const operation = plan.operations.find((operation) => operation.type === type);
@@ -232,14 +232,15 @@ test.describe('Assistant album organizer', () => {
 
     await portugalDestination.getByLabel('Description').fill('Curated favorites from the trip.');
     await portugalDestination.getByLabel('Album name').fill('Portugal Favorites');
-    await expect(portugalDestination.getByText('Create album "Portugal Favorites"')).toBeVisible();
+    const renamedPortugalDestination = getPortugalDestination(page, 'Portugal Favorites');
+    await expect(renamedPortugalDestination.getByText('Create album "Portugal Favorites"')).toBeVisible();
 
     await expect(page.getByText(proposedAddOperation!.id)).toHaveCount(0);
-    await portugalDestination.getByRole('button', { name: 'Show technical details' }).nth(1).click();
+    await renamedPortugalDestination.getByRole('button', { name: 'Show technical details' }).nth(1).click();
     await expect(page.getByText(proposedAddOperation!.id)).toBeVisible();
 
-    await portugalDestination.getByRole('checkbox', { name: 'Include photo 2' }).uncheck();
-    await expect(portugalDestination.getByText('1 of 2 photos selected')).toHaveCount(2);
+    await renamedPortugalDestination.getByRole('checkbox', { name: 'Include photo 2' }).uncheck();
+    await expect(renamedPortugalDestination.getByText('1 of 2 photos selected')).toHaveCount(2);
     await page.getByLabel('Set cover photo').uncheck();
     await expect(page.getByRole('button', { name: 'Apply 2 selected' })).toBeEnabled();
 
@@ -268,8 +269,8 @@ test.describe('Assistant album organizer', () => {
     const { plan: appliedPlan } = (await applyResponse.json()) as AgentOperationPlanApplyResponseDto;
 
     await expect(page.getByText('Applied 2 operations. 0 failed.')).toBeVisible();
-    await expect(portugalDestination.getByText('Applied')).toBeVisible();
-    await expect(portugalDestination.getByText('Skipped')).toBeVisible();
+    await expect(renamedPortugalDestination.getByText('Applied', { exact: true })).toBeVisible();
+    await expect(renamedPortugalDestination.getByText('Skipped', { exact: true })).toBeVisible();
     await expect(page.getByText('0 failed')).toBeVisible();
     expect(appliedPlan.status).toBe(AgentOperationPlanStatus.Applied);
     await expect
@@ -539,9 +540,9 @@ test.describe('Assistant album organizer', () => {
       await page.getByRole('button', { name: 'Apply 3 selected' }).click();
       await expect(page.getByText('Applied 1 operation. 1 failed.')).toBeVisible();
       await expect(page.getByText('1 applied · 1 skipped · 1 failed. Review details before continuing.')).toBeVisible();
-      await expect(getPortugalDestination(page).getByText('Applied')).toBeVisible();
-      await expect(getPortugalDestination(page).getByText('Partially applied')).toBeVisible();
-      await expect(getPortugalDestination(page).getByText('Skipped')).toBeVisible();
+      await expect(getPortugalDestination(page).getByText('Applied', { exact: true })).toBeVisible();
+      await expect(getPortugalDestination(page).getByText('Partially applied', { exact: true })).toBeVisible();
+      await expect(getPortugalDestination(page).getByText('Skipped', { exact: true })).toBeVisible();
       await expect(page.getByText(addOperation.id)).toHaveCount(0);
 
       await getPortugalDestination(page).getByRole('button', { name: 'Show technical details' }).nth(1).click();
