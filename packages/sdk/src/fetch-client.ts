@@ -711,8 +711,29 @@ export type AgentOperationPlanToolResponseDto = {
     summary: string;
     toolCall: (AgentToolCallResponseDto) | null;
 };
+export type AgentOperationItemSelection = {
+    itemKind: AgentOperationItemKind;
+    mode: Mode;
+    itemIds?: string[];
+} | {
+    itemKind: AgentOperationItemKind;
+    mode: Mode2;
+    itemIds: string[];
+} | {
+    itemKind: AgentOperationItemKind;
+    mode: Mode3;
+    itemIds: string[];
+} | {
+    itemKind: AgentOperationItemKind;
+    mode: Mode4;
+    itemIds?: string[];
+};
 export type AgentOperationPlanApplyRequestDto = {
+    itemSelections?: {
+        [key: string]: AgentOperationItemSelection;
+    };
     operationIds: string[];
+    planRevision?: number;
 };
 export type AgentOperationPlanApplyResponseDto = {
     appliedOperationIds: string[];
@@ -9544,6 +9565,21 @@ export enum AgentToolName {
     ProposeAlbumOperations = "proposeAlbumOperations",
     ReviseProposedOperations = "reviseProposedOperations",
     SummarizePlan = "summarizePlan"
+}
+export enum AgentOperationItemKind {
+    Asset = "asset"
+}
+export enum Mode {
+    All = "all"
+}
+export enum Mode2 {
+    AllExcept = "allExcept"
+}
+export enum Mode3 {
+    Only = "only"
+}
+export enum Mode4 {
+    None = "none"
 }
 export enum AgentOperationApplyStatus {
     Applied = "applied",
