@@ -1,7 +1,9 @@
 import {
+  AgentOperationItemKind,
   AgentOperationRiskLevel,
   AgentOperationTargetKind,
   AgentOperationType,
+  type AgentOperationItemSelection,
   type AgentOperationPlanResponseDto,
   type AgentOperationResponseDto,
 } from '@immich/sdk';
@@ -152,7 +154,7 @@ export const createInitialOperationEnabledState = (plan: AgentOperationPlanRespo
   Object.fromEntries(plan.operations.map((operation) => [operation.id, operation.enabled]));
 
 export const createInitialOperationItemSelectionState = (
-  _plan: AgentOperationPlanResponseDto,
+  _: AgentOperationPlanResponseDto,
 ): OperationItemSelectionState => ({});
 
 export const setOperationItemSelection = (
@@ -168,7 +170,7 @@ export const resetOperationItemSelection = (
   state: OperationItemSelectionState,
   operationId: string,
 ): OperationItemSelectionState => {
-  const { [operationId]: _removed, ...remaining } = state;
+  const { [operationId]: _, ...remaining } = state;
   return remaining;
 };
 
@@ -273,6 +275,24 @@ export const buildSelectionPayload = (model: OperationReviewModel): AgentOperati
     operationIds,
     ...(Object.keys(itemSelections).length > 0 ? { itemSelections } : {}),
   };
+};
+
+export const toAgentOperationItemSelections = (
+  itemSelections: Record<string, AgentOperationItemSelectionPayload> | undefined,
+): Record<string, AgentOperationItemSelection> | undefined => {
+  if (!itemSelections) {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    Object.entries(itemSelections).map(([operationId, selection]) => [
+      operationId,
+      {
+        ...selection,
+        itemKind: AgentOperationItemKind.Asset,
+      } as AgentOperationItemSelection,
+    ]),
+  );
 };
 
 export const buildOperationReviewImpactSummary = (model: OperationReviewModel): OperationReviewImpactSummary => {
@@ -590,12 +610,12 @@ const getSelectedAssetIds = (
   }
 
   if (selection.mode === 'allExcept') {
-    const excludedAssetIds = new Set(selection.itemIds ?? []);
+    const excludedAssetIds = new Set(selection.itemIds);
     return assetIds.filter((assetId) => !excludedAssetIds.has(assetId));
   }
 
   if (selection.mode === 'only') {
-    const includedAssetIds = new Set(selection.itemIds ?? []);
+    const includedAssetIds = new Set(selection.itemIds);
     return assetIds.filter((assetId) => includedAssetIds.has(assetId));
   }
 
@@ -682,12 +702,15 @@ const getGroupTitle = (operation: AgentOperationResponseDto) => {
 
 const getOperationReviewSummary = (operation: AgentOperationResponseDto) => {
   switch (operation.type) {
-    case AgentOperationType.AlbumCreate:
+    case AgentOperationType.AlbumCreate: {
       return `Create album "${getAlbumName(operation) ?? operation.temporaryTargetId ?? 'Untitled album'}"`;
-    case AgentOperationType.AlbumAddAssets:
+    }
+    case AgentOperationType.AlbumAddAssets: {
       return `Add ${formatPhotoCount(getOperationAssetCount([operation]))}`;
-    case AgentOperationType.AlbumSetCover:
+    }
+    case AgentOperationType.AlbumSetCover: {
       return 'Set cover photo';
+    }
     case AgentOperationType.AlbumUpdateDetails: {
       const albumName = getAlbumName(operation);
       if (albumName) {
@@ -696,8 +719,9 @@ const getOperationReviewSummary = (operation: AgentOperationResponseDto) => {
 
       return 'Update album details';
     }
-    default:
+    default: {
       return operation.summary;
+    }
   }
 };
 

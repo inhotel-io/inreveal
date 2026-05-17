@@ -16,6 +16,7 @@
     buildOperationReviewImpactSummary,
     buildOperationReviewModel,
     buildSelectionPayload,
+    toAgentOperationItemSelections,
     buildOperationItemSelectionState,
     createInitialOperationEnabledState,
     createInitialOperationItemSelectionState,
@@ -172,12 +173,13 @@
     applyErrorMessage = null;
 
     try {
+      const itemSelections = toAgentOperationItemSelections(selectionPayload.itemSelections);
       const response = await applyApprovedOperations({
         id: session.id,
         planId: applyingPlanId,
         agentOperationPlanApplyRequestDto: {
           operationIds: selectionPayload.operationIds,
-          ...(selectionPayload.itemSelections ? { itemSelections: selectionPayload.itemSelections } : {}),
+          ...(itemSelections ? { itemSelections } : {}),
           planRevision: selectionPayload.planRevision,
         },
       });
