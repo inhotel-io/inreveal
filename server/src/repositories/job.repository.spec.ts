@@ -504,6 +504,7 @@ describe(JobRepository.name, () => {
     expect(failedForceFollowUp.getState).toHaveBeenCalled();
     expect(failedForceFollowUp.remove).toHaveBeenCalled();
     expect(queue.drain).toHaveBeenCalledWith(true);
+    expect(failedForceFollowUp.remove.mock.invocationCallOrder[0]).toBeLessThan(queue.add.mock.invocationCallOrder[0]);
     expect(queue.add).toHaveBeenCalledWith(
       JobName.FacialRecognitionQueueAll,
       { force: true },
