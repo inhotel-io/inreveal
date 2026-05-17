@@ -12,4 +12,26 @@ describe('agent operation plan i18n', () => {
       }),
     );
   });
+
+  it('defines the expanded item review English strings', () => {
+    expect(en).toEqual(
+      expect.objectContaining({
+        assistant_operation_item_filter_label: 'Filter photos',
+        assistant_operation_item_filter_placeholder: 'Filter photos',
+        assistant_operation_item_media_all: 'All',
+        assistant_operation_item_media_photos: 'Photos',
+        assistant_operation_item_media_videos: 'Videos',
+        assistant_operation_item_quick_screenshots: 'Screenshots',
+        assistant_operation_item_quick_duplicates: 'Duplicates',
+        assistant_operation_item_exclude_videos: 'Exclude videos',
+        assistant_operation_item_include_only_videos: 'Include only videos',
+        assistant_operation_item_exclude_visible: 'Exclude visible',
+        assistant_operation_item_include_visible: 'Include visible',
+        assistant_operation_item_select_all_filtered: 'Select all filtered',
+        assistant_operation_item_deselect_all_filtered: 'Deselect all filtered',
+        assistant_operation_item_virtual_summary:
+          'Showing {visible, number} of {total, number} {total, plural, one {photo} other {photos}}',
+      }),
+    );
+  });
 });
