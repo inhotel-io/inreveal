@@ -59,6 +59,281 @@ const plan = (operations: AgentOperationResponseDto[]): AgentOperationPlanRespon
 });
 
 describe('agent operation plan UI helpers', () => {
+  it('builds spec-shaped review metadata for album operations', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: createId,
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Portugal album',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          payload: { albumName: 'Portugal', description: 'Lisbon and Porto' },
+        }),
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add two assets',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          assetIds: [assetA, assetB],
+          dependencyIds: [createId],
+          payload: {},
+        }),
+      ]),
+      { [createId]: true, [addId]: true },
+    );
+
+    expect(model.operationsById.get(createId)?.review).toEqual({
+      operationId: createId,
+      operationType: AgentOperationType.AlbumCreate,
+      destination: {
+        kind: 'album',
+        temporaryId: 'album-portugal',
+        name: 'Portugal',
+        subtitle: 'New album',
+      },
+      summary: 'Create album "Portugal"',
+      riskLevel: AgentOperationRiskLevel.Low,
+      selection: {
+        itemKind: 'asset',
+        totalCount: 0,
+        selectedCount: 0,
+        mode: 'all',
+        supportsItemSelection: false,
+      },
+      thumbnails: {
+        totalCount: 0,
+        representativeAssetIds: [],
+        hasMore: false,
+      },
+      dependencies: [],
+    });
+    expect(model.operationsById.get(addId)?.review).toEqual({
+      operationId: addId,
+      operationType: AgentOperationType.AlbumAddAssets,
+      destination: {
+        kind: 'album',
+        temporaryId: 'album-portugal',
+        name: 'Portugal',
+        subtitle: 'New album',
+      },
+      summary: 'Add 2 photos',
+      riskLevel: AgentOperationRiskLevel.Low,
+      selection: {
+        itemKind: 'asset',
+        totalCount: 2,
+        selectedCount: 2,
+        mode: 'all',
+        supportsItemSelection: false,
+      },
+      thumbnails: {
+        totalCount: 2,
+        representativeAssetIds: [assetA, assetB],
+        hasMore: false,
+      },
+      dependencies: [{ operationId: createId, summary: 'Create Portugal album', blocked: false }],
+    });
+  });
+
+  it('derives human-readable summaries for current album operation types', () => {
+    const existingAlbumId = '00000000-0000-4000-8000-000000000301';
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: createId,
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Portugal album',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          payload: { albumName: 'Portugal', description: 'Lisbon and Porto' },
+        }),
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add assets',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: existingAlbumId,
+          assetIds: [assetA],
+          payload: {},
+        }),
+        operation({
+          id: coverId,
+          type: AgentOperationType.AlbumSetCover,
+          summary: 'Set cover',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: existingAlbumId,
+          assetIds: [assetA],
+          payload: {},
+        }),
+        operation({
+          id: updateId,
+          type: AgentOperationType.AlbumUpdateDetails,
+          summary: 'Update details',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: existingAlbumId,
+          payload: { albumName: 'Portugal Archive' },
+        }),
+      ]),
+      { [createId]: true, [addId]: true, [coverId]: true, [updateId]: true },
+    );
+
+    expect(model.operationsById.get(createId)?.review.summary).toBe('Create album "Portugal"');
+    expect(model.operationsById.get(addId)?.review.summary).toBe('Add 1 photo');
+    expect(model.operationsById.get(coverId)?.review.summary).toBe('Set cover photo');
+    expect(model.operationsById.get(updateId)?.review.summary).toBe('Rename album to "Portugal Archive"');
+  });
+
+  it('maps future target kinds into stable review destination kinds without throwing', () => {
+    const futureOperation = operation({
+      id: updateId,
+      type: 'asset.rotate' as AgentOperationType,
+      summary: 'Rotate landscape photos',
+      targetKind: 'asset_batch' as AgentOperationTargetKind,
+      assetIds: [assetA, assetB],
+      payload: { angle: 90 },
+    });
+
+    expect(() => buildOperationReviewModel(plan([futureOperation]), { [updateId]: true })).not.toThrow();
+
+    const model = buildOperationReviewModel(plan([futureOperation]), { [updateId]: true });
+    expect(model.operationsById.get(updateId)?.review.destination).toEqual({
+      kind: 'assetBatch',
+      name: 'Rotate landscape photos',
+    });
+    expect(model.operationsById.get(updateId)?.review.summary).toBe('Rotate landscape photos');
+  });
+
+  it('exposes bounded thumbnail summaries for large operations and groups', () => {
+    const assetIds = Array.from(
+      { length: 1_000 },
+      (_, index) => `00000000-0000-4000-8000-${index.toString().padStart(12, '0')}`,
+    );
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add many assets',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: '00000000-0000-4000-8000-000000000301',
+          assetIds,
+          payload: {},
+        }),
+      ]),
+      { [addId]: true },
+    );
+
+    expect(model.operationsById.get(addId)?.review.thumbnails).toEqual({
+      totalCount: 1_000,
+      representativeAssetIds: assetIds.slice(0, 12),
+      hasMore: true,
+    });
+    expect(model.groups[0].thumbnailSummary).toEqual({
+      totalCount: 1_000,
+      representativeAssetIds: assetIds.slice(0, 12),
+      hasMore: true,
+    });
+  });
+
+  it('marks disabled and blocked operations as unselected in review selection metadata', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: createId,
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Portugal album',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          payload: { albumName: 'Portugal' },
+        }),
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add two assets',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          assetIds: [assetA, assetB],
+          dependencyIds: [createId],
+          payload: {},
+        }),
+      ]),
+      { [createId]: false, [addId]: true },
+    );
+
+    expect(model.operationsById.get(createId)?.review.selection).toEqual({
+      itemKind: 'asset',
+      totalCount: 0,
+      selectedCount: 0,
+      mode: 'none',
+      supportsItemSelection: false,
+    });
+    expect(model.operationsById.get(addId)?.review.selection).toEqual({
+      itemKind: 'asset',
+      totalCount: 2,
+      selectedCount: 0,
+      mode: 'none',
+      supportsItemSelection: false,
+    });
+    expect(model.operationsById.get(addId)?.review.dependencies).toEqual([
+      { operationId: createId, summary: 'Create Portugal album', blocked: true },
+    ]);
+  });
+
+  it('builds an empty review model and legacy empty selection payload for an empty operation plan', () => {
+    const model = buildOperationReviewModel(plan([]), {});
+
+    expect(model.groups).toEqual([]);
+    expect(model.operationsById.size).toBe(0);
+    expect(buildApprovedOperationIds(model)).toEqual([]);
+    expect(buildSelectionPayload(model)).toEqual({ planId, operationIds: [] });
+  });
+
+  it('keeps legacy operation-id apply payload while exposing the richer review model', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: createId,
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Portugal album',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          payload: { albumName: 'Portugal' },
+        }),
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add two assets',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-portugal',
+          assetIds: [assetA, assetB],
+          dependencyIds: [createId],
+          payload: {},
+        }),
+      ]),
+      { [createId]: true, [addId]: true },
+    );
+
+    expect(buildSelectionPayload(model)).toEqual({ planId, operationIds: [createId, addId] });
+    expect(model.groups[0]).toEqual(
+      expect.objectContaining({
+        id: 'new-album:album-portugal',
+        title: 'New album "Portugal"',
+        subtitle: '2 operations',
+        assetCount: 2,
+        representativeAssetIds: [assetA, assetB],
+      }),
+    );
+    expect(model.operationsById.get(addId)).toEqual(
+      expect.objectContaining({
+        id: addId,
+        summary: 'Add 2 photos',
+        assetCount: 2,
+        representativeAssetIds: [assetA, assetB],
+      }),
+    );
+  });
+
   it('groups new-album operations by temporary target and keeps operation order', () => {
     const model = buildOperationReviewModel(
       plan([
@@ -184,6 +459,9 @@ describe('agent operation plan UI helpers', () => {
         blockedBy: ['Add two assets'],
       }),
     );
+    expect(model.operationsById.get(coverId)?.review.dependencies).toEqual([
+      { operationId: addId, summary: 'Add two assets', blocked: true },
+    ]);
     expect(buildSelectionPayload(model)).toEqual({ planId, operationIds: [] });
   });
 
