@@ -30,6 +30,35 @@ const AgentModelSnapshotSchema = z
   })
   .meta({ id: 'AgentModelSnapshot' });
 
+const legacyWriteScopeDefaults = {
+  removeAssets: false,
+  createSpace: false,
+  addAssetsToSpaces: false,
+  removeAssetsFromSpaces: false,
+  updateSpaceDetails: false,
+  editAssets: false,
+  favoriteAssets: false,
+  archiveAssets: false,
+  tagAssets: false,
+};
+const expandedWriteScopeShape = {
+  createAlbum: z.boolean(),
+  addAssets: z.boolean(),
+  removeAssets: z.boolean(),
+  updateDetails: z.boolean(),
+  setCover: z.boolean(),
+  createSpace: z.boolean(),
+  addAssetsToSpaces: z.boolean(),
+  removeAssetsFromSpaces: z.boolean(),
+  updateSpaceDetails: z.boolean(),
+  editAssets: z.boolean(),
+  favoriteAssets: z.boolean(),
+  archiveAssets: z.boolean(),
+  tagAssets: z.boolean(),
+};
+
+const AgentWriteScopeSchema = z.object(expandedWriteScopeShape);
+
 const AgentPermissionPlanSchema = z
   .object({
     read: z.object({
@@ -48,12 +77,7 @@ const AgentPermissionPlanSchema = z
       sharedSpaces: z.boolean(),
       locked: z.boolean(),
     }),
-    writeScope: z.object({
-      createAlbum: z.boolean(),
-      addAssets: z.boolean(),
-      updateDetails: z.boolean(),
-      setCover: z.boolean(),
-    }),
+    writeScope: AgentWriteScopeSchema,
     limits: z.object({
       maxAssetsPerToolCall: z.number().int().min(1).max(10_000),
       maxAssetsPerSession: z.number().int().min(1).max(100_000),
@@ -199,6 +223,21 @@ const AgentPermissionPlanSchema = z
   })
   .meta({ id: 'AgentPermissionPlan' });
 
+const AgentLegacyPermissionPlanSchema = z.preprocess((value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+
+  const permissionPlan = value as { writeScope?: Record<string, unknown> };
+  return {
+    ...permissionPlan,
+    writeScope: {
+      ...legacyWriteScopeDefaults,
+      ...permissionPlan.writeScope,
+    },
+  };
+}, AgentPermissionPlanSchema);
+
 const InitialContextSchema = z
   .record(z.string(), z.unknown())
   .refine((value) => jsonByteLength(value) <= MAX_INITIAL_CONTEXT_BYTES, {
@@ -255,7 +294,7 @@ const AgentSessionResponseSchema = z
     credentialSnapshot: AgentCredentialSnapshotSchema,
     modelSnapshot: AgentModelSnapshotSchema,
     permissionPreset: AgentPermissionPresetSchema,
-    permissionPlanSnapshot: AgentPermissionPlanSchema,
+    permissionPlanSnapshot: AgentLegacyPermissionPlanSchema,
     approvalMode: AgentApprovalModeSchema,
     runnerEndpoint: z.url().nullable(),
     runnerSessionId: z.string().nullable(),

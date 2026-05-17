@@ -139,7 +139,7 @@ const session: AgentSessionResponseDto = {
     },
     providerExposure: { allowOriginalsForExternalProviders: false, metadata: true, originals: false, previews: true },
     read: { metadata: true, originals: false, previews: true },
-    writeScope: { addAssets: true, createAlbum: true, setCover: true, updateDetails: true },
+    writeScope: { addAssets: true, addAssetsToSpaces: true, archiveAssets: true, createAlbum: true, createSpace: true, editAssets: true, favoriteAssets: true, removeAssets: true, removeAssetsFromSpaces: true, setCover: true, tagAssets: true, updateDetails: true, updateSpaceDetails: true },
   },
   permissionPreset: AgentPermissionPreset.VisualOrganizer,
   approvalMode: AgentApprovalMode.PlanOnly,
@@ -269,7 +269,7 @@ const httpError = (statusCode: number, message: string) =>
   ({
     message,
     data: { statusCode, message },
-  }) as Error;
+  }) as unknown as Error;
 
 describe('AgentOperationPlanReviewPanel', () => {
   beforeEach(() => {

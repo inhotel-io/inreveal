@@ -9,12 +9,25 @@ import { AgentProviderCredentialService } from 'src/services/agent-provider-cred
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import {
   AgentCredentialSnapshot,
+  AgentNormalizedPermissionPlanSnapshot,
   AgentPermissionPlanSnapshot,
   AgentPermissionPresetMap,
 } from 'src/types/agent-session.types';
 
 @Injectable()
 export class AgentSessionService {
+  private static readonly legacyWriteScopeDefaults = {
+    removeAssets: false,
+    createSpace: false,
+    addAssetsToSpaces: false,
+    removeAssetsFromSpaces: false,
+    updateSpaceDetails: false,
+    editAssets: false,
+    favoriteAssets: false,
+    archiveAssets: false,
+    tagAssets: false,
+  };
+
   static readonly permissionPresets: AgentPermissionPresetMap = {
     [AgentPermissionPreset.Careful]: {
       read: { metadata: true, previews: false, originals: false },
@@ -25,7 +38,21 @@ export class AgentSessionService {
         allowOriginalsForExternalProviders: false,
       },
       assetScope: { owned: true, sharedSpaces: false, locked: false },
-      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      writeScope: {
+        createAlbum: true,
+        addAssets: true,
+        removeAssets: false,
+        updateDetails: true,
+        setCover: true,
+        createSpace: true,
+        addAssetsToSpaces: true,
+        removeAssetsFromSpaces: false,
+        updateSpaceDetails: true,
+        editAssets: false,
+        favoriteAssets: true,
+        archiveAssets: false,
+        tagAssets: true,
+      },
       limits: {
         maxAssetsPerToolCall: 200,
         maxAssetsPerSession: 2000,
@@ -45,7 +72,21 @@ export class AgentSessionService {
         allowOriginalsForExternalProviders: false,
       },
       assetScope: { owned: true, sharedSpaces: true, locked: false },
-      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      writeScope: {
+        createAlbum: true,
+        addAssets: true,
+        removeAssets: true,
+        updateDetails: true,
+        setCover: true,
+        createSpace: true,
+        addAssetsToSpaces: true,
+        removeAssetsFromSpaces: true,
+        updateSpaceDetails: true,
+        editAssets: true,
+        favoriteAssets: true,
+        archiveAssets: true,
+        tagAssets: true,
+      },
       limits: {
         maxAssetsPerToolCall: 500,
         maxAssetsPerSession: 5000,
@@ -65,7 +106,21 @@ export class AgentSessionService {
         allowOriginalsForExternalProviders: false,
       },
       assetScope: { owned: true, sharedSpaces: true, locked: false },
-      writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+      writeScope: {
+        createAlbum: true,
+        addAssets: true,
+        removeAssets: true,
+        updateDetails: true,
+        setCover: true,
+        createSpace: true,
+        addAssetsToSpaces: true,
+        removeAssetsFromSpaces: true,
+        updateSpaceDetails: true,
+        editAssets: true,
+        favoriteAssets: true,
+        archiveAssets: true,
+        tagAssets: true,
+      },
       limits: {
         maxAssetsPerToolCall: 500,
         maxAssetsPerSession: 5000,
@@ -251,9 +306,13 @@ export class AgentSessionService {
     return { credential, credentialSecret, credentialSnapshot };
   }
 
-  private backfillPermissionPlan(permissionPlan: AgentPermissionPlanSnapshot): AgentPermissionPlanSnapshot {
+  private backfillPermissionPlan(permissionPlan: AgentPermissionPlanSnapshot): AgentNormalizedPermissionPlanSnapshot {
     return {
       ...permissionPlan,
+      writeScope: {
+        ...AgentSessionService.legacyWriteScopeDefaults,
+        ...permissionPlan.writeScope,
+      },
       limits: {
         ...permissionPlan.limits,
         maxPreviewsPerSession:
@@ -282,7 +341,7 @@ export class AgentSessionService {
       credentialSnapshot: session.credentialSnapshot,
       modelSnapshot: session.modelSnapshot,
       permissionPreset: session.permissionPreset,
-      permissionPlanSnapshot: session.permissionPlanSnapshot,
+      permissionPlanSnapshot: this.backfillPermissionPlan(structuredClone(session.permissionPlanSnapshot)),
       approvalMode: session.approvalMode,
       runnerEndpoint: session.runnerEndpoint,
       runnerSessionId: session.runnerSessionId,
