@@ -287,11 +287,7 @@ describe('AgentPlanDestinationCard', () => {
     const onResetFieldOverride = vi.fn();
     render(AgentPlanDestinationCard, {
       props: {
-        group: group(
-          undefined,
-          undefined,
-          setOperationFieldOverride({}, createId, 'albumName', 'Madeira'),
-        ),
+        group: group(undefined, undefined, setOperationFieldOverride({}, createId, 'albumName', 'Madeira')),
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),

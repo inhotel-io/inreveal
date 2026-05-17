@@ -133,9 +133,20 @@ test.describe('Assistant album organizer', () => {
     const proposedAddOperation = currentPlan.operations.find(
       (operation) => operation.type === AgentOperationType.AlbumAddAssets,
     );
+    const proposedCreateOperation = currentPlan.operations.find(
+      (operation) => operation.type === AgentOperationType.AlbumCreate,
+    );
     expect(proposedAddOperation?.id).toEqual(expect.any(String));
+    if (!proposedCreateOperation) {
+      throw new Error('Expected the runner to propose an album create operation');
+    }
+    expect(proposedCreateOperation.id).toEqual(expect.any(String));
     const excludedAssetId = proposedAddOperation!.assetIds[1];
     expect(excludedAssetId).toEqual(expect.any(String));
+
+    await portugalDestination.getByLabel('Album name').fill('Portugal Favorites');
+    await portugalDestination.getByLabel('Description').fill('Curated favorites from the trip.');
+    await expect(portugalDestination.getByText('Create album "Portugal Favorites"')).toBeVisible();
 
     await expect(page.getByText(proposedAddOperation!.id)).toHaveCount(0);
     await portugalDestination.getByText('Details').nth(1).click();
@@ -167,6 +178,12 @@ test.describe('Assistant album organizer', () => {
           itemKind: 'asset',
           mode: 'allExcept',
           itemIds: [excludedAssetId],
+        },
+      },
+      fieldOverrides: {
+        [proposedCreateOperation.id]: {
+          albumName: 'Portugal Favorites',
+          description: 'Curated favorites from the trip.',
         },
       },
       planRevision: currentPlan.revision,
@@ -207,8 +224,8 @@ test.describe('Assistant album organizer', () => {
     expect(albumId).toEqual(expect.any(String));
 
     const album = await getAlbumInfo({ id: albumId as string }, authOptions(admin.accessToken));
-    expect(album.albumName).toBe('Portugal Trip');
-    expect(album.description).toBe('Organized by the deterministic e2e assistant.');
+    expect(album.albumName).toBe('Portugal Favorites');
+    expect(album.description).toBe('Curated favorites from the trip.');
     expect(album.assetCount).toBe(1);
   });
 
