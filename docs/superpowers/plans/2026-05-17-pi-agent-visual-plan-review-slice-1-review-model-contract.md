@@ -22,6 +22,8 @@ This slice covers:
 - human-readable operation summaries for the current album operation types;
 - bounded representative asset IDs and `hasMore` metadata for large operations;
 - operation-level selection state with future-compatible `all` and `none` modes;
+- dependency review metadata that marks missing or disabled dependencies as blocked;
+- explicit empty-plan behavior;
 - legacy-compatible `buildSelectionPayload()` returning only `{ planId, operationIds }`.
 
 This slice does not cover:
@@ -234,6 +236,7 @@ Add these helpers near the existing private helper functions:
 const buildOperationReview = (
   operation: AgentOperationResponseDto,
   operationById: Map<string, AgentOperationResponseDto>,
+  enabledByOperationId: OperationEnabledState,
   selected: boolean,
   blocked: boolean,
 ): AgentOperationReview => ({
@@ -246,11 +249,12 @@ const buildOperationReview = (
   thumbnails: getThumbnailSummary([operation]),
   dependencies: operation.dependencyIds.map((operationId) => {
     const dependency = operationById.get(operationId);
+    const dependencySelected = dependency ? (enabledByOperationId[dependency.id] ?? dependency.enabled) : false;
 
     return {
       operationId,
       summary: dependency?.summary ?? 'Missing dependency',
-      blocked: dependency === undefined,
+      blocked: dependency === undefined || !dependencySelected,
     };
   }),
 });
@@ -274,7 +278,7 @@ const buildOperationReviewSelection = (
 Inside the `items = plan.operations.map(...)` block, after `const selected = ...`, create the review and set the legacy fields from it:
 
 ```ts
-const review = buildOperationReview(operation, operationById, selected, blocked);
+const review = buildOperationReview(operation, operationById, enabledByOperationId, selected, blocked);
 
 return {
   id: operation.id,
@@ -541,7 +545,7 @@ Add these tests after the Task 2 tests:
 ```ts
 it('exposes bounded thumbnail summaries for large operations and groups', () => {
   const assetIds = Array.from(
-    { length: 40 },
+    { length: 1_000 },
     (_, index) => `00000000-0000-4000-8000-${index.toString().padStart(12, '0')}`,
   );
   const model = buildOperationReviewModel(
@@ -560,12 +564,12 @@ it('exposes bounded thumbnail summaries for large operations and groups', () => 
   );
 
   expect(model.operationsById.get(addId)?.review.thumbnails).toEqual({
-    totalCount: 40,
+    totalCount: 1_000,
     representativeAssetIds: assetIds.slice(0, 12),
     hasMore: true,
   });
   expect(model.groups[0].thumbnailSummary).toEqual({
-    totalCount: 40,
+    totalCount: 1_000,
     representativeAssetIds: assetIds.slice(0, 12),
     hasMore: true,
   });
@@ -610,6 +614,9 @@ it('marks disabled and blocked operations as unselected in review selection meta
     mode: 'none',
     supportsItemSelection: false,
   });
+  expect(model.operationsById.get(addId)?.review.dependencies).toEqual([
+    { operationId: createId, summary: 'Create Portugal album', blocked: true },
+  ]);
 });
 ```
 
@@ -621,7 +628,7 @@ Run:
 pnpm --dir web test --run "src/routes/(user)/assistant/agent-operation-plan-ui.spec.ts" -t "thumbnail summaries|unselected in review selection metadata"
 ```
 
-Expected: FAIL until `thumbnailSummary` exists on groups and blocked/disabled review selection is normalized to `none`.
+Expected: FAIL until `thumbnailSummary` exists on groups, blocked/disabled review selection is normalized to `none`, and disabled dependencies are reflected in `review.dependencies`.
 
 - [ ] **Step 3: Implement thumbnail summaries and selected-count normalization**
 
@@ -680,7 +687,7 @@ groupsById.set(groupId, {
 });
 ```
 
-Ensure `buildOperationReview()` receives `included = selected && !blocked`, so disabled and blocked operations use `mode: 'none'` and `selectedCount: 0`.
+Ensure `buildOperationReview()` receives `included = selected && !blocked`, so disabled and blocked operations use `mode: 'none'` and `selectedCount: 0`. Also pass `enabledByOperationId` into `buildOperationReview()` so dependency metadata can mark missing or disabled dependencies as `blocked: true`.
 
 - [ ] **Step 4: Run the focused tests and verify GREEN**
 
@@ -701,7 +708,75 @@ git commit -m "feat: add pi plan thumbnail review metadata"
 
 ---
 
-### Task 4: Preserve Existing Panel Compatibility And Apply Payload
+### Task 4: Add Empty Plan Edge Coverage
+
+**Files:**
+
+- Modify: `web/src/routes/(user)/assistant/agent-operation-plan-ui.spec.ts`
+- Modify: `web/src/routes/(user)/assistant/agent-operation-plan-ui.ts` only if the test fails
+
+- [ ] **Step 1: Write the failing edge-case test**
+
+Add this test near the other model edge-case tests:
+
+```ts
+it('builds an empty review model and legacy empty selection payload for an empty operation plan', () => {
+  const model = buildOperationReviewModel(plan([]), {});
+
+  expect(model.groups).toEqual([]);
+  expect(model.operationsById.size).toBe(0);
+  expect(buildApprovedOperationIds(model)).toEqual([]);
+  expect(buildSelectionPayload(model)).toEqual({ planId, operationIds: [] });
+});
+```
+
+- [ ] **Step 2: Run the focused test and verify RED or existing GREEN**
+
+Run:
+
+```bash
+pnpm --dir web test --run "src/routes/(user)/assistant/agent-operation-plan-ui.spec.ts" -t "empty review model"
+```
+
+Expected:
+
+- RED if empty operation lists currently throw or produce non-empty derived state.
+- GREEN if empty plans are already handled. Keep the test either way because it locks the edge case from the design spec.
+
+- [ ] **Step 3: Implement the minimal fix if RED**
+
+If the test fails, update `buildOperationReviewModel()` to return an empty model naturally when `plan.operations` is empty:
+
+```ts
+return {
+  plan,
+  groups: [...groupsById.values()],
+  operationsById: new Map(items.map((item) => [item.id, item])),
+};
+```
+
+Do not add special UI behavior in this slice. The existing panel empty state remains responsible for rendering an empty plan.
+
+- [ ] **Step 4: Run the focused test and verify GREEN**
+
+Run:
+
+```bash
+pnpm --dir web test --run "src/routes/(user)/assistant/agent-operation-plan-ui.spec.ts" -t "empty review model"
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit this task**
+
+```bash
+git add web/src/routes/\(user\)/assistant/agent-operation-plan-ui.ts web/src/routes/\(user\)/assistant/agent-operation-plan-ui.spec.ts
+git commit -m "test: cover empty pi plan review model"
+```
+
+---
+
+### Task 5: Preserve Existing Panel Compatibility And Apply Payload
 
 **Files:**
 
@@ -804,7 +879,7 @@ git commit -m "test: preserve pi plan operation id apply payload"
 
 ---
 
-### Task 5: Run Slice Verification
+### Task 6: Run Slice Verification
 
 **Files:**
 
@@ -862,6 +937,8 @@ If no fixes were needed, do not create an empty commit.
 - [ ] `AgentOperationReview.destination.kind` uses stable review kinds such as `album` and `assetBatch`, not raw DTO target-kind strings.
 - [ ] Current album operations produce human-readable summaries.
 - [ ] Operation-level selection metadata uses `all` for included operations and `none` for disabled or blocked operations.
+- [ ] Dependency review metadata marks missing or disabled dependencies as blocked.
+- [ ] Empty plans produce no groups, an empty operation map, and an empty legacy selection payload.
 - [ ] Representative thumbnails are bounded to 12 IDs and include `hasMore`.
 - [ ] Future operation/target kinds fall back without throwing.
 - [ ] `buildSelectionPayload()` still sends only operation IDs.
