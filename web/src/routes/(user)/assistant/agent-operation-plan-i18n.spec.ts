@@ -34,4 +34,22 @@ describe('agent operation plan i18n', () => {
       }),
     );
   });
+
+  it('defines partial apply and technical detail English strings', () => {
+    expect(en).toEqual(
+      expect.objectContaining({
+        assistant_operation_status_partial: 'Partially applied',
+        assistant_operation_skipped_reason: 'Skipped: {reason}',
+        assistant_operation_partial_asset_summary:
+          '{applied, plural, one {# applied} other {{applied, number} applied}} · {failed, plural, one {# failed} other {{failed, number} failed}}',
+        assistant_operation_detail_show: 'Show technical details',
+        assistant_operation_detail_hide: 'Hide technical details',
+        assistant_operation_detail_assets_preview: 'Asset IDs',
+        assistant_operation_detail_assets_overflow:
+          '{count, plural, one {# more asset ID} other {{count, number} more asset IDs}}',
+        assistant_operation_apply_partial_summary:
+          '{applied, plural, one {# applied} other {{applied, number} applied}} · {skipped, plural, one {# skipped} other {{skipped, number} skipped}} · {failed, plural, one {# failed} other {{failed, number} failed}}. Review details before continuing.',
+      }),
+    );
+  });
 });

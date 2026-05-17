@@ -19,6 +19,8 @@ vi.mock('$lib/utils', () => ({
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_operation_apply_applying: 'Applying operations',
+    assistant_operation_apply_partial_summary:
+      '{applied} applied · {skipped} skipped · {failed} failed. Review details before continuing.',
     assistant_operation_apply_selected: 'Apply {count} selected',
     assistant_operation_apply_summary: '{changes} changes · {assets} assets selected',
     assistant_operation_asset_count: '{count} assets',
@@ -29,7 +31,8 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_detail_id: 'Operation ID',
     assistant_operation_detail_risk: 'Risk',
     assistant_operation_detail_status: 'Status',
-    assistant_operation_detail_toggle: 'Details',
+    assistant_operation_detail_hide: 'Hide technical details',
+    assistant_operation_detail_show: 'Show technical details',
     assistant_operation_detail_type: 'Type',
     assistant_operation_field_cover_option: 'Use photo {index} as cover',
     assistant_operation_field_cover_thumbnail_alt: 'Cover photo option {index}',
@@ -40,6 +43,11 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_plan_review: 'Plan review',
     assistant_operation_plan_selected_asset_count: '{count} selected assets',
     assistant_operation_plan_selected_change_count: '{count} selected changes',
+    assistant_operation_status_applied: 'Applied',
+    assistant_operation_status_failed: 'Failed',
+    assistant_operation_status_partial: 'Partially applied',
+    assistant_operation_status_proposed: 'Proposed',
+    assistant_operation_status_skipped: 'Skipped',
     assistant_operation_item_excluded_count: '{count} excluded',
     assistant_operation_item_exclude_videos: 'Exclude videos',
     assistant_operation_item_exclude_visible: 'Exclude visible',
@@ -73,6 +81,7 @@ vi.mock('svelte-i18n', () => {
     t: readable((key: string, options?: { values?: Record<string, string | number> }) =>
       (messages[key] ?? key)
         .replace('{assets}', String(options?.values?.assets ?? ''))
+        .replace('{applied}', String(options?.values?.applied ?? ''))
         .replace('{changes}', String(options?.values?.changes ?? ''))
         .replace('{count}', String(options?.values?.count ?? ''))
         .replace('{dependencies}', String(options?.values?.dependencies ?? ''))
@@ -80,6 +89,8 @@ vi.mock('svelte-i18n', () => {
         .replace('{field}', String(options?.values?.field ?? ''))
         .replace('{name}', String(options?.values?.name ?? ''))
         .replace('{selected}', String(options?.values?.selected ?? ''))
+        .replace('{skipped}', String(options?.values?.skipped ?? ''))
+        .replace('{failed}', String(options?.values?.failed ?? ''))
         .replace('{total}', String(options?.values?.total ?? ''))
         .replace('{visible}', String(options?.values?.visible ?? '')),
     ),
@@ -114,11 +125,14 @@ const operation = (
     Pick<AgentOperationResponseDto, 'id' | 'type' | 'summary' | 'targetKind' | 'payload'>,
 ): AgentOperationResponseDto => ({ ...baseOperation, ...operation });
 
-const plan = (operations: AgentOperationResponseDto[]): AgentOperationPlanResponseDto => ({
+const plan = (
+  operations: AgentOperationResponseDto[],
+  status: AgentOperationPlanStatus = AgentOperationPlanStatus.Proposed,
+): AgentOperationPlanResponseDto => ({
   id: planId,
   sessionId: '00000000-0000-4000-8000-000000000001',
   revision: 1,
-  status: AgentOperationPlanStatus.Proposed,
+  status,
   summary: 'Organize Portugal holiday',
   operations,
   createdAt: '2026-05-15T00:00:00.000Z',
@@ -296,7 +310,7 @@ describe('AgentPlanEvidenceLedger', () => {
     expect(screen.getByText('1 selected assets')).toBeInTheDocument();
     expect(screen.getByText('3 changes · 1 assets selected')).toBeInTheDocument();
 
-    await fireEvent.click(screen.getAllByText('Details')[1]);
+    await fireEvent.click(screen.getAllByRole('button', { name: 'Show technical details' })[1]);
     await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Reset selection' }));
 
@@ -327,7 +341,7 @@ describe('AgentPlanEvidenceLedger', () => {
       },
     });
 
-    await fireEvent.click(screen.getAllByText('Details')[1]);
+    await fireEvent.click(screen.getAllByRole('button', { name: 'Show technical details' })[1]);
     await fireEvent.click(screen.getByRole('button', { name: 'Exclude visible' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Select all filtered' }));
 
@@ -383,5 +397,119 @@ describe('AgentPlanEvidenceLedger', () => {
     expect(onSetFieldOverride).toHaveBeenCalledWith(createId, 'albumName', 'Madeira');
     expect(onResetFieldOverride).toHaveBeenCalledWith(createId, 'albumName');
     expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('renders partial apply banner with applied skipped and failed counts', () => {
+    const applied = operation({
+      id: createId,
+      type: AgentOperationType.AlbumCreate,
+      summary: 'Create Portugal album',
+      targetKind: AgentOperationTargetKind.NewAlbum,
+      temporaryTargetId: 'album-portugal',
+      payload: { albumName: 'Portugal' },
+      status: AgentOperationStatus.Applied,
+    });
+    const partial = operation({
+      id: addId,
+      type: AgentOperationType.AlbumAddAssets,
+      summary: 'Add two assets',
+      targetKind: AgentOperationTargetKind.NewAlbum,
+      temporaryTargetId: 'album-portugal',
+      assetIds: [assetA, assetB],
+      payload: {},
+      status: AgentOperationStatus.Failed,
+      result: {
+        assetResults: [
+          { id: assetA, success: true },
+          { id: assetB, success: false, errorMessage: 'Asset is missing' },
+        ],
+      },
+    });
+    const skipped = operation({
+      id: updateId,
+      type: AgentOperationType.AlbumUpdateDetails,
+      summary: 'Update description',
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: existingAlbumId,
+      payload: { description: 'Better notes' },
+      status: AgentOperationStatus.Skipped,
+      result: { skippedReason: 'Dependency was not applied' },
+    });
+
+    render(AgentPlanEvidenceLedger, {
+      props: {
+        model: buildOperationReviewModel(plan([applied, partial, skipped], AgentOperationPlanStatus.Applied), {
+          [createId]: true,
+          [addId]: true,
+          [updateId]: true,
+        }),
+        selectedOperationIds: [createId, addId, updateId],
+        canChangeSelection: false,
+        canApply: false,
+        applying: false,
+        errorMessage: null,
+        applyErrorMessage: null,
+        applyMessage: null,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onApply: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText('1 applied · 1 skipped · 1 failed. Review details before continuing.')).toBeInTheDocument();
+  });
+
+  it('keeps raw operation IDs and payload values absent before opening technical details', () => {
+    render(AgentPlanEvidenceLedger, {
+      props: {
+        model: model(),
+        selectedOperationIds: [createId, addId, updateId],
+        canChangeSelection: true,
+        canApply: true,
+        applying: false,
+        errorMessage: null,
+        applyErrorMessage: null,
+        applyMessage: null,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onApply: vi.fn(),
+      },
+    });
+
+    expect(screen.queryByText(createId)).not.toBeInTheDocument();
+    expect(screen.queryByText(addId)).not.toBeInTheDocument();
+    expect(screen.queryByText('album-portugal')).not.toBeInTheDocument();
+    expect(screen.queryByText('Better notes')).not.toBeInTheDocument();
+  });
+
+  it('keeps selection controls disabled for applied plans', () => {
+    render(AgentPlanEvidenceLedger, {
+      props: {
+        model: buildOperationReviewModel(plan(model().plan.operations, AgentOperationPlanStatus.Applied), {
+          [createId]: true,
+          [addId]: true,
+          [updateId]: true,
+        }),
+        selectedOperationIds: [createId, addId, updateId],
+        canChangeSelection: true,
+        canApply: false,
+        applying: false,
+        errorMessage: null,
+        applyErrorMessage: null,
+        applyMessage: null,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onApply: vi.fn(),
+      },
+    });
+
+    expect(screen.getByRole('checkbox', { name: 'Select destination Portugal' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Add 2 photos' })).toBeDisabled();
   });
 });
