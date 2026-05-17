@@ -24,6 +24,7 @@ vi.mock('$lib/stores/websocket');
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_operation_asset_count: '{count} assets',
+    assistant_operation_asset_selection_summary: '{selected} of {total} photos selected',
     assistant_operation_apply_applying: 'Applying operations',
     assistant_operation_apply_error: 'Unable to apply proposed operations',
     assistant_operation_apply_selected: 'Apply {count} selected',
@@ -37,6 +38,15 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_detail_status: 'Status',
     assistant_operation_detail_toggle: 'Details',
     assistant_operation_detail_type: 'Type',
+    assistant_operation_item_excluded_count: '{count} excluded',
+    assistant_operation_item_overflow: '+{count} not shown',
+    assistant_operation_item_overflow_label: '{count} more affected photos are not shown',
+    assistant_operation_item_reset: 'Reset selection',
+    assistant_operation_item_review_label: 'Review photos for {summary}',
+    assistant_operation_item_selected_count: '{selected} of {total} selected',
+    assistant_operation_item_thumbnail_alt: 'Photo {index} of {count}',
+    assistant_operation_item_thumbnail_unavailable: 'Preview unavailable',
+    assistant_operation_item_toggle: 'Include photo {index}',
     assistant_operation_plan_empty: 'No proposed album plan yet.',
     assistant_operation_plan_error: 'Unable to load proposed album plan',
     assistant_operation_plan_loading: 'Loading proposed album plan',
@@ -71,7 +81,9 @@ vi.mock('svelte-i18n', () => {
         .replace('{changes}', String(options?.values?.changes ?? ''))
         .replace('{name}', String(options?.values?.name ?? ''))
         .replace('{selected}', String(options?.values?.selected ?? ''))
-        .replace('{total}', String(options?.values?.total ?? '')),
+        .replace('{total}', String(options?.values?.total ?? ''))
+        .replace('{summary}', String(options?.values?.summary ?? ''))
+        .replace('{index}', String(options?.values?.index ?? '')),
     ),
   };
 });
@@ -263,6 +275,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     await waitFor(() =>
       expect(onSelectionChange).toHaveBeenLastCalledWith({
         planId,
+        planRevision: 1,
         operationIds: [createId, addId, existingId],
       }),
     );
@@ -390,6 +403,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(screen.getByText('Blocked by Create Portugal album')).toBeInTheDocument();
     expect(onSelectionChange).toHaveBeenLastCalledWith({
       planId,
+      planRevision: 1,
       operationIds: [existingId],
     });
   });
@@ -408,6 +422,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(screen.getByRole('checkbox', { name: 'Update album details' })).toBeChecked();
     expect(onSelectionChange).toHaveBeenLastCalledWith({
       planId,
+      planRevision: 1,
       operationIds: [existingId],
     });
   });
@@ -424,6 +439,49 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(groupToggle).not.toBeChecked();
     expect(groupToggle.indeterminate).toBe(true);
     expect(groupToggle).toHaveAttribute('aria-checked', 'mixed');
+  });
+
+  it('publishes and applies sparse item selections after a user excludes one photo', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+    sdkMock.applyApprovedOperations.mockResolvedValue({
+      status: AgentOperationApplyStatus.Applied,
+      plan: appliedPlan(),
+      appliedOperationIds: [createId, addId, existingId],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 3 operation(s), skipped 0, failed 0.',
+    });
+    const onSelectionChange = vi.fn();
+
+    render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
+
+    await fireEvent.click((await screen.findAllByText('Details'))[1]);
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      planId,
+      planRevision: 1,
+      operationIds: [createId, addId, existingId],
+      itemSelections: {
+        [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
+      },
+    });
+    expect(screen.getAllByText('1 of 2 photos selected')).toHaveLength(2);
+    expect(screen.getByText('3 changes · 1 assets selected')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply 3 selected' }));
+
+    expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith({
+      id: session.id,
+      planId,
+      agentOperationPlanApplyRequestDto: {
+        operationIds: [createId, addId, existingId],
+        itemSelections: {
+          [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
+        },
+        planRevision: 1,
+      },
+    });
   });
 
   it('applies the current approved operation selection', async () => {
@@ -444,7 +502,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith({
       id: session.id,
       planId,
-      agentOperationPlanApplyRequestDto: { operationIds: [createId, addId, existingId] },
+      agentOperationPlanApplyRequestDto: { operationIds: [createId, addId, existingId], planRevision: 1 },
     });
     expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
     expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeDisabled();
@@ -621,7 +679,7 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith(
       expect.objectContaining({
-        agentOperationPlanApplyRequestDto: { operationIds: [existingId] },
+        agentOperationPlanApplyRequestDto: { operationIds: [existingId], planRevision: 1 },
       }),
     );
   });
