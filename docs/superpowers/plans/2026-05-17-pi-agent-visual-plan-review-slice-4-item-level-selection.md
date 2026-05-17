@@ -65,6 +65,8 @@ This slice does not cover:
 
 - Modify `server/src/dtos/agent-operation.dto.ts`
   - Add item-selection schemas and extend `AgentOperationPlanApplyRequestSchema`.
+- Modify `server/src/dtos/agent-operation.dto.spec.ts`
+  - Cover direct schema parsing for sparse selections, duplicate item IDs, unsupported item kinds, and revision.
 - Modify `server/src/controllers/agent-operation-plan.controller.spec.ts`
   - Cover controller validation for sparse item selections and numeric plan revisions.
 - Modify `server/src/services/agent-operation-plan.service.ts`
@@ -101,6 +103,10 @@ This slice does not cover:
   - Add user-facing labels for item selection, selected/excluded counts, reset, item review, and overflow.
 - Modify `e2e/src/specs/web/assistant-album-organizer.e2e-spec.ts`
   - Add CI-run browser coverage for excluding one photo from a visual plan and applying the sparse selection.
+- Modify generated OpenAPI/SDK files through `make open-api-typescript`
+  - Update `open-api/immich-openapi-specs.json`.
+  - Update `open-api/typescript-sdk/src/fetch-client.ts`.
+  - Update `open-api/typescript-sdk/build/fetch-client.d.ts`.
 
 ---
 
@@ -109,9 +115,79 @@ This slice does not cover:
 **Files:**
 
 - Modify: `server/src/dtos/agent-operation.dto.ts`
+- Modify: `server/src/dtos/agent-operation.dto.spec.ts`
 - Modify: `server/src/controllers/agent-operation-plan.controller.spec.ts`
 
-- [ ] **Step 1: Write the failing controller tests**
+- [ ] **Step 1: Write the failing DTO and controller tests**
+
+In `server/src/dtos/agent-operation.dto.spec.ts`, add these tests beside the existing apply request DTO tests:
+
+```ts
+it('accepts sparse apply item selections and a numeric plan revision', () => {
+  const operationId = factory.uuid();
+  const assetId = factory.uuid();
+
+  const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+    operationIds: [operationId],
+    itemSelections: {
+      [operationId]: {
+        itemKind: 'asset',
+        mode: 'allExcept',
+        itemIds: [assetId],
+      },
+    },
+    planRevision: 3,
+  });
+
+  expect(result.success).toBe(true);
+  expect(result.data).toEqual({
+    operationIds: [operationId],
+    itemSelections: {
+      [operationId]: {
+        itemKind: 'asset',
+        mode: 'allExcept',
+        itemIds: [assetId],
+      },
+    },
+    planRevision: 3,
+  });
+});
+
+it('rejects duplicate sparse item ids', () => {
+  const operationId = factory.uuid();
+  const assetId = factory.uuid();
+
+  const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+    operationIds: [operationId],
+    itemSelections: {
+      [operationId]: {
+        itemKind: 'asset',
+        mode: 'only',
+        itemIds: [assetId, assetId],
+      },
+    },
+  });
+
+  expect(result.success).toBe(false);
+  expect(result.error?.issues).toEqual([expect.objectContaining({ message: 'itemIds must be unique' })]);
+});
+
+it('rejects unsupported sparse item kinds', () => {
+  const operationId = factory.uuid();
+
+  const result = AgentOperationPlanApplyRequestDto.schema.safeParse({
+    operationIds: [operationId],
+    itemSelections: {
+      [operationId]: {
+        itemKind: 'photo',
+        mode: 'none',
+      },
+    },
+  });
+
+  expect(result.success).toBe(false);
+});
+```
 
 In `server/src/controllers/agent-operation-plan.controller.spec.ts`, add this constant beside the existing `operationId` test data:
 
@@ -210,7 +286,7 @@ it('rejects duplicate sparse item ids before calling the service', async () => {
 Run:
 
 ```bash
-pnpm --dir server test --run src/controllers/agent-operation-plan.controller.spec.ts -t "sparse item selections|invalid sparse"
+pnpm --dir server test --run src/dtos/agent-operation.dto.spec.ts src/controllers/agent-operation-plan.controller.spec.ts -t "sparse item selections|invalid sparse|duplicate sparse|unsupported sparse|plan revision"
 ```
 
 Expected: FAIL because `AgentOperationPlanApplyRequestDto` does not accept `itemSelections` or `planRevision`.
@@ -220,10 +296,8 @@ Expected: FAIL because `AgentOperationPlanApplyRequestDto` does not accept `item
 In `server/src/dtos/agent-operation.dto.ts`, add these schemas below `uniqueOperationIds`:
 
 ```ts
-const uniqueSelectionItemIds = z
-  .array(uuid)
-  .max(10_000)
-  .superRefine((itemIds, ctx) => {
+const uniqueSelectionItemIds = (schema = z.array(uuid).max(10_000)) =>
+  schema.superRefine((itemIds, ctx) => {
     if (new Set(itemIds).size !== itemIds.length) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -231,6 +305,8 @@ const uniqueSelectionItemIds = z
       });
     }
   });
+
+const requiredUniqueSelectionItemIds = uniqueSelectionItemIds(z.array(uuid).min(1).max(10_000));
 
 const AgentOperationItemKindSchema = z.literal('asset').meta({ id: 'AgentOperationItemKind' });
 
@@ -244,12 +320,12 @@ const AgentOperationItemSelectionSchema = z
     z.strictObject({
       itemKind: AgentOperationItemKindSchema,
       mode: z.literal('allExcept'),
-      itemIds: uniqueSelectionItemIds.min(1),
+      itemIds: requiredUniqueSelectionItemIds,
     }),
     z.strictObject({
       itemKind: AgentOperationItemKindSchema,
       mode: z.literal('only'),
-      itemIds: uniqueSelectionItemIds.min(1),
+      itemIds: requiredUniqueSelectionItemIds,
     }),
     z.strictObject({
       itemKind: AgentOperationItemKindSchema,
@@ -277,7 +353,7 @@ const AgentOperationPlanApplyRequestSchema = z
 Run:
 
 ```bash
-pnpm --dir server test --run src/controllers/agent-operation-plan.controller.spec.ts -t "sparse item selections|invalid sparse|duplicate sparse|validates apply params"
+pnpm --dir server test --run src/dtos/agent-operation.dto.spec.ts src/controllers/agent-operation-plan.controller.spec.ts -t "sparse item selections|invalid sparse|duplicate sparse|unsupported sparse|validates apply params|plan revision"
 ```
 
 Expected: PASS. The existing invalid `operationIds: []` test must still return `400`.
@@ -285,7 +361,7 @@ Expected: PASS. The existing invalid `operationIds: []` test must still return `
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/src/dtos/agent-operation.dto.ts server/src/controllers/agent-operation-plan.controller.spec.ts
+git add server/src/dtos/agent-operation.dto.ts server/src/dtos/agent-operation.dto.spec.ts server/src/controllers/agent-operation-plan.controller.spec.ts
 git commit -m "feat: accept sparse pi plan item selections"
 ```
 
@@ -2099,7 +2175,64 @@ git commit -m "feat: submit sparse pi plan selections"
 
 ---
 
-### Task 8: Add CI-Run E2E Coverage For Excluding A Photo
+### Task 8: Regenerate OpenAPI And TypeScript SDK
+
+**Files:**
+
+- Modify: `open-api/immich-openapi-specs.json`
+- Modify: `open-api/typescript-sdk/src/fetch-client.ts`
+- Modify: `open-api/typescript-sdk/build/fetch-client.d.ts`
+
+- [ ] **Step 1: Regenerate the TypeScript SDK from the server DTO**
+
+Run:
+
+```bash
+make open-api-typescript
+```
+
+Expected: PASS and generated files change because `AgentOperationPlanApplyRequestDto` now includes `itemSelections` and `planRevision`.
+
+- [ ] **Step 2: Verify the generated SDK exposes the extended apply request**
+
+Run:
+
+```bash
+rg -n "itemSelections|planRevision|AgentOperationPlanApplyRequestDto" open-api/immich-openapi-specs.json open-api/typescript-sdk/src/fetch-client.ts open-api/typescript-sdk/build/fetch-client.d.ts
+```
+
+Expected output includes:
+
+```ts
+export type AgentOperationPlanApplyRequestDto = {
+    itemSelections?: { [key: string]: AgentOperationItemSelection };
+    operationIds: string[];
+    planRevision?: number;
+};
+```
+
+The exact generated helper type name may differ, but the request DTO must expose optional `itemSelections` and optional numeric `planRevision`.
+
+- [ ] **Step 3: Run SDK-aware web type checks**
+
+Run:
+
+```bash
+pnpm --dir web check:typescript
+```
+
+Expected: PASS. This proves the frontend `applyApprovedOperations` call can use the regenerated `@immich/sdk` type.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add open-api/immich-openapi-specs.json open-api/typescript-sdk/src/fetch-client.ts open-api/typescript-sdk/build/fetch-client.d.ts
+git commit -m "chore: update pi plan apply sdk"
+```
+
+---
+
+### Task 9: Add CI-Run E2E Coverage For Excluding A Photo
 
 **Files:**
 
@@ -2174,7 +2307,8 @@ Run:
 
 ```bash
 pnpm --dir web test --run "src/routes/(user)/assistant/agent-operation-plan-ui.spec.ts" "src/routes/(user)/assistant/agent-plan-item-review.spec.ts" "src/routes/(user)/assistant/agent-plan-operation-row.spec.ts" "src/routes/(user)/assistant/agent-plan-destination-card.spec.ts" "src/routes/(user)/assistant/agent-plan-evidence-ledger.spec.ts" "src/routes/(user)/assistant/agent-operation-plan-review-panel.spec.ts"
-pnpm --dir server test --run src/controllers/agent-operation-plan.controller.spec.ts src/services/agent-operation-plan.service.spec.ts
+pnpm --dir server test --run src/dtos/agent-operation.dto.spec.ts src/controllers/agent-operation-plan.controller.spec.ts src/services/agent-operation-plan.service.spec.ts
+make open-api-typescript
 pnpm --dir web check:typescript
 pnpm --dir web check:svelte
 ```
@@ -2201,7 +2335,8 @@ After all tasks are complete, run:
 
 ```bash
 pnpm --dir web test --run "src/routes/(user)/assistant/agent-operation-plan-ui.spec.ts" "src/routes/(user)/assistant/agent-plan-item-review.spec.ts" "src/routes/(user)/assistant/agent-plan-operation-row.spec.ts" "src/routes/(user)/assistant/agent-plan-destination-card.spec.ts" "src/routes/(user)/assistant/agent-plan-evidence-ledger.spec.ts" "src/routes/(user)/assistant/agent-operation-plan-review-panel.spec.ts"
-pnpm --dir server test --run src/controllers/agent-operation-plan.controller.spec.ts src/services/agent-operation-plan.service.spec.ts
+pnpm --dir server test --run src/dtos/agent-operation.dto.spec.ts src/controllers/agent-operation-plan.controller.spec.ts src/services/agent-operation-plan.service.spec.ts
+make open-api-typescript
 pnpm --dir web check:typescript
 pnpm --dir web check:svelte
 pnpm --dir web format:check
