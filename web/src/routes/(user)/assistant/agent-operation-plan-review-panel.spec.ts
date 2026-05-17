@@ -281,6 +281,10 @@ describe('AgentOperationPlanReviewPanel', () => {
     render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
 
     const region = await screen.findByRole('region', { name: 'Plan review' });
+    const heading = within(region).getByRole('heading', { name: 'Plan review' });
+    expect(region).toHaveAttribute('aria-labelledby', 'assistant-operation-plan-title');
+    expect(region).not.toHaveAttribute('aria-label');
+    expect(heading).toHaveAttribute('id', 'assistant-operation-plan-title');
     expect(within(region).getByText('Organize Portugal holiday')).toBeInTheDocument();
     expect(within(region).getByText('2 destinations')).toBeInTheDocument();
     expect(within(region).getByText('3 selected changes')).toBeInTheDocument();
