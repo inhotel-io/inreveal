@@ -1,6 +1,6 @@
 import {
   RepresentativeFaceSource,
-  Type,
+  Type5 as Type,
   type PeopleFaceStatisticsResponseDto,
   type PeopleStatisticsResponseDto,
   type PersonResponseDto,

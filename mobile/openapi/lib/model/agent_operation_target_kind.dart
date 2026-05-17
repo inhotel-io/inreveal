@@ -25,11 +25,19 @@ class AgentOperationTargetKind {
 
   static const newAlbum = AgentOperationTargetKind._(r'new_album');
   static const existingAlbum = AgentOperationTargetKind._(r'existing_album');
+  static const newSpace = AgentOperationTargetKind._(r'new_space');
+  static const existingSpace = AgentOperationTargetKind._(r'existing_space');
+  static const assetBatch = AgentOperationTargetKind._(r'asset_batch');
+  static const imageEditBatch = AgentOperationTargetKind._(r'image_edit_batch');
 
   /// List of all possible values in this [enum][AgentOperationTargetKind].
   static const values = <AgentOperationTargetKind>[
     newAlbum,
     existingAlbum,
+    newSpace,
+    existingSpace,
+    assetBatch,
+    imageEditBatch,
   ];
 
   static AgentOperationTargetKind? fromJson(dynamic value) => AgentOperationTargetKindTypeTransformer().decode(value);
@@ -70,6 +78,10 @@ class AgentOperationTargetKindTypeTransformer {
       switch (data) {
         case r'new_album': return AgentOperationTargetKind.newAlbum;
         case r'existing_album': return AgentOperationTargetKind.existingAlbum;
+        case r'new_space': return AgentOperationTargetKind.newSpace;
+        case r'existing_space': return AgentOperationTargetKind.existingSpace;
+        case r'asset_batch': return AgentOperationTargetKind.assetBatch;
+        case r'image_edit_batch': return AgentOperationTargetKind.imageEditBatch;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');

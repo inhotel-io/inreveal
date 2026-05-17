@@ -716,7 +716,7 @@ export type AgentProposeAlbumOperationsDto = {
         payload: {
             spaceName: string;
             description?: string;
-            color?: string;
+            color?: UserAvatarColor;
         };
     } | {
         "type": Type;
@@ -748,7 +748,7 @@ export type AgentProposeAlbumOperationsDto = {
         payload: {
             spaceName?: string;
             description?: string;
-            color?: string;
+            color?: UserAvatarColor;
         };
     } | {
         "type": AgentAssetRotateOperationType;
@@ -937,7 +937,7 @@ export type AgentReviseAlbumOperationsDto = {
         payload: {
             spaceName: string;
             description?: string;
-            color?: string;
+            color?: UserAvatarColor;
         };
     } | {
         "type": Type3;
@@ -969,7 +969,7 @@ export type AgentReviseAlbumOperationsDto = {
         payload: {
             spaceName?: string;
             description?: string;
-            color?: string;
+            color?: UserAvatarColor;
         };
     } | {
         "type": AgentAssetRotateOperationType;
@@ -1608,7 +1608,7 @@ export type AssetFaceWithoutPersonResponseDto = {
 export type ScopedPrimaryProfile = {
     id: string;
     spaceId?: string;
-    "type": Type;
+    "type": Type5;
 };
 export type PersonWithFacesResponseDto = {
     /** Person date of birth */
@@ -2337,7 +2337,7 @@ export type ScopedPersonProfileRefDto = {
     /** Space ID for Space Person refs */
     spaceId?: string;
     /** Scoped profile type */
-    "type": Type2;
+    "type": Type6;
 };
 export type DetachScopedPersonDto = {
     /** Scoped profile to detach */
@@ -9803,14 +9803,10 @@ export enum AgentOperationNewSpaceTargetKind {
     NewSpace = "new_space"
 }
 export enum Type {
-    SpaceAddAssets = "space.addAssets",
-    UserPerson = "user-person",
-    SpacePerson = "space-person"
+    SpaceAddAssets = "space.addAssets"
 }
 export enum Type2 {
-    SpaceRemoveAssets = "space.removeAssets",
-    Person = "person",
-    SpacePerson = "space-person"
+    SpaceRemoveAssets = "space.removeAssets"
 }
 export enum AgentSpaceUpdateDetailsOperationType {
     SpaceUpdateDetails = "space.updateDetails"

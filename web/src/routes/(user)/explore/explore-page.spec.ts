@@ -1,4 +1,14 @@
+<<<<<<< ours
 import { Type, type PersonResponseDto, type SearchExploreResponseDto } from '@immich/sdk';
+||||||| base
+import TestWrapper from '$lib/components/TestWrapper.svelte';
+import { Type, type PersonResponseDto, type SearchExploreResponseDto } from '@immich/sdk';
+import { personFactory } from '@test-data/factories/person-factory';
+=======
+import TestWrapper from '$lib/components/TestWrapper.svelte';
+import { Type5 as Type, type PersonResponseDto, type SearchExploreResponseDto } from '@immich/sdk';
+import { personFactory } from '@test-data/factories/person-factory';
+>>>>>>> theirs
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/svelte';
 import type { Component } from 'svelte';
