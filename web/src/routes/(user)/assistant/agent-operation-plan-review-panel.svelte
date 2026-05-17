@@ -16,9 +16,13 @@
     buildOperationReviewImpactSummary,
     buildOperationReviewModel,
     buildSelectionPayload,
+    buildOperationItemSelectionState,
     createInitialOperationEnabledState,
+    createInitialOperationItemSelectionState,
+    resetOperationItemSelection,
     type AgentOperationSelectionPayload,
     type OperationEnabledState,
+    type OperationItemSelectionState,
     type OperationReviewGroup,
   } from './agent-operation-plan-ui';
 
@@ -33,6 +37,7 @@
 
   let plan = $state<AgentOperationPlanResponseDto | null>(null);
   let enabledByOperationId = $state<OperationEnabledState>({});
+  let itemSelectionByOperationId = $state<OperationItemSelectionState>({});
   let loading = $state(true);
   let errorMessage = $state<string | null>(null);
   let applying = $state(false);
@@ -47,8 +52,11 @@
   let loadSequence = 0;
   let destroyed = false;
 
-  const model = $derived(plan ? buildOperationReviewModel(plan, enabledByOperationId) : null);
-  const selectedOperationIds = $derived(model ? buildSelectionPayload(model).operationIds : []);
+  const model = $derived(
+    plan ? buildOperationReviewModel(plan, enabledByOperationId, itemSelectionByOperationId) : null,
+  );
+  const selectionPayload = $derived(model ? buildSelectionPayload(model) : null);
+  const selectedOperationIds = $derived(selectionPayload?.operationIds ?? []);
   const canChangeSelection = $derived(
     model !== null && model.plan.status === AgentOperationPlanStatus.Proposed && !applying,
   );
@@ -76,12 +84,17 @@
   const publishSelection = (
     nextPlan: AgentOperationPlanResponseDto,
     nextEnabledByOperationId: OperationEnabledState,
+    nextItemSelectionByOperationId: OperationItemSelectionState,
   ) => {
     if (destroyed) {
       return;
     }
 
-    onSelectionChange?.(buildSelectionPayload(buildOperationReviewModel(nextPlan, nextEnabledByOperationId)));
+    onSelectionChange?.(
+      buildSelectionPayload(
+        buildOperationReviewModel(nextPlan, nextEnabledByOperationId, nextItemSelectionByOperationId),
+      ),
+    );
   };
 
   const loadPlan = async () => {
@@ -98,12 +111,14 @@
       }
 
       const nextEnabledByOperationId = nextPlan ? createInitialOperationEnabledState(nextPlan) : {};
+      const nextItemSelectionByOperationId = nextPlan ? createInitialOperationItemSelectionState(nextPlan) : {};
       plan = nextPlan;
       enabledByOperationId = nextEnabledByOperationId;
+      itemSelectionByOperationId = nextItemSelectionByOperationId;
       planExpanded = true;
 
       if (nextPlan) {
-        publishSelection(nextPlan, nextEnabledByOperationId);
+        publishSelection(nextPlan, nextEnabledByOperationId, nextItemSelectionByOperationId);
       }
     } catch (error) {
       if (destroyed || sequence !== loadSequence) {
@@ -145,7 +160,7 @@
   };
 
   const applySelectedOperations = async () => {
-    if (!model || !canApply) {
+    if (!model || !canApply || !selectionPayload) {
       return;
     }
 
@@ -160,10 +175,15 @@
       const response = await applyApprovedOperations({
         id: session.id,
         planId: applyingPlanId,
-        agentOperationPlanApplyRequestDto: { operationIds: selectedOperationIds },
+        agentOperationPlanApplyRequestDto: {
+          operationIds: selectionPayload.operationIds,
+          ...(selectionPayload.itemSelections ? { itemSelections: selectionPayload.itemSelections } : {}),
+          planRevision: selectionPayload.planRevision,
+        },
       });
       plan = response.plan;
       enabledByOperationId = createInitialOperationEnabledState(response.plan);
+      itemSelectionByOperationId = createInitialOperationItemSelectionState(response.plan);
       applyMessage = $t('assistant_operation_apply_success', {
         values: {
           applied: response.appliedOperationIds.length,
@@ -198,7 +218,7 @@
 
     const nextEnabledByOperationId = { ...enabledByOperationId, [operationId]: checked };
     enabledByOperationId = nextEnabledByOperationId;
-    publishSelection(plan, nextEnabledByOperationId);
+    publishSelection(plan, nextEnabledByOperationId, itemSelectionByOperationId);
   };
 
   const toggleGroup = (group: OperationReviewGroup, checked: boolean) => {
@@ -208,7 +228,33 @@
 
     const nextEnabledByOperationId = buildGroupEnabledState(enabledByOperationId, group, checked);
     enabledByOperationId = nextEnabledByOperationId;
-    publishSelection(plan, nextEnabledByOperationId);
+    publishSelection(plan, nextEnabledByOperationId, itemSelectionByOperationId);
+  };
+
+  const toggleItem = (operationId: string, assetId: string, selected: boolean) => {
+    if (!plan || !canChangeSelection) {
+      return;
+    }
+
+    const nextItemSelectionByOperationId = buildOperationItemSelectionState(
+      plan,
+      itemSelectionByOperationId,
+      operationId,
+      assetId,
+      selected,
+    );
+    itemSelectionByOperationId = nextItemSelectionByOperationId;
+    publishSelection(plan, enabledByOperationId, nextItemSelectionByOperationId);
+  };
+
+  const resetItemSelection = (operationId: string) => {
+    if (!plan || !canChangeSelection) {
+      return;
+    }
+
+    const nextItemSelectionByOperationId = resetOperationItemSelection(itemSelectionByOperationId, operationId);
+    itemSelectionByOperationId = nextItemSelectionByOperationId;
+    publishSelection(plan, enabledByOperationId, nextItemSelectionByOperationId);
   };
 
   onMount(() => {
@@ -295,6 +341,8 @@
             showHeader={false}
             onToggleGroup={toggleGroup}
             onToggleOperation={toggleOperation}
+            onToggleItem={toggleItem}
+            onResetItemSelection={resetItemSelection}
             onApply={applySelectedOperations}
           />
         </div>
