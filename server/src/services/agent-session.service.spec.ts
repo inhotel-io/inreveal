@@ -6,14 +6,48 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
-import { AgentInitialContextSnapshot, AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
+import {
+  AgentInitialContextSnapshot,
+  AgentNormalizedPermissionPlanSnapshot,
+  AgentPermissionPlanSnapshot,
+} from 'src/types/agent-session.types';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { newUuid } from 'test/small.factory';
 import { automock } from 'test/utils';
 
 const now = new Date('2026-05-14T12:00:00.000Z');
+const carefulWriteScope = {
+  createAlbum: true,
+  addAssets: true,
+  updateDetails: true,
+  setCover: true,
+  removeAssets: false,
+  createSpace: true,
+  addAssetsToSpaces: true,
+  removeAssetsFromSpaces: false,
+  updateSpaceDetails: true,
+  editAssets: false,
+  favoriteAssets: true,
+  archiveAssets: false,
+  tagAssets: true,
+};
+const expandedWriteScope = {
+  createAlbum: true,
+  addAssets: true,
+  updateDetails: true,
+  setCover: true,
+  removeAssets: true,
+  createSpace: true,
+  addAssetsToSpaces: true,
+  removeAssetsFromSpaces: true,
+  updateSpaceDetails: true,
+  editAssets: true,
+  favoriteAssets: true,
+  archiveAssets: true,
+  tagAssets: true,
+};
 
-const carefulPermissionPlan: AgentPermissionPlanSnapshot = {
+const carefulPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
   read: { metadata: true, previews: false, originals: false },
   providerExposure: {
     metadata: true,
@@ -22,7 +56,7 @@ const carefulPermissionPlan: AgentPermissionPlanSnapshot = {
     allowOriginalsForExternalProviders: false,
   },
   assetScope: { owned: true, sharedSpaces: false, locked: false },
-  writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+  writeScope: carefulWriteScope,
   limits: {
     maxAssetsPerToolCall: 200,
     maxAssetsPerSession: 2000,
@@ -34,7 +68,7 @@ const carefulPermissionPlan: AgentPermissionPlanSnapshot = {
   },
 };
 
-const visualOrganizerPermissionPlan: AgentPermissionPlanSnapshot = {
+const visualOrganizerPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
   read: { metadata: true, previews: true, originals: false },
   providerExposure: {
     metadata: true,
@@ -43,7 +77,7 @@ const visualOrganizerPermissionPlan: AgentPermissionPlanSnapshot = {
     allowOriginalsForExternalProviders: false,
   },
   assetScope: { owned: true, sharedSpaces: true, locked: false },
-  writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+  writeScope: expandedWriteScope,
   limits: {
     maxAssetsPerToolCall: 500,
     maxAssetsPerSession: 5000,
@@ -55,7 +89,7 @@ const visualOrganizerPermissionPlan: AgentPermissionPlanSnapshot = {
   },
 };
 
-const localPowerUserPermissionPlan: AgentPermissionPlanSnapshot = {
+const localPowerUserPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
   read: { metadata: true, previews: true, originals: true },
   providerExposure: {
     metadata: true,
@@ -64,7 +98,7 @@ const localPowerUserPermissionPlan: AgentPermissionPlanSnapshot = {
     allowOriginalsForExternalProviders: false,
   },
   assetScope: { owned: true, sharedSpaces: true, locked: false },
-  writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+  writeScope: expandedWriteScope,
   limits: {
     maxAssetsPerToolCall: 500,
     maxAssetsPerSession: 5000,
@@ -300,6 +334,16 @@ describe(AgentSessionService.name, () => {
     });
   });
 
+  it('preset permission snapshots include the expanded write-scope decisions', async () => {
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.Careful].writeScope).toEqual(carefulWriteScope);
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.VisualOrganizer].writeScope).toEqual(
+      expandedWriteScope,
+    );
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope).toEqual(
+      expandedWriteScope,
+    );
+  });
+
   it('dangerously-skip-permissions approval mode is accepted and forwarded to the runner', async () => {
     const auth = AuthFactory.create();
     const credential = makeCredential();
@@ -334,7 +378,7 @@ describe(AgentSessionService.name, () => {
     const legacyPermissionPlan = structuredClone(localPowerUserPermissionPlan);
     delete legacyPermissionPlan.limits.maxPreviewsPerSession;
     delete legacyPermissionPlan.limits.maxOriginalsPerSession;
-    const expectedPermissionPlan: AgentPermissionPlanSnapshot = {
+    const expectedPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
       ...legacyPermissionPlan,
       limits: {
         ...legacyPermissionPlan.limits,
@@ -346,6 +390,65 @@ describe(AgentSessionService.name, () => {
       providerCredentialId: credential.id,
       permissionPreset: AgentPermissionPreset.Custom,
       permissionPlan: legacyPermissionPlan,
+    });
+    const createdSession = makeSession({
+      userId: auth.user.id,
+      providerCredentialId: credential.id,
+      permissionPreset: AgentPermissionPreset.Custom,
+      permissionPlanSnapshot: expectedPermissionPlan,
+    });
+
+    credentialService.getById.mockResolvedValue(credential);
+    repository.create.mockResolvedValue(createdSession);
+    mockSuccessfulRunnerHandoff(createdSession);
+
+    await sut.create(auth, dto);
+
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        permissionPlanSnapshot: expectedPermissionPlan,
+      }),
+    );
+    expect(agentRunnerService.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: auth.user.id,
+        permissionPlan: expectedPermissionPlan,
+      }),
+    );
+  });
+
+  it('normalizes missing expanded write-scope keys to false for legacy custom permission plans before runner handoff', async () => {
+    const auth = AuthFactory.create();
+    const credential = makeCredential();
+    const legacyPermissionPlan: AgentPermissionPlanSnapshot = structuredClone(localPowerUserPermissionPlan);
+    legacyPermissionPlan.writeScope = {
+      createAlbum: true,
+      addAssets: true,
+      updateDetails: true,
+      setCover: true,
+    } as AgentPermissionPlanSnapshot['writeScope'];
+    const expectedPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
+      ...legacyPermissionPlan,
+      writeScope: {
+        createAlbum: true,
+        addAssets: true,
+        updateDetails: true,
+        setCover: true,
+        removeAssets: false,
+        createSpace: false,
+        addAssetsToSpaces: false,
+        removeAssetsFromSpaces: false,
+        updateSpaceDetails: false,
+        editAssets: false,
+        favoriteAssets: false,
+        archiveAssets: false,
+        tagAssets: false,
+      },
+    };
+    const dto = makeCreateDto({
+      providerCredentialId: credential.id,
+      permissionPreset: AgentPermissionPreset.Custom,
+      permissionPlan: legacyPermissionPlan as AgentSessionCreateDto['permissionPlan'],
     });
     const createdSession = makeSession({
       userId: auth.user.id,
@@ -861,6 +964,38 @@ describe(AgentSessionService.name, () => {
     expect(result.permissionPlanSnapshot).toEqual(localPowerUserPermissionPlan);
     expect(result.initialContextSnapshot).toEqual({ originalPrompt: 'organize favorites' });
     expect(result.title).toBe('Renamed chat');
+  });
+
+  it('normalizes missing expanded write-scope keys to false when returning legacy stored sessions', async () => {
+    const auth = AuthFactory.create();
+    const legacyPermissionPlan: AgentPermissionPlanSnapshot = structuredClone(localPowerUserPermissionPlan);
+    legacyPermissionPlan.writeScope = {
+      createAlbum: true,
+      addAssets: true,
+      updateDetails: true,
+      setCover: true,
+    } as AgentPermissionPlanSnapshot['writeScope'];
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: legacyPermissionPlan });
+
+    repository.getById.mockResolvedValue(session);
+
+    const result = await sut.getById(auth, session.id);
+
+    expect(result.permissionPlanSnapshot.writeScope).toEqual({
+      createAlbum: true,
+      addAssets: true,
+      updateDetails: true,
+      setCover: true,
+      removeAssets: false,
+      createSpace: false,
+      addAssetsToSpaces: false,
+      removeAssetsFromSpaces: false,
+      updateSpaceDetails: false,
+      editAssets: false,
+      favoriteAssets: false,
+      archiveAssets: false,
+      tagAssets: false,
+    });
   });
 
   it('renames an owned session with trimmed title metadata', async () => {

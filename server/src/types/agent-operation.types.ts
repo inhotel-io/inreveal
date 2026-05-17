@@ -6,10 +6,7 @@ import {
   AgentOperationType,
 } from 'src/enum';
 
-export type AgentOperationPayload =
-  | { albumName: string; description?: string }
-  | { albumName?: string; description?: string }
-  | Record<string, never>;
+export type AgentOperationPayload = Record<string, unknown>;
 
 export type AgentOperationAssetResult = {
   id: string;
@@ -20,6 +17,8 @@ export type AgentOperationAssetResult = {
 
 export type AgentOperationResult = {
   albumId?: string;
+  spaceId?: string;
+  tagId?: string;
   assetIds?: string[];
   assetResults?: AgentOperationAssetResult[];
   skippedReason?: string;
