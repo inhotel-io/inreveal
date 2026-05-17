@@ -45,6 +45,16 @@ const uniqueOperationIds = z
       });
     }
   });
+const uniqueSelectionItemIds = (schema = z.array(uuid).max(10_000)) =>
+  schema.superRefine((itemIds, ctx) => {
+    if (new Set(itemIds).size !== itemIds.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'itemIds must be unique',
+      });
+    }
+  });
+const requiredUniqueSelectionItemIds = uniqueSelectionItemIds(z.array(uuid).min(1).max(10_000));
 
 const AgentOperationPlanStatusSchema = z.enum(AgentOperationPlanStatus).meta({ id: 'AgentOperationPlanStatus' });
 const AgentOperationApplyStatusSchema = z.enum(AgentOperationApplyStatus).meta({ id: 'AgentOperationApplyStatus' });
@@ -52,6 +62,32 @@ const AgentOperationTypeSchema = z.enum(AgentOperationType).meta({ id: 'AgentOpe
 const AgentOperationTargetKindSchema = z.enum(AgentOperationTargetKind).meta({ id: 'AgentOperationTargetKind' });
 const AgentOperationRiskLevelSchema = z.enum(AgentOperationRiskLevel).meta({ id: 'AgentOperationRiskLevel' });
 const AgentOperationStatusSchema = z.enum(AgentOperationStatus).meta({ id: 'AgentOperationStatus' });
+const AgentOperationItemKindSchema = z.literal('asset').meta({ id: 'AgentOperationItemKind' });
+
+const AgentOperationItemSelectionSchema = z
+  .discriminatedUnion('mode', [
+    z.strictObject({
+      itemKind: AgentOperationItemKindSchema,
+      mode: z.literal('all'),
+      itemIds: z.array(uuid).length(0).optional(),
+    }),
+    z.strictObject({
+      itemKind: AgentOperationItemKindSchema,
+      mode: z.literal('allExcept'),
+      itemIds: requiredUniqueSelectionItemIds,
+    }),
+    z.strictObject({
+      itemKind: AgentOperationItemKindSchema,
+      mode: z.literal('only'),
+      itemIds: requiredUniqueSelectionItemIds,
+    }),
+    z.strictObject({
+      itemKind: AgentOperationItemKindSchema,
+      mode: z.literal('none'),
+      itemIds: z.array(uuid).length(0).optional(),
+    }),
+  ])
+  .meta({ id: 'AgentOperationItemSelection' });
 
 const operationDefaults = {
   riskLevel: AgentOperationRiskLevelSchema.optional().default(AgentOperationRiskLevel.Low),
@@ -246,6 +282,8 @@ const AgentOperationPlanToolResponseSchema = z
 const AgentOperationPlanApplyRequestSchema = z
   .strictObject({
     operationIds: uniqueOperationIds,
+    itemSelections: z.record(uuid, AgentOperationItemSelectionSchema).optional(),
+    planRevision: z.number().int().min(1).optional(),
   })
   .meta({ id: 'AgentOperationPlanApplyRequestDto' });
 
