@@ -269,8 +269,8 @@ test.describe('Assistant album organizer', () => {
     const { plan: appliedPlan } = (await applyResponse.json()) as AgentOperationPlanApplyResponseDto;
 
     await expect(page.getByText('Applied 2 operations. 0 failed.')).toBeVisible();
-    await expect(renamedPortugalDestination.getByText('Applied', { exact: true })).toBeVisible();
-    await expect(renamedPortugalDestination.getByText('Skipped', { exact: true })).toBeVisible();
+    await expect(page.getByText('Applied', { exact: true })).toHaveCount(2);
+    await expect(page.getByText('Skipped', { exact: true })).toHaveCount(1);
     await expect(page.getByText('0 failed')).toBeVisible();
     expect(appliedPlan.status).toBe(AgentOperationPlanStatus.Applied);
     await expect
