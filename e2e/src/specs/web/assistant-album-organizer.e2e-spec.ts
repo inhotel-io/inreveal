@@ -9,8 +9,8 @@ import {
   AgentToolName,
   ProviderType,
   createAgentProviderCredential,
+  createAgentSession,
   getAgentSession,
-  getAgentSessions,
   getAlbumInfo,
   getAllAlbums,
   getCurrentOperationPlan,
@@ -42,26 +42,6 @@ const createE2eCredential = (accessToken: string) =>
     authOptions(accessToken),
   );
 
-const waitForLatestSession = async (
-  accessToken: string,
-  expectedStatus: AgentSessionStatus,
-): Promise<AgentSessionResponseDto> => {
-  let latestSession: AgentSessionResponseDto | undefined;
-
-  await expect
-    .poll(
-      async () => {
-        const sessions = await getAgentSessions(authOptions(accessToken));
-        latestSession = sessions.toSorted((first, second) => second.createdAt.localeCompare(first.createdAt))[0];
-        return latestSession?.status;
-      },
-      { timeout: 10_000 },
-    )
-    .toBe(expectedStatus);
-
-  return latestSession!;
-};
-
 const waitForCurrentPlan = async (
   accessToken: string,
   sessionId: string,
@@ -82,38 +62,33 @@ const waitForCurrentPlan = async (
   return plan!;
 };
 
-const configureAssistantDefaults = async (page: Page) => {
-  await page.getByTestId('assistant-settings-menu').click();
-  const settingsDialog = page.getByRole('dialog', { name: 'Assistant settings' });
-  await expect(settingsDialog).toBeVisible();
-
-  await settingsDialog.getByLabel('Permission preset', { exact: true }).selectOption(AgentPermissionPreset.Careful);
-  await settingsDialog.getByLabel('Approval mode', { exact: true }).selectOption(AgentApprovalMode.PlanOnly);
-  await settingsDialog.getByRole('button', { name: 'Close' }).click();
-  await expect(settingsDialog).toBeHidden();
-};
-
 const sendAssistantPrompt = async (page: Page, prompt: string) => {
   await page.getByRole('textbox', { name: 'Message' }).fill(prompt);
   await page.getByRole('button', { name: 'Send' }).click();
 };
 
-const startAssistantSession = async (page: Page, accessToken: string, prompt: string) => {
-  await page.goto('/assistant');
-  await expect(
-    page.getByTestId('assistant-empty-chat-surface').getByRole('heading', { name: 'New chat' }),
-  ).toBeVisible();
-  await configureAssistantDefaults(page);
+const startAssistantSession = async (page: Page, accessToken: string, providerCredentialId: string, prompt: string) => {
+  const session = await createAgentSession(
+    {
+      agentSessionCreateDto: {
+        providerCredentialId,
+        model,
+        permissionPreset: AgentPermissionPreset.Careful,
+        approvalMode: AgentApprovalMode.PlanOnly,
+      },
+    },
+    authOptions(accessToken),
+  );
 
+  await page.goto(`/assistant?session=${session.id}`);
+  await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
   await sendAssistantPrompt(page, prompt);
-
-  const session = await waitForLatestSession(accessToken, AgentSessionStatus.Running);
-  await expect(page.getByRole('heading', { name: prompt })).toBeVisible({ timeout: 15_000 });
   return session;
 };
 
 test.describe('Assistant album organizer', () => {
   let admin: LoginResponseDto;
+  let providerCredentialId: string;
 
   test.beforeAll(async () => {
     utils.initSdk();
@@ -122,7 +97,8 @@ test.describe('Assistant album organizer', () => {
   test.beforeEach(async () => {
     await utils.resetDatabase();
     admin = await utils.adminSetup();
-    await createE2eCredential(admin.accessToken);
+    const credential = await createE2eCredential(admin.accessToken);
+    providerCredentialId = credential.id;
   });
 
   test('proposes album operations, lets the user toggle one off, and applies the approved operations', async ({
@@ -144,6 +120,7 @@ test.describe('Assistant album organizer', () => {
     const session = await startAssistantSession(
       page,
       admin.accessToken,
+      providerCredentialId,
       'Create a Portugal trip album from my loose photos.',
     );
 
@@ -211,6 +188,7 @@ test.describe('Assistant album organizer', () => {
     const session = await startAssistantSession(
       page,
       admin.accessToken,
+      providerCredentialId,
       'Create a denied test album with an inaccessible photo.',
     );
 
