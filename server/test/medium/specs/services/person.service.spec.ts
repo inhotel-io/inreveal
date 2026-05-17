@@ -122,7 +122,9 @@ const setupFaceRecognition = (db?: Kysely<DB>) => {
       return undefined as any;
     });
 
-  ctx.getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository).set.mockResolvedValue();
+  ctx
+    .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
+    .set.mockResolvedValue();
 
   return { sut, ctx };
 };
@@ -548,9 +550,7 @@ describe(PersonService.name, () => {
           { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: space.id } },
         ]);
         expect(
-          jobMock.queue.mock.calls.filter(
-            ([job]) => job.name === JobName.FaceIdentityMaintenanceAfterRecognition,
-          ),
+          jobMock.queue.mock.calls.filter(([job]) => job.name === JobName.FaceIdentityMaintenanceAfterRecognition),
         ).toHaveLength(1);
         expect(jobMock.queue).toHaveBeenCalledWith({
           name: JobName.FaceIdentityMaintenanceAfterRecognition,

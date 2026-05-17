@@ -38,6 +38,17 @@ import {
 import { factory, newDate, newUuid } from 'test/small.factory';
 import { makeStream, newTestService, ServiceMocks } from 'test/utils';
 
+const recognitionCounts = (overrides: Partial<QueueStatisticsDto> = {}) =>
+  factory.queueStatistics({
+    active: 1,
+    waiting: 0,
+    delayed: 0,
+    paused: 0,
+    completed: 0,
+    failed: 0,
+    ...overrides,
+  });
+
 describe(PersonService.name, () => {
   let sut: PersonService;
   let mocks: ServiceMocks;
@@ -97,17 +108,6 @@ describe(PersonService.name, () => {
     expect(queuedBatchJobNames()).not.toContain(JobName.FacialRecognitionQueueAll);
     expect(queuedBatchJobNames()).not.toContain(JobName.FacialRecognition);
   };
-
-  const recognitionCounts = (overrides: Partial<QueueStatisticsDto> = {}) =>
-    factory.queueStatistics({
-      active: 1,
-      waiting: 0,
-      delayed: 0,
-      paused: 0,
-      completed: 0,
-      failed: 0,
-      ...overrides,
-    });
 
   const expectNoRecognitionCoordinatorMutation = () => {
     expect(mocks.job.empty).not.toHaveBeenCalled();
@@ -1345,20 +1345,23 @@ describe(PersonService.name, () => {
     it.each([
       ['scheduled non-force nightly', { force: false, nightly: true }],
       ['defensive force+nightly payload', { force: true, nightly: true }],
-    ] as const)('skips %s before prerequisite waits or destructive reset when no new faces exist', async (_label, data) => {
-      const lastRun = new Date('2026-05-17T02:00:00.000Z');
-      mocks.systemMetadata.get.mockResolvedValue({ lastRun: lastRun.toISOString() });
-      mocks.person.getLatestFaceDate.mockResolvedValue(new Date(lastRun.getTime() - 1_000).toISOString());
-      mocks.job.getJobCounts.mockResolvedValue(recognitionCounts({ waiting: 25_000, delayed: 1_000, paused: 3 }));
+    ] as const)(
+      'skips %s before prerequisite waits or destructive reset when no new faces exist',
+      async (_label, data) => {
+        const lastRun = new Date('2026-05-17T02:00:00.000Z');
+        mocks.systemMetadata.get.mockResolvedValue({ lastRun: lastRun.toISOString() });
+        mocks.person.getLatestFaceDate.mockResolvedValue(new Date(lastRun.getTime() - 1000).toISOString());
+        mocks.job.getJobCounts.mockResolvedValue(recognitionCounts({ waiting: 25_000, delayed: 1000, paused: 3 }));
 
-      await expect(sut.handleQueueRecognizeFaces(data)).resolves.toBe(JobStatus.Skipped);
+        await expect(sut.handleQueueRecognizeFaces(data)).resolves.toBe(JobStatus.Skipped);
 
-      expect(mocks.systemMetadata.get).toHaveBeenCalledWith(SystemMetadataKey.FacialRecognitionState);
-      expect(mocks.person.getLatestFaceDate).toHaveBeenCalledOnce();
-      expect(mocks.job.waitForQueueCompletion).not.toHaveBeenCalled();
-      expect(mocks.person.getAllFaces).not.toHaveBeenCalled();
-      expectNoRecognitionCoordinatorMutation();
-    });
+        expect(mocks.systemMetadata.get).toHaveBeenCalledWith(SystemMetadataKey.FacialRecognitionState);
+        expect(mocks.person.getLatestFaceDate).toHaveBeenCalledOnce();
+        expect(mocks.job.waitForQueueCompletion).not.toHaveBeenCalled();
+        expect(mocks.person.getAllFaces).not.toHaveBeenCalled();
+        expectNoRecognitionCoordinatorMutation();
+      },
+    );
 
     it.each([
       ['waiting jobs', { waiting: 87_000 }],
@@ -1565,10 +1568,7 @@ describe(PersonService.name, () => {
       mocks.person.getAllWithoutFaces.mockResolvedValue([]);
       mocks.sharedSpace.deleteAllPersonFaces.mockResolvedValue(void 0 as any);
       mocks.sharedSpace.deleteAllPersons.mockResolvedValue(void 0 as any);
-      mocks.sharedSpace.getSpaceIdsWithFaceRecognitionEnabled.mockResolvedValue([
-        'enabled-space-1',
-        'enabled-space-2',
-      ]);
+      mocks.sharedSpace.getSpaceIdsWithFaceRecognitionEnabled.mockResolvedValue(['enabled-space-1', 'enabled-space-2']);
 
       await expect(sut.handleQueueRecognizeFaces({ force: true })).resolves.toBe(JobStatus.Success);
 
@@ -2067,12 +2067,7 @@ describe(PersonService.name, () => {
       await expect(sut.handleFaceIdentityMaintenanceAfterRecognition({})).resolves.toBe(JobStatus.Skipped);
 
       expect(mocks.job.searchJobs).toHaveBeenCalledWith(QueueName.PeopleBackfill, {
-        status: [
-          QueueJobStatus.Active,
-          QueueJobStatus.Delayed,
-          QueueJobStatus.Paused,
-          QueueJobStatus.Waiting,
-        ],
+        status: [QueueJobStatus.Active, QueueJobStatus.Delayed, QueueJobStatus.Paused, QueueJobStatus.Waiting],
       });
       expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
     });

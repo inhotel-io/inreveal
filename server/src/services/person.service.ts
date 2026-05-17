@@ -830,9 +830,7 @@ export class PersonService extends BaseService {
 
     const lastRun = new Date().toISOString();
     const facePagination = this.personRepository.getAllFaces(
-      force
-        ? { sourceType: SourceType.MachineLearning }
-        : { personId: null, sourceType: SourceType.MachineLearning },
+      force ? { sourceType: SourceType.MachineLearning } : { personId: null, sourceType: SourceType.MachineLearning },
     );
 
     let jobs: {
