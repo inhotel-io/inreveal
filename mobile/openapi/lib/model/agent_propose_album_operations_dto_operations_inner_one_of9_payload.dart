@@ -16,7 +16,9 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload {
     required this.angle,
   });
 
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum angle;
+  /// Minimum value: -9007199254740991
+  /// Maximum value: 9007199254740991
+  int angle;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload &&
@@ -45,7 +47,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload(
-        angle: AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum.parse('${json[r'angle']}'),
+        angle: mapValueOfType<int>(json, r'angle')!,
       );
     }
     return null;
@@ -96,81 +98,4 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload {
     'angle',
   };
 }
-
-
-class AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum {
-  /// Instantiate a new enum with the provided [value].
-  const AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum._(this.value);
-
-  /// The underlying value of this enum member.
-  final num value;
-
-  @override
-  String toString() => value.toString();
-
-  num toJson() => value;
-
-  static const n90 = AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum._('90');
-  static const n180 = AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum._('180');
-  static const n270 = AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum._('270');
-
-  /// List of all possible values in this [enum][AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum].
-  static const values = <AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum>[
-    n90,
-    n180,
-    n270,
-  ];
-
-  static AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum? fromJson(dynamic value) => AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnumTypeTransformer().decode(value);
-
-  static List<AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum> listFromJson(dynamic json, {bool growable = false,}) {
-    final result = <AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum>[];
-    if (json is List && json.isNotEmpty) {
-      for (final row in json) {
-        final value = AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum.fromJson(row);
-        if (value != null) {
-          result.add(value);
-        }
-      }
-    }
-    return result.toList(growable: growable);
-  }
-}
-
-/// Transformation class that can [encode] an instance of [AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum] to num,
-/// and [decode] dynamic data back to [AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum].
-class AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnumTypeTransformer {
-  factory AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnumTypeTransformer() => _instance ??= const AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnumTypeTransformer._();
-
-  const AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnumTypeTransformer._();
-
-  num encode(AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum data) => data.value;
-
-  /// Decodes a [dynamic value][data] to a AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum.
-  ///
-  /// If [allowNull] is true and the [dynamic value][data] cannot be decoded successfully,
-  /// then null is returned. However, if [allowNull] is false and the [dynamic value][data]
-  /// cannot be decoded successfully, then an [UnimplementedError] is thrown.
-  ///
-  /// The [allowNull] is very handy when an API changes and a new enum value is added or removed,
-  /// and users are still using an old app with the old code.
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum? decode(dynamic data, {bool allowNull = true}) {
-    if (data != null) {
-      switch (data) {
-        case '90': return AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum.n90;
-        case '180': return AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum.n180;
-        case '270': return AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnum.n270;
-        default:
-          if (!allowNull) {
-            throw ArgumentError('Unknown enum value to decode: $data');
-          }
-      }
-    }
-    return null;
-  }
-
-  /// Singleton [AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnumTypeTransformer] instance.
-  static AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadAngleEnumTypeTransformer? _instance;
-}
-
 
