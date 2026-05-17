@@ -9,7 +9,11 @@ import {
 } from '@immich/sdk';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
-import { buildOperationReviewModel } from './agent-operation-plan-ui';
+import {
+  buildOperationReviewModel,
+  type OperationEnabledState,
+  type OperationItemSelectionState,
+} from './agent-operation-plan-ui';
 import AgentPlanOperationRow from './agent-plan-operation-row.svelte';
 
 vi.mock('$lib/utils', () => ({
@@ -95,7 +99,10 @@ const plan = (operations: AgentOperationResponseDto[]): AgentOperationPlanRespon
   updatedAt: '2026-05-15T00:00:00.000Z',
 });
 
-const model = (enabledByOperationId = { [createId]: true, [addId]: true }, itemSelectionByOperationId = {}) =>
+const model = (
+  enabledByOperationId?: OperationEnabledState,
+  itemSelectionByOperationId?: OperationItemSelectionState,
+) =>
   buildOperationReviewModel(
     plan([
       operation({
@@ -117,8 +124,8 @@ const model = (enabledByOperationId = { [createId]: true, [addId]: true }, itemS
         payload: {},
       }),
     ]),
-    enabledByOperationId,
-    itemSelectionByOperationId,
+    enabledByOperationId ?? { [createId]: true, [addId]: true },
+    itemSelectionByOperationId ?? {},
   );
 
 describe('AgentPlanOperationRow', () => {
