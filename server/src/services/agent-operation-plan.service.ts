@@ -66,6 +66,12 @@ type SparseItemSelection = NonNullable<AgentOperationPlanApplyRequestDto['itemSe
 type ApplySelection = {
   selectedOperationIds: Set<string>;
   selectedAssetIdsByOperationId: Map<string, string[]>;
+  fieldOverridesByOperationId: Map<string, AgentOperationFieldOverride>;
+};
+
+type AgentOperationFieldOverride = {
+  payload?: { albumName?: string; description?: string };
+  albumThumbnailAssetId?: string;
 };
 
 @Injectable()
@@ -514,7 +520,103 @@ export class AgentOperationPlanService {
       selectedAssetIdsByOperationId.set(operationId, selectedAssetIds);
     }
 
-    return { selectedOperationIds, selectedAssetIdsByOperationId };
+    const fieldOverridesByOperationId = this.validateFieldOverrides(
+      dto.fieldOverrides ?? {},
+      operationById,
+      selectedOperationIds,
+      selectedAssetIdsByOperationId,
+    );
+
+    return { selectedOperationIds, selectedAssetIdsByOperationId, fieldOverridesByOperationId };
+  }
+
+  private validateFieldOverrides(
+    fieldOverrides: NonNullable<AgentOperationPlanApplyRequestDto['fieldOverrides']>,
+    operationById: Map<string, AgentOperationPlanWithOperations['operations'][number]>,
+    selectedOperationIds: Set<string>,
+    selectedAssetIdsByOperationId: Map<string, string[]>,
+  ): Map<string, AgentOperationFieldOverride> {
+    const fieldOverridesByOperationId = new Map<string, AgentOperationFieldOverride>();
+
+    for (const [operationId, fields] of Object.entries(fieldOverrides)) {
+      const operation = operationById.get(operationId);
+      if (!operation) {
+        throw new BadRequestException('One or more field override operation ids are not in the current plan');
+      }
+
+      if (!selectedOperationIds.has(operationId)) {
+        throw new BadRequestException('One or more field override operation ids are not selected');
+      }
+
+      fieldOverridesByOperationId.set(
+        operationId,
+        this.normalizeFieldOverride(operation, fields, selectedAssetIdsByOperationId.get(operationId)),
+      );
+    }
+
+    return fieldOverridesByOperationId;
+  }
+
+  private normalizeFieldOverride(
+    operation: AgentOperationPlanWithOperations['operations'][number],
+    fields: Record<string, unknown>,
+    selectedAssetIds: string[] | undefined,
+  ): AgentOperationFieldOverride {
+    switch (operation.type) {
+      case AgentOperationType.AlbumCreate:
+      case AgentOperationType.AlbumUpdateDetails: {
+        const payload: AgentOperationFieldOverride['payload'] = {};
+        for (const [field, value] of Object.entries(fields)) {
+          if (field !== 'albumName' && field !== 'description') {
+            throw new BadRequestException('Unsupported field override for operation type');
+          }
+
+          payload[field] = this.normalizeAlbumTextOverride(field, value);
+        }
+
+        return { payload };
+      }
+
+      case AgentOperationType.AlbumSetCover: {
+        const fieldNames = Object.keys(fields);
+        if (fieldNames.some((field) => field !== 'albumThumbnailAssetId')) {
+          throw new BadRequestException('Unsupported field override for operation type');
+        }
+
+        const albumThumbnailAssetId = fields.albumThumbnailAssetId;
+        if (typeof albumThumbnailAssetId !== 'string') {
+          throw new BadRequestException('albumThumbnailAssetId must be a string');
+        }
+
+        const selectedCoverCandidateIds = selectedAssetIds ?? [...new Set(operation.assetIds)];
+        if (!selectedCoverCandidateIds.includes(albumThumbnailAssetId)) {
+          throw new BadRequestException('albumThumbnailAssetId must be one of the selected cover candidates');
+        }
+
+        return { albumThumbnailAssetId };
+      }
+
+      default: {
+        throw new BadRequestException('Field overrides are not supported for operation type');
+      }
+    }
+  }
+
+  private normalizeAlbumTextOverride(field: 'albumName' | 'description', value: unknown): string {
+    if (typeof value !== 'string') {
+      throw new BadRequestException(`${field} must be a string`);
+    }
+
+    const normalized = value.trim();
+    if (field === 'albumName' && (normalized.length < 1 || normalized.length > 200)) {
+      throw new BadRequestException('albumName must be 1-200 characters');
+    }
+
+    if (field === 'description' && normalized.length > 1000) {
+      throw new BadRequestException('description must be 1000 characters or fewer');
+    }
+
+    return normalized;
   }
 
   private resolveSelectedAssetIds(
@@ -556,7 +658,7 @@ export class AgentOperationPlanService {
     plan: AgentOperationPlanWithOperations,
     applySelection: ApplySelection,
   ): Promise<AgentOperationApplyUpdate[]> {
-    const { selectedOperationIds, selectedAssetIdsByOperationId } = applySelection;
+    const { selectedOperationIds, selectedAssetIdsByOperationId, fieldOverridesByOperationId } = applySelection;
     const appliedOperationIds = new Set<string>();
     const createdAlbumIdByTemporaryTargetId = new Map<string, string>();
     const updates: AgentOperationApplyUpdate[] = [];
@@ -574,12 +676,18 @@ export class AgentOperationPlanService {
       }
 
       const selectedAssetIds = selectedAssetIdsByOperationId.get(operation.id);
+      const fieldOverride = fieldOverridesByOperationId.get(operation.id);
       const operationForApply =
-        selectedAssetIds === undefined
+        selectedAssetIds === undefined && !fieldOverride
           ? operation
           : {
               ...operation,
-              assetIds: selectedAssetIds,
+              assetIds: fieldOverride?.albumThumbnailAssetId
+                ? [fieldOverride.albumThumbnailAssetId]
+                : (selectedAssetIds ?? operation.assetIds),
+              payload: fieldOverride?.payload
+                ? { ...this.requireObjectPayload(operation.payload), ...fieldOverride.payload }
+                : operation.payload,
             };
 
       if (selectedAssetIds?.length === 0) {
@@ -748,6 +856,14 @@ export class AgentOperationPlanService {
       albumName: typeof albumName === 'string' ? albumName : undefined,
       description: typeof description === 'string' ? description : undefined,
     };
+  }
+
+  private requireObjectPayload(payload: unknown): Record<string, unknown> {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return {};
+    }
+
+    return payload as Record<string, unknown>;
   }
 
   private createPlanningAudit(
