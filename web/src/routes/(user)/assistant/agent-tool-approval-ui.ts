@@ -69,7 +69,7 @@ export const getAgentToolCallScopeText = (toolCall: AgentToolCallResponseDto) =>
   const parts = [
     toolCall.assetCount > 0 ? pluralize(toolCall.assetCount, 'photo', 'photos') : null,
     toolCall.albumCount > 0 ? pluralize(toolCall.albumCount, 'album', 'albums') : null,
-  ].filter((part): part is string => Boolean(part));
+  ].filter(Boolean);
 
   if (parts.length === 0) {
     return 'no photos and no albums';

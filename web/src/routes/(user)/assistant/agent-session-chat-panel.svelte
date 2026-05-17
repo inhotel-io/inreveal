@@ -116,11 +116,11 @@
       .map((block) => block.text)
       .join('\n');
 
-  const buildChatTimelineItems = (
+  function buildChatTimelineItems(
     timelineMessages: AgentMessageResponseDto[],
     timelineToolCalls: AgentToolCallResponseDto[],
-  ): ChatTimelineItem[] =>
-    [
+  ): ChatTimelineItem[] {
+    return [
       ...timelineMessages.map((message) => ({
         type: 'message' as const,
         id: `message-${message.id}`,
@@ -133,9 +133,8 @@
         occurredAt: toolCall.startedAt,
         toolCall,
       })),
-    ].toSorted(
-      (first, second) => first.occurredAt.localeCompare(second.occurredAt) || first.id.localeCompare(second.id),
-    );
+    ].sort((first, second) => first.occurredAt.localeCompare(second.occurredAt) || first.id.localeCompare(second.id));
+  }
 
   const getToolCallStatusLabel = (status: AgentToolCallStatus) => {
     if (status === AgentToolCallStatus.Completed) {
@@ -155,19 +154,6 @@
 
   const toggleToolCallDetails = (toolCallId: string) => {
     expandedToolCallIds = { ...expandedToolCallIds, [toolCallId]: !expandedToolCallIds[toolCallId] };
-  };
-
-  const parseMarkdownTableRow = (line: string) =>
-    line
-      .trim()
-      .replace(/^\|/, '')
-      .replace(/\|$/, '')
-      .split('|')
-      .map((cell) => cell.trim());
-
-  const isMarkdownTableSeparator = (line: string) => {
-    const cells = parseMarkdownTableRow(line);
-    return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
   };
 
   const parseAssistantInlineMarkdown = (text: string): AssistantMarkdownInlineSegment[] => {
@@ -271,12 +257,12 @@
         flushParagraph();
         flushList();
 
-        const headers = splitTableRow(line).map(parseAssistantInlineMarkdown);
+        const headers = splitTableRow(line).map((header) => parseAssistantInlineMarkdown(header));
         const rows: AssistantMarkdownInlineSegment[][][] = [];
         index += 2;
 
         while (index < lines.length && lines[index].trim().length > 0 && isTableDataRow(lines[index])) {
-          rows.push(splitTableRow(lines[index]).map(parseAssistantInlineMarkdown));
+          rows.push(splitTableRow(lines[index]).map((cell) => parseAssistantInlineMarkdown(cell)));
           index++;
         }
 
@@ -538,11 +524,11 @@
       return;
     }
 
-    const interval = window.setInterval(() => {
+    const interval = globalThis.setInterval(() => {
       busyFrameIndex = (busyFrameIndex + 1) % busyFrames.length;
     }, 160);
 
-    return () => window.clearInterval(interval);
+    return () => globalThis.clearInterval(interval);
   });
 
   onDestroy(() => {
@@ -551,7 +537,7 @@
 </script>
 
 {#snippet assistantMarkdownInline(segments: AssistantMarkdownInlineSegment[])}
-  {#each segments as segment}
+  {#each segments as segment (segment)}
     {#if segment.type === 'strong'}
       <strong class="font-semibold">{segment.text}</strong>
     {:else if segment.type === 'emphasis'}
@@ -583,7 +569,7 @@
 
 {#snippet assistantMarkdown(blocks: AssistantMarkdownBlock[])}
   <div class="space-y-2">
-    {#each blocks as block}
+    {#each blocks as block (block)}
       {#if block.type === 'paragraph'}
         <p class="whitespace-pre-wrap">{@render assistantMarkdownInline(block.segments)}</p>
       {:else if block.type === 'heading'}
@@ -596,7 +582,7 @@
         {/if}
       {:else if block.type === 'list'}
         <ul class="list-disc space-y-1 pl-5">
-          {#each block.items as item}
+          {#each block.items as item (item)}
             <li>{@render assistantMarkdownInline(item)}</li>
           {/each}
         </ul>
@@ -609,7 +595,7 @@
           <table class="min-w-full border-collapse text-left text-xs">
             <thead>
               <tr class="border-b border-gray-200 dark:border-neutral-700">
-                {#each block.headers as header}
+                {#each block.headers as header (header)}
                   <th class="px-3 py-2 font-semibold text-slate-950 dark:text-neutral-50">
                     {@render assistantMarkdownInline(header)}
                   </th>
@@ -617,9 +603,9 @@
               </tr>
             </thead>
             <tbody>
-              {#each block.rows as row}
+              {#each block.rows as row (row)}
                 <tr class="border-b border-gray-100 last:border-0 dark:border-neutral-800">
-                  {#each row as cell}
+                  {#each row as cell (cell)}
                     <td class="px-3 py-2 align-top text-slate-700 dark:text-neutral-200">
                       {@render assistantMarkdownInline(cell)}
                     </td>
