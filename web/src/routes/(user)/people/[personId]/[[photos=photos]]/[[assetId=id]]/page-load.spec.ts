@@ -7,7 +7,7 @@ vi.mock('$lib/utils/auth', () => ({ authenticate }));
 vi.mock('$lib/utils/i18n', () => ({ getFormatter }));
 
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
-import { Type, type PersonResponseDto } from '@immich/sdk';
+import { Type5 as Type, type PersonResponseDto } from '@immich/sdk';
 import { load } from './+page';
 
 const makePerson = (overrides: Partial<PersonResponseDto> = {}): PersonResponseDto => ({

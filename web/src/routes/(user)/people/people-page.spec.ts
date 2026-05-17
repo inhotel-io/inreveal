@@ -5,7 +5,7 @@ import { clearPeopleFaceStatisticsInfoCache } from '$lib/components/people/peopl
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import {
   RepresentativeFaceSource,
-  Type,
+  Type5 as Type,
   type PeopleFaceStatisticsResponseDto,
   type PeopleStatisticsResponseDto,
   type PersonResponseDto,
