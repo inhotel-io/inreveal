@@ -382,8 +382,8 @@ describe('AgentPlanThumbnailStrip', () => {
 
     expect(strip).toHaveAttribute('aria-label', '20 photo previews');
     expect(images).toHaveLength(4);
-    expect(images[0]).toHaveAttribute('src', expect.stringContaining('/api/assets/asset-001/thumbnail'));
-    expect(images[3]).toHaveAttribute('src', expect.stringContaining('/api/assets/asset-004/thumbnail'));
+    expect(images[0].getAttribute('src')).toContain('/api/assets/asset-001/thumbnail');
+    expect(images[3].getAttribute('src')).toContain('/api/assets/asset-004/thumbnail');
     expect(within(strip).getByText('+16')).toBeInTheDocument();
     expect(within(strip).queryByAltText('Photo preview 5 of 20')).not.toBeInTheDocument();
     expect(screen.queryByText('asset-005')).not.toBeInTheDocument();
@@ -427,6 +427,21 @@ describe('AgentPlanThumbnailStrip', () => {
     });
 
     expect(container.children).toHaveLength(0);
+  });
+
+  it('does not mount every thumbnail for a 1,000-photo plan', () => {
+    render(AgentPlanThumbnailStrip, {
+      props: {
+        group: group(1_000),
+      },
+    });
+
+    const strip = screen.getByTestId('agent-plan-thumbnail-strip');
+
+    expect(within(strip).getAllByTestId('agent-plan-thumbnail-image')).toHaveLength(6);
+    expect(within(strip).getByText('+994')).toBeInTheDocument();
+    expect(screen.queryByText('asset-013')).not.toBeInTheDocument();
+    expect(within(strip).queryByAltText('Photo preview 13 of 1000')).not.toBeInTheDocument();
   });
 });
 ```
@@ -580,20 +595,20 @@ Update the existing `renders destination evidence with compact operation and ass
 const thumbnailStrip = screen.getByTestId('agent-plan-thumbnail-strip');
 expect(thumbnailStrip).toHaveAttribute('aria-label', '2 photo previews');
 expect(within(thumbnailStrip).getAllByTestId('agent-plan-thumbnail-image')).toHaveLength(2);
-expect(within(thumbnailStrip).queryByText('+')).not.toBeInTheDocument();
+expect(within(thumbnailStrip).queryByText(/\+\d+/)).not.toBeInTheDocument();
 ```
 
 Add a large destination-card regression test:
 
 ```ts
-it('renders bounded thumbnails for a destination with many affected photos', () => {
-  const largeAssetIds = Array.from({ length: 50 }, (_, index) => `large-asset-${index + 1}`);
+it('renders bounded thumbnails for a destination with 1,000 affected photos', () => {
+  const largeAssetIds = Array.from({ length: 1_000 }, (_, index) => `large-asset-${index + 1}`);
   const largeGroup = buildOperationReviewModel(
     plan([
       operation({
         id: addId,
         type: AgentOperationType.AlbumAddAssets,
-        summary: 'Add fifty assets',
+        summary: 'Add one thousand assets',
         targetKind: AgentOperationTargetKind.NewAlbum,
         temporaryTargetId: 'album-portugal',
         assetIds: largeAssetIds,
@@ -614,8 +629,9 @@ it('renders bounded thumbnails for a destination with many affected photos', () 
 
   const thumbnailStrip = screen.getByTestId('agent-plan-thumbnail-strip');
   expect(within(thumbnailStrip).getAllByTestId('agent-plan-thumbnail-image')).toHaveLength(6);
-  expect(within(thumbnailStrip).getByText('+44')).toBeInTheDocument();
+  expect(within(thumbnailStrip).getByText('+994')).toBeInTheDocument();
   expect(screen.queryByText('large-asset-7')).not.toBeInTheDocument();
+  expect(screen.queryByText('large-asset-13')).not.toBeInTheDocument();
 });
 ```
 
@@ -712,11 +728,15 @@ await expect(thumbnailStrip.getByText(/\+\d+/)).toHaveCount(0);
 
 Keep the existing destination card, operation toggle, hidden technical details, and apply assertions unchanged.
 
-- [ ] **Step 2: Verify this assertion through CI**
+- [ ] **Step 2: Run formatting for the E2E file**
 
-Use CI as the browser-test source of truth for this slice. After pushing the implementation branch, confirm `.github/workflows/test.yml` job `e2e-tests-web` passes.
+Run:
 
-Expected: PASS in CI. If CI fails on this assertion, inspect the Playwright trace and fix either the selector scope or the thumbnail rendering behavior, then push the smallest fix.
+```bash
+pnpm --dir e2e exec prettier --check "src/specs/web/assistant-album-organizer.e2e-spec.ts"
+```
+
+Expected: PASS.
 
 - [ ] **Step 3: Commit this task**
 
@@ -724,6 +744,8 @@ Expected: PASS in CI. If CI fails on this assertion, inspect the Playwright trac
 git add e2e/src/specs/web/assistant-album-organizer.e2e-spec.ts
 git commit -m "test: cover pi plan thumbnail browser flow"
 ```
+
+Browser execution for this assertion is verified in Task 5 through CI. Do not spend time on a local Playwright run unless CI fails and local reproduction is useful.
 
 ---
 
@@ -824,8 +846,8 @@ If no fixes were needed, do not create an empty commit.
 
 - [ ] `AgentPlanDestinationCard` renders a representative thumbnail strip when `group.thumbnailSummary.totalCount > 0`.
 - [ ] Collapsed destination cards render at most 6 thumbnails by default and never more than 12 through the helper.
-- [ ] A large plan with 50+ or 1,000+ affected assets does not render every affected asset into the collapsed DOM.
-- [ ] Overflow count tile reflects hidden affected photos, for example `+44` when 6 of 50 photos are rendered.
+- [ ] A large plan with 1,000 affected assets does not render every affected asset into the collapsed DOM.
+- [ ] Overflow count tile reflects hidden affected photos, for example `+994` when 6 of 1,000 photos are rendered.
 - [ ] No-preview fallback renders when affected assets exist but representative thumbnail IDs are unavailable.
 - [ ] Individual thumbnail load failures show a per-item fallback while the remaining thumbnails stay visible.
 - [ ] Zero affected photos render no thumbnail strip.
