@@ -137,6 +137,7 @@ export type OperationReviewModel = {
   plan: AgentOperationPlanResponseDto;
   groups: OperationReviewGroup[];
   operationsById: Map<string, OperationReviewItem>;
+  fieldErrors: { operationId: string; fieldKey: string; message: string }[];
 };
 
 export type OperationReviewImpactSummary = {
@@ -182,6 +183,40 @@ export const createInitialOperationEnabledState = (plan: AgentOperationPlanRespo
 export const createInitialOperationItemSelectionState = (
   _: AgentOperationPlanResponseDto,
 ): OperationItemSelectionState => ({});
+
+export const createInitialOperationFieldOverrideState = (
+  _: AgentOperationPlanResponseDto,
+): OperationFieldOverrideState => ({});
+
+export const setOperationFieldOverride = (
+  state: OperationFieldOverrideState,
+  operationId: string,
+  fieldKey: string,
+  value: unknown,
+): OperationFieldOverrideState => ({
+  ...state,
+  [operationId]: {
+    ...(state[operationId] ?? {}),
+    [fieldKey]: value,
+  },
+});
+
+export const resetOperationFieldOverride = (
+  state: OperationFieldOverrideState,
+  operationId: string,
+  fieldKey?: string,
+): OperationFieldOverrideState => {
+  if (!fieldKey) {
+    const { [operationId]: _, ...remaining } = state;
+    return remaining;
+  }
+
+  const nextFields = { ...(state[operationId] ?? {}) };
+  delete nextFields[fieldKey];
+  const { [operationId]: _, ...remaining } = state;
+
+  return Object.keys(nextFields).length === 0 ? remaining : { ...remaining, [operationId]: nextFields };
+};
 
 export const setOperationItemSelection = (
   state: OperationItemSelectionState,
@@ -514,7 +549,7 @@ export const buildOperationReviewModel = (
       id: groupId,
       title: getReviewGroupTitle(item),
       subtitle: '',
-      destination: getDestination(item.operation, operationById, ''),
+      destination: getDestination(item.operation, operationById, '', item.review.destination.name),
       assetCount: 0,
       thumbnailSummary: { totalCount: 0, representativeAssetIds: [], hasMore: false },
       representativeAssetIds: [],
@@ -529,6 +564,7 @@ export const buildOperationReviewModel = (
       subtitle,
       destination: {
         ...group.destination,
+        name: item.review.destination.name,
         subtitle,
       },
       assetCount: getOperationAssetCount(operations.map(({ operation }) => operation)),
@@ -542,6 +578,13 @@ export const buildOperationReviewModel = (
     plan,
     groups: [...groupsById.values()],
     operationsById: new Map(items.map((item) => [item.id, item])),
+    fieldErrors: items.flatMap((item) =>
+      Object.entries(item.fieldErrors).map(([fieldKey, message]) => ({
+        operationId: item.id,
+        fieldKey,
+        message,
+      })),
+    ),
   };
 };
 
@@ -673,7 +716,10 @@ const buildSparseOperationFieldOverrides = (editableFields: AgentOperationEditab
       ]),
   );
 
-const applyOperationFieldOverrides = (operation: AgentOperationResponseDto, fieldOverrides: Record<string, unknown> | undefined) => {
+const applyOperationFieldOverrides = (
+  operation: AgentOperationResponseDto,
+  fieldOverrides: Record<string, unknown> | undefined,
+) => {
   if (
     !fieldOverrides ||
     (operation.type !== AgentOperationType.AlbumCreate && operation.type !== AgentOperationType.AlbumUpdateDetails)
@@ -961,9 +1007,10 @@ const getDestination = (
   operation: AgentOperationResponseDto,
   operationById: Map<string, AgentOperationResponseDto>,
   subtitle: string,
+  titleOverride?: string,
 ): OperationReviewDestination => ({
   ...getReviewDestination(operation, operationById),
-  title: getGroupTitle(operation),
+  title: titleOverride ?? getGroupTitle(operation),
   subtitle,
 });
 
