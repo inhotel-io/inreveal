@@ -69,7 +69,9 @@
   const canChangeSelection = $derived(
     model !== null && model.plan.status === AgentOperationPlanStatus.Proposed && !applying,
   );
-  const canApply = $derived(canChangeSelection && selectedOperationIds.length > 0 && model.fieldErrors.length === 0);
+  const canApply = $derived(
+    canChangeSelection && selectedOperationIds.length > 0 && (model?.fieldErrors.length ?? 0) === 0,
+  );
   const rootClass = $derived(
     variant === 'dock'
       ? 'flex w-full flex-col gap-3 text-black dark:text-white'

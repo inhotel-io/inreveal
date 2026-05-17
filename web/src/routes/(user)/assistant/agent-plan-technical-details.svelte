@@ -1,10 +1,6 @@
 <script lang="ts">
-  import { t } from 'svelte-i18n';
-  import {
-    buildOperationTechnicalDetails,
-    type OperationReviewItem,
-    type OperationTechnicalDetails,
-  } from './agent-operation-plan-ui';
+  import { t, type Translations } from 'svelte-i18n';
+  import { buildOperationTechnicalDetails, type OperationReviewItem } from './agent-operation-plan-ui';
 
   interface Props {
     item: OperationReviewItem;
@@ -22,10 +18,10 @@
 
   const statusLabelKey = (reviewItem: OperationReviewItem) => {
     if (reviewItem.applyState.kind === 'partial') {
-      return 'assistant_operation_status_partial';
+      return 'assistant_operation_status_partial' as Translations;
     }
 
-    return `assistant_operation_status_${reviewItem.applyState.kind}`;
+    return `assistant_operation_status_${reviewItem.applyState.kind}` as Translations;
   };
 
   const resultAssetOverflowCount = $derived(details.resultAssetOverflowCount ?? 0);
@@ -65,7 +61,7 @@
         <div>
           <p class="font-medium">{$t('assistant_operation_detail_assets_preview')}</p>
           <ul class="mt-1 grid gap-1">
-            {#each details.assetIdPreview as assetId}
+            {#each details.assetIdPreview as assetId (assetId)}
               <li class="break-all">{assetId}</li>
             {/each}
           </ul>
@@ -81,7 +77,7 @@
         <div>
           <p class="font-medium">{$t('assistant_operation_detail_assets_preview')}</p>
           <ul class="mt-1 grid gap-1">
-            {#each details.resultAssetIdPreview as assetId}
+            {#each details.resultAssetIdPreview as assetId (assetId)}
               <li class="break-all">{assetId}</li>
             {/each}
           </ul>
@@ -97,7 +93,7 @@
         <div>
           <p class="font-medium">{$t('assistant_operation_detail_assets_preview')}</p>
           <ul class="mt-1 grid gap-1">
-            {#each details.resultAssetResultsPreview as result}
+            {#each details.resultAssetResultsPreview as result (result.id)}
               <li class="break-all">
                 {result.id}
                 <span

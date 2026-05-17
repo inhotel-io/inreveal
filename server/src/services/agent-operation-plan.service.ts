@@ -923,7 +923,8 @@ export class AgentOperationPlanService {
           throw new BadRequestException('Unsupported field override for operation type');
         }
 
-        const rotationAngle = fields.rotationAngle;
+        const rotationAngle =
+          typeof fields.rotationAngle === 'string' ? Number(fields.rotationAngle) : fields.rotationAngle;
         if (rotationAngle !== 90 && rotationAngle !== 180 && rotationAngle !== 270) {
           throw new BadRequestException('rotationAngle must be 90, 180, or 270');
         }
