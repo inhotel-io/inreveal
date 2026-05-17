@@ -131,12 +131,81 @@
     );
   };
 
-  const loadPlan = async () => {
+  const getErrorStatusCode = (error: unknown) => {
+    if (!error || typeof error !== 'object') {
+      return;
+    }
+
+    const data = 'data' in error ? error.data : undefined;
+    if (data && typeof data === 'object' && 'statusCode' in data && typeof data.statusCode === 'number') {
+      return data.statusCode;
+    }
+
+    if ('statusCode' in error && typeof error.statusCode === 'number') {
+      return error.statusCode;
+    }
+
+    if ('status' in error && typeof error.status === 'number') {
+      return error.status;
+    }
+  };
+
+  const getErrorText = (error: unknown) => {
+    if (!error || typeof error !== 'object') {
+      return String(error ?? '');
+    }
+
+    const data = 'data' in error ? error.data : undefined;
+    if (data && typeof data === 'object' && 'message' in data && typeof data.message === 'string') {
+      return data.message;
+    }
+
+    if ('message' in error && typeof error.message === 'string') {
+      return error.message;
+    }
+
+    return String(error);
+  };
+
+  const getApplyErrorMessage = (error: unknown) => {
+    const statusCode = getErrorStatusCode(error);
+    const message = getErrorText(error).toLowerCase();
+
+    if (
+      statusCode === 409 &&
+      (message.includes('plan') ||
+        message.includes('revision') ||
+        message.includes('stale') ||
+        message.includes('changed') ||
+        message.includes('superseded'))
+    ) {
+      return $t('assistant_operation_apply_stale');
+    }
+
+    if (
+      statusCode === 403 ||
+      statusCode === 404 ||
+      message.includes('permission') ||
+      message.includes('owned') ||
+      message.includes('owner') ||
+      message.includes('target')
+    ) {
+      return $t('assistant_operation_apply_forbidden');
+    }
+
+    return $t('assistant_operation_apply_error');
+  };
+
+  const isStaleApplyError = (error: unknown) => getApplyErrorMessage(error) === $t('assistant_operation_apply_stale');
+
+  const loadPlan = async (options?: { preserveApplyErrorMessage?: boolean }) => {
     const sequence = ++loadSequence;
     loading = true;
     errorMessage = null;
     applyMessage = null;
-    applyErrorMessage = null;
+    if (!options?.preserveApplyErrorMessage) {
+      applyErrorMessage = null;
+    }
 
     try {
       const nextPlan = await getCurrentOperationPlan({ id: session.id });
@@ -245,9 +314,12 @@
           },
         });
       } else {
-        applyErrorMessage = $t('assistant_operation_apply_error');
+        applyErrorMessage = getApplyErrorMessage(error);
         planExpanded = true;
         handleError(error, applyErrorMessage);
+        if (isStaleApplyError(error)) {
+          await loadPlan({ preserveApplyErrorMessage: true });
+        }
       }
     } finally {
       applying = false;
