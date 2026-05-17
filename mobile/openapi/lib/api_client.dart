@@ -259,6 +259,18 @@ class ApiClient {
           return AgentOperationApplyStatusTypeTransformer().decode(value);
         case 'AgentOperationExistingAlbumTargetKind':
           return AgentOperationExistingAlbumTargetKindTypeTransformer().decode(value);
+        case 'AgentOperationItemKind':
+          return AgentOperationItemKindTypeTransformer().decode(value);
+        case 'AgentOperationItemSelection':
+          return AgentOperationItemSelection.fromJson(value);
+        case 'AgentOperationItemSelectionOneOf':
+          return AgentOperationItemSelectionOneOf.fromJson(value);
+        case 'AgentOperationItemSelectionOneOf1':
+          return AgentOperationItemSelectionOneOf1.fromJson(value);
+        case 'AgentOperationItemSelectionOneOf2':
+          return AgentOperationItemSelectionOneOf2.fromJson(value);
+        case 'AgentOperationItemSelectionOneOf3':
+          return AgentOperationItemSelectionOneOf3.fromJson(value);
         case 'AgentOperationNewAlbumTargetKind':
           return AgentOperationNewAlbumTargetKindTypeTransformer().decode(value);
         case 'AgentOperationPlanApplyRequestDto':
