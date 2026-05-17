@@ -7,6 +7,14 @@ import {
   getPhotosPersonFilterThumbnailUrl,
   handlePhotosRemoveFilter,
 } from '$lib/utils/photos-filter-options';
+<<<<<<< ours
+||||||| base
+import { AssetOrder, AssetTypeEnum, AssetVisibility, Type } from '@immich/sdk';
+import { describe, expect, it } from 'vitest';
+=======
+import { AssetOrder, AssetTypeEnum, AssetVisibility, Type5 as Type } from '@immich/sdk';
+import { describe, expect, it } from 'vitest';
+>>>>>>> theirs
 
 describe('buildPhotosTimelineOptions', () => {
   it('should return base options with no filters', () => {

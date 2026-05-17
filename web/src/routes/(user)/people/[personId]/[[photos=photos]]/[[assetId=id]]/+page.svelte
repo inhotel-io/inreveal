@@ -60,7 +60,7 @@
     mergePerson,
     mergeScopedPeople,
     searchPerson,
-    Type2 as ScopedPersonProfileType,
+    Type6 as ScopedPersonProfileType,
     type PersonFaceResponseDto,
     type PersonResponseDto,
   } from '@immich/sdk';
