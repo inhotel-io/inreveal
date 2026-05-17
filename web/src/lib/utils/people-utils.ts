@@ -2,7 +2,7 @@ import { AssetTypeEnum } from '@immich/sdk';
 import type { Faces } from '$lib/managers/asset-viewer-manager.svelte';
 import { PeopleSortBy } from '$lib/stores/preferences.store';
 import { createUrl, getAssetMediaUrl } from '$lib/utils';
-import { mapNormalizedRectToContent, type Rect, type Size } from '$lib/utils/container-utils';
+import { mapNormalizedRectToContent, type ContentMetrics, type Rect, type Size } from '$lib/utils/container-utils';
 
 export type BoundingBox = Rect & { id: string };
 export type SortablePerson = {
@@ -105,7 +105,7 @@ export const getPersonFaceThumbnailUrl = (personId: string, faceId: string, upda
 export const getSpacePersonFaceThumbnailUrl = (spaceId: string, personId: string, faceId: string, updatedAt?: string) =>
   createUrl(`/shared-spaces/${spaceId}/people/${personId}/faces/${faceId}/thumbnail`, { updatedAt });
 
-export const getBoundingBox = (faces: Faces[], imageSize: Size): BoundingBox[] => {
+export const getBoundingBox = (faces: Faces[], imageSize: Size | ContentMetrics): BoundingBox[] => {
   const boxes: BoundingBox[] = [];
 
   for (const face of faces) {
