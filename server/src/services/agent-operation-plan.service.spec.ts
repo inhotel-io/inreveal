@@ -132,6 +132,24 @@ const makePlan = (
   return { ...plan, operations: overrides.operations ?? [makeOperation({ planId: plan.id })] };
 };
 
+const makeAddAssetsPlan = (auth: ReturnType<typeof AuthFactory.create>, assetIds: string[]) => {
+  const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+  const albumId = newUuid();
+  const operation = makeOperation({
+    id: newUuid(),
+    planId: 'plan-id',
+    type: AgentOperationType.AlbumAddAssets,
+    targetKind: AgentOperationTargetKind.ExistingAlbum,
+    targetId: albumId,
+    temporaryTargetId: null,
+    assetIds,
+    payload: {},
+  });
+  const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+  return { session, albumId, operation, plan };
+};
+
 const makeToolCall = (overrides: Partial<AgentToolCall> = {}): AgentToolCall => ({
   id: newUuid(),
   sessionId: newUuid(),
@@ -1055,6 +1073,85 @@ describe(AgentOperationPlanService.name, () => {
         error: null,
       }),
     );
+  });
+
+  it('rejects stale plan revisions before claiming the plan', async () => {
+    const auth = AuthFactory.create();
+    const { session, operation, plan } = makeAddAssetsPlan(auth, [newUuid()]);
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [operation.id],
+        planRevision: plan.revision + 1,
+      }),
+    ).rejects.toThrow('Agent operation plan revision is stale');
+
+    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+    expect(albumService.addAssets).not.toHaveBeenCalled();
+  });
+
+  it('rejects sparse selections for operation ids outside the selected operation set', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const { session, operation, plan } = makeAddAssetsPlan(auth, [assetId]);
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [operation.id],
+        itemSelections: {
+          [newUuid()]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetId] },
+        },
+      }),
+    ).rejects.toThrow('One or more item selection operation ids are not selected');
+
+    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+  });
+
+  it('rejects sparse selections containing asset ids outside the operation affected set', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const { session, operation, plan } = makeAddAssetsPlan(auth, [assetId]);
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [operation.id],
+        itemSelections: {
+          [operation.id]: { itemKind: 'asset', mode: 'only', itemIds: [newUuid()] },
+        },
+      }),
+    ).rejects.toThrow('One or more selected item ids are not affected by the operation');
+
+    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
+  });
+
+  it('rejects sparse selections for operations without affected assets', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+    const createOperation = makeOperation({ id: newUuid(), planId: 'plan-id', temporaryTargetId: 'tmp-portugal' });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [createOperation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [createOperation.id],
+        itemSelections: {
+          [createOperation.id]: { itemKind: 'asset', mode: 'only', itemIds: [newUuid()] },
+        },
+      }),
+    ).rejects.toThrow('Item selection is not supported for one or more operations');
+
+    expect(planRepository.claimCurrentForApply).not.toHaveBeenCalled();
   });
 
   it('applies selected album operations in stored order and marks the session completed', async () => {
