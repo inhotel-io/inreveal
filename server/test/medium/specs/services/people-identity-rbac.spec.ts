@@ -3053,6 +3053,142 @@ describe('People identity RBAC projection', () => {
       },
     );
 
+    it('scoped merge keeps inherited metadata limited to accessible profiles', async () => {
+      const fx = await setupRepairFixture(SharedSpaceRole.Editor);
+      await fx.ctx.database
+        .updateTable('person')
+        .set({ name: 'Actor Alice', birthDate: '1990-01-01' })
+        .where('id', '=', fx.actorPerson.id)
+        .execute();
+      await fx.ctx.database
+        .updateTable('shared_space_person')
+        .set({
+          name: 'Stale Space Alice',
+          nameSource: 'inherited',
+          nameSourceProfileType: 'space-person',
+          nameSourceProfileId: fx.spacePerson.id,
+          birthDate: '1980-01-01',
+          birthDateSource: 'inherited',
+          birthDateSourceProfileType: 'space-person',
+          birthDateSourceProfileId: fx.spacePerson.id,
+        })
+        .where('id', '=', fx.spacePerson.id)
+        .execute();
+
+      await fx.sut.mergeScopedPeople(factory.auth({ user: fx.actor }), {
+        target: { type: 'person', id: fx.actorPerson.id },
+        sources: [{ type: 'space-person', id: fx.spacePerson.id, spaceId: fx.space.id }],
+      });
+
+      const { sut: sharedSpaceService } = setupSharedSpace();
+      await sharedSpaceService.handleSharedSpacePersonMetadataBackfill({
+        identityId: fx.targetIdentity.id,
+        limit: 1000,
+      });
+
+      const updatedSpacePerson = await fx.ctx.database
+        .selectFrom('shared_space_person')
+        .select([
+          'identityId',
+          'name',
+          'nameSource',
+          'nameSourceProfileType',
+          'nameSourceProfileId',
+          'birthDate',
+          'birthDateSource',
+          'birthDateSourceProfileType',
+          'birthDateSourceProfileId',
+        ])
+        .where('id', '=', fx.spacePerson.id)
+        .executeTakeFirstOrThrow();
+      const nonMemberPeople = await fx.sut.getAll(factory.auth({ user: fx.otherUser }), {
+        withHidden: true,
+        withSharedSpaces: true,
+        page: 1,
+        size: 50,
+      } as any);
+
+      expect(updatedSpacePerson.identityId).toBe(fx.targetIdentity.id);
+      expect(updatedSpacePerson).toEqual(
+        expect.objectContaining({
+          name: 'Actor Alice',
+          nameSource: 'inherited',
+          nameSourceProfileType: 'user-person',
+          nameSourceProfileId: fx.actorPerson.id,
+          birthDateSource: 'inherited',
+          birthDateSourceProfileType: 'user-person',
+          birthDateSourceProfileId: fx.actorPerson.id,
+        }),
+      );
+      expect(updatedSpacePerson.nameSourceProfileId).not.toBe(fx.spacePerson.id);
+      expect(updatedSpacePerson.birthDateSourceProfileId).not.toBe(fx.spacePerson.id);
+      expect(JSON.stringify(nonMemberPeople)).not.toContain(fx.spacePerson.id);
+      expect(JSON.stringify(nonMemberPeople)).not.toContain('Stale Space Alice');
+    });
+
+    it('detach keeps old identity metadata from leaking through the detached profile', async () => {
+      const fx = await setupRepairFixture(SharedSpaceRole.Editor);
+      await fx.ctx.database
+        .updateTable('person')
+        .set({ name: 'Actor Alice', birthDate: '1990-01-01' })
+        .where('id', '=', fx.actorPerson.id)
+        .execute();
+      await fx.ctx.database
+        .updateTable('shared_space_person')
+        .set({
+          name: 'Old Actor Alice',
+          nameSource: 'inherited',
+          nameSourceProfileType: 'user-person',
+          nameSourceProfileId: fx.actorPerson.id,
+          birthDate: '1990-01-01',
+          birthDateSource: 'inherited',
+          birthDateSourceProfileType: 'user-person',
+          birthDateSourceProfileId: fx.actorPerson.id,
+        })
+        .where('id', '=', fx.spacePerson.id)
+        .execute();
+      const newIdentityId = await fx.faceIdentityRepository.detachScopedProfile({
+        type: 'space-person',
+        id: fx.spacePerson.id,
+        spaceId: fx.space.id,
+      });
+      const { sut: sharedSpaceService } = setupSharedSpace();
+
+      await sharedSpaceService.handleSharedSpacePersonMetadataBackfill({ identityId: newIdentityId, limit: 1000 });
+
+      const detached = await fx.ctx.database
+        .selectFrom('shared_space_person')
+        .select([
+          'identityId',
+          'name',
+          'nameSource',
+          'nameSourceProfileId',
+          'birthDate',
+          'birthDateSource',
+          'birthDateSourceProfileId',
+        ])
+        .where('id', '=', fx.spacePerson.id)
+        .executeTakeFirstOrThrow();
+      const targetPerson = await fx.ctx.database
+        .selectFrom('person')
+        .select('identityId')
+        .where('id', '=', fx.actorPerson.id)
+        .executeTakeFirstOrThrow();
+
+      expect(detached.identityId).toBe(newIdentityId);
+      expect(detached.identityId).not.toBe(targetPerson.identityId);
+      expect(detached).toEqual(
+        expect.objectContaining({
+          name: '',
+          nameSource: 'none',
+          nameSourceProfileId: null,
+          birthDate: null,
+          birthDateSource: 'none',
+          birthDateSourceProfileId: null,
+        }),
+      );
+    });
+
     it('user cannot repair a personal profile they do not own', async () => {
       const fx = await setupRepairFixture(SharedSpaceRole.Editor);
       const { person: otherPerson } = await fx.ctx.newPerson({ ownerId: fx.otherUser.id });
