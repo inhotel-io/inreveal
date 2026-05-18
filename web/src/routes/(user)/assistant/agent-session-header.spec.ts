@@ -15,6 +15,11 @@ vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_approval_mode: 'Approval mode',
     assistant_approval_mode_strict: 'Strict',
+    assistant_activity_visibility: 'Activity preview',
+    assistant_activity_visibility_compact: 'Compact',
+    assistant_activity_visibility_expanded: 'Expanded',
+    assistant_activity_visibility_menu: 'Activity preview options',
+    assistant_activity_visibility_off: 'Off',
     assistant_cancel: 'Cancel',
     assistant_details: 'Details',
     assistant_model: 'Model',
@@ -83,6 +88,7 @@ const renderHeader = (props: Partial<ComponentProps<typeof AgentSessionHeader>> 
   const onNewChat = vi.fn();
   const onOpenDetails = vi.fn();
   const onCancel = vi.fn();
+  const onActivityVisibilityModeChange = vi.fn();
 
   render(AgentSessionHeader, {
     props: {
@@ -94,7 +100,7 @@ const renderHeader = (props: Partial<ComponentProps<typeof AgentSessionHeader>> 
     },
   });
 
-  return { onCancel, onNewChat, onOpenDetails };
+  return { onActivityVisibilityModeChange, onCancel, onNewChat, onOpenDetails };
 };
 
 describe(AgentSessionHeader.name, () => {
@@ -182,5 +188,29 @@ describe(AgentSessionHeader.name, () => {
     expect(onCancel).not.toHaveBeenCalled();
     expect(onNewChat).toHaveBeenCalledTimes(1);
     expect(onOpenDetails).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders activity visibility menu only when a callback is provided', () => {
+    renderHeader({ activityVisibilityMode: 'compact' });
+
+    expect(screen.queryByRole('button', { name: /Activity preview/i })).not.toBeInTheDocument();
+  });
+
+  it('forwards activity visibility changes from the header menu', async () => {
+    const user = userEvent.setup();
+    const onActivityVisibilityModeChange = vi.fn();
+    renderHeader({
+      activityVisibilityMode: 'compact',
+      onActivityVisibilityModeChange,
+    });
+
+    const trigger = screen.getByRole('button', { name: /Activity preview/i });
+    expect(trigger).toHaveTextContent('Compact');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+
+    await user.click(trigger);
+    await user.click(screen.getByRole('menuitemradio', { name: 'Off' }));
+
+    expect(onActivityVisibilityModeChange).toHaveBeenCalledWith('off');
   });
 });
