@@ -75,6 +75,19 @@
 
       toolCalls = nextToolCalls;
       publishToolCallState(nextToolCalls);
+
+      if (shouldPoll) {
+        try {
+          const nextSession = await getAgentSession({ id: session.id });
+          if (destroyed || sequence !== loadSequence || nextSession.id !== session.id) {
+            return;
+          }
+
+          onSessionUpdated?.(nextSession);
+        } catch {
+          // Tool-call polling should remain useful even if the session status refresh misses once.
+        }
+      }
     } catch (error) {
       if (destroyed || sequence !== loadSequence) {
         return;
