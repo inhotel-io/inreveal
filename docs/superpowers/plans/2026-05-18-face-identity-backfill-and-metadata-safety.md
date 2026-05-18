@@ -947,10 +947,15 @@ git commit -m "test: cover metadata backfill inheritance safety"
 **Coverage:**
 
 - legacy personal identity backfill queues `SharedSpaceFaceMatchFromBackfill`, not `SharedSpaceFaceMatchAll`
+- paginated repository backfill persists page-one targets and the service queues them only after the final page
 - queued targeted jobs materialize selected-space face assignments
 - pending backfill target rows are deleted only after queue success
 - final state has no identity/projection backfill work
 - same photo in many enabled spaces materializes exactly once per enabled space
+- direct shared-space asset plus linked-library path materializes one assignment
+- stale wrong-identity selected-space assignment is repaired without leaving orphaned person-face rows
+- EXIF/imported face evidence uses targeted projection jobs, not full-space rebuilds
+- force recognition reset still preserves the full shared-space rebuild path outside identity backfill
 
 - [ ] **Step 1: Add a helper to drain targeted backfill face-match jobs**
 
@@ -1109,7 +1114,328 @@ pnpm exec vitest --config test/vitest.config.medium.mjs run test/medium/specs/se
 
 Expected: fail if the pipeline queues duplicates, queues disabled spaces, uses full rebuild, or leaves projections missing.
 
-- [ ] **Step 6: Patch production only if these tests fail**
+- [ ] **Step 6: Add the paginated delayed-fanout medium test**
+
+Add:
+
+```ts
+it('delays page-one projection fanout until the final identity backfill page', async () => {
+  const { ctx, sut, faceIdentityRepository } = setup();
+  const { sut: sharedSpaceService } = setupSharedSpace();
+  const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+  const { user: owner } = await ctx.newUser();
+  try {
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    const first = await ctx.newPerson({ ownerId: owner.id, identityId: null, name: 'Page One Alice' });
+    const second = await ctx.newPerson({ ownerId: owner.id, identityId: null, name: 'Page Two Alice' });
+    const { asset: firstAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { asset: secondAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { assetFace: firstFace } = await ctx.newAssetFace({ assetId: firstAsset.id, personId: first.person.id });
+    const { assetFace: secondFace } = await ctx.newAssetFace({ assetId: secondAsset.id, personId: second.person.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: firstAsset.id, addedById: owner.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: secondAsset.id, addedById: owner.id });
+
+    const firstPage = await faceIdentityRepository.backfillPersonalIdentities({ limit: 1 });
+    expect(firstPage).toEqual({
+      processed: 1,
+      nextCursor: expect.any(String),
+      affectedSpaceAssets: [{ spaceId: space.id, assetId: firstAsset.id }],
+    });
+    expect(jobs.queueAll).not.toHaveBeenCalled();
+    await expect(faceIdentityRepository.getPendingSharedSpaceFaceMatchBackfillTargets()).resolves.toMatchObject([
+      { spaceId: space.id, assetId: firstAsset.id },
+    ]);
+
+    await sut.handleFaceIdentityBackfill({ stage: 'person', cursor: firstPage.nextCursor });
+
+    const queuedTargetJobs = jobs.queueAll.mock.calls.flatMap(([items]) => items);
+    expect(queuedTargetJobs).toEqual([
+      { name: JobName.SharedSpaceFaceMatchFromBackfill, data: { spaceId: space.id, assetId: firstAsset.id } },
+      { name: JobName.SharedSpaceFaceMatchFromBackfill, data: { spaceId: space.id, assetId: secondAsset.id } },
+    ]);
+    await expect(faceIdentityRepository.getPendingSharedSpaceFaceMatchBackfillTargets()).resolves.toEqual([]);
+
+    await drainSharedSpaceFaceMatchFromBackfillJobs(sharedSpaceService, jobs);
+
+    const selectedFaces = await ctx.database
+      .selectFrom('shared_space_person_face')
+      .select('assetFaceId')
+      .where('assetFaceId', 'in', [firstFace.id, secondFace.id])
+      .orderBy('assetFaceId')
+      .execute();
+    expect(selectedFaces.map((row) => row.assetFaceId)).toEqual([firstFace.id, secondFace.id].toSorted());
+    await expect(faceIdentityRepository.hasBackfillWork()).resolves.toBe(false);
+  } finally {
+    await ctx.database.deleteFrom('user').where('id', '=', owner.id).execute();
+  }
+});
+```
+
+- [ ] **Step 7: Run the focused red check**
+
+Run from `server/`:
+
+```bash
+pnpm exec vitest --config test/vitest.config.medium.mjs run test/medium/specs/services/people-identity-rbac.spec.ts -t "delays page-one projection fanout until the final identity backfill page"
+```
+
+Expected: fail if page-one targets are queued early, lost after pagination, or left pending after successful final queueing.
+
+- [ ] **Step 8: Add the direct-plus-linked dedupe materialization test**
+
+Add:
+
+```ts
+it('identity backfill materializes once when an asset is both directly added and linked by library', async () => {
+  const { ctx, sut, faceIdentityRepository } = setup();
+  const { sut: sharedSpaceService } = setupSharedSpace();
+  const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+  const { user: owner } = await ctx.newUser();
+  try {
+    const { library } = await ctx.newLibrary({ ownerId: owner.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    const { person } = await ctx.newPerson({ ownerId: owner.id, identityId: null, name: 'Library Alice' });
+    const { asset } = await ctx.newAsset({
+      ownerId: owner.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: owner.id });
+
+    await sut.handleFaceIdentityBackfill({ stage: 'person' });
+
+    const queuedTargetJobs = jobs.queueAll.mock.calls.flatMap(([items]) => items);
+    expect(queuedTargetJobs).toEqual([
+      { name: JobName.SharedSpaceFaceMatchFromBackfill, data: { spaceId: space.id, assetId: asset.id } },
+    ]);
+
+    await drainSharedSpaceFaceMatchFromBackfillJobs(sharedSpaceService, jobs);
+
+    const selectedFaces = await ctx.database
+      .selectFrom('shared_space_person_face')
+      .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
+      .select(['shared_space_person.spaceId', 'shared_space_person_face.assetFaceId'])
+      .where('shared_space_person.spaceId', '=', space.id)
+      .where('shared_space_person_face.assetFaceId', '=', assetFace.id)
+      .execute();
+    expect(selectedFaces).toEqual([{ spaceId: space.id, assetFaceId: assetFace.id }]);
+    await expect(faceIdentityRepository.hasBackfillWork()).resolves.toBe(false);
+  } finally {
+    await ctx.database.deleteFrom('user').where('id', '=', owner.id).execute();
+  }
+});
+```
+
+- [ ] **Step 9: Run the focused red check**
+
+Run from `server/`:
+
+```bash
+pnpm exec vitest --config test/vitest.config.medium.mjs run test/medium/specs/services/people-identity-rbac.spec.ts -t "identity backfill materializes once when an asset is both directly added and linked by library"
+```
+
+Expected: fail if direct plus linked-library reachability queues duplicate jobs or creates duplicate selected-space face rows.
+
+- [ ] **Step 10: Add the stale wrong-identity repair medium test**
+
+Add:
+
+```ts
+it('targeted identity backfill repairs wrong-identity selected-space assignments', async () => {
+  const { ctx, faceIdentityRepository } = setup();
+  const { sut: sharedSpaceService } = setupSharedSpace();
+  const { user: owner } = await ctx.newUser();
+  try {
+    const correct = await createIdentityBackedFace(ctx, faceIdentityRepository, {
+      ownerId: owner.id,
+      personName: 'Correct Alice',
+    });
+    const wrong = await createIdentityBackedFace(ctx, faceIdentityRepository, {
+      ownerId: owner.id,
+      personName: 'Wrong Bob',
+    });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: correct.asset.id, addedById: owner.id });
+    const wrongSpacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: space.id,
+        identityId: wrong.identity.id,
+        representativeFaceId: correct.faceId,
+        type: 'person',
+        faceCount: 1,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: wrongSpacePerson.id, assetFaceId: correct.faceId })
+      .execute();
+
+    await sharedSpaceService.handleSharedSpaceFaceMatchFromBackfill({ spaceId: space.id, assetId: correct.asset.id });
+
+    const selectedFaces = await ctx.database
+      .selectFrom('shared_space_person_face')
+      .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
+      .select(['shared_space_person.id', 'shared_space_person.identityId', 'shared_space_person_face.assetFaceId'])
+      .where('shared_space_person.spaceId', '=', space.id)
+      .orderBy('shared_space_person.identityId')
+      .execute();
+    const wrongPerson = await ctx.database
+      .selectFrom('shared_space_person')
+      .select(['id', 'faceCount'])
+      .where('id', '=', wrongSpacePerson.id)
+      .executeTakeFirst();
+
+    expect(selectedFaces).toEqual([
+      {
+        id: expect.any(String),
+        identityId: correct.identity.id,
+        assetFaceId: correct.faceId,
+      },
+    ]);
+    expect(wrongPerson).toBeUndefined();
+  } finally {
+    await ctx.database.deleteFrom('user').where('id', '=', owner.id).execute();
+  }
+});
+```
+
+- [ ] **Step 11: Run the focused red check**
+
+Run from `server/`:
+
+```bash
+pnpm exec vitest --config test/vitest.config.medium.mjs run test/medium/specs/services/people-identity-rbac.spec.ts -t "targeted identity backfill repairs wrong-identity selected-space assignments"
+```
+
+Expected: fail if a stale wrong-identity assignment remains, the new identity-correct assignment is missing, or orphaned wrong-identity people survive.
+
+- [ ] **Step 12: Add the EXIF/imported face targeted-backfill test**
+
+Add `SourceType` to the enum imports in `people-identity-rbac.spec.ts`, then add:
+
+```ts
+it('identity backfill uses targeted projection for EXIF-imported face evidence', async () => {
+  const { ctx, sut, faceIdentityRepository } = setup();
+  const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+  const { user: owner } = await ctx.newUser();
+  try {
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    const { person } = await ctx.newPerson({ ownerId: owner.id, identityId: null, name: 'Imported Alice' });
+    const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
+    await ctx.newAssetFace({ assetId: asset.id, personId: person.id, sourceType: SourceType.Exif });
+
+    await sut.handleFaceIdentityBackfill({ stage: 'person' });
+
+    const queuedTargetJobs = jobs.queueAll.mock.calls.flatMap(([items]) => items);
+    expect(queuedTargetJobs).toEqual([
+      { name: JobName.SharedSpaceFaceMatchFromBackfill, data: { spaceId: space.id, assetId: asset.id } },
+    ]);
+    expect(jobs.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.SharedSpaceFaceMatchAll }));
+    await expect(faceIdentityRepository.hasBackfillWork()).resolves.toBe(true);
+  } finally {
+    await ctx.database.deleteFrom('user').where('id', '=', owner.id).execute();
+  }
+});
+```
+
+- [ ] **Step 13: Run the focused red check**
+
+Run from `server/`:
+
+```bash
+pnpm exec vitest --config test/vitest.config.medium.mjs run test/medium/specs/services/people-identity-rbac.spec.ts -t "identity backfill uses targeted projection for EXIF-imported face evidence"
+```
+
+Expected: fail if imported/EXIF face evidence falls back to `SharedSpaceFaceMatchAll` or does not queue a targeted from-backfill projection job.
+
+- [ ] **Step 14: Add force-reset full rebuild medium coverage**
+
+Add this medium test in `people-identity-rbac.spec.ts`:
+
+```ts
+it('force recognition still rebuilds shared-space projections through full-space jobs', async () => {
+  const { ctx, sut, faceIdentityRepository } = setup();
+  const { sut: sharedSpaceService, jobs: sharedJobs } = setupSharedSpace();
+  const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+  jobs.waitForQueueCompletion.mockResolvedValue();
+  jobs.empty.mockResolvedValue();
+  jobs.getJobCounts.mockResolvedValue({ active: 0, waiting: 0, delayed: 0, paused: 0, failed: 0 });
+  const { user: owner } = await ctx.newUser();
+  try {
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    const { person } = await ctx.newPerson({ ownerId: owner.id, name: 'EXIF Alice' });
+    const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+    const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { assetFace } = await ctx.newAssetFace({
+      assetId: asset.id,
+      personId: person.id,
+      sourceType: SourceType.Exif,
+    });
+    await faceIdentityRepository.linkFace({
+      assetFaceId: assetFace.id,
+      identityId: identity.id,
+      source: 'owner-person',
+    });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
+    const staleSpacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({ spaceId: space.id, identityId: identity.id, representativeFaceId: assetFace.id, type: 'person' })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: staleSpacePerson.id, assetFaceId: assetFace.id })
+      .execute();
+
+    await sut.handleQueueRecognizeFaces({ force: true });
+
+    const fullRebuildJobs = jobs.queueAll.mock.calls
+      .flatMap(([items]) => items)
+      .filter((job) => job.name === JobName.SharedSpaceFaceMatchAll);
+    expect(fullRebuildJobs).toEqual([{ name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: space.id } }]);
+    expect(jobs.queueAll.mock.calls.flatMap(([items]) => items)).not.toContainEqual(
+      expect.objectContaining({ name: JobName.SharedSpaceFaceMatchFromBackfill }),
+    );
+
+    for (const job of fullRebuildJobs) {
+      await sharedSpaceService.handleSharedSpaceFaceMatchAll(job.data);
+    }
+    await drainSharedSpaceFaceJobs(sharedSpaceService, sharedJobs);
+
+    const selectedFaces = await ctx.database
+      .selectFrom('shared_space_person_face')
+      .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
+      .select(['shared_space_person.spaceId', 'shared_space_person.identityId', 'shared_space_person_face.assetFaceId'])
+      .where('shared_space_person.spaceId', '=', space.id)
+      .execute();
+    expect(selectedFaces).toEqual([{ spaceId: space.id, identityId: identity.id, assetFaceId: assetFace.id }]);
+  } finally {
+    await ctx.database.deleteFrom('user').where('id', '=', owner.id).execute();
+  }
+});
+```
+
+- [ ] **Step 15: Run the focused red check**
+
+Run from `server/`:
+
+```bash
+pnpm exec vitest --config test/vitest.config.medium.mjs run test/medium/specs/services/people-identity-rbac.spec.ts -t "force recognition still rebuilds shared-space projections through full-space jobs"
+```
+
+Expected: fail only if force recognition no longer queues full-space rebuild jobs for enabled spaces.
+
+- [ ] **Step 16: Patch production only if these tests fail**
 
 Patch only the root cause:
 
@@ -1118,13 +1444,15 @@ Patch only the root cause:
 - Disabled spaces queued: check `FaceIdentityRepository.getSharedSpaceFaceMatchBackfillTargets()`.
 - Pending targets left after queue success: check `deletePendingSharedSpaceFaceMatchBackfillTargets()` call ordering.
 - Selected-space rows missing after job drain: check `SharedSpaceService.handleSharedSpaceFaceMatchFromBackfill()` delegates to current-state `handleSharedSpaceFaceMatch()`.
+- Duplicate direct-plus-linked materialization: check both `FaceIdentityRepository.getSharedSpaceFaceMatchBackfillTargets()` and shared-space face assignment unique paths.
+- Stale wrong-identity assignment survives: check `processSpaceFaceMatch()` stale assignment cleanup, recount, and orphan cleanup.
 
-- [ ] **Step 7: Verify and commit Task 5**
+- [ ] **Step 17: Verify and commit Task 5**
 
 Run from `server/`:
 
 ```bash
-pnpm exec vitest --config test/vitest.config.medium.mjs run test/medium/specs/services/people-identity-rbac.spec.ts -t "identity backfill queues targeted projection jobs|identity backfill materializes one selected-space assignment"
+pnpm exec vitest --config test/vitest.config.medium.mjs run test/medium/specs/services/people-identity-rbac.spec.ts -t "identity backfill queues targeted projection jobs|identity backfill materializes one selected-space assignment|delays page-one projection fanout|directly added and linked by library|wrong-identity selected-space assignments|EXIF-imported face evidence|force recognition still rebuilds shared-space projections"
 ```
 
 Commit:
@@ -1399,6 +1727,20 @@ it('scoped merge keeps inherited metadata limited to accessible profiles', async
     .set({ name: 'Actor Alice', birthDate: '1990-01-01' })
     .where('id', '=', fx.actorPerson.id)
     .execute();
+  await fx.ctx.database
+    .updateTable('shared_space_person')
+    .set({
+      name: 'Stale Space Alice',
+      nameSource: 'inherited',
+      nameSourceProfileType: 'space-person',
+      nameSourceProfileId: fx.spacePerson.id,
+      birthDate: '1980-01-01',
+      birthDateSource: 'inherited',
+      birthDateSourceProfileType: 'space-person',
+      birthDateSourceProfileId: fx.spacePerson.id,
+    })
+    .where('id', '=', fx.spacePerson.id)
+    .execute();
 
   await fx.sut.mergeScopedPeople(factory.auth({ user: fx.actor }), {
     target: { type: 'person', id: fx.actorPerson.id },
@@ -1410,7 +1752,17 @@ it('scoped merge keeps inherited metadata limited to accessible profiles', async
 
   const updatedSpacePerson = await fx.ctx.database
     .selectFrom('shared_space_person')
-    .select(['identityId', 'name', 'nameSourceProfileType', 'nameSourceProfileId'])
+    .select([
+      'identityId',
+      'name',
+      'nameSource',
+      'nameSourceProfileType',
+      'nameSourceProfileId',
+      'birthDate',
+      'birthDateSource',
+      'birthDateSourceProfileType',
+      'birthDateSourceProfileId',
+    ])
     .where('id', '=', fx.spacePerson.id)
     .executeTakeFirstOrThrow();
   const nonMemberPeople = await fx.sut.getAll(factory.auth({ user: fx.otherUser }), {
@@ -1421,8 +1773,21 @@ it('scoped merge keeps inherited metadata limited to accessible profiles', async
   } as any);
 
   expect(updatedSpacePerson.identityId).toBe(fx.targetIdentity.id);
+  expect(updatedSpacePerson).toEqual(
+    expect.objectContaining({
+      name: 'Actor Alice',
+      nameSource: 'inherited',
+      nameSourceProfileType: 'user-person',
+      nameSourceProfileId: fx.actorPerson.id,
+      birthDateSource: 'inherited',
+      birthDateSourceProfileType: 'user-person',
+      birthDateSourceProfileId: fx.actorPerson.id,
+    }),
+  );
   expect(updatedSpacePerson.nameSourceProfileId).not.toBe(fx.spacePerson.id);
+  expect(updatedSpacePerson.birthDateSourceProfileId).not.toBe(fx.spacePerson.id);
   expect(JSON.stringify(nonMemberPeople)).not.toContain(fx.spacePerson.id);
+  expect(JSON.stringify(nonMemberPeople)).not.toContain('Stale Space Alice');
 });
 ```
 
@@ -1443,6 +1808,25 @@ Add:
 ```ts
 it('detach keeps old identity metadata from leaking through the detached profile', async () => {
   const fx = await setupRepairFixture(SharedSpaceRole.Editor);
+  await fx.ctx.database
+    .updateTable('person')
+    .set({ name: 'Actor Alice', birthDate: '1990-01-01' })
+    .where('id', '=', fx.actorPerson.id)
+    .execute();
+  await fx.ctx.database
+    .updateTable('shared_space_person')
+    .set({
+      name: 'Old Actor Alice',
+      nameSource: 'inherited',
+      nameSourceProfileType: 'user-person',
+      nameSourceProfileId: fx.actorPerson.id,
+      birthDate: '1990-01-01',
+      birthDateSource: 'inherited',
+      birthDateSourceProfileType: 'user-person',
+      birthDateSourceProfileId: fx.actorPerson.id,
+    })
+    .where('id', '=', fx.spacePerson.id)
+    .execute();
   const newIdentityId = await fx.faceIdentityRepository.detachScopedProfile({
     profileType: 'space-person',
     profileId: fx.spacePerson.id,
@@ -1453,7 +1837,15 @@ it('detach keeps old identity metadata from leaking through the detached profile
 
   const detached = await fx.ctx.database
     .selectFrom('shared_space_person')
-    .select(['identityId', 'nameSourceProfileId', 'birthDateSourceProfileId'])
+    .select([
+      'identityId',
+      'name',
+      'nameSource',
+      'nameSourceProfileId',
+      'birthDate',
+      'birthDateSource',
+      'birthDateSourceProfileId',
+    ])
     .where('id', '=', fx.spacePerson.id)
     .executeTakeFirstOrThrow();
   const targetPerson = await fx.ctx.database
@@ -1464,8 +1856,16 @@ it('detach keeps old identity metadata from leaking through the detached profile
 
   expect(detached.identityId).toBe(newIdentityId);
   expect(detached.identityId).not.toBe(targetPerson.identityId);
-  expect(detached.nameSourceProfileId).not.toBe(fx.actorPerson.id);
-  expect(detached.birthDateSourceProfileId).not.toBe(fx.actorPerson.id);
+  expect(detached).toEqual(
+    expect.objectContaining({
+      name: '',
+      nameSource: 'none',
+      nameSourceProfileId: null,
+      birthDate: null,
+      birthDateSource: 'none',
+      birthDateSourceProfileId: null,
+    }),
+  );
 });
 ```
 
@@ -1543,7 +1943,18 @@ pnpm --dir server check
 
 Expected: TypeScript passes.
 
-- [ ] **Step 4: Run formatting checks**
+- [ ] **Step 4: Run lint and broad small-test verification**
+
+Run:
+
+```bash
+pnpm --dir server lint
+pnpm --config.verify-deps-before-run=false --filter immich exec vitest --config test/vitest.config.mjs run
+```
+
+Expected: ESLint passes with zero warnings and the broad server small-test suite passes. If the broad test suite is too slow locally, run it before opening the PR or document why CI is the first full broad run.
+
+- [ ] **Step 5: Run formatting checks**
 
 Run:
 
@@ -1555,7 +1966,7 @@ git diff --check
 
 Expected: formatting checks pass and `git diff --check` emits no output.
 
-- [ ] **Step 5: Inspect final diff**
+- [ ] **Step 6: Inspect final diff**
 
 Run:
 
@@ -1566,7 +1977,7 @@ git diff --name-only origin/main...HEAD
 
 Expected: diff contains this plan, Slice 6 tests, and any minimal production fixes directly proven by the new tests.
 
-- [ ] **Step 6: Final commit**
+- [ ] **Step 7: Final commit**
 
 If any verification-only fixes remain:
 
@@ -1586,12 +1997,17 @@ The implementation is complete only when these Slice 6 edge cases are explicitly
 - Projection discovery is skipped while identity work remains.
 - Pending durable targets survive queue failure.
 - Pending durable targets are deleted after successful queueing.
+- Page-one durable targets are not queued early and are recovered by final-page service fan-out.
 - Pending, repair-returned, and projection-discovered targets dedupe together.
 - Multiple faces on one asset queue one asset-level projection job per space.
 - Same photo in many spaces queues one target per enabled space.
+- Direct shared-space asset membership plus linked-library membership materializes exactly one selected-space face assignment.
+- Stale wrong-identity selected-space assignments are moved to the identity-correct person and old orphaned rows are cleaned up.
+- EXIF/imported face evidence uses targeted from-backfill projection jobs, not `SharedSpaceFaceMatchAll`.
 - Disabled spaces, deleted assets, offline assets, hidden/deleted faces, unassigned faces, and identity-less faces are excluded from projection fan-out.
 - Identity-less assigned faces are identity work, not projection work.
 - `SharedSpaceFaceMatchAll` is never queued by identity backfill.
+- Force recognition reset still queues `SharedSpaceFaceMatchAll` outside identity backfill.
 - `SharedSpaceFaceMatchFromBackfill` uses stable source-specific job IDs.
 - Metadata backfill remains on `QueueName.PeopleBackfill`.
 - Metadata backfill cursoring preserves `identityId` scope.
