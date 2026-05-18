@@ -697,6 +697,15 @@ const planningCommonMistakes: AgentMcpCommonMistake[] = [
     exampleName: 'create-album-and-add-assets',
   },
   {
+    id: 'planning-mismatched-temporary-target-kind',
+    match: {
+      issuePath: 'operations.1.temporaryTargetId',
+      messageIncludes: 'No matching create operation for temporaryTargetId',
+    },
+    hint: 'Album dependencies require an album create operation; space dependencies require a space create operation using the same temporaryTargetId.',
+    exampleName: 'create-album-and-add-assets',
+  },
+  {
     id: 'planning-wrong-album-target-kind',
     match: { messageIncludes: 'album operations require an album target' },
     hint: 'Album operations must use targetKind existing_album with targetId, or new_album with temporaryTargetId when the operation allows new albums.',
@@ -1260,6 +1269,125 @@ const slice4PlanningFailureMatrixCases: AgentMcpFailureMatrixCase[] = [
   },
 ];
 
+const slice7RuntimeFailureMatrixCases: AgentMcpFailureMatrixCase[] = [
+  {
+    id: 'search-root-taken-after-filter',
+    category: 'search',
+    description: 'Model puts a date filter at the search argument root instead of filters.',
+    toolName: AgentToolName.SearchAssets,
+    request: toolCallRequest('search-root-taken-after-filter', AgentToolName.SearchAssets, {
+      takenAfter: '2026-05-01T00:00:00.000Z',
+      limit: 25,
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: '' },
+    expectedContractMistakeId: 'search-filters-outside-filters',
+  },
+  {
+    id: 'search-root-favorite-rating-filters',
+    category: 'search',
+    description: 'Model puts favorite and rating filters at the search argument root instead of filters.',
+    toolName: AgentToolName.SearchAssets,
+    request: toolCallRequest('search-root-favorite-rating-filters', AgentToolName.SearchAssets, {
+      isFavorite: true,
+      rating: 5,
+      limit: 25,
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: '' },
+    expectedContractMistakeId: 'search-filters-outside-filters',
+  },
+  {
+    id: 'pi-prefixed-search-tool-name',
+    category: 'safety',
+    description: 'Model sends the Pi-visible prefixed search name as the MCP tool name.',
+    request: toolCallRequest('pi-prefixed-search-tool-name', 'mcp_gallery_searchAssets', {
+      filters: { isFavorite: true },
+      limit: 25,
+    }),
+    expectedResult: { kind: 'protocol-error', expectedErrorMessage: 'Unknown tool' },
+  },
+  {
+    id: 'pi-prefixed-planning-tool-name',
+    category: 'planning-safety',
+    description: 'Model sends the Pi-visible prefixed planning name as the MCP tool name.',
+    request: toolCallRequest('pi-prefixed-planning-tool-name', 'mcp_gallery_proposeAlbumOperations', {
+      summary: 'Create today test album.',
+      operations: createEmptyAlbumExample.arguments.operations,
+    }),
+    expectedResult: { kind: 'protocol-error', expectedErrorMessage: 'Unknown tool' },
+  },
+  {
+    id: 'invented-prefixed-apply-tool',
+    category: 'planning-safety',
+    description: 'Model invents a prefixed direct apply tool instead of proposing a reviewable plan.',
+    request: toolCallRequest('invented-prefixed-apply-tool', 'mcp_gallery_applyAlbumOperations', {
+      planId: examplePlanId,
+    }),
+    expectedResult: { kind: 'protocol-error', expectedErrorMessage: 'Unknown tool' },
+  },
+  {
+    id: 'planning-direct-add-assets-tool',
+    category: 'planning-safety',
+    description: 'Model invents a direct add-assets mutation tool instead of proposing a reviewable plan.',
+    request: toolCallRequest('planning-direct-add-assets-tool', 'addAssetsToAlbum', {
+      albumId: exampleAlbumId,
+      assetIds: [exampleAssetId],
+    }),
+    expectedResult: { kind: 'protocol-error', expectedErrorMessage: 'Unknown tool' },
+  },
+  {
+    id: 'planning-dependent-add-assets-wrong-temporary-target-kind',
+    category: 'planning-dependency',
+    description: 'Model creates a space then references its temporary target from an album add-assets operation.',
+    toolName: AgentToolName.ProposeAlbumOperations,
+    request: toolCallRequest(
+      'planning-dependent-add-assets-wrong-temporary-target-kind',
+      AgentToolName.ProposeAlbumOperations,
+      {
+        summary: 'Create space and incorrectly add album assets to it.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceCreate,
+            summary: 'Create Family space.',
+            targetKind: AgentOperationTargetKind.NewSpace,
+            temporaryTargetId: 'tmp-family-space',
+            payload: { spaceName: 'Family', description: 'Shared family photos.', color: 'blue' },
+          },
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos to the wrong temporary target kind.',
+            targetKind: AgentOperationTargetKind.NewAlbum,
+            temporaryTargetId: 'tmp-family-space',
+            assetIds: [exampleAssetId],
+          },
+        ],
+      },
+    ),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'operations.1.temporaryTargetId' },
+    expectedContractMistakeId: 'planning-mismatched-temporary-target-kind',
+  },
+  {
+    id: 'planning-dependent-set-cover-missing-new-album',
+    category: 'planning-dependency',
+    description: 'Model sets the cover for a new album without first creating that temporary album.',
+    toolName: AgentToolName.ProposeAlbumOperations,
+    request: toolCallRequest('planning-dependent-set-cover-missing-new-album', AgentToolName.ProposeAlbumOperations, {
+      summary: 'Set a cover for a missing new album.',
+      operations: [
+        {
+          type: AgentOperationType.AlbumSetCover,
+          summary: 'Set cover photo.',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'tmp-missing-album',
+          assetIds: [exampleAssetId],
+          payload: {},
+        },
+      ],
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'operations.0.temporaryTargetId' },
+    expectedContractMistakeId: 'planning-missing-temporary-target-dependency',
+  },
+];
+
 const cloneArguments = (args: Record<string, unknown> | undefined): Record<string, unknown> | undefined =>
   args === undefined ? undefined : structuredClone(args);
 
@@ -1338,6 +1466,14 @@ export class AgentMcpToolContractService {
 
   listSlice4PlanningFailureMatrixCases(): AgentMcpFailureMatrixCase[] {
     return structuredClone(slice4PlanningFailureMatrixCases);
+  }
+
+  listRuntimeFailureMatrixCases(): AgentMcpFailureMatrixCase[] {
+    return structuredClone([
+      ...slice1RuntimeFailureMatrixCases,
+      ...slice4PlanningFailureMatrixCases,
+      ...slice7RuntimeFailureMatrixCases,
+    ]);
   }
 
   getReadToolValidationCorrection(

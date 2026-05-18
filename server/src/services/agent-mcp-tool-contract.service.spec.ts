@@ -557,4 +557,126 @@ describe(AgentMcpToolContractService.name, () => {
       );
     }
   });
+
+  describe('Slice 7 runtime failure matrix contract', () => {
+    const expectedRuntimeFailureMatrixCategories = [
+      'request-wrapper',
+      'read-retry',
+      'read-request',
+      'album-read',
+      'search',
+      'safety',
+      'planning-wrapper',
+      'planning-dependency',
+      'planning-target',
+      'planning-payload',
+      'planning-safety',
+    ] as const;
+
+    const expectedSlice7FailureCaseIds = [
+      'pi-prefixed-search-tool-name',
+      'pi-prefixed-planning-tool-name',
+      'invented-prefixed-apply-tool',
+      'planning-dependent-add-assets-wrong-temporary-target-kind',
+      'planning-dependent-set-cover-missing-new-album',
+      'planning-direct-add-assets-tool',
+      'search-root-taken-after-filter',
+      'search-root-favorite-rating-filters',
+    ] as const;
+
+    it('returns a combined runtime failure matrix with complete metadata', () => {
+      const cases = sut.listRuntimeFailureMatrixCases();
+      const caseIds = cases.map((failureCase) => failureCase.id);
+
+      expect(caseIds).toEqual(expect.arrayContaining(sut.listSlice1RuntimeFailureMatrixCases().map(({ id }) => id)));
+      expect(caseIds).toEqual(expect.arrayContaining(sut.listSlice4PlanningFailureMatrixCases().map(({ id }) => id)));
+      expect(new Set(caseIds).size).toBe(cases.length);
+      expect(cases.map((failureCase) => failureCase.category)).toEqual(
+        expect.arrayContaining([...expectedRuntimeFailureMatrixCategories]),
+      );
+
+      for (const failureCase of cases) {
+        expect(failureCase.id.trim().length).toBeGreaterThan(0);
+        expect(failureCase.category).toBeTruthy();
+        expect(failureCase.description.trim().length).toBeGreaterThan(0);
+        expect(failureCase.request).toEqual(expect.any(Object));
+        expect(failureCase.expectedResult).toEqual(expect.any(Object));
+
+        if (failureCase.expectedResult.kind === 'tool-validation') {
+          expect(failureCase.toolName, `${failureCase.id} should declare its tool`).toBeTruthy();
+          expect(
+            failureCase.expectedContractMistakeId,
+            `${failureCase.id} should declare its expected contract mistake`,
+          ).toBeTruthy();
+        } else {
+          expect(failureCase.expectedContractMistakeId, `${failureCase.id} should not link a protocol error`).toBe(
+            undefined,
+          );
+        }
+      }
+    });
+
+    it('includes explicit Slice 7 hardening case ids', () => {
+      const caseIds = sut.listRuntimeFailureMatrixCases().map((failureCase) => failureCase.id);
+
+      expect(caseIds).toEqual(expect.arrayContaining([...expectedSlice7FailureCaseIds]));
+    });
+
+    it('links every tool-validation matrix case to an executable contract mistake example', () => {
+      const contractsByName = new Map(sut.listToolContracts().map((contract) => [contract.name, contract]));
+
+      for (const failureCase of sut.listRuntimeFailureMatrixCases()) {
+        if (failureCase.expectedResult.kind !== 'tool-validation') {
+          continue;
+        }
+
+        const contract = contractsByName.get(failureCase.toolName!);
+        const mistake = contract?.commonMistakes.find(
+          (candidate) => candidate.id === failureCase.expectedContractMistakeId,
+        );
+
+        expect(contract, `${failureCase.id} should map to a known tool contract`).toBeTruthy();
+        expect(mistake, `${failureCase.id} should map to ${failureCase.expectedContractMistakeId}`).toBeTruthy();
+        expect(mistake!.hint.trim().length).toBeGreaterThan(20);
+
+        if (!mistake!.exampleName) {
+          continue;
+        }
+
+        const example = contract!.examples.find((candidate) => candidate.name === mistake!.exampleName);
+
+        expect(example, `${failureCase.id} should reference an existing example`).toBeTruthy();
+
+        if (failureCase.toolName! in AgentReadToolRequestSchemas) {
+          const schema = AgentReadToolRequestSchemas[failureCase.toolName as keyof typeof AgentReadToolRequestSchemas];
+
+          expect(schema.safeParse(example!.arguments).success, `${failureCase.id} example should parse`).toBe(true);
+        } else {
+          const schema =
+            AgentOperationPlanToolRequestSchemas[
+              failureCase.toolName as keyof typeof AgentOperationPlanToolRequestSchemas
+            ];
+
+          expect(schema.safeParse(example!.arguments).success, `${failureCase.id} example should parse`).toBe(true);
+        }
+      }
+    });
+
+    it('keeps matrix metadata and representative requests compact', () => {
+      for (const failureCase of sut.listRuntimeFailureMatrixCases()) {
+        expect(failureCase.description.length, `${failureCase.id} description`).toBeLessThanOrEqual(220);
+
+        if (failureCase.expectedResult.kind === 'protocol-error') {
+          expect(
+            failureCase.expectedResult.expectedErrorMessage.length,
+            `${failureCase.id} protocol message`,
+          ).toBeLessThanOrEqual(100);
+        }
+
+        if (failureCase.id !== 'asset-read-too-many-asset-ids') {
+          expect(JSON.stringify(failureCase.request).length, `${failureCase.id} request`).toBeLessThanOrEqual(5000);
+        }
+      }
+    });
+  });
 });
