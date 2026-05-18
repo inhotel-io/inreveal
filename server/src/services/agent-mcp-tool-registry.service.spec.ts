@@ -227,7 +227,14 @@ describe(AgentMcpToolRegistryService.name, () => {
       expect.objectContaining({
         title: 'approved-retry',
         required: ['toolCallId'],
-        not: { anyOf: [{ required: ['assetIds'] }, { required: ['albumId'] }, { required: ['filters'] }, { required: ['limit'] }] },
+        not: {
+          anyOf: [
+            { required: ['assetIds'] },
+            { required: ['albumId'] },
+            { required: ['filters'] },
+            { required: ['limit'] },
+          ],
+        },
       }),
     ]);
     expect(listAlbums?.oneOf).toEqual([
