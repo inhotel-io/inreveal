@@ -4,6 +4,7 @@ import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.d
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
 import type { AuthDto } from 'src/dtos/auth.dto';
 import { AgentToolName } from 'src/enum';
+import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
@@ -14,6 +15,7 @@ import type {
   AgentMcpRequestId,
   AgentMcpSuccessResponse,
   AgentMcpToolCallResult,
+  AgentMcpToolValidationErrorContent,
 } from 'src/types/agent-mcp.types';
 import type { z } from 'zod';
 
@@ -45,6 +47,7 @@ export class AgentMcpService {
 
   constructor(
     private readonly toolRegistry: AgentMcpToolRegistryService,
+    private readonly toolContractService: AgentMcpToolContractService,
     private readonly toolService: AgentToolService,
     private readonly operationPlanService: AgentOperationPlanService,
   ) {}
@@ -124,7 +127,7 @@ export class AgentMcpService {
       return this.error(request.id, -32_602, 'Unknown tool', { toolName: name });
     }
 
-    return this.invokeTool(request.id, args, AgentReadToolRequestSchemas[name], (dto) =>
+    return this.invokeTool(request.id, name, args, AgentReadToolRequestSchemas[name], (dto) =>
       this.callReadTool(auth, sessionId, name, dto),
     );
   }
@@ -143,18 +146,19 @@ export class AgentMcpService {
 
   private async invokeTool<TDto>(
     id: AgentMcpRequestId,
+    toolName: AgentToolName,
     args: unknown,
     schema: z.ZodType<TDto>,
     delegate: (dto: TDto) => Promise<unknown>,
   ): Promise<AgentMcpSuccessResponse | AgentMcpErrorResponse> {
     const argumentValidation = this.validateToolArguments(args);
     if (!argumentValidation.valid) {
-      return this.success(id, this.argumentErrorResult(argumentValidation.path, argumentValidation.message));
+      return this.success(id, this.argumentErrorResult(toolName, argumentValidation.path, argumentValidation.message));
     }
 
     const parseResult = schema.safeParse(argumentValidation.value);
     if (!parseResult.success) {
-      return this.success(id, this.validationErrorResult(parseResult.error));
+      return this.success(id, this.validationErrorResult(toolName, parseResult.error));
     }
 
     try {
@@ -173,18 +177,18 @@ export class AgentMcpService {
   ): Promise<AgentMcpSuccessResponse | AgentMcpErrorResponse> {
     switch (toolName) {
       case AgentToolName.ProposeAlbumOperations: {
-        return this.invokeTool(id, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
+        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
           this.operationPlanService.proposeAlbumOperations(auth, sessionId, dto),
         );
       }
       case AgentToolName.ReviseProposedOperations: {
-        return this.invokeTool(id, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) => {
+        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) => {
           const { planId, ...body } = dto;
           return this.operationPlanService.reviseProposedOperations(auth, sessionId, planId, body);
         });
       }
       case AgentToolName.SummarizePlan: {
-        return this.invokeTool(id, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) => {
+        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) => {
           const { planId, ...body } = dto;
           return this.operationPlanService.summarizePlan(auth, sessionId, planId, body);
         });
@@ -241,20 +245,58 @@ export class AgentMcpService {
     return { valid: true, value: args as Record<string, unknown> };
   }
 
-  private validationErrorResult(error: z.ZodError): AgentMcpToolCallResult {
-    return this.validationIssuesResult(error.issues);
+  private normalizeValidationIssues(
+    issues: readonly { path: readonly unknown[]; message: string }[],
+  ): { path: string; message: string }[] {
+    return issues.map((issue) => ({
+      path: issue.path.join('.'),
+      message: issue.message,
+    }));
+  }
+
+  private sanitizeIssueMessage(message: string): string {
+    if (/unrecognized key/i.test(message)) {
+      return 'Unexpected field in arguments';
+    }
+
+    return message
+      .replace(/bearer\s+[a-z0-9._-]+/gi, 'bearer [redacted]')
+      .replace(/\/(?:api|srv)\/[^\s"']+/gi, '[redacted-path]')
+      .replace(/provider-key/gi, '[redacted-secret]');
+  }
+
+  private isReadToolNameForCorrection(toolName: AgentToolName): toolName is keyof typeof AgentReadToolRequestSchemas {
+    return this.readToolNames.has(toolName);
+  }
+
+  private validationErrorResult(toolName: AgentToolName, error: z.ZodError): AgentMcpToolCallResult {
+    return this.validationIssuesResult(toolName, this.normalizeValidationIssues(error.issues), 'tool-arguments');
   }
 
   private validationIssuesResult(
-    issues: readonly { path: readonly unknown[]; message: string }[],
+    toolName: AgentToolName,
+    issues: readonly { path: string; message: string }[],
+    requestShape: 'json-rpc' | 'tool-arguments',
   ): AgentMcpToolCallResult {
-    const structuredContent = {
+    const correction = this.isReadToolNameForCorrection(toolName)
+      ? this.toolContractService.getReadToolValidationCorrection(toolName, {
+          requestShape,
+          issues: issues.map((issue) => ({ path: issue.path, message: issue.message })),
+        })
+      : undefined;
+    const structuredContent: AgentMcpToolValidationErrorContent = {
       status: 'error',
       error: 'Invalid tool arguments',
+      toolName,
+      retryable: true,
       issues: issues.map((issue) => ({
-        path: issue.path.join('.'),
-        message: issue.message,
+        path: issue.path,
+        message: this.sanitizeIssueMessage(issue.message),
+        ...(correction?.hint && correction.issuePath === issue.path ? { hint: correction.hint } : {}),
       })),
+      ...(correction?.expected ? { expected: correction.expected } : {}),
+      ...(correction?.hint ? { hint: correction.hint } : {}),
+      ...(correction?.exampleArguments ? { exampleArguments: correction.exampleArguments } : {}),
     };
 
     return {
@@ -263,8 +305,8 @@ export class AgentMcpService {
     };
   }
 
-  private argumentErrorResult(path: string, message: string): AgentMcpToolCallResult {
-    return this.validationIssuesResult([{ path: [path], message }]);
+  private argumentErrorResult(toolName: AgentToolName, path: string, message: string): AgentMcpToolCallResult {
+    return this.validationIssuesResult(toolName, [{ path, message }], 'json-rpc');
   }
 
   private initializeResult(): AgentMcpInitializeResult {
