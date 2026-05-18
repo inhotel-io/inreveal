@@ -1205,6 +1205,7 @@ export class PersonService extends BaseService {
     }
 
     if (failures.length > 0) {
+      // Propagation is all-or-nothing after validation, so do not delegate a partial source set.
       return failures;
     }
 
