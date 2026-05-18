@@ -48,6 +48,7 @@ vi.mock('svelte-i18n', () => {
     assistant_agent_tool_status_completed: 'Completed',
     assistant_agent_tool_status_denied: 'Denied',
     assistant_agent_tool_status_failed: 'Failed',
+    assistant_busy_ascii: 'pi is working...',
     assistant_cancel: 'Cancel',
     assistant_chat: 'Chat',
     assistant_details: 'Details',
@@ -406,6 +407,98 @@ describe(AgentConversationPane.name, () => {
 
     expect(activity).toHaveTextContent('Search recent favorites');
     expect(activity).toHaveTextContent('Found matching photos');
+  });
+
+  it('shows Pi working while an approved tool call resumes the assistant', async () => {
+    const session = makeSession({ status: AgentSessionStatus.WaitingForToolApproval });
+    const pendingToolCall = makeToolCall(session.id);
+    let resolveApproval: (toolCall: AgentToolCallResponseDto) => void;
+    sdkMock.getToolCalls.mockResolvedValue([pendingToolCall]);
+    sdkMock.approveToolCall.mockReturnValue(
+      new Promise<AgentToolCallResponseDto>((resolve) => {
+        resolveApproval = resolve;
+      }),
+    );
+
+    render(AgentConversationPane, {
+      props: {
+        session,
+        title: null,
+        onNewChat: vi.fn(),
+        onTitleDiscovered: vi.fn(),
+      },
+    });
+
+    expect(await screen.findByText('Pi wants to search your photos.')).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+
+    expect(await screen.findByText('pi is working...')).toBeInTheDocument();
+
+    resolveApproval!({
+      ...pendingToolCall,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+    });
+  });
+
+  it('keeps Pi working after approval returns while the refreshed session is still running', async () => {
+    const session = makeSession({ status: AgentSessionStatus.WaitingForToolApproval });
+    const pendingToolCall = makeToolCall(session.id);
+    const completedToolCall: AgentToolCallResponseDto = {
+      ...pendingToolCall,
+      status: AgentToolCallStatus.Completed,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      responseSummary: 'Found matching photos',
+      completedAt: '2026-05-16T10:00:10.000Z',
+    };
+    sdkMock.getToolCalls.mockResolvedValueOnce([pendingToolCall]).mockResolvedValueOnce([completedToolCall]);
+    sdkMock.approveToolCall.mockResolvedValue({
+      ...pendingToolCall,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+    });
+    sdkMock.getAgentSession.mockResolvedValue(makeSession({ id: session.id, status: AgentSessionStatus.Running }));
+
+    render(AgentConversationPane, {
+      props: {
+        session,
+        title: null,
+        onNewChat: vi.fn(),
+        onTitleDiscovered: vi.fn(),
+      },
+    });
+
+    expect(await screen.findByText('Pi wants to search your photos.')).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() => expect(sdkMock.getAgentSession).toHaveBeenCalledWith({ id: session.id }));
+    expect(screen.getByText('pi is working...')).toBeInTheDocument();
+  });
+
+  it('shows Pi working for a running resumed session loaded after an approved tool call', async () => {
+    const session = makeSession({ status: AgentSessionStatus.Running });
+    sdkMock.getAgentSessionMessages.mockResolvedValue([makeMessage(session.id, 'Find recent photos')]);
+    sdkMock.getToolCalls.mockResolvedValue([
+      {
+        ...makeToolCall(session.id),
+        status: AgentToolCallStatus.Completed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: 'Returned metadata for 8 assets',
+        completedAt: '2026-05-16T10:00:10.000Z',
+      },
+    ]);
+
+    render(AgentConversationPane, {
+      props: {
+        session,
+        title: null,
+        onNewChat: vi.fn(),
+        onTitleDiscovered: vi.fn(),
+      },
+    });
+
+    expect(await screen.findByText('Find recent photos')).toBeInTheDocument();
+    expect(await screen.findByText('pi is working...')).toBeInTheDocument();
   });
 
   it('resumes interrupted sessions through append and refreshes the selected session', async () => {

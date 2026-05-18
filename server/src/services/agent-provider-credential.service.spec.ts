@@ -80,6 +80,21 @@ describe(AgentProviderCredentialService.name, () => {
     expect(result).not.toHaveProperty('secretVersion');
   });
 
+  it('rejects creating a credential whose default model is not in the configured model list', async () => {
+    const auth = AuthFactory.create();
+
+    await expect(
+      sut.create(auth, {
+        providerType: AgentProviderType.OpenAI,
+        label: 'OpenAI personal',
+        secret: 'sk-test',
+        models: ['gpt-5.1'],
+        defaultModel: 'gpt-5.2',
+      }),
+    ).rejects.toThrow('defaultModel must be listed in models');
+    expect(repository.create).not.toHaveBeenCalled();
+  });
+
   it('lists only credentials returned for authenticated user and redacts secret/encryptedSecret/secretVersion', async () => {
     const auth = AuthFactory.create();
     const credentials = [
@@ -125,6 +140,18 @@ describe(AgentProviderCredentialService.name, () => {
       label: 'Updated label',
       models: ['gpt-5.1', 'gpt-5.1-mini'],
     });
+  });
+
+  it('rejects updating a credential to a default model outside the resulting model list', async () => {
+    const auth = AuthFactory.create();
+    const credential = makeCredential({ userId: auth.user.id, models: ['gpt-5.1'], defaultModel: 'gpt-5.1' });
+
+    repository.getById.mockResolvedValue(credential);
+
+    await expect(sut.update(auth, credential.id, { defaultModel: 'gpt-5.2' })).rejects.toThrow(
+      'defaultModel must be listed in models',
+    );
+    expect(repository.update).not.toHaveBeenCalled();
   });
 
   it('rejects clearing baseUrl on OpenAI-compatible credential, and does not call repository.update or encryption', async () => {
