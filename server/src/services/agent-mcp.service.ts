@@ -260,9 +260,9 @@ export class AgentMcpService {
     }
 
     return message
-      .replace(/bearer\s+[a-z0-9._-]+/gi, 'bearer [redacted]')
-      .replace(/\/(?:api|srv)\/[^\s"']+/gi, '[redacted-path]')
-      .replace(/provider-key/gi, '[redacted-secret]');
+      .replaceAll(/bearer\s+[a-z0-9._-]+/gi, 'bearer [redacted]')
+      .replaceAll(/\/(?:api|srv)\/[^\s"']+/gi, '[redacted-path]')
+      .replaceAll(/provider-key/gi, '[redacted-secret]');
   }
 
   private isReadToolNameForCorrection(toolName: AgentToolName): toolName is keyof typeof AgentReadToolRequestSchemas {
