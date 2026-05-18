@@ -311,7 +311,8 @@ describe(AgentMcpService.name, () => {
         expect.objectContaining({ name: 'approved-retry', requiredFields: ['toolCallId'] }),
       ]),
     );
-    expect(previews?.inputSchema.oneOf).toEqual(expect.any(Array));
+    expect(previews?.inputSchema).toMatchObject({ type: 'object' });
+    expect(previews?.inputSchema).not.toHaveProperty('oneOf');
   });
 
   it('returns enriched planning tool metadata through tools/list', async () => {
