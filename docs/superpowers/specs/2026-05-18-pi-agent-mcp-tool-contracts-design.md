@@ -236,13 +236,15 @@ instructive:
   allows them.
 - `inputSchema.examples` should include valid argument examples from the
   contract when MCP clients tolerate the field.
-- Where practical, represent mutually exclusive argument modes using `oneOf` or
-  equivalent schema metadata without weakening DTO validation.
+- Keep tool `inputSchema` as a top-level JSON Schema object without root-level
+  unions such as `oneOf`; Pi and OpenAI function calling require object
+  parameter schemas. Represent argument modes through descriptions,
+  `inputSchema.examples`, and `x-gallery-argumentModes` metadata instead.
 - Tool annotations should remain unchanged: read tools are read-only, planning
   tools are not read-only, and no apply tool is exposed.
 
-If a client ignores `examples` or `oneOf`, the improved descriptions and
-validation hints still provide value.
+If a client ignores `examples` or `x-gallery-argumentModes`, the improved
+descriptions and validation hints still provide value.
 
 ## Validation Error Response
 
@@ -438,9 +440,9 @@ errors for protocol failures.
 
 ### Slice 3: Enriched `tools/list` Metadata
 
-Attach contract usage, property descriptions, examples, and optional `oneOf`
-mode hints to MCP tool metadata without weakening DTO validation or changing
-tool behavior.
+Attach contract usage, property descriptions, examples, and
+`x-gallery-argumentModes` metadata without weakening DTO validation, adding
+root-level schema unions, or changing tool behavior.
 
 ### Slice 4: Planning Examples And Operation Guidance
 
