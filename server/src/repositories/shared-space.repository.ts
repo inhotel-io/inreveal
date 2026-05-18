@@ -1530,19 +1530,19 @@ export class SharedSpaceRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  async reassignPersonFacesSafe(fromPersonId: string, toPersonId: string) {
+  async reassignPersonFacesSafe(fromPersonId: string, toPersonId: string, db: Kysely<DB> | Transaction<DB> = this.db) {
     // Delete faces that already exist on the target to avoid PK violation
-    await this.db
+    await db
       .deleteFrom('shared_space_person_face')
       .where('personId', '=', fromPersonId)
       .where(
         'assetFaceId',
         'in',
-        this.db.selectFrom('shared_space_person_face').select('assetFaceId').where('personId', '=', toPersonId),
+        db.selectFrom('shared_space_person_face').select('assetFaceId').where('personId', '=', toPersonId),
       )
       .execute();
 
-    await this.db
+    await db
       .updateTable('shared_space_person_face')
       .set({ personId: toPersonId })
       .where('personId', '=', fromPersonId)
@@ -1556,21 +1556,7 @@ export class SharedSpaceRepository {
     },
     db: Kysely<DB> | Transaction<DB> = this.db,
   ): Promise<void> {
-    await db
-      .deleteFrom('shared_space_person_face')
-      .where('personId', '=', input.sourcePersonId)
-      .where(
-        'assetFaceId',
-        'in',
-        db.selectFrom('shared_space_person_face').select('assetFaceId').where('personId', '=', input.targetPersonId),
-      )
-      .execute();
-
-    await db
-      .updateTable('shared_space_person_face')
-      .set({ personId: input.targetPersonId })
-      .where('personId', '=', input.sourcePersonId)
-      .execute();
+    await this.reassignPersonFacesSafe(input.sourcePersonId, input.targetPersonId, db);
 
     const sourceAliases = await db
       .selectFrom('shared_space_person_alias')
@@ -1588,6 +1574,7 @@ export class SharedSpaceRepository {
 
     await db.deleteFrom('shared_space_person_alias').where('personId', '=', input.sourcePersonId).execute();
     await db.deleteFrom('shared_space_person').where('id', '=', input.sourcePersonId).execute();
+    await this.recountPersons([input.targetPersonId], db);
   }
 
   async updateSpacePersonIdentity(
@@ -1617,8 +1604,12 @@ export class SharedSpaceRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  async isSpacePersonRepresentativeFaceValid(personId: string, faceId: string): Promise<boolean> {
-    const row = await this.db
+  async isSpacePersonRepresentativeFaceValid(
+    personId: string,
+    faceId: string,
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<boolean> {
+    const row = await db
       .selectFrom('shared_space_person_face')
       .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
       .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
@@ -1654,8 +1645,11 @@ export class SharedSpaceRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  async getFirstValidRepresentativeFaceForPerson(personId: string): Promise<string | null> {
-    const row = await this.db
+  async getFirstValidRepresentativeFaceForPerson(
+    personId: string,
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<string | null> {
+    const row = await db
       .selectFrom('shared_space_person_face')
       .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
       .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
@@ -1691,8 +1685,8 @@ export class SharedSpaceRepository {
     return row?.id ?? null;
   }
 
-  async repairInvalidRepresentativeFaces(spaceId: string): Promise<void> {
-    const people = await this.db
+  async repairInvalidRepresentativeFaces(spaceId: string, db: Kysely<DB> | Transaction<DB> = this.db): Promise<void> {
+    const people = await db
       .selectFrom('shared_space_person')
       .select(['id', 'representativeFaceId', 'representativeFaceSource'])
       .where('spaceId', '=', spaceId)
@@ -1702,21 +1696,25 @@ export class SharedSpaceRepository {
     for (const person of people) {
       const valid =
         !!person.representativeFaceId &&
-        (await this.isSpacePersonRepresentativeFaceValid(person.id, person.representativeFaceId));
+        (await this.isSpacePersonRepresentativeFaceValid(person.id, person.representativeFaceId, db));
       if (valid) {
         continue;
       }
 
-      await this.updatePerson(person.id, {
-        representativeFaceSource: 'auto',
-        representativeFaceId: await this.getFirstValidRepresentativeFaceForPerson(person.id),
-      });
+      await db
+        .updateTable('shared_space_person')
+        .set({
+          representativeFaceSource: 'auto',
+          representativeFaceId: await this.getFirstValidRepresentativeFaceForPerson(person.id, db),
+        })
+        .where('id', '=', person.id)
+        .execute();
     }
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  async repairOrphanedRepresentativeFaces(spaceId: string) {
-    await this.db
+  async repairOrphanedRepresentativeFaces(spaceId: string, db: Kysely<DB> | Transaction<DB> = this.db) {
+    await db
       .updateTable('shared_space_person')
       .set((eb) => ({
         representativeFaceId: eb
@@ -1844,12 +1842,12 @@ export class SharedSpaceRepository {
   }
 
   @GenerateSql({ params: [[DummyValue.UUID]] })
-  async recountPersons(personIds: string[]) {
+  async recountPersons(personIds: string[], db: Kysely<DB> | Transaction<DB> = this.db) {
     if (personIds.length === 0) {
       return;
     }
 
-    await this.db
+    await db
       .updateTable('shared_space_person')
       .set((eb) => ({
         faceCount: eb

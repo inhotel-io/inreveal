@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { Transaction } from 'kysely';
 import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { JobName, SharedSpaceActivityType } from 'src/enum';
@@ -8,6 +9,7 @@ import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
+import { DB } from 'src/schema';
 
 export type MergeProfileKind = 'person' | 'space-person';
 
@@ -122,27 +124,38 @@ export class IdentityMergePropagationService {
 
   async executePlan(plan: IdentityMergePropagationPlan, _context: { actorUserId: string }): Promise<void> {
     const deletedThumbnailPaths: string[] = [];
+    const featureFaceRepairJobs: MergePropagationFollowUpJob[] = [];
 
     await this.deps.databaseRepository.transaction(async (db) => {
       for (const step of plan.personalProfileMerges) {
+        let targetNeedsFeatureFaceRepair = false;
         for (const sourcePersonId of step.sourcePersonIds) {
-          const { deletedThumbnailPath } = await this.deps.personRepository.mergePersonProfile(
-            {
-              sourcePersonId,
-              targetPersonId: step.targetPersonId,
-              targetIdentityId: plan.targetIdentityId,
-            },
-            db,
-          );
+          const { deletedThumbnailPath, targetNeedsFeatureFaceRepair: sourceMergeNeedsFeatureFaceRepair } =
+            await this.deps.personRepository.mergePersonProfile(
+              {
+                sourcePersonId,
+                targetPersonId: step.targetPersonId,
+                targetIdentityId: plan.targetIdentityId,
+              },
+              db,
+            );
           if (deletedThumbnailPath) {
             deletedThumbnailPaths.push(deletedThumbnailPath);
           }
+          targetNeedsFeatureFaceRepair ||= sourceMergeNeedsFeatureFaceRepair;
         }
 
         await this.deps.faceIdentityRepository.linkPersonFaces(
           { personId: step.targetPersonId, identityId: plan.targetIdentityId, source: 'manual' },
           db,
         );
+
+        if (targetNeedsFeatureFaceRepair) {
+          const repairJob = await this.repairMissingPersonalFeatureFace(step.targetPersonId, db);
+          if (repairJob) {
+            featureFaceRepairJobs.push(repairJob);
+          }
+        }
       }
 
       for (const step of plan.spaceProfileMerges) {
@@ -152,6 +165,11 @@ export class IdentityMergePropagationService {
             db,
           );
         }
+      }
+
+      for (const spaceId of plan.affectedSpaceIds) {
+        await this.deps.sharedSpaceRepository.repairInvalidRepresentativeFaces(spaceId, db);
+        await this.deps.sharedSpaceRepository.repairOrphanedRepresentativeFaces(spaceId, db);
       }
 
       for (const update of plan.profileIdentityUpdates) {
@@ -180,7 +198,7 @@ export class IdentityMergePropagationService {
       }
     });
 
-    for (const job of this.dedupeFollowUpJobs(plan.followUpJobs)) {
+    for (const job of this.dedupeFollowUpJobs([...plan.followUpJobs, ...featureFaceRepairJobs])) {
       await this.deps.jobRepository.queue(job);
     }
 
@@ -190,6 +208,20 @@ export class IdentityMergePropagationService {
         data: { files: [...new Set(deletedThumbnailPaths)] },
       });
     }
+  }
+
+  private async repairMissingPersonalFeatureFace(
+    personId: string,
+    db: Transaction<DB>,
+  ): Promise<MergePropagationFollowUpJob | null> {
+    const assetFace = await this.deps.personRepository.getRandomFace(personId, db);
+    if (!assetFace) {
+      return null;
+    }
+
+    await this.deps.personRepository.update({ id: personId, faceAssetId: assetFace.id }, db);
+
+    return { name: JobName.PersonGenerateThumbnail, data: { id: personId } };
   }
 
   /**
@@ -464,7 +496,7 @@ export class IdentityMergePropagationService {
       originScope: plan.origin.type,
       actorUserId: plan.actorUserId,
       activityRole: role,
-      originatingSpaceId: plan.origin.type === 'space-person' ? plan.origin.spaceId ?? null : null,
+      originatingSpaceId: plan.origin.type === 'space-person' ? (plan.origin.spaceId ?? null) : null,
       targetProfileId: plan.origin.targetProfileId,
       sourceProfileIds: plan.origin.sourceProfileIds,
       targetIdentityId: plan.targetIdentityId,
