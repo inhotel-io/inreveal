@@ -2492,6 +2492,169 @@ describe('People identity RBAC projection', () => {
     }
   });
 
+  it('clears stale inherited metadata after membership removal before global discovery', async () => {
+    const { ctx, sut, faceIdentityRepository } = setup();
+    const { sut: sharedSpaceService } = setupSharedSpace();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { user: source } = await ctx.newUser();
+    const { user: admin } = await ctx.newUser({ isAdmin: true });
+    try {
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+      await ctx.newSharedSpaceMember({
+        spaceId: space.id,
+        userId: source.id,
+        role: SharedSpaceRole.Editor,
+        sharePersonMetadata: true,
+      });
+      const { person: sourcePerson } = await ctx.newPerson({ ownerId: source.id, name: 'Source Alice' });
+      const identity = await faceIdentityRepository.ensurePersonIdentity(sourcePerson.id);
+      const { asset } = await ctx.newAsset({ ownerId: source.id, visibility: AssetVisibility.Timeline });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: sourcePerson.id });
+      await faceIdentityRepository.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: identity.id,
+        source: 'owner-person',
+      });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: source.id });
+      const spacePerson = await ctx.database
+        .insertInto('shared_space_person')
+        .values({
+          spaceId: space.id,
+          identityId: identity.id,
+          name: 'Source Alice',
+          nameSource: 'inherited',
+          nameSourceProfileType: 'user-person',
+          nameSourceProfileId: sourcePerson.id,
+          representativeFaceId: assetFace.id,
+          type: 'person',
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await ctx.database
+        .insertInto('shared_space_person_face')
+        .values({ personId: spacePerson.id, assetFaceId: assetFace.id })
+        .execute();
+
+      await ctx.database
+        .deleteFrom('shared_space_member')
+        .where('spaceId', '=', space.id)
+        .where('userId', '=', source.id)
+        .execute();
+      await sharedSpaceService.handleSharedSpacePersonMetadataBackfill({ identityId: identity.id, limit: 1000 });
+
+      const refreshed = await ctx.database
+        .selectFrom('shared_space_person')
+        .select(['name', 'nameSource', 'nameSourceProfileId'])
+        .where('id', '=', spacePerson.id)
+        .executeTakeFirstOrThrow();
+      const people = await sut.getAll(factory.auth({ user: member }), {
+        withHidden: true,
+        withSharedSpaces: true,
+        page: 1,
+        size: 50,
+      } as any);
+      const adminPeople = await sut.getAll(factory.auth({ user: admin }), {
+        withHidden: true,
+        withSharedSpaces: true,
+        page: 1,
+        size: 50,
+      } as any);
+
+      expect(refreshed).toEqual({ name: '', nameSource: 'none', nameSourceProfileId: null });
+      expect(JSON.stringify(people)).not.toContain('Source Alice');
+      expect(JSON.stringify(adminPeople)).not.toContain('Source Alice');
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', 'in', [owner.id, member.id, source.id, admin.id]).execute();
+    }
+  });
+
+  it('excludes timeline-disabled space profile metadata from later metadata backfills', async () => {
+    const { ctx, sut, faceIdentityRepository } = setup();
+    const { sut: sharedSpaceService } = setupSharedSpace();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    try {
+      const { person: personalPerson } = await ctx.newPerson({ ownerId: owner.id, name: 'Owner Alice' });
+      const identity = await faceIdentityRepository.ensurePersonIdentity(personalPerson.id);
+      const { space: sourceSpace } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
+      const { space: targetSpace } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
+      await ctx.newSharedSpaceMember({ spaceId: sourceSpace.id, userId: owner.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceMember({ spaceId: targetSpace.id, userId: owner.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceMember({ spaceId: sourceSpace.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
+      await ctx.newSharedSpaceMember({ spaceId: targetSpace.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
+      await ctx.database
+        .updateTable('shared_space_member')
+        .set({ showInTimeline: false })
+        .where('spaceId', '=', sourceSpace.id)
+        .where('userId', '=', viewer.id)
+        .execute();
+      const { asset: targetAsset } = await ctx.newAsset({
+        ownerId: owner.id,
+        visibility: AssetVisibility.Timeline,
+      });
+      const { assetFace: targetFace } = await ctx.newAssetFace({
+        assetId: targetAsset.id,
+        personId: personalPerson.id,
+      });
+      await faceIdentityRepository.linkFace({
+        assetFaceId: targetFace.id,
+        identityId: identity.id,
+        source: 'owner-person',
+      });
+      await ctx.newSharedSpaceAsset({ spaceId: targetSpace.id, assetId: targetAsset.id, addedById: viewer.id });
+      const sourceSpacePerson = await ctx.database
+        .insertInto('shared_space_person')
+        .values({
+          spaceId: sourceSpace.id,
+          identityId: identity.id,
+          name: 'Hidden Timeline Alias',
+          type: 'person',
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      const targetSpacePerson = await ctx.database
+        .insertInto('shared_space_person')
+        .values({
+          spaceId: targetSpace.id,
+          identityId: identity.id,
+          name: 'Hidden Timeline Alias',
+          nameSource: 'inherited',
+          nameSourceProfileType: 'space-person',
+          nameSourceProfileId: sourceSpacePerson.id,
+          representativeFaceId: targetFace.id,
+          type: 'person',
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await ctx.database
+        .insertInto('shared_space_person_face')
+        .values({ personId: targetSpacePerson.id, assetFaceId: targetFace.id })
+        .execute();
+
+      await sharedSpaceService.handleSharedSpacePersonMetadataBackfill({ identityId: identity.id, limit: 1000 });
+
+      const refreshed = await ctx.database
+        .selectFrom('shared_space_person')
+        .select(['name', 'nameSource', 'nameSourceProfileType', 'nameSourceProfileId'])
+        .where('id', '=', targetSpacePerson.id)
+        .executeTakeFirstOrThrow();
+      const people = await sut.getAll(factory.auth({ user: viewer }), {
+        withHidden: true,
+        withSharedSpaces: true,
+        page: 1,
+        size: 50,
+      } as any);
+
+      expect(refreshed.name).not.toBe('Hidden Timeline Alias');
+      expect(JSON.stringify(people)).not.toContain('Hidden Timeline Alias');
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', 'in', [owner.id, viewer.id]).execute();
+    }
+  });
+
   it('timeline opt-in: album scope excludes direct space people and assets while the space is hidden from timeline', async () => {
     const { ctx, sut } = setupSearch();
     const faceIdentityRepository = ctx.get(FaceIdentityRepository);
