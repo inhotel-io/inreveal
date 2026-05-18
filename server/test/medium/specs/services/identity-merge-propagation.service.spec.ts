@@ -277,6 +277,51 @@ describe('IdentityMergePropagationService medium tests', () => {
     }
   });
 
+  it('serializes reversed personal merges before creating missing identities', async () => {
+    const db = await getKyselyDB();
+    try {
+      const { ctx, sut } = setup(db);
+      const personRepository = ctx.get(PersonRepository);
+      const { user } = await ctx.newUser();
+      const personA = await createPersonProfile(ctx, { ownerId: user.id, identityId: null, name: 'A' });
+      const personB = await createPersonProfile(ctx, { ownerId: user.id, identityId: null, name: 'B' });
+      const originalLock = personRepository.lockPeopleForMerge.bind(personRepository);
+      let releaseFirst!: () => void;
+      const firstCanFinish = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      let firstLocked!: () => void;
+      const firstLockReached = new Promise<void>((resolve) => {
+        firstLocked = resolve;
+      });
+      let heldFirst = false;
+      vi.spyOn(personRepository, 'lockPeopleForMerge').mockImplementation(async (personIds, transaction) => {
+        await originalLock(personIds, transaction);
+        if (!heldFirst && personIds.includes(personA.id) && personIds.includes(personB.id)) {
+          heldFirst = true;
+          firstLocked();
+          await firstCanFinish;
+        }
+      });
+
+      const first = sut.mergePersonalPeople(factory.auth({ user }), personA.id, [personB.id]);
+      await firstLockReached;
+      const second = sut.mergePersonalPeople(factory.auth({ user }), personB.id, [personA.id]);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      releaseFirst();
+
+      const results = await Promise.allSettled([first, second]);
+
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      const people = await getPeople(ctx.database, [personA.id, personB.id]);
+      expect(people).toHaveLength(1);
+      expect(people[0]?.identityId).toBeTruthy();
+    } finally {
+      await db.destroy();
+    }
+  });
+
   it('handles concurrent overlapping shared-space merges with one success and one clean retry or failure', async () => {
     const db = await getKyselyDB();
     try {
@@ -364,6 +409,52 @@ describe('IdentityMergePropagationService medium tests', () => {
           { id: personC.id, identityId: identityC.id },
         ]),
       );
+    } finally {
+      await db.destroy();
+    }
+  });
+
+  it('serializes reversed shared-space merges before creating missing identities', async () => {
+    const db = await getKyselyDB();
+    try {
+      const { ctx, sut } = setup(db);
+      const sharedSpaceRepository = ctx.get(SharedSpaceRepository);
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const personA = await createSpacePerson(ctx.database, { spaceId: space.id, identityId: null, name: 'A' });
+      const personB = await createSpacePerson(ctx.database, { spaceId: space.id, identityId: null, name: 'B' });
+      const originalLock = sharedSpaceRepository.lockSpacePeopleForMerge.bind(sharedSpaceRepository);
+      let releaseFirst!: () => void;
+      const firstCanFinish = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      let firstLocked!: () => void;
+      const firstLockReached = new Promise<void>((resolve) => {
+        firstLocked = resolve;
+      });
+      let heldFirst = false;
+      vi.spyOn(sharedSpaceRepository, 'lockSpacePeopleForMerge').mockImplementation(async (personIds, transaction) => {
+        await originalLock(personIds, transaction);
+        if (!heldFirst && personIds.includes(personA.id) && personIds.includes(personB.id)) {
+          heldFirst = true;
+          firstLocked();
+          await firstCanFinish;
+        }
+      });
+
+      const first = sut.mergeSpacePeople(factory.auth({ user }), space.id, personA.id, [personB.id]);
+      await firstLockReached;
+      const second = sut.mergeSpacePeople(factory.auth({ user }), space.id, personB.id, [personA.id]);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      releaseFirst();
+
+      const results = await Promise.allSettled([first, second]);
+
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      const people = await getSpacePeople(ctx.database, [personA.id, personB.id]);
+      expect(people).toHaveLength(1);
+      expect(people[0]?.identityId).toBeTruthy();
     } finally {
       await db.destroy();
     }
