@@ -321,6 +321,7 @@ Add tests to `server/src/services/identity-merge-propagation.service.spec.ts`:
 ```ts
 describe('executePlan for personal-origin propagation', () => {
   it('merges personal profiles before collapsing identities', async () => {});
+  it('links moved personal faces to the target identity with manual source before collapsing identities', async () => {});
   it('merges duplicate space profiles before collapsing identities', async () => {});
   it('updates single affected profiles to the target identity without deleting them', async () => {});
   it('queues metadata backfill and shared-space dedup for affected spaces once', async () => {});
@@ -334,6 +335,13 @@ expect(mocks.person.mergePersonProfile.mock.invocationCallOrder[0]).toBeLessThan
   mocks.faceIdentity.mergeIdentitiesAfterProfileResolution.mock.invocationCallOrder[0],
 );
 expect(mocks.sharedSpace.mergeSpacePersonProfile.mock.invocationCallOrder[0]).toBeLessThan(
+  mocks.faceIdentity.mergeIdentitiesAfterProfileResolution.mock.invocationCallOrder[0],
+);
+expect(mocks.faceIdentity.linkPersonFaces).toHaveBeenCalledWith(
+  { personId: 'person-x', identityId: 'identity-x', source: 'manual' },
+  expect.anything(),
+);
+expect(mocks.faceIdentity.linkPersonFaces.mock.invocationCallOrder[0]).toBeLessThan(
   mocks.faceIdentity.mergeIdentitiesAfterProfileResolution.mock.invocationCallOrder[0],
 );
 ```
@@ -400,9 +408,11 @@ async mergeIdentitiesAfterProfileResolution(input: {
   sourceIdentityIds: string[];
   source: 'manual' | 'shared-space-evidence';
 }, db = this.db): Promise<void> {}
+
+async linkPersonFaces(input: LinkPersonFacesInput, db = this.db): Promise<void> {}
 ```
 
-Use existing logic from `PersonService.mergePerson`, `SharedSpaceRepository.reassignPersonFacesSafe`, `SharedSpaceRepository.migrateAliases`, and `FaceIdentityRepository.mergeIdentities`.
+Use existing logic from `PersonService.mergePerson`, `FaceIdentityRepository.linkPersonFaces`, `SharedSpaceRepository.reassignPersonFacesSafe`, `SharedSpaceRepository.migrateAliases`, and `FaceIdentityRepository.mergeIdentities`.
 
 - [ ] **Step 5: Implement `mergePersonalPeople` and execution**
 
@@ -699,6 +709,7 @@ Add tests:
 ```ts
 it('preserves target personal name, birth date, color, species, hidden, favorite, and feature face', async () => {});
 it('fills blank personal target metadata from source without copying hidden or favorite', async () => {});
+it('links moved personal faces to the survivor identity with manual source', async () => {});
 it('queues source person thumbnail cleanup for deleted personal profiles', async () => {});
 ```
 
@@ -707,7 +718,7 @@ it('queues source person thumbnail cleanup for deleted personal profiles', async
 Add tests:
 
 ```ts
-it('preserves manual shared-space representative face and metadata sources', async () => {});
+it('preserves target shared-space name, birth date, hidden state, representative face, and metadata sources', async () => {});
 it('migrates aliases while keeping existing survivor aliases', async () => {});
 it('recounts face and asset counts after shared-space profile merge', async () => {});
 ```
@@ -725,6 +736,7 @@ pnpm --filter immich test -- --run src/services/identity-merge-propagation.servi
 - update `asset_face.personId`
 - fill `name`, `birthDate`, `color`, and `species` only when the target field is blank/null
 - keep target `isHidden`, `isFavorite`, and `faceAssetId`
+- leave identity relinking to `IdentityMergePropagationService`, which must call `faceIdentityRepository.linkPersonFaces({ personId: targetPersonId, identityId: targetIdentityId, source: 'manual' }, trx)` after moving faces and before collapsing identities
 - delete the source person
 - return the source `thumbnailPath` for file cleanup
 
@@ -734,6 +746,7 @@ pnpm --filter immich test -- --run src/services/identity-merge-propagation.servi
 
 - call safe face reassignment
 - migrate aliases with existing target alias winning
+- keep target `name`, `birthDate`, and `isHidden`
 - keep target `representativeFaceId` and `representativeFaceSource`
 - keep manual `nameSource` and `birthDateSource`
 - delete the source person
@@ -765,6 +778,7 @@ git commit -m "feat: preserve merge propagation metadata"
 **Files:**
 
 - Create: `server/test/medium/specs/services/identity-merge-propagation.service.spec.ts`
+- Modify: `server/src/services/identity-merge-propagation.service.spec.ts`
 - Modify: `server/src/repositories/database.repository.ts`
 - Modify: `server/src/repositories/face-identity.repository.ts`
 - Modify: `server/src/repositories/person.repository.ts`
@@ -786,18 +800,24 @@ describe('IdentityMergePropagationService medium tests', () => {
 
 - [ ] **Step 2: Write failing concurrency and failure-injection tests**
 
-Add:
+Add these medium tests to `server/test/medium/specs/services/identity-merge-propagation.service.spec.ts`:
 
 ```ts
 it('handles concurrent overlapping merges with one success and one clean retry or failure', async () => {});
 it('rolls back when activity write fails inside the transaction', async () => {});
-it('keeps core merge consistent when follow-up queueing fails after the transaction', async () => {});
 ```
 
-- [ ] **Step 3: Run failing medium tests**
+Add this unit test to `server/src/services/identity-merge-propagation.service.spec.ts`:
+
+```ts
+it('logs and returns success when follow-up queueing fails after the transaction commits', async () => {});
+```
+
+- [ ] **Step 3: Run failing transaction and failure-injection tests**
 
 ```bash
 pnpm --filter immich test:medium -- --run test/medium/specs/services/identity-merge-propagation.service.spec.ts
+pnpm --filter immich test -- --run src/services/identity-merge-propagation.service.spec.ts
 ```
 
 Expected: failures until transaction support and medium setup exist.
@@ -836,6 +856,10 @@ await this.databaseRepository.transaction(async (trx) => {
         { sourcePersonId, targetPersonId: step.targetPersonId, targetIdentityId: plan.targetIdentityId },
         trx,
       );
+      await this.faceIdentityRepository.linkPersonFaces(
+        { personId: step.targetPersonId, identityId: plan.targetIdentityId, source: 'manual' },
+        trx,
+      );
       if (result.deletedThumbnailPath) {
         deletedThumbnailPaths.push(result.deletedThumbnailPath);
       }
@@ -868,8 +892,22 @@ await this.databaseRepository.transaction(async (trx) => {
   );
   await this.writeActivities(plan, trx);
 });
-await this.queueFollowUps(plan, deletedThumbnailPaths);
+await this.queueFollowUpsBestEffort(plan, deletedThumbnailPaths);
 ```
+
+`queueFollowUpsBestEffort` must not roll back or fail the already-committed merge. Implement it as a best-effort wrapper:
+
+```ts
+private async queueFollowUpsBestEffort(plan: IdentityMergePropagationPlan, deletedThumbnailPaths: string[]) {
+  try {
+    await this.queueFollowUps(plan, deletedThumbnailPaths);
+  } catch (error: Error | any) {
+    this.logger.error(`Failed to queue merge propagation follow-up jobs: ${error}`, error?.stack);
+  }
+}
+```
+
+The failure-injection test must assert the transaction work and activity writes have completed, `logger.error` is called, and the initiating API still returns its normal success response.
 
 - [ ] **Step 7: Re-run the conservative automatic reconciliation test**
 
@@ -885,7 +923,7 @@ pnpm --filter immich test -- --run src/services/identity-merge-propagation.servi
 - [ ] **Step 9: Commit slice 5**
 
 ```bash
-git add server/test/medium/specs/services/identity-merge-propagation.service.spec.ts server/src/repositories/database.repository.ts server/src/repositories/face-identity.repository.ts server/src/repositories/person.repository.ts server/src/repositories/shared-space.repository.ts server/src/services/identity-merge-propagation.service.ts server/src/services/shared-space.service.spec.ts
+git add server/test/medium/specs/services/identity-merge-propagation.service.spec.ts server/src/services/identity-merge-propagation.service.spec.ts server/src/repositories/database.repository.ts server/src/repositories/face-identity.repository.ts server/src/repositories/person.repository.ts server/src/repositories/shared-space.repository.ts server/src/services/identity-merge-propagation.service.ts server/src/services/shared-space.service.spec.ts
 git commit -m "feat: harden merge propagation transactions"
 ```
 
@@ -968,13 +1006,15 @@ Only commit if verification required fixes. If no files changed, do not create a
 | Hidden source or target profiles | metadata preservation unit spec |
 | Favorite source profile | metadata preservation unit spec |
 | Manual personal feature face | metadata preservation unit spec |
+| Moved personal faces are relinked to target identity with manual source | executor and metadata preservation unit specs |
 | Manual shared-space representative face | metadata preservation unit spec |
+| Shared-space target name, birth date, and hidden state preservation | metadata preservation unit spec |
 | Manual shared-space name or birthday source | metadata preservation unit spec |
 | Blank survivor metadata and useful source metadata | metadata preservation unit spec |
 | Conflicting aliases during space merge | metadata preservation unit spec |
 | Mixed `person` and `pet` identities | planner and executor specs |
 | Concurrent merge of overlapping identities | medium spec |
-| Follow-up queue failure after DB transaction | unit spec with failure injection |
+| Follow-up queue failure after DB transaction | unit spec with failure injection proving best-effort logging and success response |
 | Activity write failure during transaction | medium or unit spec with failure injection |
 | Activity actor id, origin scope, initiating role, and propagated role | activity fanout unit spec |
 | Deduplicated follow-up jobs per affected space | executor unit spec |
