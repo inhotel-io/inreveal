@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { readFile, rm, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { describe, it } from 'node:test';
+import { galleryMcpPromptCheatSheet } from './generated/gallery-mcp-prompt-cheat-sheet.mjs';
 import { createPiRuntime, mapProviderType, redactSecret } from './pi-runtime.mjs';
 
 const permissionPlan = {
@@ -519,6 +520,14 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].noExtensions, true);
     assert.ok(Array.isArray(calls.loaders[0].extensionFactories));
     assert.equal(calls.loaders[0].systemPrompt.startsWith('You are Gallery Assistant'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes(galleryMcpPromptCheatSheet), true);
+    assert.equal(galleryMcpPromptCheatSheet.includes('mcp_gallery_searchAssets'), true);
+    assert.equal(galleryMcpPromptCheatSheet.includes('mcp_gallery_readAssetMetadata'), true);
+    assert.equal(galleryMcpPromptCheatSheet.includes('mcp_gallery_proposeAlbumOperations'), true);
+    assert.equal(galleryMcpPromptCheatSheet.includes('toolCallId'), true);
+    assert.equal(galleryMcpPromptCheatSheet.includes('album.create'), true);
+    assert.equal(galleryMcpPromptCheatSheet.includes('album.addAssets'), true);
+    assert.equal(galleryMcpPromptCheatSheet.includes('exampleArguments'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_searchAssets'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_readAssetMetadata'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_proposeAlbumOperations'), true);
@@ -537,7 +546,7 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].systemPrompt.includes('call mcp_gallery_proposeAlbumOperations'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('call proposeAlbumOperations'), false);
     assert.equal(calls.loaders[0].systemPrompt.includes('reviewable album operation plan'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('If a planning tool call fails with a validation error'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('exampleArguments'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('Do not redirect the user to Apple Photos'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('no direct write tools'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('has no Gallery read tools'), false);
