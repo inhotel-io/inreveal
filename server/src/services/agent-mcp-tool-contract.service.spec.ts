@@ -137,4 +137,84 @@ describe(AgentMcpToolContractService.name, () => {
     expect(sut.listReadToolContracts()[0].description).not.toBe('mutated description');
     expect(sut.listReadToolContracts()[0].examples[0].arguments).not.toEqual({ mutated: true });
   });
+
+  describe('validation correction lookup', () => {
+    it('returns the matching hint, expected usage, and example arguments for a read-tool mistake', () => {
+      const correction = sut.getReadToolValidationCorrection(AgentToolName.ReadAssetPreviews, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: '', message: 'Provide either assetIds or toolCallId, not both' }],
+      });
+
+      expect(correction).toEqual({
+        mistakeId: 'asset-read-combined-asset-ids-and-tool-call-id',
+        issuePath: '',
+        expected: 'Use assetIds for a new request. Use only toolCallId when retrying a Gallery-approved request.',
+        hint: 'Use either assetIds for a new request or toolCallId for an approved retry, not both.',
+        exampleArguments: {
+          toolCallId: '00000000-0000-4000-8000-000000000111',
+        },
+      });
+    });
+
+    it('matches JSON-RPC wrapper mistakes separately from tool-argument mistakes', () => {
+      const correction = sut.getReadToolValidationCorrection(AgentToolName.ReadAssetMetadata, {
+        requestShape: 'json-rpc',
+        issues: [{ path: 'arguments', message: 'arguments is required' }],
+      });
+
+      expect(correction).toMatchObject({
+        mistakeId: 'tool-call-arguments-missing',
+        issuePath: 'arguments',
+        hint: 'Put the tool arguments object at params.arguments in the MCP tools/call request.',
+        exampleArguments: {
+          assetIds: ['00000000-0000-4000-8000-000000000001'],
+        },
+      });
+    });
+
+    it('prefers the most specific mistake when multiple issues share a path', () => {
+      const correction = sut.getReadToolValidationCorrection(AgentToolName.ReadAssetMetadata, {
+        requestShape: 'tool-arguments',
+        issues: [
+          { path: 'assetIds', message: 'Too small: expected array to have >=1 items' },
+          { path: 'assetIds', message: 'assetIds must be unique' },
+        ],
+      });
+
+      expect(correction?.mistakeId).toBe('asset-read-duplicate-asset-ids');
+      expect(correction?.issuePath).toBe('assetIds');
+      expect(correction?.hint).toBe('Provide each asset id only once.');
+    });
+
+    it('returns a read-tool fallback when no common mistake matches', () => {
+      const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: 'filters.rating', message: 'Too big: expected number to be <=5' }],
+      });
+
+      expect(correction).toEqual({
+        expected: 'Put all search filters under filters. Use only toolCallId when retrying a Gallery-approved search.',
+        hint: 'Put all search filters under filters. Use only toolCallId when retrying a Gallery-approved search.',
+        exampleArguments: {},
+      });
+    });
+
+    it('returns defensive copies of example arguments', () => {
+      const firstCorrection = sut.getReadToolValidationCorrection(AgentToolName.ReadAlbum, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: 'albumId', message: 'Invalid UUID' }],
+      });
+
+      firstCorrection!.exampleArguments = { mutated: true };
+
+      expect(
+        sut.getReadToolValidationCorrection(AgentToolName.ReadAlbum, {
+          requestShape: 'tool-arguments',
+          issues: [{ path: 'albumId', message: 'Invalid UUID' }],
+        })?.exampleArguments,
+      ).toEqual({
+        albumId: '00000000-0000-4000-8000-000000000010',
+      });
+    });
+  });
 });
