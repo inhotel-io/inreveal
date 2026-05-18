@@ -321,6 +321,10 @@ Implementation must use TDD for every slice:
 4. Refactor with the same tests green.
 5. Run the relevant regression suite before the next slice.
 
+Each implementation plan derived from this spec must name its red, green, and
+regression commands before implementation starts. A slice is complete only after
+the new focused tests and relevant existing regression suite are green.
+
 ### Contract Tests
 
 - every tool has a contract;
@@ -360,7 +364,13 @@ Implementation must use TDD for every slice:
 ### Generated Docs Tests
 
 - generated docs are up to date with the contract;
+- full JSON-RPC examples for `initialize`, `tools/list`, and `tools/call` parse
+  through the MCP request handling path;
+- `tools/call` examples use `params.arguments`, not `input`, top-level
+  arguments, or another wrapper shape;
 - every JSON example block marked as tool arguments parses through the right DTO;
+- docs distinguish bare server-owned MCP tool names in JSON-RPC from
+  Pi-visible `mcp_gallery_` names in the runner prompt;
 - docs include approval retry flow;
 - docs include at least one create album and create-plus-add-assets example;
 - docs state that apply is not available through MCP;
