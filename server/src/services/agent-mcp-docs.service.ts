@@ -21,7 +21,14 @@ type AgentMcpJsonRpcExample = {
   request: Record<string, unknown>;
 };
 
-const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
+const compactShortStringArrays = (value: string): string =>
+  value.replaceAll(/\[\n((?:\s{2,}"[^"\n]*",?\n)+)(\s*)\]/g, (match, entries: string, indent: string) => {
+    const values = [...entries.matchAll(/"[^"\n]*"/g)].map(([entry]) => entry);
+    const compact = `[${values.join(', ')}]`;
+    return indent.length + compact.length <= 100 ? compact : match;
+  });
+
+const json = (value: unknown): string => `${compactShortStringArrays(JSON.stringify(value, null, 2))}\n`;
 
 const markdownJson = (value: unknown): string => `\`\`\`json\n${json(value)}\`\`\``;
 
@@ -185,6 +192,7 @@ export class AgentMcpDocsService {
       sanitizeText(example.description),
       '',
       `<!-- mcp-docs:tool-arguments tool="${contract.name}" example="${example.name}" -->`,
+      '',
       markdownJson(example.arguments),
       '',
     ];
