@@ -71,6 +71,8 @@
   let sentMessageBySessionId = $state<Record<string, AgentMessageResponseDto>>({});
   let assistantPermissionPreset = $state<AgentPermissionPreset>(DEFAULT_AGENT_PERMISSION_PRESET);
   let assistantApprovalMode = $state<AgentApprovalMode>(DEFAULT_AGENT_APPROVAL_MODE);
+  let assistantCredentialId = $state<string | null>(null);
+  let assistantModel = $state('');
   let assistantDefaultsInitialized = false;
   let explicitNewChatPending = false;
   const defaultsStorageKey = 'gallery.assistant.defaults';
@@ -85,6 +87,12 @@
   );
   const canSendNewChat = $derived(
     newChatDraft.trim().length > 0 && !isStartingFromMessage && isRunnerAvailable && localCredentials.length > 0,
+  );
+  const selectedAssistantCredential = $derived(
+    localCredentials.find((credential) => credential.id === assistantCredentialId) ?? localCredentials[0] ?? null,
+  );
+  const selectedAssistantModel = $derived(
+    selectedAssistantCredential ? getValidModelForCredential(selectedAssistantCredential, assistantModel) : '',
   );
 
   const isPermissionPreset = (value: unknown): value is AgentPermissionPreset =>
@@ -106,13 +114,29 @@
     }
   };
 
+  function getValidModelForCredential(credential: AgentProviderCredentialResponseDto, preferredModel: string) {
+    const trimmedPreferredModel = preferredModel.trim();
+
+    if (credential.models.length === 0) {
+      return trimmedPreferredModel || credential.defaultModel || '';
+    }
+
+    if (trimmedPreferredModel && credential.models.includes(trimmedPreferredModel)) {
+      return trimmedPreferredModel;
+    }
+
+    return getDefaultModel(credential);
+  }
+
   const readAssistantDefaults = () => {
     const parsed = readStoredAssistantDefaults();
     const credential =
-      localCredentials.find((candidate) => candidate.id === parsed.credentialId) ?? localCredentials[0];
+      selectedAssistantCredential ??
+      localCredentials.find((candidate) => candidate.id === parsed.credentialId) ??
+      localCredentials[0];
     return {
       credential,
-      model: parsed.model || getDefaultModel(credential),
+      model: credential ? selectedAssistantModel || getValidModelForCredential(credential, parsed.model ?? '') : '',
       permissionPreset: isPermissionPreset(parsed.permissionPreset)
         ? parsed.permissionPreset
         : assistantPermissionPreset,
@@ -142,6 +166,8 @@
   const writeAssistantDefaults = (session: AgentSessionResponseDto) => {
     assistantPermissionPreset = session.permissionPreset;
     assistantApprovalMode = session.approvalMode;
+    assistantCredentialId = session.providerCredentialId ?? null;
+    assistantModel = session.modelSnapshot.model;
     persistAssistantDefaults({
       credentialId: session.providerCredentialId ?? undefined,
       model: session.modelSnapshot.model,
@@ -170,6 +196,24 @@
     persistAssistantDefaults({ approvalMode: nextApprovalMode });
   };
 
+  const handleAssistantCredentialChange = (event: Event) => {
+    const nextCredentialId = (event.currentTarget as HTMLSelectElement).value;
+    const nextCredential = localCredentials.find((credential) => credential.id === nextCredentialId) ?? null;
+    assistantCredentialId = nextCredential?.id ?? null;
+    assistantModel = nextCredential ? getDefaultModel(nextCredential) : '';
+    persistAssistantDefaults({ credentialId: assistantCredentialId ?? undefined, model: assistantModel });
+  };
+
+  const handleAssistantModelChange = (event: Event) => {
+    const nextModel = (event.currentTarget as HTMLInputElement | HTMLSelectElement).value;
+    if (!selectedAssistantCredential) {
+      return;
+    }
+
+    assistantModel = getValidModelForCredential(selectedAssistantCredential, nextModel);
+    persistAssistantDefaults({ credentialId: selectedAssistantCredential.id, model: assistantModel });
+  };
+
   $effect(() => {
     if (assistantDefaultsInitialized) {
       return;
@@ -182,6 +226,32 @@
     }
     if (isApprovalMode(storedDefaults.approvalMode)) {
       assistantApprovalMode = storedDefaults.approvalMode;
+    }
+    const storedCredential =
+      localCredentials.find((credential) => credential.id === storedDefaults.credentialId) ?? localCredentials[0] ?? null;
+    assistantCredentialId = storedCredential?.id ?? null;
+    assistantModel = storedCredential ? getValidModelForCredential(storedCredential, storedDefaults.model ?? '') : '';
+  });
+
+  $effect(() => {
+    const nextCredential =
+      localCredentials.find((credential) => credential.id === assistantCredentialId) ?? localCredentials[0] ?? null;
+    const nextCredentialId = nextCredential?.id ?? null;
+    const nextModel = nextCredential ? getValidModelForCredential(nextCredential, assistantModel) : '';
+    let changed = false;
+
+    if (assistantCredentialId !== nextCredentialId) {
+      assistantCredentialId = nextCredentialId;
+      changed = true;
+    }
+
+    if (assistantModel !== nextModel) {
+      assistantModel = nextModel;
+      changed = true;
+    }
+
+    if (changed && nextCredential) {
+      persistAssistantDefaults({ credentialId: nextCredential.id, model: nextModel });
     }
   });
   const buildAssistantPath = (sessionId: string | null) => {
@@ -391,6 +461,58 @@
         </div>
         <div class="grid gap-5">
           <section class="rounded-lg border border-gray-200 p-4 dark:border-neutral-800">
+            <h3 class="text-base font-semibold">{$t('assistant_model_provider')}</h3>
+            {#if localCredentials.length === 0}
+              <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{$t('assistant_no_credentials_setup')}</p>
+            {:else}
+              <div class="mt-4 grid gap-4">
+                <div class="grid gap-2">
+                  <label class="text-sm font-medium" for="assistant-default-provider-credential">
+                    {$t('assistant_provider_credential')}
+                  </label>
+                  <select
+                    id="assistant-default-provider-credential"
+                    aria-label={$t('assistant_provider_credential')}
+                    class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-immich-dark-gray"
+                    value={selectedAssistantCredential?.id ?? ''}
+                    onchange={handleAssistantCredentialChange}
+                  >
+                    {#each localCredentials as credential (credential.id)}
+                      <option value={credential.id}>{credential.label}</option>
+                    {/each}
+                  </select>
+                </div>
+
+                <div class="grid gap-2">
+                  <label class="text-sm font-medium" for="assistant-default-model">{$t('assistant_model')}</label>
+                  {#if selectedAssistantCredential && selectedAssistantCredential.models.length > 0}
+                    <select
+                      id="assistant-default-model"
+                      aria-label={$t('assistant_model')}
+                      class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-immich-dark-gray"
+                      value={selectedAssistantModel}
+                      onchange={handleAssistantModelChange}
+                    >
+                      {#each selectedAssistantCredential.models as model (model)}
+                        <option value={model}>{model}</option>
+                      {/each}
+                    </select>
+                  {:else}
+                    <input
+                      id="assistant-default-model"
+                      aria-label={$t('assistant_model')}
+                      class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-immich-dark-gray"
+                      value={selectedAssistantModel}
+                      oninput={handleAssistantModelChange}
+                      placeholder={$t('assistant_model')}
+                    />
+                  {/if}
+                </div>
+              </div>
+            {/if}
+          </section>
+
+          <section class="rounded-lg border border-gray-200 p-4 dark:border-neutral-800">
             <div class="flex items-center justify-between gap-3">
               <div>
                 <h3 class="text-base font-semibold">{$t('assistant_api_keys')}</h3>
@@ -596,21 +718,35 @@
               }}
             >
               <div
-                class="flex w-full items-end gap-3 rounded-2xl border border-gray-300 bg-white p-2 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+                class="grid w-full gap-2 rounded-2xl border border-gray-300 bg-white p-2 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
               >
-                <label for="assistant-new-message" class="sr-only">{$t('assistant_message')}</label>
-                <textarea
-                  id="assistant-new-message"
-                  aria-label={$t('assistant_message')}
-                  class="min-h-14 flex-1 resize-none bg-transparent px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                  bind:value={newChatDraft}
-                  placeholder={$t('assistant_new_chat_placeholder')}
-                  disabled={isStartingFromMessage || !isRunnerAvailable}
-                  onkeydown={handleNewChatComposerKeydown}
-                ></textarea>
-                <Button type="submit" disabled={!canSendNewChat} loading={isStartingFromMessage}
-                  >{$t('assistant_send')}</Button
-                >
+                {#if selectedAssistantCredential}
+                  <div class="flex items-center justify-between gap-2 px-2 pt-1">
+                    <button
+                      type="button"
+                      class="max-w-full truncate rounded-md px-2 py-1 text-left text-xs text-gray-600 hover:bg-gray-100 hover:text-black dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
+                      aria-label={$t('assistant_model_selector')}
+                      onclick={() => (assistantSettingsOpen = true)}
+                    >
+                      {selectedAssistantCredential.label} · {selectedAssistantModel}
+                    </button>
+                  </div>
+                {/if}
+                <div class="flex items-end gap-3">
+                  <label for="assistant-new-message" class="sr-only">{$t('assistant_message')}</label>
+                  <textarea
+                    id="assistant-new-message"
+                    aria-label={$t('assistant_message')}
+                    class="min-h-14 flex-1 resize-none bg-transparent px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                    bind:value={newChatDraft}
+                    placeholder={$t('assistant_new_chat_placeholder')}
+                    disabled={isStartingFromMessage || !isRunnerAvailable}
+                    onkeydown={handleNewChatComposerKeydown}
+                  ></textarea>
+                  <Button type="submit" disabled={!canSendNewChat} loading={isStartingFromMessage}
+                    >{$t('assistant_send')}</Button
+                  >
+                </div>
               </div>
             </form>
           </div>

@@ -39,6 +39,7 @@
     return false;
   });
   let pendingApprovalCount = $state(0);
+  let approvalResumePending = $state(false);
   let recentToolCalls = $state<AgentToolCallResponseDto[]>([]);
   let cancelBusy = $state(false);
   let lifecycleError = $state<string | null>(null);
@@ -46,7 +47,10 @@
   let cancelSequence = 0;
   let destroyed = false;
 
-  const composerState = $derived(getAgentSessionComposerState(session.status, { pendingApprovalCount }));
+  const effectivePendingApprovalCount = $derived(approvalResumePending ? 0 : pendingApprovalCount);
+  const composerState = $derived(
+    getAgentSessionComposerState(session.status, { pendingApprovalCount: effectivePendingApprovalCount }),
+  );
   const composerDisabledReason = $derived(composerState.disabledReasonKey ? $t(composerState.disabledReasonKey) : null);
   const terminalActionLabel = $derived(
     composerState.terminalActionLabelKey ? $t(composerState.terminalActionLabelKey) : undefined,
@@ -111,6 +115,7 @@
 
   $effect(() => {
     pendingApprovalCount = 0;
+    approvalResumePending = false;
     recentToolCalls = [];
     lifecycleError = null;
     cancelBusy = false;
@@ -152,6 +157,7 @@
           {session}
           {onSessionUpdated}
           onPendingApprovalCountChange={(count) => (pendingApprovalCount = count)}
+          onApprovalResumePendingChange={(pending) => (approvalResumePending = pending)}
           onRecentToolCallsChange={(toolCalls) => (recentToolCalls = toolCalls)}
         />
       {/snippet}
@@ -161,7 +167,7 @@
         {actionDock}
         toolCalls={recentToolCalls}
         {seedMessages}
-        {assistantResponsePending}
+        assistantResponsePending={assistantResponsePending || approvalResumePending}
         composerDisabled={composerState.disabled}
         {composerDisabledReason}
         composerPlaceholder={$t(composerState.placeholderKey)}
