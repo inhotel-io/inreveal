@@ -20,15 +20,19 @@ const makeService = (profiles: MergeProfile[]) => {
       profile.identityId ??= `identity-for-${personId}`;
       return { id: profile.identityId, type: profile.type };
     }),
-    getMergePropagationProfiles: vi.fn((input: { personIds?: string[]; identityIds?: string[] }): MergeProfile[] => {
-      if (input.personIds) {
-        const personIds = new Set(input.personIds);
-        return profiles.filter((profile) => profile.kind === 'person' && personIds.has(profile.id));
-      }
+    getMergePropagationProfiles: vi.fn(
+      (
+        input: { mode: 'profiles'; personIds: string[] } | { mode: 'identities'; identityIds: string[] },
+      ): MergeProfile[] => {
+        if (input.mode === 'profiles') {
+          const personIds = new Set(input.personIds);
+          return profiles.filter((profile) => profile.kind === 'person' && personIds.has(profile.id));
+        }
 
-      const identityIds = input.identityIds ? new Set(input.identityIds) : new Set<string>();
-      return profiles.filter((profile) => profile.identityId && identityIds.has(profile.identityId));
-    }),
+        const identityIds = new Set(input.identityIds);
+        return profiles.filter((profile) => profile.identityId && identityIds.has(profile.identityId));
+      },
+    ),
   };
 
   const sut = new IdentityMergePropagationService({
@@ -256,6 +260,7 @@ describe('IdentityMergePropagationService', () => {
         'person-y',
       ]);
       expect(faceIdentityRepository.getMergePropagationProfiles).toHaveBeenNthCalledWith(2, {
+        mode: 'identities',
         identityIds: ['identity-for-person-x', 'identity-for-person-y'],
       });
       expect(plan.targetIdentityId).toBe('identity-for-person-x');

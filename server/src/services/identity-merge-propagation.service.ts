@@ -88,6 +88,9 @@ type IdentityMergePropagationDependencies = {
 export class IdentityMergePropagationService {
   constructor(private deps: IdentityMergePropagationDependencies) {}
 
+  /**
+   * Materializes missing identities for the initiating target/source profiles before loading attached profiles.
+   */
   async buildPersonalMergePlan(input: {
     actorUserId: string;
     targetPersonId: string;
@@ -96,6 +99,7 @@ export class IdentityMergePropagationService {
     const sourcePersonIds = [...new Set(input.sourcePersonIds)].filter((id) => id !== input.targetPersonId);
     const originPersonIds = [input.targetPersonId, ...sourcePersonIds];
     const originProfiles = await this.deps.faceIdentityRepository.getMergePropagationProfiles({
+      mode: 'profiles',
       personIds: originPersonIds,
     });
     const originProfilesById = new Map(originProfiles.map((profile) => [profile.id, profile as MergeProfile]));
@@ -135,6 +139,7 @@ export class IdentityMergePropagationService {
     ];
     const planIdentityIds = [targetIdentityId, ...sourceIdentityIds];
     const attachedProfiles = (await this.deps.faceIdentityRepository.getMergePropagationProfiles({
+      mode: 'identities',
       identityIds: planIdentityIds,
     })) as MergeProfile[];
 
