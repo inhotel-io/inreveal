@@ -540,6 +540,7 @@ describe(JobRepository.name, () => {
     const { sut, queue } = setup();
     setHandlers(sut, [
       JobName.SharedSpaceFaceMatch,
+      JobName.SharedSpaceFaceMatchFromBackfill,
       JobName.SharedSpaceFaceMatchAll,
       JobName.SharedSpaceFaceMatchPage,
       JobName.SharedSpacePersonDedup,
@@ -550,6 +551,7 @@ describe(JobRepository.name, () => {
       { name: JobName.SharedSpaceFaceMatch, data: { spaceId: 'space-1', assetId: 'asset-1' } },
       { name: JobName.SharedSpaceFaceMatch, data: { spaceId: 'space-1', assetId: 'asset-1' } },
       { name: JobName.SharedSpaceFaceMatch, data: { spaceId: 'space-2', assetId: 'asset-1' } },
+      { name: JobName.SharedSpaceFaceMatchFromBackfill, data: { spaceId: 'space-1', assetId: 'asset-1' } },
       { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: 'space-1' } },
       { name: JobName.SharedSpaceFaceMatchPage, data: { spaceId: 'space-1' } },
       { name: JobName.SharedSpaceFaceMatchPage, data: { spaceId: 'space-1', afterAssetId: 'asset-9' } },
@@ -571,6 +573,14 @@ describe(JobRepository.name, () => {
       { spaceId: 'space-2', assetId: 'asset-1' },
       {
         jobId: 'shared-space-face-match/space-2/asset-1',
+        removeOnComplete: true,
+      },
+    );
+    expect(queue.add).toHaveBeenCalledWith(
+      JobName.SharedSpaceFaceMatchFromBackfill,
+      { spaceId: 'space-1', assetId: 'asset-1' },
+      {
+        jobId: 'shared-space-face-match/from-backfill/space-1/asset-1',
         removeOnComplete: true,
       },
     );
@@ -619,6 +629,33 @@ describe(JobRepository.name, () => {
     }
   });
 
+  it('does not remove failed from-backfill shared-space jobs while queueing duplicates', async () => {
+    const { sut, queue } = setup();
+    const failedJob = {
+      getState: vi.fn().mockResolvedValue('failed'),
+      remove: vi.fn().mockResolvedValue(void 0),
+    };
+    queue.getJob.mockResolvedValue(failedJob);
+    setHandlers(sut, [JobName.SharedSpaceFaceMatchFromBackfill]);
+
+    await sut.queue({
+      name: JobName.SharedSpaceFaceMatchFromBackfill,
+      data: { spaceId: 'space-1', assetId: 'asset-1' },
+    });
+
+    expect(queue.getJob).toHaveBeenCalledWith('shared-space-face-match/from-backfill/space-1/asset-1');
+    expect(failedJob.getState).toHaveBeenCalled();
+    expect(failedJob.remove).not.toHaveBeenCalled();
+    expect(queue.add).toHaveBeenCalledWith(
+      JobName.SharedSpaceFaceMatchFromBackfill,
+      { spaceId: 'space-1', assetId: 'asset-1' },
+      {
+        jobId: 'shared-space-face-match/from-backfill/space-1/asset-1',
+        removeOnComplete: true,
+      },
+    );
+  });
+
   it('uses distinct stable job ids for identity-backfill shared-space face matches', async () => {
     const { sut, queue } = setup();
     setHandlers(sut, [JobName.SharedSpaceFaceMatch]);
@@ -655,6 +692,11 @@ describe(JobRepository.name, () => {
       JobName.SharedSpaceFaceMatch,
       { spaceId: 'space-1', assetId: 'asset-1', source: 'identity-backfill' },
       'shared-space-face-match/identity-backfill/space-1/asset-1',
+    ],
+    [
+      JobName.SharedSpaceFaceMatchFromBackfill,
+      { spaceId: 'space-1', assetId: 'asset-1' },
+      'shared-space-face-match/from-backfill/space-1/asset-1',
     ],
     [JobName.SharedSpaceFaceMatchAll, { spaceId: 'space-1' }, 'shared-space-face-match-all/space-1'],
     [
