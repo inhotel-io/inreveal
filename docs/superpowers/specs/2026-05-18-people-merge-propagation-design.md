@@ -238,9 +238,9 @@ The initiating API should not return partial success for a manual propagation me
 
 ## Development Process
 
-Use test-driven development for the implementation.
+Use test-driven development for every implementation slice.
 
-For each behavior below:
+For each behavior in a slice:
 
 1. Write the smallest failing test that describes the desired behavior.
 2. Run that test and confirm it fails for the expected reason.
@@ -250,123 +250,222 @@ For each behavior below:
 
 Do not write production merge propagation code before there is a failing test for that behavior. If implementation work reveals a missing edge case, add the failing test first, then update the code.
 
-## Testing
+## Vertical Implementation Slices
 
-Testing should cover the planner, executor, repositories, service entry points, and API authorization boundaries. The planner tests should use the structured dry-run plan so edge cases can be asserted without relying only on final database state.
+Create separate implementation plans for these slices. Each slice should be testable on its own, should keep the branch green, and should end with a commit. The open propagation behavior should not be considered releasable until all slices are complete.
 
-### TDD Sequence
+Suggested plan documents:
 
-Build the implementation in small red-green slices:
+- `docs/superpowers/plans/2026-05-18-people-merge-propagation-slice-1-personal-origin.md`
+- `docs/superpowers/plans/2026-05-18-people-merge-propagation-slice-2-space-to-personal.md`
+- `docs/superpowers/plans/2026-05-18-people-merge-propagation-slice-3-space-to-space.md`
+- `docs/superpowers/plans/2026-05-18-people-merge-propagation-slice-4-metadata-preservation.md`
+- `docs/superpowers/plans/2026-05-18-people-merge-propagation-slice-5-transaction-hardening.md`
 
-1. Planner chooses deterministic survivors for personal and shared-space scopes.
-2. Planner expands a personal-origin merge into personal, space, and space-to-space profile merge steps.
-3. Planner expands a space-origin merge into initiating-space, other-space, and personal profile merge steps.
-4. Executor applies personal profile merge steps.
-5. Executor applies shared-space profile merge steps.
-6. Executor collapses identities after profile conflicts are resolved.
-7. Existing personal and shared-space merge APIs call the propagation service.
-8. Follow-up jobs and activity entries are queued/written for affected spaces.
-9. Automatic reconciliation paths continue to use conservative conflict handling.
+### Slice 1: Personal-Origin Propagation
 
-### Planner Tests
+**Goal:** A personal people merge propagates into shared spaces that contain duplicate people for the same affected identities.
 
-Planner unit tests should cover:
+**User-visible behavior:**
+
+- When the owner merges personal `Y` into personal `X`, the selected personal target survives.
+- Shared spaces with duplicate people for those identities merge their duplicates.
+- Shared spaces with only one affected person keep that person and update it to the final identity.
+- Personal merge responses remain compatible with the existing bulk response shape.
+
+**Implementation scope:**
+
+- Add the initial `IdentityMergePropagationService`.
+- Add the structured propagation plan shape.
+- Add planner support for personal-origin merges.
+- Add executor support for personal profile merges, shared-space profile merges, and identity collapse as needed by the personal-origin path.
+- Route `PersonService.mergePerson()` through the propagation service after existing `PersonMerge` access validation.
+
+**TDD focus:**
+
+- Start with planner tests, then repository/executor tests, then the service entry point.
+- Use focused tests for the red-green loop before adding wider database-backed coverage.
+
+**Tests and edge cases:**
 
 - Personal merge propagates to duplicate shared-space people in multiple spaces.
-- Space editor merge propagates into personal people for affected members.
-- Space editor merge propagates to other shared spaces that have duplicate profiles for the same identity set.
 - Spaces with only one affected profile keep that profile and update its identity.
-- Multiple owners are handled independently: an owner with duplicate personal profiles gets a personal profile merge, while an owner with only one profile gets only an identity update.
-- Multiple spaces are handled independently: a space with duplicate people gets a space profile merge, while a space with one affected person gets only an identity update.
-- Survivor selection prefers the initiating target in the initiating scope.
-- Survivor selection prefers the target identity in non-initiating scopes.
+- The initiating personal target survives.
+- Non-initiating scopes prefer the profile already attached to the target identity.
 - Survivor selection falls back deterministically by face count, named over unnamed, and id ordering.
-- Duplicate source ids are deduplicated in the plan.
-- Source identities already equal to the target identity are ignored without creating self-merge steps.
-- A target or source profile without an identity gets an identity before planning continues.
-- The plan records affected owner ids, affected space ids, follow-up jobs, and activity payload summaries.
-- Propagation plan output is deterministic for the same input.
+- Missing initiating target rejects the merge.
+- Missing or inaccessible initiating source returns the appropriate bulk failure and applies no profile or identity changes.
+- Empty source list is rejected by DTO or service validation.
+- Source id equal to target id is rejected as self-merge.
+- Duplicate source ids are deduplicated without duplicate work.
+- Source already attached to the target identity does not create redundant work unless duplicate profiles still exist in a scope.
+- Target or source profile without an identity gets an identity before planning continues.
+- Mixed `person` and `pet` identities reject and roll back.
 
-### Executor And Service Tests
+**Exit criteria:**
 
-Executor and service unit tests should cover:
+- Personal-origin propagation works end-to-end in tests.
+- Existing automatic reconciliation behavior is unchanged.
+- The branch has no partially applied profile or identity changes on failure.
 
-- Target metadata wins and source metadata fills blanks only.
-- Favorite, hidden, and manual representative choices are not overwritten.
-- `person` and `pet` mixed merges abort.
-- Shared-space aliases migrate and existing survivor aliases win conflicts.
-- Transaction rolls back if one planned profile merge fails.
-- Automatic reconciliation still skips same-owner and same-space conflicts instead of force-merging profiles.
-- Shared-space activity payload records origin, activity role, propagation counts, and affected spaces.
+### Slice 2: Shared-Space-Origin Propagation To Personal People
+
+**Goal:** An editor or owner merge in a shared space propagates into affected personal people.
+
+**User-visible behavior:**
+
+- Space viewers cannot initiate space people merges.
+- Space editors and owners can merge people in the shared space.
+- The selected target space person survives in the initiating space.
+- Personal owners with duplicate personal profiles attached to the affected identities get those personal profiles merged.
+- Personal owners with only one affected profile keep that profile and update it to the final identity.
+
+**Implementation scope:**
+
+- Add planner support for shared-space-origin merges.
+- Route `SharedSpaceService.mergeSpacePeople()` through the propagation service after editor+ role validation.
+- Preserve existing initiating-space merge activity.
+- Keep the current conservative conflict behavior for automatic shared-space identity reconciliation.
+
+**TDD focus:**
+
+- First prove permission and initiating-space validation.
+- Then prove the generated propagation plan includes personal profile merges.
+- Then prove the executor applies those personal profile merges atomically.
+
+**Tests and edge cases:**
+
+- Space-origin merge rejects viewer-initiated requests.
+- Space-origin merge allows editor and owner requests.
+- Space-origin merge rejects source people outside the initiating space.
+- Space-origin self-merge is rejected.
+- Space editor merge propagates into personal people for affected members.
+- Multiple owners are handled independently.
+- Hidden source or target profiles preserve survivor hidden state.
+- Favorite source profiles do not copy favorite state to the survivor.
+- Blank survivor metadata is filled from useful source metadata, but non-blank survivor metadata wins.
+- Automatic shared-space identity reconciliation still skips same-owner and same-space conflicts instead of invoking manual propagation.
+
+**Exit criteria:**
+
+- Space-origin merges can safely mutate personal people through the propagation engine.
+- The initiating space behavior is covered by service tests.
+- Automatic reconciliation remains conservative.
+
+### Slice 3: Space-To-Space Propagation And Activity Fanout
+
+**Goal:** A confirmed merge in one shared space cleans up the same duplicate in every other shared space attached to the affected identities.
+
+**User-visible behavior:**
+
+- If Space A merges `space-Y-a` into `space-X-a`, Space B also merges `space-Y-b` into `space-X-b` when both profiles exist there.
+- If Space C has only one affected profile, it keeps that profile and updates it to the final identity.
+- Every affected shared space gets a `PersonMerge` activity entry.
+- Activity payloads distinguish the initiating merge from propagated merges.
+
+**Implementation scope:**
+
+- Extend the planner to fan out shared-space profile merge steps across all affected spaces.
+- Extend activity payload generation with origin scope, activity role, originating space id, target/source profile ids, identity ids, propagation counts, and affected space ids.
+- Deduplicate affected space ids before queueing jobs or writing activity.
+
+**TDD focus:**
+
+- Start with planner tests for multi-space layouts.
+- Add executor/service tests for per-space activity fanout.
+- Add integration coverage for a full space-origin merge that propagates to another space and personal people in one operation.
+
+**Tests and edge cases:**
+
+- Space editor merge propagates to other shared spaces with duplicate profiles for the same identity set.
+- Other spaces with only one affected profile do not delete it.
+- Multiple spaces are planned independently.
 - Propagated space-to-space merges write activity in every affected shared space.
-- Personal-origin merge returns the expected bulk success response for valid source ids.
-- Personal-origin merge validates every initiating source before propagation; missing or inaccessible sources return the appropriate bulk failure and no profile or identity changes are applied.
-- Space-origin merge rejects viewer-initiated merges.
-- Space-origin merge allows editor and owner initiated merges.
-- Space-origin merge rejects source people that are not in the initiating space.
-- Self-merge is rejected for personal and shared-space entry points.
-- Empty source id lists are rejected by DTO validation or service validation.
+- Activity payload records origin, activity role, propagation counts, and affected spaces.
+- Duplicate source ids do not create duplicate activity entries.
 - Follow-up queues deduplicate repeated affected spaces and identities.
-- Queue failure after the transaction is logged/retryable according to existing job behavior and does not leave the transaction half-applied.
 
-### Repository Tests
+**Exit criteria:**
 
-Repository-level tests should cover:
+- Space-to-space propagation is not a side effect; it is explicitly planned, executed, tested, and visible in activity.
 
-- Personal profile merge helper reassigns faces and deletes the source profile.
-- Shared-space profile merge helper reassigns faces, migrates aliases, recounts, and deletes the source profile.
-- Identity merge helper can collapse identities after profile conflicts have been resolved.
-- Personal profile merge helper does not overwrite survivor `isFavorite`, `isHidden`, or existing `faceAssetId`.
-- Shared-space profile merge helper does not overwrite survivor manual `representativeFaceId` or manual metadata sources.
-- Source person thumbnail cleanup is queued for deleted personal profiles.
-- Identity cleanup deletes source identities only when no faces or profiles still reference them.
-- Transactional helpers work with a caller-provided transaction handle.
+### Slice 4: Metadata, Aliases, And Representative Preservation
+
+**Goal:** Propagated merges preserve local metadata and user choices while still cleaning up duplicate profiles.
+
+**User-visible behavior:**
+
+- The survivor profile's explicit metadata wins.
+- Source metadata fills only blank survivor fields.
+- Favorite, hidden, and manual representative choices are not overwritten.
+- Shared-space aliases migrate from source to survivor without replacing existing survivor aliases.
+- Invalid or missing representative faces are repaired after merge.
+
+**Implementation scope:**
+
+- Harden personal profile merge helpers.
+- Harden shared-space profile merge helpers.
+- Reuse existing feature-photo and shared-space representative-face repair paths.
+- Ensure source person thumbnail cleanup is queued for deleted personal profiles.
+
+**TDD focus:**
+
+- Write repository-level tests for each metadata rule before changing helpers.
+- Add service-level tests proving the same rules hold through personal-origin and space-origin propagation.
+
+**Tests and edge cases:**
+
+- Target `name`, `birthDate`, `color`, `species`, `isFavorite`, `isHidden`, and `faceAssetId` are preserved unless blank-fill is allowed.
+- Manual personal feature face is preserved if still valid and repaired only when missing or invalid.
+- Shared-space `name`, `birthDate`, `isHidden`, `representativeFaceId`, and `representativeFaceSource` are preserved.
+- Manual shared-space `nameSource` and `birthDateSource` are not overwritten.
+- Shared-space aliases migrate and existing survivor aliases win conflicts.
+- Shared-space `faceCount` and `assetCount` are recounted after profile merges.
+- Deleted personal source thumbnails are queued through the existing cleanup path.
+
+**Exit criteria:**
+
+- The propagation engine can collapse profiles without silently overwriting local user metadata or choices.
+
+### Slice 5: Transactionality, Concurrency, And Follow-Up Hardening
+
+**Goal:** Manual propagation is atomic, resilient to races, and keeps follow-up work consistent.
+
+**User-visible behavior:**
+
+- A failed propagation does not leave half-merged people or identities.
+- Concurrent overlapping merges either serialize cleanly, retry, or fail without uniqueness violations or partial state.
+- Follow-up jobs are queued once per affected identity/space.
+- Automatic reconciliation keeps its existing conservative behavior.
+
+**Implementation scope:**
+
+- Make the propagation executor run profile merges and identity collapse in a single transaction where possible.
+- Ensure transactional repository helpers accept a caller-provided transaction handle.
+- Add the lower-level identity collapse path that assumes profile conflicts have already been resolved.
+- Keep the existing conflict-checking identity merge path for automatic reconciliation.
+- Define behavior for follow-up queue failures after the transaction and activity write failures inside the transaction.
+
+**TDD focus:**
+
+- Use medium/database-backed tests where mocks cannot prove unique-constraint ordering, transaction rollback, or concurrency behavior.
+- Add failure injection tests before adding retry or rollback handling.
+
+**Tests and edge cases:**
+
+- Transaction rolls back if one planned profile merge fails.
+- Executor error midway rolls back all profile and identity changes.
+- Activity write failure during the transaction rolls back with profile and identity changes.
+- Follow-up queue failure after the transaction leaves the core merge consistent and is logged/retryable.
 - Database unique constraints for `(ownerId, identityId)` and `(spaceId, identityId)` are not violated during execution.
+- Concurrent merge of overlapping identities results in one successful transaction and one clean retry/failure path.
+- Identity cleanup deletes source identities only when no faces or profiles still reference them.
+- Identity with faces but no profile in a scope collapses identity faces without creating profile work for that scope.
+- Existing automatic reconciliation conflicts still skip and do not call manual propagation.
 
-### API And Integration Tests
+**Exit criteria:**
 
-Controller or service-level integration tests should cover:
-
-- `mergePerson` routes through the propagation service after validating `PersonMerge` access.
-- `mergeSpacePeople` routes through the propagation service after validating editor+ role.
-- Automatic shared-space identity reconciliation keeps its old behavior: it skips conflicts instead of invoking manual propagation.
-- A full space-origin merge can propagate into another space and personal people in one operation.
-- A full personal-origin merge can propagate into multiple spaces in one operation.
-
-Use medium/database-backed tests where mocks cannot prove transactionality, unique-constraint ordering, or rollback behavior.
-
-### Edge Cases
-
-Explicitly test these edge cases:
-
-| Edge Case | Expected Behavior |
-| --- | --- |
-| Empty source list | Reject before planning or execution. |
-| Source id equals target id | Reject as self-merge. |
-| Duplicate source ids | Deduplicate without duplicate work or duplicate activity. |
-| Missing initiating target | Reject the initiating merge. |
-| Missing initiating source | Personal merge returns per-source failure without mutating any source; space merge rejects the request. |
-| Source already has target identity | No profile merge is planned for that source unless duplicate profiles still exist in a scope. |
-| Profile has no identity | Ensure identity before planning. |
-| Identity has faces but no profile in a scope | Collapse identity faces without creating profile work for that scope. |
-| Scope has one affected profile | Keep the profile and update it to the final identity. |
-| Scope has multiple affected profiles | Merge source profiles into one survivor before identity collapse. |
-| Other space has duplicates | Merge duplicate people in that other space and write propagated activity there. |
-| Other space has only one profile | Do not delete it; update/link identity only. |
-| Multiple owners have different profile layouts | Plan personal merges per owner independently. |
-| Hidden source or target profiles | Preserve survivor hidden state; do not copy hidden state from source. |
-| Favorite source profile | Do not copy favorite state to survivor. |
-| Manual personal feature face | Preserve if still valid; repair only when missing/invalid. |
-| Manual shared-space representative face | Preserve if still valid; repair only when missing/invalid. |
-| Manual shared-space name or birthday source | Do not overwrite with propagated metadata. |
-| Blank survivor metadata and useful source metadata | Fill only blank survivor fields. |
-| Conflicting aliases during space merge | Existing survivor alias wins. |
-| Mixed `person` and `pet` identities | Reject and roll back. |
-| Concurrent merge of overlapping identities | One transaction succeeds; the other retries or fails cleanly without uniqueness violations or partial state. |
-| Follow-up queue failure after DB transaction | Core merge remains consistent; failure is logged/retryable. |
-| Activity write failure during transaction | Roll back with the profile and identity changes. |
-| Executor error midway | Roll back all profile and identity changes. |
-| Existing automatic reconciliation conflict | Still skips and does not call manual propagation. |
+- The full feature can be considered releasable after this slice and its verification suite pass.
 
 ## Future Tightening
 
