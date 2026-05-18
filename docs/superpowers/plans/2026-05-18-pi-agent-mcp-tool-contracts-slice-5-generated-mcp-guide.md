@@ -105,20 +105,20 @@ Do not modify:
 
 ## Slice 5 Edge Case Matrix
 
-| Area | Case | Expected Slice 5 Result |
-| --- | --- | --- |
-| Drift | Generated doc changes when contract changes | Drift test compares committed Markdown to renderer output and fails |
-| Tool coverage | New contract tool exists | Guide includes a section for every `listToolContracts()` entry |
-| Mode coverage | Tool has multiple modes | Guide includes every `argumentModes` entry and matching examples |
-| JSON-RPC wrapper | `tools/call` example | Uses `params.name` and `params.arguments`; never `input` or top-level arguments |
-| Tool args | Every documented tool-argument example and marked Markdown block | Parses through `AgentReadToolRequestSchemas` or `AgentOperationPlanToolRequestSchemas` |
-| JSON-RPC handling | Initialize/list/call examples | Pass through `AgentMcpService.handle()` with expected success or delegated service call |
-| Approval flow | Read approval retry | Guide states stop after approval-required and retry with only `toolCallId` if resumed without result |
-| Planning | Create album examples | Guide includes create-empty-album and create-album-and-add-assets examples |
-| Safety | Direct apply | Guide states no apply tool exists; generated tool list has no apply/direct mutation tool |
-| Security | Secrets/internal details | Guide uses placeholders only and does not include real tokens, provider secrets, stack traces, filesystem paths, or undocumented routes |
-| Prefix clarity | Pi-visible vs MCP names | Guide distinguishes bare MCP names from future Pi-visible `mcp_gallery_` names |
-| Markdown | JSON fences | All generated JSON fences parse as JSON and are stable/prettier-friendly |
+| Area              | Case                                                             | Expected Slice 5 Result                                                                                                                 |
+| ----------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Drift             | Generated doc changes when contract changes                      | Drift test compares committed Markdown to renderer output and fails                                                                     |
+| Tool coverage     | New contract tool exists                                         | Guide includes a section for every `listToolContracts()` entry                                                                          |
+| Mode coverage     | Tool has multiple modes                                          | Guide includes every `argumentModes` entry and matching examples                                                                        |
+| JSON-RPC wrapper  | `tools/call` example                                             | Uses `params.name` and `params.arguments`; never `input` or top-level arguments                                                         |
+| Tool args         | Every documented tool-argument example and marked Markdown block | Parses through `AgentReadToolRequestSchemas` or `AgentOperationPlanToolRequestSchemas`                                                  |
+| JSON-RPC handling | Initialize/list/call examples                                    | Pass through `AgentMcpService.handle()` with expected success or delegated service call                                                 |
+| Approval flow     | Read approval retry                                              | Guide states stop after approval-required and retry with only `toolCallId` if resumed without result                                    |
+| Planning          | Create album examples                                            | Guide includes create-empty-album and create-album-and-add-assets examples                                                              |
+| Safety            | Direct apply                                                     | Guide states no apply tool exists; generated tool list has no apply/direct mutation tool                                                |
+| Security          | Secrets/internal details                                         | Guide uses placeholders only and does not include real tokens, provider secrets, stack traces, filesystem paths, or undocumented routes |
+| Prefix clarity    | Pi-visible vs MCP names                                          | Guide distinguishes bare MCP names from future Pi-visible `mcp_gallery_` names                                                          |
+| Markdown          | JSON fences                                                      | All generated JSON fences parse as JSON and are stable/prettier-friendly                                                                |
 
 ---
 
@@ -133,16 +133,13 @@ Do not modify:
 
 Create `server/src/services/agent-mcp-docs.service.spec.ts` with these tests:
 
-```ts
+````ts
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.dto';
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
 import { AgentToolName } from 'src/enum';
-import {
-  AGENT_MCP_GENERATED_DOC_RELATIVE_PATH,
-  AgentMcpDocsService,
-} from 'src/services/agent-mcp-docs.service';
+import { AGENT_MCP_GENERATED_DOC_RELATIVE_PATH, AgentMcpDocsService } from 'src/services/agent-mcp-docs.service';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 
 const forbiddenGeneratedDocPattern =
@@ -299,7 +296,7 @@ describe(AgentMcpDocsService.name, () => {
     expect(committed).toBe(sut.generateMarkdown());
   });
 });
-```
+````
 
 - [ ] **Step 2: Add failing runtime coverage for generated JSON-RPC examples**
 
@@ -312,54 +309,54 @@ import { AgentMcpDocsService } from 'src/services/agent-mcp-docs.service';
 After the existing `returns enriched planning tool metadata through tools/list` test, add:
 
 ```ts
-  describe('generated docs JSON-RPC examples', () => {
-    let docsService: AgentMcpDocsService;
+describe('generated docs JSON-RPC examples', () => {
+  let docsService: AgentMcpDocsService;
 
-    beforeEach(() => {
-      docsService = new AgentMcpDocsService(contractService);
-    });
+  beforeEach(() => {
+    docsService = new AgentMcpDocsService(contractService);
+  });
 
-    it.each(['initialize', 'tools-list'] as const)('handles the documented %s JSON-RPC example', async (name) => {
-      const example = docsService.listJsonRpcExamples().find((candidate) => candidate.name === name)!;
-      const response = await sut.handle(auth, sessionId, example.request);
+  it.each(['initialize', 'tools-list'] as const)('handles the documented %s JSON-RPC example', async (name) => {
+    const example = docsService.listJsonRpcExamples().find((candidate) => candidate.name === name)!;
+    const response = await sut.handle(auth, sessionId, example.request);
 
-      expect(response).toMatchObject({
-        jsonrpc: '2.0',
-        id: example.request.id,
-      });
-    });
-
-    it('handles the documented read tools/call JSON-RPC example without wrapper errors', async () => {
-      const serviceResult = { status: 'success', toolCall: null, assets: [] };
-      toolService.readAssetMetadata.mockResolvedValue(serviceResult as never);
-      const example = docsService.listJsonRpcExamples().find((candidate) => candidate.name === 'tools-call-read')!;
-
-      const response = (await sut.handle(auth, sessionId, example.request)) as AgentMcpSuccessResponse;
-
-      expect(toolService.readAssetMetadata).toHaveBeenCalledWith(auth, sessionId, {
-        assetIds: ['00000000-0000-4000-8000-000000000001'],
-      });
-      expectToolResult(response, 'read-1', serviceResult);
-    });
-
-    it('handles the documented planning tools/call JSON-RPC example without wrapper errors', async () => {
-      const serviceResult = makePlanningServiceResult();
-      operationPlanService.proposeAlbumOperations.mockResolvedValue(serviceResult as never);
-      const example = docsService.listJsonRpcExamples().find((candidate) => candidate.name === 'tools-call-plan')!;
-
-      const response = (await sut.handle(auth, sessionId, example.request)) as AgentMcpSuccessResponse;
-
-      expect(operationPlanService.proposeAlbumOperations).toHaveBeenCalledWith(
-        auth,
-        sessionId,
-        expect.objectContaining({
-          summary: 'Create today test album.',
-          operations: expect.any(Array),
-        }),
-      );
-      expectToolResult(response, 'plan-1', serviceResult);
+    expect(response).toMatchObject({
+      jsonrpc: '2.0',
+      id: example.request.id,
     });
   });
+
+  it('handles the documented read tools/call JSON-RPC example without wrapper errors', async () => {
+    const serviceResult = { status: 'success', toolCall: null, assets: [] };
+    toolService.readAssetMetadata.mockResolvedValue(serviceResult as never);
+    const example = docsService.listJsonRpcExamples().find((candidate) => candidate.name === 'tools-call-read')!;
+
+    const response = (await sut.handle(auth, sessionId, example.request)) as AgentMcpSuccessResponse;
+
+    expect(toolService.readAssetMetadata).toHaveBeenCalledWith(auth, sessionId, {
+      assetIds: ['00000000-0000-4000-8000-000000000001'],
+    });
+    expectToolResult(response, 'read-1', serviceResult);
+  });
+
+  it('handles the documented planning tools/call JSON-RPC example without wrapper errors', async () => {
+    const serviceResult = makePlanningServiceResult();
+    operationPlanService.proposeAlbumOperations.mockResolvedValue(serviceResult as never);
+    const example = docsService.listJsonRpcExamples().find((candidate) => candidate.name === 'tools-call-plan')!;
+
+    const response = (await sut.handle(auth, sessionId, example.request)) as AgentMcpSuccessResponse;
+
+    expect(operationPlanService.proposeAlbumOperations).toHaveBeenCalledWith(
+      auth,
+      sessionId,
+      expect.objectContaining({
+        summary: 'Create today test album.',
+        operations: expect.any(Array),
+      }),
+    );
+    expectToolResult(response, 'plan-1', serviceResult);
+  });
+});
 ```
 
 - [ ] **Step 3: Run the docs and runtime specs and verify they fail**
@@ -636,10 +633,7 @@ Create `server/src/bin/sync-agent-mcp-docs.ts`:
 #!/usr/bin/env node
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import {
-  AGENT_MCP_GENERATED_DOC_RELATIVE_PATH,
-  AgentMcpDocsService,
-} from 'src/services/agent-mcp-docs.service';
+import { AGENT_MCP_GENERATED_DOC_RELATIVE_PATH, AgentMcpDocsService } from 'src/services/agent-mcp-docs.service';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 
 const sync = async () => {
