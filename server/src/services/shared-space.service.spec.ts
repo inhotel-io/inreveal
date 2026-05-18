@@ -4007,6 +4007,13 @@ describe(SharedSpaceService.name, () => {
       const result = await sut.handleSharedSpaceFaceMatchFromBackfill({ spaceId: 'space-1', assetId: 'asset-1' });
 
       expect(result).toBe(JobStatus.Skipped);
+      expect(mocks.sharedSpace.isAssetInSpace).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.getAssetFacesForMatching).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.getPetFacesForAsset).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.createPerson).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.addPersonFaces).not.toHaveBeenCalled();
+      expect(mocks.job.queue).not.toHaveBeenCalled();
     });
 
     it('should skip when face recognition is disabled on the space', async () => {
@@ -4016,6 +4023,34 @@ describe(SharedSpaceService.name, () => {
       const result = await sut.handleSharedSpaceFaceMatchFromBackfill({ spaceId: space.id, assetId: 'asset-1' });
 
       expect(result).toBe(JobStatus.Skipped);
+      expect(mocks.sharedSpace.isAssetInSpace).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.getAssetFacesForMatching).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.getPetFacesForAsset).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.createPerson).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.addPersonFaces).not.toHaveBeenCalled();
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('skips safely when a from-backfill asset is no longer in the space before execution', async () => {
+      const spaceId = newUuid();
+      const assetId = newUuid();
+
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+      mocks.sharedSpace.isAssetInSpace.mockResolvedValue(false);
+
+      const result = await sut.handleSharedSpaceFaceMatchFromBackfill({ spaceId, assetId });
+
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.sharedSpace.getAssetFacesForMatching).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.getPetFacesForAsset).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.removePersonFaceAssignmentsForSpaceFace).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.createPerson).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.updatePerson).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.addPersonFaces).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.recountPersons).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.deleteOrphanedPersonsByIds).not.toHaveBeenCalled();
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.SharedSpacePersonDedup, data: { spaceId } });
     });
 
     it('should queue dedup pass after successful face match', async () => {
