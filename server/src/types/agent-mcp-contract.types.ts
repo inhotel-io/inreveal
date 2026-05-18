@@ -1,0 +1,81 @@
+import type { AgentToolName } from 'src/enum';
+
+export type AgentMcpArgumentMode = {
+  name: string;
+  description: string;
+  requiredFields: string[];
+  forbiddenFields: string[];
+  whenToUse: string;
+};
+
+export type AgentMcpToolExample = {
+  name: string;
+  description: string;
+  arguments: Record<string, unknown>;
+};
+
+export type AgentMcpCommonMistake = {
+  id: string;
+  match: {
+    issuePath?: string;
+    messageIncludes?: string;
+    missingField?: string;
+    unexpectedField?: string;
+    requestShape?: 'json-rpc' | 'tool-arguments';
+  };
+  hint: string;
+  exampleName?: string;
+};
+
+export type AgentMcpApprovalRetryContract = {
+  field: 'toolCallId';
+  instruction: string;
+};
+
+export type AgentMcpToolSafetyContract = {
+  allowsDirectMutation: false;
+  exposesSecrets: false;
+  requiresGalleryApplyForWrites: true;
+};
+
+export type AgentMcpToolContract<TName extends AgentToolName = AgentToolName> = {
+  name: TName;
+  title: string;
+  description: string;
+  usage: string;
+  argumentModes: AgentMcpArgumentMode[];
+  examples: AgentMcpToolExample[];
+  commonMistakes: AgentMcpCommonMistake[];
+  approvalRetry?: AgentMcpApprovalRetryContract;
+  safety: AgentMcpToolSafetyContract;
+};
+
+export type AgentMcpReadToolName =
+  | AgentToolName.SearchAssets
+  | AgentToolName.ReadAssetMetadata
+  | AgentToolName.ReadAssetPreviews
+  | AgentToolName.ReadAssetOriginals
+  | AgentToolName.ListAlbums
+  | AgentToolName.ReadAlbum;
+
+export type AgentMcpReadToolContract = AgentMcpToolContract<AgentMcpReadToolName>;
+
+export type AgentMcpFailureMatrixExpectedResult =
+  | {
+      kind: 'tool-validation';
+      expectedIssuePath: string;
+    }
+  | {
+      kind: 'protocol-error';
+      expectedErrorMessage: string;
+    };
+
+export type AgentMcpFailureMatrixCase = {
+  id: string;
+  category: 'request-wrapper' | 'read-retry' | 'read-request' | 'album-read' | 'search' | 'safety';
+  description: string;
+  toolName?: AgentToolName;
+  request: Record<string, unknown>;
+  expectedResult: AgentMcpFailureMatrixExpectedResult;
+  expectedContractMistakeId?: string;
+};
