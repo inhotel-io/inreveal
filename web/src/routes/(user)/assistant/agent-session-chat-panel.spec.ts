@@ -582,6 +582,19 @@ describe(AgentSessionChatPanel.name, () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load messages');
   });
 
+  it('does not keep the assistant busy indicator for an interrupted session with stale pending state', async () => {
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.Interrupted },
+        seedMessages: [makeMessage('message-user', AgentMessageRole.User, 'Create album zzz')],
+        assistantResponsePending: true,
+      },
+    });
+
+    expect(await screen.findByText('Create album zzz')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('pi is working...')).not.toBeInTheDocument());
+  });
+
   it('sends a user message and clears input', async () => {
     const returnedMessage = makeMessage('message-created', AgentMessageRole.User, 'Organize favorites');
     sdkMock.appendAgentSessionMessage.mockResolvedValue(returnedMessage);
