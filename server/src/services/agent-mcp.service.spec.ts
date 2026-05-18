@@ -1,6 +1,7 @@
 import { serverVersion } from 'src/constants';
 import type { AuthDto } from 'src/dtos/auth.dto';
 import { AgentOperationRiskLevel, AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
+import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import { AgentMcpService } from 'src/services/agent-mcp.service';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
@@ -71,6 +72,18 @@ const expectToolResult = (
 };
 
 const expectToolValidationError = (response: AgentMcpSuccessResponse, path: string) => {
+  const result = response.result as AgentMcpToolCallResult;
+
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent).toMatchObject({
+    status: 'error',
+    error: 'Invalid tool arguments',
+    issues: expect.arrayContaining([expect.objectContaining({ path })]),
+  });
+  expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+};
+
+const expectToolValidationErrorPath = (response: AgentMcpSuccessResponse, path: string) => {
   const result = response.result as AgentMcpToolCallResult;
 
   expect(result.isError).toBe(true);
@@ -542,6 +555,94 @@ describe(AgentMcpService.name, () => {
     expect(toolService.searchAssets).not.toHaveBeenCalled();
     expect(toolService.readAssetMetadata).not.toHaveBeenCalled();
     expect(toolService.readAlbum).not.toHaveBeenCalled();
+  });
+
+  describe('slice 1 small-model read failure matrix', () => {
+    let contractService: AgentMcpToolContractService;
+
+    beforeEach(() => {
+      contractService = new AgentMcpToolContractService();
+    });
+
+    it.each(
+      new AgentMcpToolContractService()
+        .listSlice1RuntimeFailureMatrixCases()
+        .filter((failureCase) => failureCase.expectedResult.kind === 'tool-validation'),
+    )('keeps runtime validation baseline for $id', async (failureCase) => {
+      const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+
+      if (failureCase.expectedResult.kind !== 'tool-validation') {
+        throw new Error(`Expected tool-validation case for ${failureCase.id}`);
+      }
+
+      expectToolValidationErrorPath(response, failureCase.expectedResult.expectedIssuePath);
+      expect(toolService.searchAssets).not.toHaveBeenCalled();
+      expect(toolService.readAssetMetadata).not.toHaveBeenCalled();
+      expect(toolService.readAssetPreviews).not.toHaveBeenCalled();
+      expect(toolService.readAssetOriginals).not.toHaveBeenCalled();
+      expect(toolService.listAlbums).not.toHaveBeenCalled();
+      expect(toolService.readAlbum).not.toHaveBeenCalled();
+    });
+
+    it.each(
+      new AgentMcpToolContractService()
+        .listSlice1RuntimeFailureMatrixCases()
+        .filter((failureCase) => failureCase.expectedResult.kind === 'protocol-error'),
+    )('keeps runtime protocol-error baseline for $id', async (failureCase) => {
+      const response = await sut.handle(auth, sessionId, failureCase.request);
+
+      if (failureCase.expectedResult.kind !== 'protocol-error') {
+        throw new Error(`Expected protocol-error case for ${failureCase.id}`);
+      }
+
+      expect(response).toMatchObject({
+        jsonrpc: '2.0',
+        id: failureCase.request.id,
+        error: {
+          message: failureCase.expectedResult.expectedErrorMessage,
+        },
+      });
+      expect(toolService.searchAssets).not.toHaveBeenCalled();
+      expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
+      expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
+      expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
+    });
+
+    it('keeps all slice 1 failure cases unique and documented', () => {
+      const cases = contractService.listSlice1RuntimeFailureMatrixCases();
+
+      expect(new Set(cases.map((failureCase) => failureCase.id)).size).toBe(cases.length);
+      for (const failureCase of cases) {
+        expect(failureCase.description.trim().length).toBeGreaterThan(20);
+        expect(failureCase.category).toEqual(expect.any(String));
+      }
+    });
+
+    it('connects read-tool failure cases to contract common mistakes', () => {
+      const expectedReadToolNameSet = new Set<AgentToolName>([
+        AgentToolName.SearchAssets,
+        AgentToolName.ReadAssetMetadata,
+        AgentToolName.ReadAssetPreviews,
+        AgentToolName.ReadAssetOriginals,
+        AgentToolName.ListAlbums,
+        AgentToolName.ReadAlbum,
+      ]);
+      const contractsByName = new Map(
+        contractService.listReadToolContracts().map((contract) => [contract.name, contract]),
+      );
+
+      for (const failureCase of contractService.listSlice1RuntimeFailureMatrixCases()) {
+        if (!failureCase.toolName || !expectedReadToolNameSet.has(failureCase.toolName)) {
+          continue;
+        }
+
+        const mistakeIds = contractsByName.get(failureCase.toolName)?.commonMistakes.map((mistake) => mistake.id) ?? [];
+
+        expect(mistakeIds, `${failureCase.id} should map to ${failureCase.toolName}`).toContain(
+          failureCase.expectedContractMistakeId,
+        );
+      }
+    });
   });
 
   describe('planning argument validation', () => {
