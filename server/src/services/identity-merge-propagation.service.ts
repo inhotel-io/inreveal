@@ -105,6 +105,7 @@ export class IdentityMergePropagationService {
     sourcePersonIds: string[],
   ): Promise<BulkIdResponseDto[]> {
     const { plan, followUps } = await this.deps.databaseRepository.transaction(async (db) => {
+      await this.lockMergePropagation(db);
       const plan = await this.buildPersonalMergePlan(
         {
           actorUserId: auth.user.id,
@@ -129,6 +130,7 @@ export class IdentityMergePropagationService {
     sourcePersonIds: string[],
   ): Promise<void> {
     const { plan, followUps } = await this.deps.databaseRepository.transaction(async (db) => {
+      await this.lockMergePropagation(db);
       const plan = await this.buildSpaceMergePlan(
         {
           actorUserId: auth.user.id,
@@ -147,6 +149,7 @@ export class IdentityMergePropagationService {
 
   async executePlan(plan: IdentityMergePropagationPlan, _context: { actorUserId: string }): Promise<void> {
     const followUps = await this.deps.databaseRepository.transaction(async (db) => {
+      await this.lockMergePropagation(db);
       await this.lockPlanForExecution(plan, db);
       return this.executePlanInTransaction(plan, db);
     });
@@ -171,6 +174,14 @@ export class IdentityMergePropagationService {
 
     await this.deps.personRepository.lockPeopleForMerge(personIds, db);
     await this.deps.sharedSpaceRepository.lockSpacePeopleForMerge(spacePersonIds, db);
+  }
+
+  private async lockMergePropagation(db: Transaction<DB>): Promise<void> {
+    if (typeof (db as { executeQuery?: unknown }).executeQuery !== 'function') {
+      return;
+    }
+
+    await sql`select pg_advisory_xact_lock(hashtext('identity-merge-propagation'))`.execute(db);
   }
 
   private async lockMergeIdentities(identityIds: string[], db: Transaction<DB>): Promise<void> {
