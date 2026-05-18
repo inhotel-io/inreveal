@@ -72,32 +72,54 @@ const expectToolResult = (
   });
 };
 
-const expectToolValidationError = (response: AgentMcpSuccessResponse, path: string) => {
+const expectEnrichedToolValidationError = (
+  response: AgentMcpSuccessResponse,
+  expected: {
+    toolName: AgentToolName;
+    path: string;
+    hintIncludes?: string;
+    expectedIncludes?: string;
+    exampleArguments?: Record<string, unknown>;
+  },
+) => {
   const result = response.result as AgentMcpToolCallResult;
+  const structuredContent = result.structuredContent as Record<string, unknown>;
 
   expect(result.isError).toBe(true);
-  expect(result.structuredContent).toMatchObject({
+  expect(structuredContent).toMatchObject({
     status: 'error',
     error: 'Invalid tool arguments',
-    issues: expect.arrayContaining([expect.objectContaining({ path })]),
+    toolName: expected.toolName,
+    retryable: true,
+    issues: expect.arrayContaining([expect.objectContaining({ path: expected.path })]),
   });
-  expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
-};
 
-const expectToolValidationErrorPath = (response: AgentMcpSuccessResponse, path: string) => {
-  const result = response.result as AgentMcpToolCallResult;
+  if (expected.hintIncludes) {
+    expect(structuredContent.hint).toEqual(expect.stringContaining(expected.hintIncludes));
+    expect(structuredContent.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: expected.path,
+          hint: expect.stringContaining(expected.hintIncludes),
+        }),
+      ]),
+    );
+  }
 
-  expect(result.isError).toBe(true);
-  expect(result.structuredContent).toMatchObject({
-    status: 'error',
-    error: 'Invalid tool arguments',
-    issues: expect.arrayContaining([expect.objectContaining({ path })]),
-  });
+  if (expected.expectedIncludes) {
+    expect(structuredContent.expected).toEqual(expect.stringContaining(expected.expectedIncludes));
+  }
+
+  if (expected.exampleArguments) {
+    expect(structuredContent.exampleArguments).toEqual(expected.exampleArguments);
+  }
+
   expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
 };
 
 describe(AgentMcpService.name, () => {
   let registry: AgentMcpToolRegistryService;
+  let contractService: AgentMcpToolContractService;
   let toolService: AutoMocked<AgentToolService>;
   let operationPlanService: AutoMocked<AgentOperationPlanService>;
   let sut: AgentMcpService;
@@ -108,9 +130,10 @@ describe(AgentMcpService.name, () => {
 
   beforeEach(() => {
     registry = new AgentMcpToolRegistryService();
+    contractService = new AgentMcpToolContractService();
     toolService = automock(AgentToolService, { strict: false });
     operationPlanService = automock(AgentOperationPlanService, { strict: false });
-    sut = new AgentMcpService(registry, toolService, operationPlanService);
+    sut = new AgentMcpService(registry, contractService, toolService, operationPlanService);
   });
 
   it('returns the MCP initialize result and advertises tools once tools/list exists', async () => {
@@ -552,19 +575,36 @@ describe(AgentMcpService.name, () => {
       makeToolCallRequest(toolName ?? AgentToolName.SearchAssets, args),
     )) as AgentMcpSuccessResponse;
 
-    expectToolValidationError(response, expectedPath);
+    expectEnrichedToolValidationError(response, {
+      toolName: toolName ?? AgentToolName.SearchAssets,
+      path: expectedPath,
+    });
     expect(toolService.searchAssets).not.toHaveBeenCalled();
     expect(toolService.readAssetMetadata).not.toHaveBeenCalled();
     expect(toolService.readAlbum).not.toHaveBeenCalled();
   });
 
+  it('does not serialize raw malformed argument values, secrets, routes, or filesystem paths in validation errors', async () => {
+    const response = (await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(AgentToolName.SearchAssets, {
+        token: 'bearer abc123',
+        internalRoute: '/api/agent/internal/mcp',
+        file: '/srv/gallery/provider-key.json',
+        filters: { isFavorite: true },
+      }),
+    )) as AgentMcpSuccessResponse;
+    const result = response.result as AgentMcpToolCallResult;
+    const serialized = JSON.stringify(result.structuredContent);
+
+    expect(serialized).not.toMatch(
+      /token|internalRoute|file|bearer|abc123|\/api\/agent\/internal|\/srv\/gallery|provider-key/i,
+    );
+    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+  });
+
   describe('slice 1 small-model read failure matrix', () => {
-    let contractService: AgentMcpToolContractService;
-
-    beforeEach(() => {
-      contractService = new AgentMcpToolContractService();
-    });
-
     it.each(
       new AgentMcpToolContractService()
         .listSlice1RuntimeFailureMatrixCases()
@@ -576,13 +616,105 @@ describe(AgentMcpService.name, () => {
         throw new Error(`Expected tool-validation case for ${failureCase.id}`);
       }
 
-      expectToolValidationErrorPath(response, failureCase.expectedResult.expectedIssuePath);
+      expectEnrichedToolValidationError(response, {
+        toolName: failureCase.toolName!,
+        path: failureCase.expectedResult.expectedIssuePath,
+      });
       expect(toolService.searchAssets).not.toHaveBeenCalled();
       expect(toolService.readAssetMetadata).not.toHaveBeenCalled();
       expect(toolService.readAssetPreviews).not.toHaveBeenCalled();
       expect(toolService.readAssetOriginals).not.toHaveBeenCalled();
       expect(toolService.listAlbums).not.toHaveBeenCalled();
       expect(toolService.readAlbum).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
+        id: 'read-input-instead-of-arguments',
+        hintIncludes: 'params.arguments',
+        exampleArguments: { assetIds: ['00000000-0000-4000-8000-000000000001'] },
+      },
+      {
+        id: 'read-arguments-array',
+        hintIncludes: 'must be a JSON object',
+        exampleArguments: { assetIds: ['00000000-0000-4000-8000-000000000001'] },
+      },
+      {
+        id: 'asset-read-combined-asset-ids-and-tool-call-id',
+        hintIncludes: 'not both',
+        expectedIncludes: 'Use assetIds for a new request',
+        exampleArguments: { toolCallId: '00000000-0000-4000-8000-000000000111' },
+      },
+      {
+        id: 'asset-read-duplicate-asset-ids',
+        hintIncludes: 'only once',
+        exampleArguments: { assetIds: ['00000000-0000-4000-8000-000000000001'] },
+      },
+      {
+        id: 'read-album-invalid-album-id',
+        hintIncludes: 'Album ids must be UUID strings',
+        exampleArguments: { albumId: '00000000-0000-4000-8000-000000000010' },
+      },
+      {
+        id: 'search-filters-outside-filters',
+        hintIncludes: 'inside the filters object',
+        exampleArguments: {
+          filters: {
+            takenAfter: '2026-05-01T00:00:00.000Z',
+            takenBefore: '2026-05-18T23:59:59.999Z',
+            city: 'Berlin',
+            country: 'Germany',
+          },
+          limit: 50,
+        },
+      },
+      {
+        id: 'search-limit-out-of-range',
+        hintIncludes: 'no greater than 10000',
+        exampleArguments: {
+          filters: {
+            isFavorite: true,
+            rating: 5,
+          },
+          limit: 25,
+        },
+      },
+    ])('returns an actionable correction for $id', async (expectation) => {
+      const failureCase = contractService
+        .listSlice1RuntimeFailureMatrixCases()
+        .find((candidate) => candidate.id === expectation.id)!;
+
+      const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+
+      if (failureCase.expectedResult.kind !== 'tool-validation' || !failureCase.toolName) {
+        throw new Error(`Expected tool-validation read case for ${failureCase.id}`);
+      }
+
+      expectEnrichedToolValidationError(response, {
+        toolName: failureCase.toolName,
+        path: failureCase.expectedResult.expectedIssuePath,
+        hintIncludes: expectation.hintIncludes,
+        expectedIncludes: expectation.expectedIncludes,
+        exampleArguments: expectation.exampleArguments,
+      });
+    });
+
+    it('adds correction fields for every read-tool failure matrix case', async () => {
+      for (const failureCase of contractService
+        .listSlice1RuntimeFailureMatrixCases()
+        .filter((candidate) => candidate.expectedResult.kind === 'tool-validation')) {
+        const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+        const result = response.result as AgentMcpToolCallResult;
+        const structuredContent = result.structuredContent as Record<string, unknown>;
+
+        expect(failureCase.toolName, failureCase.id).toBeDefined();
+        expect(structuredContent.toolName, failureCase.id).toBe(failureCase.toolName);
+        expect(structuredContent.retryable, failureCase.id).toBe(true);
+        expect(typeof structuredContent.expected, failureCase.id).toBe('string');
+        expect(typeof structuredContent.hint, failureCase.id).toBe('string');
+        expect(structuredContent.exampleArguments, failureCase.id).toEqual(expect.any(Object));
+        expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+      }
     });
 
     it.each(
@@ -811,12 +943,35 @@ describe(AgentMcpService.name, () => {
           makeToolCallRequest(toolName, args),
         )) as AgentMcpSuccessResponse;
 
-        expectToolValidationError(response, expectedPath);
+        expectEnrichedToolValidationError(response, {
+          toolName,
+          path: expectedPath,
+        });
         expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
         expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
         expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
       },
     );
+
+    it('adds generic retry metadata for planning tools before planning contracts exist', async () => {
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(AgentToolName.ProposeAlbumOperations, undefined),
+      )) as AgentMcpSuccessResponse;
+      const result = response.result as AgentMcpToolCallResult;
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        status: 'error',
+        error: 'Invalid tool arguments',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        retryable: true,
+        issues: [{ path: 'arguments', message: 'arguments is required' }],
+      });
+      expect(result.structuredContent).not.toHaveProperty('exampleArguments');
+      expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+    });
   });
 
   it.each([
@@ -861,6 +1016,28 @@ describe(AgentMcpService.name, () => {
     });
   });
 
+  it('keeps unknown tools as JSON-RPC protocol errors instead of tool validation results', async () => {
+    const response = await sut.handle(auth, sessionId, {
+      jsonrpc: '2.0',
+      id: 'unknown-tool-protocol-error',
+      method: 'tools/call',
+      params: {
+        name: 'mcp_gallery_applyAlbumOperations',
+        arguments: { token: 'bearer abc' },
+      },
+    });
+
+    expect(response).toEqual({
+      jsonrpc: '2.0',
+      id: 'unknown-tool-protocol-error',
+      error: {
+        code: -32_602,
+        message: 'Unknown tool',
+        data: { toolName: 'mcp_gallery_applyAlbumOperations' },
+      },
+    });
+  });
+
   it('converts unexpected service failures to redacted JSON-RPC internal errors', async () => {
     toolService.readAssetMetadata.mockRejectedValue(
       new Error('secret bearer token abc /srv/gallery/provider-request.json stacktrace'),
@@ -871,6 +1048,19 @@ describe(AgentMcpService.name, () => {
     ).resolves.toEqual({
       jsonrpc: '2.0',
       id: `${AgentToolName.ReadAssetMetadata}-call`,
+      error: {
+        code: -32_603,
+        message: 'Internal error',
+      },
+    });
+  });
+
+  it('keeps service exceptions as redacted JSON-RPC internal errors', async () => {
+    toolService.searchAssets.mockRejectedValue(new Error('bearer token abc /srv/gallery/internal-route'));
+
+    await expect(sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.SearchAssets, {}))).resolves.toEqual({
+      jsonrpc: '2.0',
+      id: `${AgentToolName.SearchAssets}-call`,
       error: {
         code: -32_603,
         message: 'Internal error',
