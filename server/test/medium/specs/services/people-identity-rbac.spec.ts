@@ -2238,6 +2238,7 @@ describe('People identity RBAC projection', () => {
     const { ctx, sut, faceIdentityRepository } = setup();
     const { sut: sharedSpaceService } = setupSharedSpace();
     const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+    await ctx.database.deleteFrom('user').execute();
     const { user: owner } = await ctx.newUser();
     try {
       const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
@@ -2433,6 +2434,7 @@ describe('People identity RBAC projection', () => {
     ctx
       .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
       .set.mockResolvedValue();
+    await ctx.database.deleteFrom('user').execute();
     const { user: owner } = await ctx.newUser();
     try {
       const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
