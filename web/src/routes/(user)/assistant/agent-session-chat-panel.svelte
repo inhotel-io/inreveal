@@ -125,8 +125,16 @@
       latestActivityNeedingAssistantAt !== null &&
       (latestAssistantMessageAt === null || latestActivityNeedingAssistantAt > latestAssistantMessageAt),
   );
+  const canHavePendingAssistantResponse = $derived(
+    session.status === AgentSessionStatus.Created ||
+      session.status === AgentSessionStatus.Running ||
+      session.status === AgentSessionStatus.WaitingForToolApproval ||
+      session.status === AgentSessionStatus.WaitingForPlanReview,
+  );
   const isResponsePending = $derived(
-    isSending || isAssistantActive || assistantResponsePending || isRunningAwaitingAssistant,
+    isSending ||
+      (canHavePendingAssistantResponse &&
+        (isAssistantActive || assistantResponsePending || isRunningAwaitingAssistant)),
   );
   const canSend = $derived(draft.trim().length > 0 && !isResponsePending && !composerDisabled);
   const showAssistantBusyIndicator = $derived(isResponsePending && streamingText.length === 0 && !composerDisabled);
@@ -508,7 +516,7 @@
   });
 
   $effect(() => {
-    if (!terminalStatuses.has(session.status)) {
+    if (canHavePendingAssistantResponse && !terminalStatuses.has(session.status)) {
       return;
     }
 
