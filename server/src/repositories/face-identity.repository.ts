@@ -75,6 +75,10 @@ export type MergePropagationProfile = {
   faceCount: number;
 };
 
+export type MergePropagationProfileInput =
+  | { mode: 'profiles'; personIds: string[] }
+  | { mode: 'identities'; identityIds: string[] };
+
 export type AccessibleIdentityFaceMatch = {
   identityId: string;
   type: string;
@@ -1948,12 +1952,8 @@ export class FaceIdentityRepository {
     });
   }
 
-  async getMergePropagationProfiles(input: {
-    personIds?: string[];
-    identityIds?: string[];
-  }): Promise<MergePropagationProfile[]> {
-    const personIds = input.personIds ? [...new Set(input.personIds)].filter(Boolean) : [];
-    const identityIds = input.identityIds ? [...new Set(input.identityIds)].filter(Boolean) : [];
+  async getMergePropagationProfiles(input: MergePropagationProfileInput): Promise<MergePropagationProfile[]> {
+    const { personIds, identityIds } = this.parseMergePropagationProfileInput(input);
     const profiles: MergePropagationProfile[] = [];
 
     if (personIds.length > 0 || identityIds.length > 0) {
@@ -2016,6 +2016,33 @@ export class FaceIdentityRepository {
     }
 
     return profiles;
+  }
+
+  private parseMergePropagationProfileInput(input: MergePropagationProfileInput): {
+    personIds: string[];
+    identityIds: string[];
+  } {
+    switch (input.mode) {
+      case 'profiles': {
+        if (Object.hasOwn(input, 'identityIds')) {
+          throw new Error('Cannot lookup merge propagation profiles by profile ids and identity ids in the same call');
+        }
+
+        return { personIds: [...new Set(input.personIds)].filter(Boolean), identityIds: [] };
+      }
+
+      case 'identities': {
+        if (Object.hasOwn(input, 'personIds')) {
+          throw new Error('Cannot lookup merge propagation profiles by profile ids and identity ids in the same call');
+        }
+
+        return { personIds: [], identityIds: [...new Set(input.identityIds)].filter(Boolean) };
+      }
+
+      default: {
+        throw new Error('Invalid merge propagation profile lookup mode');
+      }
+    }
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
