@@ -1585,13 +1585,16 @@ export class SharedSpaceRepository {
       return;
     }
 
-    await db
+    const rows = await db
       .selectFrom('shared_space_person')
       .select('id')
       .where('id', 'in', [...new Set(personIds)].toSorted())
       .orderBy('id')
       .forUpdate()
       .execute();
+    if (rows.length !== new Set(personIds).size) {
+      throw new Error('Space person profile not found');
+    }
   }
 
   async updateSpacePersonIdentity(

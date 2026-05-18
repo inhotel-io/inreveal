@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { Kysely, Transaction } from 'kysely';
+import { Kysely, sql, Transaction } from 'kysely';
 import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { JobName, SharedSpaceActivityType } from 'src/enum';
@@ -113,6 +113,7 @@ export class IdentityMergePropagationService {
         },
         db,
       );
+      await this.lockPlanForExecution(plan, db);
       return { plan, followUps: await this.executePlanInTransaction(plan, db) };
     });
 
@@ -137,6 +138,7 @@ export class IdentityMergePropagationService {
         },
         db,
       );
+      await this.lockPlanForExecution(plan, db);
       return { plan, followUps: await this.executePlanInTransaction(plan, db) };
     });
 
@@ -144,8 +146,43 @@ export class IdentityMergePropagationService {
   }
 
   async executePlan(plan: IdentityMergePropagationPlan, _context: { actorUserId: string }): Promise<void> {
-    const followUps = await this.deps.databaseRepository.transaction((db) => this.executePlanInTransaction(plan, db));
+    const followUps = await this.deps.databaseRepository.transaction(async (db) => {
+      await this.lockPlanForExecution(plan, db);
+      return this.executePlanInTransaction(plan, db);
+    });
     await this.queueFollowUpsBestEffort(plan, followUps);
+  }
+
+  private async lockPlanForExecution(plan: IdentityMergePropagationPlan, db: Transaction<DB>): Promise<void> {
+    await this.lockMergeIdentities([plan.targetIdentityId, ...plan.sourceIdentityIds], db);
+
+    const personIds = [
+      ...plan.personalProfileMerges.flatMap((step) => [step.targetPersonId, ...step.sourcePersonIds]),
+      ...plan.profileIdentityUpdates
+        .filter((update) => update.kind === 'person')
+        .map((update) => update.profileId),
+    ];
+    const spacePersonIds = [
+      ...plan.spaceProfileMerges.flatMap((step) => [step.targetPersonId, ...step.sourcePersonIds]),
+      ...plan.profileIdentityUpdates
+        .filter((update) => update.kind === 'space-person')
+        .map((update) => update.profileId),
+    ];
+
+    await this.deps.personRepository.lockPeopleForMerge(personIds, db);
+    await this.deps.sharedSpaceRepository.lockSpacePeopleForMerge(spacePersonIds, db);
+  }
+
+  private async lockMergeIdentities(identityIds: string[], db: Transaction<DB>): Promise<void> {
+    if (typeof (db as { executeQuery?: unknown }).executeQuery !== 'function') {
+      return;
+    }
+
+    for (const identityId of [...new Set(identityIds)].toSorted()) {
+      await sql`select pg_advisory_xact_lock(hashtext('identity-merge-propagation'), hashtext(${identityId}))`.execute(
+        db,
+      );
+    }
   }
 
   private async executePlanInTransaction(
@@ -277,7 +314,6 @@ export class IdentityMergePropagationService {
   ): Promise<IdentityMergePropagationPlan> {
     const sourcePersonIds = [...new Set(input.sourcePersonIds)].filter((id) => id !== input.targetPersonId);
     const originPersonIds = [input.targetPersonId, ...sourcePersonIds];
-    await this.deps.personRepository.lockPeopleForMerge(originPersonIds, db);
     const originProfiles = await this.deps.faceIdentityRepository.getMergePropagationProfiles(
       {
         mode: 'profiles',
@@ -420,8 +456,6 @@ export class IdentityMergePropagationService {
     db?: DbOrTransaction,
   ): Promise<IdentityMergePropagationPlan> {
     const sourcePersonIds = [...new Set(input.sourcePersonIds)].filter((id) => id !== input.targetPersonId);
-    const originPersonIds = [input.targetPersonId, ...sourcePersonIds];
-    await this.deps.sharedSpaceRepository.lockSpacePeopleForMerge(originPersonIds, db);
 
     const target = await this.deps.sharedSpaceRepository.getPersonById(input.targetPersonId, db);
     if (!target || target.spaceId !== input.spaceId) {
