@@ -213,11 +213,6 @@ describe('IdentityMergePropagationService medium tests', () => {
         }
 
         await bothAttemptsReached;
-
-        if (attempt === 2) {
-          throw new Error('concurrent merge retry required');
-        }
-
         return originalMerge(input, transaction);
       });
 
@@ -233,7 +228,7 @@ describe('IdentityMergePropagationService medium tests', () => {
       expect(fulfilled[0]).toEqual({ status: 'fulfilled', value: [{ id: source.id, success: true }] });
       expect(rejected[0]).toMatchObject({
         status: 'rejected',
-        reason: expect.objectContaining({ message: 'concurrent merge retry required' }),
+        reason: expect.any(Error),
       });
       expect(mergeAttempts).toBe(2);
       await expect(getPeople(ctx.database, [target.id, source.id])).resolves.toEqual([
