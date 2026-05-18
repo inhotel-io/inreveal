@@ -409,6 +409,44 @@ describe('SharedSpaceService linked-library face identity repair', () => {
     });
   });
 
+  it('removing direct assets removes selected-space face rows and deletes orphaned space people', async () => {
+    const { ctx, sut, faceIdentityRepository, sharedSpaceRepository } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+    const { library } = await ctx.newLibrary({ ownerId: user.id });
+    const face = await createIdentityFace(ctx, faceIdentityRepository, {
+      ownerId: user.id,
+      libraryId: library.id,
+      name: 'Alice',
+    });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: face.asset.id, addedById: user.id });
+
+    await expect(sut.handleSharedSpaceFaceMatch({ spaceId: space.id, assetId: face.asset.id })).resolves.toBe(
+      JobStatus.Success,
+    );
+    const projectedPerson = await ctx.database
+      .selectFrom('shared_space_person')
+      .selectAll()
+      .where('spaceId', '=', space.id)
+      .where('identityId', '=', face.identity.id)
+      .executeTakeFirstOrThrow();
+    await expect(getSelectedSpaceFaceRows(ctx, space.id)).resolves.toHaveLength(1);
+
+    await sut.removeAssets(factory.auth({ user: { id: user.id } }), space.id, { assetIds: [face.asset.id] });
+
+    await expect(getSelectedSpaceFaceRows(ctx, space.id)).resolves.toEqual([]);
+    await expect(sharedSpaceRepository.getPersonById(projectedPerson.id)).resolves.toBeUndefined();
+    await expect(
+      sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 }),
+    ).resolves.toMatchObject({
+      detectedFaceCount: 0,
+      assignedVisibleFaceCount: 0,
+      assignedHiddenFaceCount: 0,
+      unassignedFaceCount: 0,
+    });
+  });
+
   it('full-space rematch repairs stale selected-space face assignments from linked libraries', async () => {
     const { ctx, sut, faceIdentityRepository, sharedSpaceRepository, jobs } = setup();
     const { user } = await ctx.newUser();
