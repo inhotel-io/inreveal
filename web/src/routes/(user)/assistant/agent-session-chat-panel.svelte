@@ -1,13 +1,14 @@
 <script lang="ts">
   import { websocketEvents, type AgentSessionClientEvent } from '$lib/stores/websocket';
   import { handleError } from '$lib/utils/handle-error';
-  import { appendAgentSessionMessage, getAgentSessionMessages } from '@immich/sdk';
+  import { appendAgentSessionMessage, getAgentSessionMessages, getAppliedOperationPlans } from '@immich/sdk';
   import {
     AgentMessageRole,
     AgentMessageTextBlockType,
     AgentSessionStatus,
     AgentToolCallStatus,
     type AgentMessageResponseDto,
+    type AgentOperationPlanResponseDto,
     type AgentSessionResponseDto,
     type AgentToolCallResponseDto,
   } from '@immich/sdk';
@@ -22,6 +23,7 @@
     getAgentToolNameLabelKey,
   } from './agent-tool-approval-ui';
   import { deriveAgentSessionTitleFromMessages } from './agent-session-workspace-ui';
+  import AgentAppliedPlanTimelineCard from './agent-applied-plan-timeline-card.svelte';
 
   interface Props {
     session: AgentSessionResponseDto;
@@ -67,7 +69,8 @@
 
   type ChatTimelineItem =
     | { type: 'message'; id: string; occurredAt: string; message: AgentMessageResponseDto }
-    | { type: 'tool-call'; id: string; occurredAt: string; toolCall: AgentToolCallResponseDto };
+    | { type: 'tool-call'; id: string; occurredAt: string; toolCall: AgentToolCallResponseDto }
+    | { type: 'applied-plan'; id: string; occurredAt: string; plan: AgentOperationPlanResponseDto };
 
   let {
     session,
@@ -87,6 +90,7 @@
   }: Props = $props();
 
   let messages = $state<AgentMessageResponseDto[]>([]);
+  let appliedPlans = $state<AgentOperationPlanResponseDto[]>([]);
   let draft = $state('');
   let isSending = $state(false);
   let isAssistantActive = $state(false);
@@ -96,6 +100,7 @@
   let expandedToolCallIds = $state<Record<string, boolean>>({});
   let lastPublishedTitle: string | null = null;
   let cleanupWebsocketListener: (() => void) | undefined;
+  let appliedPlanLoadSequence = 0;
 
   const assistantContinuationToolStatuses = new Set<AgentToolCallStatus>([
     AgentToolCallStatus.Approved,
@@ -140,7 +145,7 @@
   const showAssistantBusyIndicator = $derived(isResponsePending && streamingText.length === 0 && !composerDisabled);
   const busyFrames = ['-', '\\', '|', '/'];
   const busyFrame = $derived(busyFrames[busyFrameIndex]);
-  const chatTimelineItems = $derived(buildChatTimelineItems(messages, toolCalls));
+  const chatTimelineItems = $derived(buildChatTimelineItems(messages, toolCalls, appliedPlans));
   const terminalStatuses = new Set<AgentSessionStatus>([
     AgentSessionStatus.Applying,
     AgentSessionStatus.Completed,
@@ -157,7 +162,14 @@
   function buildChatTimelineItems(
     timelineMessages: AgentMessageResponseDto[],
     timelineToolCalls: AgentToolCallResponseDto[],
+    timelineAppliedPlans: AgentOperationPlanResponseDto[],
   ): ChatTimelineItem[] {
+    const typePriority: Record<ChatTimelineItem['type'], number> = {
+      message: 0,
+      'tool-call': 1,
+      'applied-plan': 2,
+    };
+
     return [
       ...timelineMessages.map((message) => ({
         type: 'message' as const,
@@ -171,8 +183,35 @@
         occurredAt: toolCall.startedAt,
         toolCall,
       })),
-    ].sort((first, second) => first.occurredAt.localeCompare(second.occurredAt) || first.id.localeCompare(second.id));
+      ...dedupeAppliedPlans(timelineAppliedPlans).map((plan) => ({
+        type: 'applied-plan' as const,
+        id: `applied-plan-${plan.id}-${plan.revision}`,
+        occurredAt: plan.updatedAt,
+        plan,
+      })),
+    ].sort(
+      (first, second) =>
+        first.occurredAt.localeCompare(second.occurredAt) ||
+        typePriority[first.type] - typePriority[second.type] ||
+        first.id.localeCompare(second.id),
+    );
   }
+
+  function dedupeAppliedPlans(plans: AgentOperationPlanResponseDto[]) {
+    const plansByKey = new Map<string, AgentOperationPlanResponseDto>();
+
+    for (const plan of plans) {
+      plansByKey.set(`${plan.id}:${plan.revision}`, plan);
+    }
+
+    return [...plansByKey.values()];
+  }
+
+  const loadAppliedOperationPlans = async (sessionId: string) => {
+    const response = await getAppliedOperationPlans({ id: sessionId });
+
+    return Array.isArray(response) ? response : [];
+  };
 
   const getToolCallStatusLabel = (status: AgentToolCallStatus) => {
     if (status === AgentToolCallStatus.Completed) {
@@ -417,7 +456,12 @@
       return;
     }
 
-    if (event.type === 'operation-plan-ready' || event.type === 'operation-plan-applied') {
+    if (event.type === 'operation-plan-ready') {
+      return;
+    }
+
+    if (event.type === 'operation-plan-applied') {
+      void loadAppliedPlans();
       return;
     }
 
@@ -440,6 +484,26 @@
       messages = nextMessages;
       publishDiscoveredTitle(nextMessages);
     } catch (error) {
+      errorMessage = $t('assistant_message_load_error');
+      handleError(error, errorMessage);
+    }
+  };
+
+  const loadAppliedPlans = async () => {
+    const sequence = ++appliedPlanLoadSequence;
+
+    try {
+      const nextAppliedPlans = dedupeAppliedPlans(await loadAppliedOperationPlans(session.id));
+      if (sequence !== appliedPlanLoadSequence) {
+        return;
+      }
+
+      appliedPlans = nextAppliedPlans;
+    } catch (error) {
+      if (sequence !== appliedPlanLoadSequence) {
+        return;
+      }
+
       errorMessage = $t('assistant_message_load_error');
       handleError(error, errorMessage);
     }
@@ -513,6 +577,7 @@
   onMount(() => {
     cleanupWebsocketListener = websocketEvents.on('on_agent_session_event', handleSessionEvent);
     void loadMessages();
+    void loadAppliedPlans();
   });
 
   $effect(() => {
@@ -570,6 +635,7 @@
   });
 
   onDestroy(() => {
+    appliedPlanLoadSequence += 1;
     cleanupWebsocketListener?.();
   });
 </script>
@@ -699,6 +765,8 @@
               {/if}
             </article>
           {/if}
+        {:else if item.type === 'applied-plan'}
+          <AgentAppliedPlanTimelineCard plan={item.plan} />
         {:else}
           {@const toolCall = item.toolCall}
           {@const toolName = $t(getAgentToolNameLabelKey(toolCall.toolName))}
