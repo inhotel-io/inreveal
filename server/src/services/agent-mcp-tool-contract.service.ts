@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { AgentToolName } from 'src/enum';
 import type {
-  AgentMcpArgumentMode,
   AgentMcpApprovalRetryContract,
+  AgentMcpArgumentMode,
   AgentMcpCommonMistake,
   AgentMcpFailureMatrixCase,
   AgentMcpReadToolContract,
@@ -553,26 +553,10 @@ const slice1RuntimeFailureMatrixCases: AgentMcpFailureMatrixCase[] = [
   },
 ];
 
-const hideSafetySerializationFields = (contract: AgentMcpReadToolContract): AgentMcpReadToolContract => {
-  const contractCopy: AgentMcpReadToolContract = {
-    ...contract,
-    safety: { ...contract.safety },
-  };
-
-  Object.defineProperty(contractCopy.safety, 'toJSON', {
-    value: () => ({
-      allowsDirectMutation: contractCopy.safety.allowsDirectMutation,
-      requiresGalleryApplyForWrites: contractCopy.safety.requiresGalleryApplyForWrites,
-    }),
-  });
-
-  return contractCopy;
-};
-
 @Injectable()
 export class AgentMcpToolContractService {
   listReadToolContracts(): AgentMcpReadToolContract[] {
-    return structuredClone(readToolContracts).map(hideSafetySerializationFields);
+    return structuredClone(readToolContracts);
   }
 
   getReadToolContract(name: AgentMcpReadToolName): AgentMcpReadToolContract | undefined {

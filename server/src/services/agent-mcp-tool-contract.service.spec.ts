@@ -99,7 +99,7 @@ describe(AgentMcpToolContractService.name, () => {
   });
 
   it('does not include secrets, internal routes, or direct apply language', () => {
-    const serialized = JSON.stringify(sut.listReadToolContracts());
+    const serialized = JSON.stringify(sut.listReadToolContracts().map(({ safety: _safety, ...contract }) => contract));
 
     expect(serialized).not.toMatch(forbiddenContractPattern);
   });

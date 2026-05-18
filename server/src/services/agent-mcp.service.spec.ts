@@ -6,6 +6,7 @@ import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registr
 import { AgentMcpService } from 'src/services/agent-mcp.service';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
+import type { AgentMcpReadToolName } from 'src/types/agent-mcp-contract.types';
 import type { AgentMcpSuccessResponse, AgentMcpToolCallResult } from 'src/types/agent-mcp.types';
 import { factory } from 'test/small.factory';
 import { automock, type AutoMocked } from 'test/utils';
@@ -619,7 +620,7 @@ describe(AgentMcpService.name, () => {
     });
 
     it('connects read-tool failure cases to contract common mistakes', () => {
-      const expectedReadToolNameSet = new Set<AgentToolName>([
+      const expectedReadToolNames = new Set<AgentMcpReadToolName>([
         AgentToolName.SearchAssets,
         AgentToolName.ReadAssetMetadata,
         AgentToolName.ReadAssetPreviews,
@@ -627,12 +628,14 @@ describe(AgentMcpService.name, () => {
         AgentToolName.ListAlbums,
         AgentToolName.ReadAlbum,
       ]);
+      const isExpectedReadToolName = (toolName: AgentToolName): toolName is AgentMcpReadToolName =>
+        expectedReadToolNames.has(toolName as AgentMcpReadToolName);
       const contractsByName = new Map(
         contractService.listReadToolContracts().map((contract) => [contract.name, contract]),
       );
 
       for (const failureCase of contractService.listSlice1RuntimeFailureMatrixCases()) {
-        if (!failureCase.toolName || !expectedReadToolNameSet.has(failureCase.toolName)) {
+        if (!failureCase.toolName || !isExpectedReadToolName(failureCase.toolName)) {
           continue;
         }
 
