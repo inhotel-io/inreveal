@@ -1096,8 +1096,8 @@ export class SharedSpaceRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  getPersonById(id: string) {
-    return this.db
+  getPersonById(id: string, db: Kysely<DB> | Transaction<DB> = this.db) {
+    return db
       .selectFrom('shared_space_person')
       .selectAll('shared_space_person')
       .where('shared_space_person.id', '=', id)
