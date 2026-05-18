@@ -293,6 +293,37 @@ describe(AgentMcpService.name, () => {
     expect(previews?.inputSchema.oneOf).toEqual(expect.any(Array));
   });
 
+  it('returns enriched planning tool metadata through tools/list', async () => {
+    const response = (await sut.handle(auth, sessionId, {
+      jsonrpc: '2.0',
+      id: 'tools-enriched-planning-metadata',
+      method: 'tools/list',
+    })) as AgentMcpSuccessResponse;
+    const result = response.result as {
+      tools: Array<{ name: AgentToolName; description: string; inputSchema: Record<string, unknown> }>;
+    };
+    const proposal = result.tools.find((tool) => tool.name === AgentToolName.ProposeAlbumOperations);
+
+    expect(proposal?.description).toContain('reviewable Gallery operation plan');
+    expect(proposal?.inputSchema.examples).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          summary: 'Create today test album.',
+          operations: expect.any(Array),
+        }),
+        expect.objectContaining({
+          summary: 'Create today test and add selected photos.',
+          operations: expect.any(Array),
+        }),
+      ]),
+    );
+    expect(proposal?.inputSchema['x-gallery-argumentModes']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'operation-plan', requiredFields: ['summary', 'operations'] }),
+      ]),
+    );
+  });
+
   it.each([
     {
       toolName: AgentToolName.SearchAssets,
@@ -808,6 +839,117 @@ describe(AgentMcpService.name, () => {
   describe('planning argument validation', () => {
     const assetId = factory.uuid();
 
+    it.each(
+      new AgentMcpToolContractService()
+        .listSlice4PlanningFailureMatrixCases()
+        .filter((failureCase) => failureCase.expectedResult.kind === 'tool-validation'),
+    )('keeps runtime validation baseline for Slice 4 planning case $id', async (failureCase) => {
+      const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+
+      if (failureCase.expectedResult.kind !== 'tool-validation') {
+        throw new Error(`Expected tool-validation case for ${failureCase.id}`);
+      }
+
+      expectEnrichedToolValidationError(response, {
+        toolName: failureCase.toolName!,
+        path: failureCase.expectedResult.expectedIssuePath,
+      });
+      expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
+      expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
+      expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
+        id: 'planning-missing-arguments',
+        hintIncludes: 'params.arguments',
+        expectedIncludes: 'reviewable Gallery operation plan',
+      },
+      {
+        id: 'planning-missing-new-album-dependency',
+        hintIncludes: 'Create the new album or space first',
+        expectedIncludes: 'reviewable Gallery operation plan',
+      },
+      {
+        id: 'planning-wrong-album-target-kind',
+        hintIncludes: 'existing_album',
+        expectedIncludes: 'reviewable Gallery operation plan',
+      },
+      {
+        id: 'planning-wrong-space-target-kind',
+        hintIncludes: 'existing_space',
+        expectedIncludes: 'reviewable Gallery operation plan',
+      },
+      {
+        id: 'planning-wrong-asset-batch-target-kind',
+        hintIncludes: 'asset_batch',
+        expectedIncludes: 'reviewable Gallery operation plan',
+      },
+      {
+        id: 'planning-wrong-image-edit-target-kind',
+        hintIncludes: 'image_edit_batch',
+        expectedIncludes: 'reviewable Gallery operation plan',
+      },
+      {
+        id: 'planning-duplicate-asset-ids',
+        hintIncludes: 'only once',
+        expectedIncludes: 'reviewable Gallery operation plan',
+      },
+      {
+        id: 'planning-invalid-rotate-angle',
+        hintIncludes: '90, 180, or 270',
+        expectedIncludes: 'reviewable Gallery operation plan',
+      },
+      {
+        id: 'planning-invalid-tag-payload',
+        hintIncludes: 'exactly one of tagId or tagName',
+        expectedIncludes: 'reviewable Gallery operation plan',
+      },
+    ])('returns an actionable planning correction for $id', async (expectation) => {
+      const failureCase = contractService
+        .listSlice4PlanningFailureMatrixCases()
+        .find((candidate) => candidate.id === expectation.id)!;
+
+      const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+
+      if (failureCase.expectedResult.kind !== 'tool-validation' || !failureCase.toolName) {
+        throw new Error(`Expected tool-validation planning case for ${failureCase.id}`);
+      }
+
+      expectEnrichedToolValidationError(response, {
+        toolName: failureCase.toolName,
+        path: failureCase.expectedResult.expectedIssuePath,
+        hintIncludes: expectation.hintIncludes,
+        expectedIncludes: expectation.expectedIncludes,
+      });
+
+      const result = response.result as AgentMcpToolCallResult;
+      expect((result.structuredContent as Record<string, unknown>).exampleArguments).toEqual(expect.any(Object));
+    });
+
+    it.each(
+      new AgentMcpToolContractService()
+        .listSlice4PlanningFailureMatrixCases()
+        .filter((failureCase) => failureCase.expectedResult.kind === 'protocol-error'),
+    )('keeps runtime protocol-error baseline for Slice 4 planning case $id', async (failureCase) => {
+      const response = await sut.handle(auth, sessionId, failureCase.request);
+
+      if (failureCase.expectedResult.kind !== 'protocol-error') {
+        throw new Error(`Expected protocol-error case for ${failureCase.id}`);
+      }
+
+      expect(response).toMatchObject({
+        jsonrpc: '2.0',
+        id: failureCase.request.id,
+        error: {
+          message: failureCase.expectedResult.expectedErrorMessage,
+        },
+      });
+      expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
+      expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
+      expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
+    });
+
     it.each([
       {
         name: 'planning missing arguments',
@@ -978,7 +1120,7 @@ describe(AgentMcpService.name, () => {
       },
     );
 
-    it('adds generic retry metadata for planning tools before planning contracts exist', async () => {
+    it('adds contract-derived correction fields for planning tools', async () => {
       const response = (await sut.handle(auth, sessionId, {
         jsonrpc: '2.0',
         id: `${AgentToolName.ProposeAlbumOperations}-call`,
@@ -995,9 +1137,16 @@ describe(AgentMcpService.name, () => {
         error: 'Invalid tool arguments',
         toolName: AgentToolName.ProposeAlbumOperations,
         retryable: true,
-        issues: [{ path: 'arguments', message: 'arguments is required' }],
+        issues: [
+          { path: 'arguments', message: 'arguments is required', hint: expect.stringContaining('params.arguments') },
+        ],
+        expected: expect.stringContaining('reviewable Gallery operation plan'),
+        hint: expect.stringContaining('params.arguments'),
+        exampleArguments: expect.objectContaining({
+          summary: 'Create today test album.',
+          operations: expect.any(Array),
+        }),
       });
-      expect(result.structuredContent).not.toHaveProperty('exampleArguments');
       expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
     });
   });
