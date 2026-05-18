@@ -2,6 +2,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { AgentRunnerMcpController } from 'src/controllers/agent-runner-mcp.controller';
 import { AgentRunnerTokenGuard } from 'src/controllers/agent-runner-token.guard';
 import { AgentOperationRiskLevel, AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
+import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import { AgentMcpService } from 'src/services/agent-mcp.service';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
@@ -227,6 +228,7 @@ describe(AgentRunnerMcpController.name, () => {
       realCtx = await controllerSetup(AgentRunnerMcpController, [
         AgentRunnerTokenGuard,
         { provide: AgentRunnerToolTokenService, useValue: tokenService },
+        AgentMcpToolContractService,
         AgentMcpToolRegistryService,
         { provide: AgentToolService, useValue: realToolService },
         { provide: AgentOperationPlanService, useValue: realOperationPlanService },

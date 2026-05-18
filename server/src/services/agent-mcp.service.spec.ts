@@ -129,8 +129,8 @@ describe(AgentMcpService.name, () => {
   const auth = { user: { id: userId } } as AuthDto;
 
   beforeEach(() => {
-    registry = new AgentMcpToolRegistryService();
     contractService = new AgentMcpToolContractService();
+    registry = new AgentMcpToolRegistryService(contractService);
     toolService = automock(AgentToolService, { strict: false });
     operationPlanService = automock(AgentOperationPlanService, { strict: false });
     sut = new AgentMcpService(registry, contractService, toolService, operationPlanService);
@@ -266,6 +266,31 @@ describe(AgentMcpService.name, () => {
         tools: registry.listTools(),
       },
     });
+  });
+
+  it('returns enriched read tool metadata through tools/list', async () => {
+    const response = (await sut.handle(auth, sessionId, {
+      jsonrpc: '2.0',
+      id: 'tools-enriched-read-metadata',
+      method: 'tools/list',
+    })) as AgentMcpSuccessResponse;
+    const result = response.result as {
+      tools: Array<{ name: AgentToolName; description: string; inputSchema: Record<string, unknown> }>;
+    };
+    const previews = result.tools.find((tool) => tool.name === AgentToolName.ReadAssetPreviews);
+
+    expect(previews?.description).toContain('Use assetIds for a new request');
+    expect(previews?.inputSchema.examples).toEqual([
+      { assetIds: ['00000000-0000-4000-8000-000000000001'] },
+      { toolCallId: '00000000-0000-4000-8000-000000000111' },
+    ]);
+    expect(previews?.inputSchema['x-gallery-argumentModes']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'asset-ids', requiredFields: ['assetIds'], forbiddenFields: ['toolCallId'] }),
+        expect.objectContaining({ name: 'approved-retry', requiredFields: ['toolCallId'] }),
+      ]),
+    );
+    expect(previews?.inputSchema.oneOf).toEqual(expect.any(Array));
   });
 
   it.each([
