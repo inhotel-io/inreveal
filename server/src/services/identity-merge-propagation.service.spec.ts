@@ -461,6 +461,9 @@ const makeService = (profiles: MergeProfile[]) => {
   const jobRepository = {
     queue: vi.fn().mockResolvedValue(void 0),
   };
+  const logger = {
+    error: vi.fn(),
+  };
   const sharedSpaceRepository = {
     getPersonById: vi.fn((personId: string) => {
       const person = profiles.find((profile) => profile.kind === 'space-person' && profile.id === personId);
@@ -486,7 +489,7 @@ const makeService = (profiles: MergeProfile[]) => {
     databaseRepository: databaseRepository as never,
     faceIdentityRepository: faceIdentityRepository as never,
     jobRepository: jobRepository as never,
-    logger: {} as never,
+    logger: logger as never,
     personRepository: personRepository as never,
     sharedSpaceRepository: sharedSpaceRepository as never,
   });
@@ -497,6 +500,7 @@ const makeService = (profiles: MergeProfile[]) => {
       database: databaseRepository,
       faceIdentity: faceIdentityRepository,
       job: jobRepository,
+      logger,
       person: personRepository,
       sharedSpace: sharedSpaceRepository,
     },
@@ -1036,10 +1040,14 @@ describe('IdentityMergePropagationService', () => {
         'person-x',
         'person-y',
       ]);
-      expect(faceIdentityRepository.getMergePropagationProfiles).toHaveBeenNthCalledWith(2, {
-        mode: 'identities',
-        identityIds: ['identity-for-person-x', 'identity-for-person-y'],
-      });
+      expect(faceIdentityRepository.getMergePropagationProfiles).toHaveBeenNthCalledWith(
+        2,
+        {
+          mode: 'identities',
+          identityIds: ['identity-for-person-x', 'identity-for-person-y'],
+        },
+        undefined,
+      );
       expect(plan.targetIdentityId).toBe('identity-for-person-x');
       expect(plan.sourceIdentityIds).toEqual(['identity-for-person-y']);
       expect(plan.profileIdentityUpdates).toEqual([
@@ -1764,6 +1772,42 @@ describe('IdentityMergePropagationService', () => {
 
       expect(mocks.database.transaction).toHaveBeenCalledTimes(1);
       expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('logs and returns success when follow-up queueing fails after the transaction commits', async () => {
+      const { sut, mocks } = makeService([]);
+      mocks.job.queue.mockRejectedValueOnce(new Error('queue failed'));
+
+      await expect(
+        sut.executePlan(
+          {
+            actorUserId: 'owner-1',
+            origin: {
+              type: 'person',
+              targetProfileId: 'person-x',
+              sourceProfileIds: ['person-y'],
+              ownerId: 'owner-1',
+            },
+            targetIdentityId: 'identity-x',
+            sourceIdentityIds: ['identity-y'],
+            personalProfileMerges: [{ ownerId: 'owner-1', targetPersonId: 'person-x', sourcePersonIds: ['person-y'] }],
+            spaceProfileMerges: [],
+            profileIdentityUpdates: [],
+            affectedOwnerIds: ['owner-1'],
+            affectedSpaceIds: ['space-a'],
+            followUpJobs: [{ name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: 'identity-x' } }],
+            activityEvents: [],
+          },
+          { actorUserId: 'owner-1' },
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mocks.database.transaction).toHaveBeenCalledTimes(1);
+      expect(mocks.faceIdentity.mergeIdentitiesAfterProfileResolution).toHaveBeenCalled();
+      expect(mocks.logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to queue merge propagation follow-up jobs'),
+        expect.any(String),
+      );
     });
   });
 

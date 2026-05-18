@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { Transaction } from 'kysely';
+import { Kysely, Transaction } from 'kysely';
 import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { JobName, SharedSpaceActivityType } from 'src/enum';
@@ -88,6 +88,13 @@ type IdentityMergePropagationDependencies = {
   sharedSpaceRepository: SharedSpaceRepository;
 };
 
+type DbOrTransaction = Kysely<DB> | Transaction<DB>;
+
+type ExecutedPlanFollowUps = {
+  deletedThumbnailPaths: string[];
+  featureFaceRepairJobs: MergePropagationFollowUpJob[];
+};
+
 @Injectable()
 export class IdentityMergePropagationService {
   constructor(private deps: IdentityMergePropagationDependencies) {}
@@ -97,12 +104,19 @@ export class IdentityMergePropagationService {
     targetPersonId: string,
     sourcePersonIds: string[],
   ): Promise<BulkIdResponseDto[]> {
-    const plan = await this.buildPersonalMergePlan({
-      actorUserId: auth.user.id,
-      targetPersonId,
-      sourcePersonIds,
+    const { plan, followUps } = await this.deps.databaseRepository.transaction(async (db) => {
+      const plan = await this.buildPersonalMergePlan(
+        {
+          actorUserId: auth.user.id,
+          targetPersonId,
+          sourcePersonIds,
+        },
+        db,
+      );
+      return { plan, followUps: await this.executePlanInTransaction(plan, db) };
     });
-    await this.executePlan(plan, { actorUserId: auth.user.id });
+
+    await this.queueFollowUpsBestEffort(plan, followUps);
 
     return sourcePersonIds.map((id) => ({ id, success: true }));
   }
@@ -113,99 +127,124 @@ export class IdentityMergePropagationService {
     targetPersonId: string,
     sourcePersonIds: string[],
   ): Promise<void> {
-    const plan = await this.buildSpaceMergePlan({
-      actorUserId: auth.user.id,
-      spaceId,
-      targetPersonId,
-      sourcePersonIds,
-    });
-    await this.executePlan(plan, { actorUserId: auth.user.id });
-  }
-
-  async executePlan(plan: IdentityMergePropagationPlan, _context: { actorUserId: string }): Promise<void> {
-    const deletedThumbnailPaths: string[] = [];
-    const featureFaceRepairJobs: MergePropagationFollowUpJob[] = [];
-
-    await this.deps.databaseRepository.transaction(async (db) => {
-      for (const step of plan.personalProfileMerges) {
-        let targetNeedsFeatureFaceRepair = false;
-        for (const sourcePersonId of step.sourcePersonIds) {
-          const { deletedThumbnailPath, targetNeedsFeatureFaceRepair: sourceMergeNeedsFeatureFaceRepair } =
-            await this.deps.personRepository.mergePersonProfile(
-              {
-                sourcePersonId,
-                targetPersonId: step.targetPersonId,
-                targetIdentityId: plan.targetIdentityId,
-              },
-              db,
-            );
-          if (deletedThumbnailPath) {
-            deletedThumbnailPaths.push(deletedThumbnailPath);
-          }
-          targetNeedsFeatureFaceRepair ||= sourceMergeNeedsFeatureFaceRepair;
-        }
-
-        await this.deps.faceIdentityRepository.linkPersonFaces(
-          { personId: step.targetPersonId, identityId: plan.targetIdentityId, source: 'manual' },
-          db,
-        );
-
-        if (targetNeedsFeatureFaceRepair) {
-          const repairJob = await this.repairMissingPersonalFeatureFace(step.targetPersonId, db);
-          if (repairJob) {
-            featureFaceRepairJobs.push(repairJob);
-          }
-        }
-      }
-
-      for (const step of plan.spaceProfileMerges) {
-        for (const sourcePersonId of step.sourcePersonIds) {
-          await this.deps.sharedSpaceRepository.mergeSpacePersonProfile(
-            { sourcePersonId, targetPersonId: step.targetPersonId },
-            db,
-          );
-        }
-      }
-
-      for (const spaceId of plan.affectedSpaceIds) {
-        await this.deps.sharedSpaceRepository.repairInvalidRepresentativeFaces(spaceId, db);
-        await this.deps.sharedSpaceRepository.repairOrphanedRepresentativeFaces(spaceId, db);
-      }
-
-      for (const update of plan.profileIdentityUpdates) {
-        await (update.kind === 'person'
-          ? this.deps.personRepository.updatePersonIdentity(
-              { personId: update.profileId, identityId: update.identityId },
-              db,
-            )
-          : this.deps.sharedSpaceRepository.updateSpacePersonIdentity(
-              { personId: update.profileId, identityId: update.identityId },
-              db,
-            ));
-      }
-
-      await this.deps.faceIdentityRepository.mergeIdentitiesAfterProfileResolution(
+    const { plan, followUps } = await this.deps.databaseRepository.transaction(async (db) => {
+      const plan = await this.buildSpaceMergePlan(
         {
-          targetIdentityId: plan.targetIdentityId,
-          sourceIdentityIds: plan.sourceIdentityIds,
-          source: 'manual',
+          actorUserId: auth.user.id,
+          spaceId,
+          targetPersonId,
+          sourcePersonIds,
         },
         db,
       );
-
-      for (const event of plan.activityEvents) {
-        await this.deps.sharedSpaceRepository.logActivity(event, db);
-      }
+      return { plan, followUps: await this.executePlanInTransaction(plan, db) };
     });
 
-    for (const job of this.dedupeFollowUpJobs([...plan.followUpJobs, ...featureFaceRepairJobs])) {
+    await this.queueFollowUpsBestEffort(plan, followUps);
+  }
+
+  async executePlan(plan: IdentityMergePropagationPlan, _context: { actorUserId: string }): Promise<void> {
+    const followUps = await this.deps.databaseRepository.transaction((db) => this.executePlanInTransaction(plan, db));
+    await this.queueFollowUpsBestEffort(plan, followUps);
+  }
+
+  private async executePlanInTransaction(
+    plan: IdentityMergePropagationPlan,
+    db: Transaction<DB>,
+  ): Promise<ExecutedPlanFollowUps> {
+    const deletedThumbnailPaths: string[] = [];
+    const featureFaceRepairJobs: MergePropagationFollowUpJob[] = [];
+
+    for (const step of plan.personalProfileMerges) {
+      let targetNeedsFeatureFaceRepair = false;
+      for (const sourcePersonId of step.sourcePersonIds) {
+        const { deletedThumbnailPath, targetNeedsFeatureFaceRepair: sourceMergeNeedsFeatureFaceRepair } =
+          await this.deps.personRepository.mergePersonProfile(
+            {
+              sourcePersonId,
+              targetPersonId: step.targetPersonId,
+              targetIdentityId: plan.targetIdentityId,
+            },
+            db,
+          );
+        if (deletedThumbnailPath) {
+          deletedThumbnailPaths.push(deletedThumbnailPath);
+        }
+        targetNeedsFeatureFaceRepair ||= sourceMergeNeedsFeatureFaceRepair;
+      }
+
+      await this.deps.faceIdentityRepository.linkPersonFaces(
+        { personId: step.targetPersonId, identityId: plan.targetIdentityId, source: 'manual' },
+        db,
+      );
+
+      if (targetNeedsFeatureFaceRepair) {
+        const repairJob = await this.repairMissingPersonalFeatureFace(step.targetPersonId, db);
+        if (repairJob) {
+          featureFaceRepairJobs.push(repairJob);
+        }
+      }
+    }
+
+    for (const step of plan.spaceProfileMerges) {
+      for (const sourcePersonId of step.sourcePersonIds) {
+        await this.deps.sharedSpaceRepository.mergeSpacePersonProfile(
+          { sourcePersonId, targetPersonId: step.targetPersonId },
+          db,
+        );
+      }
+    }
+
+    for (const spaceId of plan.affectedSpaceIds) {
+      await this.deps.sharedSpaceRepository.repairInvalidRepresentativeFaces(spaceId, db);
+      await this.deps.sharedSpaceRepository.repairOrphanedRepresentativeFaces(spaceId, db);
+    }
+
+    for (const update of plan.profileIdentityUpdates) {
+      await (update.kind === 'person'
+        ? this.deps.personRepository.updatePersonIdentity(
+            { personId: update.profileId, identityId: update.identityId },
+            db,
+          )
+        : this.deps.sharedSpaceRepository.updateSpacePersonIdentity(
+            { personId: update.profileId, identityId: update.identityId },
+            db,
+          ));
+    }
+
+    await this.deps.faceIdentityRepository.mergeIdentitiesAfterProfileResolution(
+      {
+        targetIdentityId: plan.targetIdentityId,
+        sourceIdentityIds: plan.sourceIdentityIds,
+        source: 'manual',
+      },
+      db,
+    );
+
+    for (const event of plan.activityEvents) {
+      await this.deps.sharedSpaceRepository.logActivity(event, db);
+    }
+
+    return { deletedThumbnailPaths, featureFaceRepairJobs };
+  }
+
+  private async queueFollowUpsBestEffort(plan: IdentityMergePropagationPlan, followUps: ExecutedPlanFollowUps) {
+    try {
+      await this.queueFollowUps(plan, followUps);
+    } catch (error: Error | any) {
+      this.deps.logger.error(`Failed to queue merge propagation follow-up jobs: ${error}`, error?.stack);
+    }
+  }
+
+  private async queueFollowUps(plan: IdentityMergePropagationPlan, followUps: ExecutedPlanFollowUps) {
+    for (const job of this.dedupeFollowUpJobs([...plan.followUpJobs, ...followUps.featureFaceRepairJobs])) {
       await this.deps.jobRepository.queue(job);
     }
 
-    if (deletedThumbnailPaths.length > 0) {
+    if (followUps.deletedThumbnailPaths.length > 0) {
       await this.deps.jobRepository.queue({
         name: JobName.FileDelete,
-        data: { files: [...new Set(deletedThumbnailPaths)] },
+        data: { files: [...new Set(followUps.deletedThumbnailPaths)] },
       });
     }
   }
@@ -228,17 +267,23 @@ export class IdentityMergePropagationService {
    * Ensures identities for the initiating target/source profiles before loading attached profiles;
    * this may persist newly-created identities.
    */
-  async buildPersonalMergePlan(input: {
-    actorUserId: string;
-    targetPersonId: string;
-    sourcePersonIds: string[];
-  }): Promise<IdentityMergePropagationPlan> {
+  async buildPersonalMergePlan(
+    input: {
+      actorUserId: string;
+      targetPersonId: string;
+      sourcePersonIds: string[];
+    },
+    db?: DbOrTransaction,
+  ): Promise<IdentityMergePropagationPlan> {
     const sourcePersonIds = [...new Set(input.sourcePersonIds)].filter((id) => id !== input.targetPersonId);
     const originPersonIds = [input.targetPersonId, ...sourcePersonIds];
-    const originProfiles = await this.deps.faceIdentityRepository.getMergePropagationProfiles({
-      mode: 'profiles',
-      personIds: originPersonIds,
-    });
+    const originProfiles = await this.deps.faceIdentityRepository.getMergePropagationProfiles(
+      {
+        mode: 'profiles',
+        personIds: originPersonIds,
+      },
+      db,
+    );
     const originProfilesById = new Map(originProfiles.map((profile) => [profile.id, profile as MergeProfile]));
 
     const targetProfile = originProfilesById.get(input.targetPersonId);
@@ -259,7 +304,7 @@ export class IdentityMergePropagationService {
       return sourceProfile;
     });
 
-    const ensuredOriginProfiles = await this.ensureOriginIdentities([targetProfile, ...sourceProfiles]);
+    const ensuredOriginProfiles = await this.ensureOriginIdentities([targetProfile, ...sourceProfiles], db);
     const ensuredTargetProfile = ensuredOriginProfiles[0];
     const ensuredSourceProfiles = ensuredOriginProfiles.slice(1);
     const targetIdentityId = ensuredTargetProfile.identityId;
@@ -275,10 +320,13 @@ export class IdentityMergePropagationService {
       ),
     ];
     const planIdentityIds = [targetIdentityId, ...sourceIdentityIds];
-    const attachedProfiles = (await this.deps.faceIdentityRepository.getMergePropagationProfiles({
-      mode: 'identities',
-      identityIds: planIdentityIds,
-    })) as MergeProfile[];
+    const attachedProfiles = (await this.deps.faceIdentityRepository.getMergePropagationProfiles(
+      {
+        mode: 'identities',
+        identityIds: planIdentityIds,
+      },
+      db,
+    )) as MergeProfile[];
 
     const personalGroups = this.groupProfiles(attachedProfiles, 'person');
     const spaceGroups = this.groupProfiles(attachedProfiles, 'space-person');
@@ -361,15 +409,18 @@ export class IdentityMergePropagationService {
    * Ensures identities for the initiating target/source space profiles before loading attached profiles;
    * this may persist newly-created identities.
    */
-  async buildSpaceMergePlan(input: {
-    actorUserId: string;
-    spaceId: string;
-    targetPersonId: string;
-    sourcePersonIds: string[];
-  }): Promise<IdentityMergePropagationPlan> {
+  async buildSpaceMergePlan(
+    input: {
+      actorUserId: string;
+      spaceId: string;
+      targetPersonId: string;
+      sourcePersonIds: string[];
+    },
+    db?: DbOrTransaction,
+  ): Promise<IdentityMergePropagationPlan> {
     const sourcePersonIds = [...new Set(input.sourcePersonIds)].filter((id) => id !== input.targetPersonId);
 
-    const target = await this.deps.sharedSpaceRepository.getPersonById(input.targetPersonId);
+    const target = await this.deps.sharedSpaceRepository.getPersonById(input.targetPersonId, db);
     if (!target || target.spaceId !== input.spaceId) {
       throw new BadRequestException('Person not found');
     }
@@ -377,7 +428,7 @@ export class IdentityMergePropagationService {
     const targetProfile = this.mapSpacePersonMergeProfile(target);
     const sourceProfiles: MergeProfile[] = [];
     for (const sourcePersonId of sourcePersonIds) {
-      const source = await this.deps.sharedSpaceRepository.getPersonById(sourcePersonId);
+      const source = await this.deps.sharedSpaceRepository.getPersonById(sourcePersonId, db);
       if (!source || source.spaceId !== input.spaceId) {
         throw new BadRequestException('Source person not found in this space');
       }
@@ -389,7 +440,7 @@ export class IdentityMergePropagationService {
       sourceProfiles.push(this.mapSpacePersonMergeProfile(source));
     }
 
-    const ensuredOriginProfiles = await this.ensureSpaceOriginIdentities([targetProfile, ...sourceProfiles]);
+    const ensuredOriginProfiles = await this.ensureSpaceOriginIdentities([targetProfile, ...sourceProfiles], db);
     const ensuredTargetProfile = ensuredOriginProfiles[0];
     const ensuredSourceProfiles = ensuredOriginProfiles.slice(1);
     const targetIdentityId = ensuredTargetProfile.identityId;
@@ -405,10 +456,13 @@ export class IdentityMergePropagationService {
       ),
     ];
     const planIdentityIds = [targetIdentityId, ...sourceIdentityIds];
-    const attachedProfiles = (await this.deps.faceIdentityRepository.getMergePropagationProfiles({
-      mode: 'identities',
-      identityIds: planIdentityIds,
-    })) as MergeProfile[];
+    const attachedProfiles = (await this.deps.faceIdentityRepository.getMergePropagationProfiles(
+      {
+        mode: 'identities',
+        identityIds: planIdentityIds,
+      },
+      db,
+    )) as MergeProfile[];
 
     const personalGroups = this.groupProfiles(attachedProfiles, 'person');
     const spaceGroups = this.groupProfiles(attachedProfiles, 'space-person');
@@ -507,22 +561,22 @@ export class IdentityMergePropagationService {
     };
   }
 
-  private async ensureOriginIdentities(profiles: MergeProfile[]): Promise<MergeProfile[]> {
+  private async ensureOriginIdentities(profiles: MergeProfile[], db?: DbOrTransaction): Promise<MergeProfile[]> {
     const ensured: MergeProfile[] = [];
 
     for (const profile of profiles) {
-      const identity = await this.deps.faceIdentityRepository.ensurePersonIdentity(profile.id);
+      const identity = await this.deps.faceIdentityRepository.ensurePersonIdentity(profile.id, db);
       ensured.push({ ...profile, identityId: identity.id });
     }
 
     return ensured;
   }
 
-  private async ensureSpaceOriginIdentities(profiles: MergeProfile[]): Promise<MergeProfile[]> {
+  private async ensureSpaceOriginIdentities(profiles: MergeProfile[], db?: DbOrTransaction): Promise<MergeProfile[]> {
     const ensured: MergeProfile[] = [];
 
     for (const profile of profiles) {
-      const identity = await this.deps.faceIdentityRepository.ensureSpacePersonIdentity(profile.id);
+      const identity = await this.deps.faceIdentityRepository.ensureSpacePersonIdentity(profile.id, db);
       ensured.push({ ...profile, identityId: identity.id });
     }
 

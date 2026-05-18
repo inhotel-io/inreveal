@@ -1921,23 +1921,23 @@ export class FaceIdentityRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  async ensurePersonIdentity(personId: string): Promise<FaceIdentity> {
-    return this.db.transaction().execute(async (trx) => {
-      const person = await trx
+  async ensurePersonIdentity(personId: string, db: Kysely<DB> | Transaction<DB> = this.db): Promise<FaceIdentity> {
+    const ensure = async (runner: Kysely<DB> | Transaction<DB>) => {
+      const person = await runner
         .selectFrom('person')
         .select(['id', 'identityId', 'type', 'faceAssetId'])
         .where('id', '=', personId)
         .executeTakeFirstOrThrow();
 
       if (person.identityId) {
-        return trx
+        return runner
           .selectFrom('face_identity')
           .selectAll()
           .where('id', '=', person.identityId)
           .executeTakeFirstOrThrow();
       }
 
-      const identity = await trx
+      const identity = await runner
         .insertInto('face_identity')
         .values({
           type: person.type,
@@ -1946,18 +1946,23 @@ export class FaceIdentityRepository {
         .returningAll()
         .executeTakeFirstOrThrow();
 
-      await trx.updateTable('person').set({ identityId: identity.id }).where('id', '=', person.id).execute();
+      await runner.updateTable('person').set({ identityId: identity.id }).where('id', '=', person.id).execute();
 
       return identity;
-    });
+    };
+
+    return db === this.db ? this.db.transaction().execute(ensure) : ensure(db);
   }
 
-  async getMergePropagationProfiles(input: MergePropagationProfileInput): Promise<MergePropagationProfile[]> {
+  async getMergePropagationProfiles(
+    input: MergePropagationProfileInput,
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<MergePropagationProfile[]> {
     const { personIds, identityIds } = this.parseMergePropagationProfileInput(input);
     const profiles: MergePropagationProfile[] = [];
 
     if (personIds.length > 0 || identityIds.length > 0) {
-      let query = this.db.selectFrom('person').select(({ selectFrom }) => [
+      let query = db.selectFrom('person').select(({ selectFrom }) => [
         'person.id',
         'person.ownerId',
         'person.identityId',
@@ -1989,7 +1994,7 @@ export class FaceIdentityRepository {
     }
 
     if (identityIds.length > 0 && personIds.length === 0) {
-      const spacePeople = await this.db
+      const spacePeople = await db
         .selectFrom('shared_space_person')
         .select([
           'shared_space_person.id',
@@ -2046,23 +2051,26 @@ export class FaceIdentityRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  async ensureSpacePersonIdentity(spacePersonId: string): Promise<FaceIdentity> {
-    return this.db.transaction().execute(async (trx) => {
-      const person = await trx
+  async ensureSpacePersonIdentity(
+    spacePersonId: string,
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<FaceIdentity> {
+    const ensure = async (runner: Kysely<DB> | Transaction<DB>) => {
+      const person = await runner
         .selectFrom('shared_space_person')
         .select(['id', 'identityId', 'type', 'representativeFaceId'])
         .where('id', '=', spacePersonId)
         .executeTakeFirstOrThrow();
 
       if (person.identityId) {
-        return trx
+        return runner
           .selectFrom('face_identity')
           .selectAll()
           .where('id', '=', person.identityId)
           .executeTakeFirstOrThrow();
       }
 
-      const identity = await trx
+      const identity = await runner
         .insertInto('face_identity')
         .values({
           type: person.type,
@@ -2071,14 +2079,16 @@ export class FaceIdentityRepository {
         .returningAll()
         .executeTakeFirstOrThrow();
 
-      await trx
+      await runner
         .updateTable('shared_space_person')
         .set({ identityId: identity.id })
         .where('id', '=', person.id)
         .execute();
 
       return identity;
-    });
+    };
+
+    return db === this.db ? this.db.transaction().execute(ensure) : ensure(db);
   }
 
   @GenerateSql({
