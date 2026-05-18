@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
+import { AuthDto } from 'src/dtos/auth.dto';
 import { JobName, SharedSpaceActivityType } from 'src/enum';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
@@ -87,6 +89,92 @@ type IdentityMergePropagationDependencies = {
 @Injectable()
 export class IdentityMergePropagationService {
   constructor(private deps: IdentityMergePropagationDependencies) {}
+
+  async mergePersonalPeople(
+    auth: AuthDto,
+    targetPersonId: string,
+    sourcePersonIds: string[],
+  ): Promise<BulkIdResponseDto[]> {
+    const plan = await this.buildPersonalMergePlan({
+      actorUserId: auth.user.id,
+      targetPersonId,
+      sourcePersonIds,
+    });
+    await this.executePlan(plan, { actorUserId: auth.user.id });
+
+    return sourcePersonIds.map((id) => ({ id, success: true }));
+  }
+
+  async executePlan(plan: IdentityMergePropagationPlan, _context: { actorUserId: string }): Promise<void> {
+    const db = this.getExecutionDb();
+    const deletedThumbnailPaths: string[] = [];
+
+    for (const step of plan.personalProfileMerges) {
+      for (const sourcePersonId of step.sourcePersonIds) {
+        const { deletedThumbnailPath } = await this.deps.personRepository.mergePersonProfile(
+          {
+            sourcePersonId,
+            targetPersonId: step.targetPersonId,
+            targetIdentityId: plan.targetIdentityId,
+          },
+          db,
+        );
+        if (deletedThumbnailPath) {
+          deletedThumbnailPaths.push(deletedThumbnailPath);
+        }
+      }
+
+      await this.deps.faceIdentityRepository.linkPersonFaces(
+        { personId: step.targetPersonId, identityId: plan.targetIdentityId, source: 'manual' },
+        db,
+      );
+    }
+
+    for (const step of plan.spaceProfileMerges) {
+      for (const sourcePersonId of step.sourcePersonIds) {
+        await this.deps.sharedSpaceRepository.mergeSpacePersonProfile(
+          { sourcePersonId, targetPersonId: step.targetPersonId },
+          db,
+        );
+      }
+    }
+
+    for (const update of plan.profileIdentityUpdates) {
+      await (update.kind === 'person'
+        ? this.deps.personRepository.updatePersonIdentity(
+            { personId: update.profileId, identityId: update.identityId },
+            db,
+          )
+        : this.deps.sharedSpaceRepository.updateSpacePersonIdentity(
+            { personId: update.profileId, identityId: update.identityId },
+            db,
+          ));
+    }
+
+    await this.deps.faceIdentityRepository.mergeIdentitiesAfterProfileResolution(
+      {
+        targetIdentityId: plan.targetIdentityId,
+        sourceIdentityIds: plan.sourceIdentityIds,
+        source: 'manual',
+      },
+      db,
+    );
+
+    for (const event of plan.activityEvents) {
+      await this.deps.sharedSpaceRepository.logActivity(event);
+    }
+
+    for (const job of this.dedupeFollowUpJobs(plan.followUpJobs)) {
+      await this.deps.jobRepository.queue(job);
+    }
+
+    if (deletedThumbnailPaths.length > 0) {
+      await this.deps.jobRepository.queue({
+        name: JobName.FileDelete,
+        data: { files: [...new Set(deletedThumbnailPaths)] },
+      });
+    }
+  }
 
   /**
    * Ensures identities for the initiating target/source profiles before loading attached profiles;
@@ -293,5 +381,26 @@ export class IdentityMergePropagationService {
 
   private hasName(profile: MergeProfile): boolean {
     return profile.name.trim().length > 0;
+  }
+
+  private getExecutionDb(): never {
+    return ((this.deps.databaseRepository as unknown as { db?: unknown }).db ?? {}) as never;
+  }
+
+  private dedupeFollowUpJobs(jobs: MergePropagationFollowUpJob[]): MergePropagationFollowUpJob[] {
+    const seen = new Set<string>();
+    const deduped: MergePropagationFollowUpJob[] = [];
+
+    for (const job of jobs) {
+      const key = `${job.name}:${JSON.stringify(job.data)}`;
+      if (seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      deduped.push(job);
+    }
+
+    return deduped;
   }
 }

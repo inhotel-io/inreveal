@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Insertable, Kysely, NotNull, sql, Updateable } from 'kysely';
+import { Insertable, Kysely, NotNull, sql, Transaction, Updateable } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { ChunkedArray, ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
 import { AssetType, AssetVisibility, SharedSpaceRole, VectorIndex } from 'src/enum';
@@ -1543,6 +1543,61 @@ export class SharedSpaceRepository {
       .updateTable('shared_space_person_face')
       .set({ personId: toPersonId })
       .where('personId', '=', fromPersonId)
+      .execute();
+  }
+
+  async mergeSpacePersonProfile(
+    input: {
+      sourcePersonId: string;
+      targetPersonId: string;
+    },
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<void> {
+    await db
+      .deleteFrom('shared_space_person_face')
+      .where('personId', '=', input.sourcePersonId)
+      .where(
+        'assetFaceId',
+        'in',
+        db.selectFrom('shared_space_person_face').select('assetFaceId').where('personId', '=', input.targetPersonId),
+      )
+      .execute();
+
+    await db
+      .updateTable('shared_space_person_face')
+      .set({ personId: input.targetPersonId })
+      .where('personId', '=', input.sourcePersonId)
+      .execute();
+
+    const sourceAliases = await db
+      .selectFrom('shared_space_person_alias')
+      .selectAll()
+      .where('personId', '=', input.sourcePersonId)
+      .execute();
+
+    for (const alias of sourceAliases) {
+      await db
+        .insertInto('shared_space_person_alias')
+        .values({ personId: input.targetPersonId, userId: alias.userId, alias: alias.alias })
+        .onConflict((oc) => oc.doNothing())
+        .execute();
+    }
+
+    await db.deleteFrom('shared_space_person_alias').where('personId', '=', input.sourcePersonId).execute();
+    await db.deleteFrom('shared_space_person').where('id', '=', input.sourcePersonId).execute();
+  }
+
+  async updateSpacePersonIdentity(
+    input: {
+      personId: string;
+      identityId: string;
+    },
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<void> {
+    await db
+      .updateTable('shared_space_person')
+      .set({ identityId: input.identityId })
+      .where('id', '=', input.personId)
       .execute();
   }
 
