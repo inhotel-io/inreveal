@@ -2665,6 +2665,62 @@ describe(PersonService.name, () => {
       );
     });
 
+    it('dedupes pending repair and projection targets together before deleting pending rows', async () => {
+      const pendingTargets = [
+        {
+          spaceId: 'space-1',
+          assetId: 'asset-1',
+          updateId: 'pending-1',
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+        {
+          spaceId: 'space-3',
+          assetId: 'asset-3',
+          updateId: 'pending-3',
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ];
+      mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({
+        processed: 1,
+        affectedSpaceAssets: [
+          { spaceId: 'space-1', assetId: 'asset-1' },
+          { spaceId: 'space-2', assetId: 'asset-2' },
+        ],
+      });
+      mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({
+        processed: 1,
+        conflictCount: 0,
+        affectedSpaceAssets: [{ spaceId: 'space-2', assetId: 'asset-2' }],
+      });
+      (mocks.faceIdentity as any).getBackfillWork.mockResolvedValue({
+        hasPersonalIdentityWork: false,
+        hasSpacePersonIdentityWork: false,
+        hasSharedSpaceProjectionWork: true,
+      });
+      (mocks.faceIdentity as any).getPendingSharedSpaceFaceMatchBackfillTargets.mockResolvedValue(pendingTargets);
+      (mocks.faceIdentity as any).getSharedSpaceFaceMatchBackfillTargets.mockResolvedValue([
+        { spaceId: 'space-2', assetId: 'asset-2' },
+        { spaceId: 'space-4', assetId: 'asset-4' },
+      ]);
+
+      await expect(sut.handleFaceIdentityBackfill({ stage: 'person' })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.job.queueAll).toHaveBeenCalledTimes(1);
+      expect(mocks.job.queueAll).toHaveBeenCalledWith([
+        { name: JobName.SharedSpaceFaceMatchFromBackfill, data: { spaceId: 'space-1', assetId: 'asset-1' } },
+        { name: JobName.SharedSpaceFaceMatchFromBackfill, data: { spaceId: 'space-2', assetId: 'asset-2' } },
+        { name: JobName.SharedSpaceFaceMatchFromBackfill, data: { spaceId: 'space-3', assetId: 'asset-3' } },
+        { name: JobName.SharedSpaceFaceMatchFromBackfill, data: { spaceId: 'space-4', assetId: 'asset-4' } },
+      ]);
+      expect((mocks.faceIdentity as any).deletePendingSharedSpaceFaceMatchBackfillTargets).toHaveBeenCalledWith(
+        pendingTargets,
+      );
+      expect(mocks.job.queue).not.toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonMetadataBackfill,
+        data: {},
+      });
+    });
+
     it('rediscovers earlier-page targets after paginated identity backfill completes', async () => {
       mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValueOnce({
         processed: 1,
