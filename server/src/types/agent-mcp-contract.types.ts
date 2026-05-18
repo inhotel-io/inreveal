@@ -60,6 +60,24 @@ export type AgentMcpReadToolName =
 
 export type AgentMcpReadToolContract = AgentMcpToolContract<AgentMcpReadToolName>;
 
+export type AgentMcpValidationIssue = {
+  path: string;
+  message: string;
+};
+
+export type AgentMcpValidationCorrectionRequest = {
+  requestShape: 'json-rpc' | 'tool-arguments';
+  issues: AgentMcpValidationIssue[];
+};
+
+export type AgentMcpValidationCorrection = {
+  mistakeId?: string;
+  issuePath?: string;
+  expected: string;
+  hint: string;
+  exampleArguments?: Record<string, unknown>;
+};
+
 export type AgentMcpFailureMatrixExpectedResult =
   | {
       kind: 'tool-validation';

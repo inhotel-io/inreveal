@@ -10,6 +10,9 @@ import type {
   AgentMcpToolContract,
   AgentMcpToolExample,
   AgentMcpToolSafetyContract,
+  AgentMcpValidationCorrection,
+  AgentMcpValidationCorrectionRequest,
+  AgentMcpValidationIssue,
 } from 'src/types/agent-mcp-contract.types';
 
 const exampleAssetId = '00000000-0000-4000-8000-000000000001';
@@ -553,6 +556,52 @@ const slice1RuntimeFailureMatrixCases: AgentMcpFailureMatrixCase[] = [
   },
 ];
 
+const cloneArguments = (args: Record<string, unknown> | undefined): Record<string, unknown> | undefined =>
+  args === undefined ? undefined : structuredClone(args);
+
+const mistakeSpecificity = (mistake: AgentMcpCommonMistake): number =>
+  Number(Boolean(mistake.match.issuePath)) +
+  Number(Boolean(mistake.match.messageIncludes)) +
+  Number(Boolean(mistake.match.missingField)) +
+  Number(Boolean(mistake.match.unexpectedField)) +
+  Number(Boolean(mistake.match.requestShape));
+
+const issueMatchesMessage = (issue: AgentMcpValidationIssue, messageIncludes: string | undefined): boolean =>
+  !messageIncludes || issue.message.includes(messageIncludes);
+
+const issueMatchesPath = (issue: AgentMcpValidationIssue, issuePath: string | undefined): boolean =>
+  issuePath === undefined || issue.path === issuePath;
+
+const mistakeMatchingIssue = (
+  mistake: AgentMcpCommonMistake,
+  request: AgentMcpValidationCorrectionRequest,
+): AgentMcpValidationIssue | undefined => {
+  const { match } = mistake;
+
+  if (match.requestShape && match.requestShape !== request.requestShape) {
+    return;
+  }
+
+  if (match.missingField) {
+    return request.issues.find(
+      (issue) => issue.path === match.missingField && issue.message.includes('required'),
+    );
+  }
+
+  if (match.unexpectedField) {
+    return request.issues.find(
+      (issue) =>
+        issueMatchesPath(issue, match.issuePath) &&
+        issueMatchesMessage(issue, match.messageIncludes) &&
+        issue.message.includes(match.unexpectedField),
+    );
+  }
+
+  return request.issues.find(
+    (issue) => issueMatchesPath(issue, match.issuePath) && issueMatchesMessage(issue, match.messageIncludes),
+  );
+};
+
 @Injectable()
 export class AgentMcpToolContractService {
   listReadToolContracts(): AgentMcpReadToolContract[] {
@@ -565,5 +614,43 @@ export class AgentMcpToolContractService {
 
   listSlice1RuntimeFailureMatrixCases(): AgentMcpFailureMatrixCase[] {
     return structuredClone(slice1RuntimeFailureMatrixCases);
+  }
+
+  getReadToolValidationCorrection(
+    name: AgentMcpReadToolName,
+    request: AgentMcpValidationCorrectionRequest,
+  ): AgentMcpValidationCorrection | undefined {
+    const contract = this.getReadToolContract(name);
+    if (!contract) {
+      return;
+    }
+
+    const matchingCorrection = contract.commonMistakes
+      .map((mistake) => ({ mistake, issue: mistakeMatchingIssue(mistake, request) }))
+      .filter((correction): correction is { mistake: AgentMcpCommonMistake; issue: AgentMcpValidationIssue } =>
+        Boolean(correction.issue),
+      )
+      .sort((left, right) => mistakeSpecificity(right.mistake) - mistakeSpecificity(left.mistake))[0];
+
+    if (!matchingCorrection) {
+      return {
+        expected: contract.usage,
+        hint: contract.usage,
+        exampleArguments: cloneArguments(contract.examples[0]?.arguments),
+      };
+    }
+
+    const { mistake: matchingMistake, issue: matchingIssue } = matchingCorrection;
+    const example = matchingMistake.exampleName
+      ? contract.examples.find((candidate) => candidate.name === matchingMistake.exampleName)
+      : undefined;
+
+    return {
+      mistakeId: matchingMistake.id,
+      issuePath: matchingIssue.path,
+      expected: contract.usage,
+      hint: matchingMistake.hint,
+      exampleArguments: cloneArguments(example?.arguments),
+    };
   }
 }
