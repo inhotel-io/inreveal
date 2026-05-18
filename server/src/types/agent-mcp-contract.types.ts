@@ -61,6 +61,13 @@ export type AgentMcpReadToolName =
 
 export type AgentMcpReadToolContract = AgentMcpToolContract<AgentMcpReadToolName>;
 
+export type AgentMcpPlanningToolName =
+  | AgentToolName.ProposeAlbumOperations
+  | AgentToolName.ReviseProposedOperations
+  | AgentToolName.SummarizePlan;
+
+export type AgentMcpPlanningToolContract = AgentMcpToolContract<AgentMcpPlanningToolName>;
+
 export type AgentMcpValidationIssue = {
   path: string;
   message: string;
@@ -91,7 +98,18 @@ export type AgentMcpFailureMatrixExpectedResult =
 
 export type AgentMcpFailureMatrixCase = {
   id: string;
-  category: 'request-wrapper' | 'read-retry' | 'read-request' | 'album-read' | 'search' | 'safety';
+  category:
+    | 'request-wrapper'
+    | 'read-retry'
+    | 'read-request'
+    | 'album-read'
+    | 'search'
+    | 'safety'
+    | 'planning-wrapper'
+    | 'planning-dependency'
+    | 'planning-target'
+    | 'planning-payload'
+    | 'planning-safety';
   description: string;
   toolName?: AgentToolName;
   request: Record<string, unknown>;

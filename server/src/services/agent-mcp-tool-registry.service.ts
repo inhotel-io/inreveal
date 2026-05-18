@@ -3,7 +3,7 @@ import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.d
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
 import { AgentToolName } from 'src/enum';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
-import type { AgentMcpArgumentMode, AgentMcpReadToolContract } from 'src/types/agent-mcp-contract.types';
+import type { AgentMcpArgumentMode, AgentMcpToolContract } from 'src/types/agent-mcp-contract.types';
 import type { AgentMcpToolAnnotations, AgentMcpToolDefinition } from 'src/types/agent-mcp.types';
 import z, { type ZodType } from 'zod';
 
@@ -47,12 +47,17 @@ const cloneTool = (tool: AgentMcpToolDefinition): AgentMcpToolDefinition => stru
 const approvedRequestInstruction =
   ' If approval is required, Gallery may ask the user; after approval, continue the approved request by calling this tool with toolCallId.';
 
-const fieldDescriptions = {
-  assetIds: 'Asset ids for a new asset read request. Use ids returned by searchAssets or readAlbum.',
+const propertyDescriptions = {
+  assetIds: 'Asset ids for a new asset read request or planning operation. Use ids returned by Gallery tools.',
   albumId: 'The album id returned by listAlbums for a new album read request.',
   filters: 'Put search filters here for date, place, camera, favorite, rating, album, tag, and media searches.',
   limit: 'Maximum number of results to return. Use a positive integer up to 10000.',
   toolCallId: 'Use only for an approved retry after Gallery approves a pending read request.',
+  summary: 'A human-readable plan summary describing what Gallery should review.',
+  operations: 'The reviewable Gallery operations to propose or revise. Do not apply changes directly.',
+  planId: 'The id of an existing proposed plan returned by Gallery.',
+  feedback: 'Optional user feedback explaining how to revise the existing plan.',
+  focus: 'An optional summary focus, such as risks, selected changes, or skipped operations.',
 } as const satisfies Record<string, string>;
 
 const toArgumentModeMetadata = (mode: AgentMcpArgumentMode) => ({
@@ -96,12 +101,15 @@ const toOneOfModeHint = (mode: AgentMcpArgumentMode): Record<string, unknown> =>
   return hint;
 };
 
-const enrichReadTool = (tool: AgentMcpToolDefinition, contract: AgentMcpReadToolContract): AgentMcpToolDefinition => {
+const enrichToolFromContract = (
+  tool: AgentMcpToolDefinition,
+  contract: AgentMcpToolContract,
+): AgentMcpToolDefinition => {
   const inputSchema = structuredClone(tool.inputSchema);
   const properties = inputSchema.properties;
 
   if (properties && typeof properties === 'object' && !Array.isArray(properties)) {
-    for (const [field, description] of Object.entries(fieldDescriptions)) {
+    for (const [field, description] of Object.entries(propertyDescriptions)) {
       const property = (properties as Record<string, unknown>)[field];
 
       if (property && typeof property === 'object' && !Array.isArray(property)) {
@@ -113,7 +121,7 @@ const enrichReadTool = (tool: AgentMcpToolDefinition, contract: AgentMcpReadTool
   inputSchema.examples = contract.examples.map((example) => structuredClone(example.arguments));
   inputSchema['x-gallery-argumentModes'] = contract.argumentModes.map((mode) => toArgumentModeMetadata(mode));
 
-  if (modesArePairwiseExclusive(contract.argumentModes)) {
+  if (contract.argumentModes.length > 1 && modesArePairwiseExclusive(contract.argumentModes)) {
     inputSchema.oneOf = contract.argumentModes.map((mode) => toOneOfModeHint(mode));
   }
 
@@ -122,25 +130,25 @@ const enrichReadTool = (tool: AgentMcpToolDefinition, contract: AgentMcpReadTool
     title: contract.title,
     description: `${contract.description} ${contract.usage} Modes: ${contract.argumentModes
       .map((mode) => `${mode.name}: ${mode.whenToUse}`)
-      .join(' ')}${approvedRequestInstruction}`,
+      .join(' ')}${contract.approvalRetry ? approvedRequestInstruction : ''}`,
     inputSchema,
   };
 };
 
-const getReadContract = (
-  contractsByName: ReadonlyMap<AgentToolName, AgentMcpReadToolContract>,
+const getToolContract = (
+  contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolContract>,
   toolName: AgentToolName,
-): AgentMcpReadToolContract => {
+): AgentMcpToolContract => {
   const contract = contractsByName.get(toolName);
 
   if (!contract) {
-    throw new Error(`Missing MCP read tool contract for ${toolName}`);
+    throw new Error(`Missing MCP tool contract for ${toolName}`);
   }
 
   return contract;
 };
 
-const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpReadToolContract>): AgentMcpToolDefinition[] =>
+const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolContract>): AgentMcpToolDefinition[] =>
   [
     defineTool({
       name: AgentToolName.SearchAssets,
@@ -206,8 +214,9 @@ const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpReadTool
       annotations: planningToolAnnotations,
     }),
   ].map((tool) =>
-    Object.hasOwn(AgentReadToolRequestSchemas, tool.name)
-      ? enrichReadTool(tool, getReadContract(contractsByName, tool.name))
+    Object.hasOwn(AgentReadToolRequestSchemas, tool.name) ||
+    Object.hasOwn(AgentOperationPlanToolRequestSchemas, tool.name)
+      ? enrichToolFromContract(tool, getToolContract(contractsByName, tool.name))
       : tool,
   );
 
@@ -217,7 +226,7 @@ export class AgentMcpToolRegistryService {
 
   constructor(private readonly contractService: AgentMcpToolContractService) {
     const contractsByName = new Map(
-      this.contractService.listReadToolContracts().map((contract) => [contract.name, contract]),
+      this.contractService.listToolContracts().map((contract) => [contract.name, contract]),
     );
     this.tools = buildTools(contractsByName);
   }
