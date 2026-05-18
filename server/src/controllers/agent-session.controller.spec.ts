@@ -1,6 +1,17 @@
 import { AgentSessionController } from 'src/controllers/agent-session.controller';
+import { AgentSessionActivityEventResponseDto } from 'src/dtos/agent-session-activity-event.dto';
 import { AgentSessionCreateDto, AgentSessionResponseDto } from 'src/dtos/agent-session.dto';
-import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType, AgentSessionStatus, Permission } from 'src/enum';
+import {
+  AgentApprovalMode,
+  AgentPermissionPreset,
+  AgentProviderType,
+  AgentSessionActivityEventKind,
+  AgentSessionActivityEventSource,
+  AgentSessionActivityEventStatus,
+  AgentSessionStatus,
+  Permission,
+} from 'src/enum';
+import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import type { AgentNormalizedPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import request from 'supertest';
@@ -67,6 +78,10 @@ const makeInitialContext = (targetBytes: number) => {
 describe(AgentSessionController.name, () => {
   let ctx: ControllerContext;
   const service = automock(AgentSessionService, { args: [{} as never, {} as never, {} as never], strict: false });
+  const activityEventService = automock(AgentSessionActivityEventService, {
+    args: [{} as never, {} as never],
+    strict: false,
+  });
   const auth = AuthFactory.create();
   const id = factory.uuid();
   const providerCredentialId = factory.uuid();
@@ -115,14 +130,28 @@ describe(AgentSessionController.name, () => {
     updatedAt: now,
     endedAt: null,
   };
+  const activityEvent: AgentSessionActivityEventResponseDto = {
+    id: factory.uuid(),
+    sessionId: id,
+    kind: AgentSessionActivityEventKind.StartProcessing,
+    status: AgentSessionActivityEventStatus.Running,
+    source: AgentSessionActivityEventSource.Server,
+    summary: null,
+    counts: null,
+    createdAt: now,
+  };
 
   beforeAll(async () => {
-    ctx = await controllerSetup(AgentSessionController, [{ provide: AgentSessionService, useValue: service }]);
+    ctx = await controllerSetup(AgentSessionController, [
+      { provide: AgentSessionService, useValue: service },
+      { provide: AgentSessionActivityEventService, useValue: activityEventService },
+    ]);
     return () => ctx.close();
   });
 
   beforeEach(() => {
     service.resetAllMocks();
+    activityEventService.resetAllMocks();
     ctx.reset();
     ctx.authenticate.mockResolvedValue(auth);
   });
@@ -299,6 +328,34 @@ describe(AgentSessionController.name, () => {
       expect(status).toBe(200);
       expect(service.getById).toHaveBeenCalledWith(auth, id);
       expectSerializedResponse(result);
+    });
+  });
+
+  describe('GET /agent/sessions/:id/activity-events', () => {
+    it('should be an authenticated route', async () => {
+      activityEventService.getHistory.mockResolvedValue([]);
+
+      await request(ctx.getHttpServer()).get(`/agent/sessions/${id}/activity-events`);
+
+      expect(ctx.authenticate).toHaveBeenCalled();
+      expectPermission(Permission.AgentSessionRead);
+    });
+
+    it('should require a valid uuid', async () => {
+      const { status, body: result } = await request(ctx.getHttpServer()).get('/agent/sessions/123/activity-events');
+
+      expect(status).toBe(400);
+      expect(result).toEqual(factory.responses.badRequest(['[id] Invalid UUID']));
+    });
+
+    it('should call the activity event service with auth and id', async () => {
+      activityEventService.getHistory.mockResolvedValue([activityEvent]);
+
+      const { status, body: result } = await request(ctx.getHttpServer()).get(`/agent/sessions/${id}/activity-events`);
+
+      expect(status).toBe(200);
+      expect(activityEventService.getHistory).toHaveBeenCalledWith(auth, id);
+      expect(result).toEqual([{ ...activityEvent, createdAt: now.toISOString() }]);
     });
   });
 

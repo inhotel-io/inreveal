@@ -44,6 +44,22 @@ vi.mock('svelte-i18n', () => {
     assistant_approval_recent_activity: 'Recent activity ({count})',
     assistant_approval_refresh_error: 'Approval was recorded, but refresh failed.',
     assistant_approval_tool_calls_error: 'Unable to load approval requests',
+    assistant_activity_count: '{count} items',
+    assistant_activity_hide: 'Hide activity',
+    assistant_activity_show: 'Show activity',
+    assistant_activity_status_blocked: 'Needs attention',
+    assistant_activity_status_completed: 'Done',
+    assistant_activity_status_failed: 'Failed',
+    assistant_activity_status_pending: 'Pending',
+    assistant_activity_status_running: 'Running',
+    assistant_activity_status_skipped: 'Skipped',
+    assistant_activity_summary_title: 'Activity summary',
+    assistant_activity_title: 'Pi is working',
+    assistant_activity_visibility: 'Activity preview',
+    assistant_activity_visibility_compact: 'Compact',
+    assistant_activity_visibility_expanded: 'Expanded',
+    assistant_activity_visibility_menu: 'Activity preview options',
+    assistant_activity_visibility_off: 'Off',
     assistant_agent_tool_data_class_metadata: 'Metadata',
     assistant_agent_tool_name_searchAssets: 'Search photos',
     assistant_agent_tool_status_completed: 'Completed',
@@ -234,13 +250,24 @@ const makeToolCall = (sessionId: string): AgentToolCallResponseDto => ({
 });
 
 describe(AgentConversationPane.name, () => {
+  let storageValues: Map<string, string>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    storageValues = new Map();
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn((key: string) => storageValues.get(key) ?? null),
+      setItem: vi.fn((key: string, value: string) => storageValues.set(key, value)),
+    });
     sdkMock.getAgentSession.mockReset();
     websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
     sdkMock.getAgentSessionMessages.mockResolvedValue([]);
     sdkMock.getCurrentOperationPlan.mockResolvedValue(null);
     sdkMock.getToolCalls.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('renders a compact header and chat without the old separate plan review block', async () => {
@@ -405,22 +432,21 @@ describe(AgentConversationPane.name, () => {
       },
     });
 
-    const activity = await screen.findByRole('article', { name: 'Pi searched your photos: Done' });
-    expect(activity).toHaveTextContent('Pi searched your photos.');
-    expect(activity).toHaveTextContent('4 photos');
+    const activity = await screen.findByRole('article', { name: 'Activity summary' });
+    expect(activity).toHaveTextContent('Searching photos');
+    expect(activity).toHaveTextContent('4 items');
     expect(activity).not.toHaveTextContent('Search recent favorites');
-    expect(activity).not.toHaveTextContent('Found matching photos');
 
-    await fireEvent.click(within(activity).getByRole('button', { name: 'Details' }));
+    await fireEvent.click(within(activity).getByRole('button', { name: 'Show activity' }));
 
-    expect(activity).toHaveTextContent('Search recent favorites');
     expect(activity).toHaveTextContent('Found matching photos');
+    expect(activity).not.toHaveTextContent('Search recent favorites');
     expect(screen.queryByText('Recent activity (1)')).not.toBeInTheDocument();
 
     const transcript = screen.getByTestId('agent-session-chat-transcript');
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('Find my beach photos'),
-      expect.stringContaining('Search photos'),
+      expect.stringContaining('Searching photos'),
       expect.stringContaining('I found the best candidates.'),
     ]);
   });
@@ -441,6 +467,7 @@ describe(AgentConversationPane.name, () => {
       status: AgentToolCallStatus.Approved,
       approvalDecision: AgentToolApprovalDecision.Approved,
     });
+    sdkMock.getAgentSessionMessages.mockResolvedValue([makeMessage(session.id, 'Find recent photos')]);
     sdkMock.getAgentSession.mockResolvedValue(makeSession({ id: session.id, status: AgentSessionStatus.Running }));
 
     render(AgentConversationPane, {
@@ -456,20 +483,20 @@ describe(AgentConversationPane.name, () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
     await waitFor(() => expect(screen.queryByRole('article', { name: 'Approval request' })).not.toBeInTheDocument());
-    const activity = await screen.findByRole('article', { name: 'Pi searched your photos: Done' });
-    expect(activity).toHaveTextContent('Pi searched your photos.');
-    expect(activity).not.toHaveTextContent('Found matching photos');
+    const activity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(activity).toHaveTextContent('Searching photos');
 
-    await fireEvent.click(within(activity).getByRole('button', { name: 'Details' }));
+    await fireEvent.click(within(activity).getByRole('button', { name: 'Show activity' }));
 
-    expect(activity).toHaveTextContent('Search recent favorites');
     expect(activity).toHaveTextContent('Found matching photos');
+    expect(activity).not.toHaveTextContent('Search recent favorites');
   });
 
   it('shows Pi working while an approved tool call resumes the assistant', async () => {
     const session = makeSession({ status: AgentSessionStatus.WaitingForToolApproval });
     const pendingToolCall = makeToolCall(session.id);
     let resolveApproval: (toolCall: AgentToolCallResponseDto) => void;
+    sdkMock.getAgentSessionMessages.mockResolvedValue([makeMessage(session.id, 'Find recent photos')]);
     sdkMock.getToolCalls.mockResolvedValue([pendingToolCall]);
     sdkMock.approveToolCall.mockReturnValue(
       new Promise<AgentToolCallResponseDto>((resolve) => {
@@ -489,7 +516,7 @@ describe(AgentConversationPane.name, () => {
     expect(await screen.findByText('Pi wants to search your photos.')).toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
-    expect(await screen.findByText('pi is working...')).toBeInTheDocument();
+    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
 
     resolveApproval!({
       ...pendingToolCall,
@@ -514,6 +541,7 @@ describe(AgentConversationPane.name, () => {
       status: AgentToolCallStatus.Approved,
       approvalDecision: AgentToolApprovalDecision.Approved,
     });
+    sdkMock.getAgentSessionMessages.mockResolvedValue([makeMessage(session.id, 'Find recent photos')]);
     sdkMock.getAgentSession.mockResolvedValue(makeSession({ id: session.id, status: AgentSessionStatus.Running }));
 
     render(AgentConversationPane, {
@@ -529,7 +557,7 @@ describe(AgentConversationPane.name, () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
     await waitFor(() => expect(sdkMock.getAgentSession).toHaveBeenCalledWith({ id: session.id }));
-    expect(screen.getByText('pi is working...')).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
   });
 
   it('shows Pi working for a running resumed session loaded after an approved tool call', async () => {
@@ -555,7 +583,7 @@ describe(AgentConversationPane.name, () => {
     });
 
     expect(await screen.findByText('Find recent photos')).toBeInTheDocument();
-    expect(await screen.findByText('pi is working...')).toBeInTheDocument();
+    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
   });
 
   it('resumes interrupted sessions through append and refreshes the selected session', async () => {
@@ -812,6 +840,58 @@ describe(AgentConversationPane.name, () => {
 
     await fireEvent.click(screen.getByRole('button', { name: 'Close details' }));
     expect(screen.queryByRole('dialog', { name: 'Session details' })).not.toBeInTheDocument();
+  });
+
+  it('persists activity visibility changes from the session header menu', async () => {
+    const session = makeSession();
+
+    render(AgentConversationPane, {
+      props: {
+        session,
+        title: null,
+        onNewChat: vi.fn(),
+        onTitleDiscovered: vi.fn(),
+      },
+    });
+
+    const trigger = screen.getByRole('button', { name: /Activity preview/i });
+    expect(trigger).toHaveTextContent('Compact');
+
+    await fireEvent.click(trigger);
+    await fireEvent.click(screen.getByRole('menuitemradio', { name: 'Expanded' }));
+
+    expect(trigger).toHaveTextContent('Expanded');
+    expect(globalThis.localStorage.setItem).toHaveBeenCalledWith(
+      `gallery.assistant.activityVisibility.${session.id}`,
+      'expanded',
+    );
+  });
+
+  it('loads activity visibility per session instead of sharing one global mode', async () => {
+    const firstSession = makeSession({ id: '00000000-0000-4000-8000-000000000101' });
+    const secondSession = makeSession({ id: '00000000-0000-4000-8000-000000000102' });
+    storageValues.set(`gallery.assistant.activityVisibility.${firstSession.id}`, 'off');
+    storageValues.set(`gallery.assistant.activityVisibility.${secondSession.id}`, 'expanded');
+
+    const view = render(AgentConversationPane, {
+      props: {
+        session: firstSession,
+        title: null,
+        onNewChat: vi.fn(),
+        onTitleDiscovered: vi.fn(),
+      },
+    });
+
+    expect(screen.getByRole('button', { name: /Activity preview/i })).toHaveTextContent('Off');
+
+    await view.rerender({
+      session: secondSession,
+      title: null,
+      onNewChat: vi.fn(),
+      onTitleDiscovered: vi.fn(),
+    });
+
+    expect(screen.getByRole('button', { name: /Activity preview/i })).toHaveTextContent('Expanded');
   });
 
   it('forwards New chat and discovered titles', async () => {

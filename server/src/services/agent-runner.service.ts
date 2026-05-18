@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Optional } from '@nestjs/common';
 import { AgentMessage } from 'src/database';
 import { AgentRunnerStatusDto } from 'src/dtos/agent-runner.dto';
 import { AgentMessageRole, AgentSessionStatus } from 'src/enum';
@@ -7,9 +7,14 @@ import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository'
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
+import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
 import { AgentMessageContent } from 'src/types/agent-message.types';
-import { AgentRunnerCreateSessionInput, AgentRunnerStreamEvent } from 'src/types/agent-runner.types';
+import {
+  AgentRunnerActivityStreamEvent,
+  AgentRunnerCreateSessionInput,
+  AgentRunnerStreamEvent,
+} from 'src/types/agent-runner.types';
 
 const RUNNER_STATUS_CACHE_MS = 15_000;
 
@@ -17,6 +22,11 @@ const buildMcpSessionUrl = (mcpGatewayBaseUrl: string, sessionId: string) =>
   new URL(`sessions/${encodeURIComponent(sessionId)}`, `${mcpGatewayBaseUrl.replace(/\/+$/, '')}/`).toString();
 
 class RunnerReportedError extends Error {}
+
+type AgentSessionActivityServiceLike = {
+  createSystemEvent: (userId: string, sessionId: string, event: Record<string, unknown>) => Promise<unknown>;
+  normalizeRunnerEvent: (event: AgentRunnerActivityStreamEvent) => Record<string, unknown> | null | undefined;
+};
 
 @Injectable()
 export class AgentRunnerService {
@@ -36,6 +46,9 @@ export class AgentRunnerService {
     private readonly sessionRepository: AgentSessionRepository,
     private readonly websocketRepository: WebsocketRepository,
     private readonly toolTokenService: AgentRunnerToolTokenService,
+    @Optional()
+    @Inject(AgentSessionActivityEventService)
+    private readonly activityService?: Partial<AgentSessionActivityServiceLike>,
   ) {}
 
   async createSession(input: AgentRunnerCreateSessionInput) {
@@ -232,6 +245,8 @@ export class AgentRunnerService {
         throw new BadRequestException('Agent runner is not configured');
       }
 
+      this.createActivityEvent(userId, sessionId, { kind: 'start-processing', status: 'running' });
+
       await this.processRunnerStream({
         userId,
         sessionId,
@@ -278,6 +293,8 @@ export class AgentRunnerService {
         ...(toolResult === undefined ? {} : { toolResult }),
       };
 
+      this.createActivityEvent(userId, sessionId, { kind: 'runner-recovery', status: 'running' });
+
       await this.processRunnerStream({
         userId,
         sessionId,
@@ -313,6 +330,11 @@ export class AgentRunnerService {
     let suppressAssistantOutput = false;
     for await (const event of stream) {
       if (event.sessionId !== sessionId || event.runnerSessionId !== runnerSessionId) {
+        continue;
+      }
+
+      if (event.type === 'activity') {
+        void this.createRunnerActivityEvent(userId, sessionId, event);
         continue;
       }
 
@@ -389,6 +411,32 @@ export class AgentRunnerService {
           : 'The assistant runner stopped while processing the message.',
       createdAt: this.toIsoNow(),
     });
+  }
+
+  private createRunnerActivityEvent(userId: string, sessionId: string, event: AgentRunnerActivityStreamEvent) {
+    const normalizedEvent =
+      typeof this.activityService?.normalizeRunnerEvent === 'function'
+        ? this.activityService.normalizeRunnerEvent(event)
+        : undefined;
+    if (!normalizedEvent) {
+      return;
+    }
+
+    return this.createActivityEvent(userId, sessionId, normalizedEvent);
+  }
+
+  private createActivityEvent(userId: string, sessionId: string, event: Record<string, unknown>) {
+    try {
+      if (typeof this.activityService?.createSystemEvent !== 'function') {
+        return;
+      }
+
+      void Promise.resolve(this.activityService.createSystemEvent(userId, sessionId, event)).catch(() => {
+        // Activity events are audit hints and must not block the assistant stream.
+      });
+    } catch {
+      // Activity events are audit hints and must not block the assistant stream.
+    }
   }
 
   private mapMessage(message: AgentMessage) {

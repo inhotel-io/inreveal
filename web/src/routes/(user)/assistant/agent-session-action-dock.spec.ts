@@ -475,4 +475,280 @@ describe(AgentSessionActionDock.name, () => {
     expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(3);
     vi.useRealTimers();
   });
+
+  it('publishes completed tool calls after a same-session websocket refresh', async () => {
+    const handlers: Array<Parameters<typeof websocketMock.websocketEvents.on>[1]> = [];
+    const onRecentToolCallsChange = vi.fn();
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handlers.push(nextHandler);
+      return vi.fn();
+    });
+    sdkMock.getToolCalls
+      .mockResolvedValueOnce([toolCall({ status: AgentToolCallStatus.Executing })])
+      .mockResolvedValueOnce([
+        toolCall({
+          status: AgentToolCallStatus.Completed,
+          responseSummary: 'Found matching photos',
+          completedAt: '2026-05-16T10:01:00.000Z',
+        }),
+      ]);
+
+    render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+    });
+    await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1));
+
+    for (const handler of handlers) {
+      handler({
+        type: 'tool-call-completed',
+        sessionId: 'session-1',
+        toolCallId: 'tool-call-1',
+        createdAt: '2026-05-16T10:01:00Z',
+      });
+    }
+
+    await waitFor(() =>
+      expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({ id: 'tool-call-1', status: AgentToolCallStatus.Completed }),
+      ]),
+    );
+  });
+
+  it('publishes completed tool calls after a polling refresh', async () => {
+    vi.useFakeTimers();
+    const onRecentToolCallsChange = vi.fn();
+    sdkMock.getToolCalls
+      .mockResolvedValueOnce([toolCall({ status: AgentToolCallStatus.Executing })])
+      .mockResolvedValueOnce([
+        toolCall({
+          status: AgentToolCallStatus.Completed,
+          responseSummary: 'Found matching photos',
+          completedAt: '2026-05-16T10:01:00.000Z',
+        }),
+      ]);
+
+    render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+    });
+    await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1));
+
+    await vi.advanceTimersByTimeAsync(3000);
+
+    await waitFor(() =>
+      expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({ id: 'tool-call-1', status: AgentToolCallStatus.Completed }),
+      ]),
+    );
+    vi.useRealTimers();
+  });
+
+  it('does not republish recent tool calls when a polling refresh returns unchanged data', async () => {
+    vi.useFakeTimers();
+    const onRecentToolCallsChange = vi.fn();
+    const completedToolCall = toolCall({
+      status: AgentToolCallStatus.Completed,
+      responseSummary: 'Found matching photos',
+      completedAt: '2026-05-16T10:01:00.000Z',
+    });
+    sdkMock.getToolCalls.mockResolvedValue([completedToolCall]);
+
+    render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+    });
+    await waitFor(() =>
+      expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({ id: completedToolCall.id }),
+      ]),
+    );
+    const publishCountAfterInitialLoad = onRecentToolCallsChange.mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(3000);
+    await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(2));
+
+    expect(onRecentToolCallsChange).toHaveBeenCalledTimes(publishCountAfterInitialLoad);
+    vi.useRealTimers();
+  });
+
+  it('ignores stale out-of-order quiet refresh responses', async () => {
+    const handlers: Array<Parameters<typeof websocketMock.websocketEvents.on>[1]> = [];
+    const onRecentToolCallsChange = vi.fn();
+    let resolveStaleRefresh: (toolCalls: AgentToolCallResponseDto[]) => void;
+    let resolveLatestRefresh: (toolCalls: AgentToolCallResponseDto[]) => void;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handlers.push(nextHandler);
+      return vi.fn();
+    });
+    sdkMock.getToolCalls
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(
+        new Promise<AgentToolCallResponseDto[]>((resolve) => {
+          resolveStaleRefresh = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise<AgentToolCallResponseDto[]>((resolve) => {
+          resolveLatestRefresh = resolve;
+        }),
+      );
+
+    render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+    });
+    await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1));
+
+    for (const handler of handlers) {
+      handler({
+        type: 'tool-call-completed',
+        sessionId: 'session-1',
+        toolCallId: 'tool-call-1',
+        createdAt: '2026-05-16T10:01:00Z',
+      });
+      handler({
+        type: 'tool-call-completed',
+        sessionId: 'session-1',
+        toolCallId: 'tool-call-1',
+        createdAt: '2026-05-16T10:02:00Z',
+      });
+    }
+    await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(3));
+
+    resolveLatestRefresh!([
+      toolCall({
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Latest result',
+        completedAt: '2026-05-16T10:02:00.000Z',
+      }),
+    ]);
+    await waitFor(() =>
+      expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({ responseSummary: 'Latest result' }),
+      ]),
+    );
+
+    resolveStaleRefresh!([
+      toolCall({
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Stale result',
+        completedAt: '2026-05-16T10:01:00.000Z',
+      }),
+    ]);
+    await Promise.resolve();
+
+    expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ responseSummary: 'Latest result' }),
+    ]);
+  });
+
+  it('ignores late refresh responses from a previous session after switching sessions', async () => {
+    const onRecentToolCallsChange = vi.fn();
+    let resolveFirstSession: (toolCalls: AgentToolCallResponseDto[]) => void;
+    sdkMock.getToolCalls
+      .mockReturnValueOnce(
+        new Promise<AgentToolCallResponseDto[]>((resolve) => {
+          resolveFirstSession = resolve;
+        }),
+      )
+      .mockResolvedValueOnce([
+        toolCall({
+          id: 'tool-call-2',
+          sessionId: 'session-2',
+          status: AgentToolCallStatus.Completed,
+          responseSummary: 'New session result',
+          completedAt: '2026-05-16T10:02:00.000Z',
+        }),
+      ]);
+    const view = render(AgentSessionActionDock, {
+      props: { session: makeSession({ id: 'session-1' }), onRecentToolCallsChange },
+    });
+    await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledWith({ id: 'session-1' }));
+
+    await view.rerender({ session: makeSession({ id: 'session-2' }), onRecentToolCallsChange });
+
+    await waitFor(() =>
+      expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({ id: 'tool-call-2', responseSummary: 'New session result' }),
+      ]),
+    );
+
+    resolveFirstSession!([
+      toolCall({
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Old session result',
+        completedAt: '2026-05-16T10:03:00.000Z',
+      }),
+    ]);
+    await Promise.resolve();
+
+    expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: 'tool-call-2', responseSummary: 'New session result' }),
+    ]);
+  });
+
+  it('ignores late refresh responses after the dock is destroyed', async () => {
+    const onRecentToolCallsChange = vi.fn();
+    let resolveToolCalls: (toolCalls: AgentToolCallResponseDto[]) => void;
+    sdkMock.getToolCalls.mockReturnValue(
+      new Promise<AgentToolCallResponseDto[]>((resolve) => {
+        resolveToolCalls = resolve;
+      }),
+    );
+    const { unmount } = render(AgentSessionActionDock, {
+      props: { session: makeSession(), onRecentToolCallsChange },
+    });
+    await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledWith({ id: 'session-1' }));
+
+    unmount();
+    resolveToolCalls!([
+      toolCall({
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Late result',
+        completedAt: '2026-05-16T10:01:00.000Z',
+      }),
+    ]);
+    await Promise.resolve();
+
+    expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it('preserves last known tool-call state when a quiet refresh fails', async () => {
+    const handlers: Array<Parameters<typeof websocketMock.websocketEvents.on>[1]> = [];
+    const onRecentToolCallsChange = vi.fn();
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handlers.push(nextHandler);
+      return vi.fn();
+    });
+    sdkMock.getToolCalls
+      .mockResolvedValueOnce([
+        toolCall({
+          status: AgentToolCallStatus.Completed,
+          responseSummary: 'Known result',
+          completedAt: '2026-05-16T10:01:00.000Z',
+        }),
+      ])
+      .mockRejectedValueOnce(new Error('refresh failed'));
+
+    const { container } = render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+    });
+    await waitFor(() =>
+      expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({ responseSummary: 'Known result' }),
+      ]),
+    );
+
+    for (const handler of handlers) {
+      handler({
+        type: 'tool-call-completed',
+        sessionId: 'session-1',
+        toolCallId: 'tool-call-1',
+        createdAt: '2026-05-16T10:02:00Z',
+      });
+    }
+    await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(2));
+
+    expect(container).not.toHaveTextContent('Unable to load approval requests');
+    expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ responseSummary: 'Known result' }),
+    ]);
+  });
 });

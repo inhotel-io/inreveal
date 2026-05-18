@@ -2,6 +2,7 @@ import {
   AgentOperationApplyStatus,
   MaintenanceAction,
   type AgentMessageResponseDto,
+  type AgentSessionActivityEventResponseDto,
   type AssetResponseDto,
   type MaintenanceStatusResponseDto,
   type NotificationDto,
@@ -64,6 +65,12 @@ export type AgentSessionClientEvent =
       appliedCount: number;
       skippedCount: number;
       failedCount: number;
+    }
+  | {
+      type: 'activity';
+      sessionId: string;
+      event: AgentSessionActivityEventResponseDto;
+      createdAt: string;
     };
 
 export interface Events {
