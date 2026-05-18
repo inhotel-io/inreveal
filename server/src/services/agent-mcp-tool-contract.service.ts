@@ -183,7 +183,25 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
   commonMistakes: [
     {
       id: 'search-filters-outside-filters',
-      match: { unexpectedField: 'city' },
+      match: {
+        issuePath: '',
+        unexpectedFields: [
+          'takenAfter',
+          'takenBefore',
+          'city',
+          'state',
+          'country',
+          'make',
+          'model',
+          'lensModel',
+          'isFavorite',
+          'isNotInAlbum',
+          'type',
+          'rating',
+          'tagIds',
+          'albumIds',
+        ],
+      },
       hint: 'Place date, location, favorite, rating, album, tag, camera, and media filters inside the filters object.',
       exampleName: 'bounded-date-location-search',
     },
@@ -563,7 +581,7 @@ const mistakeSpecificity = (mistake: AgentMcpCommonMistake): number =>
   Number(Boolean(mistake.match.issuePath)) +
   Number(Boolean(mistake.match.messageIncludes)) +
   Number(Boolean(mistake.match.missingField)) +
-  Number(Boolean(mistake.match.unexpectedField)) +
+  Number(Boolean(mistake.match.unexpectedField || mistake.match.unexpectedFields)) +
   Number(Boolean(mistake.match.requestShape));
 
 const issueMatchesMessage = (issue: AgentMcpValidationIssue, messageIncludes: string | undefined): boolean =>
@@ -588,12 +606,14 @@ const mistakeMatchingIssue = (
     );
   }
 
-  if (match.unexpectedField) {
+  const unexpectedFields = match.unexpectedFields ?? (match.unexpectedField ? [match.unexpectedField] : undefined);
+
+  if (unexpectedFields) {
     return request.issues.find(
       (issue) =>
         issueMatchesPath(issue, match.issuePath) &&
         issueMatchesMessage(issue, match.messageIncludes) &&
-        issue.message.includes(match.unexpectedField),
+        unexpectedFields.some((field) => issue.message.includes(field)),
     );
   }
 
