@@ -34,6 +34,23 @@ export type AgentMcpToolCallResult = {
   isError?: boolean;
 };
 
+export type AgentMcpToolValidationIssue = {
+  path: string;
+  message: string;
+  hint?: string;
+};
+
+export type AgentMcpToolValidationErrorContent = {
+  status: 'error';
+  error: 'Invalid tool arguments';
+  toolName: AgentToolName;
+  retryable: true;
+  issues: AgentMcpToolValidationIssue[];
+  expected?: string;
+  hint?: string;
+  exampleArguments?: AgentMcpJsonObject;
+};
+
 export type AgentMcpError = {
   code: number;
   message: string;
