@@ -60,6 +60,19 @@
     publishToolCallState(nextToolCalls);
   };
 
+  const refreshSession = async () => {
+    try {
+      const nextSession = await getAgentSession({ id: session.id });
+      if (destroyed || nextSession.id !== session.id) {
+        return;
+      }
+
+      onSessionUpdated?.(nextSession);
+    } catch {
+      // Approval/plan refresh should still update local dock state when session status refresh misses once.
+    }
+  };
+
   const loadToolCalls = async ({ quiet = false }: { quiet?: boolean } = {}) => {
     const sequence = ++loadSequence;
     if (!quiet) {
@@ -141,8 +154,14 @@
   };
 
   const handleSessionEvent = (event: AgentSessionClientEvent) => {
-    if (event.sessionId === session.id) {
-      void loadToolCalls({ quiet: true });
+    if (event.sessionId !== session.id) {
+      return;
+    }
+
+    void loadToolCalls({ quiet: true });
+
+    if (event.type === 'operation-plan-applied') {
+      void refreshSession();
     }
   };
 
