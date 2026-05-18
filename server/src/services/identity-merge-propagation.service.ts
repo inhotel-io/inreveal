@@ -89,7 +89,8 @@ export class IdentityMergePropagationService {
   constructor(private deps: IdentityMergePropagationDependencies) {}
 
   /**
-   * Materializes missing identities for the initiating target/source profiles before loading attached profiles.
+   * Ensures identities for the initiating target/source profiles before loading attached profiles;
+   * this may persist newly-created identities.
    */
   async buildPersonalMergePlan(input: {
     actorUserId: string;
