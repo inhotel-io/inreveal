@@ -78,7 +78,7 @@ describe(AgentMcpDocsService.name, () => {
     const markdown = sut.generateMarkdown();
     const blocks = [
       ...markdown.matchAll(
-        /<!-- mcp-docs:tool-arguments tool="([^"]+)" example="([^"]+)" -->\n```json\n([\s\S]*?)\n```/g,
+        /<!-- mcp-docs:tool-arguments tool="([^"]+)" example="([^"]+)" -->\n\n```json\n([\s\S]*?)\n```/g,
       ),
     ];
 
