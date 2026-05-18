@@ -169,7 +169,10 @@ export class PersonRepository {
       .execute();
     const targetNeedsFeatureFaceRepair =
       !target.faceAssetId || !(await this.isFeatureFaceValid(input.targetPersonId, target.faceAssetId, db));
-    await db.deleteFrom('person').where('id', '=', input.sourcePersonId).execute();
+    const [deleteResult] = await db.deleteFrom('person').where('id', '=', input.sourcePersonId).execute();
+    if (Number(deleteResult.numDeletedRows ?? 0) === 0) {
+      throw new Error('Person profile not found');
+    }
 
     return { deletedThumbnailPath: source.thumbnailPath || null, targetNeedsFeatureFaceRepair };
   }

@@ -149,10 +149,12 @@ class PersonalMergeDeleteBuilder {
 
   async execute() {
     if (this.table === 'person' && this.whereColumn === 'id') {
+      const before = this.db.people.length;
       this.db.people = this.db.people.filter((person) => person.id !== this.whereValue);
+      return [{ numDeletedRows: BigInt(before - this.db.people.length) }];
     }
 
-    return [];
+    return [{ numDeletedRows: 0n }];
   }
 }
 
