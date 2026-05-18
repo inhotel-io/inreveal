@@ -279,6 +279,13 @@ export class IdentityMergePropagationService {
   }
 
   private sortMergeSources(profiles: MergeProfile[]): MergeProfile[] {
-    return profiles.toSorted((a, b) => b.faceCount - a.faceCount || a.id.localeCompare(b.id));
+    return profiles.toSorted(
+      (a, b) =>
+        b.faceCount - a.faceCount || Number(this.hasName(b)) - Number(this.hasName(a)) || a.id.localeCompare(b.id),
+    );
+  }
+
+  private hasName(profile: MergeProfile): boolean {
+    return profile.name.trim().length > 0;
   }
 }
