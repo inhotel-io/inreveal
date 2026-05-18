@@ -6537,7 +6537,7 @@ describe(SharedSpaceService.name, () => {
         identityId,
         name: 'Manual Alice',
         nameSource: 'manual',
-        birthDate: new Date('1988-08-08T00:00:00.000Z'),
+        birthDate: '1988-08-08',
         birthDateSource: 'manual',
       });
 
@@ -6576,7 +6576,7 @@ describe(SharedSpaceService.name, () => {
         name: 'Old Inherited',
         nameSource: 'inherited',
         nameSourceProfileId: newUuid(),
-        birthDate: new Date('1991-01-01T00:00:00.000Z'),
+        birthDate: '1991-01-01',
         birthDateSource: 'inherited',
         birthDateSourceProfileId: newUuid(),
       });

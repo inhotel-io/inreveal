@@ -2261,12 +2261,13 @@ describe('People identity RBAC projection', () => {
         nextCursor: expect.any(String),
         affectedSpaceAssets: expect.any(Array),
       });
-      expect(firstPage.affectedSpaceAssets).toHaveLength(1);
-      expect([firstAsset.id, secondAsset.id]).toContain(firstPage.affectedSpaceAssets[0].assetId);
-      expect(firstPage.affectedSpaceAssets[0].spaceId).toBe(space.id);
+      const firstPageAffectedAssets = firstPage.affectedSpaceAssets ?? [];
+      expect(firstPageAffectedAssets).toHaveLength(1);
+      expect([firstAsset.id, secondAsset.id]).toContain(firstPageAffectedAssets[0].assetId);
+      expect(firstPageAffectedAssets[0].spaceId).toBe(space.id);
       expect(jobs.queueAll).not.toHaveBeenCalled();
       await expect(faceIdentityRepository.getPendingSharedSpaceFaceMatchBackfillTargets()).resolves.toMatchObject(
-        firstPage.affectedSpaceAssets,
+        firstPageAffectedAssets,
       );
 
       await sut.handleFaceIdentityBackfill({ stage: 'person', cursor: firstPage.nextCursor });
@@ -2430,7 +2431,7 @@ describe('People identity RBAC projection', () => {
     const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
     jobs.waitForQueueCompletion.mockResolvedValue();
     jobs.empty.mockResolvedValue();
-    jobs.getJobCounts.mockResolvedValue({ active: 0, waiting: 0, delayed: 0, paused: 0, failed: 0 });
+    jobs.getJobCounts.mockResolvedValue({ active: 0, waiting: 0, delayed: 0, paused: 0, failed: 0, completed: 0 });
     ctx
       .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
       .set.mockResolvedValue();
@@ -2505,12 +2506,13 @@ describe('People identity RBAC projection', () => {
       const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
       await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
       await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
-      await ctx.newSharedSpaceMember({
-        spaceId: space.id,
-        userId: source.id,
-        role: SharedSpaceRole.Editor,
-        sharePersonMetadata: true,
-      });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: source.id, role: SharedSpaceRole.Editor });
+      await ctx.database
+        .updateTable('shared_space_member')
+        .set({ sharePersonMetadata: true })
+        .where('spaceId', '=', space.id)
+        .where('userId', '=', source.id)
+        .execute();
       const { person: sourcePerson } = await ctx.newPerson({ ownerId: source.id, name: 'Source Alice' });
       const identity = await faceIdentityRepository.ensurePersonIdentity(sourcePerson.id);
       const { asset } = await ctx.newAsset({ ownerId: source.id, visibility: AssetVisibility.Timeline });
