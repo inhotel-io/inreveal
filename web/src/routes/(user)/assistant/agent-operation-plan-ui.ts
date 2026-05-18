@@ -153,7 +153,7 @@ export type OperationReviewItem = {
   representativeAssetIds: string[];
   editableFields: AgentOperationEditableField[];
   fieldErrors: Record<string, string>;
-  fieldOverrides: Record<string, unknown>;
+  fieldOverrides: Record<string, string>;
   applyState: OperationApplyState;
 };
 
@@ -883,12 +883,13 @@ const getAssetResultDetails = (value: unknown) => {
 
 const buildSparseOperationFieldOverrides = (editableFields: AgentOperationEditableField[]): Record<string, string> =>
   Object.fromEntries(
-    editableFields
-      .filter((field) => field.value !== field.originalValue)
-      .map((field) => [
-        field.key,
-        field.input === 'textarea' || field.input === 'text' ? field.value.trim() : field.value,
-      ]),
+    editableFields.flatMap((field) => {
+      if (field.value === field.originalValue || typeof field.value !== 'string') {
+        return [];
+      }
+
+      return [[field.key, field.input === 'textarea' || field.input === 'text' ? field.value.trim() : field.value]];
+    }),
   );
 
 const applyOperationFieldOverrides = (
