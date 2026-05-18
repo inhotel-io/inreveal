@@ -186,6 +186,16 @@ describe(AgentMcpToolContractService.name, () => {
       expect(correction?.hint).toBe('Provide each asset id only once.');
     });
 
+    it('returns the asset id limit correction for max array validation failures', () => {
+      const correction = sut.getReadToolValidationCorrection(AgentToolName.ReadAssetMetadata, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: 'assetIds', message: 'Too big: expected array to have <=10000 items' }],
+      });
+
+      expect(correction?.mistakeId).toBe('asset-read-too-many-asset-ids');
+      expect(correction?.hint).toContain('at most 10000');
+    });
+
     it('returns a read-tool fallback when no common mistake matches', () => {
       const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
         requestShape: 'tool-arguments',
