@@ -416,12 +416,10 @@
       return;
     }
 
-    const nextFieldOverrideByOperationId = setOperationFieldOverride(
-      fieldOverrideByOperationId,
-      operationId,
-      fieldKey,
-      value,
-    );
+    const nextFieldOverrideByOperationId =
+      value === undefined
+        ? resetOperationFieldOverride(fieldOverrideByOperationId, operationId, fieldKey)
+        : setOperationFieldOverride(fieldOverrideByOperationId, operationId, fieldKey, value);
     fieldOverrideByOperationId = nextFieldOverrideByOperationId;
     publishSelection(plan, enabledByOperationId, itemSelectionByOperationId, nextFieldOverrideByOperationId);
   };
