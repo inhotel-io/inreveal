@@ -42,6 +42,7 @@
   let interval: ReturnType<typeof setInterval> | undefined;
   let loadSequence = 0;
   let destroyed = false;
+  let activeSessionId: string | undefined;
 
   const pendingToolCalls = $derived(getPendingToolCalls(toolCalls));
   const shouldPoll = $derived(
@@ -49,21 +50,48 @@
   );
   const canShowPlanReview = $derived((!loading || loadErrorMessage !== null) && pendingToolCalls.length === 0);
 
+  const toolCallStateKey = (toolCall: AgentToolCallResponseDto) =>
+    [
+      toolCall.id,
+      toolCall.status,
+      toolCall.startedAt,
+      toolCall.completedAt ?? '',
+      toolCall.responseSummary ?? '',
+      toolCall.error ?? '',
+      toolCall.approvalDecision ?? '',
+    ].join('|');
+
+  const areToolCallListsEquivalent = (
+    firstToolCalls: AgentToolCallResponseDto[],
+    secondToolCalls: AgentToolCallResponseDto[],
+  ) =>
+    firstToolCalls.length === secondToolCalls.length &&
+    firstToolCalls.every((toolCall, index) => toolCallStateKey(toolCall) === toolCallStateKey(secondToolCalls[index]));
+
   const publishToolCallState = (nextToolCalls: AgentToolCallResponseDto[]) => {
     onPendingApprovalCountChange?.(getPendingToolCalls(nextToolCalls).length);
     onRecentToolCallsChange?.(getRecentToolCalls(nextToolCalls));
   };
 
-  const replaceToolCall = (toolCall: AgentToolCallResponseDto) => {
-    const nextToolCalls = [toolCall, ...toolCalls.filter((existingToolCall) => existingToolCall.id !== toolCall.id)];
+  const setToolCalls = (nextToolCalls: AgentToolCallResponseDto[]) => {
+    if (areToolCallListsEquivalent(toolCalls, nextToolCalls)) {
+      return;
+    }
+
     toolCalls = nextToolCalls;
     publishToolCallState(nextToolCalls);
   };
 
+  const replaceToolCall = (toolCall: AgentToolCallResponseDto) => {
+    const nextToolCalls = [toolCall, ...toolCalls.filter((existingToolCall) => existingToolCall.id !== toolCall.id)];
+    setToolCalls(nextToolCalls);
+  };
+
   const refreshSession = async () => {
+    const sessionId = session.id;
     try {
-      const nextSession = await getAgentSession({ id: session.id });
-      if (destroyed || nextSession.id !== session.id) {
+      const nextSession = await getAgentSession({ id: sessionId });
+      if (destroyed || nextSession.id !== session.id || nextSession.id !== sessionId) {
         return;
       }
 
@@ -75,24 +103,25 @@
 
   const loadToolCalls = async ({ quiet = false }: { quiet?: boolean } = {}) => {
     const sequence = ++loadSequence;
+    const sessionId = session.id;
     if (!quiet) {
       loading = true;
+      loadErrorMessage = null;
     }
-    loadErrorMessage = null;
 
     try {
-      const nextToolCalls = await getToolCalls({ id: session.id });
-      if (destroyed || sequence !== loadSequence) {
+      const nextToolCalls = await getToolCalls({ id: sessionId });
+      if (destroyed || sequence !== loadSequence || session.id !== sessionId) {
         return;
       }
 
-      toolCalls = nextToolCalls;
-      publishToolCallState(nextToolCalls);
+      setToolCalls(nextToolCalls);
+      loadErrorMessage = null;
 
       if (shouldPoll) {
         try {
-          const nextSession = await getAgentSession({ id: session.id });
-          if (destroyed || sequence !== loadSequence || nextSession.id !== session.id) {
+          const nextSession = await getAgentSession({ id: sessionId });
+          if (destroyed || sequence !== loadSequence || session.id !== sessionId || nextSession.id !== sessionId) {
             return;
           }
 
@@ -102,7 +131,11 @@
         }
       }
     } catch (error) {
-      if (destroyed || sequence !== loadSequence) {
+      if (destroyed || sequence !== loadSequence || session.id !== sessionId) {
+        return;
+      }
+
+      if (quiet) {
         return;
       }
 
@@ -185,9 +218,21 @@
     startPolling();
   });
 
+  $effect(() => {
+    const nextSessionId = session.id;
+    if (activeSessionId === nextSessionId) {
+      return;
+    }
+
+    activeSessionId = nextSessionId;
+    loadSequence += 1;
+    toolCalls = [];
+    publishToolCallState([]);
+    void loadToolCalls();
+  });
+
   onMount(() => {
     cleanupWebsocketListener = websocketEvents.on('on_agent_session_event', handleSessionEvent);
-    void loadToolCalls();
   });
 
   onDestroy(() => {

@@ -196,6 +196,26 @@ export enum AgentSessionStatus {
   Failed = 'failed',
 }
 
+export enum AgentSessionActivityEventKind {
+  StartProcessing = 'start-processing',
+  PlanComposing = 'plan-composing',
+  ApplyProgress = 'apply-progress',
+  RunnerRecovery = 'runner-recovery',
+  Unknown = 'unknown',
+}
+
+export enum AgentSessionActivityEventStatus {
+  Running = 'running',
+  Completed = 'completed',
+  Failed = 'failed',
+  Skipped = 'skipped',
+}
+
+export enum AgentSessionActivityEventSource {
+  Server = 'server',
+  Runner = 'runner',
+}
+
 export enum SharedSpaceActivityType {
   AssetAdd = 'asset_add',
   AssetRemove = 'asset_remove',

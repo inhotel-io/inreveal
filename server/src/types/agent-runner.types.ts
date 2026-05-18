@@ -49,6 +49,22 @@ export type AgentRunnerResumeRequest = {
   toolResult?: unknown;
 };
 
+export type AgentRunnerActivityKind = 'start-processing' | 'plan-composing' | 'apply-progress' | 'runner-recovery' | 'unknown';
+
+export type AgentRunnerActivityStatus = 'running' | 'completed' | 'failed' | 'skipped';
+
+export type AgentRunnerActivityCounts = Partial<Record<'total' | 'applied' | 'skipped' | 'failed', number>>;
+
+export type AgentRunnerActivityStreamEvent = {
+  type: 'activity';
+  sessionId: string;
+  runnerSessionId: string;
+  kind: AgentRunnerActivityKind;
+  status: AgentRunnerActivityStatus;
+  summary?: string;
+  counts?: AgentRunnerActivityCounts;
+};
+
 export type AgentRunnerStreamEvent =
   | {
       type: 'assistant-message-delta';
@@ -75,4 +91,5 @@ export type AgentRunnerStreamEvent =
       sessionId: string;
       runnerSessionId: string;
       message: string;
-    };
+    }
+  | AgentRunnerActivityStreamEvent;

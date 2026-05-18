@@ -19,6 +19,7 @@ import { AgentMessageTable } from 'src/schema/tables/agent-message.table';
 import { AgentOperationPlanTable } from 'src/schema/tables/agent-operation-plan.table';
 import { AgentOperationTable } from 'src/schema/tables/agent-operation.table';
 import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
+import { AgentSessionActivityEventTable } from 'src/schema/tables/agent-session-activity-event.table';
 import { AgentSessionTable } from 'src/schema/tables/agent-session.table';
 import { AgentToolCallTable } from 'src/schema/tables/agent-tool-call.table';
 import { AlbumTable } from 'src/schema/tables/album.table';
@@ -95,6 +96,7 @@ export type ApiKey = {
 export type AgentProviderCredential = Selectable<AgentProviderCredentialTable>;
 export type AgentMessage = Selectable<AgentMessageTable>;
 export type AgentSession = Selectable<AgentSessionTable>;
+export type AgentSessionActivityEvent = Selectable<AgentSessionActivityEventTable>;
 export type AgentToolCall = Selectable<AgentToolCallTable>;
 export type AgentOperationPlan = Selectable<AgentOperationPlanTable>;
 export type AgentOperation = Selectable<AgentOperationTable>;
@@ -585,6 +587,7 @@ export const columns = {
     'endedAt',
     'updateId',
   ],
+  agentSessionActivityEvent: ['id', 'sessionId', 'kind', 'status', 'source', 'summary', 'counts', 'createdAt'],
   notification: ['id', 'createdAt', 'level', 'type', 'title', 'description', 'data', 'readAt'],
   syncAsset: [
     'asset.id',
