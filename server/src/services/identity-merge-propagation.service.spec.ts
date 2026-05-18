@@ -484,10 +484,12 @@ describe('IdentityMergePropagationService', () => {
 
       expect(plan.spaceProfileMerges).toEqual([
         { spaceId: 'space-a', targetPersonId: 'space-a-x', sourcePersonIds: ['space-a-y'] },
+        { spaceId: 'space-b', targetPersonId: 'space-b-x', sourcePersonIds: ['space-b-y'] },
       ]);
       expect(plan.followUpJobs).toEqual([
         { name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: 'identity-x' } },
         { name: JobName.SharedSpacePersonDedup, data: { spaceId: 'space-a' } },
+        { name: JobName.SharedSpacePersonDedup, data: { spaceId: 'space-b' } },
       ]);
       expect(plan.activityEvents).toEqual([
         expect.objectContaining({
@@ -499,6 +501,93 @@ describe('IdentityMergePropagationService', () => {
           data: expect.objectContaining({ originScope: 'space-person', activityRole: 'propagated' }),
         }),
       ]);
+    });
+
+    it('plans propagated merges in every other space with duplicate profiles', async () => {
+      const { sut } = makeService([
+        profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x', faceCount: 10 }),
+        profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y', faceCount: 4 }),
+        profile({ kind: 'space-person', id: 'space-b-x', spaceId: 'space-b', identityId: 'identity-x', faceCount: 8 }),
+        profile({ kind: 'space-person', id: 'space-b-y', spaceId: 'space-b', identityId: 'identity-y', faceCount: 1 }),
+        profile({ kind: 'space-person', id: 'space-c-y', spaceId: 'space-c', identityId: 'identity-y', faceCount: 2 }),
+      ]);
+
+      const plan = await sut.buildSpaceMergePlan({
+        actorUserId: 'editor-1',
+        spaceId: 'space-a',
+        targetPersonId: 'space-a-x',
+        sourcePersonIds: ['space-a-y'],
+      });
+
+      expect(plan.spaceProfileMerges).toEqual([
+        { spaceId: 'space-a', targetPersonId: 'space-a-x', sourcePersonIds: ['space-a-y'] },
+        { spaceId: 'space-b', targetPersonId: 'space-b-x', sourcePersonIds: ['space-b-y'] },
+      ]);
+      expect(plan.profileIdentityUpdates).toContainEqual({
+        kind: 'space-person',
+        profileId: 'space-c-y',
+        identityId: 'identity-x',
+      });
+      expect(plan.affectedSpaceIds).toEqual(['space-a', 'space-b', 'space-c']);
+      expect(plan.followUpJobs).toEqual([
+        { name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: 'identity-x' } },
+        { name: JobName.SharedSpacePersonDedup, data: { spaceId: 'space-a' } },
+        { name: JobName.SharedSpacePersonDedup, data: { spaceId: 'space-b' } },
+        { name: JobName.SharedSpacePersonDedup, data: { spaceId: 'space-c' } },
+      ]);
+    });
+
+    it('keeps other-space single profiles and updates identity only', async () => {
+      const { sut } = makeService([
+        profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x', faceCount: 10 }),
+        profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y', faceCount: 4 }),
+        profile({ kind: 'space-person', id: 'space-c-y', spaceId: 'space-c', identityId: 'identity-y', faceCount: 2 }),
+      ]);
+
+      const plan = await sut.buildSpaceMergePlan({
+        actorUserId: 'editor-1',
+        spaceId: 'space-a',
+        targetPersonId: 'space-a-x',
+        sourcePersonIds: ['space-a-y'],
+      });
+
+      expect(plan.spaceProfileMerges).toEqual([
+        { spaceId: 'space-a', targetPersonId: 'space-a-x', sourcePersonIds: ['space-a-y'] },
+      ]);
+      expect(plan.profileIdentityUpdates.filter((update) => update.kind === 'space-person')).toEqual([
+        { kind: 'space-person', profileId: 'space-c-y', identityId: 'identity-x' },
+      ]);
+      expect(plan.affectedSpaceIds).toEqual(['space-a', 'space-c']);
+    });
+
+    it('deduplicates affected space ids for jobs and activity', async () => {
+      const { sut } = makeService([
+        profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x', faceCount: 10 }),
+        profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y', faceCount: 4 }),
+        profile({ kind: 'space-person', id: 'space-a-z', spaceId: 'space-a', identityId: 'identity-z', faceCount: 2 }),
+        profile({ kind: 'space-person', id: 'space-b-x', spaceId: 'space-b', identityId: 'identity-x', faceCount: 8 }),
+        profile({ kind: 'space-person', id: 'space-b-y', spaceId: 'space-b', identityId: 'identity-y', faceCount: 1 }),
+        profile({ kind: 'space-person', id: 'space-b-z', spaceId: 'space-b', identityId: 'identity-z', faceCount: 3 }),
+        profile({ kind: 'space-person', id: 'space-c-y', spaceId: 'space-c', identityId: 'identity-y', faceCount: 2 }),
+      ]);
+
+      const plan = await sut.buildSpaceMergePlan({
+        actorUserId: 'editor-1',
+        spaceId: 'space-a',
+        targetPersonId: 'space-a-x',
+        sourcePersonIds: ['space-a-y', 'space-a-y', 'space-a-z'],
+      });
+
+      expect(plan.origin.sourceProfileIds).toEqual(['space-a-y', 'space-a-z']);
+      expect(plan.sourceIdentityIds).toEqual(['identity-y', 'identity-z']);
+      expect(plan.affectedSpaceIds).toEqual(['space-a', 'space-b', 'space-c']);
+      expect(plan.followUpJobs).toEqual([
+        { name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: 'identity-x' } },
+        { name: JobName.SharedSpacePersonDedup, data: { spaceId: 'space-a' } },
+        { name: JobName.SharedSpacePersonDedup, data: { spaceId: 'space-b' } },
+        { name: JobName.SharedSpacePersonDedup, data: { spaceId: 'space-c' } },
+      ]);
+      expect(plan.activityEvents.map((event) => event.spaceId)).toEqual(['space-a', 'space-b', 'space-c']);
     });
 
     it('plans personal propagation and other-space activity without requiring actor membership in other scopes', async () => {
@@ -529,11 +618,12 @@ describe('IdentityMergePropagationService', () => {
       });
       expect(plan.spaceProfileMerges).toEqual([
         { spaceId: 'space-a', targetPersonId: 'space-a-x', sourcePersonIds: ['space-a-y'] },
+        { spaceId: 'space-b', targetPersonId: 'space-b-x', sourcePersonIds: ['space-b-y'] },
       ]);
       expect(plan.activityEvents.map((event) => event.spaceId)).toEqual(['space-a', 'space-b']);
     });
 
-    it('does not plan singleton identity updates for other spaces in task 3', async () => {
+    it('plans singleton identity updates for other spaces', async () => {
       const { sut } = makeService([
         profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x', faceCount: 10 }),
         profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y', faceCount: 4 }),
@@ -547,7 +637,9 @@ describe('IdentityMergePropagationService', () => {
         sourcePersonIds: ['space-a-y'],
       });
 
-      expect(plan.profileIdentityUpdates.filter((update) => update.kind === 'space-person')).toEqual([]);
+      expect(plan.profileIdentityUpdates.filter((update) => update.kind === 'space-person')).toEqual([
+        { kind: 'space-person', profileId: 'space-b-y', identityId: 'identity-x' },
+      ]);
       expect(plan.activityEvents.map((event) => event.spaceId)).toEqual(['space-a', 'space-b']);
     });
   });
@@ -835,6 +927,93 @@ describe('IdentityMergePropagationService', () => {
 
       expect(mocks.database.transaction).toHaveBeenCalledTimes(1);
       expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('activity fanout', () => {
+    it('writes initiating activity for the origin space and propagated activity for every affected other space', async () => {
+      const { sut, mocks } = makeService([
+        profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x', faceCount: 10 }),
+        profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y', faceCount: 4 }),
+        profile({ kind: 'space-person', id: 'space-b-x', spaceId: 'space-b', identityId: 'identity-x', faceCount: 8 }),
+        profile({ kind: 'space-person', id: 'space-b-y', spaceId: 'space-b', identityId: 'identity-y', faceCount: 1 }),
+        profile({ kind: 'space-person', id: 'space-c-y', spaceId: 'space-c', identityId: 'identity-y', faceCount: 2 }),
+      ]);
+
+      const plan = await sut.buildSpaceMergePlan({
+        actorUserId: 'editor-1',
+        spaceId: 'space-a',
+        targetPersonId: 'space-a-x',
+        sourcePersonIds: ['space-a-y'],
+      });
+      await sut.executePlan(plan, { actorUserId: 'editor-1' });
+
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledTimes(3);
+      expect(mocks.sharedSpace.logActivity).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          spaceId: 'space-a',
+          data: expect.objectContaining({
+            originScope: 'space-person',
+            activityRole: 'initiating',
+            originatingSpaceId: 'space-a',
+            targetIdentityId: 'identity-x',
+            sourceIdentityIds: ['identity-y'],
+            affectedSpaceIds: ['space-a', 'space-b', 'space-c'],
+          }),
+        }),
+        expect.anything(),
+      );
+      expect(mocks.sharedSpace.logActivity).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          spaceId: 'space-b',
+          data: expect.objectContaining({
+            originScope: 'space-person',
+            activityRole: 'propagated',
+            originatingSpaceId: 'space-a',
+            targetIdentityId: 'identity-x',
+            sourceIdentityIds: ['identity-y'],
+            affectedSpaceIds: ['space-a', 'space-b', 'space-c'],
+          }),
+        }),
+        expect.anything(),
+      );
+      expect(mocks.sharedSpace.logActivity).toHaveBeenNthCalledWith(
+        3,
+        expect.objectContaining({
+          spaceId: 'space-c',
+          data: expect.objectContaining({
+            originScope: 'space-person',
+            activityRole: 'propagated',
+            originatingSpaceId: 'space-a',
+            targetIdentityId: 'identity-x',
+            sourceIdentityIds: ['identity-y'],
+            affectedSpaceIds: ['space-a', 'space-b', 'space-c'],
+          }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('does not write duplicate activity when duplicate source ids are provided', async () => {
+      const { sut, mocks } = makeService([
+        profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x', faceCount: 10 }),
+        profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y', faceCount: 4 }),
+        profile({ kind: 'space-person', id: 'space-b-y', spaceId: 'space-b', identityId: 'identity-y', faceCount: 2 }),
+      ]);
+
+      const plan = await sut.buildSpaceMergePlan({
+        actorUserId: 'editor-1',
+        spaceId: 'space-a',
+        targetPersonId: 'space-a-x',
+        sourcePersonIds: ['space-a-y', 'space-a-y'],
+      });
+      await sut.executePlan(plan, { actorUserId: 'editor-1' });
+
+      expect(plan.origin.sourceProfileIds).toEqual(['space-a-y']);
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledTimes(2);
+      expect(mocks.sharedSpace.logActivity.mock.calls.map(([event]) => event.spaceId)).toEqual(['space-a', 'space-b']);
     });
   });
 });

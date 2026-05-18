@@ -291,21 +291,7 @@ export class IdentityMergePropagationService {
 
     const sortedAffectedOwnerIds = [...affectedOwnerIds].toSorted();
     const sortedAffectedSpaceIds = [...affectedSpaceIds].toSorted();
-    const payload: MergePropagationActivityPayload = {
-      originScope: 'person',
-      actorUserId: input.actorUserId,
-      activityRole: 'propagated',
-      originatingSpaceId: null,
-      targetProfileId: ensuredTargetProfile.id,
-      sourceProfileIds: sourcePersonIds,
-      targetIdentityId,
-      sourceIdentityIds,
-      affectedPersonalProfileMergeCount: personalProfileMerges.length,
-      affectedSharedSpaceProfileMergeCount: spaceProfileMerges.length,
-      affectedSpaceIds: sortedAffectedSpaceIds,
-    };
-
-    return {
+    const plan: IdentityMergePropagationPlan = {
       actorUserId: input.actorUserId,
       origin: {
         type: 'person',
@@ -326,13 +312,17 @@ export class IdentityMergePropagationService {
           (spaceId): MergePropagationFollowUpJob => ({ name: JobName.SharedSpacePersonDedup, data: { spaceId } }),
         ),
       ],
-      activityEvents: sortedAffectedSpaceIds.map((spaceId) => ({
-        spaceId,
-        userId: input.actorUserId,
-        type: SharedSpaceActivityType.PersonMerge,
-        data: payload,
-      })),
+      activityEvents: [],
     };
+
+    plan.activityEvents = sortedAffectedSpaceIds.map((spaceId) => ({
+      spaceId,
+      userId: input.actorUserId,
+      type: SharedSpaceActivityType.PersonMerge,
+      data: this.buildActivityPayload(plan, 'propagated', spaceId),
+    }));
+
+    return plan;
   }
 
   /**
@@ -395,7 +385,6 @@ export class IdentityMergePropagationService {
     const profileIdentityUpdates: IdentityMergePropagationPlan['profileIdentityUpdates'] = [];
     const affectedOwnerIds = new Set<string>();
     const affectedSpaceIds = new Set<string>();
-    const followUpSpaceIds = new Set<string>();
 
     for (const [ownerId, profiles] of [...personalGroups.entries()].toSorted(([a], [b]) => a.localeCompare(b))) {
       const survivor = this.chooseSurvivor(profiles, { targetIdentityId });
@@ -415,43 +404,24 @@ export class IdentityMergePropagationService {
     }
 
     for (const [spaceId, profiles] of [...spaceGroups.entries()].toSorted(([a], [b]) => a.localeCompare(b))) {
-      affectedSpaceIds.add(spaceId);
-      if (spaceId !== input.spaceId) {
-        continue;
-      }
-
       const survivor = this.chooseSurvivor(profiles, {
         targetIdentityId,
-        initiatingTargetProfileId: ensuredTargetProfile.id,
+        initiatingTargetProfileId: spaceId === input.spaceId ? ensuredTargetProfile.id : undefined,
       });
       const sources = this.sortMergeSources(profiles.filter((profile) => profile.id !== survivor.id));
 
       if (sources.length > 0) {
         spaceProfileMerges.push({ spaceId, targetPersonId: survivor.id, sourcePersonIds: sources.map(({ id }) => id) });
-        followUpSpaceIds.add(spaceId);
+        affectedSpaceIds.add(spaceId);
       } else if (survivor.identityId !== targetIdentityId) {
         profileIdentityUpdates.push({ kind: 'space-person', profileId: survivor.id, identityId: targetIdentityId });
-        followUpSpaceIds.add(spaceId);
+        affectedSpaceIds.add(spaceId);
       }
     }
 
     const sortedAffectedOwnerIds = [...affectedOwnerIds].toSorted();
     const sortedAffectedSpaceIds = [...affectedSpaceIds].toSorted();
-    const sortedFollowUpSpaceIds = [...followUpSpaceIds].toSorted();
-    const basePayload = {
-      originScope: 'space-person' as const,
-      actorUserId: input.actorUserId,
-      originatingSpaceId: input.spaceId,
-      targetProfileId: ensuredTargetProfile.id,
-      sourceProfileIds: sourcePersonIds,
-      targetIdentityId,
-      sourceIdentityIds,
-      affectedPersonalProfileMergeCount: personalProfileMerges.length,
-      affectedSharedSpaceProfileMergeCount: spaceProfileMerges.length,
-      affectedSpaceIds: sortedAffectedSpaceIds,
-    };
-
-    return {
+    const plan: IdentityMergePropagationPlan = {
       actorUserId: input.actorUserId,
       origin: {
         type: 'space-person',
@@ -468,19 +438,40 @@ export class IdentityMergePropagationService {
       affectedSpaceIds: sortedAffectedSpaceIds,
       followUpJobs: [
         { name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: targetIdentityId } },
-        ...sortedFollowUpSpaceIds.map(
+        ...sortedAffectedSpaceIds.map(
           (spaceId): MergePropagationFollowUpJob => ({ name: JobName.SharedSpacePersonDedup, data: { spaceId } }),
         ),
       ],
-      activityEvents: sortedAffectedSpaceIds.map((spaceId) => ({
-        spaceId,
-        userId: input.actorUserId,
-        type: SharedSpaceActivityType.PersonMerge,
-        data: {
-          ...basePayload,
-          activityRole: spaceId === input.spaceId ? 'initiating' : 'propagated',
-        },
-      })),
+      activityEvents: [],
+    };
+
+    plan.activityEvents = sortedAffectedSpaceIds.map((spaceId) => ({
+      spaceId,
+      userId: input.actorUserId,
+      type: SharedSpaceActivityType.PersonMerge,
+      data: this.buildActivityPayload(plan, spaceId === input.spaceId ? 'initiating' : 'propagated', spaceId),
+    }));
+
+    return plan;
+  }
+
+  private buildActivityPayload(
+    plan: IdentityMergePropagationPlan,
+    role: 'initiating' | 'propagated',
+    _spaceId: string,
+  ): MergePropagationActivityPayload {
+    return {
+      originScope: plan.origin.type,
+      actorUserId: plan.actorUserId,
+      activityRole: role,
+      originatingSpaceId: plan.origin.type === 'space-person' ? plan.origin.spaceId ?? null : null,
+      targetProfileId: plan.origin.targetProfileId,
+      sourceProfileIds: plan.origin.sourceProfileIds,
+      targetIdentityId: plan.targetIdentityId,
+      sourceIdentityIds: plan.sourceIdentityIds,
+      affectedPersonalProfileMergeCount: plan.personalProfileMerges.length,
+      affectedSharedSpaceProfileMergeCount: plan.spaceProfileMerges.length,
+      affectedSpaceIds: plan.affectedSpaceIds,
     };
   }
 
