@@ -97,7 +97,37 @@
   let lastPublishedTitle: string | null = null;
   let cleanupWebsocketListener: (() => void) | undefined;
 
-  const isResponsePending = $derived(isSending || isAssistantActive || assistantResponsePending);
+  const assistantContinuationToolStatuses = new Set<AgentToolCallStatus>([
+    AgentToolCallStatus.Approved,
+    AgentToolCallStatus.Completed,
+    AgentToolCallStatus.Denied,
+  ]);
+  const latestAssistantMessageAt = $derived(
+    messages
+      .filter((message) => message.role === AgentMessageRole.Assistant)
+      .map((message) => message.createdAt)
+      .sort()
+      .at(-1) ?? null,
+  );
+  const latestActivityNeedingAssistantAt = $derived(
+    [
+      ...messages.filter((message) => message.role === AgentMessageRole.User).map((message) => message.createdAt),
+      ...toolCalls
+        .filter((toolCall) => assistantContinuationToolStatuses.has(toolCall.status))
+        .map((toolCall) => toolCall.completedAt ?? toolCall.startedAt),
+    ]
+      .sort()
+      .at(-1) ?? null,
+  );
+  const isRunningAwaitingAssistant = $derived(
+    session.status === AgentSessionStatus.Running &&
+      errorMessage === null &&
+      latestActivityNeedingAssistantAt !== null &&
+      (latestAssistantMessageAt === null || latestActivityNeedingAssistantAt > latestAssistantMessageAt),
+  );
+  const isResponsePending = $derived(
+    isSending || isAssistantActive || assistantResponsePending || isRunningAwaitingAssistant,
+  );
   const canSend = $derived(draft.trim().length > 0 && !isResponsePending && !composerDisabled);
   const showAssistantBusyIndicator = $derived(isResponsePending && streamingText.length === 0 && !composerDisabled);
   const busyFrames = ['-', '\\', '|', '/'];

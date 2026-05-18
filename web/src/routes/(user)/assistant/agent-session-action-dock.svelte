@@ -20,10 +20,17 @@
     session: AgentSessionResponseDto;
     onSessionUpdated?: (session: AgentSessionResponseDto) => void;
     onPendingApprovalCountChange?: (count: number) => void;
+    onApprovalResumePendingChange?: (pending: boolean) => void;
     onRecentToolCallsChange?: (toolCalls: AgentToolCallResponseDto[]) => void;
   }
 
-  let { session, onSessionUpdated, onPendingApprovalCountChange, onRecentToolCallsChange }: Props = $props();
+  let {
+    session,
+    onSessionUpdated,
+    onPendingApprovalCountChange,
+    onApprovalResumePendingChange,
+    onRecentToolCallsChange,
+  }: Props = $props();
 
   let toolCalls = $state<AgentToolCallResponseDto[]>([]);
   let loading = $state(true);
@@ -96,6 +103,7 @@
 
   const decide = async (toolCallId: string, decision: AgentToolApprovalDecision, reason?: string) => {
     busyByToolCallId = { ...busyByToolCallId, [toolCallId]: true };
+    onApprovalResumePendingChange?.(true);
     const remainingErrors = { ...errorByToolCallId };
     delete remainingErrors[toolCallId];
     errorByToolCallId = remainingErrors;
@@ -115,6 +123,7 @@
       const remainingBusy = { ...busyByToolCallId };
       delete remainingBusy[toolCallId];
       busyByToolCallId = remainingBusy;
+      onApprovalResumePendingChange?.(Object.values(remainingBusy).some(Boolean));
     }
   };
 
@@ -155,6 +164,7 @@
     stopPolling();
     cleanupWebsocketListener?.();
     onPendingApprovalCountChange?.(0);
+    onApprovalResumePendingChange?.(false);
     onRecentToolCallsChange?.([]);
   });
 </script>

@@ -84,6 +84,8 @@ vi.mock('svelte-i18n', () => {
     assistant_message_resume_placeholder: 'Describe what changed or what the assistant should try next.',
     assistant_manage_api_keys: 'Manage API keys',
     assistant_model: 'Model',
+    assistant_model_provider: 'Model provider',
+    assistant_model_selector: 'Select model',
     assistant_new_chat: 'New chat',
     assistant_details: 'Details',
     assistant_no: 'no',
@@ -551,6 +553,55 @@ describe(AgentAssistantWorkspace.name, () => {
     );
   });
 
+  it('uses the provider and model selected from assistant settings when creating the next session', async () => {
+    const user = userEvent.setup();
+    const modelCredentials: AgentProviderCredentialResponseDto[] = [
+      {
+        ...credentials[0],
+        models: ['gpt-5.1', 'gpt-5.1-mini'],
+        defaultModel: 'gpt-5.1',
+      },
+    ];
+    const createdSession = makeSession({
+      id: '00000000-0000-4000-8000-000000000402',
+      status: AgentSessionStatus.Running,
+      modelSnapshot: { model: 'gpt-5.1-mini', providerCredentialId: credentials[0].id },
+    });
+    sdkMock.createAgentSession.mockResolvedValue(createdSession);
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(makeUserMessage(createdSession.id, 'Use the fast model'));
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials: modelCredentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
+    await user.selectOptions(screen.getByLabelText('Model'), 'gpt-5.1-mini');
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Assistant settings' })).getByRole('button', { name: 'Close' }),
+    );
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Use the fast model');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() =>
+      expect(sdkMock.createAgentSession).toHaveBeenCalledWith({
+        agentSessionCreateDto: expect.objectContaining({
+          providerCredentialId: credentials[0].id,
+          model: 'gpt-5.1-mini',
+        }),
+      }),
+    );
+    expect(JSON.parse(localStorage.getItem('gallery.assistant.defaults') ?? '{}')).toMatchObject({
+      credentialId: credentials[0].id,
+      model: 'gpt-5.1-mini',
+    });
+  });
+
   it('keeps the composer visible but blocks sending with an inline runner-unavailable banner', () => {
     render(AgentAssistantWorkspace, {
       props: {
@@ -732,6 +783,7 @@ describe(AgentAssistantWorkspace.name, () => {
     await user.click(screen.getByRole('button', { name: 'Edit models' }));
     await user.clear(screen.getByLabelText(`${credentials[0].label} Models`));
     await user.type(screen.getByLabelText(`${credentials[0].label} Models`), 'gpt-5.1, gpt-5.2, gpt-5.2-mini');
+    await user.selectOptions(screen.getByLabelText(`${credentials[0].label} Default model`), 'gpt-5.2-mini');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
@@ -739,7 +791,7 @@ describe(AgentAssistantWorkspace.name, () => {
         id: credentials[0].id,
         agentProviderCredentialUpdateDto: {
           models: ['gpt-5.1', 'gpt-5.2', 'gpt-5.2-mini'],
-          defaultModel: 'gpt-5.1',
+          defaultModel: 'gpt-5.2-mini',
         },
       }),
     );
@@ -748,7 +800,7 @@ describe(AgentAssistantWorkspace.name, () => {
     await user.selectOptions(screen.getByLabelText('Provider'), ProviderType.Openai);
     await user.type(screen.getByLabelText('Name'), 'OpenAI work');
     await user.type(screen.getByLabelText('API key'), 'sk-test');
-    await user.type(screen.getAllByLabelText('Models')[1], 'gpt-5.1, gpt-5.2');
+    await user.type(screen.getByLabelText('Models'), 'gpt-5.1, gpt-5.2');
     await user.type(screen.getByLabelText('Default model'), 'gpt-5.2');
     await user.click(screen.getByRole('button', { name: 'Save API key' }));
 
@@ -764,7 +816,7 @@ describe(AgentAssistantWorkspace.name, () => {
         },
       }),
     );
-    expect(await screen.findByText('OpenAI work')).toBeInTheDocument();
+    expect(await screen.findAllByText('OpenAI work')).not.toHaveLength(0);
   });
 
   it('adds Ollama credentials without asking for an API key', async () => {
