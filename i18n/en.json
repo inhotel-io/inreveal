@@ -741,6 +741,8 @@
   "assistant_message_resume_placeholder": "Send a message to resume this session",
   "assistant_message_send_error": "Unable to send message",
   "assistant_model": "Model",
+  "assistant_model_provider": "Model provider",
+  "assistant_model_selector": "Select model",
   "assistant_models": "Models",
   "assistant_new_chat": "New chat",
   "assistant_new_chat_placeholder": "Ask Gallery what to do with your photos.",

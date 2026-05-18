@@ -228,7 +228,9 @@
       assistantApprovalMode = storedDefaults.approvalMode;
     }
     const storedCredential =
-      localCredentials.find((credential) => credential.id === storedDefaults.credentialId) ?? localCredentials[0] ?? null;
+      localCredentials.find((credential) => credential.id === storedDefaults.credentialId) ??
+      localCredentials[0] ??
+      null;
     assistantCredentialId = storedCredential?.id ?? null;
     assistantModel = storedCredential ? getValidModelForCredential(storedCredential, storedDefaults.model ?? '') : '';
   });
