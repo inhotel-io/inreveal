@@ -105,6 +105,21 @@ export class IdentityMergePropagationService {
     return sourcePersonIds.map((id) => ({ id, success: true }));
   }
 
+  async mergeSpacePeople(
+    auth: AuthDto,
+    spaceId: string,
+    targetPersonId: string,
+    sourcePersonIds: string[],
+  ): Promise<void> {
+    const plan = await this.buildSpaceMergePlan({
+      actorUserId: auth.user.id,
+      spaceId,
+      targetPersonId,
+      sourcePersonIds,
+    });
+    await this.executePlan(plan, { actorUserId: auth.user.id });
+  }
+
   async executePlan(plan: IdentityMergePropagationPlan, _context: { actorUserId: string }): Promise<void> {
     const deletedThumbnailPaths: string[] = [];
 
@@ -320,6 +335,148 @@ export class IdentityMergePropagationService {
     };
   }
 
+  /**
+   * Ensures identities for the initiating target/source space profiles before loading attached profiles;
+   * this may persist newly-created identities.
+   */
+  async buildSpaceMergePlan(input: {
+    actorUserId: string;
+    spaceId: string;
+    targetPersonId: string;
+    sourcePersonIds: string[];
+  }): Promise<IdentityMergePropagationPlan> {
+    const sourcePersonIds = [...new Set(input.sourcePersonIds)].filter((id) => id !== input.targetPersonId);
+
+    const target = await this.deps.sharedSpaceRepository.getPersonById(input.targetPersonId);
+    if (!target || target.spaceId !== input.spaceId) {
+      throw new BadRequestException('Person not found');
+    }
+
+    const targetProfile = this.mapSpacePersonMergeProfile(target);
+    const sourceProfiles: MergeProfile[] = [];
+    for (const sourcePersonId of sourcePersonIds) {
+      const source = await this.deps.sharedSpaceRepository.getPersonById(sourcePersonId);
+      if (!source || source.spaceId !== input.spaceId) {
+        throw new BadRequestException('Source person not found in this space');
+      }
+
+      if (source.type !== target.type) {
+        throw new BadRequestException('Cannot merge people of different types');
+      }
+
+      sourceProfiles.push(this.mapSpacePersonMergeProfile(source));
+    }
+
+    const ensuredOriginProfiles = await this.ensureSpaceOriginIdentities([targetProfile, ...sourceProfiles]);
+    const ensuredTargetProfile = ensuredOriginProfiles[0];
+    const ensuredSourceProfiles = ensuredOriginProfiles.slice(1);
+    const targetIdentityId = ensuredTargetProfile.identityId;
+    if (!targetIdentityId) {
+      throw new BadRequestException('Target person identity not found');
+    }
+
+    const sourceIdentityIds = [
+      ...new Set(
+        ensuredSourceProfiles
+          .map((profile) => profile.identityId)
+          .filter((identityId): identityId is string => !!identityId && identityId !== targetIdentityId),
+      ),
+    ];
+    const planIdentityIds = [targetIdentityId, ...sourceIdentityIds];
+    const attachedProfiles = (await this.deps.faceIdentityRepository.getMergePropagationProfiles({
+      mode: 'identities',
+      identityIds: planIdentityIds,
+    })) as MergeProfile[];
+
+    const personalGroups = this.groupProfiles(attachedProfiles, 'person');
+    const spaceGroups = this.groupProfiles(attachedProfiles, 'space-person');
+    const personalProfileMerges: PersonalProfileMergeStep[] = [];
+    const spaceProfileMerges: SpaceProfileMergeStep[] = [];
+    const profileIdentityUpdates: IdentityMergePropagationPlan['profileIdentityUpdates'] = [];
+    const affectedOwnerIds = new Set<string>();
+    const affectedSpaceIds = new Set<string>();
+
+    for (const [ownerId, profiles] of [...personalGroups.entries()].toSorted(([a], [b]) => a.localeCompare(b))) {
+      const survivor = this.chooseSurvivor(profiles, { targetIdentityId });
+      const sources = this.sortMergeSources(profiles.filter((profile) => profile.id !== survivor.id));
+
+      if (sources.length > 0) {
+        personalProfileMerges.push({
+          ownerId,
+          targetPersonId: survivor.id,
+          sourcePersonIds: sources.map(({ id }) => id),
+        });
+        affectedOwnerIds.add(ownerId);
+      } else if (survivor.identityId !== targetIdentityId) {
+        profileIdentityUpdates.push({ kind: 'person', profileId: survivor.id, identityId: targetIdentityId });
+        affectedOwnerIds.add(ownerId);
+      }
+    }
+
+    for (const [spaceId, profiles] of [...spaceGroups.entries()].toSorted(([a], [b]) => a.localeCompare(b))) {
+      const survivor = this.chooseSurvivor(profiles, {
+        targetIdentityId,
+        initiatingTargetProfileId: spaceId === input.spaceId ? ensuredTargetProfile.id : undefined,
+      });
+      const sources = this.sortMergeSources(profiles.filter((profile) => profile.id !== survivor.id));
+
+      if (sources.length > 0) {
+        spaceProfileMerges.push({ spaceId, targetPersonId: survivor.id, sourcePersonIds: sources.map(({ id }) => id) });
+        affectedSpaceIds.add(spaceId);
+      } else if (survivor.identityId !== targetIdentityId) {
+        profileIdentityUpdates.push({ kind: 'space-person', profileId: survivor.id, identityId: targetIdentityId });
+        affectedSpaceIds.add(spaceId);
+      }
+    }
+
+    const sortedAffectedOwnerIds = [...affectedOwnerIds].toSorted();
+    const sortedAffectedSpaceIds = [...affectedSpaceIds].toSorted();
+    const basePayload = {
+      originScope: 'space-person' as const,
+      actorUserId: input.actorUserId,
+      originatingSpaceId: input.spaceId,
+      targetProfileId: ensuredTargetProfile.id,
+      sourceProfileIds: sourcePersonIds,
+      targetIdentityId,
+      sourceIdentityIds,
+      affectedPersonalProfileMergeCount: personalProfileMerges.length,
+      affectedSharedSpaceProfileMergeCount: spaceProfileMerges.length,
+      affectedSpaceIds: sortedAffectedSpaceIds,
+    };
+
+    return {
+      actorUserId: input.actorUserId,
+      origin: {
+        type: 'space-person',
+        targetProfileId: ensuredTargetProfile.id,
+        sourceProfileIds: sourcePersonIds,
+        spaceId: input.spaceId,
+      },
+      targetIdentityId,
+      sourceIdentityIds,
+      personalProfileMerges,
+      spaceProfileMerges,
+      profileIdentityUpdates,
+      affectedOwnerIds: sortedAffectedOwnerIds,
+      affectedSpaceIds: sortedAffectedSpaceIds,
+      followUpJobs: [
+        { name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: targetIdentityId } },
+        ...sortedAffectedSpaceIds.map(
+          (spaceId): MergePropagationFollowUpJob => ({ name: JobName.SharedSpacePersonDedup, data: { spaceId } }),
+        ),
+      ],
+      activityEvents: sortedAffectedSpaceIds.map((spaceId) => ({
+        spaceId,
+        userId: input.actorUserId,
+        type: SharedSpaceActivityType.PersonMerge,
+        data: {
+          ...basePayload,
+          activityRole: spaceId === input.spaceId ? 'initiating' : 'propagated',
+        },
+      })),
+    };
+  }
+
   private async ensureOriginIdentities(profiles: MergeProfile[]): Promise<MergeProfile[]> {
     const ensured: MergeProfile[] = [];
 
@@ -329,6 +486,36 @@ export class IdentityMergePropagationService {
     }
 
     return ensured;
+  }
+
+  private async ensureSpaceOriginIdentities(profiles: MergeProfile[]): Promise<MergeProfile[]> {
+    const ensured: MergeProfile[] = [];
+
+    for (const profile of profiles) {
+      const identity = await this.deps.faceIdentityRepository.ensureSpacePersonIdentity(profile.id);
+      ensured.push({ ...profile, identityId: identity.id });
+    }
+
+    return ensured;
+  }
+
+  private mapSpacePersonMergeProfile(person: {
+    id: string;
+    spaceId: string;
+    identityId?: string | null;
+    type: string;
+    name?: string | null;
+    faceCount?: number | null;
+  }): MergeProfile {
+    return {
+      kind: 'space-person',
+      id: person.id,
+      spaceId: person.spaceId,
+      identityId: person.identityId ?? null,
+      type: person.type,
+      name: person.name ?? '',
+      faceCount: Number(person.faceCount ?? 0),
+    };
   }
 
   private groupProfiles(profiles: MergeProfile[], kind: 'person'): Map<string, MergeProfile[]>;

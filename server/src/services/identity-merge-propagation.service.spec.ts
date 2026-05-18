@@ -28,6 +28,15 @@ const makeService = (profiles: MergeProfile[]) => {
       profile.identityId ??= `identity-for-${personId}`;
       return { id: profile.identityId, type: profile.type };
     }),
+    ensureSpacePersonIdentity: vi.fn((personId: string) => {
+      const profile = profiles.find((profile) => profile.kind === 'space-person' && profile.id === personId);
+      if (!profile) {
+        throw new Error('Space person not found');
+      }
+
+      profile.identityId ??= `identity-for-${personId}`;
+      return { id: profile.identityId, type: profile.type };
+    }),
     getMergePropagationProfiles: vi.fn(
       (
         input: { mode: 'profiles'; personIds: string[] } | { mode: 'identities'; identityIds: string[] },
@@ -48,6 +57,19 @@ const makeService = (profiles: MergeProfile[]) => {
     queue: vi.fn().mockResolvedValue(void 0),
   };
   const sharedSpaceRepository = {
+    getPersonById: vi.fn((personId: string) => {
+      const person = profiles.find((profile) => profile.kind === 'space-person' && profile.id === personId);
+      return person
+        ? {
+            id: person.id,
+            spaceId: person.spaceId,
+            identityId: person.identityId,
+            type: person.type,
+            name: person.name,
+            faceCount: person.faceCount,
+          }
+        : undefined;
+    }),
     mergeSpacePersonProfile: vi.fn().mockResolvedValue(void 0),
     updateSpacePersonIdentity: vi.fn().mockResolvedValue(void 0),
     logActivity: vi.fn().mockResolvedValue(void 0),
@@ -385,6 +407,124 @@ describe('IdentityMergePropagationService', () => {
           },
         },
       ]);
+    });
+  });
+
+  describe('buildSpaceMergePlan', () => {
+    it('plans initiating-space merge and personal profile merges for affected owners', async () => {
+      const { sut } = makeService([
+        profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x', faceCount: 10 }),
+        profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y', faceCount: 4 }),
+        profile({ kind: 'person', id: 'owner-1-x', ownerId: 'owner-1', identityId: 'identity-x', faceCount: 8 }),
+        profile({ kind: 'person', id: 'owner-1-y', ownerId: 'owner-1', identityId: 'identity-y', faceCount: 2 }),
+      ]);
+
+      const plan = await sut.buildSpaceMergePlan({
+        actorUserId: 'editor-1',
+        spaceId: 'space-a',
+        targetPersonId: 'space-a-x',
+        sourcePersonIds: ['space-a-y'],
+      });
+
+      expect(plan.origin).toEqual({
+        type: 'space-person',
+        targetProfileId: 'space-a-x',
+        sourceProfileIds: ['space-a-y'],
+        spaceId: 'space-a',
+      });
+      expect(plan.targetIdentityId).toBe('identity-x');
+      expect(plan.sourceIdentityIds).toEqual(['identity-y']);
+      expect(plan.spaceProfileMerges).toEqual([
+        { spaceId: 'space-a', targetPersonId: 'space-a-x', sourcePersonIds: ['space-a-y'] },
+      ]);
+      expect(plan.personalProfileMerges).toEqual([
+        { ownerId: 'owner-1', targetPersonId: 'owner-1-x', sourcePersonIds: ['owner-1-y'] },
+      ]);
+      expect(plan.affectedOwnerIds).toEqual(['owner-1']);
+      expect(plan.affectedSpaceIds).toEqual(['space-a']);
+    });
+
+    it('plans identity updates for owners with only one affected personal profile', async () => {
+      const { sut } = makeService([
+        profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x', faceCount: 10 }),
+        profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y', faceCount: 4 }),
+        profile({ kind: 'person', id: 'owner-2-y', ownerId: 'owner-2', identityId: 'identity-y', faceCount: 2 }),
+      ]);
+
+      const plan = await sut.buildSpaceMergePlan({
+        actorUserId: 'editor-1',
+        spaceId: 'space-a',
+        targetPersonId: 'space-a-x',
+        sourcePersonIds: ['space-a-y'],
+      });
+
+      expect(plan.personalProfileMerges).toEqual([]);
+      expect(plan.profileIdentityUpdates).toContainEqual({
+        kind: 'person',
+        profileId: 'owner-2-y',
+        identityId: 'identity-x',
+      });
+      expect(plan.affectedOwnerIds).toEqual(['owner-2']);
+    });
+
+    it('includes initiating-space activity and propagated activity for other affected spaces', async () => {
+      const { sut } = makeService([
+        profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x', faceCount: 10 }),
+        profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y', faceCount: 4 }),
+        profile({ kind: 'space-person', id: 'space-b-x', spaceId: 'space-b', identityId: 'identity-x', faceCount: 8 }),
+        profile({ kind: 'space-person', id: 'space-b-y', spaceId: 'space-b', identityId: 'identity-y', faceCount: 1 }),
+      ]);
+
+      const plan = await sut.buildSpaceMergePlan({
+        actorUserId: 'editor-1',
+        spaceId: 'space-a',
+        targetPersonId: 'space-a-x',
+        sourcePersonIds: ['space-a-y'],
+      });
+
+      expect(plan.activityEvents).toEqual([
+        expect.objectContaining({
+          spaceId: 'space-a',
+          data: expect.objectContaining({ originScope: 'space-person', activityRole: 'initiating' }),
+        }),
+        expect.objectContaining({
+          spaceId: 'space-b',
+          data: expect.objectContaining({ originScope: 'space-person', activityRole: 'propagated' }),
+        }),
+      ]);
+    });
+
+    it('plans propagation to personal people and other spaces without requiring actor membership in those other scopes', async () => {
+      const { sut, mocks } = makeService([
+        profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x', faceCount: 10 }),
+        profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y', faceCount: 4 }),
+        profile({ kind: 'person', id: 'owner-2-x', ownerId: 'owner-2', identityId: 'identity-x', faceCount: 5 }),
+        profile({ kind: 'person', id: 'owner-2-y', ownerId: 'owner-2', identityId: 'identity-y', faceCount: 3 }),
+        profile({ kind: 'space-person', id: 'space-b-x', spaceId: 'space-b', identityId: 'identity-x', faceCount: 6 }),
+        profile({ kind: 'space-person', id: 'space-b-y', spaceId: 'space-b', identityId: 'identity-y', faceCount: 1 }),
+      ]);
+
+      const plan = await sut.buildSpaceMergePlan({
+        actorUserId: 'editor-1',
+        spaceId: 'space-a',
+        targetPersonId: 'space-a-x',
+        sourcePersonIds: ['space-a-y'],
+      });
+
+      expect(mocks.sharedSpace.getPersonById.mock.calls.map(([personId]) => personId)).toEqual([
+        'space-a-x',
+        'space-a-y',
+      ]);
+      expect(plan.personalProfileMerges).toContainEqual({
+        ownerId: 'owner-2',
+        targetPersonId: 'owner-2-x',
+        sourcePersonIds: ['owner-2-y'],
+      });
+      expect(plan.spaceProfileMerges).toContainEqual({
+        spaceId: 'space-b',
+        targetPersonId: 'space-b-x',
+        sourcePersonIds: ['space-b-y'],
+      });
     });
   });
 
