@@ -177,6 +177,41 @@ describe('IdentityMergePropagationService', () => {
       ]);
     });
 
+    it('prefers named survivor candidates over unnamed candidates with equal face counts outside the initiating scope', async () => {
+      const { sut } = makeService([
+        profile({ kind: 'person', id: 'person-x', ownerId: 'owner-1', identityId: 'identity-x', faceCount: 10 }),
+        profile({ kind: 'person', id: 'person-y', ownerId: 'owner-1', identityId: 'identity-y', faceCount: 4 }),
+        profile({ kind: 'person', id: 'person-z', ownerId: 'owner-1', identityId: 'identity-z', faceCount: 4 }),
+        profile({
+          kind: 'person',
+          id: 'owner-2-a',
+          ownerId: 'owner-2',
+          identityId: 'identity-y',
+          name: '',
+          faceCount: 5,
+        }),
+        profile({
+          kind: 'person',
+          id: 'owner-2-b',
+          ownerId: 'owner-2',
+          identityId: 'identity-z',
+          name: 'Named candidate',
+          faceCount: 5,
+        }),
+      ]);
+
+      const plan = await sut.buildPersonalMergePlan({
+        actorUserId: 'owner-1',
+        targetPersonId: 'person-x',
+        sourcePersonIds: ['person-y', 'person-z'],
+      });
+
+      expect(plan.personalProfileMerges).toEqual([
+        { ownerId: 'owner-1', targetPersonId: 'person-x', sourcePersonIds: ['person-y', 'person-z'] },
+        { ownerId: 'owner-2', targetPersonId: 'owner-2-b', sourcePersonIds: ['owner-2-a'] },
+      ]);
+    });
+
     it('deduplicates duplicate source ids before planning', async () => {
       const { sut, faceIdentityRepository } = makeService([
         profile({ kind: 'person', id: 'person-x', ownerId: 'owner-1', identityId: 'identity-x' }),
