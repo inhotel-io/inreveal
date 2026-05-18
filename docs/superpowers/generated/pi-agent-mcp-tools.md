@@ -55,9 +55,7 @@ Call a read tool with params.arguments.
   "params": {
     "name": "readAssetMetadata",
     "arguments": {
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ]
+      "assetIds": ["00000000-0000-4000-8000-000000000001"]
     }
   }
 }
@@ -126,6 +124,7 @@ Argument modes:
 Search with default filters and limit.
 
 <!-- mcp-docs:tool-arguments tool="searchAssets" example="empty-search" -->
+
 ```json
 {}
 ```
@@ -135,6 +134,7 @@ Search with default filters and limit.
 Search photos from a known place and date window.
 
 <!-- mcp-docs:tool-arguments tool="searchAssets" example="bounded-date-location-search" -->
+
 ```json
 {
   "filters": {
@@ -152,6 +152,7 @@ Search photos from a known place and date window.
 Search favorite five-star assets.
 
 <!-- mcp-docs:tool-arguments tool="searchAssets" example="favorite-rating-search" -->
+
 ```json
 {
   "filters": {
@@ -167,6 +168,7 @@ Search favorite five-star assets.
 Retry an approved read request by id.
 
 <!-- mcp-docs:tool-arguments tool="searchAssets" example="approved-retry" -->
+
 ```json
 {
   "toolCallId": "00000000-0000-4000-8000-000000000111"
@@ -195,11 +197,10 @@ Argument modes:
 Read selected assets by id.
 
 <!-- mcp-docs:tool-arguments tool="readAssetMetadata" example="read-selected-assets" -->
+
 ```json
 {
-  "assetIds": [
-    "00000000-0000-4000-8000-000000000001"
-  ]
+  "assetIds": ["00000000-0000-4000-8000-000000000001"]
 }
 ```
 
@@ -208,6 +209,7 @@ Read selected assets by id.
 Retry an approved read request by id.
 
 <!-- mcp-docs:tool-arguments tool="readAssetMetadata" example="approved-retry" -->
+
 ```json
 {
   "toolCallId": "00000000-0000-4000-8000-000000000111"
@@ -236,11 +238,10 @@ Argument modes:
 Read selected assets by id.
 
 <!-- mcp-docs:tool-arguments tool="readAssetPreviews" example="read-selected-assets" -->
+
 ```json
 {
-  "assetIds": [
-    "00000000-0000-4000-8000-000000000001"
-  ]
+  "assetIds": ["00000000-0000-4000-8000-000000000001"]
 }
 ```
 
@@ -249,6 +250,7 @@ Read selected assets by id.
 Retry an approved read request by id.
 
 <!-- mcp-docs:tool-arguments tool="readAssetPreviews" example="approved-retry" -->
+
 ```json
 {
   "toolCallId": "00000000-0000-4000-8000-000000000111"
@@ -277,11 +279,10 @@ Argument modes:
 Read selected assets by id.
 
 <!-- mcp-docs:tool-arguments tool="readAssetOriginals" example="read-selected-assets" -->
+
 ```json
 {
-  "assetIds": [
-    "00000000-0000-4000-8000-000000000001"
-  ]
+  "assetIds": ["00000000-0000-4000-8000-000000000001"]
 }
 ```
 
@@ -290,6 +291,7 @@ Read selected assets by id.
 Retry an approved read request by id.
 
 <!-- mcp-docs:tool-arguments tool="readAssetOriginals" example="approved-retry" -->
+
 ```json
 {
   "toolCallId": "00000000-0000-4000-8000-000000000111"
@@ -318,6 +320,7 @@ Argument modes:
 List visible albums.
 
 <!-- mcp-docs:tool-arguments tool="listAlbums" example="list-visible-albums" -->
+
 ```json
 {}
 ```
@@ -327,6 +330,7 @@ List visible albums.
 Retry an approved read request by id.
 
 <!-- mcp-docs:tool-arguments tool="listAlbums" example="approved-retry" -->
+
 ```json
 {
   "toolCallId": "00000000-0000-4000-8000-000000000111"
@@ -355,6 +359,7 @@ Argument modes:
 Read an album by id.
 
 <!-- mcp-docs:tool-arguments tool="readAlbum" example="read-visible-album" -->
+
 ```json
 {
   "albumId": "00000000-0000-4000-8000-000000000010"
@@ -366,6 +371,7 @@ Read an album by id.
 Retry an approved read request by id.
 
 <!-- mcp-docs:tool-arguments tool="readAlbum" example="approved-retry" -->
+
 ```json
 {
   "toolCallId": "00000000-0000-4000-8000-000000000111"
@@ -471,6 +477,7 @@ Argument modes:
 Create a new empty album for later review.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="create-empty-album" -->
+
 ```json
 {
   "summary": "Create today test album.",
@@ -494,6 +501,7 @@ Create a new empty album for later review.
 Create a new album and add selected assets to it.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="create-album-and-add-assets" -->
+
 ```json
 {
   "summary": "Create today test and add selected photos.",
@@ -513,10 +521,7 @@ Create a new album and add selected assets to it.
       "summary": "Add selected photos to today test.",
       "targetKind": "new_album",
       "temporaryTargetId": "tmp-today-test",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002"
-      ]
+      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
     }
   ]
 }
@@ -527,6 +532,7 @@ Create a new album and add selected assets to it.
 Add selected assets to an existing album.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="add-assets-to-existing-album" -->
+
 ```json
 {
   "summary": "Add selected photos to an existing album.",
@@ -536,10 +542,7 @@ Add selected assets to an existing album.
       "summary": "Add selected photos.",
       "targetKind": "existing_album",
       "targetId": "00000000-0000-4000-8000-000000000010",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002"
-      ]
+      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
     }
   ]
 }
@@ -550,6 +553,7 @@ Add selected assets to an existing album.
 Remove selected assets from an existing album.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="remove-assets-from-existing-album" -->
+
 ```json
 {
   "summary": "Remove selected photos from an album.",
@@ -559,9 +563,7 @@ Remove selected assets from an existing album.
       "summary": "Remove selected photos.",
       "targetKind": "existing_album",
       "targetId": "00000000-0000-4000-8000-000000000010",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {}
     }
   ]
@@ -573,6 +575,7 @@ Remove selected assets from an existing album.
 Rename or describe an existing album.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="update-album-details" -->
+
 ```json
 {
   "summary": "Update album details.",
@@ -596,6 +599,7 @@ Rename or describe an existing album.
 Set an existing album cover from a selected asset.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="set-album-cover" -->
+
 ```json
 {
   "summary": "Set album cover.",
@@ -605,9 +609,7 @@ Set an existing album cover from a selected asset.
       "summary": "Set cover photo.",
       "targetKind": "existing_album",
       "targetId": "00000000-0000-4000-8000-000000000010",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {}
     }
   ]
@@ -619,6 +621,7 @@ Set an existing album cover from a selected asset.
 Create a new shared space.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="create-space" -->
+
 ```json
 {
   "summary": "Create a family space.",
@@ -643,6 +646,7 @@ Create a new shared space.
 Create a new shared space and add selected assets.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="create-space-and-add-assets" -->
+
 ```json
 {
   "summary": "Create a family space and add selected photos.",
@@ -663,10 +667,7 @@ Create a new shared space and add selected assets.
       "summary": "Add selected photos to Family space.",
       "targetKind": "new_space",
       "temporaryTargetId": "tmp-family-space",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
       "payload": {}
     }
   ]
@@ -678,6 +679,7 @@ Create a new shared space and add selected assets.
 Add selected assets to an existing shared space.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="add-assets-to-existing-space" -->
+
 ```json
 {
   "summary": "Add selected photos to an existing space.",
@@ -687,10 +689,7 @@ Add selected assets to an existing shared space.
       "summary": "Add selected photos to Family space.",
       "targetKind": "existing_space",
       "targetId": "00000000-0000-4000-8000-000000000020",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
       "payload": {}
     }
   ]
@@ -702,6 +701,7 @@ Add selected assets to an existing shared space.
 Remove selected assets from an existing shared space.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="remove-assets-from-existing-space" -->
+
 ```json
 {
   "summary": "Remove selected photos from a space.",
@@ -711,9 +711,7 @@ Remove selected assets from an existing shared space.
       "summary": "Remove selected photos from Family space.",
       "targetKind": "existing_space",
       "targetId": "00000000-0000-4000-8000-000000000020",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {}
     }
   ]
@@ -725,6 +723,7 @@ Remove selected assets from an existing shared space.
 Update an existing shared space.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="update-space-details" -->
+
 ```json
 {
   "summary": "Update Family space details.",
@@ -841,6 +840,7 @@ Update an existing shared space color.
 Rotate selected image assets.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="rotate-assets" -->
+
 ```json
 {
   "summary": "Rotate selected images.",
@@ -849,9 +849,7 @@ Rotate selected image assets.
       "type": "asset.rotate",
       "summary": "Rotate selected images clockwise.",
       "targetKind": "image_edit_batch",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {
         "angle": 90
       }
@@ -865,6 +863,7 @@ Rotate selected image assets.
 Mark selected assets as favorites.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="favorite-assets" -->
+
 ```json
 {
   "summary": "Favorite selected photos.",
@@ -873,10 +872,7 @@ Mark selected assets as favorites.
       "type": "asset.setFavorite",
       "summary": "Favorite selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
       "payload": {
         "favorite": true
       }
@@ -890,6 +886,7 @@ Mark selected assets as favorites.
 Archive selected assets.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="archive-assets" -->
+
 ```json
 {
   "summary": "Archive selected photos.",
@@ -898,9 +895,7 @@ Archive selected assets.
       "type": "asset.setArchive",
       "summary": "Archive selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {
         "archived": true
       }
@@ -914,6 +909,7 @@ Archive selected assets.
 Add a tag to selected assets.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="add-tag-to-assets" -->
+
 ```json
 {
   "summary": "Tag selected photos.",
@@ -922,9 +918,7 @@ Add a tag to selected assets.
       "type": "asset.addTag",
       "summary": "Add Travel tag.",
       "targetKind": "asset_batch",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {
         "tagName": "Travel"
       }
@@ -938,6 +932,7 @@ Add a tag to selected assets.
 Remove a tag from selected assets.
 
 <!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="remove-tag-from-assets" -->
+
 ```json
 {
   "summary": "Remove tag from selected photos.",
@@ -946,9 +941,7 @@ Remove a tag from selected assets.
       "type": "asset.removeTag",
       "summary": "Remove tag from selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {
         "tagId": "00000000-0000-4000-8000-000000000030"
       }
@@ -979,6 +972,7 @@ Argument modes:
 Revise a plan to create a new empty album for later review.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-create-empty-album" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1004,6 +998,7 @@ Revise a plan to create a new empty album for later review.
 Revise a plan to create a new album and add selected assets to it.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-create-album-and-add-assets" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1025,10 +1020,7 @@ Revise a plan to create a new album and add selected assets to it.
       "summary": "Add selected photos to today test.",
       "targetKind": "new_album",
       "temporaryTargetId": "tmp-today-test",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002"
-      ]
+      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
     }
   ]
 }
@@ -1039,6 +1031,7 @@ Revise a plan to create a new album and add selected assets to it.
 Revise a plan to add selected assets to an existing album.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-add-assets-to-existing-album" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1050,10 +1043,7 @@ Revise a plan to add selected assets to an existing album.
       "summary": "Add selected photos.",
       "targetKind": "existing_album",
       "targetId": "00000000-0000-4000-8000-000000000010",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002"
-      ]
+      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
     }
   ]
 }
@@ -1064,6 +1054,7 @@ Revise a plan to add selected assets to an existing album.
 Revise a plan to remove selected assets from an existing album.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-remove-assets-from-existing-album" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1075,9 +1066,7 @@ Revise a plan to remove selected assets from an existing album.
       "summary": "Remove selected photos.",
       "targetKind": "existing_album",
       "targetId": "00000000-0000-4000-8000-000000000010",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {}
     }
   ]
@@ -1089,6 +1078,7 @@ Revise a plan to remove selected assets from an existing album.
 Revise a plan to rename or describe an existing album.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-update-album-details" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1114,6 +1104,7 @@ Revise a plan to rename or describe an existing album.
 Revise a plan to set an existing album cover from a selected asset.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-set-album-cover" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1125,9 +1116,7 @@ Revise a plan to set an existing album cover from a selected asset.
       "summary": "Set cover photo.",
       "targetKind": "existing_album",
       "targetId": "00000000-0000-4000-8000-000000000010",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {}
     }
   ]
@@ -1139,6 +1128,7 @@ Revise a plan to set an existing album cover from a selected asset.
 Revise a plan to create a new shared space.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-create-space" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1165,6 +1155,7 @@ Revise a plan to create a new shared space.
 Revise a plan to create a new shared space and add selected assets.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-create-space-and-add-assets" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1187,10 +1178,7 @@ Revise a plan to create a new shared space and add selected assets.
       "summary": "Add selected photos to Family space.",
       "targetKind": "new_space",
       "temporaryTargetId": "tmp-family-space",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
       "payload": {}
     }
   ]
@@ -1202,6 +1190,7 @@ Revise a plan to create a new shared space and add selected assets.
 Revise a plan to add selected assets to an existing shared space.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-add-assets-to-existing-space" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1213,10 +1202,7 @@ Revise a plan to add selected assets to an existing shared space.
       "summary": "Add selected photos to Family space.",
       "targetKind": "existing_space",
       "targetId": "00000000-0000-4000-8000-000000000020",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
       "payload": {}
     }
   ]
@@ -1228,6 +1214,7 @@ Revise a plan to add selected assets to an existing shared space.
 Revise a plan to remove selected assets from an existing shared space.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-remove-assets-from-existing-space" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1239,9 +1226,7 @@ Revise a plan to remove selected assets from an existing shared space.
       "summary": "Remove selected photos from Family space.",
       "targetKind": "existing_space",
       "targetId": "00000000-0000-4000-8000-000000000020",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {}
     }
   ]
@@ -1253,6 +1238,7 @@ Revise a plan to remove selected assets from an existing shared space.
 Revise a plan to update an existing shared space.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-update-space-details" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1379,6 +1365,7 @@ Revise a plan to update an existing shared space color.
 Revise a plan to rotate selected image assets.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-rotate-assets" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1389,9 +1376,7 @@ Revise a plan to rotate selected image assets.
       "type": "asset.rotate",
       "summary": "Rotate selected images clockwise.",
       "targetKind": "image_edit_batch",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {
         "angle": 90
       }
@@ -1405,6 +1390,7 @@ Revise a plan to rotate selected image assets.
 Revise a plan to mark selected assets as favorites.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-favorite-assets" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1415,10 +1401,7 @@ Revise a plan to mark selected assets as favorites.
       "type": "asset.setFavorite",
       "summary": "Favorite selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
       "payload": {
         "favorite": true
       }
@@ -1432,6 +1415,7 @@ Revise a plan to mark selected assets as favorites.
 Revise a plan to archive selected assets.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-archive-assets" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1442,9 +1426,7 @@ Revise a plan to archive selected assets.
       "type": "asset.setArchive",
       "summary": "Archive selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {
         "archived": true
       }
@@ -1458,6 +1440,7 @@ Revise a plan to archive selected assets.
 Revise a plan to add a tag to selected assets.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-add-tag-to-assets" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1468,9 +1451,7 @@ Revise a plan to add a tag to selected assets.
       "type": "asset.addTag",
       "summary": "Add Travel tag.",
       "targetKind": "asset_batch",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {
         "tagName": "Travel"
       }
@@ -1484,6 +1465,7 @@ Revise a plan to add a tag to selected assets.
 Revise a plan to remove a tag from selected assets.
 
 <!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-remove-tag-from-assets" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
@@ -1494,9 +1476,7 @@ Revise a plan to remove a tag from selected assets.
       "type": "asset.removeTag",
       "summary": "Remove tag from selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": [
-        "00000000-0000-4000-8000-000000000001"
-      ],
+      "assetIds": ["00000000-0000-4000-8000-000000000001"],
       "payload": {
         "tagId": "00000000-0000-4000-8000-000000000030"
       }
@@ -1524,6 +1504,7 @@ Argument modes:
 Summarize the whole plan.
 
 <!-- mcp-docs:tool-arguments tool="summarizePlan" example="summarize-plan" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222"
@@ -1535,6 +1516,7 @@ Summarize the whole plan.
 Summarize plan risks and selected changes.
 
 <!-- mcp-docs:tool-arguments tool="summarizePlan" example="summarize-plan-risks" -->
+
 ```json
 {
   "planId": "00000000-0000-4000-8000-000000000222",
