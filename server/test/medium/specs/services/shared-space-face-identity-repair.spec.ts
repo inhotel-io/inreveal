@@ -485,6 +485,52 @@ describe('SharedSpaceService linked-library face identity repair', () => {
     });
   });
 
+  it('same asset direct plus linked-library path materializes only one selected-space face assignment', async () => {
+    const { ctx, sut, faceIdentityRepository, sharedSpaceRepository } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+    const { library } = await ctx.newLibrary({ ownerId: user.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
+    const face = await createIdentityFace(ctx, faceIdentityRepository, {
+      ownerId: user.id,
+      libraryId: library.id,
+      name: 'Alice',
+    });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: face.asset.id, addedById: user.id });
+
+    await expect(sut.handleSharedSpaceFaceMatch({ spaceId: space.id, assetId: face.asset.id })).resolves.toBe(
+      JobStatus.Success,
+    );
+    await expect(sut.handleSharedSpaceLibraryFaceSync({ spaceId: space.id, libraryId: library.id })).resolves.toBe(
+      JobStatus.Success,
+    );
+
+    const people = await ctx.database
+      .selectFrom('shared_space_person')
+      .selectAll()
+      .where('spaceId', '=', space.id)
+      .where('identityId', '=', face.identity.id)
+      .execute();
+    expect(people).toHaveLength(1);
+    await expect(getSelectedSpaceFaceRows(ctx, space.id)).resolves.toEqual([
+      {
+        assetFaceId: face.assetFace.id,
+        personId: people[0].id,
+        identityId: face.identity.id,
+        type: 'person',
+      },
+    ]);
+    await expect(
+      sharedSpaceRepository.getPeopleFaceStatisticsBySpaceId(space.id, { minimumFaceCount: 1 }),
+    ).resolves.toMatchObject({
+      detectedFaceCount: 1,
+      assignedVisibleFaceCount: 1,
+      assignedHiddenFaceCount: 0,
+      unassignedFaceCount: 0,
+    });
+  });
+
   it('full-space rematch repairs stale selected-space face assignments from linked libraries', async () => {
     const { ctx, sut, faceIdentityRepository, sharedSpaceRepository, jobs } = setup();
     const { user } = await ctx.newUser();
