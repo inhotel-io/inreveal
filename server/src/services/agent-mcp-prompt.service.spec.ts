@@ -1,0 +1,151 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.dto';
+import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
+import { AgentToolName } from 'src/enum';
+import { AgentMcpPromptService } from 'src/services/agent-mcp-prompt.service';
+import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
+import type { AgentMcpPlanningToolName, AgentMcpReadToolName } from 'src/types/agent-mcp-contract.types';
+
+describe(AgentMcpPromptService.name, () => {
+  let contractService: AgentMcpToolContractService;
+  let sut: AgentMcpPromptService;
+
+  beforeEach(() => {
+    contractService = new AgentMcpToolContractService();
+    sut = new AgentMcpPromptService(contractService);
+  });
+
+  it('generates a compact runner cheat sheet from the contract', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toContain('Gallery MCP tool-use cheat sheet');
+    expect(prompt.length).toBeLessThanOrEqual(3000);
+    expect(prompt).toContain('mcp_gallery_searchAssets');
+    expect(prompt).toContain('mcp_gallery_readAssetMetadata');
+    expect(prompt).toContain('mcp_gallery_proposeAlbumOperations');
+  });
+
+  it('uses Pi-visible tool names and does not use bare tool-call names as instructions', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    for (const contract of contractService.listToolContracts()) {
+      expect(prompt).toContain(`mcp_gallery_${contract.name}`);
+    }
+
+    expect(prompt).toContain('call mcp_gallery_proposeAlbumOperations');
+    expect(prompt).not.toContain('call proposeAlbumOperations');
+  });
+
+  it('includes approval retry guidance from contract-owned read tool modes', () => {
+    const prompt = sut.generatePromptCheatSheet();
+    const metadataContract = contractService
+      .listToolContracts()
+      .find((contract) => contract.name === AgentToolName.ReadAssetMetadata);
+    const retryMode = metadataContract?.argumentModes.find((mode) => mode.name === 'approved-retry');
+
+    expect(prompt).toContain(metadataContract?.approvalRetry?.instruction);
+    expect(prompt).toContain('toolCallId');
+    expect(prompt).toMatch(/retry uses only .*toolCallId/is);
+    expect(prompt).toMatch(/do not combine .*toolCallId .*old request fields/is);
+    expect(prompt).toContain(retryMode?.forbiddenFields.join(', '));
+  });
+
+  it('includes create album and create-plus-add-assets planning examples', () => {
+    const prompt = sut.generatePromptCheatSheet();
+    const examples = sut.listPromptExamples();
+
+    expect(prompt).toContain('album.create');
+    expect(prompt).toContain('album.addAssets');
+    expect(prompt).toContain('temporaryTargetId');
+    expect(examples).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ exampleName: 'create-empty-album' }),
+        expect.objectContaining({ exampleName: 'create-album-and-add-assets' }),
+      ]),
+    );
+  });
+
+  it('documents validation-error recovery', () => {
+    const prompt = sut.generatePromptCheatSheet();
+    const planningContract = contractService
+      .listToolContracts()
+      .find((contract) => contract.name === AgentToolName.ProposeAlbumOperations);
+    const mistake = planningContract?.commonMistakes.find((candidate) => candidate.exampleName);
+
+    expect(prompt).toContain('exampleArguments');
+    expect(prompt).toMatch(/retry once .*correction is obvious/is);
+    expect(prompt).toContain(mistake?.hint);
+  });
+
+  it('derives write safety guidance from the contract safety flags', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    for (const contract of contractService.listToolContracts()) {
+      expect(contract.safety.allowsDirectMutation, contract.name).toBe(false);
+      expect(contract.safety.requiresGalleryApplyForWrites, contract.name).toBe(true);
+    }
+    expect(prompt).toContain('No direct apply/write tool is available');
+    expect(prompt).toContain('Gallery applies final changes only after plan review');
+  });
+
+  it('does not expose direct apply or unsafe implementation details', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).not.toMatch(/bearer\s+[a-z0-9._~+/-]+=*/i);
+    expect(prompt).not.toMatch(/provider-key/i);
+    expect(prompt).not.toMatch(/stack trace/i);
+    expect(prompt).not.toMatch(/(^|\s)\/(?:home|tmp|var|usr|etc)\//);
+    expect(prompt).not.toContain('/agent/internal/mcp');
+    expect(prompt).not.toMatch(/applyAlbumOperations|applyOperations/);
+    expect(prompt).not.toMatch(/mcp_gallery_apply\w*/);
+    expect(prompt).not.toMatch(/mcp_gallery_\w*(apply|execute|mutate|write|delete|destroy|directWrite)\w*/i);
+  });
+
+  it('validates every structured prompt example against the tool DTO schemas', () => {
+    const readToolNames = new Set<AgentToolName>(
+      contractService.listReadToolContracts().map((contract) => contract.name),
+    );
+
+    for (const example of sut.listPromptExamples()) {
+      if (readToolNames.has(example.toolName)) {
+        AgentReadToolRequestSchemas[example.toolName as AgentMcpReadToolName].parse(example.arguments);
+        continue;
+      }
+
+      AgentOperationPlanToolRequestSchemas[example.toolName as AgentMcpPlanningToolName].parse(example.arguments);
+    }
+  });
+
+  it('exports a generated ESM module that round-trips exact prompt text', async () => {
+    const moduleText = sut.generateAgentRunnerModule();
+    const directory = await mkdtemp(join(tmpdir(), 'gallery-mcp-prompt-'));
+    const modulePath = join(directory, 'prompt.mjs');
+
+    try {
+      expect(moduleText).toContain('Generated by server/src/bin/sync-agent-mcp-prompt.ts');
+      expect(moduleText).toContain('export const galleryMcpPromptCheatSheet =');
+
+      await writeFile(modulePath, moduleText);
+      const imported = (await import(`${pathToFileURL(modulePath).href}?t=${Date.now()}`)) as {
+        galleryMcpPromptCheatSheet: string;
+      };
+
+      expect(imported.galleryMcpPromptCheatSheet).toBe(sut.generatePromptCheatSheet());
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the committed runner prompt module in sync with the renderer', async () => {
+    const committedModule = await readFile(
+      join(process.cwd(), '..', 'agent-runner', 'src', 'generated', 'gallery-mcp-prompt-cheat-sheet.mjs'),
+      'utf8',
+    );
+
+    expect(committedModule).toBe(sut.generateAgentRunnerModule());
+  });
+});
