@@ -1573,7 +1573,10 @@ export class SharedSpaceRepository {
     }
 
     await db.deleteFrom('shared_space_person_alias').where('personId', '=', input.sourcePersonId).execute();
-    await db.deleteFrom('shared_space_person').where('id', '=', input.sourcePersonId).execute();
+    const [deleteResult] = await db.deleteFrom('shared_space_person').where('id', '=', input.sourcePersonId).execute();
+    if (Number(deleteResult.numDeletedRows ?? 0) === 0) {
+      throw new Error('Space person profile not found');
+    }
     await this.recountPersons([input.targetPersonId], db);
   }
 
