@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { AgentSessionResponseDto } from '@immich/sdk';
   import { t } from 'svelte-i18n';
+  import type { AgentActivityVisibilityMode } from './agent-activity-visibility-ui';
+  import AgentActivityVisibilityMenu from './agent-activity-visibility-menu.svelte';
   import { getApprovalModeLabelKey } from './agent-session-ui';
   import { getAgentSessionStatusBadge, getAgentSessionStatusLabelKey } from './agent-session-workspace-ui';
 
@@ -11,9 +13,20 @@
     onCancel?: (() => void) | null;
     onNewChat: () => void;
     onOpenDetails: () => void;
+    activityVisibilityMode?: AgentActivityVisibilityMode;
+    onActivityVisibilityModeChange?: (mode: AgentActivityVisibilityMode) => void;
   }
 
-  let { session, title = null, cancelDisabled = false, onCancel = null, onNewChat, onOpenDetails }: Props = $props();
+  let {
+    session,
+    title = null,
+    cancelDisabled = false,
+    onCancel = null,
+    onNewChat,
+    onOpenDetails,
+    activityVisibilityMode,
+    onActivityVisibilityModeChange,
+  }: Props = $props();
 
   const displayTitle = $derived(title?.trim() || $t('assistant_new_chat'));
   const statusBadge = $derived(getAgentSessionStatusBadge(session.status));
@@ -84,6 +97,9 @@
       >
         {$t('assistant_cancel')}
       </button>
+    {/if}
+    {#if activityVisibilityMode && onActivityVisibilityModeChange}
+      <AgentActivityVisibilityMenu mode={activityVisibilityMode} onModeChange={onActivityVisibilityModeChange} />
     {/if}
     <button
       type="button"

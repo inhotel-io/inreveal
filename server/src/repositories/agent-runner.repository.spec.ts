@@ -502,6 +502,100 @@ describe(AgentRunnerRepository.name, () => {
     ).resolves.toEqual([approvalEvent]);
   });
 
+  it('streams normalized runner activity SSE events', async () => {
+    const activityEvent = {
+      type: 'activity',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      kind: 'plan-composing',
+      summary: 'Drafting a plan',
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`event: activity\ndata: ${JSON.stringify(activityEvent)}\n\n`),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).resolves.toEqual([
+      {
+        ...activityEvent,
+        status: 'running',
+      },
+    ]);
+  });
+
+  it('normalizes unknown runner activity kinds to unknown', async () => {
+    const activityEvent = {
+      type: 'activity',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      kind: 'future-kind',
+      status: 'completed',
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`event: activity\ndata: ${JSON.stringify(activityEvent)}\n\n`),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).resolves.toEqual([{ ...activityEvent, kind: 'unknown' }]);
+  });
+
+  it('ignores structurally invalid runner activity SSE events', async () => {
+    const invalidActivityEvent = {
+      type: 'activity',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      kind: 'apply-progress',
+      status: 'running',
+      counts: { total: -1 },
+    };
+    const completedEvent = {
+      type: 'assistant-message-completed',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      providerMessageId: 'provider-message-1',
+      content: { blocks: [{ type: 'text', text: 'Done.' }] },
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(
+        `event: activity\ndata: ${JSON.stringify(invalidActivityEvent)}\n\n` +
+          `data: ${JSON.stringify(completedEvent)}\n\n`,
+      ),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).resolves.toEqual([completedEvent]);
+  });
+
   it('throws when runner-reported error events are missing a non-empty message', async () => {
     const runnerErrorEvent = {
       type: 'runner-error',

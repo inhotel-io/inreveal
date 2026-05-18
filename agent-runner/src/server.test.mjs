@@ -798,6 +798,67 @@ describe('agent runner server', () => {
     });
   });
 
+  it('passes runtime activity events through the message SSE stream', async () => {
+    const runtime = createRuntime({
+      async *sendMessage(body) {
+        yield {
+          type: 'activity',
+          sessionId: body.gallerySessionId,
+          runnerSessionId: body.runnerSessionId,
+          kind: 'plan-composing',
+          status: 'running',
+          summary: 'Composing a plan',
+        };
+        yield {
+          type: 'assistant-message-completed',
+          sessionId: body.gallerySessionId,
+          runnerSessionId: body.runnerSessionId,
+          providerMessageId: null,
+          content: { blocks: [{ type: 'text', text: 'Done.' }] },
+        };
+      },
+    });
+
+    await withServer(runtime, async (baseUrl) => {
+      await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+
+      const response = await fetch(`${baseUrl}/sessions/pi-00000000-0000-4000-8000-000000000100/messages`, {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify(messageBody),
+      });
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await readSse(response), [
+        {
+          event: 'activity',
+          data: {
+            type: 'activity',
+            sessionId: '00000000-0000-4000-8000-000000000100',
+            runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+            kind: 'plan-composing',
+            status: 'running',
+            summary: 'Composing a plan',
+          },
+        },
+        {
+          event: 'assistant-message-completed',
+          data: {
+            type: 'assistant-message-completed',
+            sessionId: '00000000-0000-4000-8000-000000000100',
+            runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+            providerMessageId: null,
+            content: { blocks: [{ type: 'text', text: 'Done.' }] },
+          },
+        },
+      ]);
+    });
+  });
+
   it('continues an existing runner session and streams resumed assistant events', async () => {
     const runtime = createRuntime();
 
