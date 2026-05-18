@@ -281,53 +281,16 @@ describe(AgentMcpToolRegistryService.name, () => {
     }
   });
 
-  it('adds oneOf mode hints only when read tool modes are mutually exclusive', () => {
+  it('keeps read tool input schemas top-level object schemas without root oneOf unions', () => {
     const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
-    const previews = toolsByName.get(AgentToolName.ReadAssetPreviews)?.inputSchema;
-    const listAlbums = toolsByName.get(AgentToolName.ListAlbums)?.inputSchema;
-    const readAlbum = toolsByName.get(AgentToolName.ReadAlbum)?.inputSchema;
-    const search = toolsByName.get(AgentToolName.SearchAssets)?.inputSchema;
 
-    expect(previews?.oneOf).toEqual([
-      expect.objectContaining({
-        title: 'asset-ids',
-        required: ['assetIds'],
-        not: { anyOf: [{ required: ['toolCallId'] }] },
-      }),
-      expect.objectContaining({
-        title: 'approved-retry',
-        required: ['toolCallId'],
-        not: {
-          anyOf: [
-            { required: ['assetIds'] },
-            { required: ['albumId'] },
-            { required: ['filters'] },
-            { required: ['limit'] },
-          ],
-        },
-      }),
-    ]);
-    expect(listAlbums?.oneOf).toEqual([
-      expect.objectContaining({
-        title: 'list-visible-albums',
-        not: { anyOf: [{ required: ['toolCallId'] }] },
-      }),
-      expect.objectContaining({
-        title: 'approved-retry',
-        required: ['toolCallId'],
-      }),
-    ]);
-    expect(readAlbum?.oneOf).toEqual([
-      expect.objectContaining({
-        title: 'album-id',
-        required: ['albumId'],
-      }),
-      expect.objectContaining({
-        title: 'approved-retry',
-        required: ['toolCallId'],
-      }),
-    ]);
-    expect(search).not.toHaveProperty('oneOf');
+    for (const toolName of expectedReadToolNames) {
+      const schema = toolsByName.get(toolName)?.inputSchema;
+
+      expect(schema).toMatchObject({ type: 'object' });
+      expect(schema).not.toHaveProperty('oneOf');
+      expect(schema?.['x-gallery-argumentModes']).toEqual(expect.any(Array));
+    }
   });
 
   it('marks read tools as read-only, non-destructive, non-idempotent, and closed-world', () => {
