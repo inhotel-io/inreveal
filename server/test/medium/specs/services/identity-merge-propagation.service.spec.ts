@@ -190,7 +190,6 @@ describe('IdentityMergePropagationService medium tests', () => {
     const db = await getKyselyDB();
     try {
       const { ctx, sut } = setup(db);
-      const personRepository = ctx.get(PersonRepository);
       const { user } = await ctx.newUser();
       const targetIdentity = await createIdentity(ctx.database);
       const sourceIdentity = await createIdentity(ctx.database);
@@ -204,22 +203,6 @@ describe('IdentityMergePropagationService medium tests', () => {
         identityId: sourceIdentity.id,
         name: 'Source',
       });
-      const originalMerge = personRepository.mergePersonProfile.bind(personRepository);
-      let mergeAttempts = 0;
-      let releaseBothAttempts!: () => void;
-      const bothAttemptsReached = new Promise<void>((resolve) => {
-        releaseBothAttempts = resolve;
-      });
-      vi.spyOn(personRepository, 'mergePersonProfile').mockImplementation(async (input, transaction) => {
-        const attempt = ++mergeAttempts;
-        if (attempt === 2) {
-          releaseBothAttempts();
-        }
-
-        await bothAttemptsReached;
-        return originalMerge(input, transaction);
-      });
-
       const results = await Promise.allSettled([
         sut.mergePersonalPeople(factory.auth({ user }), target.id, [source.id]),
         sut.mergePersonalPeople(factory.auth({ user }), target.id, [source.id]),
@@ -234,10 +217,61 @@ describe('IdentityMergePropagationService medium tests', () => {
         status: 'rejected',
         reason: expect.any(Error),
       });
-      expect(mergeAttempts).toBe(2);
       await expect(getPeople(ctx.database, [target.id, source.id])).resolves.toEqual([
         { id: target.id, identityId: targetIdentity.id },
       ]);
+    } finally {
+      await db.destroy();
+    }
+  });
+
+  it('serializes chained personal merges so a deleted target fails cleanly', async () => {
+    const db = await getKyselyDB();
+    try {
+      const { ctx, sut } = setup(db);
+      const personRepository = ctx.get(PersonRepository);
+      const { user } = await ctx.newUser();
+      const identityA = await createIdentity(ctx.database);
+      const identityB = await createIdentity(ctx.database);
+      const identityC = await createIdentity(ctx.database);
+      const personA = await createPersonProfile(ctx, { ownerId: user.id, identityId: identityA.id, name: 'A' });
+      const personB = await createPersonProfile(ctx, { ownerId: user.id, identityId: identityB.id, name: 'B' });
+      const personC = await createPersonProfile(ctx, { ownerId: user.id, identityId: identityC.id, name: 'C' });
+      const originalLock = personRepository.lockPeopleForMerge.bind(personRepository);
+      let releaseFirst!: () => void;
+      const firstCanFinish = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      let firstLocked!: () => void;
+      const firstLockReached = new Promise<void>((resolve) => {
+        firstLocked = resolve;
+      });
+      let heldFirst = false;
+      vi.spyOn(personRepository, 'lockPeopleForMerge').mockImplementation(async (personIds, transaction) => {
+        await originalLock(personIds, transaction);
+        if (!heldFirst && personIds.includes(personA.id) && personIds.includes(personB.id)) {
+          heldFirst = true;
+          firstLocked();
+          await firstCanFinish;
+        }
+      });
+
+      const first = sut.mergePersonalPeople(factory.auth({ user }), personA.id, [personB.id]);
+      await firstLockReached;
+      const second = sut.mergePersonalPeople(factory.auth({ user }), personB.id, [personC.id]);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      releaseFirst();
+
+      const results = await Promise.allSettled([first, second]);
+
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      await expect(getPeople(ctx.database, [personA.id, personB.id, personC.id])).resolves.toEqual(
+        expect.arrayContaining([
+          { id: personA.id, identityId: identityA.id },
+          { id: personC.id, identityId: identityC.id },
+        ]),
+      );
     } finally {
       await db.destroy();
     }
@@ -247,7 +281,6 @@ describe('IdentityMergePropagationService medium tests', () => {
     const db = await getKyselyDB();
     try {
       const { ctx, sut } = setup(db);
-      const sharedSpaceRepository = ctx.get(SharedSpaceRepository);
       const { user } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
       const targetIdentity = await createIdentity(ctx.database);
@@ -262,22 +295,6 @@ describe('IdentityMergePropagationService medium tests', () => {
         identityId: sourceIdentity.id,
         name: 'Source',
       });
-      const originalMerge = sharedSpaceRepository.mergeSpacePersonProfile.bind(sharedSpaceRepository);
-      let mergeAttempts = 0;
-      let releaseBothAttempts!: () => void;
-      const bothAttemptsReached = new Promise<void>((resolve) => {
-        releaseBothAttempts = resolve;
-      });
-      vi.spyOn(sharedSpaceRepository, 'mergeSpacePersonProfile').mockImplementation(async (input, transaction) => {
-        const attempt = ++mergeAttempts;
-        if (attempt === 2) {
-          releaseBothAttempts();
-        }
-
-        await bothAttemptsReached;
-        return originalMerge(input, transaction);
-      });
-
       const results = await Promise.allSettled([
         sut.mergeSpacePeople(factory.auth({ user }), space.id, target.id, [source.id]),
         sut.mergeSpacePeople(factory.auth({ user }), space.id, target.id, [source.id]),
@@ -291,10 +308,62 @@ describe('IdentityMergePropagationService medium tests', () => {
         status: 'rejected',
         reason: expect.any(Error),
       });
-      expect(mergeAttempts).toBe(2);
       await expect(getSpacePeople(ctx.database, [target.id, source.id])).resolves.toEqual([
         { id: target.id, identityId: targetIdentity.id },
       ]);
+    } finally {
+      await db.destroy();
+    }
+  });
+
+  it('serializes chained shared-space merges so a deleted target fails cleanly', async () => {
+    const db = await getKyselyDB();
+    try {
+      const { ctx, sut } = setup(db);
+      const sharedSpaceRepository = ctx.get(SharedSpaceRepository);
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const identityA = await createIdentity(ctx.database);
+      const identityB = await createIdentity(ctx.database);
+      const identityC = await createIdentity(ctx.database);
+      const personA = await createSpacePerson(ctx.database, { spaceId: space.id, identityId: identityA.id, name: 'A' });
+      const personB = await createSpacePerson(ctx.database, { spaceId: space.id, identityId: identityB.id, name: 'B' });
+      const personC = await createSpacePerson(ctx.database, { spaceId: space.id, identityId: identityC.id, name: 'C' });
+      const originalLock = sharedSpaceRepository.lockSpacePeopleForMerge.bind(sharedSpaceRepository);
+      let releaseFirst!: () => void;
+      const firstCanFinish = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      let firstLocked!: () => void;
+      const firstLockReached = new Promise<void>((resolve) => {
+        firstLocked = resolve;
+      });
+      let heldFirst = false;
+      vi.spyOn(sharedSpaceRepository, 'lockSpacePeopleForMerge').mockImplementation(async (personIds, transaction) => {
+        await originalLock(personIds, transaction);
+        if (!heldFirst && personIds.includes(personA.id) && personIds.includes(personB.id)) {
+          heldFirst = true;
+          firstLocked();
+          await firstCanFinish;
+        }
+      });
+
+      const first = sut.mergeSpacePeople(factory.auth({ user }), space.id, personA.id, [personB.id]);
+      await firstLockReached;
+      const second = sut.mergeSpacePeople(factory.auth({ user }), space.id, personB.id, [personC.id]);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      releaseFirst();
+
+      const results = await Promise.allSettled([first, second]);
+
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      await expect(getSpacePeople(ctx.database, [personA.id, personB.id, personC.id])).resolves.toEqual(
+        expect.arrayContaining([
+          { id: personA.id, identityId: identityA.id },
+          { id: personC.id, identityId: identityC.id },
+        ]),
+      );
     } finally {
       await db.destroy();
     }

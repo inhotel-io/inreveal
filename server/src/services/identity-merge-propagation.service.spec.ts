@@ -424,6 +424,7 @@ const makeService = (profiles: MergeProfile[]) => {
     transaction: vi.fn((callback: (db: typeof transaction) => Promise<unknown>) => callback(transaction)),
   };
   const personRepository = {
+    lockPeopleForMerge: vi.fn().mockResolvedValue(void 0),
     mergePersonProfile: vi.fn().mockResolvedValue({ deletedThumbnailPath: null, targetNeedsFeatureFaceRepair: false }),
     getRandomFace: vi.fn().mockResolvedValue(undefined),
     update: vi.fn().mockResolvedValue(void 0),
@@ -471,6 +472,7 @@ const makeService = (profiles: MergeProfile[]) => {
     error: vi.fn(),
   };
   const sharedSpaceRepository = {
+    lockSpacePeopleForMerge: vi.fn().mockResolvedValue(void 0),
     getPersonById: vi.fn((personId: string) => {
       const person = profiles.find((profile) => profile.kind === 'space-person' && profile.id === personId);
       return person
