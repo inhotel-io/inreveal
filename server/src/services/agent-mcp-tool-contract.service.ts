@@ -4,6 +4,7 @@ import type {
   AgentMcpArgumentMode,
   AgentMcpApprovalRetryContract,
   AgentMcpCommonMistake,
+  AgentMcpFailureMatrixCase,
   AgentMcpReadToolContract,
   AgentMcpReadToolName,
   AgentMcpToolContract,
@@ -339,6 +340,219 @@ const readToolContracts: AgentMcpReadToolContract[] = [
   readAlbumContract,
 ];
 
+const toolCallRequest = (id: string, name: string, args: unknown): Record<string, unknown> => ({
+  jsonrpc: '2.0',
+  id,
+  method: 'tools/call',
+  params: {
+    name,
+    arguments: args,
+  },
+});
+
+const toolCallRequestWithParams = (id: string, params: Record<string, unknown>): Record<string, unknown> => ({
+  jsonrpc: '2.0',
+  id,
+  method: 'tools/call',
+  params,
+});
+
+const oversizedAssetIds = Array.from(
+  { length: 10_001 },
+  (_, index) => `00000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`,
+);
+
+const slice1RuntimeFailureMatrixCases: AgentMcpFailureMatrixCase[] = [
+  {
+    id: 'read-input-instead-of-arguments',
+    category: 'request-wrapper',
+    description: 'Model sends params.input instead of params.arguments.',
+    toolName: AgentToolName.ReadAssetMetadata,
+    request: toolCallRequestWithParams('read-input-instead-of-arguments', {
+      name: AgentToolName.ReadAssetMetadata,
+      input: { assetIds: [exampleAssetId] },
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'arguments' },
+    expectedContractMistakeId: 'tool-call-arguments-missing',
+  },
+  {
+    id: 'read-top-level-arguments',
+    category: 'request-wrapper',
+    description: 'Model sends arguments outside params.',
+    toolName: AgentToolName.ReadAssetMetadata,
+    request: {
+      ...toolCallRequestWithParams('read-top-level-arguments', { name: AgentToolName.ReadAssetMetadata }),
+      arguments: { assetIds: [exampleAssetId] },
+    },
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'arguments' },
+    expectedContractMistakeId: 'tool-call-arguments-missing',
+  },
+  {
+    id: 'read-arguments-array',
+    category: 'request-wrapper',
+    description: 'Model sends params.arguments as an array instead of an object.',
+    toolName: AgentToolName.ReadAssetMetadata,
+    request: toolCallRequest('read-arguments-array', AgentToolName.ReadAssetMetadata, [exampleAssetId]),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'arguments' },
+    expectedContractMistakeId: 'tool-call-arguments-not-object',
+  },
+  {
+    id: 'read-arguments-primitive',
+    category: 'request-wrapper',
+    description: 'Model sends params.arguments as a primitive string instead of an object.',
+    toolName: AgentToolName.ReadAssetMetadata,
+    request: toolCallRequest('read-arguments-primitive', AgentToolName.ReadAssetMetadata, 'not-an-object'),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'arguments' },
+    expectedContractMistakeId: 'tool-call-arguments-not-object',
+  },
+  {
+    id: 'read-arguments-null',
+    category: 'request-wrapper',
+    description: 'Model sends params.arguments as null instead of an object.',
+    toolName: AgentToolName.ReadAssetMetadata,
+    request: toolCallRequest('read-arguments-null', AgentToolName.ReadAssetMetadata, null),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'arguments' },
+    expectedContractMistakeId: 'tool-call-arguments-not-object',
+  },
+  {
+    id: 'asset-read-combined-asset-ids-and-tool-call-id',
+    category: 'read-retry',
+    description: 'Model combines new request ids with approved retry id.',
+    toolName: AgentToolName.ReadAssetPreviews,
+    request: toolCallRequest('asset-read-combined-asset-ids-and-tool-call-id', AgentToolName.ReadAssetPreviews, {
+      assetIds: [exampleAssetId],
+      toolCallId: exampleToolCallId,
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: '' },
+    expectedContractMistakeId: 'asset-read-combined-asset-ids-and-tool-call-id',
+  },
+  {
+    id: 'asset-read-missing-asset-ids-or-tool-call-id',
+    category: 'read-request',
+    description: 'Model sends an empty asset read argument object.',
+    toolName: AgentToolName.ReadAssetMetadata,
+    request: toolCallRequest('asset-read-missing-asset-ids-or-tool-call-id', AgentToolName.ReadAssetMetadata, {}),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: '' },
+    expectedContractMistakeId: 'asset-read-missing-asset-ids-or-tool-call-id',
+  },
+  {
+    id: 'asset-read-empty-asset-ids',
+    category: 'read-request',
+    description: 'Model sends an empty asset id array.',
+    toolName: AgentToolName.ReadAssetMetadata,
+    request: toolCallRequest('asset-read-empty-asset-ids', AgentToolName.ReadAssetMetadata, { assetIds: [] }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'assetIds' },
+    expectedContractMistakeId: 'asset-read-empty-asset-ids',
+  },
+  {
+    id: 'asset-read-invalid-asset-id',
+    category: 'read-request',
+    description: 'Model sends a non-UUID asset id.',
+    toolName: AgentToolName.ReadAssetMetadata,
+    request: toolCallRequest('asset-read-invalid-asset-id', AgentToolName.ReadAssetMetadata, {
+      assetIds: ['not-a-uuid'],
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'assetIds.0' },
+    expectedContractMistakeId: 'asset-read-invalid-asset-id',
+  },
+  {
+    id: 'asset-read-duplicate-asset-ids',
+    category: 'read-request',
+    description: 'Model sends duplicate asset ids.',
+    toolName: AgentToolName.ReadAssetMetadata,
+    request: toolCallRequest('asset-read-duplicate-asset-ids', AgentToolName.ReadAssetMetadata, {
+      assetIds: [exampleAssetId, exampleAssetId],
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'assetIds' },
+    expectedContractMistakeId: 'asset-read-duplicate-asset-ids',
+  },
+  {
+    id: 'asset-read-too-many-asset-ids',
+    category: 'read-request',
+    description: 'Model sends more asset ids than the read-tool maximum.',
+    toolName: AgentToolName.ReadAssetMetadata,
+    request: toolCallRequest('asset-read-too-many-asset-ids', AgentToolName.ReadAssetMetadata, {
+      assetIds: oversizedAssetIds,
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'assetIds' },
+    expectedContractMistakeId: 'asset-read-too-many-asset-ids',
+  },
+  {
+    id: 'read-album-missing-album-id-or-tool-call-id',
+    category: 'album-read',
+    description: 'Model sends an empty readAlbum argument object.',
+    toolName: AgentToolName.ReadAlbum,
+    request: toolCallRequest('read-album-missing-album-id-or-tool-call-id', AgentToolName.ReadAlbum, {}),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: '' },
+    expectedContractMistakeId: 'read-album-missing-album-id-or-tool-call-id',
+  },
+  {
+    id: 'read-album-combined-album-id-and-tool-call-id',
+    category: 'album-read',
+    description: 'Model combines albumId and toolCallId.',
+    toolName: AgentToolName.ReadAlbum,
+    request: toolCallRequest('read-album-combined-album-id-and-tool-call-id', AgentToolName.ReadAlbum, {
+      albumId: exampleAlbumId,
+      toolCallId: exampleToolCallId,
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: '' },
+    expectedContractMistakeId: 'read-album-combined-album-id-and-tool-call-id',
+  },
+  {
+    id: 'read-album-invalid-album-id',
+    category: 'album-read',
+    description: 'Model sends a non-UUID album id.',
+    toolName: AgentToolName.ReadAlbum,
+    request: toolCallRequest('read-album-invalid-album-id', AgentToolName.ReadAlbum, { albumId: 'not-a-uuid' }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'albumId' },
+    expectedContractMistakeId: 'read-album-invalid-album-id',
+  },
+  {
+    id: 'search-filters-outside-filters',
+    category: 'search',
+    description: 'Model puts date or location filters at the argument root.',
+    toolName: AgentToolName.SearchAssets,
+    request: toolCallRequest('search-filters-outside-filters', AgentToolName.SearchAssets, {
+      city: 'Berlin',
+      country: 'Germany',
+      limit: 25,
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: '' },
+    expectedContractMistakeId: 'search-filters-outside-filters',
+  },
+  {
+    id: 'search-combined-filters-and-tool-call-id',
+    category: 'search',
+    description: 'Model combines search filters and approved retry id.',
+    toolName: AgentToolName.SearchAssets,
+    request: toolCallRequest('search-combined-filters-and-tool-call-id', AgentToolName.SearchAssets, {
+      filters: { isFavorite: true },
+      toolCallId: exampleToolCallId,
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: '' },
+    expectedContractMistakeId: 'search-combined-filters-and-tool-call-id',
+  },
+  {
+    id: 'search-limit-out-of-range',
+    category: 'search',
+    description: 'Model requests more than the maximum search limit.',
+    toolName: AgentToolName.SearchAssets,
+    request: toolCallRequest('search-limit-out-of-range', AgentToolName.SearchAssets, { limit: 10_001 }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'limit' },
+    expectedContractMistakeId: 'search-limit-out-of-range',
+  },
+  {
+    id: 'invented-apply-tool',
+    category: 'safety',
+    description: 'Model invents a direct apply tool.',
+    request: toolCallRequest('invented-apply-tool', 'applyAlbumOperations', {
+      planId: '00000000-0000-4000-8000-000000000222',
+      operationIds: ['00000000-0000-4000-8000-000000000333'],
+    }),
+    expectedResult: { kind: 'protocol-error', expectedErrorMessage: 'Unknown tool' },
+  },
+];
+
 const hideSafetySerializationFields = (contract: AgentMcpReadToolContract): AgentMcpReadToolContract => {
   const contractCopy: AgentMcpReadToolContract = {
     ...contract,
@@ -363,5 +577,9 @@ export class AgentMcpToolContractService {
 
   getReadToolContract(name: AgentMcpReadToolName): AgentMcpReadToolContract | undefined {
     return this.listReadToolContracts().find((contract) => contract.name === name);
+  }
+
+  listSlice1RuntimeFailureMatrixCases(): AgentMcpFailureMatrixCase[] {
+    return structuredClone(slice1RuntimeFailureMatrixCases);
   }
 }
