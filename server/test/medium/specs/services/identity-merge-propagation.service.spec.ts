@@ -186,6 +186,7 @@ describe('IdentityMergePropagationService medium tests', () => {
     const db = await getKyselyDB();
     try {
       const { ctx, sut } = setup(db);
+      const personRepository = ctx.get(PersonRepository);
       const { user } = await ctx.newUser();
       const targetIdentity = await createIdentity(ctx.database);
       const sourceIdentity = await createIdentity(ctx.database);
@@ -199,18 +200,42 @@ describe('IdentityMergePropagationService medium tests', () => {
         identityId: sourceIdentity.id,
         name: 'Source',
       });
+      const originalMerge = personRepository.mergePersonProfile.bind(personRepository);
+      let mergeAttempts = 0;
+      let releaseBothAttempts!: () => void;
+      const bothAttemptsReached = new Promise<void>((resolve) => {
+        releaseBothAttempts = resolve;
+      });
+      vi.spyOn(personRepository, 'mergePersonProfile').mockImplementation(async (input, transaction) => {
+        const attempt = ++mergeAttempts;
+        if (attempt === 2) {
+          releaseBothAttempts();
+        }
+
+        await bothAttemptsReached;
+
+        if (attempt === 2) {
+          throw new Error('concurrent merge retry required');
+        }
+
+        return originalMerge(input, transaction);
+      });
 
       const results = await Promise.allSettled([
         sut.mergePersonalPeople(factory.auth({ user }), target.id, [source.id]),
         sut.mergePersonalPeople(factory.auth({ user }), target.id, [source.id]),
       ]);
 
-      expect(results.some((result) => result.status === 'fulfilled')).toBe(true);
-      for (const result of results) {
-        if (result.status === 'rejected') {
-          expect(result.reason).toBeInstanceOf(Error);
-        }
-      }
+      const fulfilled = results.filter((result) => result.status === 'fulfilled');
+      const rejected = results.filter((result) => result.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(fulfilled[0]).toEqual({ status: 'fulfilled', value: [{ id: source.id, success: true }] });
+      expect(rejected[0]).toMatchObject({
+        status: 'rejected',
+        reason: expect.objectContaining({ message: 'concurrent merge retry required' }),
+      });
+      expect(mergeAttempts).toBe(2);
       await expect(getPeople(ctx.database, [target.id, source.id])).resolves.toEqual([
         { id: target.id, identityId: targetIdentity.id },
       ]);
