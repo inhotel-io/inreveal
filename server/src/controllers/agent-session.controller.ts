@@ -1,17 +1,22 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
+import { AgentSessionActivityEventResponseDto } from 'src/dtos/agent-session-activity-event.dto';
 import { AgentSessionCreateDto, AgentSessionResponseDto, AgentSessionUpdateDto } from 'src/dtos/agent-session.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { ApiTag, Permission } from 'src/enum';
 import { Auth, Authenticated } from 'src/middleware/auth.guard';
+import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import { UUIDParamDto } from 'src/validation';
 
 @ApiTags(ApiTag.AgentSessions)
 @Controller('agent/sessions')
 export class AgentSessionController {
-  constructor(private readonly service: AgentSessionService) {}
+  constructor(
+    private readonly service: AgentSessionService,
+    private readonly activityEventService: AgentSessionActivityEventService,
+  ) {}
 
   @Post()
   @Authenticated({ permission: Permission.AgentSessionCreate })
@@ -58,6 +63,20 @@ export class AgentSessionController {
   })
   getAgentSession(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto): Promise<AgentSessionResponseDto> {
     return this.service.getById(auth, id);
+  }
+
+  @Get(':id/activity-events')
+  @Authenticated({ permission: Permission.AgentSessionRead })
+  @Endpoint({
+    summary: 'List agent session activity events',
+    description: 'Retrieve persisted activity events for an AI agent session owned by the current user.',
+    history: new HistoryBuilder().added('v2.7.5').alpha('v2.7.5'),
+  })
+  getAgentSessionActivityEvents(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+  ): Promise<AgentSessionActivityEventResponseDto[]> {
+    return this.activityEventService.getHistory(auth, id);
   }
 
   @Put(':id')

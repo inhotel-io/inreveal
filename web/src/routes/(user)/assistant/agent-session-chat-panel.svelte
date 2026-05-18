@@ -1,7 +1,13 @@
 <script lang="ts">
   import { websocketEvents, type AgentSessionClientEvent } from '$lib/stores/websocket';
   import { handleError } from '$lib/utils/handle-error';
-  import { appendAgentSessionMessage, getAgentSessionMessages, getAppliedOperationPlans } from '@immich/sdk';
+  import {
+    appendAgentSessionMessage,
+    getAgentSessionMessages,
+    getAppliedOperationPlans,
+    getCurrentOperationPlan,
+  } from '@immich/sdk';
+  import * as agentSdk from '@immich/sdk';
   import {
     AgentMessageRole,
     AgentMessageTextBlockType,
@@ -16,6 +22,13 @@
   import { onDestroy, onMount, type Snippet } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
+  import type { AgentActivityVisibilityMode } from './agent-activity-visibility-ui';
+  import type { AgentActivityModel } from './agent-activity-ui';
+  import {
+    buildAgentSessionActivityTurns,
+    getCoveredToolCallIdsForActivityTurns,
+    type AgentActivityEvent,
+  } from './agent-session-activity-turns-ui';
   import {
     getAgentToolCallCompletedText,
     getAgentToolCallScopeText,
@@ -23,6 +36,7 @@
     getAgentToolNameLabelKey,
   } from './agent-tool-approval-ui';
   import { deriveAgentSessionTitleFromMessages } from './agent-session-workspace-ui';
+  import AgentActivityBlock from './agent-activity-block.svelte';
   import AgentAppliedPlanTimelineCard from './agent-applied-plan-timeline-card.svelte';
 
   interface Props {
@@ -40,6 +54,8 @@
     onMessageSent?: (sessionId: string) => void | Promise<void>;
     onRunnerError?: (sessionId: string) => void | Promise<void>;
     onTitleDiscovered?: (sessionId: string, title: string) => void;
+    activityVisibilityMode?: AgentActivityVisibilityMode;
+    onActivityVisibilityModeChange?: (mode: AgentActivityVisibilityMode) => void;
   }
 
   type AssistantMarkdownInlineSegment =
@@ -69,6 +85,7 @@
 
   type ChatTimelineItem =
     | { type: 'message'; id: string; occurredAt: string; message: AgentMessageResponseDto }
+    | { type: 'activity'; id: string; occurredAt: string; model: AgentActivityModel }
     | { type: 'tool-call'; id: string; occurredAt: string; toolCall: AgentToolCallResponseDto }
     | { type: 'applied-plan'; id: string; occurredAt: string; plan: AgentOperationPlanResponseDto };
 
@@ -87,6 +104,8 @@
     onMessageSent,
     onRunnerError,
     onTitleDiscovered,
+    activityVisibilityMode = 'compact',
+    onActivityVisibilityModeChange,
   }: Props = $props();
 
   let messages = $state<AgentMessageResponseDto[]>([]);
@@ -98,9 +117,13 @@
   let streamingText = $state('');
   let busyFrameIndex = $state(0);
   let expandedToolCallIds = $state<Record<string, boolean>>({});
+  let currentPlan = $state<AgentOperationPlanResponseDto | null>(null);
+  let activityEvents = $state<AgentActivityEvent[]>([]);
   let lastPublishedTitle: string | null = null;
   let cleanupWebsocketListener: (() => void) | undefined;
   let appliedPlanLoadSequence = 0;
+  let currentPlanLoadSequence = 0;
+  let activityEventLoadSequence = 0;
 
   const assistantContinuationToolStatuses = new Set<AgentToolCallStatus>([
     AgentToolCallStatus.Approved,
@@ -142,10 +165,42 @@
         (isAssistantActive || assistantResponsePending || isRunningAwaitingAssistant)),
   );
   const canSend = $derived(draft.trim().length > 0 && !isResponsePending && !composerDisabled);
-  const showAssistantBusyIndicator = $derived(isResponsePending && streamingText.length === 0 && !composerDisabled);
+  const activitySession = $derived(
+    session.status === AgentSessionStatus.Applying && appliedPlans.length > 0
+      ? { ...session, status: AgentSessionStatus.Running }
+      : session,
+  );
+  const activityTurns = $derived(
+    buildAgentSessionActivityTurns({
+      session: activitySession,
+      messages,
+      toolCalls,
+      currentPlan,
+      appliedPlans,
+      activityEvents,
+      streamingText,
+      isAssistantActive: isResponsePending,
+    }),
+  );
+  const coveredToolCallIds = $derived(getCoveredToolCallIdsForActivityTurns(activityTurns));
+  const showAssistantBusyIndicator = $derived(
+    isResponsePending &&
+      streamingText.length === 0 &&
+      !composerDisabled &&
+      (activityVisibilityMode === 'off' || activityTurns.every((turn) => turn.model.items.length === 0)),
+  );
   const busyFrames = ['-', '\\', '|', '/'];
   const busyFrame = $derived(busyFrames[busyFrameIndex]);
-  const chatTimelineItems = $derived(buildChatTimelineItems(messages, toolCalls, appliedPlans));
+  const chatTimelineItems = $derived(
+    buildChatTimelineItems(
+      messages,
+      toolCalls,
+      appliedPlans,
+      activityTurns,
+      coveredToolCallIds,
+      activityVisibilityMode,
+    ),
+  );
   const terminalStatuses = new Set<AgentSessionStatus>([
     AgentSessionStatus.Applying,
     AgentSessionStatus.Completed,
@@ -163,11 +218,15 @@
     timelineMessages: AgentMessageResponseDto[],
     timelineToolCalls: AgentToolCallResponseDto[],
     timelineAppliedPlans: AgentOperationPlanResponseDto[],
+    timelineActivityTurns: ReturnType<typeof buildAgentSessionActivityTurns>,
+    timelineCoveredToolCallIds: Set<string>,
+    timelineActivityVisibilityMode: AgentActivityVisibilityMode,
   ): ChatTimelineItem[] {
     const typePriority: Record<ChatTimelineItem['type'], number> = {
       message: 0,
-      'tool-call': 1,
-      'applied-plan': 2,
+      activity: 1,
+      'tool-call': 2,
+      'applied-plan': 3,
     };
 
     return [
@@ -177,12 +236,24 @@
         occurredAt: message.createdAt,
         message,
       })),
-      ...timelineToolCalls.map((toolCall) => ({
-        type: 'tool-call' as const,
-        id: `tool-call-${toolCall.id}`,
-        occurredAt: toolCall.startedAt,
-        toolCall,
-      })),
+      ...(timelineActivityVisibilityMode !== 'off'
+        ? timelineActivityTurns
+            .filter((turn) => turn.model.items.length > 0)
+            .map((turn) => ({
+              type: 'activity' as const,
+              id: `activity-${turn.id}`,
+              occurredAt: turn.occurredAt,
+              model: turn.model,
+            }))
+        : []),
+      ...timelineToolCalls
+        .filter((toolCall) => !timelineCoveredToolCallIds.has(toolCall.id))
+        .map((toolCall) => ({
+          type: 'tool-call' as const,
+          id: `tool-call-${toolCall.id}`,
+          occurredAt: toolCall.startedAt,
+          toolCall,
+        })),
       ...dedupeAppliedPlans(timelineAppliedPlans).map((plan) => ({
         type: 'applied-plan' as const,
         id: `applied-plan-${plan.id}-${plan.revision}`,
@@ -209,6 +280,12 @@
 
   const loadAppliedOperationPlans = async (sessionId: string) => {
     const response = await getAppliedOperationPlans({ id: sessionId });
+
+    return Array.isArray(response) ? response : [];
+  };
+
+  const loadAgentSessionActivityEvents = async (sessionId: string): Promise<AgentActivityEvent[]> => {
+    const response = await agentSdk.getAgentSessionActivityEvents({ id: sessionId });
 
     return Array.isArray(response) ? response : [];
   };
@@ -401,6 +478,16 @@
     return mergedMessages;
   };
 
+  const mergeActivityEvents = (firstEvents: AgentActivityEvent[], secondEvents: AgentActivityEvent[]) => {
+    const eventsById = new Map<string, AgentActivityEvent>();
+
+    for (const event of [...firstEvents, ...secondEvents]) {
+      eventsById.set(event.id, event);
+    }
+
+    return [...eventsById.values()];
+  };
+
   const publishDiscoveredTitle = (nextMessages: AgentMessageResponseDto[]) => {
     const title = deriveAgentSessionTitleFromMessages(nextMessages);
 
@@ -438,6 +525,10 @@
     messages = messages.filter((message) => message.id !== messageId);
   };
 
+  const appendActivityEventIfNew = (event: AgentActivityEvent) => {
+    activityEvents = mergeActivityEvents(activityEvents, [event]);
+  };
+
   const handleSessionEvent = (event: AgentSessionClientEvent) => {
     if (event.sessionId !== session.id) {
       return;
@@ -457,11 +548,20 @@
     }
 
     if (event.type === 'operation-plan-ready') {
+      void loadCurrentPlan(session.id);
       return;
     }
 
     if (event.type === 'operation-plan-applied') {
+      if (currentPlan?.id === event.planId) {
+        currentPlan = null;
+      }
       void loadAppliedPlans();
+      return;
+    }
+
+    if (event.type === 'activity') {
+      appendActivityEventIfNew(event.event);
       return;
     }
 
@@ -506,6 +606,44 @@
 
       errorMessage = $t('assistant_message_load_error');
       handleError(error, errorMessage);
+    }
+  };
+
+  const loadActivityEvents = async () => {
+    const sequence = ++activityEventLoadSequence;
+
+    try {
+      const loadedActivityEvents = await loadAgentSessionActivityEvents(session.id);
+      if (sequence !== activityEventLoadSequence) {
+        return;
+      }
+
+      activityEvents = mergeActivityEvents(loadedActivityEvents, activityEvents);
+    } catch (error) {
+      if (sequence !== activityEventLoadSequence) {
+        return;
+      }
+
+      handleError(error, $t('assistant_message_load_error'));
+    }
+  };
+
+  const loadCurrentPlan = async (sessionId: string) => {
+    const sequence = ++currentPlanLoadSequence;
+
+    try {
+      const nextPlan = await getCurrentOperationPlan({ id: sessionId });
+      if (sequence !== currentPlanLoadSequence || session.id !== sessionId) {
+        return;
+      }
+
+      currentPlan = nextPlan;
+    } catch (error) {
+      if (sequence !== currentPlanLoadSequence || session.id !== sessionId) {
+        return;
+      }
+
+      handleError(error, $t('assistant_operation_plan_error'));
     }
   };
 
@@ -578,6 +716,7 @@
     cleanupWebsocketListener = websocketEvents.on('on_agent_session_event', handleSessionEvent);
     void loadMessages();
     void loadAppliedPlans();
+    void loadActivityEvents();
   });
 
   $effect(() => {
@@ -636,6 +775,8 @@
 
   onDestroy(() => {
     appliedPlanLoadSequence += 1;
+    currentPlanLoadSequence += 1;
+    activityEventLoadSequence += 1;
     cleanupWebsocketListener?.();
   });
 </script>
@@ -765,6 +906,12 @@
               {/if}
             </article>
           {/if}
+        {:else if item.type === 'activity'}
+          <AgentActivityBlock
+            model={item.model}
+            visibilityMode={activityVisibilityMode === 'expanded' ? 'expanded' : 'compact'}
+            onVisibilityModeChange={onActivityVisibilityModeChange}
+          />
         {:else if item.type === 'applied-plan'}
           <AgentAppliedPlanTimelineCard plan={item.plan} />
         {:else}
