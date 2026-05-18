@@ -265,12 +265,29 @@ export class AgentMcpService {
       .replaceAll(/provider-key/gi, '[redacted-secret]');
   }
 
-  private isReadToolNameForCorrection(toolName: AgentToolName): toolName is keyof typeof AgentReadToolRequestSchemas {
-    return this.readToolNames.has(toolName);
-  }
-
   private validationErrorResult(toolName: AgentToolName, error: z.ZodError): AgentMcpToolCallResult {
     return this.validationIssuesResult(toolName, this.normalizeValidationIssues(error.issues), 'tool-arguments');
+  }
+
+  private validationCorrectionFor(
+    toolName: AgentToolName,
+    issues: readonly { path: string; message: string }[],
+    requestShape: 'json-rpc' | 'tool-arguments',
+  ) {
+    const request = {
+      requestShape,
+      issues: issues.map((issue) => ({ path: issue.path, message: issue.message })),
+    };
+
+    if (this.isReadToolName(toolName)) {
+      return this.toolContractService.getReadToolValidationCorrection(toolName, request);
+    }
+
+    if (this.isPlanningToolName(toolName)) {
+      return this.toolContractService.getPlanningToolValidationCorrection(toolName, request);
+    }
+
+    return;
   }
 
   private validationIssuesResult(
@@ -278,12 +295,7 @@ export class AgentMcpService {
     issues: readonly { path: string; message: string }[],
     requestShape: 'json-rpc' | 'tool-arguments',
   ): AgentMcpToolCallResult {
-    const correction = this.isReadToolNameForCorrection(toolName)
-      ? this.toolContractService.getReadToolValidationCorrection(toolName, {
-          requestShape,
-          issues: issues.map((issue) => ({ path: issue.path, message: issue.message })),
-        })
-      : undefined;
+    const correction = this.validationCorrectionFor(toolName, issues, requestShape);
     const structuredContent: AgentMcpToolValidationErrorContent = {
       status: 'error',
       error: 'Invalid tool arguments',
