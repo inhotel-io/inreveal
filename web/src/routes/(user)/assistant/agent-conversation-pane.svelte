@@ -6,8 +6,15 @@
     type AgentSessionResponseDto,
     type AgentToolCallResponseDto,
   } from '@immich/sdk';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
+  import {
+    getAgentActivityVisibilityStorageKey,
+    parseAgentActivityVisibilityMode,
+    readAgentActivityVisibilityMode,
+    writeAgentActivityVisibilityMode,
+    type AgentActivityVisibilityMode,
+  } from './agent-activity-visibility-ui';
   import AgentSessionActionDock from './agent-session-action-dock.svelte';
   import AgentSessionChatPanel from './agent-session-chat-panel.svelte';
   import AgentSessionDetailsDrawer from './agent-session-details-drawer.svelte';
@@ -41,6 +48,7 @@
   let pendingApprovalCount = $state(0);
   let approvalResumePending = $state(false);
   let recentToolCalls = $state<AgentToolCallResponseDto[]>([]);
+  let activityVisibilityMode = $state<AgentActivityVisibilityMode>('compact');
   let cancelBusy = $state(false);
   let lifecycleError = $state<string | null>(null);
   let refreshSequence = 0;
@@ -112,8 +120,13 @@
   };
 
   const cancelHandler = $derived(isAgentSessionCancellable(session.status) ? cancelSelectedSession : null);
+  const setActivityVisibilityMode = (mode: AgentActivityVisibilityMode) => {
+    activityVisibilityMode = mode;
+    writeAgentActivityVisibilityMode(session.id, mode);
+  };
 
   $effect(() => {
+    void session.id;
     pendingApprovalCount = 0;
     approvalResumePending = false;
     recentToolCalls = [];
@@ -121,6 +134,25 @@
     cancelBusy = false;
     refreshSequence += 1;
     cancelSequence += 1;
+  });
+
+  $effect(() => {
+    const sessionId = session.id;
+    activityVisibilityMode = readAgentActivityVisibilityMode(sessionId);
+  });
+
+  onMount(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== getAgentActivityVisibilityStorageKey(session.id)) {
+        return;
+      }
+
+      activityVisibilityMode = parseAgentActivityVisibilityMode(event.newValue);
+    };
+
+    globalThis.addEventListener?.('storage', handleStorage);
+
+    return () => globalThis.removeEventListener?.('storage', handleStorage);
   });
 
   onDestroy(() => {
@@ -138,6 +170,8 @@
     onCancel={cancelHandler}
     cancelDisabled={cancelBusy}
     onOpenDetails={() => (detailsOpen = true)}
+    {activityVisibilityMode}
+    onActivityVisibilityModeChange={setActivityVisibilityMode}
   />
   <AgentSessionDetailsDrawer {session} open={detailsOpen} onClose={() => (detailsOpen = false)} />
 
@@ -177,6 +211,8 @@
         onMessageSent={refreshSelectedSession}
         onRunnerError={refreshSelectedSession}
         {onTitleDiscovered}
+        {activityVisibilityMode}
+        onActivityVisibilityModeChange={setActivityVisibilityMode}
       />
     {/key}
   </div>

@@ -4,6 +4,7 @@ import { AgentMessageRepository } from 'src/repositories/agent-message.repositor
 import { AgentOperationPlanRepository } from 'src/repositories/agent-operation-plan.repository';
 import { AgentProviderCredentialRepository } from 'src/repositories/agent-provider-credential.repository';
 import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository';
+import { AgentSessionActivityEventRepository } from 'src/repositories/agent-session-activity-event.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AlbumUserRepository } from 'src/repositories/album-user.repository';
@@ -74,6 +75,7 @@ export const repositories = [
   AgentOperationPlanRepository,
   AgentProviderCredentialRepository,
   AgentRunnerRepository,
+  AgentSessionActivityEventRepository,
   AgentSessionRepository,
   AgentToolCallRepository,
   ApiKeyRepository,

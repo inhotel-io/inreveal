@@ -8,6 +8,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { AgentMessageResponseDto } from 'src/dtos/agent-message.dto';
+import { AgentSessionActivityEventResponseDto } from 'src/dtos/agent-session-activity-event.dto';
 import { AssetResponseDto } from 'src/dtos/asset-response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { NotificationDto } from 'src/dtos/notification.dto';
@@ -70,6 +71,12 @@ export type AgentSessionClientEvent =
       appliedCount: number;
       skippedCount: number;
       failedCount: number;
+    }
+  | {
+      type: 'activity';
+      sessionId: string;
+      event: AgentSessionActivityEventResponseDto;
+      createdAt: string;
     };
 
 export interface ClientEventMap {
