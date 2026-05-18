@@ -314,6 +314,7 @@ export class IdentityMergePropagationService {
   ): Promise<IdentityMergePropagationPlan> {
     const sourcePersonIds = [...new Set(input.sourcePersonIds)].filter((id) => id !== input.targetPersonId);
     const originPersonIds = [input.targetPersonId, ...sourcePersonIds];
+    await this.deps.personRepository.lockPeopleForMerge(originPersonIds, db);
     const originProfiles = await this.deps.faceIdentityRepository.getMergePropagationProfiles(
       {
         mode: 'profiles',
@@ -456,6 +457,8 @@ export class IdentityMergePropagationService {
     db?: DbOrTransaction,
   ): Promise<IdentityMergePropagationPlan> {
     const sourcePersonIds = [...new Set(input.sourcePersonIds)].filter((id) => id !== input.targetPersonId);
+    const originPersonIds = [input.targetPersonId, ...sourcePersonIds];
+    await this.deps.sharedSpaceRepository.lockSpacePeopleForMerge(originPersonIds, db);
 
     const target = await this.deps.sharedSpaceRepository.getPersonById(input.targetPersonId, db);
     if (!target || target.spaceId !== input.spaceId) {
