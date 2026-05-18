@@ -94,24 +94,24 @@ Do not modify in this slice:
 
 ## Slice 3 Edge Case Matrix
 
-| Area | Case | Expected Slice 3 Result |
-| --- | --- | --- |
-| Tool list shape | `tools/list` response order | Exactly the existing nine tools in stable order |
-| Safety | Apply/direct mutation names | No apply/direct mutation tool appears |
-| Read descriptions | Client ignores schema examples | Read descriptions still include the contract usage and approved retry guidance |
-| Schema structure | Metadata enrichment | After stripping `description`, `examples`, `oneOf`, and `x-gallery-argumentModes`, read schemas equal the DTO-generated schemas |
-| Examples | Read contract examples | Every `inputSchema.examples[]` entry parses through the matching read-tool Zod schema |
-| Examples | Placeholder IDs | Examples use stable UUID placeholders that still parse |
-| Property descriptions | `assetIds`, `albumId`, `toolCallId`, `filters`, `limit` | Present where the field exists and contains model-actionable guidance |
-| Mode metadata | Every read tool | `x-gallery-argumentModes` mirrors contract names, required fields, forbidden fields, and when-to-use text |
-| `oneOf` hints | Mutually exclusive modes | Asset reads, `readAlbum`, and `listAlbums` expose practical `oneOf` mode hints |
-| `oneOf` hints | Overlapping search modes | `searchAssets` does not expose invalid `oneOf` for overlapping empty-search/filtered-search modes |
-| Annotations | Read and planning tools | Existing read-only/planning annotations remain unchanged |
-| Planning tools | No planning contracts yet | Planning tool schemas/descriptions remain structurally unchanged except existing baseline behavior |
-| Defensive copies | Caller mutates returned metadata | Later `listTools()` calls return unmodified metadata |
-| Security | Serialized metadata | No internal routes, bearer tokens, provider secrets, stack traces, or direct apply instructions leak |
-| Service integration | `AgentMcpService` uses registry | Existing `initialize`, `tools/list`, and tool-call tests stay green after registry constructor injection |
-| Controller integration | Real MCP controller setup | Controller-level `tools/list` test still compiles Nest providers and returns the enriched registry output |
+| Area                   | Case                                                    | Expected Slice 3 Result                                                                                                         |
+| ---------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Tool list shape        | `tools/list` response order                             | Exactly the existing nine tools in stable order                                                                                 |
+| Safety                 | Apply/direct mutation names                             | No apply/direct mutation tool appears                                                                                           |
+| Read descriptions      | Client ignores schema examples                          | Read descriptions still include the contract usage and approved retry guidance                                                  |
+| Schema structure       | Metadata enrichment                                     | After stripping `description`, `examples`, `oneOf`, and `x-gallery-argumentModes`, read schemas equal the DTO-generated schemas |
+| Examples               | Read contract examples                                  | Every `inputSchema.examples[]` entry parses through the matching read-tool Zod schema                                           |
+| Examples               | Placeholder IDs                                         | Examples use stable UUID placeholders that still parse                                                                          |
+| Property descriptions  | `assetIds`, `albumId`, `toolCallId`, `filters`, `limit` | Present where the field exists and contains model-actionable guidance                                                           |
+| Mode metadata          | Every read tool                                         | `x-gallery-argumentModes` mirrors contract names, required fields, forbidden fields, and when-to-use text                       |
+| `oneOf` hints          | Mutually exclusive modes                                | Asset reads, `readAlbum`, and `listAlbums` expose practical `oneOf` mode hints                                                  |
+| `oneOf` hints          | Overlapping search modes                                | `searchAssets` does not expose invalid `oneOf` for overlapping empty-search/filtered-search modes                               |
+| Annotations            | Read and planning tools                                 | Existing read-only/planning annotations remain unchanged                                                                        |
+| Planning tools         | No planning contracts yet                               | Planning tool schemas/descriptions remain structurally unchanged except existing baseline behavior                              |
+| Defensive copies       | Caller mutates returned metadata                        | Later `listTools()` calls return unmodified metadata                                                                            |
+| Security               | Serialized metadata                                     | No internal routes, bearer tokens, provider secrets, stack traces, or direct apply instructions leak                            |
+| Service integration    | `AgentMcpService` uses registry                         | Existing `initialize`, `tools/list`, and tool-call tests stay green after registry constructor injection                        |
+| Controller integration | Real MCP controller setup                               | Controller-level `tools/list` test still compiles Nest providers and returns the enriched registry output                       |
 
 ---
 
@@ -163,13 +163,13 @@ const stripContractMetadata = (value: unknown, depth = 0): unknown => {
 Add a contract service variable and update setup:
 
 ```ts
-  let contractService: AgentMcpToolContractService;
-  let sut: AgentMcpToolRegistryService;
+let contractService: AgentMcpToolContractService;
+let sut: AgentMcpToolRegistryService;
 
-  beforeEach(() => {
-    contractService = new AgentMcpToolContractService();
-    sut = new AgentMcpToolRegistryService(contractService);
-  });
+beforeEach(() => {
+  contractService = new AgentMcpToolContractService();
+  sut = new AgentMcpToolRegistryService(contractService);
+});
 ```
 
 - [ ] **Step 2: Replace the exact read schema equality test with a structural-preservation test**
@@ -177,15 +177,15 @@ Add a contract service variable and update setup:
 Replace the existing `derives read tool input schemas from the existing read tool DTO schemas` test with:
 
 ```ts
-  it('preserves DTO-derived read tool input schema structure after stripping contract metadata', () => {
-    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+it('preserves DTO-derived read tool input schema structure after stripping contract metadata', () => {
+  const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
 
-    for (const toolName of expectedReadToolNames) {
-      expect(stripContractMetadata(toolsByName.get(toolName)?.inputSchema)).toEqual(
-        stripContractMetadata(toExpectedInputSchema(AgentReadToolRequestSchemas[toolName])),
-      );
-    }
-  });
+  for (const toolName of expectedReadToolNames) {
+    expect(stripContractMetadata(toolsByName.get(toolName)?.inputSchema)).toEqual(
+      stripContractMetadata(toExpectedInputSchema(AgentReadToolRequestSchemas[toolName])),
+    );
+  }
+});
 ```
 
 - [ ] **Step 3: Add red tests for contract-backed read descriptions and examples**
@@ -193,37 +193,37 @@ Replace the existing `derives read tool input schemas from the existing read too
 Add these tests after `tells models how to continue approved read requests with toolCallId`:
 
 ```ts
-  it('enriches read tool descriptions from the read tool contracts', () => {
-    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+it('enriches read tool descriptions from the read tool contracts', () => {
+  const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
 
-    for (const contract of contractService.listReadToolContracts()) {
-      const tool = toolsByName.get(contract.name);
+  for (const contract of contractService.listReadToolContracts()) {
+    const tool = toolsByName.get(contract.name);
 
-      expect(tool?.title).toBe(contract.title);
-      expect(tool?.description).toContain(contract.description);
-      expect(tool?.description).toContain(contract.usage);
-      expect(tool?.description).toContain('approval');
-      expect(tool?.description).toContain('toolCallId');
-      expect(tool?.description).not.toMatch(/\/api|agent\/internal|bearer|token|provider key|stack trace/i);
+    expect(tool?.title).toBe(contract.title);
+    expect(tool?.description).toContain(contract.description);
+    expect(tool?.description).toContain(contract.usage);
+    expect(tool?.description).toContain('approval');
+    expect(tool?.description).toContain('toolCallId');
+    expect(tool?.description).not.toMatch(/\/api|agent\/internal|bearer|token|provider key|stack trace/i);
+  }
+});
+
+it('publishes valid contract examples on read tool input schemas', () => {
+  const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+
+  for (const contract of contractService.listReadToolContracts()) {
+    const tool = toolsByName.get(contract.name);
+    const examples = tool?.inputSchema.examples;
+
+    expect(examples).toEqual(contract.examples.map((example) => example.arguments));
+    expect(examples).toHaveLength(contract.examples.length);
+    for (const exampleArguments of examples as Record<string, unknown>[]) {
+      const result = AgentReadToolRequestSchemas[contract.name].safeParse(exampleArguments);
+
+      expect(result.success, `${contract.name} example should parse`).toBe(true);
     }
-  });
-
-  it('publishes valid contract examples on read tool input schemas', () => {
-    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
-
-    for (const contract of contractService.listReadToolContracts()) {
-      const tool = toolsByName.get(contract.name);
-      const examples = tool?.inputSchema.examples;
-
-      expect(examples).toEqual(contract.examples.map((example) => example.arguments));
-      expect(examples).toHaveLength(contract.examples.length);
-      for (const exampleArguments of examples as Record<string, unknown>[]) {
-        const result = AgentReadToolRequestSchemas[contract.name].safeParse(exampleArguments);
-
-        expect(result.success, `${contract.name} example should parse`).toBe(true);
-      }
-    }
-  });
+  }
+});
 ```
 
 - [ ] **Step 4: Add red tests for property descriptions and mode metadata**
@@ -231,58 +231,58 @@ Add these tests after `tells models how to continue approved read requests with 
 Add these tests after the examples test:
 
 ```ts
-  it('adds model-facing property descriptions for read tool argument fields', () => {
-    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
-    const metadata = toolsByName.get(AgentToolName.ReadAssetMetadata)?.inputSchema;
-    const search = toolsByName.get(AgentToolName.SearchAssets)?.inputSchema;
-    const album = toolsByName.get(AgentToolName.ReadAlbum)?.inputSchema;
+it('adds model-facing property descriptions for read tool argument fields', () => {
+  const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+  const metadata = toolsByName.get(AgentToolName.ReadAssetMetadata)?.inputSchema;
+  const search = toolsByName.get(AgentToolName.SearchAssets)?.inputSchema;
+  const album = toolsByName.get(AgentToolName.ReadAlbum)?.inputSchema;
 
-    expect(metadata?.properties).toMatchObject({
-      assetIds: expect.objectContaining({
-        description: expect.stringContaining('new asset read request'),
-      }),
-      toolCallId: expect.objectContaining({
-        description: expect.stringContaining('approved retry'),
-      }),
-    });
-    expect(search?.properties).toMatchObject({
-      filters: expect.objectContaining({
-        description: expect.stringContaining('Put search filters here'),
-      }),
-      limit: expect.objectContaining({
-        description: expect.stringContaining('10000'),
-      }),
-      toolCallId: expect.objectContaining({
-        description: expect.stringContaining('approved retry'),
-      }),
-    });
-    expect(album?.properties).toMatchObject({
-      albumId: expect.objectContaining({
-        description: expect.stringContaining('album id returned by listAlbums'),
-      }),
-      toolCallId: expect.objectContaining({
-        description: expect.stringContaining('approved retry'),
-      }),
-    });
+  expect(metadata?.properties).toMatchObject({
+    assetIds: expect.objectContaining({
+      description: expect.stringContaining('new asset read request'),
+    }),
+    toolCallId: expect.objectContaining({
+      description: expect.stringContaining('approved retry'),
+    }),
   });
-
-  it('publishes contract argument mode metadata for every read tool', () => {
-    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
-
-    for (const contract of contractService.listReadToolContracts()) {
-      const modeMetadata = toolsByName.get(contract.name)?.inputSchema['x-gallery-argumentModes'];
-
-      expect(modeMetadata).toEqual(
-        contract.argumentModes.map((mode) => ({
-          name: mode.name,
-          description: mode.description,
-          requiredFields: mode.requiredFields,
-          forbiddenFields: mode.forbiddenFields,
-          whenToUse: mode.whenToUse,
-        })),
-      );
-    }
+  expect(search?.properties).toMatchObject({
+    filters: expect.objectContaining({
+      description: expect.stringContaining('Put search filters here'),
+    }),
+    limit: expect.objectContaining({
+      description: expect.stringContaining('10000'),
+    }),
+    toolCallId: expect.objectContaining({
+      description: expect.stringContaining('approved retry'),
+    }),
   });
+  expect(album?.properties).toMatchObject({
+    albumId: expect.objectContaining({
+      description: expect.stringContaining('album id returned by listAlbums'),
+    }),
+    toolCallId: expect.objectContaining({
+      description: expect.stringContaining('approved retry'),
+    }),
+  });
+});
+
+it('publishes contract argument mode metadata for every read tool', () => {
+  const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+
+  for (const contract of contractService.listReadToolContracts()) {
+    const modeMetadata = toolsByName.get(contract.name)?.inputSchema['x-gallery-argumentModes'];
+
+    expect(modeMetadata).toEqual(
+      contract.argumentModes.map((mode) => ({
+        name: mode.name,
+        description: mode.description,
+        requiredFields: mode.requiredFields,
+        forbiddenFields: mode.forbiddenFields,
+        whenToUse: mode.whenToUse,
+      })),
+    );
+  }
+});
 ```
 
 - [ ] **Step 5: Add red tests for practical `oneOf` hints**
@@ -290,47 +290,54 @@ Add these tests after the examples test:
 Add this test after the mode metadata test:
 
 ```ts
-  it('adds oneOf mode hints only when read tool modes are mutually exclusive', () => {
-    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
-    const previews = toolsByName.get(AgentToolName.ReadAssetPreviews)?.inputSchema;
-    const listAlbums = toolsByName.get(AgentToolName.ListAlbums)?.inputSchema;
-    const readAlbum = toolsByName.get(AgentToolName.ReadAlbum)?.inputSchema;
-    const search = toolsByName.get(AgentToolName.SearchAssets)?.inputSchema;
+it('adds oneOf mode hints only when read tool modes are mutually exclusive', () => {
+  const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+  const previews = toolsByName.get(AgentToolName.ReadAssetPreviews)?.inputSchema;
+  const listAlbums = toolsByName.get(AgentToolName.ListAlbums)?.inputSchema;
+  const readAlbum = toolsByName.get(AgentToolName.ReadAlbum)?.inputSchema;
+  const search = toolsByName.get(AgentToolName.SearchAssets)?.inputSchema;
 
-    expect(previews?.oneOf).toEqual([
-      expect.objectContaining({
-        title: 'asset-ids',
-        required: ['assetIds'],
-        not: { anyOf: [{ required: ['toolCallId'] }] },
-      }),
-      expect.objectContaining({
-        title: 'approved-retry',
-        required: ['toolCallId'],
-        not: { anyOf: [{ required: ['assetIds'] }, { required: ['albumId'] }, { required: ['filters'] }, { required: ['limit'] }] },
-      }),
-    ]);
-    expect(listAlbums?.oneOf).toEqual([
-      expect.objectContaining({
-        title: 'list-visible-albums',
-        not: { anyOf: [{ required: ['toolCallId'] }] },
-      }),
-      expect.objectContaining({
-        title: 'approved-retry',
-        required: ['toolCallId'],
-      }),
-    ]);
-    expect(readAlbum?.oneOf).toEqual([
-      expect.objectContaining({
-        title: 'album-id',
-        required: ['albumId'],
-      }),
-      expect.objectContaining({
-        title: 'approved-retry',
-        required: ['toolCallId'],
-      }),
-    ]);
-    expect(search).not.toHaveProperty('oneOf');
-  });
+  expect(previews?.oneOf).toEqual([
+    expect.objectContaining({
+      title: 'asset-ids',
+      required: ['assetIds'],
+      not: { anyOf: [{ required: ['toolCallId'] }] },
+    }),
+    expect.objectContaining({
+      title: 'approved-retry',
+      required: ['toolCallId'],
+      not: {
+        anyOf: [
+          { required: ['assetIds'] },
+          { required: ['albumId'] },
+          { required: ['filters'] },
+          { required: ['limit'] },
+        ],
+      },
+    }),
+  ]);
+  expect(listAlbums?.oneOf).toEqual([
+    expect.objectContaining({
+      title: 'list-visible-albums',
+      not: { anyOf: [{ required: ['toolCallId'] }] },
+    }),
+    expect.objectContaining({
+      title: 'approved-retry',
+      required: ['toolCallId'],
+    }),
+  ]);
+  expect(readAlbum?.oneOf).toEqual([
+    expect.objectContaining({
+      title: 'album-id',
+      required: ['albumId'],
+    }),
+    expect.objectContaining({
+      title: 'approved-retry',
+      required: ['toolCallId'],
+    }),
+  ]);
+  expect(search).not.toHaveProperty('oneOf');
+});
 ```
 
 - [ ] **Step 6: Add red tests for planning preservation and metadata security**
@@ -338,26 +345,26 @@ Add this test after the mode metadata test:
 Add these tests before `returns defensive copies of registry metadata`:
 
 ```ts
-  it('leaves planning tool structural schemas unchanged before planning contracts exist', () => {
-    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+it('leaves planning tool structural schemas unchanged before planning contracts exist', () => {
+  const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
 
-    for (const toolName of expectedPlanningToolNames) {
-      const tool = toolsByName.get(toolName);
+  for (const toolName of expectedPlanningToolNames) {
+    const tool = toolsByName.get(toolName);
 
-      expect(tool?.inputSchema).toEqual(toExpectedInputSchema(AgentOperationPlanToolRequestSchemas[toolName]));
-      expect(tool?.inputSchema).not.toHaveProperty('examples');
-      expect(tool?.inputSchema).not.toHaveProperty('x-gallery-argumentModes');
-      expect(tool?.inputSchema).not.toHaveProperty('oneOf');
-    }
-  });
+    expect(tool?.inputSchema).toEqual(toExpectedInputSchema(AgentOperationPlanToolRequestSchemas[toolName]));
+    expect(tool?.inputSchema).not.toHaveProperty('examples');
+    expect(tool?.inputSchema).not.toHaveProperty('x-gallery-argumentModes');
+    expect(tool?.inputSchema).not.toHaveProperty('oneOf');
+  }
+});
 
-  it('does not leak secrets, routes, stack traces, or direct apply guidance through enriched metadata', () => {
-    const serialized = JSON.stringify(sut.listTools());
+it('does not leak secrets, routes, stack traces, or direct apply guidance through enriched metadata', () => {
+  const serialized = JSON.stringify(sut.listTools());
 
-    expect(serialized).not.toMatch(
-      /\/api|agent\/internal|bearer|token|provider key|stack trace|applyAlbumOperations|applyOperations|createAlbum|addAssetsToAlbum/i,
-    );
-  });
+  expect(serialized).not.toMatch(
+    /\/api|agent\/internal|bearer|token|provider key|stack trace|applyAlbumOperations|applyOperations|createAlbum|addAssetsToAlbum/i,
+  );
+});
 ```
 
 - [ ] **Step 7: Add runtime `tools/list` red coverage**
@@ -365,44 +372,44 @@ Add these tests before `returns defensive copies of registry metadata`:
 In `server/src/services/agent-mcp.service.spec.ts`, update the setup to use the coming registry constructor dependency. Replace the current setup order:
 
 ```ts
-    registry = new AgentMcpToolRegistryService();
-    contractService = new AgentMcpToolContractService();
+registry = new AgentMcpToolRegistryService();
+contractService = new AgentMcpToolContractService();
 ```
 
 with:
 
 ```ts
-    contractService = new AgentMcpToolContractService();
-    registry = new AgentMcpToolRegistryService(contractService);
+contractService = new AgentMcpToolContractService();
+registry = new AgentMcpToolRegistryService(contractService);
 ```
 
 Add this test after `returns the registered Gallery MCP tools for tools/list`:
 
 ```ts
-  it('returns enriched read tool metadata through tools/list', async () => {
-    const response = (await sut.handle(auth, sessionId, {
-      jsonrpc: '2.0',
-      id: 'tools-enriched-read-metadata',
-      method: 'tools/list',
-    })) as AgentMcpSuccessResponse;
-    const result = response.result as {
-      tools: Array<{ name: AgentToolName; description: string; inputSchema: Record<string, unknown> }>;
-    };
-    const previews = result.tools.find((tool) => tool.name === AgentToolName.ReadAssetPreviews);
+it('returns enriched read tool metadata through tools/list', async () => {
+  const response = (await sut.handle(auth, sessionId, {
+    jsonrpc: '2.0',
+    id: 'tools-enriched-read-metadata',
+    method: 'tools/list',
+  })) as AgentMcpSuccessResponse;
+  const result = response.result as {
+    tools: Array<{ name: AgentToolName; description: string; inputSchema: Record<string, unknown> }>;
+  };
+  const previews = result.tools.find((tool) => tool.name === AgentToolName.ReadAssetPreviews);
 
-    expect(previews?.description).toContain('Use assetIds for a new request');
-    expect(previews?.inputSchema.examples).toEqual([
-      { assetIds: ['00000000-0000-4000-8000-000000000001'] },
-      { toolCallId: '00000000-0000-4000-8000-000000000111' },
-    ]);
-    expect(previews?.inputSchema['x-gallery-argumentModes']).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: 'asset-ids', requiredFields: ['assetIds'], forbiddenFields: ['toolCallId'] }),
-        expect.objectContaining({ name: 'approved-retry', requiredFields: ['toolCallId'] }),
-      ]),
-    );
-    expect(previews?.inputSchema.oneOf).toEqual(expect.any(Array));
-  });
+  expect(previews?.description).toContain('Use assetIds for a new request');
+  expect(previews?.inputSchema.examples).toEqual([
+    { assetIds: ['00000000-0000-4000-8000-000000000001'] },
+    { toolCallId: '00000000-0000-4000-8000-000000000111' },
+  ]);
+  expect(previews?.inputSchema['x-gallery-argumentModes']).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: 'asset-ids', requiredFields: ['assetIds'], forbiddenFields: ['toolCallId'] }),
+      expect.objectContaining({ name: 'approved-retry', requiredFields: ['toolCallId'] }),
+    ]),
+  );
+  expect(previews?.inputSchema.oneOf).toEqual(expect.any(Array));
+});
 ```
 
 - [ ] **Step 8: Update controller integration setup for the coming registry dependency**
@@ -465,12 +472,15 @@ Add these helpers after `toInputSchema`:
 
 ```ts
 const propertyDescriptions: Record<string, string> = {
-  assetIds: 'For a new asset read request, use asset ids returned by Gallery tools. Do not combine assetIds with toolCallId.',
-  albumId: 'For a new album read request, use an album id returned by listAlbums. Do not combine albumId with toolCallId.',
+  assetIds:
+    'For a new asset read request, use asset ids returned by Gallery tools. Do not combine assetIds with toolCallId.',
+  albumId:
+    'For a new album read request, use an album id returned by listAlbums. Do not combine albumId with toolCallId.',
   filters:
     'Put search filters here. Do not place date, location, favorite, rating, album, tag, camera, or media fields at the argument root.',
   limit: 'Maximum search results to return. Use a positive integer no greater than 10000.',
-  toolCallId: 'For an approved retry only. Use the toolCall.id from an approval-required response and omit original request fields.',
+  toolCallId:
+    'For an approved retry only. Use the toolCall.id from an approval-required response and omit original request fields.',
 };
 
 const buildReadToolDescription = (contract: AgentMcpReadToolContract): string =>
@@ -588,7 +598,9 @@ Change `buildTools` to accept read contracts:
 
 ```ts
 const buildTools = (toolContractService: AgentMcpToolContractService): AgentMcpToolDefinition[] => {
-  const readContractsByName = new Map(toolContractService.listReadToolContracts().map((contract) => [contract.name, contract]));
+  const readContractsByName = new Map(
+    toolContractService.listReadToolContracts().map((contract) => [contract.name, contract]),
+  );
   const getReadContract = (name: AgentMcpReadToolContract['name']): AgentMcpReadToolContract => {
     const contract = readContractsByName.get(name);
     if (!contract) {
@@ -698,8 +710,8 @@ export class AgentMcpToolRegistryService {
 Confirm `server/src/services/agent-mcp.service.spec.ts` already has this setup from Task 1:
 
 ```ts
-    contractService = new AgentMcpToolContractService();
-    registry = new AgentMcpToolRegistryService(contractService);
+contractService = new AgentMcpToolContractService();
+registry = new AgentMcpToolRegistryService(contractService);
 ```
 
 Leave the existing `AgentMcpService` constructor unchanged.

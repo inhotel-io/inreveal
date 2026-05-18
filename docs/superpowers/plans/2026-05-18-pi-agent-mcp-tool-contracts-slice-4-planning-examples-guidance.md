@@ -117,26 +117,26 @@ Do not modify in this slice:
 
 ## Slice 4 Edge Case Matrix
 
-| Area | Case | Expected Slice 4 Result |
-| --- | --- | --- |
-| Contract coverage | Planning tool names | Planning contracts exist for propose, revise, and summarize in stable order |
-| Example validation | Planning examples | Every planning example parses through the matching planning Zod schema |
-| Album examples | Create/add/remove/update/cover | Required album operation examples exist and parse |
-| Space examples | Create/add-to-new/add-to-existing/remove/update | Required space operation examples exist and parse |
-| Asset-batch examples | Rotate/favorite/archive/add-tag/remove-tag | Required asset-batch and image-edit examples exist and parse |
-| Temporary targets | New album and new space dependencies | Examples use matching `temporaryTargetId` values in create and dependent operations |
-| Target kinds | Operation-specific targets | Examples show the correct `targetKind` for album, space, asset batch, and image edit |
-| Validation hints | Missing `arguments` | Planning validation error includes planning hint and valid example arguments |
-| Validation hints | Missing create dependency | Hint explains creating the temporary target before referencing it |
-| Validation hints | Wrong target kind | Hint explains the correct target kind for the operation family |
-| Validation hints | Duplicate asset ids | Hint explains each asset id must appear only once |
-| Validation hints | Bad payload | Rotate angle and tag-payload errors return specific hints |
-| Failure matrix | Known malformed planning calls | Every tool-validation case returns `toolName`, `retryable`, `expected`, `hint`, and example arguments |
-| Safety | Invented direct mutation/apply tools | Still JSON-RPC `Unknown tool`; no direct apply tool is exposed |
-| Registry metadata | Planning `tools/list` examples | Planning tool schemas include contract examples and mode metadata |
-| Schema structure | Planning metadata enrichment | Planning schemas equal DTO schemas after stripping descriptions, examples, `oneOf`, and `x-gallery-argumentModes` |
-| Security | Serialized contracts and metadata | No internal routes, bearer tokens, provider secrets, stack traces, or direct apply tool names leak |
-| Compatibility | Read tool behavior | Slice 1-3 read contract, validation, and registry tests stay green |
+| Area                 | Case                                            | Expected Slice 4 Result                                                                                           |
+| -------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Contract coverage    | Planning tool names                             | Planning contracts exist for propose, revise, and summarize in stable order                                       |
+| Example validation   | Planning examples                               | Every planning example parses through the matching planning Zod schema                                            |
+| Album examples       | Create/add/remove/update/cover                  | Required album operation examples exist and parse                                                                 |
+| Space examples       | Create/add-to-new/add-to-existing/remove/update | Required space operation examples exist and parse                                                                 |
+| Asset-batch examples | Rotate/favorite/archive/add-tag/remove-tag      | Required asset-batch and image-edit examples exist and parse                                                      |
+| Temporary targets    | New album and new space dependencies            | Examples use matching `temporaryTargetId` values in create and dependent operations                               |
+| Target kinds         | Operation-specific targets                      | Examples show the correct `targetKind` for album, space, asset batch, and image edit                              |
+| Validation hints     | Missing `arguments`                             | Planning validation error includes planning hint and valid example arguments                                      |
+| Validation hints     | Missing create dependency                       | Hint explains creating the temporary target before referencing it                                                 |
+| Validation hints     | Wrong target kind                               | Hint explains the correct target kind for the operation family                                                    |
+| Validation hints     | Duplicate asset ids                             | Hint explains each asset id must appear only once                                                                 |
+| Validation hints     | Bad payload                                     | Rotate angle and tag-payload errors return specific hints                                                         |
+| Failure matrix       | Known malformed planning calls                  | Every tool-validation case returns `toolName`, `retryable`, `expected`, `hint`, and example arguments             |
+| Safety               | Invented direct mutation/apply tools            | Still JSON-RPC `Unknown tool`; no direct apply tool is exposed                                                    |
+| Registry metadata    | Planning `tools/list` examples                  | Planning tool schemas include contract examples and mode metadata                                                 |
+| Schema structure     | Planning metadata enrichment                    | Planning schemas equal DTO schemas after stripping descriptions, examples, `oneOf`, and `x-gallery-argumentModes` |
+| Security             | Serialized contracts and metadata               | No internal routes, bearer tokens, provider secrets, stack traces, or direct apply tool names leak                |
+| Compatibility        | Read tool behavior                              | Slice 1-3 read contract, validation, and registry tests stay green                                                |
 
 ---
 
@@ -209,16 +209,16 @@ const expectedPlanningOperationTypes = [
 Replace the existing test named `does not expose planning contracts before the planning guidance slice` with:
 
 ```ts
-  it('returns exactly the planning-tool contracts in stable order', () => {
-    expect(sut.listPlanningToolContracts().map((contract) => contract.name)).toEqual(expectedPlanningToolNames);
-  });
+it('returns exactly the planning-tool contracts in stable order', () => {
+  expect(sut.listPlanningToolContracts().map((contract) => contract.name)).toEqual(expectedPlanningToolNames);
+});
 
-  it('returns all tool contracts in stable MCP tool order', () => {
-    expect(sut.listToolContracts().map((contract) => contract.name)).toEqual([
-      ...expectedReadToolNames,
-      ...expectedPlanningToolNames,
-    ]);
-  });
+it('returns all tool contracts in stable MCP tool order', () => {
+  expect(sut.listToolContracts().map((contract) => contract.name)).toEqual([
+    ...expectedReadToolNames,
+    ...expectedPlanningToolNames,
+  ]);
+});
 ```
 
 - [ ] **Step 4: Add red tests for validated planning examples**
@@ -226,76 +226,78 @@ Replace the existing test named `does not expose planning contracts before the p
 Add these tests after `defines the required list and album read examples from the spec`:
 
 ```ts
-  it('defines the required planning examples from the spec', () => {
-    const proposal = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations);
-    const revise = sut.getPlanningToolContract(AgentToolName.ReviseProposedOperations);
-    const summarize = sut.getPlanningToolContract(AgentToolName.SummarizePlan);
+it('defines the required planning examples from the spec', () => {
+  const proposal = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations);
+  const revise = sut.getPlanningToolContract(AgentToolName.ReviseProposedOperations);
+  const summarize = sut.getPlanningToolContract(AgentToolName.SummarizePlan);
 
-    expect(proposal?.examples.map((example) => example.name)).toEqual(expect.arrayContaining([...expectedProposalExampleNames]));
-    expect(revise?.examples.map((example) => example.name)).toEqual(
-      expect.arrayContaining(['revise-add-assets-to-existing-album', 'revise-create-empty-album']),
-    );
-    expect(summarize?.examples.map((example) => example.name)).toEqual(
-      expect.arrayContaining(['summarize-plan', 'summarize-plan-risks']),
-    );
-  });
+  expect(proposal?.examples.map((example) => example.name)).toEqual(
+    expect.arrayContaining([...expectedProposalExampleNames]),
+  );
+  expect(revise?.examples.map((example) => example.name)).toEqual(
+    expect.arrayContaining(['revise-add-assets-to-existing-album', 'revise-create-empty-album']),
+  );
+  expect(summarize?.examples.map((example) => example.name)).toEqual(
+    expect.arrayContaining(['summarize-plan', 'summarize-plan-risks']),
+  );
+});
 
-  it('defines executable examples for every planning tool', () => {
-    for (const contract of sut.listPlanningToolContracts()) {
-      const schema = AgentOperationPlanToolRequestSchemas[contract.name];
+it('defines executable examples for every planning tool', () => {
+  for (const contract of sut.listPlanningToolContracts()) {
+    const schema = AgentOperationPlanToolRequestSchemas[contract.name];
 
-      expect(contract.examples.length).toBeGreaterThan(0);
-      for (const example of contract.examples) {
-        const result = schema.safeParse(example.arguments);
+    expect(contract.examples.length).toBeGreaterThan(0);
+    for (const example of contract.examples) {
+      const result = schema.safeParse(example.arguments);
 
-        expect(result.success, `${contract.name} example "${example.name}" should parse`).toBe(true);
-      }
+      expect(result.success, `${contract.name} example "${example.name}" should parse`).toBe(true);
     }
+  }
+});
+
+it('covers every supported planning operation type with proposal examples', () => {
+  const proposal = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations)!;
+  const serializedExamples = JSON.stringify(proposal.examples.map((example) => example.arguments));
+
+  for (const operationType of expectedPlanningOperationTypes) {
+    expect(serializedExamples, `${operationType} should have a valid proposal example`).toContain(operationType);
+  }
+});
+
+it('shows correct temporary target dependencies in planning examples', () => {
+  const proposal = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations)!;
+  const albumExample = proposal.examples.find((example) => example.name === 'create-album-and-add-assets')!;
+  const spaceExample = proposal.examples.find((example) => example.name === 'create-space-and-add-assets')!;
+
+  expect(albumExample.arguments).toMatchObject({
+    operations: [
+      expect.objectContaining({
+        type: AgentOperationType.AlbumCreate,
+        targetKind: AgentOperationTargetKind.NewAlbum,
+        temporaryTargetId: 'tmp-today-test',
+      }),
+      expect.objectContaining({
+        type: AgentOperationType.AlbumAddAssets,
+        targetKind: AgentOperationTargetKind.NewAlbum,
+        temporaryTargetId: 'tmp-today-test',
+      }),
+    ],
   });
-
-  it('covers every supported planning operation type with proposal examples', () => {
-    const proposal = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations)!;
-    const serializedExamples = JSON.stringify(proposal.examples.map((example) => example.arguments));
-
-    for (const operationType of expectedPlanningOperationTypes) {
-      expect(serializedExamples, `${operationType} should have a valid proposal example`).toContain(operationType);
-    }
+  expect(spaceExample.arguments).toMatchObject({
+    operations: [
+      expect.objectContaining({
+        type: AgentOperationType.SpaceCreate,
+        targetKind: AgentOperationTargetKind.NewSpace,
+        temporaryTargetId: 'tmp-family-space',
+      }),
+      expect.objectContaining({
+        type: AgentOperationType.SpaceAddAssets,
+        targetKind: AgentOperationTargetKind.NewSpace,
+        temporaryTargetId: 'tmp-family-space',
+      }),
+    ],
   });
-
-  it('shows correct temporary target dependencies in planning examples', () => {
-    const proposal = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations)!;
-    const albumExample = proposal.examples.find((example) => example.name === 'create-album-and-add-assets')!;
-    const spaceExample = proposal.examples.find((example) => example.name === 'create-space-and-add-assets')!;
-
-    expect(albumExample.arguments).toMatchObject({
-      operations: [
-        expect.objectContaining({
-          type: AgentOperationType.AlbumCreate,
-          targetKind: AgentOperationTargetKind.NewAlbum,
-          temporaryTargetId: 'tmp-today-test',
-        }),
-        expect.objectContaining({
-          type: AgentOperationType.AlbumAddAssets,
-          targetKind: AgentOperationTargetKind.NewAlbum,
-          temporaryTargetId: 'tmp-today-test',
-        }),
-      ],
-    });
-    expect(spaceExample.arguments).toMatchObject({
-      operations: [
-        expect.objectContaining({
-          type: AgentOperationType.SpaceCreate,
-          targetKind: AgentOperationTargetKind.NewSpace,
-          temporaryTargetId: 'tmp-family-space',
-        }),
-        expect.objectContaining({
-          type: AgentOperationType.SpaceAddAssets,
-          targetKind: AgentOperationTargetKind.NewSpace,
-          temporaryTargetId: 'tmp-family-space',
-        }),
-      ],
-    });
-  });
+});
 ```
 
 - [ ] **Step 5: Add red tests for planning mistakes, safety, and defensive copies**
@@ -303,45 +305,47 @@ Add these tests after `defines the required list and album read examples from th
 Add these tests after the read common-mistake test:
 
 ```ts
-  it('defines planning common mistakes with usable correction hints', () => {
-    for (const contract of sut.listPlanningToolContracts()) {
-      const exampleNames = new Set(contract.examples.map((example) => example.name));
+it('defines planning common mistakes with usable correction hints', () => {
+  for (const contract of sut.listPlanningToolContracts()) {
+    const exampleNames = new Set(contract.examples.map((example) => example.name));
 
-      expect(contract.commonMistakes.length).toBeGreaterThan(0);
-      for (const mistake of contract.commonMistakes) {
-        expect(mistake.id.trim().length).toBeGreaterThan(0);
-        expect(mistake.hint.trim().length).toBeGreaterThan(20);
-        if (mistake.exampleName) {
-          expect(exampleNames.has(mistake.exampleName), `${contract.name} mistake ${mistake.id}`).toBe(true);
-        }
+    expect(contract.commonMistakes.length).toBeGreaterThan(0);
+    for (const mistake of contract.commonMistakes) {
+      expect(mistake.id.trim().length).toBeGreaterThan(0);
+      expect(mistake.hint.trim().length).toBeGreaterThan(20);
+      if (mistake.exampleName) {
+        expect(exampleNames.has(mistake.exampleName), `${contract.name} mistake ${mistake.id}`).toBe(true);
       }
     }
-  });
+  }
+});
 
-  it('does not include secrets, internal routes, or direct apply tool names in planning contracts', () => {
-    const serialized = JSON.stringify(sut.listPlanningToolContracts().map(({ safety: _safety, ...contract }) => contract));
+it('does not include secrets, internal routes, or direct apply tool names in planning contracts', () => {
+  const serialized = JSON.stringify(
+    sut.listPlanningToolContracts().map(({ safety: _safety, ...contract }) => contract),
+  );
 
-    expect(serialized).not.toMatch(forbiddenContractPattern);
-  });
+  expect(serialized).not.toMatch(forbiddenContractPattern);
+});
 
-  it('marks planning contracts as non-mutating and requiring Gallery apply for final writes', () => {
-    for (const contract of sut.listPlanningToolContracts()) {
-      expect(contract.safety).toEqual({
-        allowsDirectMutation: false,
-        exposesSecrets: false,
-        requiresGalleryApplyForWrites: true,
-      });
-    }
-  });
+it('marks planning contracts as non-mutating and requiring Gallery apply for final writes', () => {
+  for (const contract of sut.listPlanningToolContracts()) {
+    expect(contract.safety).toEqual({
+      allowsDirectMutation: false,
+      exposesSecrets: false,
+      requiresGalleryApplyForWrites: true,
+    });
+  }
+});
 
-  it('returns defensive copies of planning contracts', () => {
-    const firstContracts = sut.listPlanningToolContracts();
-    firstContracts[0].description = 'mutated description';
-    firstContracts[0].examples[0].arguments = { mutated: true };
+it('returns defensive copies of planning contracts', () => {
+  const firstContracts = sut.listPlanningToolContracts();
+  firstContracts[0].description = 'mutated description';
+  firstContracts[0].examples[0].arguments = { mutated: true };
 
-    expect(sut.listPlanningToolContracts()[0].description).not.toBe('mutated description');
-    expect(sut.listPlanningToolContracts()[0].examples[0].arguments).not.toEqual({ mutated: true });
-  });
+  expect(sut.listPlanningToolContracts()[0].description).not.toBe('mutated description');
+  expect(sut.listPlanningToolContracts()[0].examples[0].arguments).not.toEqual({ mutated: true });
+});
 ```
 
 - [ ] **Step 6: Add red tests for planning correction lookup and failure matrix**
@@ -349,114 +353,113 @@ Add these tests after the read common-mistake test:
 Inside the existing `describe('validation correction lookup', ...)`, append:
 
 ```ts
-    it('returns a planning correction for missing temporary target dependencies', () => {
-      const correction = sut.getPlanningToolValidationCorrection(AgentToolName.ProposeAlbumOperations, {
-        requestShape: 'tool-arguments',
-        issues: [{ path: 'operations.0.temporaryTargetId', message: 'No matching create operation for temporaryTargetId' }],
-      });
+it('returns a planning correction for missing temporary target dependencies', () => {
+  const correction = sut.getPlanningToolValidationCorrection(AgentToolName.ProposeAlbumOperations, {
+    requestShape: 'tool-arguments',
+    issues: [{ path: 'operations.0.temporaryTargetId', message: 'No matching create operation for temporaryTargetId' }],
+  });
 
-      expect(correction).toMatchObject({
-        mistakeId: 'planning-missing-temporary-target-dependency',
-        issuePath: 'operations.0.temporaryTargetId',
-        expected: expect.stringContaining('reviewable Gallery operation plan'),
-        hint: expect.stringContaining('Create the new album or space first'),
-        exampleArguments: expect.objectContaining({
-          summary: 'Create today test and add selected photos.',
-          operations: expect.any(Array),
-        }),
-      });
-    });
+  expect(correction).toMatchObject({
+    mistakeId: 'planning-missing-temporary-target-dependency',
+    issuePath: 'operations.0.temporaryTargetId',
+    expected: expect.stringContaining('reviewable Gallery operation plan'),
+    hint: expect.stringContaining('Create the new album or space first'),
+    exampleArguments: expect.objectContaining({
+      summary: 'Create today test and add selected photos.',
+      operations: expect.any(Array),
+    }),
+  });
+});
 
-    it('returns a planning correction for wrong asset batch target kind', () => {
-      const correction = sut.getPlanningToolValidationCorrection(AgentToolName.ProposeAlbumOperations, {
-        requestShape: 'tool-arguments',
-        issues: [{ path: 'operations.0.targetKind', message: 'asset.setFavorite requires an asset_batch target' }],
-      });
+it('returns a planning correction for wrong asset batch target kind', () => {
+  const correction = sut.getPlanningToolValidationCorrection(AgentToolName.ProposeAlbumOperations, {
+    requestShape: 'tool-arguments',
+    issues: [{ path: 'operations.0.targetKind', message: 'asset.setFavorite requires an asset_batch target' }],
+  });
 
-      expect(correction).toMatchObject({
-        mistakeId: 'planning-wrong-asset-batch-target-kind',
-        issuePath: 'operations.0.targetKind',
-        hint: expect.stringContaining('asset_batch'),
-        exampleArguments: expect.objectContaining({
-          operations: [expect.objectContaining({ targetKind: AgentOperationTargetKind.AssetBatch })],
-        }),
-      });
-    });
+  expect(correction).toMatchObject({
+    mistakeId: 'planning-wrong-asset-batch-target-kind',
+    issuePath: 'operations.0.targetKind',
+    hint: expect.stringContaining('asset_batch'),
+    exampleArguments: expect.objectContaining({
+      operations: [expect.objectContaining({ targetKind: AgentOperationTargetKind.AssetBatch })],
+    }),
+  });
+});
 
-    it('returns a planning correction for invalid rotate angles', () => {
-      const correction = sut.getPlanningToolValidationCorrection(AgentToolName.ProposeAlbumOperations, {
-        requestShape: 'tool-arguments',
-        issues: [{ path: 'operations.0.payload.angle', message: 'angle must be 90, 180, or 270' }],
-      });
+it('returns a planning correction for invalid rotate angles', () => {
+  const correction = sut.getPlanningToolValidationCorrection(AgentToolName.ProposeAlbumOperations, {
+    requestShape: 'tool-arguments',
+    issues: [{ path: 'operations.0.payload.angle', message: 'angle must be 90, 180, or 270' }],
+  });
 
-      expect(correction).toMatchObject({
-        mistakeId: 'planning-invalid-rotate-angle',
-        issuePath: 'operations.0.payload.angle',
-        hint: expect.stringContaining('90, 180, or 270'),
-        exampleArguments: expect.objectContaining({
-          operations: [expect.objectContaining({ type: AgentOperationType.AssetRotate })],
-        }),
-      });
-    });
+  expect(correction).toMatchObject({
+    mistakeId: 'planning-invalid-rotate-angle',
+    issuePath: 'operations.0.payload.angle',
+    hint: expect.stringContaining('90, 180, or 270'),
+    exampleArguments: expect.objectContaining({
+      operations: [expect.objectContaining({ type: AgentOperationType.AssetRotate })],
+    }),
+  });
+});
 
-    it('returns a planning-tool fallback when no common mistake matches', () => {
-      const correction = sut.getPlanningToolValidationCorrection(AgentToolName.ProposeAlbumOperations, {
-        requestShape: 'tool-arguments',
-        issues: [{ path: 'summary', message: 'Too small: expected string to have >=1 characters' }],
-      });
+it('returns a planning-tool fallback when no common mistake matches', () => {
+  const correction = sut.getPlanningToolValidationCorrection(AgentToolName.ProposeAlbumOperations, {
+    requestShape: 'tool-arguments',
+    issues: [{ path: 'summary', message: 'Too small: expected string to have >=1 characters' }],
+  });
 
-      expect(correction).toEqual({
-        expected: 'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review.',
-        hint: 'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review.',
-        exampleArguments: expect.objectContaining({
-          summary: 'Create today test album.',
-          operations: expect.any(Array),
-        }),
-      });
-    });
+  expect(correction).toEqual({
+    expected:
+      'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review.',
+    hint: 'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review.',
+    exampleArguments: expect.objectContaining({
+      summary: 'Create today test album.',
+      operations: expect.any(Array),
+    }),
+  });
+});
 ```
 
 Then add these tests after the validation lookup `describe` block:
 
 ```ts
-  it('defines a Slice 4 planning failure matrix with unique ids', () => {
-    const cases = sut.listSlice4PlanningFailureMatrixCases();
+it('defines a Slice 4 planning failure matrix with unique ids', () => {
+  const cases = sut.listSlice4PlanningFailureMatrixCases();
 
-    expect(cases.length).toBeGreaterThan(0);
-    expect(new Set(cases.map((failureCase) => failureCase.id)).size).toBe(cases.length);
-    expect(cases.map((failureCase) => failureCase.id)).toEqual(
-      expect.arrayContaining([
-        'planning-missing-arguments',
-        'planning-missing-new-album-dependency',
-        'planning-wrong-album-target-kind',
-        'planning-wrong-space-target-kind',
-        'planning-wrong-asset-batch-target-kind',
-        'planning-wrong-image-edit-target-kind',
-        'planning-duplicate-asset-ids',
-        'planning-invalid-rotate-angle',
-        'planning-invented-create-album-tool',
-        'planning-invented-add-assets-tool',
-      ]),
-    );
-  });
+  expect(cases.length).toBeGreaterThan(0);
+  expect(new Set(cases.map((failureCase) => failureCase.id)).size).toBe(cases.length);
+  expect(cases.map((failureCase) => failureCase.id)).toEqual(
+    expect.arrayContaining([
+      'planning-missing-arguments',
+      'planning-missing-new-album-dependency',
+      'planning-wrong-album-target-kind',
+      'planning-wrong-space-target-kind',
+      'planning-wrong-asset-batch-target-kind',
+      'planning-wrong-image-edit-target-kind',
+      'planning-duplicate-asset-ids',
+      'planning-invalid-rotate-angle',
+      'planning-invented-create-album-tool',
+      'planning-invented-add-assets-tool',
+    ]),
+  );
+});
 
-  it('connects planning failure cases to contract common mistakes', () => {
-    const contractsByName = new Map(
-      sut.listPlanningToolContracts().map((contract) => [contract.name, contract]),
-    );
+it('connects planning failure cases to contract common mistakes', () => {
+  const contractsByName = new Map(sut.listPlanningToolContracts().map((contract) => [contract.name, contract]));
 
-    for (const failureCase of sut.listSlice4PlanningFailureMatrixCases()) {
-      if (!failureCase.toolName) {
-        continue;
-      }
-
-      const mistakeIds = contractsByName.get(failureCase.toolName)?.commonMistakes.map((mistake) => mistake.id) ?? [];
-
-      expect(mistakeIds, `${failureCase.id} should map to ${failureCase.toolName}`).toContain(
-        failureCase.expectedContractMistakeId,
-      );
+  for (const failureCase of sut.listSlice4PlanningFailureMatrixCases()) {
+    if (!failureCase.toolName) {
+      continue;
     }
-  });
+
+    const mistakeIds = contractsByName.get(failureCase.toolName)?.commonMistakes.map((mistake) => mistake.id) ?? [];
+
+    expect(mistakeIds, `${failureCase.id} should map to ${failureCase.toolName}`).toContain(
+      failureCase.expectedContractMistakeId,
+    );
+  }
+});
 ```
 
 - [ ] **Step 7: Run focused contract tests and verify they fail**
@@ -944,7 +947,8 @@ const reviseProposedOperationsContract: AgentMcpPlanningToolContract = {
   name: AgentToolName.ReviseProposedOperations,
   title: 'Revise proposed operations',
   description: 'Revise an existing reviewable Gallery operation plan from user feedback.',
-  usage: 'Revise an existing reviewable Gallery operation plan by providing planId, summary, and replacement operations.',
+  usage:
+    'Revise an existing reviewable Gallery operation plan by providing planId, summary, and replacement operations.',
   argumentModes: [planIdMode, planningMode],
   examples: [
     {
@@ -1245,13 +1249,13 @@ const slice4PlanningFailureMatrixCases: AgentMcpFailureMatrixCase[] = [
 First, broaden `missingField` matching in `mistakeMatchingIssue()` so Zod missing-field messages from planning DTOs can match common mistakes:
 
 ```ts
-  if (match.missingField) {
-    return request.issues.find(
-      (issue) =>
-        issue.path === match.missingField &&
-        (issue.message.includes('required') || issue.message.includes('Invalid input')),
-    );
-  }
+if (match.missingField) {
+  return request.issues.find(
+    (issue) =>
+      issue.path === match.missingField &&
+      (issue.message.includes('required') || issue.message.includes('Invalid input')),
+  );
+}
 ```
 
 In `AgentMcpToolContractService`, add:
@@ -1356,116 +1360,116 @@ EOF
 Inside `describe('planning argument validation', ...)`, before the existing `it.each([...])('returns isError tool result for malformed planning arguments'...)`, add:
 
 ```ts
-    it.each(
-      new AgentMcpToolContractService()
-        .listSlice4PlanningFailureMatrixCases()
-        .filter((failureCase) => failureCase.expectedResult.kind === 'tool-validation'),
-    )('keeps runtime validation baseline for Slice 4 planning case $id', async (failureCase) => {
-      const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+it.each(
+  new AgentMcpToolContractService()
+    .listSlice4PlanningFailureMatrixCases()
+    .filter((failureCase) => failureCase.expectedResult.kind === 'tool-validation'),
+)('keeps runtime validation baseline for Slice 4 planning case $id', async (failureCase) => {
+  const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
 
-      if (failureCase.expectedResult.kind !== 'tool-validation') {
-        throw new Error(`Expected tool-validation case for ${failureCase.id}`);
-      }
+  if (failureCase.expectedResult.kind !== 'tool-validation') {
+    throw new Error(`Expected tool-validation case for ${failureCase.id}`);
+  }
 
-      expectEnrichedToolValidationError(response, {
-        toolName: failureCase.toolName!,
-        path: failureCase.expectedResult.expectedIssuePath,
-      });
-      expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
-      expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
-      expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
-    });
+  expectEnrichedToolValidationError(response, {
+    toolName: failureCase.toolName!,
+    path: failureCase.expectedResult.expectedIssuePath,
+  });
+  expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
+  expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
+  expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
+});
 
-    it.each([
-      {
-        id: 'planning-missing-arguments',
-        hintIncludes: 'params.arguments',
-        expectedIncludes: 'reviewable Gallery operation plan',
-      },
-      {
-        id: 'planning-missing-new-album-dependency',
-        hintIncludes: 'Create the new album or space first',
-        expectedIncludes: 'reviewable Gallery operation plan',
-      },
-      {
-        id: 'planning-wrong-album-target-kind',
-        hintIncludes: 'existing_album',
-        expectedIncludes: 'reviewable Gallery operation plan',
-      },
-      {
-        id: 'planning-wrong-space-target-kind',
-        hintIncludes: 'existing_space',
-        expectedIncludes: 'reviewable Gallery operation plan',
-      },
-      {
-        id: 'planning-wrong-asset-batch-target-kind',
-        hintIncludes: 'asset_batch',
-        expectedIncludes: 'reviewable Gallery operation plan',
-      },
-      {
-        id: 'planning-wrong-image-edit-target-kind',
-        hintIncludes: 'image_edit_batch',
-        expectedIncludes: 'reviewable Gallery operation plan',
-      },
-      {
-        id: 'planning-duplicate-asset-ids',
-        hintIncludes: 'only once',
-        expectedIncludes: 'reviewable Gallery operation plan',
-      },
-      {
-        id: 'planning-invalid-rotate-angle',
-        hintIncludes: '90, 180, or 270',
-        expectedIncludes: 'reviewable Gallery operation plan',
-      },
-      {
-        id: 'planning-invalid-tag-payload',
-        hintIncludes: 'exactly one of tagId or tagName',
-        expectedIncludes: 'reviewable Gallery operation plan',
-      },
-    ])('returns an actionable planning correction for $id', async (expectation) => {
-      const failureCase = contractService
-        .listSlice4PlanningFailureMatrixCases()
-        .find((candidate) => candidate.id === expectation.id)!;
+it.each([
+  {
+    id: 'planning-missing-arguments',
+    hintIncludes: 'params.arguments',
+    expectedIncludes: 'reviewable Gallery operation plan',
+  },
+  {
+    id: 'planning-missing-new-album-dependency',
+    hintIncludes: 'Create the new album or space first',
+    expectedIncludes: 'reviewable Gallery operation plan',
+  },
+  {
+    id: 'planning-wrong-album-target-kind',
+    hintIncludes: 'existing_album',
+    expectedIncludes: 'reviewable Gallery operation plan',
+  },
+  {
+    id: 'planning-wrong-space-target-kind',
+    hintIncludes: 'existing_space',
+    expectedIncludes: 'reviewable Gallery operation plan',
+  },
+  {
+    id: 'planning-wrong-asset-batch-target-kind',
+    hintIncludes: 'asset_batch',
+    expectedIncludes: 'reviewable Gallery operation plan',
+  },
+  {
+    id: 'planning-wrong-image-edit-target-kind',
+    hintIncludes: 'image_edit_batch',
+    expectedIncludes: 'reviewable Gallery operation plan',
+  },
+  {
+    id: 'planning-duplicate-asset-ids',
+    hintIncludes: 'only once',
+    expectedIncludes: 'reviewable Gallery operation plan',
+  },
+  {
+    id: 'planning-invalid-rotate-angle',
+    hintIncludes: '90, 180, or 270',
+    expectedIncludes: 'reviewable Gallery operation plan',
+  },
+  {
+    id: 'planning-invalid-tag-payload',
+    hintIncludes: 'exactly one of tagId or tagName',
+    expectedIncludes: 'reviewable Gallery operation plan',
+  },
+])('returns an actionable planning correction for $id', async (expectation) => {
+  const failureCase = contractService
+    .listSlice4PlanningFailureMatrixCases()
+    .find((candidate) => candidate.id === expectation.id)!;
 
-      const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+  const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
 
-      if (failureCase.expectedResult.kind !== 'tool-validation' || !failureCase.toolName) {
-        throw new Error(`Expected tool-validation planning case for ${failureCase.id}`);
-      }
+  if (failureCase.expectedResult.kind !== 'tool-validation' || !failureCase.toolName) {
+    throw new Error(`Expected tool-validation planning case for ${failureCase.id}`);
+  }
 
-      expectEnrichedToolValidationError(response, {
-        toolName: failureCase.toolName,
-        path: failureCase.expectedResult.expectedIssuePath,
-        hintIncludes: expectation.hintIncludes,
-        expectedIncludes: expectation.expectedIncludes,
-      });
+  expectEnrichedToolValidationError(response, {
+    toolName: failureCase.toolName,
+    path: failureCase.expectedResult.expectedIssuePath,
+    hintIncludes: expectation.hintIncludes,
+    expectedIncludes: expectation.expectedIncludes,
+  });
 
-      const result = response.result as AgentMcpToolCallResult;
-      expect((result.structuredContent as Record<string, unknown>).exampleArguments).toEqual(expect.any(Object));
-    });
+  const result = response.result as AgentMcpToolCallResult;
+  expect((result.structuredContent as Record<string, unknown>).exampleArguments).toEqual(expect.any(Object));
+});
 
-    it.each(
-      new AgentMcpToolContractService()
-        .listSlice4PlanningFailureMatrixCases()
-        .filter((failureCase) => failureCase.expectedResult.kind === 'protocol-error'),
-    )('keeps runtime protocol-error baseline for Slice 4 planning case $id', async (failureCase) => {
-      const response = await sut.handle(auth, sessionId, failureCase.request);
+it.each(
+  new AgentMcpToolContractService()
+    .listSlice4PlanningFailureMatrixCases()
+    .filter((failureCase) => failureCase.expectedResult.kind === 'protocol-error'),
+)('keeps runtime protocol-error baseline for Slice 4 planning case $id', async (failureCase) => {
+  const response = await sut.handle(auth, sessionId, failureCase.request);
 
-      if (failureCase.expectedResult.kind !== 'protocol-error') {
-        throw new Error(`Expected protocol-error case for ${failureCase.id}`);
-      }
+  if (failureCase.expectedResult.kind !== 'protocol-error') {
+    throw new Error(`Expected protocol-error case for ${failureCase.id}`);
+  }
 
-      expect(response).toMatchObject({
-        jsonrpc: '2.0',
-        id: failureCase.request.id,
-        error: {
-          message: failureCase.expectedResult.expectedErrorMessage,
-        },
-      });
-      expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
-      expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
-      expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
-    });
+  expect(response).toMatchObject({
+    jsonrpc: '2.0',
+    id: failureCase.request.id,
+    error: {
+      message: failureCase.expectedResult.expectedErrorMessage,
+    },
+  });
+  expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
+  expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
+  expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 2: Replace the pre-Slice-4 generic planning fallback test**
@@ -1473,33 +1477,35 @@ Inside `describe('planning argument validation', ...)`, before the existing `it.
 Replace the test named `adds generic retry metadata for planning tools before planning contracts exist` with:
 
 ```ts
-    it('adds contract-derived correction fields for planning tools', async () => {
-      const response = (await sut.handle(auth, sessionId, {
-        jsonrpc: '2.0',
-        id: `${AgentToolName.ProposeAlbumOperations}-call`,
-        method: 'tools/call',
-        params: {
-          name: AgentToolName.ProposeAlbumOperations,
-        },
-      })) as AgentMcpSuccessResponse;
-      const result = response.result as AgentMcpToolCallResult;
+it('adds contract-derived correction fields for planning tools', async () => {
+  const response = (await sut.handle(auth, sessionId, {
+    jsonrpc: '2.0',
+    id: `${AgentToolName.ProposeAlbumOperations}-call`,
+    method: 'tools/call',
+    params: {
+      name: AgentToolName.ProposeAlbumOperations,
+    },
+  })) as AgentMcpSuccessResponse;
+  const result = response.result as AgentMcpToolCallResult;
 
-      expect(result.isError).toBe(true);
-      expect(result.structuredContent).toMatchObject({
-        status: 'error',
-        error: 'Invalid tool arguments',
-        toolName: AgentToolName.ProposeAlbumOperations,
-        retryable: true,
-        issues: [{ path: 'arguments', message: 'arguments is required', hint: expect.stringContaining('params.arguments') }],
-        expected: expect.stringContaining('reviewable Gallery operation plan'),
-        hint: expect.stringContaining('params.arguments'),
-        exampleArguments: expect.objectContaining({
-          summary: 'Create today test album.',
-          operations: expect.any(Array),
-        }),
-      });
-      expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
-    });
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent).toMatchObject({
+    status: 'error',
+    error: 'Invalid tool arguments',
+    toolName: AgentToolName.ProposeAlbumOperations,
+    retryable: true,
+    issues: [
+      { path: 'arguments', message: 'arguments is required', hint: expect.stringContaining('params.arguments') },
+    ],
+    expected: expect.stringContaining('reviewable Gallery operation plan'),
+    hint: expect.stringContaining('params.arguments'),
+    exampleArguments: expect.objectContaining({
+      summary: 'Create today test album.',
+      operations: expect.any(Array),
+    }),
+  });
+  expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+});
 ```
 
 - [ ] **Step 3: Run MCP service tests and verify they fail**
@@ -1559,7 +1565,7 @@ In `server/src/services/agent-mcp.service.ts`, replace `isReadToolNameForCorrect
 Then replace the `correction` initialization in `validationIssuesResult()` with:
 
 ```ts
-    const correction = this.validationCorrectionFor(toolName, issues, requestShape);
+const correction = this.validationCorrectionFor(toolName, issues, requestShape);
 ```
 
 Remove the now-unused `isReadToolNameForCorrection()` method.
@@ -1596,15 +1602,15 @@ EOF
 Replace `derives planning tool input schemas from the existing planning tool DTO schemas` with:
 
 ```ts
-  it('preserves DTO-derived planning tool input schema structure after stripping contract metadata', () => {
-    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+it('preserves DTO-derived planning tool input schema structure after stripping contract metadata', () => {
+  const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
 
-    for (const toolName of expectedPlanningToolNames) {
-      expect(stripContractMetadata(toolsByName.get(toolName)?.inputSchema)).toEqual(
-        stripContractMetadata(toExpectedInputSchema(AgentOperationPlanToolRequestSchemas[toolName])),
-      );
-    }
-  });
+  for (const toolName of expectedPlanningToolNames) {
+    expect(stripContractMetadata(toolsByName.get(toolName)?.inputSchema)).toEqual(
+      stripContractMetadata(toExpectedInputSchema(AgentOperationPlanToolRequestSchemas[toolName])),
+    );
+  }
+});
 ```
 
 Delete the test named `leaves planning tool structural schemas unchanged before planning contracts exist`.
@@ -1614,75 +1620,75 @@ Delete the test named `leaves planning tool structural schemas unchanged before 
 Add these tests after the read mode metadata test:
 
 ```ts
-  it('enriches planning tool descriptions from the planning tool contracts', () => {
-    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+it('enriches planning tool descriptions from the planning tool contracts', () => {
+  const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
 
-    for (const contract of contractService.listPlanningToolContracts()) {
-      const tool = toolsByName.get(contract.name);
+  for (const contract of contractService.listPlanningToolContracts()) {
+    const tool = toolsByName.get(contract.name);
 
-      expect(tool?.title).toBe(contract.title);
-      expect(tool?.description).toContain(contract.description);
-      expect(tool?.description).toContain(contract.usage);
-      expect(tool?.description).toContain('review');
-      expect(tool?.description).not.toMatch(/\/api|agent\/internal|bearer|token|provider key|stack trace/i);
+    expect(tool?.title).toBe(contract.title);
+    expect(tool?.description).toContain(contract.description);
+    expect(tool?.description).toContain(contract.usage);
+    expect(tool?.description).toContain('review');
+    expect(tool?.description).not.toMatch(/\/api|agent\/internal|bearer|token|provider key|stack trace/i);
+  }
+});
+
+it('publishes valid contract examples on planning tool input schemas', () => {
+  const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+
+  for (const contract of contractService.listPlanningToolContracts()) {
+    const tool = toolsByName.get(contract.name);
+    const examples = tool?.inputSchema.examples;
+
+    expect(examples).toEqual(contract.examples.map((example) => example.arguments));
+    expect(examples).toHaveLength(contract.examples.length);
+    for (const exampleArguments of examples as Record<string, unknown>[]) {
+      const result = AgentOperationPlanToolRequestSchemas[contract.name].safeParse(exampleArguments);
+
+      expect(result.success, `${contract.name} example should parse`).toBe(true);
     }
+  }
+});
+
+it('adds model-facing property descriptions for planning tool argument fields', () => {
+  const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+  const proposal = toolsByName.get(AgentToolName.ProposeAlbumOperations)?.inputSchema;
+  const revision = toolsByName.get(AgentToolName.ReviseProposedOperations)?.inputSchema;
+  const summary = toolsByName.get(AgentToolName.SummarizePlan)?.inputSchema;
+
+  expect(proposal?.properties).toMatchObject({
+    summary: expect.objectContaining({ description: expect.stringContaining('human-readable plan summary') }),
+    operations: expect.objectContaining({ description: expect.stringContaining('reviewable Gallery operations') }),
   });
-
-  it('publishes valid contract examples on planning tool input schemas', () => {
-    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
-
-    for (const contract of contractService.listPlanningToolContracts()) {
-      const tool = toolsByName.get(contract.name);
-      const examples = tool?.inputSchema.examples;
-
-      expect(examples).toEqual(contract.examples.map((example) => example.arguments));
-      expect(examples).toHaveLength(contract.examples.length);
-      for (const exampleArguments of examples as Record<string, unknown>[]) {
-        const result = AgentOperationPlanToolRequestSchemas[contract.name].safeParse(exampleArguments);
-
-        expect(result.success, `${contract.name} example should parse`).toBe(true);
-      }
-    }
+  expect(revision?.properties).toMatchObject({
+    planId: expect.objectContaining({ description: expect.stringContaining('existing proposed plan') }),
+    feedback: expect.objectContaining({ description: expect.stringContaining('user feedback') }),
   });
-
-  it('adds model-facing property descriptions for planning tool argument fields', () => {
-    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
-    const proposal = toolsByName.get(AgentToolName.ProposeAlbumOperations)?.inputSchema;
-    const revision = toolsByName.get(AgentToolName.ReviseProposedOperations)?.inputSchema;
-    const summary = toolsByName.get(AgentToolName.SummarizePlan)?.inputSchema;
-
-    expect(proposal?.properties).toMatchObject({
-      summary: expect.objectContaining({ description: expect.stringContaining('human-readable plan summary') }),
-      operations: expect.objectContaining({ description: expect.stringContaining('reviewable Gallery operations') }),
-    });
-    expect(revision?.properties).toMatchObject({
-      planId: expect.objectContaining({ description: expect.stringContaining('existing proposed plan') }),
-      feedback: expect.objectContaining({ description: expect.stringContaining('user feedback') }),
-    });
-    expect(summary?.properties).toMatchObject({
-      planId: expect.objectContaining({ description: expect.stringContaining('existing proposed plan') }),
-      focus: expect.objectContaining({ description: expect.stringContaining('optional summary focus') }),
-    });
+  expect(summary?.properties).toMatchObject({
+    planId: expect.objectContaining({ description: expect.stringContaining('existing proposed plan') }),
+    focus: expect.objectContaining({ description: expect.stringContaining('optional summary focus') }),
   });
+});
 
-  it('publishes contract argument mode metadata for every planning tool without oneOf noise', () => {
-    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+it('publishes contract argument mode metadata for every planning tool without oneOf noise', () => {
+  const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
 
-    for (const contract of contractService.listPlanningToolContracts()) {
-      const tool = toolsByName.get(contract.name);
+  for (const contract of contractService.listPlanningToolContracts()) {
+    const tool = toolsByName.get(contract.name);
 
-      expect(tool?.inputSchema['x-gallery-argumentModes']).toEqual(
-        contract.argumentModes.map((mode) => ({
-          name: mode.name,
-          description: mode.description,
-          requiredFields: mode.requiredFields,
-          forbiddenFields: mode.forbiddenFields,
-          whenToUse: mode.whenToUse,
-        })),
-      );
-      expect(tool?.inputSchema).not.toHaveProperty('oneOf');
-    }
-  });
+    expect(tool?.inputSchema['x-gallery-argumentModes']).toEqual(
+      contract.argumentModes.map((mode) => ({
+        name: mode.name,
+        description: mode.description,
+        requiredFields: mode.requiredFields,
+        forbiddenFields: mode.forbiddenFields,
+        whenToUse: mode.whenToUse,
+      })),
+    );
+    expect(tool?.inputSchema).not.toHaveProperty('oneOf');
+  }
+});
 ```
 
 - [ ] **Step 3: Add runtime `tools/list` red coverage for planning metadata**
@@ -1690,36 +1696,36 @@ Add these tests after the read mode metadata test:
 In `server/src/services/agent-mcp.service.spec.ts`, add this test after `returns enriched read tool metadata through tools/list`:
 
 ```ts
-  it('returns enriched planning tool metadata through tools/list', async () => {
-    const response = (await sut.handle(auth, sessionId, {
-      jsonrpc: '2.0',
-      id: 'tools-enriched-planning-metadata',
-      method: 'tools/list',
-    })) as AgentMcpSuccessResponse;
-    const result = response.result as {
-      tools: Array<{ name: AgentToolName; description: string; inputSchema: Record<string, unknown> }>;
-    };
-    const proposal = result.tools.find((tool) => tool.name === AgentToolName.ProposeAlbumOperations);
+it('returns enriched planning tool metadata through tools/list', async () => {
+  const response = (await sut.handle(auth, sessionId, {
+    jsonrpc: '2.0',
+    id: 'tools-enriched-planning-metadata',
+    method: 'tools/list',
+  })) as AgentMcpSuccessResponse;
+  const result = response.result as {
+    tools: Array<{ name: AgentToolName; description: string; inputSchema: Record<string, unknown> }>;
+  };
+  const proposal = result.tools.find((tool) => tool.name === AgentToolName.ProposeAlbumOperations);
 
-    expect(proposal?.description).toContain('reviewable Gallery operation plan');
-    expect(proposal?.inputSchema.examples).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          summary: 'Create today test album.',
-          operations: expect.any(Array),
-        }),
-        expect.objectContaining({
-          summary: 'Create today test and add selected photos.',
-          operations: expect.any(Array),
-        }),
-      ]),
-    );
-    expect(proposal?.inputSchema['x-gallery-argumentModes']).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: 'operation-plan', requiredFields: ['summary', 'operations'] }),
-      ]),
-    );
-  });
+  expect(proposal?.description).toContain('reviewable Gallery operation plan');
+  expect(proposal?.inputSchema.examples).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        summary: 'Create today test album.',
+        operations: expect.any(Array),
+      }),
+      expect.objectContaining({
+        summary: 'Create today test and add selected photos.',
+        operations: expect.any(Array),
+      }),
+    ]),
+  );
+  expect(proposal?.inputSchema['x-gallery-argumentModes']).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: 'operation-plan', requiredFields: ['summary', 'operations'] }),
+    ]),
+  );
+});
 ```
 
 - [ ] **Step 4: Run registry and MCP service tests and verify they fail**
@@ -1779,7 +1785,10 @@ const propertyDescriptions = {
 Change `enrichReadTool()` to a generic `enrichToolFromContract()`:
 
 ```ts
-const enrichToolFromContract = (tool: AgentMcpToolDefinition, contract: AgentMcpToolContract): AgentMcpToolDefinition => {
+const enrichToolFromContract = (
+  tool: AgentMcpToolDefinition,
+  contract: AgentMcpToolContract,
+): AgentMcpToolDefinition => {
   const inputSchema = structuredClone(tool.inputSchema);
   const properties = inputSchema.properties;
 
@@ -1849,7 +1858,7 @@ Change the final `.map()` to enrich both read and planning tools:
 In the constructor, use all tool contracts:
 
 ```ts
-    const contractsByName = new Map(this.contractService.listToolContracts().map((contract) => [contract.name, contract]));
+const contractsByName = new Map(this.contractService.listToolContracts().map((contract) => [contract.name, contract]));
 ```
 
 - [ ] **Step 3: Run registry and MCP service tests and verify they pass**

@@ -94,24 +94,24 @@ Do not modify in this slice:
 
 This slice must explicitly cover:
 
-| Area | Case | Expected Slice 1 Result |
-| --- | --- | --- |
-| Request wrapper | `params.input` used instead of `params.arguments` | Existing MCP service returns an `isError: true` tool validation result for missing `arguments` |
+| Area            | Case                                                             | Expected Slice 1 Result                                                                        |
+| --------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Request wrapper | `params.input` used instead of `params.arguments`                | Existing MCP service returns an `isError: true` tool validation result for missing `arguments` |
 | Request wrapper | tool arguments placed at top level instead of `params.arguments` | Existing MCP service returns an `isError: true` tool validation result for missing `arguments` |
-| Request wrapper | `params.arguments` is an array, primitive, or null | Existing MCP service returns an `isError: true` tool validation result for invalid `arguments` |
-| Read retry | `assetIds` combined with `toolCallId` | Existing MCP service returns an `isError: true` tool validation result |
-| Read request | missing `assetIds` and `toolCallId` for asset read | Existing MCP service returns an `isError: true` tool validation result |
-| Read request | empty `assetIds` | Existing MCP service returns an `isError: true` tool validation result |
-| Read request | invalid asset UUID | Existing MCP service returns an `isError: true` tool validation result |
-| Read request | duplicate asset IDs | Existing MCP service returns an `isError: true` tool validation result |
-| Read request | more than `10_000` asset IDs | Existing MCP service returns an `isError: true` tool validation result |
-| Album read | missing `albumId` and `toolCallId` | Existing MCP service returns an `isError: true` tool validation result |
-| Album read | `albumId` combined with `toolCallId` | Existing MCP service returns an `isError: true` tool validation result |
-| Album read | invalid album UUID | Existing MCP service returns an `isError: true` tool validation result |
-| Search | date/location filters outside `filters` | Existing MCP service returns an `isError: true` tool validation result |
-| Search | `toolCallId` combined with filters or limit | Existing MCP service returns an `isError: true` tool validation result |
-| Search | limit over `10_000` | Existing MCP service returns an `isError: true` tool validation result |
-| Safety | invented apply tool | Existing MCP service returns an unknown-tool protocol error |
+| Request wrapper | `params.arguments` is an array, primitive, or null               | Existing MCP service returns an `isError: true` tool validation result for invalid `arguments` |
+| Read retry      | `assetIds` combined with `toolCallId`                            | Existing MCP service returns an `isError: true` tool validation result                         |
+| Read request    | missing `assetIds` and `toolCallId` for asset read               | Existing MCP service returns an `isError: true` tool validation result                         |
+| Read request    | empty `assetIds`                                                 | Existing MCP service returns an `isError: true` tool validation result                         |
+| Read request    | invalid asset UUID                                               | Existing MCP service returns an `isError: true` tool validation result                         |
+| Read request    | duplicate asset IDs                                              | Existing MCP service returns an `isError: true` tool validation result                         |
+| Read request    | more than `10_000` asset IDs                                     | Existing MCP service returns an `isError: true` tool validation result                         |
+| Album read      | missing `albumId` and `toolCallId`                               | Existing MCP service returns an `isError: true` tool validation result                         |
+| Album read      | `albumId` combined with `toolCallId`                             | Existing MCP service returns an `isError: true` tool validation result                         |
+| Album read      | invalid album UUID                                               | Existing MCP service returns an `isError: true` tool validation result                         |
+| Search          | date/location filters outside `filters`                          | Existing MCP service returns an `isError: true` tool validation result                         |
+| Search          | `toolCallId` combined with filters or limit                      | Existing MCP service returns an `isError: true` tool validation result                         |
+| Search          | limit over `10_000`                                              | Existing MCP service returns an `isError: true` tool validation result                         |
+| Safety          | invented apply tool                                              | Existing MCP service returns an unknown-tool protocol error                                    |
 
 This slice records the cases and proves the current runtime rejects them. Slice 2 owns changing the validation payload into model-actionable hints.
 
@@ -588,19 +588,19 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       hint: 'Use a positive integer limit no greater than 10000.',
       exampleName: 'favorite-rating-search',
     },
-  {
-    id: 'tool-call-arguments-missing',
-    match: { missingField: 'arguments', requestShape: 'json-rpc' },
-    hint: 'Put the search arguments object at params.arguments in the MCP tools/call request.',
-    exampleName: 'empty-search',
-  },
-  {
-    id: 'tool-call-arguments-not-object',
-    match: { issuePath: 'arguments', requestShape: 'json-rpc' },
-    hint: 'The params.arguments value must be a JSON object, not an array, primitive, or null.',
-    exampleName: 'empty-search',
-  },
-],
+    {
+      id: 'tool-call-arguments-missing',
+      match: { missingField: 'arguments', requestShape: 'json-rpc' },
+      hint: 'Put the search arguments object at params.arguments in the MCP tools/call request.',
+      exampleName: 'empty-search',
+    },
+    {
+      id: 'tool-call-arguments-not-object',
+      match: { issuePath: 'arguments', requestShape: 'json-rpc' },
+      hint: 'The params.arguments value must be a JSON object, not an array, primitive, or null.',
+      exampleName: 'empty-search',
+    },
+  ],
   approvalRetry,
   safety,
 };
@@ -635,19 +635,19 @@ const listAlbumsContract: AgentMcpToolContract<AgentToolName.ListAlbums> = {
       hint: 'Use {} to list albums. Use readAlbum with albumId to inspect one album.',
       exampleName: 'list-visible-albums',
     },
-  {
-    id: 'tool-call-arguments-missing',
-    match: { missingField: 'arguments', requestShape: 'json-rpc' },
-    hint: 'Use params.arguments: {} for a normal listAlbums tool call.',
-    exampleName: 'list-visible-albums',
-  },
-  {
-    id: 'tool-call-arguments-not-object',
-    match: { issuePath: 'arguments', requestShape: 'json-rpc' },
-    hint: 'The params.arguments value must be a JSON object. Use {} for a normal listAlbums call.',
-    exampleName: 'list-visible-albums',
-  },
-],
+    {
+      id: 'tool-call-arguments-missing',
+      match: { missingField: 'arguments', requestShape: 'json-rpc' },
+      hint: 'Use params.arguments: {} for a normal listAlbums tool call.',
+      exampleName: 'list-visible-albums',
+    },
+    {
+      id: 'tool-call-arguments-not-object',
+      match: { issuePath: 'arguments', requestShape: 'json-rpc' },
+      hint: 'The params.arguments value must be a JSON object. Use {} for a normal listAlbums call.',
+      exampleName: 'list-visible-albums',
+    },
+  ],
   approvalRetry,
   safety,
 };
@@ -694,19 +694,19 @@ const readAlbumContract: AgentMcpToolContract<AgentToolName.ReadAlbum> = {
       hint: 'Album ids must be UUID strings returned by listAlbums.',
       exampleName: 'read-visible-album',
     },
-  {
-    id: 'tool-call-arguments-missing',
-    match: { missingField: 'arguments', requestShape: 'json-rpc' },
-    hint: 'Put the album read arguments object at params.arguments in the MCP tools/call request.',
-    exampleName: 'read-visible-album',
-  },
-  {
-    id: 'tool-call-arguments-not-object',
-    match: { issuePath: 'arguments', requestShape: 'json-rpc' },
-    hint: 'The params.arguments value must be a JSON object, not an array, primitive, or null.',
-    exampleName: 'read-visible-album',
-  },
-],
+    {
+      id: 'tool-call-arguments-missing',
+      match: { missingField: 'arguments', requestShape: 'json-rpc' },
+      hint: 'Put the album read arguments object at params.arguments in the MCP tools/call request.',
+      exampleName: 'read-visible-album',
+    },
+    {
+      id: 'tool-call-arguments-not-object',
+      match: { issuePath: 'arguments', requestShape: 'json-rpc' },
+      hint: 'The params.arguments value must be a JSON object, not an array, primitive, or null.',
+      exampleName: 'read-visible-album',
+    },
+  ],
   approvalRetry,
   safety,
 };
@@ -889,7 +889,9 @@ describe('slice 1 small-model read failure matrix', () => {
       AgentToolName.ListAlbums,
       AgentToolName.ReadAlbum,
     ]);
-    const contractsByName = new Map(contractService.listReadToolContracts().map((contract) => [contract.name, contract]));
+    const contractsByName = new Map(
+      contractService.listReadToolContracts().map((contract) => [contract.name, contract]),
+    );
 
     for (const failureCase of contractService.listSlice1RuntimeFailureMatrixCases()) {
       if (!failureCase.toolName || !expectedReadToolNameSet.has(failureCase.toolName)) {
@@ -1312,18 +1314,21 @@ Use this summary shape in the final implementation response:
 Implemented Slice 1: Failure Matrix And Contract Skeleton.
 
 What changed:
+
 - Added server-owned read-tool contract types and service.
 - Added executable read-tool examples validated against existing DTO schemas.
 - Added slice 1 small-model runtime failure matrix cases.
 - Added baseline runtime tests proving current MCP behavior rejects malformed read calls without changing error payloads yet.
 
 Verification:
+
 - `pnpm --dir server exec vitest --config test/vitest.config.mjs src/services/agent-mcp-tool-contract.service.spec.ts src/services/agent-mcp.service.spec.ts src/services/agent-mcp-tool-registry.service.spec.ts src/dtos/agent-tool.dto.spec.ts`
 - `pnpm --dir server run check`
 - `pnpm --dir server run lint`
 - `pnpm --dir server run format`
 
 Next slice:
+
 - Slice 2 should consume these contracts and matrix cases to enrich `isError: true` validation payloads with model-actionable correction hints.
 ```
 
