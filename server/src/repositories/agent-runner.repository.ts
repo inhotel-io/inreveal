@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { AgentRunnerCapabilities, AgentRunnerStatusReason } from 'src/dtos/agent-runner.dto';
 import type {
+  AgentRunnerActivityKind,
+  AgentRunnerActivityStatus,
+  AgentRunnerActivityStreamEvent,
   AgentRunnerCreateSessionRequest,
   AgentRunnerCreateSessionResult,
   AgentRunnerMessageRequest,
@@ -72,6 +75,15 @@ const isValidateSessionResult = (value: unknown): value is AgentRunnerValidateSe
 };
 
 const optionalString = (value: unknown): boolean => value === undefined || typeof value === 'string';
+const activityKinds = new Set<AgentRunnerActivityKind>([
+  'start-processing',
+  'plan-composing',
+  'apply-progress',
+  'runner-recovery',
+  'unknown',
+]);
+const activityStatuses = new Set<AgentRunnerActivityStatus>(['running', 'completed', 'failed', 'skipped']);
+const activityCountKeys = new Set(['total', 'applied', 'skipped', 'failed']);
 
 const isMessageBlock = (value: unknown): boolean => {
   const block = objectRecord(value);
@@ -97,6 +109,58 @@ const isMessageBlock = (value: unknown): boolean => {
 const isMessageContent = (value: unknown): boolean => {
   const content = objectRecord(value);
   return Array.isArray(content.blocks) && content.blocks.every((block) => isMessageBlock(block));
+};
+
+const normalizeActivityEvent = (value: unknown): AgentRunnerActivityStreamEvent | null => {
+  const body = objectRecord(value);
+  if (
+    body.type !== 'activity' ||
+    typeof body.sessionId !== 'string' ||
+    typeof body.runnerSessionId !== 'string' ||
+    typeof body.kind !== 'string'
+  ) {
+    return null;
+  }
+
+  if (
+    body.status !== undefined &&
+    (typeof body.status !== 'string' || !activityStatuses.has(body.status as AgentRunnerActivityStatus))
+  ) {
+    return null;
+  }
+
+  const activityEvent: AgentRunnerActivityStreamEvent = {
+    type: 'activity',
+    sessionId: body.sessionId,
+    runnerSessionId: body.runnerSessionId,
+    kind: activityKinds.has(body.kind as AgentRunnerActivityKind) ? (body.kind as AgentRunnerActivityKind) : 'unknown',
+    status: body.status === undefined ? 'running' : (body.status as AgentRunnerActivityStatus),
+  };
+
+  if (body.summary !== undefined) {
+    if (typeof body.summary !== 'string') {
+      return null;
+    }
+    activityEvent.summary = body.summary;
+  }
+
+  if (body.counts !== undefined) {
+    const counts = objectRecord(body.counts);
+    if (counts !== body.counts) {
+      return null;
+    }
+
+    const normalizedCounts: NonNullable<AgentRunnerActivityStreamEvent['counts']> = {};
+    for (const [key, count] of Object.entries(counts)) {
+      if (!activityCountKeys.has(key) || typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) {
+        return null;
+      }
+      normalizedCounts[key as keyof typeof normalizedCounts] = count;
+    }
+    activityEvent.counts = normalizedCounts;
+  }
+
+  return activityEvent;
 };
 
 const isStreamEvent = (value: unknown): value is AgentRunnerStreamEvent => {
@@ -154,6 +218,10 @@ const parseSseFrame = (frame: string): AgentRunnerStreamEvent | null => {
     parsed = JSON.parse(dataLine.slice('data: '.length));
   } catch {
     throw new Error('Agent runner returned an invalid stream event');
+  }
+
+  if (objectRecord(parsed).type === 'activity') {
+    return normalizeActivityEvent(parsed);
   }
 
   if (!isStreamEvent(parsed)) {

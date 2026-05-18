@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { AgentSession, AgentToolCall } from 'src/database';
 import {
   AgentOperationPlanApplyRequestDto,
@@ -18,6 +18,8 @@ import {
   AgentOperationStatus,
   AgentOperationTargetKind,
   AgentOperationType,
+  AgentSessionActivityEventKind,
+  AgentSessionActivityEventStatus,
   AgentSessionStatus,
   AgentToolApprovalDecision,
   AgentToolCallStatus,
@@ -39,6 +41,7 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
+import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
@@ -123,6 +126,9 @@ export class AgentOperationPlanService {
     private readonly sharedSpaceService: SharedSpaceService,
     private readonly assetService: AssetService,
     private readonly tagService: TagService,
+    @Optional()
+    @Inject(AgentSessionActivityEventService)
+    private readonly activityEventService?: Pick<AgentSessionActivityEventService, 'createSystemEvent'>,
   ) {}
 
   async getCurrentPlan(auth: AuthDto, sessionId: string): Promise<AgentOperationPlanResponseDto | null> {
@@ -1050,6 +1056,18 @@ export class AgentOperationPlanService {
     const createdAlbumIdByTemporaryTargetId = new Map<string, string>();
     const createdSpaceIdByTemporaryTargetId = new Map<string, string>();
     const updates: AgentOperationApplyUpdate[] = [];
+    const selectedTotal = selectedOperationIds.size;
+    let appliedCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+
+    await this.emitApplyProgress(auth, session.id, {
+      status: AgentSessionActivityEventStatus.Running,
+      total: selectedTotal,
+      applied: appliedCount,
+      skipped: skippedCount,
+      failed: failedCount,
+    });
 
     for (const operation of plan.operations) {
       if (!selectedOperationIds.has(operation.id)) {
@@ -1069,11 +1087,27 @@ export class AgentOperationPlanService {
       );
       if (!dependencyApplied) {
         updates.push(this.skippedOperation(operation.id, 'Dependency was not applied'));
+        skippedCount++;
+        await this.emitApplyProgress(auth, session.id, {
+          status: AgentSessionActivityEventStatus.Running,
+          total: selectedTotal,
+          applied: appliedCount,
+          skipped: skippedCount,
+          failed: failedCount,
+        });
         continue;
       }
 
       if (selectedAssetIds?.length === 0) {
         updates.push(this.skippedOperation(operation.id, 'No selected items for operation'));
+        skippedCount++;
+        await this.emitApplyProgress(auth, session.id, {
+          status: AgentSessionActivityEventStatus.Running,
+          total: selectedTotal,
+          applied: appliedCount,
+          skipped: skippedCount,
+          failed: failedCount,
+        });
         continue;
       }
 
@@ -1088,7 +1122,17 @@ export class AgentOperationPlanService {
         updates.push(update);
         if (update.status === AgentOperationStatus.Applied) {
           appliedOperationIds.add(operation.id);
+          appliedCount++;
+        } else {
+          skippedCount++;
         }
+        await this.emitApplyProgress(auth, session.id, {
+          status: AgentSessionActivityEventStatus.Running,
+          total: selectedTotal,
+          applied: appliedCount,
+          skipped: skippedCount,
+          failed: failedCount,
+        });
       } catch (error) {
         updates.push({
           id: operation.id,
@@ -1096,10 +1140,53 @@ export class AgentOperationPlanService {
           result: null,
           error: error instanceof Error ? error.message : 'Agent operation apply failed',
         });
+        failedCount++;
+        await this.emitApplyProgress(auth, session.id, {
+          status: AgentSessionActivityEventStatus.Running,
+          total: selectedTotal,
+          applied: appliedCount,
+          skipped: skippedCount,
+          failed: failedCount,
+        });
       }
     }
 
+    await this.emitApplyProgress(auth, session.id, {
+      status: failedCount > 0 ? AgentSessionActivityEventStatus.Failed : AgentSessionActivityEventStatus.Completed,
+      total: selectedTotal,
+      applied: appliedCount,
+      skipped: skippedCount,
+      failed: failedCount,
+    });
+
     return updates;
+  }
+
+  private async emitApplyProgress(
+    auth: AuthDto,
+    sessionId: string,
+    progress: {
+      status: AgentSessionActivityEventStatus;
+      total: number;
+      applied: number;
+      skipped: number;
+      failed: number;
+    },
+  ) {
+    try {
+      await this.activityEventService?.createSystemEvent(auth.user.id, sessionId, {
+        kind: AgentSessionActivityEventKind.ApplyProgress,
+        status: progress.status,
+        counts: {
+          total: progress.total,
+          applied: progress.applied,
+          skipped: progress.skipped,
+          failed: progress.failed,
+        },
+      });
+    } catch {
+      // Activity events are visibility hints and must not block applying approved changes.
+    }
   }
 
   private applyOperationOverrides(
