@@ -177,6 +177,20 @@ export class PersonRepository {
     return { deletedThumbnailPath: source.thumbnailPath || null, targetNeedsFeatureFaceRepair };
   }
 
+  async lockPeopleForMerge(personIds: string[], db: Kysely<DB> | Transaction<DB> = this.db): Promise<void> {
+    if (personIds.length === 0) {
+      return;
+    }
+
+    await db
+      .selectFrom('person')
+      .select('id')
+      .where('id', 'in', [...new Set(personIds)].toSorted())
+      .orderBy('id')
+      .forUpdate()
+      .execute();
+  }
+
   private async isFeatureFaceValid(
     personId: string,
     faceAssetId: string,

@@ -1580,6 +1580,20 @@ export class SharedSpaceRepository {
     await this.recountPersons([input.targetPersonId], db);
   }
 
+  async lockSpacePeopleForMerge(personIds: string[], db: Kysely<DB> | Transaction<DB> = this.db): Promise<void> {
+    if (personIds.length === 0) {
+      return;
+    }
+
+    await db
+      .selectFrom('shared_space_person')
+      .select('id')
+      .where('id', 'in', [...new Set(personIds)].toSorted())
+      .orderBy('id')
+      .forUpdate()
+      .execute();
+  }
+
   async updateSpacePersonIdentity(
     input: {
       personId: string;
