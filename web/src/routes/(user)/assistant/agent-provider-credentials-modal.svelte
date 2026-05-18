@@ -42,6 +42,7 @@
   let revealedCredentialIds = $state<Record<string, boolean>>({});
   let visibleSecretByCredentialId = $state<Record<string, string>>({});
   let modelDraftByCredentialId = $state<Record<string, string>>({});
+  let defaultModelDraftByCredentialId = $state<Record<string, string>>({});
 
   const isOpenAiCompatible = $derived(providerType === ProviderType.OpenaiCompatible);
   const isOllama = $derived(providerOption === 'ollama');
@@ -53,17 +54,23 @@
       !isSaving,
   );
 
+  const uniqueModels = (models: string[]) => [...new Set(models)];
+
   const parseModels = () =>
-    modelsText
-      .split(',')
-      .map((model) => model.trim())
-      .filter(Boolean);
+    uniqueModels(
+      modelsText
+        .split(',')
+        .map((model) => model.trim())
+        .filter(Boolean),
+    );
 
   const parseModelDraft = (credentialId: string) =>
-    (modelDraftByCredentialId[credentialId] ?? '')
-      .split(',')
-      .map((model) => model.trim())
-      .filter(Boolean);
+    uniqueModels(
+      (modelDraftByCredentialId[credentialId] ?? '')
+        .split(',')
+        .map((model) => model.trim())
+        .filter(Boolean),
+    );
 
   const resetForm = () => {
     providerOption = ProviderType.Openai;
@@ -130,6 +137,11 @@
 
   const saveCredentialModels = async (credential: AgentProviderCredentialResponseDto) => {
     const models = parseModelDraft(credential.id);
+    const selectedDefaultModel = (defaultModelDraftByCredentialId[credential.id] ?? '').trim();
+    const nextDefaultModel =
+      selectedDefaultModel && (models.length === 0 || models.includes(selectedDefaultModel))
+        ? selectedDefaultModel
+        : (models[0] ?? null);
     updatingCredentialId = credential.id;
     errorMessage = null;
 
@@ -138,10 +150,11 @@
         id: credential.id,
         agentProviderCredentialUpdateDto: {
           models,
-          defaultModel: models.includes(credential.defaultModel ?? '') ? credential.defaultModel : (models[0] ?? null),
+          defaultModel: nextDefaultModel,
         },
       });
       onCredentialsChanged(await getAgentProviderCredentials());
+      editingModelsCredentialId = null;
       toastManager.success($t('assistant_api_key_models_saved'));
     } catch (error) {
       errorMessage = $t('assistant_api_key_models_save_error');
@@ -165,12 +178,15 @@
       const nextVisibleSecrets = { ...visibleSecretByCredentialId };
       const nextRevealedIds = { ...revealedCredentialIds };
       const nextModelDrafts = { ...modelDraftByCredentialId };
+      const nextDefaultModelDrafts = { ...defaultModelDraftByCredentialId };
       delete nextVisibleSecrets[credential.id];
       delete nextRevealedIds[credential.id];
       delete nextModelDrafts[credential.id];
+      delete nextDefaultModelDrafts[credential.id];
       visibleSecretByCredentialId = nextVisibleSecrets;
       revealedCredentialIds = nextRevealedIds;
       modelDraftByCredentialId = nextModelDrafts;
+      defaultModelDraftByCredentialId = nextDefaultModelDrafts;
       toastManager.success($t('assistant_api_key_deleted'));
     } catch (error) {
       errorMessage = $t('assistant_api_key_delete_error');
@@ -182,19 +198,24 @@
 
   $effect(() => {
     const nextDrafts = { ...modelDraftByCredentialId };
+    const nextDefaultDrafts = { ...defaultModelDraftByCredentialId };
     let changed = false;
 
     for (const credential of credentials) {
-      if (credential.id in nextDrafts) {
-        continue;
+      if (!(credential.id in nextDrafts)) {
+        nextDrafts[credential.id] = credential.models.join(', ');
+        changed = true;
       }
 
-      nextDrafts[credential.id] = credential.models.join(', ');
-      changed = true;
+      if (!(credential.id in nextDefaultDrafts)) {
+        nextDefaultDrafts[credential.id] = credential.defaultModel ?? '';
+        changed = true;
+      }
     }
 
     if (changed) {
       modelDraftByCredentialId = nextDrafts;
+      defaultModelDraftByCredentialId = nextDefaultDrafts;
     }
   });
 </script>
@@ -312,6 +333,7 @@
                   </div>
 
                   {#if isEditingModels}
+                    {@const draftModels = parseModelDraft(credential.id)}
                     <div class="mt-4 grid gap-2 border-t border-gray-200 pt-3 dark:border-neutral-800">
                       <label
                         class="text-xs font-medium uppercase text-gray-500 dark:text-neutral-400"
@@ -332,6 +354,29 @@
                         autocomplete="off"
                         disabled={updatingCredentialId === credential.id}
                       />
+                      <label
+                        class="text-xs font-medium uppercase text-gray-500 dark:text-neutral-400"
+                        for={`assistant-default-model-${credential.id}`}
+                      >
+                        {$t('assistant_api_key_default_model')}
+                      </label>
+                      <select
+                        id={`assistant-default-model-${credential.id}`}
+                        aria-label={`${credential.label} ${$t('assistant_api_key_default_model')}`}
+                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-neutral-950"
+                        value={defaultModelDraftByCredentialId[credential.id] ?? ''}
+                        disabled={updatingCredentialId === credential.id}
+                        onchange={(event) =>
+                          (defaultModelDraftByCredentialId = {
+                            ...defaultModelDraftByCredentialId,
+                            [credential.id]: (event.currentTarget as HTMLSelectElement).value,
+                          })}
+                      >
+                        <option value="">{$t('assistant_default_model')}</option>
+                        {#each draftModels as model (model)}
+                          <option value={model}>{model}</option>
+                        {/each}
+                      </select>
                       <div class="flex items-center justify-between gap-3">
                         <Text size="small" color="muted">{$t('assistant_api_key_models_hint')}</Text>
                         <Button
