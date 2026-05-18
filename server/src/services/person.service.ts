@@ -790,7 +790,11 @@ export class PersonService extends BaseService {
       return JobStatus.Skipped;
     }
 
-    await this.jobRepository.waitForQueueCompletion(QueueName.ThumbnailGeneration, QueueName.FaceDetection);
+    await this.jobRepository.waitForQueueCompletion(
+      QueueName.ThumbnailGeneration,
+      QueueName.FaceDetection,
+      ...(force ? [QueueName.PeopleBackfill] : []),
+    );
 
     if (nightly) {
       const [state, latestFaceDate] = await Promise.all([
@@ -834,7 +838,7 @@ export class PersonService extends BaseService {
     const lastRun = new Date().toISOString();
 
     const faces = this.personRepository.getAllFaces(
-      force ? undefined : { personGroupId: null, sourceType: SourceType.MachineLearning },
+      force ? { sourceType: SourceType.MachineLearning } : { personGroupId: null, sourceType: SourceType.MachineLearning },
     );
     for await (const batch of batched(faces)) {
       await this.jobRepository.queueAll(
