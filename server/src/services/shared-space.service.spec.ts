@@ -7479,6 +7479,32 @@ describe(SharedSpaceService.name, () => {
       });
     });
 
+    it('does not queue identity reconciliation when library sync finds assets but changes no space people', async () => {
+      const spaceId = newUuid();
+      const libraryId = newUuid();
+      const assetId = newUuid();
+
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+      mocks.sharedSpace.hasLibraryLink.mockResolvedValue(true);
+      mocks.asset.getByLibraryIdWithFaces.mockResolvedValueOnce([{ id: assetId }]).mockResolvedValueOnce([]);
+      mocks.sharedSpace.isAssetInSpace.mockResolvedValue(true);
+      mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([]);
+      mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
+
+      const result = await sut.handleSharedSpaceLibraryFaceSync({ spaceId, libraryId });
+
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.sharedSpace.getAssetFacesForMatching).toHaveBeenCalledWith(assetId);
+      expect(mocks.job.queue).toHaveBeenCalledTimes(1);
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonDedup,
+        data: { spaceId },
+      });
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpaceIdentityReconciliation }),
+      );
+    });
+
     it('should skip when space does not exist', async () => {
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
       const result = await sut.handleSharedSpaceLibraryFaceSync({ spaceId: newUuid(), libraryId: newUuid() });
@@ -7508,10 +7534,14 @@ describe(SharedSpaceService.name, () => {
       mocks.asset.getByLibraryIdWithFaces.mockResolvedValue([]);
       const result = await sut.handleSharedSpaceLibraryFaceSync({ spaceId, libraryId });
       expect(result).toBe(JobStatus.Success);
+      expect(mocks.job.queue).toHaveBeenCalledTimes(1);
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.SharedSpacePersonDedup,
         data: { spaceId },
       });
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpaceIdentityReconciliation }),
+      );
     });
 
     it('should stop syncing when library is unlinked during iteration', async () => {
