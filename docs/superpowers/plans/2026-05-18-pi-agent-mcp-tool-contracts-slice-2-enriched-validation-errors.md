@@ -90,28 +90,28 @@ Do not modify in this slice:
 
 ## Slice 2 Edge Case Matrix
 
-| Area | Case | Expected Slice 2 Result |
-| --- | --- | --- |
-| Request wrapper | Missing `params.arguments` | `isError: true` with `toolName`, `retryable: true`, `issues[0].path: "arguments"`, wrapper hint, and valid `exampleArguments` |
-| Request wrapper | `params.input` instead of `params.arguments` | Same as missing `arguments`; no raw `input` body appears in payload |
-| Request wrapper | Arguments at top level | Same as missing `arguments`; JSON-RPC wrapper remains valid |
-| Request wrapper | `params.arguments` is array, primitive, or null | `arguments must be an object` issue with non-object hint |
-| Read retry | `assetIds` combined with `toolCallId` | Hint says choose one mode, expected describes asset IDs vs approved retry |
-| Asset read | Missing `assetIds` and `toolCallId` | Hint says use `assetIds` for new reads or only `toolCallId` for approved retry |
-| Asset read | Empty `assetIds` | Hint says provide at least one valid asset id |
-| Asset read | Invalid asset UUID | UUID-specific hint and valid UUID example |
-| Asset read | Duplicate asset IDs | Duplicate-specific hint, not generic `assetIds` hint |
-| Asset read | More than `10_000` IDs | Limit-specific hint and no raw ID list in payload |
-| Album read | Missing `albumId` and `toolCallId` | Album mode hint |
-| Album read | `albumId` combined with `toolCallId` | Choose-one-mode hint |
-| Album read | Invalid album UUID | UUID-specific album hint |
-| Search | Date/location filters outside `filters` | Hint says filters belong under `filters` |
-| Search | `toolCallId` combined with filters or limit | Choose search fields or approved retry, not both |
-| Search | Limit over `10_000` | Limit-specific hint |
-| Safety | Invented apply tool | Still JSON-RPC `Unknown tool`, not an `isError` tool result |
-| Security | Malformed args contain token-like strings, bearer text, internal paths, or route-looking values | Payload does not include those values |
-| Text sync | Any validation error | `content[0].text` exactly equals `JSON.stringify(structuredContent)` |
-| Planning fallback | Planning tool malformed arguments before planning contracts exist | `isError: true` includes `toolName`, `retryable: true`, and issues, but no read-tool `exampleArguments` |
+| Area              | Case                                                                                            | Expected Slice 2 Result                                                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Request wrapper   | Missing `params.arguments`                                                                      | `isError: true` with `toolName`, `retryable: true`, `issues[0].path: "arguments"`, wrapper hint, and valid `exampleArguments` |
+| Request wrapper   | `params.input` instead of `params.arguments`                                                    | Same as missing `arguments`; no raw `input` body appears in payload                                                           |
+| Request wrapper   | Arguments at top level                                                                          | Same as missing `arguments`; JSON-RPC wrapper remains valid                                                                   |
+| Request wrapper   | `params.arguments` is array, primitive, or null                                                 | `arguments must be an object` issue with non-object hint                                                                      |
+| Read retry        | `assetIds` combined with `toolCallId`                                                           | Hint says choose one mode, expected describes asset IDs vs approved retry                                                     |
+| Asset read        | Missing `assetIds` and `toolCallId`                                                             | Hint says use `assetIds` for new reads or only `toolCallId` for approved retry                                                |
+| Asset read        | Empty `assetIds`                                                                                | Hint says provide at least one valid asset id                                                                                 |
+| Asset read        | Invalid asset UUID                                                                              | UUID-specific hint and valid UUID example                                                                                     |
+| Asset read        | Duplicate asset IDs                                                                             | Duplicate-specific hint, not generic `assetIds` hint                                                                          |
+| Asset read        | More than `10_000` IDs                                                                          | Limit-specific hint and no raw ID list in payload                                                                             |
+| Album read        | Missing `albumId` and `toolCallId`                                                              | Album mode hint                                                                                                               |
+| Album read        | `albumId` combined with `toolCallId`                                                            | Choose-one-mode hint                                                                                                          |
+| Album read        | Invalid album UUID                                                                              | UUID-specific album hint                                                                                                      |
+| Search            | Date/location filters outside `filters`                                                         | Hint says filters belong under `filters`                                                                                      |
+| Search            | `toolCallId` combined with filters or limit                                                     | Choose search fields or approved retry, not both                                                                              |
+| Search            | Limit over `10_000`                                                                             | Limit-specific hint                                                                                                           |
+| Safety            | Invented apply tool                                                                             | Still JSON-RPC `Unknown tool`, not an `isError` tool result                                                                   |
+| Security          | Malformed args contain token-like strings, bearer text, internal paths, or route-looking values | Payload does not include those values                                                                                         |
+| Text sync         | Any validation error                                                                            | `content[0].text` exactly equals `JSON.stringify(structuredContent)`                                                          |
+| Planning fallback | Planning tool malformed arguments before planning contracts exist                               | `isError: true` includes `toolName`, `retryable: true`, and issues, but no read-tool `exampleArguments`                       |
 
 ---
 
@@ -126,85 +126,85 @@ Do not modify in this slice:
 Append these tests before the final `});` in `server/src/services/agent-mcp-tool-contract.service.spec.ts`:
 
 ```ts
-  describe('validation correction lookup', () => {
-    it('returns the matching hint, expected usage, and example arguments for a read-tool mistake', () => {
-      const correction = sut.getReadToolValidationCorrection(AgentToolName.ReadAssetPreviews, {
-        requestShape: 'tool-arguments',
-        issues: [{ path: '', message: 'Provide either assetIds or toolCallId, not both' }],
-      });
-
-      expect(correction).toEqual({
-        mistakeId: 'asset-read-combined-asset-ids-and-tool-call-id',
-        issuePath: '',
-        expected: 'Use assetIds for a new request. Use only toolCallId when retrying a Gallery-approved request.',
-        hint: 'Use either assetIds for a new request or toolCallId for an approved retry, not both.',
-        exampleArguments: {
-          toolCallId: '00000000-0000-4000-8000-000000000111',
-        },
-      });
+describe('validation correction lookup', () => {
+  it('returns the matching hint, expected usage, and example arguments for a read-tool mistake', () => {
+    const correction = sut.getReadToolValidationCorrection(AgentToolName.ReadAssetPreviews, {
+      requestShape: 'tool-arguments',
+      issues: [{ path: '', message: 'Provide either assetIds or toolCallId, not both' }],
     });
 
-    it('matches JSON-RPC wrapper mistakes separately from tool-argument mistakes', () => {
-      const correction = sut.getReadToolValidationCorrection(AgentToolName.ReadAssetMetadata, {
-        requestShape: 'json-rpc',
-        issues: [{ path: 'arguments', message: 'arguments is required' }],
-      });
-
-      expect(correction).toMatchObject({
-        mistakeId: 'tool-call-arguments-missing',
-        issuePath: 'arguments',
-        hint: 'Put the tool arguments object at params.arguments in the MCP tools/call request.',
-        exampleArguments: {
-          assetIds: ['00000000-0000-4000-8000-000000000001'],
-        },
-      });
-    });
-
-    it('prefers the most specific mistake when multiple issues share a path', () => {
-      const correction = sut.getReadToolValidationCorrection(AgentToolName.ReadAssetMetadata, {
-        requestShape: 'tool-arguments',
-        issues: [
-          { path: 'assetIds', message: 'Too small: expected array to have >=1 items' },
-          { path: 'assetIds', message: 'assetIds must be unique' },
-        ],
-      });
-
-      expect(correction?.mistakeId).toBe('asset-read-duplicate-asset-ids');
-      expect(correction?.issuePath).toBe('assetIds');
-      expect(correction?.hint).toBe('Provide each asset id only once.');
-    });
-
-    it('returns a read-tool fallback when no common mistake matches', () => {
-      const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
-        requestShape: 'tool-arguments',
-        issues: [{ path: 'filters.rating', message: 'Too big: expected number to be <=5' }],
-      });
-
-      expect(correction).toEqual({
-        expected: 'Put all search filters under filters. Use only toolCallId when retrying a Gallery-approved search.',
-        hint: 'Put all search filters under filters. Use only toolCallId when retrying a Gallery-approved search.',
-        exampleArguments: {},
-      });
-    });
-
-    it('returns defensive copies of example arguments', () => {
-      const firstCorrection = sut.getReadToolValidationCorrection(AgentToolName.ReadAlbum, {
-        requestShape: 'tool-arguments',
-        issues: [{ path: 'albumId', message: 'Invalid UUID' }],
-      });
-
-      firstCorrection!.exampleArguments = { mutated: true };
-
-      expect(
-        sut.getReadToolValidationCorrection(AgentToolName.ReadAlbum, {
-          requestShape: 'tool-arguments',
-          issues: [{ path: 'albumId', message: 'Invalid UUID' }],
-        })?.exampleArguments,
-      ).toEqual({
-        albumId: '00000000-0000-4000-8000-000000000010',
-      });
+    expect(correction).toEqual({
+      mistakeId: 'asset-read-combined-asset-ids-and-tool-call-id',
+      issuePath: '',
+      expected: 'Use assetIds for a new request. Use only toolCallId when retrying a Gallery-approved request.',
+      hint: 'Use either assetIds for a new request or toolCallId for an approved retry, not both.',
+      exampleArguments: {
+        toolCallId: '00000000-0000-4000-8000-000000000111',
+      },
     });
   });
+
+  it('matches JSON-RPC wrapper mistakes separately from tool-argument mistakes', () => {
+    const correction = sut.getReadToolValidationCorrection(AgentToolName.ReadAssetMetadata, {
+      requestShape: 'json-rpc',
+      issues: [{ path: 'arguments', message: 'arguments is required' }],
+    });
+
+    expect(correction).toMatchObject({
+      mistakeId: 'tool-call-arguments-missing',
+      issuePath: 'arguments',
+      hint: 'Put the tool arguments object at params.arguments in the MCP tools/call request.',
+      exampleArguments: {
+        assetIds: ['00000000-0000-4000-8000-000000000001'],
+      },
+    });
+  });
+
+  it('prefers the most specific mistake when multiple issues share a path', () => {
+    const correction = sut.getReadToolValidationCorrection(AgentToolName.ReadAssetMetadata, {
+      requestShape: 'tool-arguments',
+      issues: [
+        { path: 'assetIds', message: 'Too small: expected array to have >=1 items' },
+        { path: 'assetIds', message: 'assetIds must be unique' },
+      ],
+    });
+
+    expect(correction?.mistakeId).toBe('asset-read-duplicate-asset-ids');
+    expect(correction?.issuePath).toBe('assetIds');
+    expect(correction?.hint).toBe('Provide each asset id only once.');
+  });
+
+  it('returns a read-tool fallback when no common mistake matches', () => {
+    const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+      requestShape: 'tool-arguments',
+      issues: [{ path: 'filters.rating', message: 'Too big: expected number to be <=5' }],
+    });
+
+    expect(correction).toEqual({
+      expected: 'Put all search filters under filters. Use only toolCallId when retrying a Gallery-approved search.',
+      hint: 'Put all search filters under filters. Use only toolCallId when retrying a Gallery-approved search.',
+      exampleArguments: {},
+    });
+  });
+
+  it('returns defensive copies of example arguments', () => {
+    const firstCorrection = sut.getReadToolValidationCorrection(AgentToolName.ReadAlbum, {
+      requestShape: 'tool-arguments',
+      issues: [{ path: 'albumId', message: 'Invalid UUID' }],
+    });
+
+    firstCorrection!.exampleArguments = { mutated: true };
+
+    expect(
+      sut.getReadToolValidationCorrection(AgentToolName.ReadAlbum, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: 'albumId', message: 'Invalid UUID' }],
+      })?.exampleArguments,
+    ).toEqual({
+      albumId: '00000000-0000-4000-8000-000000000010',
+    });
+  });
+});
 ```
 
 - [ ] **Step 2: Run the focused test and verify it fails**
@@ -299,11 +299,7 @@ const mistakeMatchingIssue = (
   }
 
   if (match.missingField) {
-    return request.issues.find(
-      (issue) =>
-        issue.path === match.missingField &&
-        issue.message.includes('required'),
-    );
+    return request.issues.find((issue) => issue.path === match.missingField && issue.message.includes('required'));
   }
 
   if (match.unexpectedField) {
@@ -394,17 +390,17 @@ EOF
 In `server/src/services/agent-mcp.service.spec.ts`, add a local variable next to `registry`:
 
 ```ts
-  let contractService: AgentMcpToolContractService;
+let contractService: AgentMcpToolContractService;
 ```
 
 In `beforeEach`, instantiate it and pass it to the SUT:
 
 ```ts
-    registry = new AgentMcpToolRegistryService();
-    contractService = new AgentMcpToolContractService();
-    toolService = automock(AgentToolService, { strict: false });
-    operationPlanService = automock(AgentOperationPlanService, { strict: false });
-    sut = new AgentMcpService(registry, contractService, toolService, operationPlanService);
+registry = new AgentMcpToolRegistryService();
+contractService = new AgentMcpToolContractService();
+toolService = automock(AgentToolService, { strict: false });
+operationPlanService = automock(AgentOperationPlanService, { strict: false });
+sut = new AgentMcpService(registry, contractService, toolService, operationPlanService);
 ```
 
 - [ ] **Step 2: Replace the validation assertion helpers**
@@ -493,76 +489,76 @@ expectEnrichedToolValidationError(response, {
 Add this test inside `describe('slice 1 small-model read failure matrix', ...)` after the runtime validation baseline test:
 
 ```ts
-    it.each([
-      {
-        id: 'read-input-instead-of-arguments',
-        hintIncludes: 'params.arguments',
-        exampleArguments: { assetIds: ['00000000-0000-4000-8000-000000000001'] },
+it.each([
+  {
+    id: 'read-input-instead-of-arguments',
+    hintIncludes: 'params.arguments',
+    exampleArguments: { assetIds: ['00000000-0000-4000-8000-000000000001'] },
+  },
+  {
+    id: 'read-arguments-array',
+    hintIncludes: 'must be a JSON object',
+    exampleArguments: { assetIds: ['00000000-0000-4000-8000-000000000001'] },
+  },
+  {
+    id: 'asset-read-combined-asset-ids-and-tool-call-id',
+    hintIncludes: 'not both',
+    expectedIncludes: 'Use assetIds for a new request',
+    exampleArguments: { toolCallId: '00000000-0000-4000-8000-000000000111' },
+  },
+  {
+    id: 'asset-read-duplicate-asset-ids',
+    hintIncludes: 'only once',
+    exampleArguments: { assetIds: ['00000000-0000-4000-8000-000000000001'] },
+  },
+  {
+    id: 'read-album-invalid-album-id',
+    hintIncludes: 'Album ids must be UUID strings',
+    exampleArguments: { albumId: '00000000-0000-4000-8000-000000000010' },
+  },
+  {
+    id: 'search-filters-outside-filters',
+    hintIncludes: 'inside the filters object',
+    exampleArguments: {
+      filters: {
+        takenAfter: '2026-05-01T00:00:00.000Z',
+        takenBefore: '2026-05-18T23:59:59.999Z',
+        city: 'Berlin',
+        country: 'Germany',
       },
-      {
-        id: 'read-arguments-array',
-        hintIncludes: 'must be a JSON object',
-        exampleArguments: { assetIds: ['00000000-0000-4000-8000-000000000001'] },
+      limit: 50,
+    },
+  },
+  {
+    id: 'search-limit-out-of-range',
+    hintIncludes: 'no greater than 10000',
+    exampleArguments: {
+      filters: {
+        isFavorite: true,
+        rating: 5,
       },
-      {
-        id: 'asset-read-combined-asset-ids-and-tool-call-id',
-        hintIncludes: 'not both',
-        expectedIncludes: 'Use assetIds for a new request',
-        exampleArguments: { toolCallId: '00000000-0000-4000-8000-000000000111' },
-      },
-      {
-        id: 'asset-read-duplicate-asset-ids',
-        hintIncludes: 'only once',
-        exampleArguments: { assetIds: ['00000000-0000-4000-8000-000000000001'] },
-      },
-      {
-        id: 'read-album-invalid-album-id',
-        hintIncludes: 'Album ids must be UUID strings',
-        exampleArguments: { albumId: '00000000-0000-4000-8000-000000000010' },
-      },
-      {
-        id: 'search-filters-outside-filters',
-        hintIncludes: 'inside the filters object',
-        exampleArguments: {
-          filters: {
-            takenAfter: '2026-05-01T00:00:00.000Z',
-            takenBefore: '2026-05-18T23:59:59.999Z',
-            city: 'Berlin',
-            country: 'Germany',
-          },
-          limit: 50,
-        },
-      },
-      {
-        id: 'search-limit-out-of-range',
-        hintIncludes: 'no greater than 10000',
-        exampleArguments: {
-          filters: {
-            isFavorite: true,
-            rating: 5,
-          },
-          limit: 25,
-        },
-      },
-    ])('returns an actionable correction for $id', async (expectation) => {
-      const failureCase = contractService
-        .listSlice1RuntimeFailureMatrixCases()
-        .find((candidate) => candidate.id === expectation.id)!;
+      limit: 25,
+    },
+  },
+])('returns an actionable correction for $id', async (expectation) => {
+  const failureCase = contractService
+    .listSlice1RuntimeFailureMatrixCases()
+    .find((candidate) => candidate.id === expectation.id)!;
 
-      const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+  const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
 
-      if (failureCase.expectedResult.kind !== 'tool-validation' || !failureCase.toolName) {
-        throw new Error(`Expected tool-validation read case for ${failureCase.id}`);
-      }
+  if (failureCase.expectedResult.kind !== 'tool-validation' || !failureCase.toolName) {
+    throw new Error(`Expected tool-validation read case for ${failureCase.id}`);
+  }
 
-      expectEnrichedToolValidationError(response, {
-        toolName: failureCase.toolName,
-        path: failureCase.expectedResult.expectedIssuePath,
-        hintIncludes: expectation.hintIncludes,
-        expectedIncludes: expectation.expectedIncludes,
-        exampleArguments: expectation.exampleArguments,
-      });
-    });
+  expectEnrichedToolValidationError(response, {
+    toolName: failureCase.toolName,
+    path: failureCase.expectedResult.expectedIssuePath,
+    hintIncludes: expectation.hintIncludes,
+    expectedIncludes: expectation.expectedIncludes,
+    exampleArguments: expectation.exampleArguments,
+  });
+});
 ```
 
 - [ ] **Step 4: Add tests for every Slice 1 tool-validation case receiving a read correction**
@@ -570,23 +566,23 @@ Add this test inside `describe('slice 1 small-model read failure matrix', ...)` 
 Add this test in the same describe block:
 
 ```ts
-    it('adds correction fields for every read-tool failure matrix case', async () => {
-      for (const failureCase of contractService
-        .listSlice1RuntimeFailureMatrixCases()
-        .filter((candidate) => candidate.expectedResult.kind === 'tool-validation')) {
-        const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
-        const result = response.result as AgentMcpToolCallResult;
-        const structuredContent = result.structuredContent as Record<string, unknown>;
+it('adds correction fields for every read-tool failure matrix case', async () => {
+  for (const failureCase of contractService
+    .listSlice1RuntimeFailureMatrixCases()
+    .filter((candidate) => candidate.expectedResult.kind === 'tool-validation')) {
+    const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+    const result = response.result as AgentMcpToolCallResult;
+    const structuredContent = result.structuredContent as Record<string, unknown>;
 
-        expect(failureCase.toolName, failureCase.id).toBeDefined();
-        expect(structuredContent.toolName, failureCase.id).toBe(failureCase.toolName);
-        expect(structuredContent.retryable, failureCase.id).toBe(true);
-        expect(typeof structuredContent.expected, failureCase.id).toBe('string');
-        expect(typeof structuredContent.hint, failureCase.id).toBe('string');
-        expect(structuredContent.exampleArguments, failureCase.id).toEqual(expect.any(Object));
-        expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
-      }
-    });
+    expect(failureCase.toolName, failureCase.id).toBeDefined();
+    expect(structuredContent.toolName, failureCase.id).toBe(failureCase.toolName);
+    expect(structuredContent.retryable, failureCase.id).toBe(true);
+    expect(typeof structuredContent.expected, failureCase.id).toBe('string');
+    expect(typeof structuredContent.hint, failureCase.id).toBe('string');
+    expect(structuredContent.exampleArguments, failureCase.id).toEqual(expect.any(Object));
+    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+  }
+});
 ```
 
 - [ ] **Step 5: Add protocol and service error preservation tests**
@@ -594,42 +590,40 @@ Add this test in the same describe block:
 Add these tests near the existing unknown-tool and service-exception tests:
 
 ```ts
-  it('keeps unknown tools as JSON-RPC protocol errors instead of tool validation results', async () => {
-    const response = await sut.handle(auth, sessionId, {
-      jsonrpc: '2.0',
-      id: 'unknown-tool-protocol-error',
-      method: 'tools/call',
-      params: {
-        name: 'mcp_gallery_applyAlbumOperations',
-        arguments: { token: 'bearer abc' },
-      },
-    });
-
-    expect(response).toEqual({
-      jsonrpc: '2.0',
-      id: 'unknown-tool-protocol-error',
-      error: {
-        code: -32_602,
-        message: 'Unknown tool',
-        data: { toolName: 'mcp_gallery_applyAlbumOperations' },
-      },
-    });
+it('keeps unknown tools as JSON-RPC protocol errors instead of tool validation results', async () => {
+  const response = await sut.handle(auth, sessionId, {
+    jsonrpc: '2.0',
+    id: 'unknown-tool-protocol-error',
+    method: 'tools/call',
+    params: {
+      name: 'mcp_gallery_applyAlbumOperations',
+      arguments: { token: 'bearer abc' },
+    },
   });
 
-  it('keeps service exceptions as redacted JSON-RPC internal errors', async () => {
-    toolService.searchAssets.mockRejectedValue(new Error('bearer token abc /srv/gallery/internal-route'));
-
-    await expect(
-      sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.SearchAssets, {})),
-    ).resolves.toEqual({
-      jsonrpc: '2.0',
-      id: `${AgentToolName.SearchAssets}-call`,
-      error: {
-        code: -32_603,
-        message: 'Internal error',
-      },
-    });
+  expect(response).toEqual({
+    jsonrpc: '2.0',
+    id: 'unknown-tool-protocol-error',
+    error: {
+      code: -32_602,
+      message: 'Unknown tool',
+      data: { toolName: 'mcp_gallery_applyAlbumOperations' },
+    },
   });
+});
+
+it('keeps service exceptions as redacted JSON-RPC internal errors', async () => {
+  toolService.searchAssets.mockRejectedValue(new Error('bearer token abc /srv/gallery/internal-route'));
+
+  await expect(sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.SearchAssets, {}))).resolves.toEqual({
+    jsonrpc: '2.0',
+    id: `${AgentToolName.SearchAssets}-call`,
+    error: {
+      code: -32_603,
+      message: 'Internal error',
+    },
+  });
+});
 ```
 
 - [ ] **Step 6: Add validation redaction coverage**
@@ -637,25 +631,25 @@ Add these tests near the existing unknown-tool and service-exception tests:
 Add this test near the malformed argument tests:
 
 ```ts
-  it('does not serialize raw malformed argument values, secrets, routes, or filesystem paths in validation errors', async () => {
-    const response = (await sut.handle(
-      auth,
-      sessionId,
-      makeToolCallRequest(AgentToolName.SearchAssets, {
-        token: 'bearer abc123',
-        internalRoute: '/api/agent/internal/mcp',
-        file: '/srv/gallery/provider-key.json',
-        filters: { isFavorite: true },
-      }),
-    )) as AgentMcpSuccessResponse;
-    const result = response.result as AgentMcpToolCallResult;
-    const serialized = JSON.stringify(result.structuredContent);
+it('does not serialize raw malformed argument values, secrets, routes, or filesystem paths in validation errors', async () => {
+  const response = (await sut.handle(
+    auth,
+    sessionId,
+    makeToolCallRequest(AgentToolName.SearchAssets, {
+      token: 'bearer abc123',
+      internalRoute: '/api/agent/internal/mcp',
+      file: '/srv/gallery/provider-key.json',
+      filters: { isFavorite: true },
+    }),
+  )) as AgentMcpSuccessResponse;
+  const result = response.result as AgentMcpToolCallResult;
+  const serialized = JSON.stringify(result.structuredContent);
 
-    expect(serialized).not.toMatch(
-      /token|internalRoute|file|bearer|abc123|\/api\/agent\/internal|\/srv\/gallery|provider-key/i,
-    );
-    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
-  });
+  expect(serialized).not.toMatch(
+    /token|internalRoute|file|bearer|abc123|\/api\/agent\/internal|\/srv\/gallery|provider-key/i,
+  );
+  expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+});
 ```
 
 - [ ] **Step 7: Add planning fallback coverage**
@@ -663,25 +657,25 @@ Add this test near the malformed argument tests:
 Add this test in `describe('planning argument validation', ...)`:
 
 ```ts
-    it('adds generic retry metadata for planning tools before planning contracts exist', async () => {
-      const response = (await sut.handle(
-        auth,
-        sessionId,
-        makeToolCallRequest(AgentToolName.ProposeAlbumOperations, undefined),
-      )) as AgentMcpSuccessResponse;
-      const result = response.result as AgentMcpToolCallResult;
+it('adds generic retry metadata for planning tools before planning contracts exist', async () => {
+  const response = (await sut.handle(
+    auth,
+    sessionId,
+    makeToolCallRequest(AgentToolName.ProposeAlbumOperations, undefined),
+  )) as AgentMcpSuccessResponse;
+  const result = response.result as AgentMcpToolCallResult;
 
-      expect(result.isError).toBe(true);
-      expect(result.structuredContent).toMatchObject({
-        status: 'error',
-        error: 'Invalid tool arguments',
-        toolName: AgentToolName.ProposeAlbumOperations,
-        retryable: true,
-        issues: [{ path: 'arguments', message: 'arguments is required' }],
-      });
-      expect(result.structuredContent).not.toHaveProperty('exampleArguments');
-      expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
-    });
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent).toMatchObject({
+    status: 'error',
+    error: 'Invalid tool arguments',
+    toolName: AgentToolName.ProposeAlbumOperations,
+    retryable: true,
+    issues: [{ path: 'arguments', message: 'arguments is required' }],
+  });
+  expect(result.structuredContent).not.toHaveProperty('exampleArguments');
+  expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+});
 ```
 
 - [ ] **Step 8: Run the focused service test and verify it fails**
@@ -800,9 +794,9 @@ return this.invokeTool(id, toolName, args, schema, delegate);
 For the read path, use:
 
 ```ts
-    return this.invokeTool(request.id, name, args, AgentReadToolRequestSchemas[name], (dto) =>
-      this.callReadTool(auth, sessionId, name, dto),
-    );
+return this.invokeTool(request.id, name, args, AgentReadToolRequestSchemas[name], (dto) =>
+  this.callReadTool(auth, sessionId, name, dto),
+);
 ```
 
 - [ ] **Step 3: Add issue normalization and redaction helpers**

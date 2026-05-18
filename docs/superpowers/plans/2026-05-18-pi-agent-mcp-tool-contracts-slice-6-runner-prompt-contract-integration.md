@@ -132,22 +132,22 @@ Do not modify:
 
 ## Slice 6 Edge Case Matrix
 
-| Area | Case | Expected Slice 6 Result |
-| --- | --- | --- |
-| Drift | Contract examples change | Server drift test fails until `sync:agent-mcp-prompt` updates the generated runner module |
-| Tool coverage | Contract gains a tool | Generated prompt lists the new `mcp_gallery_<toolName>` name or a test fails |
-| Runtime integration | Runner creates a Pi session | `DefaultResourceLoader` receives a `systemPrompt` containing `galleryMcpPromptCheatSheet` |
-| Prefix clarity | Prompt examples mention tools | Uses `mcp_gallery_<toolName>` names, not bare server-owned MCP names |
-| Retry shape | Approved read retry | Prompt shows only `toolCallId` and explicitly forbids mixing original request fields |
-| Planning | Create empty album | Prompt includes a valid contract-backed `album.create` example |
-| Planning | Create album and add assets | Prompt includes a valid contract-backed `temporaryTargetId` dependency example |
-| Validation recovery | Tool validation error includes `exampleArguments` | Prompt says to retry once when correction is obvious |
-| Direct apply | Model may invent apply tool | Prompt states no direct apply/write tool exists and writes happen only through plan review |
-| Safety | Generated prompt content | No real bearer tokens, provider credentials, filesystem paths, stack traces, or internal endpoint URLs |
-| Compactness | Contract grows | Prompt renderer keeps the cheat sheet under a defined size budget and uses selected examples, not every example |
-| Packaging | Runner image runs without server source | Runner imports committed generated `.mjs`, not server TypeScript |
-| Escaping | Prompt includes quotes/backticks/JSON | Generated ESM module round-trips through dynamic import and exports exact text |
-| Existing UX | MCP unavailable | No runner capability behavior changes beyond prompt text |
+| Area                | Case                                              | Expected Slice 6 Result                                                                                         |
+| ------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Drift               | Contract examples change                          | Server drift test fails until `sync:agent-mcp-prompt` updates the generated runner module                       |
+| Tool coverage       | Contract gains a tool                             | Generated prompt lists the new `mcp_gallery_<toolName>` name or a test fails                                    |
+| Runtime integration | Runner creates a Pi session                       | `DefaultResourceLoader` receives a `systemPrompt` containing `galleryMcpPromptCheatSheet`                       |
+| Prefix clarity      | Prompt examples mention tools                     | Uses `mcp_gallery_<toolName>` names, not bare server-owned MCP names                                            |
+| Retry shape         | Approved read retry                               | Prompt shows only `toolCallId` and explicitly forbids mixing original request fields                            |
+| Planning            | Create empty album                                | Prompt includes a valid contract-backed `album.create` example                                                  |
+| Planning            | Create album and add assets                       | Prompt includes a valid contract-backed `temporaryTargetId` dependency example                                  |
+| Validation recovery | Tool validation error includes `exampleArguments` | Prompt says to retry once when correction is obvious                                                            |
+| Direct apply        | Model may invent apply tool                       | Prompt states no direct apply/write tool exists and writes happen only through plan review                      |
+| Safety              | Generated prompt content                          | No real bearer tokens, provider credentials, filesystem paths, stack traces, or internal endpoint URLs          |
+| Compactness         | Contract grows                                    | Prompt renderer keeps the cheat sheet under a defined size budget and uses selected examples, not every example |
+| Packaging           | Runner image runs without server source           | Runner imports committed generated `.mjs`, not server TypeScript                                                |
+| Escaping            | Prompt includes quotes/backticks/JSON             | Generated ESM module round-trips through dynamic import and exports exact text                                  |
+| Existing UX         | MCP unavailable                                   | No runner capability behavior changes beyond prompt text                                                        |
 
 ---
 

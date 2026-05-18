@@ -109,27 +109,27 @@ If a test failure appears to require one of the do-not-modify files, stop and ex
 
 ## Slice 7 Edge Case Matrix
 
-| Area | Case | Expected Slice 7 Result |
-| --- | --- | --- |
-| Wrapper | `params.input` used instead of `params.arguments` | `isError: true`, hint says to use `params.arguments`, no downstream service calls |
-| Wrapper | `arguments` at request root | `isError: true`, hint says to put tool arguments under `params.arguments` |
-| Wrapper | `params.arguments` is array/string/null | `isError: true`, hint says arguments must be a JSON object |
-| Retry | `toolCallId` combined with `assetIds`, `albumId`, `filters`, or `limit` | Hint says choose new request fields or approved retry, not both |
-| Read | Missing `assetIds`/`albumId`/`toolCallId` | Hint identifies the valid modes and returns a valid example |
-| Read limits | Empty arrays, duplicate ids, invalid UUIDs, too many ids | Specific hint for the failing condition and valid example arguments |
-| Search | Date/location/favorite/rating filters at root | Hint says filters belong inside `filters` |
-| Search | Excessive `limit` | Hint says max allowed limit and returns bounded example |
-| Planning wrapper | Missing or wrong planning `arguments` | Hint says to use `params.arguments` and reviewable plan shape |
-| Planning direct mutation | `createAlbum`, `addAssetsToAlbum`, `applyAlbumOperations`, or `mcp_gallery_apply...` | Protocol error, no domain service calls, no direct mutation tool exposed |
-| Planning dependency | Add/set-cover operation references missing `temporaryTargetId` | Hint says create the new album/space first and reuse the same `temporaryTargetId` |
-| Planning dependency | Dependent operation references the wrong temporary target kind | Hint explains album dependencies require album create, space dependencies require space create |
-| Planning target kind | Album operation targets a space, space operation targets an album, asset-batch/image-edit targets album/space | Operation-specific target-kind hint |
-| Planning payload | Duplicate asset ids, invalid rotate angle, ambiguous tag payload | Payload-specific hint and valid example arguments |
-| Prefix clarity | Pi-visible `mcp_gallery_<toolName>` sent as JSON-RPC `params.name` | Protocol error, no service calls, and the prefixed name is not accepted; bare-name guidance may be added only if it falls out of existing unknown-tool handling |
-| Multiple issues | First Zod issue is not the most helpful root cause | Correction lookup selects the most specific contract mistake |
-| Safety | Error payload contains malformed input with tokens/routes/files | Structured and text payloads contain no secrets or internals |
-| Payload size | Representative validation payload has multiple issues or long invalid input | `expected`, `hint`, issues, and serialized payload stay compact enough for a smaller model to retry |
-| Text sync | Any validation error | `content[0].text === JSON.stringify(structuredContent)` |
+| Area                     | Case                                                                                                          | Expected Slice 7 Result                                                                                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Wrapper                  | `params.input` used instead of `params.arguments`                                                             | `isError: true`, hint says to use `params.arguments`, no downstream service calls                                                                               |
+| Wrapper                  | `arguments` at request root                                                                                   | `isError: true`, hint says to put tool arguments under `params.arguments`                                                                                       |
+| Wrapper                  | `params.arguments` is array/string/null                                                                       | `isError: true`, hint says arguments must be a JSON object                                                                                                      |
+| Retry                    | `toolCallId` combined with `assetIds`, `albumId`, `filters`, or `limit`                                       | Hint says choose new request fields or approved retry, not both                                                                                                 |
+| Read                     | Missing `assetIds`/`albumId`/`toolCallId`                                                                     | Hint identifies the valid modes and returns a valid example                                                                                                     |
+| Read limits              | Empty arrays, duplicate ids, invalid UUIDs, too many ids                                                      | Specific hint for the failing condition and valid example arguments                                                                                             |
+| Search                   | Date/location/favorite/rating filters at root                                                                 | Hint says filters belong inside `filters`                                                                                                                       |
+| Search                   | Excessive `limit`                                                                                             | Hint says max allowed limit and returns bounded example                                                                                                         |
+| Planning wrapper         | Missing or wrong planning `arguments`                                                                         | Hint says to use `params.arguments` and reviewable plan shape                                                                                                   |
+| Planning direct mutation | `createAlbum`, `addAssetsToAlbum`, `applyAlbumOperations`, or `mcp_gallery_apply...`                          | Protocol error, no domain service calls, no direct mutation tool exposed                                                                                        |
+| Planning dependency      | Add/set-cover operation references missing `temporaryTargetId`                                                | Hint says create the new album/space first and reuse the same `temporaryTargetId`                                                                               |
+| Planning dependency      | Dependent operation references the wrong temporary target kind                                                | Hint explains album dependencies require album create, space dependencies require space create                                                                  |
+| Planning target kind     | Album operation targets a space, space operation targets an album, asset-batch/image-edit targets album/space | Operation-specific target-kind hint                                                                                                                             |
+| Planning payload         | Duplicate asset ids, invalid rotate angle, ambiguous tag payload                                              | Payload-specific hint and valid example arguments                                                                                                               |
+| Prefix clarity           | Pi-visible `mcp_gallery_<toolName>` sent as JSON-RPC `params.name`                                            | Protocol error, no service calls, and the prefixed name is not accepted; bare-name guidance may be added only if it falls out of existing unknown-tool handling |
+| Multiple issues          | First Zod issue is not the most helpful root cause                                                            | Correction lookup selects the most specific contract mistake                                                                                                    |
+| Safety                   | Error payload contains malformed input with tokens/routes/files                                               | Structured and text payloads contain no secrets or internals                                                                                                    |
+| Payload size             | Representative validation payload has multiple issues or long invalid input                                   | `expected`, `hint`, issues, and serialized payload stay compact enough for a smaller model to retry                                                             |
+| Text sync                | Any validation error                                                                                          | `content[0].text === JSON.stringify(structuredContent)`                                                                                                         |
 
 ---
 
