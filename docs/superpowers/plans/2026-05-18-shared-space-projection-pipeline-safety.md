@@ -50,6 +50,13 @@ Slice 4 status: already implemented on PR #604 (`codex/face-trigger-slice-4-plan
 - no-identity pet legacy path
 - type-incompatible full rematch cleanup
 
+`server/test/medium/specs/repositories/shared-space-face-matching.spec.ts` already covers repository-level selected-space face assignment behavior:
+
+- duplicate assignment attempts are idempotent
+- asset-face cascades remove selected-space face rows
+- selected-space orphan cleanup removes faceless space people
+- multiple-space and linked-library repository paths stay isolated
+
 This plan fills the remaining high-risk gaps from Slice 5: `SharedSpaceFaceMatchFromBackfill` stable job ids, from-backfill asset-removal safety, identity-backed pet incompatibility in small tests, no-work linked-library follow-up suppression, and DB-backed destructive cleanup/duplication invariants.
 
 ## File Structure
@@ -66,6 +73,8 @@ This plan fills the remaining high-risk gaps from Slice 5: `SharedSpaceFaceMatch
   - Owns selected-space assignment cleanup, orphan deletion, and asset/library face selection queries.
 - Modify: `server/test/medium/specs/services/shared-space-face-identity-repair.spec.ts`
   - Owns DB-backed destructive projection tests for missing, stale, wrong-identity, direct-plus-linked duplicate, direct asset removal, and library unlink cleanup.
+- Verify: `server/test/medium/specs/repositories/shared-space-face-matching.spec.ts`
+  - Preserves repository-level selected-space assignment idempotency, cascade cleanup, orphan cleanup, and linked-library isolation coverage required by the Slice 5 design.
 
 ## Execution Preflight
 
@@ -644,32 +653,36 @@ it('full-space rematch repairs missing stale and wrong-identity selected-space a
     .executeTakeFirstOrThrow();
   expect(repairedPerson.id).toBe(correctPerson.id);
 
-  await expect(getSelectedSpaceFaceRows(ctx, space.id)).resolves.toEqual([
-    {
-      assetFaceId: missing.assetFace.id,
-      personId: repairedPerson.id,
-      identityId: target.identity.id,
-      type: 'person',
-    },
-    {
-      assetFaceId: stale.assetFace.id,
-      personId: repairedPerson.id,
-      identityId: target.identity.id,
-      type: 'person',
-    },
-    {
-      assetFaceId: target.assetFace.id,
-      personId: repairedPerson.id,
-      identityId: target.identity.id,
-      type: 'person',
-    },
-    {
-      assetFaceId: wrong.assetFace.id,
-      personId: repairedPerson.id,
-      identityId: target.identity.id,
-      type: 'person',
-    },
-  ]);
+  const repairedRows = await getSelectedSpaceFaceRows(ctx, space.id);
+  expect(repairedRows).toHaveLength(4);
+  expect(repairedRows).toEqual(
+    expect.arrayContaining([
+      {
+        assetFaceId: missing.assetFace.id,
+        personId: repairedPerson.id,
+        identityId: target.identity.id,
+        type: 'person',
+      },
+      {
+        assetFaceId: stale.assetFace.id,
+        personId: repairedPerson.id,
+        identityId: target.identity.id,
+        type: 'person',
+      },
+      {
+        assetFaceId: target.assetFace.id,
+        personId: repairedPerson.id,
+        identityId: target.identity.id,
+        type: 'person',
+      },
+      {
+        assetFaceId: wrong.assetFace.id,
+        personId: repairedPerson.id,
+        identityId: target.identity.id,
+        type: 'person',
+      },
+    ]),
+  );
   await expect(sharedSpaceRepository.getPersonById(wrongSpacePerson.id)).resolves.toBeUndefined();
   await expect(sharedSpaceRepository.getPersonById(staleSpacePerson.id)).resolves.toBeUndefined();
   await expect(
@@ -960,6 +973,7 @@ If production files were not changed, omit them from `git add`.
 - Verify: `server/src/repositories/job.repository.spec.ts`
 - Verify: `server/src/services/shared-space.service.spec.ts`
 - Verify: `server/test/medium/specs/services/shared-space-face-identity-repair.spec.ts`
+- Verify: `server/test/medium/specs/repositories/shared-space-face-matching.spec.ts`
 - Verify changed production files if any
 
 - [ ] **Step 1: Run the full job repository spec**
@@ -992,12 +1006,22 @@ pnpm --filter immich test:medium -- --run test/medium/specs/services/shared-spac
 
 Expected: PASS.
 
-- [ ] **Step 4: Run formatting and type checks**
+- [ ] **Step 4: Run the full shared-space face matching repository medium spec**
 
 Run:
 
 ```bash
-pnpm --dir server exec prettier --check src/repositories/job.repository.spec.ts src/services/shared-space.service.spec.ts test/medium/specs/services/shared-space-face-identity-repair.spec.ts
+pnpm --filter immich test:medium -- --run test/medium/specs/repositories/shared-space-face-matching.spec.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Run formatting and type checks**
+
+Run:
+
+```bash
+pnpm --dir server exec prettier --check src/repositories/job.repository.spec.ts src/services/shared-space.service.spec.ts test/medium/specs/services/shared-space-face-identity-repair.spec.ts test/medium/specs/repositories/shared-space-face-matching.spec.ts
 pnpm --dir docs exec prettier --check superpowers/plans/2026-05-18-shared-space-projection-pipeline-safety.md
 pnpm --dir server check
 git diff --check
@@ -1005,22 +1029,22 @@ git diff --check
 
 Expected: all commands pass.
 
-- [ ] **Step 5: Inspect the final diff**
+- [ ] **Step 6: Inspect the final diff**
 
 Run:
 
 ```bash
-git diff @{upstream}...HEAD -- server/src/repositories/job.repository.ts server/src/repositories/job.repository.spec.ts server/src/services/shared-space.service.ts server/src/services/shared-space.service.spec.ts server/src/repositories/shared-space.repository.ts server/test/medium/specs/services/shared-space-face-identity-repair.spec.ts docs/superpowers/plans/2026-05-18-shared-space-projection-pipeline-safety.md
+git diff @{upstream}...HEAD -- server/src/repositories/job.repository.ts server/src/repositories/job.repository.spec.ts server/src/services/shared-space.service.ts server/src/services/shared-space.service.spec.ts server/src/repositories/shared-space.repository.ts server/test/medium/specs/services/shared-space-face-identity-repair.spec.ts server/test/medium/specs/repositories/shared-space-face-matching.spec.ts docs/superpowers/plans/2026-05-18-shared-space-projection-pipeline-safety.md
 ```
 
 Expected: diff contains only Slice 5 shared-space projection tests, this plan, and any minimal production fixes directly proven by the new tests.
 
-- [ ] **Step 6: Commit final formatting if needed**
+- [ ] **Step 7: Commit final formatting if needed**
 
 If formatting commands changed files after earlier task commits, commit them:
 
 ```bash
-git add server/src/repositories/job.repository.spec.ts server/src/services/shared-space.service.spec.ts server/test/medium/specs/services/shared-space-face-identity-repair.spec.ts docs/superpowers/plans/2026-05-18-shared-space-projection-pipeline-safety.md
+git add server/src/repositories/job.repository.spec.ts server/src/services/shared-space.service.spec.ts server/test/medium/specs/services/shared-space-face-identity-repair.spec.ts server/test/medium/specs/repositories/shared-space-face-matching.spec.ts docs/superpowers/plans/2026-05-18-shared-space-projection-pipeline-safety.md
 git commit -m "chore: format shared-space projection tests"
 ```
 
@@ -1049,6 +1073,7 @@ If formatting produced no changes, do not create an empty commit.
 - [ ] Library face sync rechecks link existence between batches and stops after unlink: existing small tests preserved.
 - [ ] Library face sync creates one identity-backed space person across multiple linked libraries: existing medium test preserved.
 - [ ] Full-space rematch repairs missing, stale, and wrong-identity selected-space assignments without inflating counts: Task 5.
+- [ ] Repository-level selected-space assignment idempotency, asset-face cascade cleanup, orphan cleanup, and multiple-space/linked-library isolation remain covered: existing `shared-space-face-matching.spec.ts`, verified in Task 9.
 - [ ] Linked-library relink rebuilds identity-backed selected-space assignments: existing medium test preserved.
 - [ ] Removing assets or unlinking libraries removes selected-space face rows and deletes orphaned space people: Tasks 6 and 7.
 - [ ] Same asset direct plus linked-library path materializes only one selected-space face assignment: Task 8.
