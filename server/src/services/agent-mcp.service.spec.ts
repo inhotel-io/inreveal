@@ -8,7 +8,7 @@ import { AgentMcpService } from 'src/services/agent-mcp.service';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import type { AgentMcpReadToolName } from 'src/types/agent-mcp-contract.types';
-import type { AgentMcpSuccessResponse, AgentMcpToolCallResult } from 'src/types/agent-mcp.types';
+import type { AgentMcpErrorResponse, AgentMcpSuccessResponse, AgentMcpToolCallResult } from 'src/types/agent-mcp.types';
 import { factory } from 'test/small.factory';
 import { automock, type AutoMocked } from 'test/utils';
 
@@ -117,6 +117,26 @@ const expectEnrichedToolValidationError = (
 
   expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
 };
+
+const expectNoMcpDownstreamServicesCalled = (
+  toolService: AutoMocked<AgentToolService>,
+  operationPlanService: AutoMocked<AgentOperationPlanService>,
+) => {
+  expect(toolService.searchAssets).not.toHaveBeenCalled();
+  expect(toolService.readAssetMetadata).not.toHaveBeenCalled();
+  expect(toolService.readAssetPreviews).not.toHaveBeenCalled();
+  expect(toolService.readAssetOriginals).not.toHaveBeenCalled();
+  expect(toolService.listAlbums).not.toHaveBeenCalled();
+  expect(toolService.readAlbum).not.toHaveBeenCalled();
+  expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
+  expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
+  expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
+};
+
+const secretLeakPattern =
+  /bearer\s+[a-z0-9._-]{10,}|provider[- ]?key|stack trace|\/(?:srv|home|tmp|var|etc|opt|mnt|Users)\/|\/agent\/internal\/mcp|sk-[a-z0-9_-]+/i;
+
+const getRuntimeFailureMatrixCases = () => new AgentMcpToolContractService().listRuntimeFailureMatrixCases();
 
 describe(AgentMcpService.name, () => {
   let registry: AgentMcpToolRegistryService;
@@ -1198,6 +1218,101 @@ describe(AgentMcpService.name, () => {
         }),
       });
       expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+    });
+  });
+
+  describe('slice 7 full small-model failure matrix', () => {
+    it.each(
+      getRuntimeFailureMatrixCases().filter((failureCase) => failureCase.expectedResult.kind === 'tool-validation'),
+    )('returns compact actionable validation guidance for $id', async (failureCase) => {
+      const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+
+      if (failureCase.expectedResult.kind !== 'tool-validation' || !failureCase.toolName) {
+        throw new Error(`Expected tool-validation case for ${failureCase.id}`);
+      }
+
+      const expectedResult = failureCase.expectedResult;
+      const result = response.result as AgentMcpToolCallResult;
+      const structuredContent = result.structuredContent as Record<string, unknown>;
+      const issues = structuredContent.issues as Array<Record<string, unknown>>;
+      const expectedPathIssue = issues.find((issue) => issue.path === expectedResult.expectedIssuePath);
+      const serialized = JSON.stringify(structuredContent);
+
+      expect(response).toMatchObject({
+        jsonrpc: '2.0',
+        id: failureCase.request.id,
+      });
+      expect(result.isError).toBe(true);
+      expect(structuredContent).toMatchObject({
+        status: 'error',
+        error: 'Invalid tool arguments',
+        toolName: failureCase.toolName,
+        retryable: true,
+        expected: expect.any(String),
+        hint: expect.any(String),
+        exampleArguments: expect.any(Object),
+      });
+      expect(issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ path: expectedResult.expectedIssuePath })]),
+      );
+      expect(expectedPathIssue?.hint ?? structuredContent.hint).toEqual(expect.any(String));
+      expect((structuredContent.expected as string).trim()).not.toBe('');
+      expect((structuredContent.hint as string).trim()).not.toBe('');
+      expect((structuredContent.expected as string).length).toBeLessThanOrEqual(500);
+      expect((structuredContent.hint as string).length).toBeLessThanOrEqual(500);
+      expect(serialized.length).toBeLessThanOrEqual(5000);
+      expect(serialized).not.toMatch(secretLeakPattern);
+      expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+      expectNoMcpDownstreamServicesCalled(toolService, operationPlanService);
+    });
+
+    it.each(
+      getRuntimeFailureMatrixCases().filter((failureCase) => failureCase.expectedResult.kind === 'protocol-error'),
+    )('keeps $id as a compact protocol error', async (failureCase) => {
+      const response = await sut.handle(auth, sessionId, failureCase.request);
+
+      if (failureCase.expectedResult.kind !== 'protocol-error') {
+        throw new Error(`Expected protocol-error case for ${failureCase.id}`);
+      }
+
+      const errorResponse = response as AgentMcpErrorResponse;
+
+      expect(errorResponse).toMatchObject({
+        jsonrpc: '2.0',
+        id: failureCase.request.id,
+        error: {
+          message: failureCase.expectedResult.expectedErrorMessage,
+        },
+      });
+      expect(errorResponse).not.toHaveProperty('result');
+      expect(JSON.stringify(errorResponse.error).length).toBeLessThanOrEqual(1000);
+      expect(JSON.stringify(errorResponse.error)).not.toMatch(secretLeakPattern);
+      expectNoMcpDownstreamServicesCalled(toolService, operationPlanService);
+    });
+
+    it.each([
+      ['read-input-instead-of-arguments', 'params.arguments'],
+      ['read-arguments-array', 'JSON object'],
+      ['asset-read-combined-asset-ids-and-tool-call-id', 'not both'],
+      ['search-root-taken-after-filter', 'inside the filters object'],
+      ['planning-dependent-set-cover-missing-new-album', 'Create the new album or space first'],
+      ['planning-dependent-add-assets-wrong-temporary-target-kind', 'Album dependencies require an album create'],
+      ['planning-wrong-album-target-kind', 'existing_album'],
+      ['planning-invalid-rotate-angle', '90, 180, or 270'],
+      ['planning-invalid-tag-payload', 'tagId or tagName'],
+    ])('returns category-specific guidance for %s', async (id, hintIncludes) => {
+      const failureCase = getRuntimeFailureMatrixCases().find((candidate) => candidate.id === id);
+
+      expect(failureCase).toBeDefined();
+      if (!failureCase || failureCase.expectedResult.kind !== 'tool-validation') {
+        throw new Error(`Expected tool-validation case for ${id}`);
+      }
+
+      const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+      const result = response.result as AgentMcpToolCallResult;
+      const structuredContent = result.structuredContent as Record<string, unknown>;
+
+      expect(structuredContent.hint).toEqual(expect.stringContaining(hintIncludes));
     });
   });
 
