@@ -41,6 +41,21 @@ export class AgentOperationPlanController {
     return this.service.getCurrentPlan(auth, id);
   }
 
+  @Get('applied')
+  @Authenticated({ permission: Permission.AgentSessionRead })
+  @ApiOkResponse({ type: AgentOperationPlanResponseDto, isArray: true })
+  @Endpoint({
+    summary: 'Get applied agent operation plans',
+    description: 'Get applied album operation plan history for an AI agent session owned by the current user.',
+    history: new HistoryBuilder().added('v2.7.5').alpha('v2.7.5'),
+  })
+  getAppliedOperationPlans(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+  ): Promise<AgentOperationPlanResponseDto[]> {
+    return this.service.getAppliedPlans(auth, id);
+  }
+
   @Post('proposals')
   @Authenticated({ permission: Permission.AgentSessionUpdate })
   @ApiCreatedResponse({ type: AgentOperationPlanToolResponseDto })

@@ -5319,6 +5319,19 @@ export function getCurrentOperationPlan({ id }: {
     }));
 }
 /**
+ * Get applied agent operation plans
+ */
+export function getAppliedOperationPlans({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AgentOperationPlanResponseDto[];
+    }>(`/agent/sessions/${encodeURIComponent(id)}/operation-plan/applied`, {
+        ...opts
+    }));
+}
+/**
  * Propose agent album operations
  */
 export function proposeAlbumOperations({ id, agentProposeAlbumOperationsDto }: {

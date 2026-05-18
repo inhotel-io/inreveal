@@ -140,6 +140,40 @@ describe(AgentMessageService.name, () => {
     });
   });
 
+  it('accepts follow-up user messages after plan apply returns the session to running', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.Running,
+      endedAt: null,
+      runnerSessionId: 'runner-session-1',
+    });
+    const dto: AgentMessageCreateDto = {
+      content: { blocks: [{ type: 'text', text: 'Now make a smaller album from that result.' }] },
+    };
+    const saved = makeMessage({ sessionId: session.id, content: dto.content });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    messageRepository.create.mockResolvedValue(saved);
+    agentRunnerService.sendMessage.mockReturnValue(new Promise<void>(() => {}));
+
+    await expect(sut.appendUserMessage(auth, session.id, dto)).resolves.toEqual(saved);
+    expect(messageRepository.create).toHaveBeenCalledWith({
+      sessionId: session.id,
+      role: AgentMessageRole.User,
+      content: dto.content,
+      providerMessageId: null,
+      toolCallId: null,
+    });
+    expect(agentRunnerService.sendMessage).toHaveBeenCalledWith({
+      userId: auth.user.id,
+      sessionId: session.id,
+      runnerSessionId: 'runner-session-1',
+      messageId: saved.id,
+      content: saved.content,
+    });
+  });
+
   it('does not fail the append request when asynchronous runner dispatch rejects', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, runnerSessionId: 'runner-session-1' });

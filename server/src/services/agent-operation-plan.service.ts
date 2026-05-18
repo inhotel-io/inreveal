@@ -132,6 +132,13 @@ export class AgentOperationPlanService {
     return plan ? this.mapPlan(plan) : null;
   }
 
+  async getAppliedPlans(auth: AuthDto, sessionId: string): Promise<AgentOperationPlanResponseDto[]> {
+    const session = await this.getOwnedSession(auth, sessionId, { requireActive: false });
+    const plans = await this.planRepository.getAppliedBySessionId(session.id);
+
+    return plans.map((plan) => this.mapPlan(plan));
+  }
+
   async proposeAlbumOperations(
     auth: AuthDto,
     sessionId: string,
@@ -227,8 +234,8 @@ export class AgentOperationPlanService {
       const response = this.buildApplyResponse(this.mapPlan(appliedPlan), applySelection.selectedOperationIds);
 
       await this.sessionRepository.update(auth.user.id, session.id, {
-        status: AgentSessionStatus.Completed,
-        endedAt: new Date(),
+        status: AgentSessionStatus.Running,
+        endedAt: null,
       });
       this.websocketRepository.clientSend('on_agent_session_event', auth.user.id, {
         type: 'operation-plan-applied',

@@ -817,7 +817,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     });
   });
 
-  it('resets local edits to the applied partial plan and disables further mutation', async () => {
+  it('clears local edits and proposed review controls after a partial apply response', async () => {
     sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
     sdkMock.applyApprovedOperations.mockResolvedValue({
       status: AgentOperationApplyStatus.PartiallyApplied,
@@ -838,13 +838,12 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     expect(await screen.findByText('Applied 1 operations. 1 failed.')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Madeira' })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Portugal' })).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Create album "Portugal"' })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: 'Update album details' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeDisabled();
+    expect(screen.queryByRole('region', { name: 'Portugal' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Create album "Portugal"' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Apply 3 selected' })).not.toBeInTheDocument();
   });
 
-  it('applies the current approved operation selection', async () => {
+  it('clears the proposed plan after applying the current approved operation selection', async () => {
     sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
     sdkMock.applyApprovedOperations.mockResolvedValue({
       status: AgentOperationApplyStatus.Applied,
@@ -865,7 +864,8 @@ describe('AgentOperationPlanReviewPanel', () => {
       agentOperationPlanApplyRequestDto: { operationIds: [createId, addId, existingId], planRevision: 1 },
     });
     expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
-    expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Apply 3 selected' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Plan review' })).not.toBeInTheDocument();
   });
 
   it('keeps local apply success visible when the same plan-applied event arrives', async () => {
@@ -900,7 +900,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     });
 
     expect(screen.getByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
-    expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
+    expect(screen.queryByText('Organize Portugal holiday')).not.toBeInTheDocument();
     expect(screen.queryByText('No proposed album plan yet.')).not.toBeInTheDocument();
     expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledTimes(1);
   });
@@ -947,7 +947,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     });
 
     expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
-    expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
+    expect(screen.queryByText('Organize Portugal holiday')).not.toBeInTheDocument();
     expect(screen.queryByText('No proposed album plan yet.')).not.toBeInTheDocument();
   });
 
@@ -1016,9 +1016,9 @@ describe('AgentOperationPlanReviewPanel', () => {
     });
 
     expect(await screen.findByRole('status')).toHaveTextContent('Applied 3 operations. 0 failed.');
-    expect(screen.getByRole('checkbox', { name: 'Select destination Portugal' })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: 'Create album "Portugal"' })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: 'Update album details' })).toBeDisabled();
+    expect(screen.queryByRole('checkbox', { name: 'Select destination Portugal' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Create album "Portugal"' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Update album details' })).not.toBeInTheDocument();
   });
 
   it('sends only enabled and unblocked operation ids when applying', async () => {

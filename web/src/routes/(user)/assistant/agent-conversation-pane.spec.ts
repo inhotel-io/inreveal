@@ -3,6 +3,7 @@ import {
   AgentApprovalMode,
   AgentMessageRole,
   AgentMessageTextBlockType,
+  AgentOperationApplyStatus,
   AgentOperationPlanStatus,
   AgentOperationRiskLevel,
   AgentOperationStatus,
@@ -73,6 +74,7 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_plan_error: 'Unable to load proposed album plan',
     assistant_operation_plan_loading: 'Loading proposed album plan',
     assistant_operation_apply_applying: 'Applying operations',
+    assistant_operation_apply_success: 'Applied {applied} operations. {failed} failed.',
     assistant_operation_apply_selected: 'Apply {count} selected',
     assistant_operation_asset_count: '{count} assets',
     assistant_operation_blocked_by: 'Blocked by {dependencies}',
@@ -109,6 +111,8 @@ vi.mock('svelte-i18n', () => {
     t: readable((key: string, options?: { values?: Record<string, string | number> }) =>
       (messages[key] ?? key)
         .replace('{count}', String(options?.values?.count ?? ''))
+        .replace('{applied}', String(options?.values?.applied ?? ''))
+        .replace('{failed}', String(options?.values?.failed ?? ''))
         .replace('{dependencies}', String(options?.values?.dependencies ?? '')),
     ),
   };
@@ -279,6 +283,58 @@ describe(AgentConversationPane.name, () => {
     expect(await screen.findByRole('heading', { name: 'Plan review' })).toBeInTheDocument();
     expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
+  });
+
+  it('refreshes from plan review to running after apply and keeps follow-up composer enabled', async () => {
+    const handlers: Parameters<typeof websocketMock.websocketEvents.on>[1][] = [];
+    const session = makeSession({ status: AgentSessionStatus.WaitingForPlanReview });
+    const runningSession = makeSession({ id: session.id, status: AgentSessionStatus.Running });
+    const onSessionUpdated = vi.fn();
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handlers.push(nextHandler);
+      return vi.fn();
+    });
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(makePlan(session.id));
+    sdkMock.getAgentSession.mockResolvedValue(runningSession);
+
+    const view = render(AgentConversationPane, {
+      props: {
+        session,
+        title: 'Plan session',
+        onNewChat: vi.fn(),
+        onTitleDiscovered: vi.fn(),
+        onSessionUpdated,
+      },
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Plan review' })).toBeInTheDocument();
+
+    const event = {
+      type: 'operation-plan-applied',
+      sessionId: session.id,
+      planId: '00000000-0000-4000-8000-000000000500',
+      status: AgentOperationApplyStatus.Applied,
+      appliedCount: 1,
+      skippedCount: 0,
+      failedCount: 0,
+    } as const;
+    for (const handler of handlers) {
+      handler(event);
+    }
+
+    await waitFor(() => expect(onSessionUpdated).toHaveBeenCalledWith(runningSession));
+    await view.rerender({
+      session: runningSession,
+      title: 'Plan session',
+      onNewChat: vi.fn(),
+      onTitleDiscovered: vi.fn(),
+      onSessionUpdated,
+    });
+
+    const input = screen.getByRole('textbox', { name: 'Message' });
+    expect(input).toBeEnabled();
+    expect(input).toHaveAttribute('placeholder', 'assistant_message_placeholder');
+    expect(screen.queryByRole('button', { name: 'Start new chat' })).not.toBeInTheDocument();
   });
 
   it('keeps the composer enabled while waiting for plan review without pending approvals', async () => {

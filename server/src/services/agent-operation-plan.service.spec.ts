@@ -1082,6 +1082,24 @@ describe(AgentOperationPlanService.name, () => {
     await expect(sut.getCurrentPlan(auth, session.id)).resolves.toBeNull();
   });
 
+  it('returns applied plans through history while current plan remains proposed-only', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Running });
+    const appliedPlan = makePlan({
+      sessionId: session.id,
+      status: AgentOperationPlanStatus.Applied,
+      operations: [makeOperation({ status: AgentOperationStatus.Applied, result: { albumId: newUuid() } })],
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getCurrentBySessionId.mockResolvedValue(void 0);
+    planRepository.getAppliedBySessionId.mockResolvedValue([appliedPlan]);
+
+    await expect(sut.getCurrentPlan(auth, session.id)).resolves.toBeNull();
+    await expect(sut.getAppliedPlans(auth, session.id)).resolves.toEqual([
+      expect.objectContaining({ id: appliedPlan.id, status: AgentOperationPlanStatus.Applied }),
+    ]);
+  });
+
   it('throws not found for sessions not owned by the user', async () => {
     const auth = AuthFactory.create();
     sessionRepository.getById.mockImplementation(() => Promise.resolve(void 0));
@@ -1111,6 +1129,46 @@ describe(AgentOperationPlanService.name, () => {
       }),
     ).rejects.toThrow('Agent session is not active');
     expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('proposes another plan after an applied plan without hiding applied history', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Running });
+    const appliedPlan = makePlan({ sessionId: session.id, status: AgentOperationPlanStatus.Applied, revision: 1 });
+    const proposedPlan = makePlan({ sessionId: session.id, status: AgentOperationPlanStatus.Proposed, revision: 2 });
+    const executingToolCall = makeToolCall({ sessionId: session.id, status: AgentToolCallStatus.Executing });
+    const completedToolCall = makeToolCall({ sessionId: session.id, status: AgentToolCallStatus.Completed });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.createReplacementRevision.mockResolvedValue(proposedPlan);
+    planRepository.getAppliedBySessionId.mockResolvedValue([appliedPlan]);
+    toolCallRepository.create.mockResolvedValue(executingToolCall);
+    toolCallRepository.transition.mockResolvedValue(completedToolCall);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Follow-up plan.',
+        operations: [
+          {
+            type: AgentOperationType.AlbumCreate,
+            summary: 'Create the next album.',
+            targetKind: AgentOperationTargetKind.NewAlbum,
+            temporaryTargetId: 'tmp-next',
+            payload: { albumName: 'Next album', description: '' },
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      status: 'success',
+      plan: { id: proposedPlan.id, status: AgentOperationPlanStatus.Proposed, revision: 2 },
+    });
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.WaitingForPlanReview,
+    });
+    await expect(sut.getAppliedPlans(auth, session.id)).resolves.toEqual([
+      expect.objectContaining({ id: appliedPlan.id, status: AgentOperationPlanStatus.Applied }),
+    ]);
   });
 
   it('rejects revisions for superseded plans', async () => {
@@ -1597,7 +1655,7 @@ describe(AgentOperationPlanService.name, () => {
     expect(albumService.update).not.toHaveBeenCalled();
   });
 
-  it('applies selected album operations in stored order and marks the session completed', async () => {
+  it('applies selected album operations in stored order and returns the session to running', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
     const albumId = newUuid();
@@ -1662,9 +1720,14 @@ describe(AgentOperationPlanService.name, () => {
       expect.objectContaining({ id: addOperation.id, status: AgentOperationStatus.Applied }),
     ]);
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
-      status: AgentSessionStatus.Completed,
-      endedAt: expect.any(Date),
+      status: AgentSessionStatus.Running,
+      endedAt: null,
     });
+    expect(sessionRepository.update).not.toHaveBeenCalledWith(
+      auth.user.id,
+      session.id,
+      expect.objectContaining({ status: AgentSessionStatus.Completed }),
+    );
     expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', auth.user.id, {
       type: 'operation-plan-applied',
       sessionId: session.id,
@@ -2210,6 +2273,10 @@ describe(AgentOperationPlanService.name, () => {
     expect(result.status).toBe(AgentOperationApplyStatus.PartiallyApplied);
     expect(result.appliedOperationIds).toEqual([createOperation.id]);
     expect(result.failedOperationIds).toEqual([updateOperation.id]);
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.Running,
+      endedAt: null,
+    });
   });
 
   it('records album add-asset bulk failures without treating failed assets as applied', async () => {
@@ -2264,6 +2331,10 @@ describe(AgentOperationPlanService.name, () => {
 
     expect(result.status).toBe(AgentOperationApplyStatus.Failed);
     expect(result.failedOperationIds).toEqual([addOperation.id]);
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.Running,
+      endedAt: null,
+    });
     expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
       expect.objectContaining({
         id: addOperation.id,
