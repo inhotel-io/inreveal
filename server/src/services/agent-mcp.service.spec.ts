@@ -954,11 +954,14 @@ describe(AgentMcpService.name, () => {
     );
 
     it('adds generic retry metadata for planning tools before planning contracts exist', async () => {
-      const response = (await sut.handle(
-        auth,
-        sessionId,
-        makeToolCallRequest(AgentToolName.ProposeAlbumOperations, undefined),
-      )) as AgentMcpSuccessResponse;
+      const response = (await sut.handle(auth, sessionId, {
+        jsonrpc: '2.0',
+        id: `${AgentToolName.ProposeAlbumOperations}-call`,
+        method: 'tools/call',
+        params: {
+          name: AgentToolName.ProposeAlbumOperations,
+        },
+      })) as AgentMcpSuccessResponse;
       const result = response.result as AgentMcpToolCallResult;
 
       expect(result.isError).toBe(true);

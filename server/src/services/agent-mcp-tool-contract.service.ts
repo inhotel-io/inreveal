@@ -601,9 +601,7 @@ const mistakeMatchingIssue = (
   }
 
   if (match.missingField) {
-    return request.issues.find(
-      (issue) => issue.path === match.missingField && issue.message.includes('required'),
-    );
+    return request.issues.find((issue) => issue.path === match.missingField && issue.message.includes('required'));
   }
 
   const unexpectedFields = match.unexpectedFields ?? (match.unexpectedField ? [match.unexpectedField] : undefined);
@@ -650,7 +648,7 @@ export class AgentMcpToolContractService {
       .filter((correction): correction is { mistake: AgentMcpCommonMistake; issue: AgentMcpValidationIssue } =>
         Boolean(correction.issue),
       )
-      .sort((left, right) => mistakeSpecificity(right.mistake) - mistakeSpecificity(left.mistake))[0];
+      .toSorted((left, right) => mistakeSpecificity(right.mistake) - mistakeSpecificity(left.mistake))[0];
 
     if (!matchingCorrection) {
       return {
