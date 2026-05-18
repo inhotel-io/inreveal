@@ -232,6 +232,7 @@ const makeToolCall = (sessionId: string): AgentToolCallResponseDto => ({
 describe(AgentConversationPane.name, () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sdkMock.getAgentSession.mockReset();
     websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
     sdkMock.getAgentSessionMessages.mockResolvedValue([]);
     sdkMock.getCurrentOperationPlan.mockResolvedValue(null);
