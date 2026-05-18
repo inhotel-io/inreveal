@@ -271,7 +271,7 @@ test.describe('Assistant album organizer', () => {
     await expect(page.getByText('Applied 2 operations. 0 failed.')).toBeVisible();
     await expect(page.getByText('Applied', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Skipped', { exact: true }).first()).toBeVisible();
-    await expect(page.getByText('0 failed')).toBeVisible();
+    await expect(page.getByText('0 failed').first()).toBeVisible();
     expect(appliedPlan.status).toBe(AgentOperationPlanStatus.Applied);
     await expect
       .poll(
