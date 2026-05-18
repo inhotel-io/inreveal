@@ -100,6 +100,10 @@ const getPeople = (db: Kysely<DB>, ids: string[]) => {
   return db.selectFrom('person').select(['id', 'identityId']).where('id', 'in', ids).orderBy('id').execute();
 };
 
+const getSpacePeople = (db: Kysely<DB>, ids: string[]) => {
+  return db.selectFrom('shared_space_person').select(['id', 'identityId']).where('id', 'in', ids).orderBy('id').execute();
+};
+
 describe('IdentityMergePropagationService medium tests', () => {
   it('rolls back all profile and identity changes when one profile merge fails', async () => {
     const { ctx, sut } = setup();
@@ -232,6 +236,63 @@ describe('IdentityMergePropagationService medium tests', () => {
       });
       expect(mergeAttempts).toBe(2);
       await expect(getPeople(ctx.database, [target.id, source.id])).resolves.toEqual([
+        { id: target.id, identityId: targetIdentity.id },
+      ]);
+    } finally {
+      await db.destroy();
+    }
+  });
+
+  it('handles concurrent overlapping shared-space merges with one success and one clean retry or failure', async () => {
+    const db = await getKyselyDB();
+    try {
+      const { ctx, sut } = setup(db);
+      const sharedSpaceRepository = ctx.get(SharedSpaceRepository);
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const targetIdentity = await createIdentity(ctx.database);
+      const sourceIdentity = await createIdentity(ctx.database);
+      const target = await createSpacePerson(ctx.database, {
+        spaceId: space.id,
+        identityId: targetIdentity.id,
+        name: 'Target',
+      });
+      const source = await createSpacePerson(ctx.database, {
+        spaceId: space.id,
+        identityId: sourceIdentity.id,
+        name: 'Source',
+      });
+      const originalMerge = sharedSpaceRepository.mergeSpacePersonProfile.bind(sharedSpaceRepository);
+      let mergeAttempts = 0;
+      let releaseBothAttempts!: () => void;
+      const bothAttemptsReached = new Promise<void>((resolve) => {
+        releaseBothAttempts = resolve;
+      });
+      vi.spyOn(sharedSpaceRepository, 'mergeSpacePersonProfile').mockImplementation(async (input, transaction) => {
+        const attempt = ++mergeAttempts;
+        if (attempt === 2) {
+          releaseBothAttempts();
+        }
+
+        await bothAttemptsReached;
+        return originalMerge(input, transaction);
+      });
+
+      const results = await Promise.allSettled([
+        sut.mergeSpacePeople(factory.auth({ user }), space.id, target.id, [source.id]),
+        sut.mergeSpacePeople(factory.auth({ user }), space.id, target.id, [source.id]),
+      ]);
+
+      const fulfilled = results.filter((result) => result.status === 'fulfilled');
+      const rejected = results.filter((result) => result.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]).toMatchObject({
+        status: 'rejected',
+        reason: expect.any(Error),
+      });
+      expect(mergeAttempts).toBe(2);
+      await expect(getSpacePeople(ctx.database, [target.id, source.id])).resolves.toEqual([
         { id: target.id, identityId: targetIdentity.id },
       ]);
     } finally {

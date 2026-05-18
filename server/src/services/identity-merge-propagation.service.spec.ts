@@ -337,17 +337,21 @@ class SharedSpaceMergeDeleteBuilder {
       this.db.faces = this.db.faces.filter(
         (face) => face.personId !== this.personId || !duplicateFaceIds.has(face.assetFaceId),
       );
+      return [];
     }
 
     if (this.table === 'shared_space_person_alias') {
       this.db.aliases = this.db.aliases.filter((alias) => alias.personId !== this.personId);
+      return [];
     }
 
     if (this.table === 'shared_space_person') {
+      const before = this.db.people.length;
       this.db.people = this.db.people.filter((person) => person.id !== this.personId);
+      return [{ numDeletedRows: BigInt(before - this.db.people.length) }];
     }
 
-    return [];
+    return [{ numDeletedRows: 0n }];
   }
 }
 
@@ -1777,35 +1781,24 @@ describe('IdentityMergePropagationService', () => {
     });
 
     it('logs and returns success when follow-up queueing fails after the transaction commits', async () => {
-      const { sut, mocks } = makeService([]);
+      const { sut, mocks } = makeService([
+        profile({ kind: 'person', id: 'person-x', ownerId: 'owner-1', identityId: 'identity-x' }),
+        profile({ kind: 'person', id: 'person-y', ownerId: 'owner-1', identityId: 'identity-y' }),
+        profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y' }),
+      ]);
       mocks.job.queue.mockRejectedValueOnce(new Error('queue failed'));
 
       await expect(
-        sut.executePlan(
-          {
-            actorUserId: 'owner-1',
-            origin: {
-              type: 'person',
-              targetProfileId: 'person-x',
-              sourceProfileIds: ['person-y'],
-              ownerId: 'owner-1',
-            },
-            targetIdentityId: 'identity-x',
-            sourceIdentityIds: ['identity-y'],
-            personalProfileMerges: [{ ownerId: 'owner-1', targetPersonId: 'person-x', sourcePersonIds: ['person-y'] }],
-            spaceProfileMerges: [],
-            profileIdentityUpdates: [],
-            affectedOwnerIds: ['owner-1'],
-            affectedSpaceIds: ['space-a'],
-            followUpJobs: [{ name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: 'identity-x' } }],
-            activityEvents: [],
-          },
-          { actorUserId: 'owner-1' },
-        ),
-      ).resolves.toBeUndefined();
+        sut.mergePersonalPeople({ user: { id: 'owner-1' } } as never, 'person-x', ['person-y']),
+      ).resolves.toEqual([{ id: 'person-y', success: true }]);
 
       expect(mocks.database.transaction).toHaveBeenCalledTimes(1);
+      expect(mocks.person.mergePersonProfile).toHaveBeenCalled();
       expect(mocks.faceIdentity.mergeIdentitiesAfterProfileResolution).toHaveBeenCalled();
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(
+        expect.objectContaining({ spaceId: 'space-a', type: SharedSpaceActivityType.PersonMerge }),
+        expect.anything(),
+      );
       expect(mocks.logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to queue merge propagation follow-up jobs'),
         expect.any(String),
