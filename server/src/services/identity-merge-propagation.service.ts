@@ -106,63 +106,64 @@ export class IdentityMergePropagationService {
   }
 
   async executePlan(plan: IdentityMergePropagationPlan, _context: { actorUserId: string }): Promise<void> {
-    const db = this.getExecutionDb();
     const deletedThumbnailPaths: string[] = [];
 
-    for (const step of plan.personalProfileMerges) {
-      for (const sourcePersonId of step.sourcePersonIds) {
-        const { deletedThumbnailPath } = await this.deps.personRepository.mergePersonProfile(
-          {
-            sourcePersonId,
-            targetPersonId: step.targetPersonId,
-            targetIdentityId: plan.targetIdentityId,
-          },
+    await this.deps.databaseRepository.transaction(async (db) => {
+      for (const step of plan.personalProfileMerges) {
+        for (const sourcePersonId of step.sourcePersonIds) {
+          const { deletedThumbnailPath } = await this.deps.personRepository.mergePersonProfile(
+            {
+              sourcePersonId,
+              targetPersonId: step.targetPersonId,
+              targetIdentityId: plan.targetIdentityId,
+            },
+            db,
+          );
+          if (deletedThumbnailPath) {
+            deletedThumbnailPaths.push(deletedThumbnailPath);
+          }
+        }
+
+        await this.deps.faceIdentityRepository.linkPersonFaces(
+          { personId: step.targetPersonId, identityId: plan.targetIdentityId, source: 'manual' },
           db,
         );
-        if (deletedThumbnailPath) {
-          deletedThumbnailPaths.push(deletedThumbnailPath);
+      }
+
+      for (const step of plan.spaceProfileMerges) {
+        for (const sourcePersonId of step.sourcePersonIds) {
+          await this.deps.sharedSpaceRepository.mergeSpacePersonProfile(
+            { sourcePersonId, targetPersonId: step.targetPersonId },
+            db,
+          );
         }
       }
 
-      await this.deps.faceIdentityRepository.linkPersonFaces(
-        { personId: step.targetPersonId, identityId: plan.targetIdentityId, source: 'manual' },
+      for (const update of plan.profileIdentityUpdates) {
+        await (update.kind === 'person'
+          ? this.deps.personRepository.updatePersonIdentity(
+              { personId: update.profileId, identityId: update.identityId },
+              db,
+            )
+          : this.deps.sharedSpaceRepository.updateSpacePersonIdentity(
+              { personId: update.profileId, identityId: update.identityId },
+              db,
+            ));
+      }
+
+      await this.deps.faceIdentityRepository.mergeIdentitiesAfterProfileResolution(
+        {
+          targetIdentityId: plan.targetIdentityId,
+          sourceIdentityIds: plan.sourceIdentityIds,
+          source: 'manual',
+        },
         db,
       );
-    }
 
-    for (const step of plan.spaceProfileMerges) {
-      for (const sourcePersonId of step.sourcePersonIds) {
-        await this.deps.sharedSpaceRepository.mergeSpacePersonProfile(
-          { sourcePersonId, targetPersonId: step.targetPersonId },
-          db,
-        );
+      for (const event of plan.activityEvents) {
+        await this.deps.sharedSpaceRepository.logActivity(event, db);
       }
-    }
-
-    for (const update of plan.profileIdentityUpdates) {
-      await (update.kind === 'person'
-        ? this.deps.personRepository.updatePersonIdentity(
-            { personId: update.profileId, identityId: update.identityId },
-            db,
-          )
-        : this.deps.sharedSpaceRepository.updateSpacePersonIdentity(
-            { personId: update.profileId, identityId: update.identityId },
-            db,
-          ));
-    }
-
-    await this.deps.faceIdentityRepository.mergeIdentitiesAfterProfileResolution(
-      {
-        targetIdentityId: plan.targetIdentityId,
-        sourceIdentityIds: plan.sourceIdentityIds,
-        source: 'manual',
-      },
-      db,
-    );
-
-    for (const event of plan.activityEvents) {
-      await this.deps.sharedSpaceRepository.logActivity(event);
-    }
+    });
 
     for (const job of this.dedupeFollowUpJobs(plan.followUpJobs)) {
       await this.deps.jobRepository.queue(job);
@@ -381,10 +382,6 @@ export class IdentityMergePropagationService {
 
   private hasName(profile: MergeProfile): boolean {
     return profile.name.trim().length > 0;
-  }
-
-  private getExecutionDb(): never {
-    return ((this.deps.databaseRepository as unknown as { db?: unknown }).db ?? {}) as never;
   }
 
   private dedupeFollowUpJobs(jobs: MergePropagationFollowUpJob[]): MergePropagationFollowUpJob[] {

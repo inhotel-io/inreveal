@@ -10,6 +10,10 @@ const profile = (overrides: Partial<MergeProfile> & Pick<MergeProfile, 'kind' | 
   }) as MergeProfile;
 
 const makeService = (profiles: MergeProfile[]) => {
+  const transaction = { transaction: true };
+  const databaseRepository = {
+    transaction: vi.fn((callback: (db: typeof transaction) => Promise<unknown>) => callback(transaction)),
+  };
   const personRepository = {
     mergePersonProfile: vi.fn().mockResolvedValue({ deletedThumbnailPath: null }),
     updatePersonIdentity: vi.fn().mockResolvedValue(void 0),
@@ -46,10 +50,11 @@ const makeService = (profiles: MergeProfile[]) => {
   const sharedSpaceRepository = {
     mergeSpacePersonProfile: vi.fn().mockResolvedValue(void 0),
     updateSpacePersonIdentity: vi.fn().mockResolvedValue(void 0),
+    logActivity: vi.fn().mockResolvedValue(void 0),
   };
 
   const sut = new IdentityMergePropagationService({
-    databaseRepository: {} as never,
+    databaseRepository: databaseRepository as never,
     faceIdentityRepository: faceIdentityRepository as never,
     jobRepository: jobRepository as never,
     logger: {} as never,
@@ -60,11 +65,13 @@ const makeService = (profiles: MergeProfile[]) => {
   return {
     sut,
     mocks: {
+      database: databaseRepository,
       faceIdentity: faceIdentityRepository,
       job: jobRepository,
       person: personRepository,
       sharedSpace: sharedSpaceRepository,
     },
+    transaction,
     faceIdentityRepository,
   };
 };
@@ -571,6 +578,99 @@ describe('IdentityMergePropagationService', () => {
         name: JobName.SharedSpacePersonDedup,
         data: { spaceId: 'space-b' },
       });
+    });
+
+    it('runs DB mutations inside one transaction and passes the transaction to every mutation helper', async () => {
+      const { sut, mocks, transaction } = makeService([]);
+
+      await sut.executePlan(
+        {
+          actorUserId: 'owner-1',
+          origin: {
+            type: 'person',
+            targetProfileId: 'person-x',
+            sourceProfileIds: ['person-y'],
+            ownerId: 'owner-1',
+          },
+          targetIdentityId: 'identity-x',
+          sourceIdentityIds: ['identity-y'],
+          personalProfileMerges: [{ ownerId: 'owner-1', targetPersonId: 'person-x', sourcePersonIds: ['person-y'] }],
+          spaceProfileMerges: [{ spaceId: 'space-a', targetPersonId: 'space-a-x', sourcePersonIds: ['space-a-y'] }],
+          profileIdentityUpdates: [
+            { kind: 'person', profileId: 'person-z', identityId: 'identity-x' },
+            { kind: 'space-person', profileId: 'space-a-z', identityId: 'identity-x' },
+          ],
+          affectedOwnerIds: ['owner-1'],
+          affectedSpaceIds: ['space-a'],
+          followUpJobs: [],
+          activityEvents: [
+            {
+              spaceId: 'space-a',
+              userId: 'owner-1',
+              type: SharedSpaceActivityType.PersonMerge,
+              data: {
+                originScope: 'person',
+                actorUserId: 'owner-1',
+                activityRole: 'propagated',
+                originatingSpaceId: null,
+                targetProfileId: 'person-x',
+                sourceProfileIds: ['person-y'],
+                targetIdentityId: 'identity-x',
+                sourceIdentityIds: ['identity-y'],
+                affectedPersonalProfileMergeCount: 1,
+                affectedSharedSpaceProfileMergeCount: 1,
+                affectedSpaceIds: ['space-a'],
+              },
+            },
+          ],
+        },
+        { actorUserId: 'owner-1' },
+      );
+
+      expect(mocks.database.transaction).toHaveBeenCalledTimes(1);
+      expect(mocks.person.mergePersonProfile).toHaveBeenCalledWith(expect.anything(), transaction);
+      expect(mocks.faceIdentity.linkPersonFaces).toHaveBeenCalledWith(expect.anything(), transaction);
+      expect(mocks.sharedSpace.mergeSpacePersonProfile).toHaveBeenCalledWith(expect.anything(), transaction);
+      expect(mocks.person.updatePersonIdentity).toHaveBeenCalledWith(expect.anything(), transaction);
+      expect(mocks.sharedSpace.updateSpacePersonIdentity).toHaveBeenCalledWith(expect.anything(), transaction);
+      expect(mocks.faceIdentity.mergeIdentitiesAfterProfileResolution).toHaveBeenCalledWith(
+        expect.anything(),
+        transaction,
+      );
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(expect.anything(), transaction);
+    });
+
+    it('does not queue follow-up jobs when identity collapse fails', async () => {
+      const { sut, mocks } = makeService([]);
+
+      mocks.faceIdentity.mergeIdentitiesAfterProfileResolution.mockRejectedValueOnce(new Error('collapse failed'));
+
+      await expect(
+        sut.executePlan(
+          {
+            actorUserId: 'owner-1',
+            origin: {
+              type: 'person',
+              targetProfileId: 'person-x',
+              sourceProfileIds: ['person-y'],
+              ownerId: 'owner-1',
+            },
+            targetIdentityId: 'identity-x',
+            sourceIdentityIds: ['identity-y'],
+            personalProfileMerges: [{ ownerId: 'owner-1', targetPersonId: 'person-x', sourcePersonIds: ['person-y'] }],
+            spaceProfileMerges: [],
+            profileIdentityUpdates: [],
+            affectedOwnerIds: ['owner-1'],
+            affectedSpaceIds: ['space-a'],
+            followUpJobs: [{ name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: 'identity-x' } }],
+            activityEvents: [],
+          },
+          { actorUserId: 'owner-1' },
+        ),
+      ).rejects.toThrow('collapse failed');
+
+      expect(mocks.database.transaction).toHaveBeenCalledTimes(1);
+      expect(mocks.job.queue).not.toHaveBeenCalled();
     });
   });
 });

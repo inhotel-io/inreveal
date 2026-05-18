@@ -69,6 +69,10 @@ export class DatabaseRepository {
     await this.db.destroy();
   }
 
+  transaction<T>(callback: (db: Transaction<DB>) => Promise<T>): Promise<T> {
+    return this.db.transaction().execute(callback);
+  }
+
   getVectorExtension(): Promise<VectorExtension> {
     return getVectorExtension(this.db);
   }

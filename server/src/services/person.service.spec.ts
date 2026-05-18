@@ -4156,6 +4156,28 @@ describe(PersonService.name, () => {
       expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
     });
 
+    it('returns only failed source responses and does not delegate valid sources when any source fails validation', async () => {
+      const auth = AuthFactory.create();
+      const [person, validSource] = [
+        PersonFactory.create({ id: 'person-x' }),
+        PersonFactory.create({ id: 'person-y' }),
+      ];
+      const identityMergePropagation = useIdentityMergePropagation();
+
+      mocks.person.getById.mockResolvedValueOnce(person);
+      mocks.person.getById.mockResolvedValueOnce(validSource);
+      mocks.access.person.checkOwnerAccess.mockResolvedValueOnce(new Set([person.id]));
+      mocks.access.person.checkOwnerAccess.mockResolvedValueOnce(new Set([validSource.id]));
+
+      await expect(sut.mergePerson(auth, 'person-x', { ids: ['person-y', 'person-z'] })).resolves.toEqual([
+        { id: 'person-z', success: false, error: BulkIdErrorReason.NO_PERMISSION },
+      ]);
+
+      expect(identityMergePropagation.mergePersonalPeople).not.toHaveBeenCalled();
+      expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
+      expect(mocks.person.delete).not.toHaveBeenCalled();
+    });
+
     it('rejects an empty source list before delegation', async () => {
       const auth = AuthFactory.create();
       const identityMergePropagation = useIdentityMergePropagation();

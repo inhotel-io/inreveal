@@ -598,8 +598,11 @@ export class SharedSpaceRepository {
       .execute();
   }
 
-  async logActivity(values: { spaceId: string; userId: string; type: string; data?: Record<string, unknown> }) {
-    await this.db
+  async logActivity(
+    values: { spaceId: string; userId: string; type: string; data?: Record<string, unknown> },
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ) {
+    await db
       .insertInto('shared_space_activity')
       .values({
         spaceId: values.spaceId,
