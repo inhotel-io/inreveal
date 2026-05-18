@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ExpressionBuilder, Insertable, Kysely, Selectable, sql, SqlBool, Updateable } from 'kysely';
+import { ExpressionBuilder, Insertable, Kysely, Selectable, sql, SqlBool, Transaction, Updateable } from 'kysely';
 import { jsonObjectFrom } from 'kysely/helpers/postgres';
 import { InjectKysely } from 'nestjs-kysely';
 import { AssetFace } from 'src/database';
@@ -121,6 +121,55 @@ export class PersonRepository {
       .executeTakeFirst();
 
     return Number(result.numChangedRows ?? 0);
+  }
+
+  async mergePersonProfile(
+    input: {
+      sourcePersonId: string;
+      targetPersonId: string;
+      targetIdentityId: string;
+    },
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<{ deletedThumbnailPath: string | null }> {
+    const people = await db
+      .selectFrom('person')
+      .select(['id', 'name', 'birthDate', 'thumbnailPath'])
+      .where('id', 'in', [input.sourcePersonId, input.targetPersonId])
+      .execute();
+    const target = people.find((person) => person.id === input.targetPersonId);
+    const source = people.find((person) => person.id === input.sourcePersonId);
+    if (!target || !source) {
+      throw new Error('Person profile not found');
+    }
+
+    const update: Updateable<PersonTable> = { identityId: input.targetIdentityId };
+    if (!target.name && source.name) {
+      update.name = source.name;
+    }
+
+    if (!target.birthDate && source.birthDate) {
+      update.birthDate = source.birthDate;
+    }
+
+    await db.updateTable('person').set(update).where('id', '=', input.targetPersonId).execute();
+    await db
+      .updateTable('asset_face')
+      .set({ personId: input.targetPersonId })
+      .where('personId', '=', input.sourcePersonId)
+      .execute();
+    await db.deleteFrom('person').where('id', '=', input.sourcePersonId).execute();
+
+    return { deletedThumbnailPath: source.thumbnailPath || null };
+  }
+
+  async updatePersonIdentity(
+    input: {
+      personId: string;
+      identityId: string;
+    },
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<void> {
+    await db.updateTable('person').set({ identityId: input.identityId }).where('id', '=', input.personId).execute();
   }
 
   async unassignFaces({ sourceType }: UnassignFacesOptions): Promise<void> {

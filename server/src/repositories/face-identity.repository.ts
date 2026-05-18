@@ -2112,8 +2112,8 @@ export class FaceIdentityRepository {
   }
 
   @GenerateSql({ params: [{ personId: DummyValue.UUID, identityId: DummyValue.UUID, source: 'manual' }] })
-  async linkPersonFaces(input: LinkPersonFacesInput): Promise<void> {
-    await this.db
+  async linkPersonFaces(input: LinkPersonFacesInput, db: Kysely<DB> | Transaction<DB> = this.db): Promise<void> {
+    await db
       .insertInto('face_identity_face')
       .columns(['assetFaceId', 'identityId', 'source', 'confidence'])
       .expression((eb) =>
@@ -2662,6 +2662,79 @@ export class FaceIdentityRepository {
         spaceProfileConflictCount,
       };
     });
+  }
+
+  async mergeIdentitiesAfterProfileResolution(
+    input: {
+      targetIdentityId: string;
+      sourceIdentityIds: string[];
+      source: 'manual' | 'shared-space-evidence';
+    },
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<void> {
+    const sourceIdentityIds = [...new Set(input.sourceIdentityIds)].filter((id) => id !== input.targetIdentityId);
+    if (sourceIdentityIds.length === 0) {
+      return;
+    }
+
+    const identities = await db
+      .selectFrom('face_identity')
+      .select(['id', 'type'])
+      .where('id', 'in', [input.targetIdentityId, ...sourceIdentityIds])
+      .execute();
+    const targetIdentity = identities.find((identity) => identity.id === input.targetIdentityId);
+    if (!targetIdentity) {
+      throw new Error('Target face identity not found');
+    }
+    const incompatible = identities.some(
+      (identity) => identity.id !== input.targetIdentityId && identity.type !== targetIdentity.type,
+    );
+    if (incompatible) {
+      throw new Error('Cannot merge face identities with different types');
+    }
+
+    const { personalProfileConflictCount, spaceProfileConflictCount } = await this.countMergeConflicts(db, {
+      targetIdentityId: input.targetIdentityId,
+      sourceIdentityIds,
+    });
+    if (personalProfileConflictCount > 0 || spaceProfileConflictCount > 0) {
+      throw new Error('Cannot merge face identities with unresolved profile conflicts');
+    }
+
+    await db
+      .updateTable('face_identity_face')
+      .set({ identityId: input.targetIdentityId, source: input.source })
+      .where('identityId', 'in', sourceIdentityIds)
+      .execute();
+
+    await db
+      .updateTable('person')
+      .set({ identityId: input.targetIdentityId })
+      .where('identityId', 'in', sourceIdentityIds)
+      .execute();
+
+    await db
+      .updateTable('shared_space_person')
+      .set({ identityId: input.targetIdentityId })
+      .where('identityId', 'in', sourceIdentityIds)
+      .execute();
+
+    const deletable = await db
+      .selectFrom('face_identity')
+      .leftJoin('person', 'person.identityId', 'face_identity.id')
+      .leftJoin('shared_space_person', 'shared_space_person.identityId', 'face_identity.id')
+      .leftJoin('face_identity_face', 'face_identity_face.identityId', 'face_identity.id')
+      .select('face_identity.id')
+      .where('face_identity.id', 'in', sourceIdentityIds)
+      .where('person.id', 'is', null)
+      .where('shared_space_person.id', 'is', null)
+      .where('face_identity_face.assetFaceId', 'is', null)
+      .execute();
+
+    const deletableIds = deletable.map((identity) => identity.id);
+    if (deletableIds.length > 0) {
+      await db.deleteFrom('face_identity').where('id', 'in', deletableIds).execute();
+    }
   }
 
   private async countMergeConflicts(
