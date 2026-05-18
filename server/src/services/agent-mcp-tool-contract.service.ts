@@ -92,7 +92,7 @@ const assetIdMistakes: AgentMcpCommonMistake[] = [
   },
   {
     id: 'asset-read-too-many-asset-ids',
-    match: { issuePath: 'assetIds' },
+    match: { issuePath: 'assetIds', messageIncludes: 'expected array to have <=10000 items' },
     hint: 'Asset read requests may include at most 10000 asset ids. Search or narrow the request before reading.',
     exampleName: 'read-selected-assets',
   },
