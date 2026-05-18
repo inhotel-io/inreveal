@@ -211,6 +211,76 @@ describe(AgentMcpToolRegistryService.name, () => {
     }
   });
 
+  it('enriches planning tool descriptions from the planning tool contracts', () => {
+    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+
+    for (const contract of contractService.listPlanningToolContracts()) {
+      const tool = toolsByName.get(contract.name);
+
+      expect(tool?.title).toBe(contract.title);
+      expect(tool?.description).toContain(contract.description);
+      expect(tool?.description).toContain(contract.usage);
+      expect(tool?.description).toContain('review');
+      expect(tool?.description).not.toMatch(/\/api|agent\/internal|bearer|token|provider key|stack trace/i);
+    }
+  });
+
+  it('publishes valid contract examples on planning tool input schemas', () => {
+    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+
+    for (const contract of contractService.listPlanningToolContracts()) {
+      const tool = toolsByName.get(contract.name);
+      const examples = tool?.inputSchema.examples;
+
+      expect(examples).toEqual(contract.examples.map((example) => example.arguments));
+      expect(examples).toHaveLength(contract.examples.length);
+      for (const exampleArguments of examples as Record<string, unknown>[]) {
+        const result = AgentOperationPlanToolRequestSchemas[contract.name].safeParse(exampleArguments);
+
+        expect(result.success, `${contract.name} example should parse`).toBe(true);
+      }
+    }
+  });
+
+  it('adds model-facing property descriptions for planning tool argument fields', () => {
+    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+    const proposal = toolsByName.get(AgentToolName.ProposeAlbumOperations)?.inputSchema;
+    const revision = toolsByName.get(AgentToolName.ReviseProposedOperations)?.inputSchema;
+    const summary = toolsByName.get(AgentToolName.SummarizePlan)?.inputSchema;
+
+    expect(proposal?.properties).toMatchObject({
+      summary: expect.objectContaining({ description: expect.stringContaining('human-readable plan summary') }),
+      operations: expect.objectContaining({ description: expect.stringContaining('reviewable Gallery operations') }),
+    });
+    expect(revision?.properties).toMatchObject({
+      planId: expect.objectContaining({ description: expect.stringContaining('existing proposed plan') }),
+      feedback: expect.objectContaining({ description: expect.stringContaining('user feedback') }),
+    });
+    expect(summary?.properties).toMatchObject({
+      planId: expect.objectContaining({ description: expect.stringContaining('existing proposed plan') }),
+      focus: expect.objectContaining({ description: expect.stringContaining('optional summary focus') }),
+    });
+  });
+
+  it('publishes contract argument mode metadata for every planning tool without oneOf noise', () => {
+    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+
+    for (const contract of contractService.listPlanningToolContracts()) {
+      const tool = toolsByName.get(contract.name);
+
+      expect(tool?.inputSchema['x-gallery-argumentModes']).toEqual(
+        contract.argumentModes.map((mode) => ({
+          name: mode.name,
+          description: mode.description,
+          requiredFields: mode.requiredFields,
+          forbiddenFields: mode.forbiddenFields,
+          whenToUse: mode.whenToUse,
+        })),
+      );
+      expect(tool?.inputSchema).not.toHaveProperty('oneOf');
+    }
+  });
+
   it('adds oneOf mode hints only when read tool modes are mutually exclusive', () => {
     const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
     const previews = toolsByName.get(AgentToolName.ReadAssetPreviews)?.inputSchema;
@@ -337,12 +407,12 @@ describe(AgentMcpToolRegistryService.name, () => {
     );
   });
 
-  it('derives planning tool input schemas from the existing planning tool DTO schemas', () => {
+  it('preserves DTO-derived planning tool input schema structure after stripping contract metadata', () => {
     const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
 
     for (const toolName of expectedPlanningToolNames) {
-      expect(toolsByName.get(toolName)?.inputSchema).toEqual(
-        toExpectedInputSchema(AgentOperationPlanToolRequestSchemas[toolName]),
+      expect(stripContractMetadata(toolsByName.get(toolName)?.inputSchema)).toEqual(
+        stripContractMetadata(toExpectedInputSchema(AgentOperationPlanToolRequestSchemas[toolName])),
       );
     }
   });
@@ -398,19 +468,6 @@ describe(AgentMcpToolRegistryService.name, () => {
     expect(planningSchemaJson).toContain(AgentOperationTargetKind.ExistingSpace);
     expect(planningSchemaJson).toContain(AgentOperationTargetKind.AssetBatch);
     expect(planningSchemaJson).toContain(AgentOperationTargetKind.ImageEditBatch);
-  });
-
-  it('leaves planning tool structural schemas unchanged before planning contracts exist', () => {
-    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
-
-    for (const toolName of expectedPlanningToolNames) {
-      const tool = toolsByName.get(toolName);
-
-      expect(tool?.inputSchema).toEqual(toExpectedInputSchema(AgentOperationPlanToolRequestSchemas[toolName]));
-      expect(tool?.inputSchema).not.toHaveProperty('examples');
-      expect(tool?.inputSchema).not.toHaveProperty('x-gallery-argumentModes');
-      expect(tool?.inputSchema).not.toHaveProperty('oneOf');
-    }
   });
 
   it('does not leak secrets, routes, stack traces, or direct apply guidance through enriched metadata', () => {
