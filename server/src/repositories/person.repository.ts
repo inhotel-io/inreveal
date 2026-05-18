@@ -182,13 +182,16 @@ export class PersonRepository {
       return;
     }
 
-    await db
+    const rows = await db
       .selectFrom('person')
       .select('id')
       .where('id', 'in', [...new Set(personIds)].toSorted())
       .orderBy('id')
       .forUpdate()
       .execute();
+    if (rows.length !== new Set(personIds).size) {
+      throw new Error('Person profile not found');
+    }
   }
 
   private async isFeatureFaceValid(
