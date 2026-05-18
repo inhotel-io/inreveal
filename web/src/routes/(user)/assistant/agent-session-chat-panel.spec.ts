@@ -11,24 +11,33 @@ import {
   AgentOperationType,
   AgentPermissionPreset,
   AgentProviderType,
+  AgentSessionActivityEventSource,
+  AgentSessionActivityEventStatus,
   AgentSessionStatus,
   AgentToolApprovalDecision,
   AgentToolCallStatus,
   AgentToolDataClass,
   AgentToolName,
+  Kind as AgentSessionActivityEventKind,
   type AgentMessageResponseDto,
   type AgentOperationPlanResponseDto,
   type AgentOperationResponseDto,
+  type AgentSessionActivityEventResponseDto,
   type AgentSessionResponseDto,
   type AgentToolCallResponseDto,
 } from '@immich/sdk';
 import { websocketMock } from '@test-data/mocks/websocket.mock';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import { createRawSnippet } from 'svelte';
 import { tick } from 'svelte';
 import { readable } from 'svelte/store';
 import AgentSessionChatPanel from './agent-session-chat-panel.svelte';
 
 vi.mock('$lib/stores/websocket');
+
+const sdkActivityMock = sdkMock as typeof sdkMock & {
+  getAgentSessionActivityEvents: ReturnType<typeof vi.fn>;
+};
 
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
@@ -41,6 +50,17 @@ vi.mock('svelte-i18n', () => {
     assistant_send: 'Send',
     assistant_start_new_chat: 'Start new chat',
     assistant_streaming_response: 'Assistant is responding',
+    assistant_activity_count: '{count} items',
+    assistant_activity_hide: 'Hide activity',
+    assistant_activity_show: 'Show activity',
+    assistant_activity_status_blocked: 'Needs attention',
+    assistant_activity_status_completed: 'Done',
+    assistant_activity_status_failed: 'Failed',
+    assistant_activity_status_pending: 'Pending',
+    assistant_activity_status_running: 'Running',
+    assistant_activity_status_skipped: 'Skipped',
+    assistant_activity_summary_title: 'Activity summary',
+    assistant_activity_title: 'Pi is working',
     assistant_agent_tool_data_class_metadata: 'Metadata',
     assistant_agent_tool_name_listAlbums: 'List albums',
     assistant_operation_applied_plan: 'Applied plan',
@@ -198,6 +218,40 @@ const makeAppliedPlan = (overrides: Partial<AgentOperationPlanResponseDto> = {})
   updatedAt: overrides.updatedAt ?? '2026-05-16T10:01:00.000Z',
 });
 
+const makeActivityEvent = (
+  overrides: Record<string, unknown> & {
+    kind?: AgentSessionActivityEventResponseDto['kind'] | string;
+    status?: AgentSessionActivityEventResponseDto['status'] | string;
+    source?: AgentSessionActivityEventResponseDto['source'] | string;
+    counts?: Record<string, number> | null;
+    totalCount?: number | null;
+    appliedCount?: number | null;
+    skippedCount?: number | null;
+    failedCount?: number | null;
+  } = {},
+): AgentSessionActivityEventResponseDto => ({
+  id: (overrides.id ?? 'activity-event-1') as string,
+  sessionId: (overrides.sessionId ?? session.id) as string,
+  kind: (overrides.kind ?? AgentSessionActivityEventKind.StartProcessing) as AgentSessionActivityEventResponseDto['kind'],
+  status: (overrides.status ?? AgentSessionActivityEventStatus.Running) as AgentSessionActivityEventResponseDto['status'],
+  summary: (overrides.summary ?? null) as AgentSessionActivityEventResponseDto['summary'],
+  source: (overrides.source ?? AgentSessionActivityEventSource.Server) as AgentSessionActivityEventResponseDto['source'],
+  counts:
+    overrides.counts ??
+    (overrides.totalCount == null &&
+    overrides.appliedCount == null &&
+    overrides.skippedCount == null &&
+    overrides.failedCount == null
+      ? null
+      : {
+          total: overrides.totalCount ?? undefined,
+          applied: overrides.appliedCount ?? undefined,
+          skipped: overrides.skippedCount ?? undefined,
+          failed: overrides.failedCount ?? undefined,
+        }),
+  createdAt: (overrides.createdAt ?? '2026-05-16T10:00:01.000Z') as string,
+});
+
 const setAppliedPlanHistory = (plans: AgentOperationPlanResponseDto[]) => {
   sdkMock.getAppliedOperationPlans.mockResolvedValue(plans);
 };
@@ -206,7 +260,9 @@ describe(AgentSessionChatPanel.name, () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sdkMock.getAgentSessionMessages.mockResolvedValue([]);
+    sdkActivityMock.getAgentSessionActivityEvents.mockResolvedValue([]);
     websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(null);
     setAppliedPlanHistory([]);
   });
 
@@ -242,31 +298,378 @@ describe(AgentSessionChatPanel.name, () => {
     expect(screen.getByText('Birthday cake').closest('li')).toBeInTheDocument();
   });
 
-  it('renders handled tool calls as plain-language activity with expandable details', async () => {
+  it('renders current-turn tool calls in the activity block without technical details', async () => {
     render(AgentSessionChatPanel, {
       props: {
         session,
+        seedMessages: [
+          {
+            ...makeMessage('message-user', AgentMessageRole.User, 'Show me my albums'),
+            createdAt: '2026-05-16T11:56:00.000Z',
+          },
+        ],
         toolCalls: [makeToolCall()],
       },
     });
 
-    const activity = await screen.findByRole('article', { name: 'Pi checked your albums: Done' });
-    expect(activity).toHaveTextContent('Pi checked your albums.');
-    expect(activity).toHaveTextContent('1 album');
+    const activity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(activity).toHaveTextContent('Searching albums');
+    expect(activity).toHaveTextContent('Found matching albums');
+    expect(activity).toHaveTextContent('1 items');
     expect(activity).not.toHaveTextContent('List albums');
     expect(activity).not.toHaveTextContent('Returned 1 album(s)');
+  });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+  it('renders one activity block after the triggering user message before the assistant response', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Find my Portugal photos'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+      {
+        ...makeMessage('message-assistant', AgentMessageRole.Assistant, 'I found them.'),
+        createdAt: '2026-05-16T10:00:20.000Z',
+      },
+    ]);
 
-    expect(activity).toHaveTextContent('List albums');
-    expect(activity).toHaveTextContent('Returned 1 album(s)');
-    expect(activity).toHaveTextContent('Metadata');
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.Completed },
+        toolCalls: [
+          makeToolCall({
+            id: 'search-tool',
+            toolName: AgentToolName.SearchAssets,
+            assetCount: 12,
+            albumCount: 0,
+            startedAt: '2026-05-16T10:00:05.000Z',
+            completedAt: '2026-05-16T10:00:07.000Z',
+          }),
+        ],
+      },
+    });
+
+    const transcript = await screen.findByTestId('agent-session-chat-transcript');
+    await screen.findByText('I found them.');
+
+    expect(screen.getAllByRole('article', { name: 'Activity summary' })).toHaveLength(1);
+    expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
+      expect.stringContaining('Find my Portugal photos'),
+      expect.stringContaining('Searching photos'),
+      expect.stringContaining('I found them.'),
+    ]);
+  });
+
+  it('reconstructs completed tool activity after the triggering user message on reload', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'List my albums'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+      {
+        ...makeMessage('message-assistant', AgentMessageRole.Assistant, 'You have one album.'),
+        createdAt: '2026-05-16T10:00:20.000Z',
+      },
+    ]);
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.Completed },
+        toolCalls: [
+          makeToolCall({
+            id: 'reload-tool',
+            startedAt: '2026-05-16T10:00:05.000Z',
+            completedAt: '2026-05-16T10:00:06.000Z',
+          }),
+        ],
+      },
+    });
+
+    const transcript = await screen.findByTestId('agent-session-chat-transcript');
+    await screen.findByText('You have one album.');
+
+    expect(screen.getByRole('article', { name: 'Activity summary' })).toHaveTextContent('Found matching albums');
+    expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
+    expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
+      expect.stringContaining('List my albums'),
+      expect.stringContaining('Searching albums'),
+      expect.stringContaining('You have one album.'),
+    ]);
+  });
+
+  it('loads persisted activity events into the triggering turn without raw details', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Make a plan'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ]);
+    sdkActivityMock.getAgentSessionActivityEvents.mockResolvedValue([
+      makeActivityEvent({
+        id: 'plan-composing-event',
+        kind: 'plan-composing',
+        status: 'running',
+        summary: 'Bearer secret-token',
+        createdAt: '2026-05-16T10:00:05.000Z',
+      }),
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const transcript = await screen.findByTestId('agent-session-chat-transcript');
+    const activity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(sdkActivityMock.getAgentSessionActivityEvents).toHaveBeenCalledWith({ id: session.id });
+    expect(activity).toHaveTextContent('Preparing a plan');
+    expect(activity).toHaveTextContent('Preparing the plan');
+    expect(activity).not.toHaveTextContent('secret-token');
+    expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
+      expect.stringContaining('Make a plan'),
+      expect.stringContaining('Preparing a plan'),
+    ]);
+  });
+
+  it('keeps pending approval reload activity and the action dock surface visible', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Check private photos'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ]);
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.WaitingForToolApproval },
+        actionDock: createRawSnippet(() => ({ render: () => '<section aria-label="Approval request">Approve?</section>' })),
+        toolCalls: [
+          makeToolCall({
+            id: 'approval-tool',
+            status: AgentToolCallStatus.PendingApproval,
+            toolName: AgentToolName.ReadAssetMetadata,
+            responseSummary: null,
+            completedAt: null,
+            startedAt: '2026-05-16T10:00:05.000Z',
+          }),
+        ],
+      },
+    });
+
+    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Waiting for approval');
+    expect(screen.getByRole('region', { name: 'Approval request' })).toHaveTextContent('Approve?');
+    expect(screen.queryByRole('article', { name: /Pi wants/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps applied-plan reload activity while the applied plan card remains separate', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Apply the Portugal plan'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+      {
+        ...makeMessage('message-assistant', AgentMessageRole.Assistant, 'Applied.'),
+        createdAt: '2026-05-16T10:02:00.000Z',
+      },
+    ]);
+    setAppliedPlanHistory([
+      makeAppliedPlan({
+        id: 'applied-reload-plan',
+        createdAt: '2026-05-16T10:00:20.000Z',
+        updatedAt: '2026-05-16T10:01:00.000Z',
+      }),
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session: { ...session, status: AgentSessionStatus.Completed } } });
+
+    expect(await screen.findByRole('article', { name: 'Activity summary' })).toHaveTextContent(
+      'Applied selected changes',
+    );
+    expect(screen.getByRole('article', { name: 'Applied plan: Organize Portugal holiday' })).toBeInTheDocument();
+    expect(screen.getAllByRole('article', { name: 'Activity summary' })).toHaveLength(1);
+  });
+
+  it('reconstructs two completed user turns as separate activity blocks', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user-a', AgentMessageRole.User, 'First request'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+      {
+        ...makeMessage('message-assistant-a', AgentMessageRole.Assistant, 'First response'),
+        createdAt: '2026-05-16T10:00:20.000Z',
+      },
+      {
+        ...makeMessage('message-user-b', AgentMessageRole.User, 'Second request'),
+        createdAt: '2026-05-16T10:01:00.000Z',
+      },
+    ]);
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.Completed },
+        toolCalls: [
+          makeToolCall({
+            id: 'old-tool',
+            startedAt: '2026-05-16T10:00:05.000Z',
+            completedAt: '2026-05-16T10:00:06.000Z',
+          }),
+          makeToolCall({
+            id: 'new-tool',
+            toolName: AgentToolName.SearchAssets,
+            assetCount: 3,
+            albumCount: 0,
+            startedAt: '2026-05-16T10:01:05.000Z',
+            completedAt: '2026-05-16T10:01:06.000Z',
+          }),
+        ],
+      },
+    });
+
+    const transcript = await screen.findByTestId('agent-session-chat-transcript');
+    await screen.findByText('Second request');
+
+    expect(screen.getAllByRole('article', { name: 'Activity summary' })).toHaveLength(2);
+    expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
+    expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
+      expect.stringContaining('First request'),
+      expect.stringContaining('Searching albums'),
+      expect.stringContaining('First response'),
+      expect.stringContaining('Second request'),
+      expect.stringContaining('Searching photos'),
+    ]);
+  });
+
+  it('does not fold a late tool call into a completed turn after the terminal assistant response', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'List my albums'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+      {
+        ...makeMessage('message-assistant', AgentMessageRole.Assistant, 'Done listing albums.'),
+        createdAt: '2026-05-16T10:00:20.000Z',
+      },
+    ]);
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.Completed },
+        toolCalls: [
+          makeToolCall({
+            id: 'late-tool',
+            startedAt: '2026-05-16T10:00:30.000Z',
+            completedAt: '2026-05-16T10:00:31.000Z',
+          }),
+        ],
+      },
+    });
+
+    const transcript = await screen.findByTestId('agent-session-chat-transcript');
+    await screen.findByText('Done listing albums.');
+
+    expect(screen.queryByRole('article', { name: 'Activity summary' })).not.toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Pi checked your albums: Done' })).toBeInTheDocument();
+    expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
+      expect.stringContaining('List my albums'),
+      expect.stringContaining('Done listing albums.'),
+      expect.stringContaining('Pi checked your albums.'),
+    ]);
+  });
+
+  it('keeps covered raw tool cards suppressed when activity visibility is off', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'List my albums'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+      {
+        ...makeMessage('message-assistant', AgentMessageRole.Assistant, 'Done.'),
+        createdAt: '2026-05-16T10:00:20.000Z',
+      },
+    ]);
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.Completed },
+        activityVisibilityMode: 'off',
+        toolCalls: [
+          makeToolCall({
+            id: 'covered-tool',
+            startedAt: '2026-05-16T10:00:05.000Z',
+            completedAt: '2026-05-16T10:00:06.000Z',
+          }),
+        ],
+      },
+    });
+
+    expect(await screen.findByText('Done.')).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: 'Activity summary' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Returned 1 album(s)')).not.toBeInTheDocument();
+  });
+
+  it('hides explicit activity events when activity visibility is off', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Apply plan'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ]);
+    sdkActivityMock.getAgentSessionActivityEvents.mockResolvedValue([
+      makeActivityEvent({
+        id: 'apply-progress-event',
+        kind: 'apply-progress',
+        totalCount: 2,
+        appliedCount: 1,
+        createdAt: '2026-05-16T10:00:05.000Z',
+      }),
+    ]);
+
+    render(AgentSessionChatPanel, {
+      props: { session, activityVisibilityMode: 'off' },
+    });
+
+    expect(await screen.findByText('Apply plan')).toBeInTheDocument();
+    expect(screen.queryByText('Applying changes')).not.toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: 'Pi is working' })).not.toBeInTheDocument();
+  });
+
+  it('shows pending permission activity without rendering approval controls inside chat', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Check private photos'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ]);
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.WaitingForToolApproval },
+        toolCalls: [
+          makeToolCall({
+            status: AgentToolCallStatus.PendingApproval,
+            toolName: AgentToolName.ReadAssetMetadata,
+            responseSummary: null,
+            completedAt: null,
+            startedAt: '2026-05-16T10:00:05.000Z',
+          }),
+        ],
+      },
+    });
+
+    const block = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(block).toHaveTextContent('Waiting for approval');
+    expect(within(block).queryByRole('button', { name: /Approve/i })).not.toBeInTheDocument();
+    expect(within(block).queryByRole('button', { name: /Deny/i })).not.toBeInTheDocument();
   });
 
   it('renders approved tool calls as in-progress chat activity', async () => {
     render(AgentSessionChatPanel, {
       props: {
         session,
+        seedMessages: [
+          {
+            ...makeMessage('message-user', AgentMessageRole.User, 'Show me my albums'),
+            createdAt: '2026-05-16T11:56:00.000Z',
+          },
+        ],
         toolCalls: [
           makeToolCall({
             status: AgentToolCallStatus.Approved,
@@ -278,15 +681,88 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    const activity = await screen.findByRole('article', { name: 'Pi checked your albums: Approved' });
-    expect(activity).toHaveTextContent('Pi checked your albums.');
-    expect(activity).toHaveTextContent('Approved');
+    const activity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(activity).toHaveTextContent('Searching albums');
+    expect(activity).toHaveTextContent('Running');
   });
 
-  it('renders denied and failed handled tool call details with request and error context', async () => {
+  it('expands current activity when the session visibility mode is expanded', async () => {
     render(AgentSessionChatPanel, {
       props: {
         session,
+        activityVisibilityMode: 'expanded',
+        seedMessages: [
+          {
+            ...makeMessage('message-user', AgentMessageRole.User, 'Find my photos'),
+            createdAt: '2026-05-16T11:56:00.000Z',
+          },
+        ],
+        toolCalls: [
+          makeToolCall({ id: 'tool-call-1', toolName: AgentToolName.SearchAssets, assetCount: 2, albumCount: 0 }),
+          makeToolCall({ id: 'tool-call-2', toolName: AgentToolName.ListAlbums, assetCount: 0, albumCount: 1 }),
+          makeToolCall({
+            id: 'tool-call-3',
+            toolName: AgentToolName.ReadAssetMetadata,
+            assetCount: 1,
+            albumCount: 0,
+          }),
+          makeToolCall({ id: 'tool-call-4', toolName: AgentToolName.SearchAssets, assetCount: 3, albumCount: 0 }),
+        ],
+      },
+    });
+
+    const activity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(within(activity).getByRole('button', { name: 'Hide activity' })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(activity).getAllByText(/Done|Running|Pending|Failed|Needs attention|Skipped/)).toHaveLength(4);
+  });
+
+  it('forwards current activity visibility changes to the session owner', async () => {
+    const onActivityVisibilityModeChange = vi.fn();
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session,
+        activityVisibilityMode: 'compact',
+        onActivityVisibilityModeChange,
+        seedMessages: [
+          {
+            ...makeMessage('message-user', AgentMessageRole.User, 'Show me my albums'),
+            createdAt: '2026-05-16T11:56:00.000Z',
+          },
+        ],
+        toolCalls: [makeToolCall()],
+      },
+    });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Show activity' }));
+
+    expect(onActivityVisibilityModeChange).toHaveBeenCalledWith('expanded');
+  });
+
+  it('hides current activity and uses the busy fallback when activity visibility is off', async () => {
+    render(AgentSessionChatPanel, {
+      props: {
+        session,
+        assistantResponsePending: true,
+        activityVisibilityMode: 'off',
+        toolCalls: [makeToolCall()],
+      },
+    });
+
+    expect(await screen.findByRole('status')).toHaveTextContent('pi is working...');
+    expect(screen.queryByRole('article', { name: 'Pi is working' })).not.toBeInTheDocument();
+  });
+
+  it('renders denied and failed current-turn activity without request and error context', async () => {
+    render(AgentSessionChatPanel, {
+      props: {
+        session,
+        seedMessages: [
+          {
+            ...makeMessage('message-user', AgentMessageRole.User, 'Check album access'),
+            createdAt: '2026-05-16T11:56:00.000Z',
+          },
+        ],
         toolCalls: [
           makeToolCall({
             id: 'denied-tool-call',
@@ -309,21 +785,13 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    const deniedActivity = await screen.findByRole('article', { name: 'Pi checked your albums: Not allowed' });
-    expect(deniedActivity).toHaveTextContent('Pi checked your albums.');
-    expect(deniedActivity).not.toHaveTextContent('Read private screenshots');
-    expect(deniedActivity).not.toHaveTextContent('You denied access.');
-
-    await fireEvent.click(within(deniedActivity).getByRole('button', { name: 'Details' }));
-
-    expect(deniedActivity).toHaveTextContent('Read private screenshots');
-    expect(deniedActivity).toHaveTextContent('You denied access.');
-
-    const failedActivity = screen.getByRole('article', { name: 'Pi checked your albums: Failed' });
-    await fireEvent.click(within(failedActivity).getByRole('button', { name: 'Details' }));
-
-    expect(failedActivity).toHaveTextContent('List albums before organizing');
-    expect(failedActivity).toHaveTextContent('Album service timed out.');
+    const activity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(activity).toHaveTextContent('Searching albums');
+    expect(activity).toHaveTextContent('Failed');
+    expect(activity).not.toHaveTextContent('Read private screenshots');
+    expect(activity).not.toHaveTextContent('You denied access.');
+    expect(activity).not.toHaveTextContent('List albums before organizing');
+    expect(activity).not.toHaveTextContent('Album service timed out.');
   });
 
   it('renders assistant markdown headings and inline code as formatted content', async () => {
@@ -740,7 +1208,7 @@ describe(AgentSessionChatPanel.name, () => {
       },
       {
         ...makeMessage('message-a', AgentMessageRole.Assistant, 'First same-time message'),
-        createdAt: '2026-05-16T10:00:00.000Z',
+        createdAt: '2026-05-16T09:59:00.000Z',
       },
       {
         ...makeMessage('message-later', AgentMessageRole.Assistant, 'Later assistant response'),
@@ -770,7 +1238,7 @@ describe(AgentSessionChatPanel.name, () => {
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('First same-time message'),
       expect.stringContaining('Second same-time message'),
-      expect.stringContaining('Pi checked your albums.'),
+      expect.stringContaining('Searching albums'),
       expect.stringContaining('Later assistant response'),
     ]);
   });
@@ -817,8 +1285,10 @@ describe(AgentSessionChatPanel.name, () => {
     const transcript = screen.getByTestId('agent-session-chat-transcript');
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('Please organize Portugal'),
+      expect.stringContaining('Applied selected changes'),
       expect.stringContaining('Applied plan'),
       expect.stringContaining('Now add Porto'),
+      expect.stringContaining('Writing response'),
     ]);
   });
 
@@ -989,7 +1459,7 @@ describe(AgentSessionChatPanel.name, () => {
     expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('shows an ASCII busy indicator immediately while sending the user message', async () => {
+  it('shows an activity block immediately while sending the user message', async () => {
     sdkMock.appendAgentSessionMessage.mockReturnValue(new Promise(() => undefined));
 
     render(AgentSessionChatPanel, { props: { session } });
@@ -998,11 +1468,13 @@ describe(AgentSessionChatPanel.name, () => {
     await fireEvent.input(input, { target: { value: 'Organize this album' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent('pi is working...');
+    const activity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(activity).toHaveTextContent('Writing response');
+    expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
     expect(input).toBeDisabled();
   });
 
-  it('animates the ASCII busy indicator through terminal-style frames', async () => {
+  it('does not render the ASCII animation when the activity block covers pending work', async () => {
     vi.useFakeTimers();
     sdkMock.appendAgentSessionMessage.mockReturnValue(new Promise(() => undefined));
 
@@ -1013,26 +1485,27 @@ describe(AgentSessionChatPanel.name, () => {
       await fireEvent.input(input, { target: { value: 'Organize this album' } });
       await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-      const status = screen.getByRole('status');
-      expect(status).toHaveTextContent('pi is working... -');
+      const activity = await screen.findByRole('article', { name: 'Pi is working' });
+      expect(activity).toHaveTextContent('Writing response');
+      expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
 
       vi.advanceTimersByTime(160);
       await tick();
-      expect(status).toHaveTextContent('pi is working... \\');
+      expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
 
       vi.advanceTimersByTime(160);
       await tick();
-      expect(status).toHaveTextContent('pi is working... |');
+      expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
 
       vi.advanceTimersByTime(160);
       await tick();
-      expect(status).toHaveTextContent('pi is working... /');
+      expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('keeps the ASCII busy indicator after send succeeds while waiting for the first assistant delta', async () => {
+  it('keeps the activity block after send succeeds while waiting for the first assistant delta', async () => {
     sdkMock.appendAgentSessionMessage.mockResolvedValue(
       makeMessage('message-created', AgentMessageRole.User, 'Organize screenshots'),
     );
@@ -1044,10 +1517,10 @@ describe(AgentSessionChatPanel.name, () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(await screen.findByText('Organize screenshots')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('pi is working...');
+    expect(screen.getByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
   });
 
-  it('replaces the ASCII busy indicator with streamed assistant text on the first delta', async () => {
+  it('replaces the fallback busy text with streamed assistant text on the first delta', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
       handler = nextHandler;
@@ -1063,7 +1536,7 @@ describe(AgentSessionChatPanel.name, () => {
     await fireEvent.input(input, { target: { value: 'Start organizing' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent('pi is working...');
+    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
 
     handler?.({
       type: 'assistant-message-delta',
@@ -1092,7 +1565,7 @@ describe(AgentSessionChatPanel.name, () => {
     const input = await screen.findByRole('textbox', { name: 'Message' });
     await fireEvent.input(input, { target: { value: 'Make an album' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('pi is working...');
+    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
 
     handler?.({
       type: 'assistant-message-created',
@@ -1120,7 +1593,7 @@ describe(AgentSessionChatPanel.name, () => {
     const input = await screen.findByRole('textbox', { name: 'Message' });
     await fireEvent.input(input, { target: { value: 'Make an album' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('pi is working...');
+    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
 
     handler?.({
       type: 'runner-error',
@@ -1225,15 +1698,44 @@ describe(AgentSessionChatPanel.name, () => {
     await waitFor(() => expect(screen.queryByText('Partial response')).not.toBeInTheDocument());
   });
 
-  it('ignores operation plan ready websocket events without interrupting an active response', async () => {
+  it('refreshes current plan activity for operation plan ready events without interrupting an active response', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
       handler = nextHandler;
       return vi.fn();
     });
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Make a Portugal album'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ]);
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(
+      makeAppliedPlan({
+        id: '00000000-0000-4000-8000-000000000200',
+        status: AgentOperationPlanStatus.Proposed,
+        operations: [
+          makeOperation({
+            id: 'operation-create',
+            planId: '00000000-0000-4000-8000-000000000200',
+            status: AgentOperationStatus.Proposed,
+          }),
+          makeOperation({
+            id: 'operation-add',
+            planId: '00000000-0000-4000-8000-000000000200',
+            type: AgentOperationType.AlbumAddAssets,
+            status: AgentOperationStatus.Proposed,
+            assetIds: ['asset-1'],
+            payload: {},
+          }),
+        ],
+        createdAt: '2026-05-16T10:00:05.000Z',
+        updatedAt: '2026-05-16T10:00:10.000Z',
+      }),
+    );
 
     render(AgentSessionChatPanel, { props: { session } });
-    await screen.findByRole('textbox', { name: 'Message' });
+    await screen.findByText('Make a Portugal album');
 
     handler?.({
       type: 'assistant-message-delta',
@@ -1250,10 +1752,194 @@ describe(AgentSessionChatPanel.name, () => {
       planId: '00000000-0000-4000-8000-000000000200',
       revision: 1,
     });
-    await tick();
 
+    await waitFor(() => expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: session.id }));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByText('Thinking...')).toBeInTheDocument();
+    const activity = await screen.findByRole('article', { name: 'Activity summary' });
+    expect(activity).toHaveTextContent('Preparing a plan');
+    expect(activity).toHaveTextContent('Prepared a plan');
+    expect(activity).toHaveTextContent('2 items');
+    expect(screen.getAllByRole('article', { name: 'Activity summary' })).toHaveLength(1);
+  });
+
+  it('merges live activity websocket events with delayed history by id without stealing focus', async () => {
+    let resolveActivityEvents: (events: ReturnType<typeof makeActivityEvent>[]) => void;
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Apply the selected changes'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+      {
+        ...makeMessage('message-assistant', AgentMessageRole.Assistant, 'Ready to apply.'),
+        createdAt: '2026-05-16T10:00:10.000Z',
+      },
+    ]);
+    sdkActivityMock.getAgentSessionActivityEvents.mockReturnValue(
+      new Promise((resolve) => {
+        resolveActivityEvents = resolve;
+      }),
+    );
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+
+    render(AgentSessionChatPanel, { props: { session: { ...session, status: AgentSessionStatus.Completed } } });
+
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    input.focus();
+    handler?.({
+      type: 'activity',
+      sessionId: session.id,
+      event: makeActivityEvent({
+        id: 'apply-progress-live',
+        kind: 'apply-progress',
+        totalCount: 4,
+        appliedCount: 2,
+        skippedCount: 1,
+        createdAt: '2026-05-16T10:00:05.000Z',
+      }),
+      createdAt: '2026-05-16T10:00:05.000Z',
+    });
+
+    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Applied 2 of 4 changes');
+    expect(document.activeElement).toBe(input);
+
+    resolveActivityEvents!([
+      makeActivityEvent({
+        id: 'apply-progress-live',
+        kind: 'apply-progress',
+        totalCount: 4,
+        appliedCount: 2,
+        skippedCount: 1,
+        createdAt: '2026-05-16T10:00:05.000Z',
+      }),
+    ]);
+
+    await tick();
+    expect(screen.getAllByText('Applying changes')).toHaveLength(1);
+  });
+
+  it('keeps previous safe activity when current plan refresh fails', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Make a plan'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ]);
+    sdkMock.getCurrentOperationPlan.mockRejectedValue(new Error('raw plan load failure'));
+
+    render(AgentSessionChatPanel, { props: { session, assistantResponsePending: true } });
+
+    const activity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(activity).toHaveTextContent('Writing response');
+
+    handler?.({
+      type: 'operation-plan-ready',
+      sessionId: session.id,
+      planId: '00000000-0000-4000-8000-000000000200',
+      revision: 1,
+    });
+
+    await waitFor(() => expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: session.id }));
+    expect(screen.getByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
+    expect(screen.queryByText('raw plan load failure')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
+  });
+
+  it('updates applying activity to applied history without duplicate activity or plan cards', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Apply this plan'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ]);
+    const appliedPlan = makeAppliedPlan({
+      id: 'plan-applied-live',
+      updatedAt: '2026-05-16T10:01:00.000Z',
+    });
+    sdkMock.getAppliedOperationPlans.mockResolvedValueOnce([]).mockResolvedValueOnce([appliedPlan]);
+
+    render(AgentSessionChatPanel, {
+      props: { session: { ...session, status: AgentSessionStatus.Applying } },
+    });
+
+    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Applying changes');
+
+    handler?.({
+      type: 'operation-plan-applied',
+      sessionId: session.id,
+      planId: appliedPlan.id,
+      status: AgentOperationApplyStatus.Applied,
+      appliedCount: 2,
+      skippedCount: 0,
+      failedCount: 0,
+    });
+
+    expect(await screen.findAllByRole('article', { name: 'Applied plan: Organize Portugal holiday' })).toHaveLength(
+      1,
+    );
+    expect(screen.getAllByRole('article', { name: 'Activity summary' })).toHaveLength(1);
+    expect(screen.getByRole('article', { name: 'Activity summary' })).toHaveTextContent('Applied selected changes');
+  });
+
+  it('adds a running tool activity row after the triggering user message without duplicating blocks', async () => {
+    const runningToolCall = makeToolCall({
+      status: AgentToolCallStatus.Executing,
+      toolName: AgentToolName.SearchAssets,
+      assetCount: 7,
+      albumCount: 0,
+      responseSummary: null,
+      completedAt: null,
+      startedAt: '2026-05-16T10:00:05.000Z',
+    });
+    const { rerender } = render(AgentSessionChatPanel, {
+      props: {
+        session,
+        seedMessages: [
+          {
+            ...makeMessage('message-user', AgentMessageRole.User, 'Find beach photos'),
+            createdAt: '2026-05-16T10:00:00.000Z',
+          },
+        ],
+      },
+    });
+
+    await screen.findByText('Find beach photos');
+    expect(screen.getByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
+
+    await rerender({
+      session,
+      seedMessages: [
+        {
+          ...makeMessage('message-user', AgentMessageRole.User, 'Find beach photos'),
+          createdAt: '2026-05-16T10:00:00.000Z',
+        },
+      ],
+      toolCalls: [runningToolCall],
+    });
+
+    const transcript = screen.getByTestId('agent-session-chat-transcript');
+    const activity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(activity).toHaveTextContent('Searching photos');
+    expect(activity).toHaveTextContent('7 items');
+    expect(screen.getAllByRole('article', { name: 'Pi is working' })).toHaveLength(1);
+    expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
+      expect.stringContaining('Find beach photos'),
+      expect.stringContaining('Searching photos'),
+    ]);
   });
 
   it('treats tool approval websocket events as a pause without showing an error', async () => {
@@ -1317,7 +2003,7 @@ describe(AgentSessionChatPanel.name, () => {
     expect(input).not.toBeDisabled();
   });
 
-  it('clears the ASCII busy indicator when the session becomes terminal before any assistant text streams', async () => {
+  it('clears pending activity when the session becomes terminal before any assistant text streams', async () => {
     sdkMock.appendAgentSessionMessage.mockResolvedValue(
       makeMessage('message-created', AgentMessageRole.User, 'Start task'),
     );
@@ -1327,7 +2013,7 @@ describe(AgentSessionChatPanel.name, () => {
     const input = await screen.findByRole('textbox', { name: 'Message' });
     await fireEvent.input(input, { target: { value: 'Start task' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('pi is working...');
+    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
 
     await rerender({ session: { ...session, status: AgentSessionStatus.Cancelled } });
 
@@ -1335,7 +2021,7 @@ describe(AgentSessionChatPanel.name, () => {
     expect(input).not.toBeDisabled();
   });
 
-  it('renders only one ASCII busy indicator while send and assistant activity overlap', async () => {
+  it('renders only one activity block while send and assistant activity overlap', async () => {
     let resolveSend: (message: AgentMessageResponseDto) => void;
     sdkMock.appendAgentSessionMessage.mockReturnValue(
       new Promise<AgentMessageResponseDto>((resolve) => {
@@ -1349,12 +2035,12 @@ describe(AgentSessionChatPanel.name, () => {
     await fireEvent.input(input, { target: { value: 'Start task' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(screen.getAllByText('pi is working...')).toHaveLength(1);
+    expect(await screen.findAllByRole('article', { name: 'Pi is working' })).toHaveLength(1);
 
     resolveSend!(makeMessage('message-created', AgentMessageRole.User, 'Start task'));
     await tick();
 
-    expect(screen.getAllByText('pi is working...')).toHaveLength(1);
+    expect(screen.getAllByRole('article', { name: 'Pi is working' })).toHaveLength(1);
   });
 
   it('renders a visible label for the message draft', async () => {

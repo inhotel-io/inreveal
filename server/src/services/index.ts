@@ -8,6 +8,7 @@ import { AgentOperationPlanService } from 'src/services/agent-operation-plan.ser
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
+import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import { AlbumService } from 'src/services/album.service';
@@ -80,6 +81,7 @@ export const services = [
   AgentProviderCredentialService,
   AgentRunnerService,
   AgentRunnerToolTokenService,
+  AgentSessionActivityEventService,
   AgentSessionService,
   AgentToolService,
   AlbumService,

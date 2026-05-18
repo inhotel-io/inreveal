@@ -11,6 +11,8 @@ vi.mock('@immich/sdk', async (originalImport) => {
     }
   }
 
+  mocks.getAgentSessionActivityEvents ??= vi.fn();
+
   const mock = { ...module, ...mocks };
   return { ...mock, default: mock };
 });

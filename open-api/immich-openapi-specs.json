@@ -2447,6 +2447,66 @@
         "x-immich-state": "Alpha"
       }
     },
+    "/agent/sessions/{id}/activity-events": {
+      "get": {
+        "description": "Retrieve persisted activity events for an AI agent session owned by the current user.",
+        "operationId": "getAgentSessionActivityEvents",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentSessionActivityEventResponseDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List agent session activity events",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentSession.read",
+        "x-immich-state": "Alpha"
+      }
+    },
     "/agent/sessions/{id}/cancel": {
       "post": {
         "description": "Cancel an active AI agent session owned by the current user.",
@@ -27164,6 +27224,109 @@
           "toolCall"
         ],
         "type": "object"
+      },
+      "AgentSessionActivityEventCounts": {
+        "additionalProperties": false,
+        "properties": {
+          "applied": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failed": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "skipped": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AgentSessionActivityEventResponseDto": {
+        "properties": {
+          "counts": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AgentSessionActivityEventCounts"
+              }
+            ],
+            "nullable": true
+          },
+          "createdAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "start-processing",
+              "plan-composing",
+              "apply-progress",
+              "runner-recovery",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "sessionId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AgentSessionActivityEventSource"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentSessionActivityEventStatus"
+          },
+          "summary": {
+            "maxLength": 240,
+            "minLength": 1,
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "counts",
+          "createdAt",
+          "id",
+          "kind",
+          "sessionId",
+          "source",
+          "status",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "AgentSessionActivityEventSource": {
+        "enum": [
+          "server",
+          "runner"
+        ],
+        "type": "string"
+      },
+      "AgentSessionActivityEventStatus": {
+        "enum": [
+          "running",
+          "completed",
+          "failed",
+          "skipped"
+        ],
+        "type": "string"
       },
       "AgentSessionCreateDto": {
         "properties": {

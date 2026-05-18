@@ -582,6 +582,22 @@ export type AgentSessionCreateDto = {
 export type AgentSessionUpdateDto = {
     title: string | null;
 };
+export type AgentSessionActivityEventCounts = {
+    applied?: number;
+    failed?: number;
+    skipped?: number;
+    total?: number;
+};
+export type AgentSessionActivityEventResponseDto = {
+    counts: (AgentSessionActivityEventCounts) | null;
+    createdAt: string;
+    id: string;
+    kind: Kind;
+    sessionId: string;
+    source: AgentSessionActivityEventSource;
+    status: AgentSessionActivityEventStatus;
+    summary: string | null;
+};
 export type AgentMessageTextBlock = {
     text: string;
     "type": AgentMessageTextBlockType;
@@ -5263,6 +5279,19 @@ export function updateAgentSession({ id, agentSessionUpdateDto }: {
     })));
 }
 /**
+ * List agent session activity events
+ */
+export function getAgentSessionActivityEvents({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AgentSessionActivityEventResponseDto[];
+    }>(`/agent/sessions/${encodeURIComponent(id)}/activity-events`, {
+        ...opts
+    }));
+}
+/**
  * Cancel an agent session
  */
 export function cancelAgentSession({ id }: {
@@ -9728,6 +9757,23 @@ export enum AgentSessionStatus {
     Cancelled = "cancelled",
     Interrupted = "interrupted",
     Failed = "failed"
+}
+export enum Kind {
+    StartProcessing = "start-processing",
+    PlanComposing = "plan-composing",
+    ApplyProgress = "apply-progress",
+    RunnerRecovery = "runner-recovery",
+    Unknown = "unknown"
+}
+export enum AgentSessionActivityEventSource {
+    Server = "server",
+    Runner = "runner"
+}
+export enum AgentSessionActivityEventStatus {
+    Running = "running",
+    Completed = "completed",
+    Failed = "failed",
+    Skipped = "skipped"
 }
 export enum AgentMessageTextBlockType {
     Text = "text"

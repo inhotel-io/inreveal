@@ -12,6 +12,8 @@ import {
   AgentOperationType,
   AgentPermissionPreset,
   AgentProviderType,
+  AgentSessionActivityEventKind,
+  AgentSessionActivityEventStatus,
   AgentSessionStatus,
   AgentToolApprovalDecision,
   AgentToolCallStatus,
@@ -32,6 +34,7 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
+import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
@@ -228,6 +231,7 @@ describe(AgentOperationPlanService.name, () => {
   let planRepository: ReturnType<typeof automock<AgentOperationPlanRepository>>;
   let toolCallRepository: ReturnType<typeof automock<AgentToolCallRepository>>;
   let websocketRepository: ReturnType<typeof automock<WebsocketRepository>>;
+  let activityEventService: Pick<AgentSessionActivityEventService, 'createSystemEvent'>;
 
   beforeEach(() => {
     accessRepository = newAccessRepositoryMock();
@@ -240,6 +244,9 @@ describe(AgentOperationPlanService.name, () => {
     planRepository = automock(AgentOperationPlanRepository, { args: [{} as never] });
     toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
     websocketRepository = automock(WebsocketRepository, { args: [{} as never, { setContext: () => {} } as never] });
+    activityEventService = {
+      createSystemEvent: vi.fn(() => Promise.resolve(null)),
+    };
     sessionRepository.update.mockResolvedValue({} as never);
     websocketRepository.clientSend.mockImplementation(() => {});
     toolCallRepository.transition.mockImplementation((_sessionId, _id, _expectedStatus, dto) =>
@@ -261,6 +268,7 @@ describe(AgentOperationPlanService.name, () => {
       sharedSpaceService,
       assetService,
       tagService,
+      activityEventService,
     );
   });
 
@@ -1737,6 +1745,65 @@ describe(AgentOperationPlanService.name, () => {
       skippedCount: 0,
       failedCount: 0,
     });
+  });
+
+  it('emits aggregate apply progress activity events without exposing operation or asset ids', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
+    const assetId = newUuid();
+    const albumId = newUuid();
+    const createOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      payload: { albumName: 'Portugal' },
+    });
+    const addOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AlbumAddAssets,
+      targetKind: AgentOperationTargetKind.NewAlbum,
+      temporaryTargetId: 'tmp-portugal',
+      assetIds: [assetId],
+      payload: {},
+      dependencyIds: [createOperation.id],
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [createOperation, addOperation] });
+    const appliedPlan = applyUpdatesToPlan(plan, [
+      { id: createOperation.id, status: AgentOperationStatus.Applied, result: { albumId }, error: null },
+      { id: addOperation.id, status: AgentOperationStatus.Applied, result: { albumId, assetIds: [assetId] }, error: null },
+    ]);
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockResolvedValue(appliedPlan);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+    albumService.create.mockResolvedValue({ id: albumId } as never);
+    albumService.addAssets.mockResolvedValue([{ id: assetId, success: true }]);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [createOperation.id, addOperation.id],
+    });
+
+    expect(activityEventService.createSystemEvent).toHaveBeenCalledWith(auth.user.id, session.id, {
+      kind: AgentSessionActivityEventKind.ApplyProgress,
+      status: AgentSessionActivityEventStatus.Running,
+      counts: { total: 2, applied: 0, skipped: 0, failed: 0 },
+    });
+    expect(activityEventService.createSystemEvent).toHaveBeenCalledWith(auth.user.id, session.id, {
+      kind: AgentSessionActivityEventKind.ApplyProgress,
+      status: AgentSessionActivityEventStatus.Completed,
+      counts: { total: 2, applied: 2, skipped: 0, failed: 0 },
+    });
+    expect(activityEventService.createSystemEvent).not.toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({
+        operationIds: expect.anything(),
+        assetIds: expect.anything(),
+      }),
+    );
   });
 
   it('applies normalized album create field overrides before calling AlbumService.create', async () => {

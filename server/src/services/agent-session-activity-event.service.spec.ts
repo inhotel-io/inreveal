@@ -1,0 +1,235 @@
+import { BadRequestException } from '@nestjs/common';
+import { AgentSession, AgentSessionActivityEvent } from 'src/database';
+import { AgentSessionActivityEventCreateDto } from 'src/dtos/agent-session-activity-event.dto';
+import {
+  AgentSessionActivityEventKind,
+  AgentSessionActivityEventSource,
+  AgentSessionActivityEventStatus,
+  AgentApprovalMode,
+  AgentPermissionPreset,
+  AgentProviderType,
+  AgentSessionStatus,
+} from 'src/enum';
+import { AgentSessionActivityEventRepository } from 'src/repositories/agent-session-activity-event.repository';
+import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
+import { WebsocketRepository } from 'src/repositories/websocket.repository';
+import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
+import { AuthFactory } from 'test/factories/auth.factory';
+import { factory } from 'test/small.factory';
+import { automock } from 'test/utils';
+
+const makeSession = (overrides: Partial<AgentSession> = {}): AgentSession => ({
+  id: factory.uuid(),
+  userId: factory.uuid(),
+  status: AgentSessionStatus.Running,
+  title: null,
+  providerCredentialId: factory.uuid(),
+  credentialSnapshot: {
+    id: factory.uuid(),
+    providerType: AgentProviderType.OpenAI,
+    label: 'OpenAI',
+    baseUrl: null,
+    models: ['gpt-5.1'],
+    defaultModel: 'gpt-5.1',
+  },
+  modelSnapshot: { providerCredentialId: factory.uuid(), model: 'gpt-5.1' },
+  permissionPreset: AgentPermissionPreset.Careful,
+  permissionPlanSnapshot: {
+    read: { metadata: true, previews: true, originals: false },
+    providerExposure: { metadata: true, previews: true, originals: false, allowOriginalsForExternalProviders: false },
+    assetScope: { owned: true, sharedSpaces: false, locked: false },
+    writeScope: {
+      createAlbum: true,
+      addAssets: true,
+      removeAssets: false,
+      updateDetails: false,
+      setCover: false,
+      createSpace: false,
+      addAssetsToSpaces: false,
+      removeAssetsFromSpaces: false,
+      updateSpaceDetails: false,
+      editAssets: false,
+      favoriteAssets: false,
+      archiveAssets: false,
+      tagAssets: false,
+    },
+    limits: {
+      maxAssetsPerToolCall: 20,
+      maxAssetsPerSession: 100,
+      maxPreviewsPerToolCall: 10,
+      maxOriginalsPerToolCall: 0,
+      expiresInMinutes: 60,
+    },
+  },
+  approvalMode: AgentApprovalMode.Strict,
+  runnerEndpoint: 'http://agent-runner:4477',
+  runnerSessionId: 'runner-session',
+  runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: [], models: [] },
+  initialContextSnapshot: {},
+  createdAt: new Date('2026-05-18T10:00:00.000Z'),
+  updatedAt: new Date('2026-05-18T10:00:00.000Z'),
+  updateId: factory.uuid(),
+  endedAt: null,
+  ...overrides,
+});
+
+const makeEvent = (overrides: Partial<AgentSessionActivityEvent> = {}): AgentSessionActivityEvent => ({
+  id: factory.uuid(),
+  sessionId: factory.uuid(),
+  kind: AgentSessionActivityEventKind.StartProcessing,
+  status: AgentSessionActivityEventStatus.Running,
+  source: AgentSessionActivityEventSource.Server,
+  summary: null,
+  counts: null,
+  createdAt: new Date('2026-05-18T10:00:00.000Z'),
+  ...overrides,
+});
+
+describe(AgentSessionActivityEventService.name, () => {
+  const auth = AuthFactory.create();
+  let sut: AgentSessionActivityEventService;
+  let repository: ReturnType<typeof automock<AgentSessionActivityEventRepository>>;
+  let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
+  let websocketRepository: ReturnType<typeof automock<WebsocketRepository>>;
+
+  beforeEach(() => {
+    repository = automock(AgentSessionActivityEventRepository, { args: [{} as never] });
+    sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
+    websocketRepository = automock(WebsocketRepository, { args: [{} as never, { setContext: () => {} } as never] });
+    websocketRepository.clientSend.mockImplementation(() => {});
+    sut = new AgentSessionActivityEventService(repository, sessionRepository, websocketRepository);
+  });
+
+  it('returns owned history ordered by repository order', async () => {
+    const session = makeSession({ userId: auth.user.id });
+    const first = makeEvent({ sessionId: session.id, createdAt: new Date('2026-05-18T10:01:00.000Z') });
+    const second = makeEvent({ sessionId: session.id, createdAt: new Date('2026-05-18T10:01:00.000Z') });
+    sessionRepository.getById.mockResolvedValue(session);
+    repository.getBySessionId.mockResolvedValue([first, second]);
+
+    await expect(sut.getHistory(auth, session.id)).resolves.toEqual([first, second]);
+
+    expect(sessionRepository.getById).toHaveBeenCalledWith(auth.user.id, session.id);
+    expect(repository.getBySessionId).toHaveBeenCalledWith(session.id);
+  });
+
+  it('returns an empty owned history', async () => {
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+    repository.getBySessionId.mockResolvedValue([]);
+
+    await expect(sut.getHistory(auth, session.id)).resolves.toEqual([]);
+  });
+
+  it('rejects history for sessions not owned by the current user', async () => {
+    sessionRepository.getById.mockImplementation(() => Promise.resolve(undefined as never));
+
+    await expect(sut.getHistory(auth, factory.uuid())).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it.each([AgentSessionStatus.Completed, AgentSessionStatus.Cancelled, AgentSessionStatus.Failed])(
+    'ignores new events for terminal %s sessions',
+    async (status) => {
+      const session = makeSession({ userId: auth.user.id, status });
+      sessionRepository.getById.mockResolvedValue(session);
+
+      await expect(sut.create(auth, session.id, makeCreateDto())).resolves.toBeNull();
+
+      expect(repository.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('redacts secrets before persistence', async () => {
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+    repository.create.mockImplementation((event) =>
+      Promise.resolve(
+        makeEvent({
+          ...event,
+          createdAt: new Date('2026-05-18T10:00:00.000Z'),
+        }),
+      ),
+    );
+
+    const result = await sut.create(auth, session.id, makeCreateDto({ summary: 'Using Bearer sk-secret123456789' }));
+
+    expect(result?.summary).toBe('Using Bearer [REDACTED]');
+  });
+
+  it('websockets persisted activity events', async () => {
+    const session = makeSession({ userId: auth.user.id });
+    const event = makeEvent({ sessionId: session.id });
+    sessionRepository.getById.mockResolvedValue(session);
+    repository.create.mockResolvedValue(event);
+
+    await expect(sut.create(auth, session.id, makeCreateDto())).resolves.toEqual(event);
+
+    expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', auth.user.id, {
+      type: 'activity',
+      sessionId: session.id,
+      event,
+      createdAt: event.createdAt.toISOString(),
+    });
+  });
+
+  it('accepts apply progress while the session is applying', async () => {
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Applying });
+    const event = makeEvent({
+      sessionId: session.id,
+      kind: AgentSessionActivityEventKind.ApplyProgress,
+      counts: { total: 5, applied: 2, skipped: 0, failed: 0 },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    repository.create.mockResolvedValue(event);
+
+    await expect(
+      sut.create(
+        auth,
+        session.id,
+        makeCreateDto({
+          kind: AgentSessionActivityEventKind.ApplyProgress,
+          counts: { total: 5, applied: 2, skipped: 0, failed: 0 },
+        }),
+      ),
+    ).resolves.toEqual(event);
+  });
+
+  it('suppresses prompt and reasoning summaries before persistence', async () => {
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+    repository.create.mockImplementation((event) =>
+      Promise.resolve(
+        makeEvent({
+          ...event,
+          createdAt: new Date('2026-05-18T10:00:00.000Z'),
+        }),
+      ),
+    );
+
+    const result = await sut.create(
+      auth,
+      session.id,
+      makeCreateDto({
+        summary: 'chain-of-thought: hidden reasoning',
+      }),
+    );
+
+    expect(result?.summary).toBe('Activity update');
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        summary: 'Activity update',
+      }),
+    );
+  });
+});
+
+const makeCreateDto = (
+  overrides: Partial<AgentSessionActivityEventCreateDto> = {},
+): AgentSessionActivityEventCreateDto => ({
+  kind: AgentSessionActivityEventKind.StartProcessing,
+  status: AgentSessionActivityEventStatus.Running,
+  source: AgentSessionActivityEventSource.Server,
+  summary: 'Starting',
+  counts: null,
+  ...overrides,
+});
