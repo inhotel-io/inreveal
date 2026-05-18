@@ -20,6 +20,8 @@ export class AgentProviderCredentialService {
   ) {}
 
   async create(auth: AuthDto, dto: AgentProviderCredentialCreateDto): Promise<AgentProviderCredentialResponseDto> {
+    this.validateDefaultModel(dto.models ?? [], dto.defaultModel ?? null);
+
     const encryptedSecret = this.encryptedSecretService.encrypt(dto.secret);
     const credential = await this.repository.create({
       userId: auth.user.id,
@@ -57,6 +59,11 @@ export class AgentProviderCredentialService {
     if (providerType === AgentProviderType.OpenAICompatible && !baseUrl) {
       throw new BadRequestException('baseUrl is required for openai-compatible providers');
     }
+
+    this.validateDefaultModel(
+      dto.models === undefined ? existing.models : dto.models,
+      dto.defaultModel === undefined ? existing.defaultModel : dto.defaultModel,
+    );
 
     const update: Updateable<AgentProviderCredentialTable> = {};
     if (dto.providerType !== undefined) {
@@ -104,6 +111,12 @@ export class AgentProviderCredentialService {
     }
 
     return credential;
+  }
+
+  private validateDefaultModel(models: string[], defaultModel: string | null) {
+    if (models.length > 0 && defaultModel && !models.includes(defaultModel)) {
+      throw new BadRequestException('defaultModel must be listed in models');
+    }
   }
 
   private map(credential: AgentProviderCredential): AgentProviderCredentialResponseDto {
