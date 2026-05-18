@@ -1,5 +1,408 @@
 import { JobName, SharedSpaceActivityType } from 'src/enum';
+import { PersonRepository } from 'src/repositories/person.repository';
+import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { IdentityMergePropagationService, MergeProfile } from 'src/services/identity-merge-propagation.service';
+
+type PersonalMergePersonRow = {
+  id: string;
+  name: string;
+  birthDate: string | null;
+  thumbnailPath: string;
+  color: string | null;
+  species: string | null;
+  isHidden: boolean;
+  isFavorite: boolean;
+  faceAssetId: string | null;
+  identityId: string | null;
+};
+
+type PersonalMergeFaceRow = { id: string; personId: string | null; deletedAt?: string | null; isVisible?: boolean };
+
+class PersonalMergeDb {
+  constructor(
+    public people: PersonalMergePersonRow[],
+    public faces: PersonalMergeFaceRow[],
+  ) {}
+
+  selectFrom(table: string) {
+    return new PersonalMergeSelectBuilder(this, table);
+  }
+
+  updateTable(table: string) {
+    return new PersonalMergeUpdateBuilder(this, table);
+  }
+
+  deleteFrom(table: string) {
+    return new PersonalMergeDeleteBuilder(this, table);
+  }
+}
+
+class PersonalMergeSelectBuilder {
+  private idFilter: string[] | null = null;
+  private faceFilters: Array<{ column: string; operator: string; value: unknown }> = [];
+
+  constructor(
+    private db: PersonalMergeDb,
+    private table: string,
+  ) {}
+
+  select() {
+    return this;
+  }
+
+  where(column: string, operator: string, value: unknown) {
+    if (this.table === 'person' && column === 'id' && operator === 'in' && Array.isArray(value)) {
+      this.idFilter = value;
+    }
+
+    if (this.table === 'asset_face') {
+      this.faceFilters.push({ column, operator, value });
+    }
+    return this;
+  }
+
+  async execute() {
+    if (this.table !== 'person') {
+      return [];
+    }
+
+    return this.idFilter ? this.db.people.filter((person) => this.idFilter?.includes(person.id)) : this.db.people;
+  }
+
+  async executeTakeFirst() {
+    if (this.table !== 'asset_face') {
+      return undefined;
+    }
+
+    return this.db.faces.find((face) =>
+      this.faceFilters.every(({ column, operator, value }) => {
+        const key = column.replace('asset_face.', '') as keyof PersonalMergeFaceRow;
+        const faceValue = face[key] ?? null;
+        if (operator === '=') {
+          return faceValue === value;
+        }
+        if (operator === 'is') {
+          return faceValue === value;
+        }
+        return false;
+      }),
+    );
+  }
+}
+
+class PersonalMergeUpdateBuilder {
+  private update: Record<string, unknown> = {};
+  private whereColumn: string | null = null;
+  private whereValue: string | null = null;
+
+  constructor(
+    private db: PersonalMergeDb,
+    private table: string,
+  ) {}
+
+  set(update: Record<string, unknown>) {
+    this.update = update;
+    return this;
+  }
+
+  where(column: string, _operator: string, value: string) {
+    this.whereColumn = column;
+    this.whereValue = value;
+    return this;
+  }
+
+  async execute() {
+    if (this.table === 'person' && this.whereColumn === 'id') {
+      for (const person of this.db.people) {
+        if (person.id === this.whereValue) {
+          Object.assign(person, this.update);
+        }
+      }
+    }
+
+    if (this.table === 'asset_face' && this.whereColumn === 'personId') {
+      for (const face of this.db.faces) {
+        if (face.personId === this.whereValue) {
+          Object.assign(face, this.update);
+        }
+      }
+    }
+
+    return [];
+  }
+}
+
+class PersonalMergeDeleteBuilder {
+  private whereColumn: string | null = null;
+  private whereValue: string | null = null;
+
+  constructor(
+    private db: PersonalMergeDb,
+    private table: string,
+  ) {}
+
+  where(column: string, _operator: string, value: string) {
+    this.whereColumn = column;
+    this.whereValue = value;
+    return this;
+  }
+
+  async execute() {
+    if (this.table === 'person' && this.whereColumn === 'id') {
+      this.db.people = this.db.people.filter((person) => person.id !== this.whereValue);
+    }
+
+    return [];
+  }
+}
+
+type SharedSpaceMergePersonRow = {
+  id: string;
+  name: string;
+  birthDate: string | null;
+  isHidden: boolean;
+  representativeFaceId: string | null;
+  representativeFaceSource: 'auto' | 'manual';
+  nameSource: string;
+  birthDateSource: string;
+  faceCount: number;
+  assetCount: number;
+};
+
+type SharedSpaceMergeFaceRow = { personId: string; assetFaceId: string; assetId: string };
+type SharedSpaceMergeAliasRow = { personId: string; userId: string; alias: string };
+
+class SharedSpaceMergeDb {
+  constructor(
+    public people: SharedSpaceMergePersonRow[],
+    public faces: SharedSpaceMergeFaceRow[],
+    public aliases: SharedSpaceMergeAliasRow[],
+  ) {}
+
+  selectFrom(table: string) {
+    return new SharedSpaceMergeSelectBuilder(this, table);
+  }
+
+  updateTable(table: string) {
+    return new SharedSpaceMergeUpdateBuilder(this, table);
+  }
+
+  deleteFrom(table: string) {
+    return new SharedSpaceMergeDeleteBuilder(this, table);
+  }
+
+  insertInto(table: string) {
+    return new SharedSpaceMergeInsertBuilder(this, table);
+  }
+
+  removeDuplicateFaces(fromPersonId: string, toPersonId: string) {
+    const targetFaceIds = new Set(
+      this.faces.filter((face) => face.personId === toPersonId).map((face) => face.assetFaceId),
+    );
+    this.faces = this.faces.filter((face) => face.personId !== fromPersonId || !targetFaceIds.has(face.assetFaceId));
+  }
+
+  moveFaces(fromPersonId: string, toPersonId: string) {
+    for (const face of this.faces) {
+      if (face.personId === fromPersonId) {
+        face.personId = toPersonId;
+      }
+    }
+  }
+
+  recount(personIds: string[]) {
+    for (const personId of personIds) {
+      const person = this.people.find((person) => person.id === personId);
+      if (!person) {
+        continue;
+      }
+
+      const faces = this.faces.filter((face) => face.personId === personId);
+      person.faceCount = faces.length;
+      person.assetCount = new Set(faces.map((face) => face.assetId)).size;
+    }
+  }
+}
+
+class SharedSpaceMergeSelectBuilder {
+  private whereColumn: string | null = null;
+  private whereValue: string | null = null;
+
+  constructor(
+    private db: SharedSpaceMergeDb,
+    private table: string,
+  ) {}
+
+  select() {
+    return this;
+  }
+
+  selectAll() {
+    return this;
+  }
+
+  where(column: string, _operator: string, value: string) {
+    this.whereColumn = column;
+    this.whereValue = value;
+    return this;
+  }
+
+  async execute() {
+    if (this.table === 'shared_space_person_alias') {
+      return this.db.aliases.filter((alias) => alias.personId === this.whereValue);
+    }
+
+    if (this.table === 'shared_space_person_face') {
+      return this.db.faces
+        .filter((face) => face.personId === this.whereValue)
+        .map((face) => ({ assetFaceId: face.assetFaceId }));
+    }
+
+    return [];
+  }
+
+  evaluateAssetFaceIds() {
+    if (this.table !== 'shared_space_person_face' || this.whereColumn !== 'personId') {
+      return [];
+    }
+
+    return this.db.faces.filter((face) => face.personId === this.whereValue).map((face) => face.assetFaceId);
+  }
+}
+
+class SharedSpaceMergeUpdateBuilder {
+  private update: Record<string, unknown> = {};
+  private whereColumn: string | null = null;
+  private whereValue: string | null = null;
+
+  constructor(
+    private db: SharedSpaceMergeDb,
+    private table: string,
+  ) {}
+
+  set(update: Record<string, unknown>) {
+    this.update = update;
+    return this;
+  }
+
+  where(column: string, _operator: string, value: string) {
+    this.whereColumn = column;
+    this.whereValue = value;
+    return this;
+  }
+
+  async execute() {
+    if (this.table === 'shared_space_person_face' && this.whereColumn === 'personId') {
+      for (const face of this.db.faces) {
+        if (face.personId === this.whereValue) {
+          Object.assign(face, this.update);
+        }
+      }
+    }
+
+    return [];
+  }
+}
+
+class SharedSpaceMergeDeleteBuilder {
+  private personId: string | null = null;
+  private duplicateFaceSubquery: SharedSpaceMergeSelectBuilder | null = null;
+
+  constructor(
+    private db: SharedSpaceMergeDb,
+    private table: string,
+  ) {}
+
+  where(column: string, operator: string, value: string | SharedSpaceMergeSelectBuilder) {
+    if (column === 'personId' && operator === '=') {
+      this.personId = value as string;
+    }
+
+    if (column === 'assetFaceId' && operator === 'in') {
+      this.duplicateFaceSubquery = value as SharedSpaceMergeSelectBuilder;
+    }
+
+    if (column === 'id' && operator === '=') {
+      this.personId = value as string;
+    }
+
+    return this;
+  }
+
+  async execute() {
+    if (this.table === 'shared_space_person_face') {
+      const duplicateFaceIds = new Set(this.duplicateFaceSubquery?.evaluateAssetFaceIds() ?? []);
+      this.db.faces = this.db.faces.filter(
+        (face) => face.personId !== this.personId || !duplicateFaceIds.has(face.assetFaceId),
+      );
+    }
+
+    if (this.table === 'shared_space_person_alias') {
+      this.db.aliases = this.db.aliases.filter((alias) => alias.personId !== this.personId);
+    }
+
+    if (this.table === 'shared_space_person') {
+      this.db.people = this.db.people.filter((person) => person.id !== this.personId);
+    }
+
+    return [];
+  }
+}
+
+class SharedSpaceMergeInsertBuilder {
+  private row: SharedSpaceMergeAliasRow | null = null;
+
+  constructor(
+    private db: SharedSpaceMergeDb,
+    private table: string,
+  ) {}
+
+  values(row: SharedSpaceMergeAliasRow) {
+    this.row = row;
+    return this;
+  }
+
+  onConflict() {
+    return this;
+  }
+
+  doNothing() {
+    return this;
+  }
+
+  async execute() {
+    if (this.table !== 'shared_space_person_alias' || !this.row) {
+      return [];
+    }
+
+    const exists = this.db.aliases.some(
+      (alias) => alias.personId === this.row?.personId && alias.userId === this.row?.userId,
+    );
+    if (!exists) {
+      this.db.aliases.push(this.row);
+    }
+
+    return [];
+  }
+}
+
+class TestSharedSpaceRepository extends SharedSpaceRepository {
+  public reassignPersonFacesSafeCalls: Array<{ fromPersonId: string; toPersonId: string }> = [];
+
+  constructor(private fakeDb: SharedSpaceMergeDb) {
+    super(fakeDb as never);
+  }
+
+  override async reassignPersonFacesSafe(fromPersonId: string, toPersonId: string) {
+    this.reassignPersonFacesSafeCalls.push({ fromPersonId, toPersonId });
+    this.fakeDb.removeDuplicateFaces(fromPersonId, toPersonId);
+    this.fakeDb.moveFaces(fromPersonId, toPersonId);
+  }
+
+  override async recountPersons(personIds: string[]) {
+    this.fakeDb.recount(personIds);
+  }
+}
 
 const profile = (overrides: Partial<MergeProfile> & Pick<MergeProfile, 'kind' | 'id' | 'identityId'>) =>
   ({
@@ -15,7 +418,9 @@ const makeService = (profiles: MergeProfile[]) => {
     transaction: vi.fn((callback: (db: typeof transaction) => Promise<unknown>) => callback(transaction)),
   };
   const personRepository = {
-    mergePersonProfile: vi.fn().mockResolvedValue({ deletedThumbnailPath: null }),
+    mergePersonProfile: vi.fn().mockResolvedValue({ deletedThumbnailPath: null, targetNeedsFeatureFaceRepair: false }),
+    getRandomFace: vi.fn().mockResolvedValue(undefined),
+    update: vi.fn().mockResolvedValue(void 0),
     updatePersonIdentity: vi.fn().mockResolvedValue(void 0),
   };
   const faceIdentityRepository = {
@@ -72,6 +477,8 @@ const makeService = (profiles: MergeProfile[]) => {
     }),
     mergeSpacePersonProfile: vi.fn().mockResolvedValue(void 0),
     updateSpacePersonIdentity: vi.fn().mockResolvedValue(void 0),
+    repairInvalidRepresentativeFaces: vi.fn().mockResolvedValue(void 0),
+    repairOrphanedRepresentativeFaces: vi.fn().mockResolvedValue(void 0),
     logActivity: vi.fn().mockResolvedValue(void 0),
   };
 
@@ -97,6 +504,325 @@ const makeService = (profiles: MergeProfile[]) => {
     faceIdentityRepository,
   };
 };
+
+describe(PersonRepository.name, () => {
+  describe('mergePersonProfile', () => {
+    it('preserves target personal name, birth date, color, species, hidden, favorite, and feature face', async () => {
+      const db = new PersonalMergeDb(
+        [
+          {
+            id: 'target-person',
+            name: 'Target Name',
+            birthDate: '1980-01-02',
+            thumbnailPath: '/target-thumb.jpg',
+            color: '#123456',
+            species: 'human',
+            isHidden: true,
+            isFavorite: true,
+            faceAssetId: 'target-feature-face',
+            identityId: 'identity-target-old',
+          },
+          {
+            id: 'source-person',
+            name: 'Source Name',
+            birthDate: '1990-03-04',
+            thumbnailPath: '/source-thumb.jpg',
+            color: '#abcdef',
+            species: 'source species',
+            isHidden: false,
+            isFavorite: false,
+            faceAssetId: 'source-feature-face',
+            identityId: 'identity-source',
+          },
+        ],
+        [
+          { id: 'target-feature-face', personId: 'target-person', deletedAt: null, isVisible: true },
+          { id: 'source-face', personId: 'source-person', deletedAt: null, isVisible: true },
+        ],
+      );
+      const sut = new PersonRepository(db as never);
+
+      const result = await sut.mergePersonProfile(
+        { sourcePersonId: 'source-person', targetPersonId: 'target-person', targetIdentityId: 'identity-target' },
+        db as never,
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          deletedThumbnailPath: '/source-thumb.jpg',
+          targetNeedsFeatureFaceRepair: false,
+        }),
+      );
+      expect(db.people).toHaveLength(1);
+      expect(db.people[0]).toMatchObject({
+        id: 'target-person',
+        name: 'Target Name',
+        birthDate: '1980-01-02',
+        color: '#123456',
+        species: 'human',
+        isHidden: true,
+        isFavorite: true,
+        faceAssetId: 'target-feature-face',
+        identityId: 'identity-target',
+      });
+      expect(db.faces).toEqual([
+        { id: 'target-feature-face', personId: 'target-person', deletedAt: null, isVisible: true },
+        { id: 'source-face', personId: 'target-person', deletedAt: null, isVisible: true },
+      ]);
+    });
+
+    it('fills blank personal target metadata from source without copying hidden or favorite', async () => {
+      const db = new PersonalMergeDb(
+        [
+          {
+            id: 'target-person',
+            name: '',
+            birthDate: null,
+            thumbnailPath: '',
+            color: null,
+            species: null,
+            isHidden: false,
+            isFavorite: false,
+            faceAssetId: null,
+            identityId: 'identity-target-old',
+          },
+          {
+            id: 'source-person',
+            name: 'Source Name',
+            birthDate: '1990-03-04',
+            thumbnailPath: '',
+            color: '#abcdef',
+            species: 'source species',
+            isHidden: true,
+            isFavorite: true,
+            faceAssetId: 'source-feature-face',
+            identityId: 'identity-source',
+          },
+        ],
+        [],
+      );
+      const sut = new PersonRepository(db as never);
+
+      await sut.mergePersonProfile(
+        { sourcePersonId: 'source-person', targetPersonId: 'target-person', targetIdentityId: 'identity-target' },
+        db as never,
+      );
+
+      expect(db.people).toEqual([
+        expect.objectContaining({
+          id: 'target-person',
+          name: 'Source Name',
+          birthDate: '1990-03-04',
+          color: '#abcdef',
+          species: 'source species',
+          isHidden: false,
+          isFavorite: false,
+          faceAssetId: null,
+          identityId: 'identity-target',
+        }),
+      ]);
+    });
+
+    it('reports feature face repair is needed when the preserved personal feature face is invalid', async () => {
+      const db = new PersonalMergeDb(
+        [
+          {
+            id: 'target-person',
+            name: 'Target Name',
+            birthDate: null,
+            thumbnailPath: '',
+            color: null,
+            species: null,
+            isHidden: false,
+            isFavorite: false,
+            faceAssetId: 'missing-feature-face',
+            identityId: 'identity-target-old',
+          },
+          {
+            id: 'source-person',
+            name: 'Source Name',
+            birthDate: null,
+            thumbnailPath: '',
+            color: null,
+            species: null,
+            isHidden: false,
+            isFavorite: false,
+            faceAssetId: null,
+            identityId: 'identity-source',
+          },
+        ],
+        [{ id: 'source-face', personId: 'source-person', deletedAt: null, isVisible: true }],
+      );
+      const sut = new PersonRepository(db as never);
+
+      const result = await sut.mergePersonProfile(
+        { sourcePersonId: 'source-person', targetPersonId: 'target-person', targetIdentityId: 'identity-target' },
+        db as never,
+      );
+
+      expect(result.targetNeedsFeatureFaceRepair).toBe(true);
+      expect(db.people).toEqual([
+        expect.objectContaining({ id: 'target-person', faceAssetId: 'missing-feature-face' }),
+      ]);
+      expect(db.faces).toEqual([{ id: 'source-face', personId: 'target-person', deletedAt: null, isVisible: true }]);
+    });
+  });
+});
+
+describe(SharedSpaceRepository.name, () => {
+  describe('mergeSpacePersonProfile', () => {
+    it('preserves target shared-space name, birth date, hidden state, representative face, and metadata sources', async () => {
+      const db = new SharedSpaceMergeDb(
+        [
+          {
+            id: 'target-person',
+            name: 'Target Name',
+            birthDate: '1980-01-02',
+            isHidden: true,
+            representativeFaceId: 'target-representative-face',
+            representativeFaceSource: 'manual',
+            nameSource: 'manual',
+            birthDateSource: 'manual',
+            faceCount: 1,
+            assetCount: 1,
+          },
+          {
+            id: 'source-person',
+            name: 'Source Name',
+            birthDate: '1990-03-04',
+            isHidden: false,
+            representativeFaceId: 'source-representative-face',
+            representativeFaceSource: 'auto',
+            nameSource: 'profile',
+            birthDateSource: 'profile',
+            faceCount: 1,
+            assetCount: 1,
+          },
+        ],
+        [
+          { personId: 'target-person', assetFaceId: 'target-face', assetId: 'target-asset' },
+          { personId: 'source-person', assetFaceId: 'source-face', assetId: 'source-asset' },
+        ],
+        [],
+      );
+      const sut = new TestSharedSpaceRepository(db);
+
+      await sut.mergeSpacePersonProfile(
+        { sourcePersonId: 'source-person', targetPersonId: 'target-person' },
+        db as never,
+      );
+
+      expect(sut.reassignPersonFacesSafeCalls).toEqual([
+        { fromPersonId: 'source-person', toPersonId: 'target-person' },
+      ]);
+      expect(db.people).toEqual([
+        expect.objectContaining({
+          id: 'target-person',
+          name: 'Target Name',
+          birthDate: '1980-01-02',
+          isHidden: true,
+          representativeFaceId: 'target-representative-face',
+          representativeFaceSource: 'manual',
+          nameSource: 'manual',
+          birthDateSource: 'manual',
+        }),
+      ]);
+    });
+
+    it('migrates aliases while keeping existing survivor aliases', async () => {
+      const db = new SharedSpaceMergeDb(
+        [
+          {
+            id: 'target-person',
+            name: 'Target Name',
+            birthDate: null,
+            isHidden: false,
+            representativeFaceId: null,
+            representativeFaceSource: 'auto',
+            nameSource: 'none',
+            birthDateSource: 'none',
+            faceCount: 0,
+            assetCount: 0,
+          },
+          {
+            id: 'source-person',
+            name: 'Source Name',
+            birthDate: null,
+            isHidden: false,
+            representativeFaceId: null,
+            representativeFaceSource: 'auto',
+            nameSource: 'none',
+            birthDateSource: 'none',
+            faceCount: 0,
+            assetCount: 0,
+          },
+        ],
+        [],
+        [
+          { personId: 'target-person', userId: 'user-1', alias: 'Target Alias' },
+          { personId: 'source-person', userId: 'user-1', alias: 'Source Alias Loses' },
+          { personId: 'source-person', userId: 'user-2', alias: 'Source Alias Moves' },
+        ],
+      );
+      const sut = new TestSharedSpaceRepository(db);
+
+      await sut.mergeSpacePersonProfile(
+        { sourcePersonId: 'source-person', targetPersonId: 'target-person' },
+        db as never,
+      );
+
+      expect(db.aliases).toEqual([
+        { personId: 'target-person', userId: 'user-1', alias: 'Target Alias' },
+        { personId: 'target-person', userId: 'user-2', alias: 'Source Alias Moves' },
+      ]);
+    });
+
+    it('recounts face and asset counts after shared-space profile merge', async () => {
+      const db = new SharedSpaceMergeDb(
+        [
+          {
+            id: 'target-person',
+            name: 'Target Name',
+            birthDate: null,
+            isHidden: false,
+            representativeFaceId: null,
+            representativeFaceSource: 'auto',
+            nameSource: 'none',
+            birthDateSource: 'none',
+            faceCount: 0,
+            assetCount: 0,
+          },
+          {
+            id: 'source-person',
+            name: 'Source Name',
+            birthDate: null,
+            isHidden: false,
+            representativeFaceId: null,
+            representativeFaceSource: 'auto',
+            nameSource: 'none',
+            birthDateSource: 'none',
+            faceCount: 0,
+            assetCount: 0,
+          },
+        ],
+        [
+          { personId: 'target-person', assetFaceId: 'target-face', assetId: 'asset-a' },
+          { personId: 'source-person', assetFaceId: 'source-face-1', assetId: 'asset-b' },
+          { personId: 'source-person', assetFaceId: 'source-face-2', assetId: 'asset-b' },
+        ],
+        [],
+      );
+      const sut = new TestSharedSpaceRepository(db);
+
+      await sut.mergeSpacePersonProfile(
+        { sourcePersonId: 'source-person', targetPersonId: 'target-person' },
+        db as never,
+      );
+
+      expect(db.people).toEqual([expect.objectContaining({ id: 'target-person', faceCount: 3, assetCount: 2 })]);
+    });
+  });
+});
 
 describe('IdentityMergePropagationService', () => {
   describe('buildPersonalMergePlan', () => {
@@ -717,6 +1443,82 @@ describe('IdentityMergePropagationService', () => {
       );
     });
 
+    it('queues source person thumbnail cleanup for deleted personal profiles', async () => {
+      const { sut, mocks } = makeService([]);
+      mocks.person.mergePersonProfile.mockResolvedValueOnce({
+        deletedThumbnailPath: '/source-person-thumb.jpg',
+        targetNeedsFeatureFaceRepair: false,
+      });
+
+      await sut.executePlan(
+        {
+          actorUserId: 'owner-1',
+          origin: {
+            type: 'person',
+            targetProfileId: 'person-x',
+            sourceProfileIds: ['person-y'],
+            ownerId: 'owner-1',
+          },
+          targetIdentityId: 'identity-x',
+          sourceIdentityIds: ['identity-y'],
+          personalProfileMerges: [{ ownerId: 'owner-1', targetPersonId: 'person-x', sourcePersonIds: ['person-y'] }],
+          spaceProfileMerges: [],
+          profileIdentityUpdates: [],
+          affectedOwnerIds: ['owner-1'],
+          affectedSpaceIds: [],
+          followUpJobs: [],
+          activityEvents: [],
+        },
+        { actorUserId: 'owner-1' },
+      );
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.FileDelete,
+        data: { files: ['/source-person-thumb.jpg'] },
+      });
+    });
+
+    it('repairs missing personal survivor feature faces and queues thumbnail regeneration', async () => {
+      const { sut, mocks, transaction } = makeService([]);
+      mocks.person.mergePersonProfile.mockResolvedValueOnce({
+        deletedThumbnailPath: null,
+        targetNeedsFeatureFaceRepair: true,
+      });
+      mocks.person.getRandomFace.mockResolvedValueOnce({ id: 'replacement-face' });
+
+      await sut.executePlan(
+        {
+          actorUserId: 'owner-1',
+          origin: {
+            type: 'person',
+            targetProfileId: 'person-x',
+            sourceProfileIds: ['person-y'],
+            ownerId: 'owner-1',
+          },
+          targetIdentityId: 'identity-x',
+          sourceIdentityIds: ['identity-y'],
+          personalProfileMerges: [{ ownerId: 'owner-1', targetPersonId: 'person-x', sourcePersonIds: ['person-y'] }],
+          spaceProfileMerges: [],
+          profileIdentityUpdates: [],
+          affectedOwnerIds: ['owner-1'],
+          affectedSpaceIds: [],
+          followUpJobs: [],
+          activityEvents: [],
+        },
+        { actorUserId: 'owner-1' },
+      );
+
+      expect(mocks.person.getRandomFace).toHaveBeenCalledWith('person-x', transaction);
+      expect(mocks.person.update).toHaveBeenCalledWith(
+        { id: 'person-x', faceAssetId: 'replacement-face' },
+        transaction,
+      );
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.PersonGenerateThumbnail,
+        data: { id: 'person-x' },
+      });
+    });
+
     it('merges duplicate space profiles before collapsing identities', async () => {
       const { sut, mocks } = makeService([]);
 
@@ -748,6 +1550,41 @@ describe('IdentityMergePropagationService', () => {
       );
       expect(mocks.sharedSpace.mergeSpacePersonProfile.mock.invocationCallOrder[0]).toBeLessThan(
         mocks.faceIdentity.mergeIdentitiesAfterProfileResolution.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('repairs shared-space representative faces before queueing space dedup jobs', async () => {
+      const { sut, mocks, transaction } = makeService([]);
+
+      await sut.executePlan(
+        {
+          actorUserId: 'owner-1',
+          origin: {
+            type: 'person',
+            targetProfileId: 'person-x',
+            sourceProfileIds: ['person-y'],
+            ownerId: 'owner-1',
+          },
+          targetIdentityId: 'identity-x',
+          sourceIdentityIds: ['identity-y'],
+          personalProfileMerges: [],
+          spaceProfileMerges: [{ spaceId: 'space-a', targetPersonId: 'space-a-x', sourcePersonIds: ['space-a-y'] }],
+          profileIdentityUpdates: [],
+          affectedOwnerIds: [],
+          affectedSpaceIds: ['space-a'],
+          followUpJobs: [{ name: JobName.SharedSpacePersonDedup, data: { spaceId: 'space-a' } }],
+          activityEvents: [],
+        },
+        { actorUserId: 'owner-1' },
+      );
+
+      expect(mocks.sharedSpace.repairInvalidRepresentativeFaces).toHaveBeenCalledWith('space-a', transaction);
+      expect(mocks.sharedSpace.repairOrphanedRepresentativeFaces).toHaveBeenCalledWith('space-a', transaction);
+      expect(mocks.sharedSpace.mergeSpacePersonProfile.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.sharedSpace.repairInvalidRepresentativeFaces.mock.invocationCallOrder[0],
+      );
+      expect(mocks.sharedSpace.repairOrphanedRepresentativeFaces.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.job.queue.mock.invocationCallOrder[0],
       );
     });
 

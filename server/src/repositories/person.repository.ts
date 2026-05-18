@@ -63,6 +63,8 @@ export interface PeopleFaceStatisticsOptions {
 
 const peopleAssetVisibilities = [AssetVisibility.Archive, AssetVisibility.Timeline];
 
+const isBlank = (value: string | null | undefined) => !value || value.trim().length === 0;
+
 export interface DeleteFacesOptions {
   sourceType: SourceType;
 }
@@ -130,10 +132,10 @@ export class PersonRepository {
       targetIdentityId: string;
     },
     db: Kysely<DB> | Transaction<DB> = this.db,
-  ): Promise<{ deletedThumbnailPath: string | null }> {
+  ): Promise<{ deletedThumbnailPath: string | null; targetNeedsFeatureFaceRepair: boolean }> {
     const people = await db
       .selectFrom('person')
-      .select(['id', 'name', 'birthDate', 'thumbnailPath'])
+      .select(['id', 'name', 'birthDate', 'thumbnailPath', 'color', 'species', 'faceAssetId'])
       .where('id', 'in', [input.sourcePersonId, input.targetPersonId])
       .execute();
     const target = people.find((person) => person.id === input.targetPersonId);
@@ -143,12 +145,20 @@ export class PersonRepository {
     }
 
     const update: Updateable<PersonTable> = { identityId: input.targetIdentityId };
-    if (!target.name && source.name) {
+    if (isBlank(target.name) && !isBlank(source.name)) {
       update.name = source.name;
     }
 
     if (!target.birthDate && source.birthDate) {
       update.birthDate = source.birthDate;
+    }
+
+    if (isBlank(target.color) && !isBlank(source.color)) {
+      update.color = source.color;
+    }
+
+    if (isBlank(target.species) && !isBlank(source.species)) {
+      update.species = source.species;
     }
 
     await db.updateTable('person').set(update).where('id', '=', input.targetPersonId).execute();
@@ -157,9 +167,28 @@ export class PersonRepository {
       .set({ personId: input.targetPersonId })
       .where('personId', '=', input.sourcePersonId)
       .execute();
+    const targetNeedsFeatureFaceRepair =
+      !target.faceAssetId || !(await this.isFeatureFaceValid(input.targetPersonId, target.faceAssetId, db));
     await db.deleteFrom('person').where('id', '=', input.sourcePersonId).execute();
 
-    return { deletedThumbnailPath: source.thumbnailPath || null };
+    return { deletedThumbnailPath: source.thumbnailPath || null, targetNeedsFeatureFaceRepair };
+  }
+
+  private async isFeatureFaceValid(
+    personId: string,
+    faceAssetId: string,
+    db: Kysely<DB> | Transaction<DB>,
+  ): Promise<boolean> {
+    const row = await db
+      .selectFrom('asset_face')
+      .select('asset_face.id')
+      .where('asset_face.id', '=', faceAssetId)
+      .where('asset_face.personId', '=', personId)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', 'is', true)
+      .executeTakeFirst();
+
+    return !!row;
   }
 
   async updatePersonIdentity(
@@ -732,8 +761,8 @@ export class PersonRepository {
     await query.selectFrom(sql`(select 1)`.as('dummy')).execute();
   }
 
-  async update(person: Updateable<PersonTable> & { id: string }) {
-    return this.db
+  async update(person: Updateable<PersonTable> & { id: string }, db: Kysely<DB> | Transaction<DB> = this.db) {
+    return db
       .updateTable('person')
       .set(person)
       .where('person.id', '=', person.id)
@@ -793,8 +822,8 @@ export class PersonRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  getRandomFace(personId: string) {
-    return this.db
+  getRandomFace(personId: string, db: Kysely<DB> | Transaction<DB> = this.db) {
+    return db
       .selectFrom('asset_face')
       .selectAll('asset_face')
       .where('asset_face.personId', '=', personId)
