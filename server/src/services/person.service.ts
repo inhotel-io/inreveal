@@ -780,12 +780,6 @@ export class PersonService extends BaseService {
       return JobStatus.Skipped;
     }
 
-    await this.jobRepository.waitForQueueCompletion(
-      QueueName.ThumbnailGeneration,
-      QueueName.FaceDetection,
-      ...(force ? [QueueName.PeopleBackfill] : []),
-    );
-
     if (nightly) {
       const [state, latestFaceDate] = await Promise.all([
         this.systemMetadataRepository.get(SystemMetadataKey.FacialRecognitionState),
@@ -798,11 +792,19 @@ export class PersonService extends BaseService {
       }
     }
 
+    await this.jobRepository.waitForQueueCompletion(
+      QueueName.ThumbnailGeneration,
+      QueueName.FaceDetection,
+      ...(force ? [QueueName.PeopleBackfill] : []),
+    );
+
     if (force) {
       await this.jobRepository.empty(QueueName.FacialRecognition, true);
     }
 
-    const { waiting } = await this.jobRepository.getJobCounts(QueueName.FacialRecognition);
+    const { active, delayed, paused, waiting } = await this.jobRepository.getJobCounts(QueueName.FacialRecognition);
+    const hasOtherActiveRecognitionWork = active > 1;
+    const hasPendingRecognitionWork = waiting > 0 || delayed > 0 || paused > 0 || hasOtherActiveRecognitionWork;
 
     if (force) {
       await this.personRepository.unassignFaces({ sourceType: SourceType.MachineLearning });
@@ -816,9 +818,10 @@ export class PersonService extends BaseService {
       await this.sharedSpaceRepository.deleteAllPersonFaces();
       await this.sharedSpaceRepository.deleteAllPersons();
       await this.faceIdentityRepository.deleteUnreferencedIdentities();
-    } else if (waiting) {
+    } else if (hasPendingRecognitionWork) {
       this.logger.debug(
-        `Skipping facial recognition queueing because ${waiting} job${waiting > 1 ? 's are' : ' is'} already queued`,
+        `Skipping facial recognition queueing because recognition work is already pending ` +
+          `(${active} active, ${waiting} waiting, ${delayed} delayed, ${paused} paused)`,
       );
       return JobStatus.Skipped;
     }
