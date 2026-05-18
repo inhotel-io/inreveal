@@ -1333,6 +1333,7 @@ Summarize plan risks and selected changes.
 - `planning-tool-arguments-not-object`: The params.arguments value must be a JSON object with summary and operations.
 - `planning-missing-create-temporary-target-id`: New album and space create operations need a temporaryTargetId so later operations can reference them.
 - `planning-missing-temporary-target-dependency`: Create the new album or space first, then reference the same temporaryTargetId from dependent add-assets or cover operations.
+- `planning-mismatched-temporary-target-kind`: Album dependencies require an album create operation; space dependencies require a space create operation using the same temporaryTargetId.
 - `planning-wrong-album-target-kind`: Album operations must use targetKind existing_album with targetId, or new_album with temporaryTargetId when the operation allows new albums.
 - `planning-wrong-space-target-kind`: Space operations must use targetKind existing_space with targetId, or new_space with temporaryTargetId when the operation allows new spaces.
 - `planning-wrong-asset-batch-target-kind`: Favorite, archive, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.
@@ -1348,6 +1349,7 @@ Summarize plan risks and selected changes.
 - `planning-tool-arguments-not-object`: The params.arguments value must be a JSON object with summary and operations.
 - `planning-missing-create-temporary-target-id`: New album and space create operations need a temporaryTargetId so later operations can reference them.
 - `planning-missing-temporary-target-dependency`: Create the new album or space first, then reference the same temporaryTargetId from dependent add-assets or cover operations.
+- `planning-mismatched-temporary-target-kind`: Album dependencies require an album create operation; space dependencies require a space create operation using the same temporaryTargetId.
 - `planning-wrong-album-target-kind`: Album operations must use targetKind existing_album with targetId, or new_album with temporaryTargetId when the operation allows new albums.
 - `planning-wrong-space-target-kind`: Space operations must use targetKind existing_space with targetId, or new_space with temporaryTargetId when the operation allows new spaces.
 - `planning-wrong-asset-batch-target-kind`: Favorite, archive, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.
