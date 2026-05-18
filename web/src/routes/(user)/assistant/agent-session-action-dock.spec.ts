@@ -271,6 +271,20 @@ describe(AgentSessionActionDock.name, () => {
     expect(screen.queryByText('Found matching photos')).not.toBeInTheDocument();
   });
 
+  it('refreshes active session state while polling tool calls so missed runner errors stop stale loading UI', async () => {
+    const onSessionUpdated = vi.fn();
+    const interruptedSession = makeSession({ status: AgentSessionStatus.Interrupted });
+    sdkMock.getToolCalls.mockResolvedValue([]);
+    sdkMock.getAgentSession.mockResolvedValue(interruptedSession);
+
+    render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.Running }), onSessionUpdated },
+    });
+
+    await waitFor(() => expect(sdkMock.getAgentSession).toHaveBeenCalledWith({ id: 'session-1' }));
+    expect(onSessionUpdated).toHaveBeenCalledWith(interruptedSession);
+  });
+
   it('renders plan review inside the dock when there are no pending approvals', async () => {
     sdkMock.getCurrentOperationPlan.mockResolvedValue(plan());
 
