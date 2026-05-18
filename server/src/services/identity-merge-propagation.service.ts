@@ -395,6 +395,7 @@ export class IdentityMergePropagationService {
     const profileIdentityUpdates: IdentityMergePropagationPlan['profileIdentityUpdates'] = [];
     const affectedOwnerIds = new Set<string>();
     const affectedSpaceIds = new Set<string>();
+    const followUpSpaceIds = new Set<string>();
 
     for (const [ownerId, profiles] of [...personalGroups.entries()].toSorted(([a], [b]) => a.localeCompare(b))) {
       const survivor = this.chooseSurvivor(profiles, { targetIdentityId });
@@ -414,23 +415,29 @@ export class IdentityMergePropagationService {
     }
 
     for (const [spaceId, profiles] of [...spaceGroups.entries()].toSorted(([a], [b]) => a.localeCompare(b))) {
+      affectedSpaceIds.add(spaceId);
+      if (spaceId !== input.spaceId) {
+        continue;
+      }
+
       const survivor = this.chooseSurvivor(profiles, {
         targetIdentityId,
-        initiatingTargetProfileId: spaceId === input.spaceId ? ensuredTargetProfile.id : undefined,
+        initiatingTargetProfileId: ensuredTargetProfile.id,
       });
       const sources = this.sortMergeSources(profiles.filter((profile) => profile.id !== survivor.id));
 
       if (sources.length > 0) {
         spaceProfileMerges.push({ spaceId, targetPersonId: survivor.id, sourcePersonIds: sources.map(({ id }) => id) });
-        affectedSpaceIds.add(spaceId);
+        followUpSpaceIds.add(spaceId);
       } else if (survivor.identityId !== targetIdentityId) {
         profileIdentityUpdates.push({ kind: 'space-person', profileId: survivor.id, identityId: targetIdentityId });
-        affectedSpaceIds.add(spaceId);
+        followUpSpaceIds.add(spaceId);
       }
     }
 
     const sortedAffectedOwnerIds = [...affectedOwnerIds].toSorted();
     const sortedAffectedSpaceIds = [...affectedSpaceIds].toSorted();
+    const sortedFollowUpSpaceIds = [...followUpSpaceIds].toSorted();
     const basePayload = {
       originScope: 'space-person' as const,
       actorUserId: input.actorUserId,
@@ -461,7 +468,7 @@ export class IdentityMergePropagationService {
       affectedSpaceIds: sortedAffectedSpaceIds,
       followUpJobs: [
         { name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: targetIdentityId } },
-        ...sortedAffectedSpaceIds.map(
+        ...sortedFollowUpSpaceIds.map(
           (spaceId): MergePropagationFollowUpJob => ({ name: JobName.SharedSpacePersonDedup, data: { spaceId } }),
         ),
       ],
