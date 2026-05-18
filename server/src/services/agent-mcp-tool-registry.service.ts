@@ -68,39 +68,6 @@ const toArgumentModeMetadata = (mode: AgentMcpArgumentMode) => ({
   whenToUse: mode.whenToUse,
 });
 
-const modesArePairwiseExclusive = (modes: AgentMcpArgumentMode[]): boolean =>
-  modes.every((mode, index) =>
-    modes.slice(index + 1).every((otherMode) => {
-      const modeForbidsOtherRequirement = otherMode.requiredFields.some((field) =>
-        mode.forbiddenFields.includes(field),
-      );
-      const otherModeForbidsModeRequirement = mode.requiredFields.some((field) =>
-        otherMode.forbiddenFields.includes(field),
-      );
-
-      return modeForbidsOtherRequirement || otherModeForbidsModeRequirement;
-    }),
-  );
-
-const toOneOfModeHint = (mode: AgentMcpArgumentMode): Record<string, unknown> => {
-  const hint: Record<string, unknown> = {
-    title: mode.name,
-    description: mode.description,
-  };
-
-  if (mode.requiredFields.length > 0) {
-    hint.required = mode.requiredFields;
-  }
-
-  if (mode.forbiddenFields.length > 0) {
-    hint.not = {
-      anyOf: mode.forbiddenFields.map((field) => ({ required: [field] })),
-    };
-  }
-
-  return hint;
-};
-
 const enrichToolFromContract = (
   tool: AgentMcpToolDefinition,
   contract: AgentMcpToolContract,
@@ -120,10 +87,6 @@ const enrichToolFromContract = (
 
   inputSchema.examples = contract.examples.map((example) => structuredClone(example.arguments));
   inputSchema['x-gallery-argumentModes'] = contract.argumentModes.map((mode) => toArgumentModeMetadata(mode));
-
-  if (contract.argumentModes.length > 1 && modesArePairwiseExclusive(contract.argumentModes)) {
-    inputSchema.oneOf = contract.argumentModes.map((mode) => toOneOfModeHint(mode));
-  }
 
   return {
     ...tool,
