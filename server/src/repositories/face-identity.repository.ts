@@ -64,6 +64,17 @@ export type MergeIdentitiesResult = {
   spaceProfileConflictCount: number;
 };
 
+export type MergePropagationProfile = {
+  kind: 'person' | 'space-person';
+  id: string;
+  ownerId?: string;
+  spaceId?: string;
+  identityId: string | null;
+  type: string;
+  name: string;
+  faceCount: number;
+};
+
 export type AccessibleIdentityFaceMatch = {
   identityId: string;
   type: string;
@@ -1935,6 +1946,76 @@ export class FaceIdentityRepository {
 
       return identity;
     });
+  }
+
+  async getMergePropagationProfiles(input: {
+    personIds?: string[];
+    identityIds?: string[];
+  }): Promise<MergePropagationProfile[]> {
+    const personIds = input.personIds ? [...new Set(input.personIds)].filter(Boolean) : [];
+    const identityIds = input.identityIds ? [...new Set(input.identityIds)].filter(Boolean) : [];
+    const profiles: MergePropagationProfile[] = [];
+
+    if (personIds.length > 0 || identityIds.length > 0) {
+      let query = this.db.selectFrom('person').select(({ selectFrom }) => [
+        'person.id',
+        'person.ownerId',
+        'person.identityId',
+        'person.type',
+        'person.name',
+        selectFrom('asset_face')
+          .select(sql<number>`count(*)::int`.as('faceCount'))
+          .whereRef('asset_face.personId', '=', 'person.id')
+          .as('faceCount'),
+      ]);
+
+      query =
+        personIds.length > 0
+          ? query.where('person.id', 'in', personIds)
+          : query.where('person.identityId', 'in', identityIds);
+
+      const people = await query.execute();
+      profiles.push(
+        ...people.map((person) => ({
+          kind: 'person' as const,
+          id: person.id,
+          ownerId: person.ownerId,
+          identityId: person.identityId,
+          type: person.type,
+          name: person.name,
+          faceCount: Number(person.faceCount ?? 0),
+        })),
+      );
+    }
+
+    if (identityIds.length > 0 && personIds.length === 0) {
+      const spacePeople = await this.db
+        .selectFrom('shared_space_person')
+        .select([
+          'shared_space_person.id',
+          'shared_space_person.spaceId',
+          'shared_space_person.identityId',
+          'shared_space_person.type',
+          'shared_space_person.name',
+          'shared_space_person.faceCount',
+        ])
+        .where('shared_space_person.identityId', 'in', identityIds)
+        .execute();
+
+      profiles.push(
+        ...spacePeople.map((person) => ({
+          kind: 'space-person' as const,
+          id: person.id,
+          spaceId: person.spaceId,
+          identityId: person.identityId,
+          type: person.type,
+          name: person.name,
+          faceCount: Number(person.faceCount ?? 0),
+        })),
+      );
+    }
+
+    return profiles;
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
