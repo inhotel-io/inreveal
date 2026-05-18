@@ -21,6 +21,7 @@ export type AgentMcpCommonMistake = {
     messageIncludes?: string;
     missingField?: string;
     unexpectedField?: string;
+    unexpectedFields?: string[];
     requestShape?: 'json-rpc' | 'tool-arguments';
   };
   hint: string;

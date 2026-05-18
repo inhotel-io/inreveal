@@ -196,6 +196,33 @@ describe(AgentMcpToolContractService.name, () => {
       expect(correction?.hint).toContain('at most 10000');
     });
 
+    it('returns the search filter placement correction for supported filters at the argument root', () => {
+      const countryCorrection = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: '', message: 'Unrecognized key: "country"' }],
+      });
+      const ratingCorrection = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: '', message: 'Unrecognized key: "rating"' }],
+      });
+
+      for (const correction of [countryCorrection, ratingCorrection]) {
+        expect(correction?.mistakeId).toBe('search-filters-outside-filters');
+        expect(correction?.hint).toBe(
+          'Place date, location, favorite, rating, album, tag, camera, and media filters inside the filters object.',
+        );
+        expect(correction?.exampleArguments).toEqual({
+          filters: {
+            takenAfter: '2026-05-01T00:00:00.000Z',
+            takenBefore: '2026-05-18T23:59:59.999Z',
+            city: 'Berlin',
+            country: 'Germany',
+          },
+          limit: 50,
+        });
+      }
+    });
+
     it('returns a read-tool fallback when no common mistake matches', () => {
       const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
         requestShape: 'tool-arguments',
