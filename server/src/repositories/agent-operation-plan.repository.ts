@@ -111,6 +111,21 @@ export class AgentOperationPlanRepository {
     return plan ? this.withOperations(plan) : undefined;
   }
 
+  @GenerateSql({ params: [DummyValue.UUID] })
+  async getAppliedBySessionId(sessionId: string): Promise<AgentOperationPlanWithOperations[]> {
+    const plans = await this.db
+      .selectFrom('agent_operation_plan')
+      .select(columns.agentOperationPlan)
+      .where('sessionId', '=', asUuid(sessionId))
+      .where('status', '=', AgentOperationPlanStatus.Applied)
+      .orderBy('updatedAt', 'asc')
+      .orderBy('revision', 'asc')
+      .orderBy('id', 'asc')
+      .execute();
+
+    return Promise.all(plans.map((plan) => this.withOperations(plan)));
+  }
+
   async claimCurrentForApply(sessionId: string, planId: string): Promise<AgentOperationPlanWithOperations | undefined> {
     return this.db.transaction().execute(async (trx) => {
       const session = await this.lockSession(trx, sessionId);

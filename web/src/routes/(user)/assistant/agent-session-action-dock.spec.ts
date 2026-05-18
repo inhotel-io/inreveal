@@ -1,6 +1,7 @@
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import {
   AgentApprovalMode,
+  AgentOperationApplyStatus,
   AgentOperationPlanStatus,
   AgentOperationRiskLevel,
   AgentOperationStatus,
@@ -296,6 +297,66 @@ describe(AgentSessionActionDock.name, () => {
     expect(screen.getByText('Organize Portugal holiday')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Apply 1 selected' })).toBeInTheDocument();
     expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: 'session-1' });
+  });
+
+  it('clears the dock after a proposed operation plan is applied', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(plan());
+    sdkMock.applyApprovedOperations.mockResolvedValue({
+      status: AgentOperationApplyStatus.Applied,
+      plan: plan({
+        status: AgentOperationPlanStatus.Applied,
+        operations: [operation({ status: AgentOperationStatus.Applied, result: { albumId: 'album-1' } })],
+      }),
+      appliedOperationIds: ['operation-1'],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 1 operation(s), skipped 0, failed 0.',
+    });
+
+    const { container } = render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.WaitingForPlanReview }) },
+    });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Apply 1 selected' }));
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Plan review' })).not.toBeInTheDocument());
+    expect(container).not.toHaveTextContent('Applied 1 operations');
+    expect(container.querySelector('button')).not.toBeInTheDocument();
+  });
+
+  it('refreshes the selected session after a same-session plan-applied event', async () => {
+    const handlers: Parameters<typeof websocketMock.websocketEvents.on>[1][] = [];
+    const onSessionUpdated = vi.fn();
+    const runningSession = makeSession({ status: AgentSessionStatus.Running });
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handlers.push(nextHandler);
+      return vi.fn();
+    });
+    sdkMock.getAgentSession.mockResolvedValue(runningSession);
+
+    render(AgentSessionActionDock, {
+      props: {
+        session: makeSession({ status: AgentSessionStatus.WaitingForPlanReview }),
+        onSessionUpdated,
+      },
+    });
+    await waitFor(() => expect(handlers.length).toBeGreaterThan(0));
+
+    const event = {
+      type: 'operation-plan-applied',
+      sessionId: 'session-1',
+      planId: 'plan-1',
+      status: AgentOperationApplyStatus.Applied,
+      appliedCount: 1,
+      skippedCount: 0,
+      failedCount: 0,
+    } as const;
+    for (const handler of handlers) {
+      handler(event);
+    }
+
+    await waitFor(() => expect(sdkMock.getAgentSession).toHaveBeenCalledWith({ id: 'session-1' }));
+    expect(onSessionUpdated).toHaveBeenCalledWith(runningSession);
   });
 
   it('keeps pending approvals as the active dock work before plan review', async () => {

@@ -136,10 +136,12 @@ const planRevisionInput = (
   sessionId: string,
   {
     revision,
+    status = AgentOperationPlanStatus.Proposed,
     summary,
     operations,
   }: {
     revision: number;
+    status?: AgentOperationPlanStatus;
     summary: string;
     operations: AgentAlbumOperationInput[];
   },
@@ -147,7 +149,7 @@ const planRevisionInput = (
   plan: {
     sessionId,
     revision,
-    status: AgentOperationPlanStatus.Proposed,
+    status,
     summary,
   },
   operations,
@@ -408,6 +410,56 @@ describe(AgentOperationPlanRepository.name, () => {
     expect(current?.operations.map((operation) => operation.temporaryTargetId)).toEqual([
       'replacement-album',
       'replacement-album',
+    ]);
+  });
+
+  it('returns applied plans for a session and excludes proposed and superseded revisions', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { session } = await createSession(ctx, credentialRepository, sessionRepository);
+
+    const firstApplied = await sut.createRevision(
+      planRevisionInput(session.id, {
+        revision: 1,
+        status: AgentOperationPlanStatus.Applied,
+        summary: 'First applied plan',
+        operations: [createAlbumOperation('first-applied-album')],
+      }),
+    );
+    const secondApplied = await sut.createRevision(
+      planRevisionInput(session.id, {
+        revision: 2,
+        status: AgentOperationPlanStatus.Applied,
+        summary: 'Second applied plan',
+        operations: [createAlbumOperation('second-applied-album'), addAssetsOperation('second-applied-album')],
+      }),
+    );
+    await sut.createRevision(
+      planRevisionInput(session.id, {
+        revision: 3,
+        status: AgentOperationPlanStatus.Superseded,
+        summary: 'Superseded plan',
+        operations: [createAlbumOperation('superseded-album')],
+      }),
+    );
+    await sut.createRevision(
+      planRevisionInput(session.id, {
+        revision: 4,
+        status: AgentOperationPlanStatus.Proposed,
+        summary: 'Current proposed plan',
+        operations: [createAlbumOperation('proposed-album')],
+      }),
+    );
+
+    const applied = await sut.getAppliedBySessionId(session.id);
+
+    expect(applied.map((plan) => plan.id)).toEqual([firstApplied.id, secondApplied.id]);
+    expect(applied.map((plan) => plan.status)).toEqual([
+      AgentOperationPlanStatus.Applied,
+      AgentOperationPlanStatus.Applied,
+    ]);
+    expect(applied[1].operations.map((operation) => operation.temporaryTargetId)).toEqual([
+      'second-applied-album',
+      'second-applied-album',
     ]);
   });
 

@@ -118,6 +118,18 @@ describe(AgentOperationPlanController.name, () => {
     expect(responses?.[200]?.type).toBeUndefined();
   });
 
+  it('documents getAppliedOperationPlans as a typed plan array response', () => {
+    const responses = Reflect.getMetadata(
+      DECORATORS.API_RESPONSE,
+      AgentOperationPlanController.prototype.getAppliedOperationPlans,
+    ) as Record<number, { type?: unknown; isArray?: boolean }> | undefined;
+
+    expect(responses?.[200]).toMatchObject({
+      type: AgentOperationPlanResponseDto,
+      isArray: true,
+    });
+  });
+
   describe('GET /agent/sessions/:id/operation-plan', () => {
     it('gets the current operation plan with read permission and serializes dates', async () => {
       service.getCurrentPlan.mockResolvedValue(plan);
@@ -163,6 +175,49 @@ describe(AgentOperationPlanController.name, () => {
       expect(status).toBe(200);
       expect(text).toBe('');
       expect(service.getCurrentPlan).toHaveBeenCalledWith(auth, sessionId);
+    });
+  });
+
+  describe('GET /agent/sessions/:id/operation-plan/applied', () => {
+    it('gets applied operation plan history with read permission and serializes dates', async () => {
+      const appliedPlan: AgentOperationPlanResponseDto = {
+        ...plan,
+        status: AgentOperationPlanStatus.Applied,
+        operations: [
+          { ...plan.operations[0], status: AgentOperationStatus.Applied, result: { albumId: factory.uuid() } },
+        ],
+      };
+      service.getAppliedPlans.mockResolvedValue([appliedPlan]);
+
+      const { status, body } = await request(ctx.getHttpServer()).get(
+        `/agent/sessions/${sessionId}/operation-plan/applied`,
+      );
+
+      expect(status).toBe(200);
+      expectPermission(Permission.AgentSessionRead);
+      expect(service.getAppliedPlans).toHaveBeenCalledWith(auth, sessionId);
+      expect(body).toEqual([
+        {
+          ...appliedPlan,
+          createdAt: createdAt.toISOString(),
+          updatedAt: updatedAt.toISOString(),
+          operations: [
+            {
+              ...appliedPlan.operations[0],
+              createdAt: createdAt.toISOString(),
+              updatedAt: updatedAt.toISOString(),
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('returns applied operation plan history directly from the controller method', async () => {
+      const appliedPlan = { ...plan, status: AgentOperationPlanStatus.Applied };
+      service.getAppliedPlans.mockResolvedValue([appliedPlan]);
+      const controller = new AgentOperationPlanController(service);
+
+      await expect(controller.getAppliedOperationPlans(auth, { id: sessionId })).resolves.toEqual([appliedPlan]);
     });
   });
 

@@ -52,6 +52,7 @@
   let applyErrorMessage = $state<string | null>(null);
   let planExpanded = $state(true);
   let locallyApplyingPlanId = $state<string | null>(null);
+  let lastAppliedPlanId = $state<string | null>(null);
   let pendingLocalApplyEvent = $state<Extract<AgentSessionClientEvent, { type: 'operation-plan-applied' }> | null>(
     null,
   );
@@ -255,11 +256,11 @@
       return;
     }
 
-    if (
-      event.type === 'operation-plan-applied' &&
-      model?.plan.id === event.planId &&
-      model.plan.status === AgentOperationPlanStatus.Applied
-    ) {
+    if (event.type === 'operation-plan-ready') {
+      lastAppliedPlanId = null;
+    }
+
+    if (event.type === 'operation-plan-applied' && lastAppliedPlanId === event.planId) {
       return;
     }
 
@@ -295,11 +296,20 @@
           planRevision: selectionPayload.planRevision,
         },
       });
-      plan = response.plan;
-      enabledByOperationId = createInitialOperationEnabledState(response.plan);
-      itemSelectionByOperationId = createInitialOperationItemSelectionState(response.plan);
-      fieldOverrideByOperationId = createInitialOperationFieldOverrideState(response.plan);
-      publishSelection(response.plan, enabledByOperationId, itemSelectionByOperationId, fieldOverrideByOperationId);
+      const nextEnabledByOperationId = createInitialOperationEnabledState(response.plan);
+      const nextItemSelectionByOperationId = createInitialOperationItemSelectionState(response.plan);
+      const nextFieldOverrideByOperationId = createInitialOperationFieldOverrideState(response.plan);
+      publishSelection(
+        response.plan,
+        nextEnabledByOperationId,
+        nextItemSelectionByOperationId,
+        nextFieldOverrideByOperationId,
+      );
+      plan = null;
+      enabledByOperationId = {};
+      itemSelectionByOperationId = {};
+      fieldOverrideByOperationId = {};
+      lastAppliedPlanId = applyingPlanId;
       applyMessage = $t('assistant_operation_apply_success', {
         values: {
           applied: response.appliedOperationIds.length,
@@ -464,7 +474,7 @@
     </div>
   </section>
 {:else if !model}
-  {#if applyMessage || !hideEmpty}
+  {#if !hideEmpty}
     <section class={passivePaddedRootClass}>
       {#if applyMessage}
         <p
