@@ -20,7 +20,7 @@
   } from '@immich/sdk';
   import { Button } from '@immich/ui';
   import { onDestroy, onMount, type Snippet } from 'svelte';
-  import { SvelteSet } from 'svelte/reactivity';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
   import type { AgentActivityVisibilityMode } from './agent-activity-visibility-ui';
   import type { AgentActivityModel } from './agent-activity-ui';
@@ -236,16 +236,16 @@
         occurredAt: message.createdAt,
         message,
       })),
-      ...(timelineActivityVisibilityMode !== 'off'
-        ? timelineActivityTurns
+      ...(timelineActivityVisibilityMode === 'off'
+        ? []
+        : timelineActivityTurns
             .filter((turn) => turn.model.items.length > 0)
             .map((turn) => ({
               type: 'activity' as const,
               id: `activity-${turn.id}`,
               occurredAt: turn.occurredAt,
               model: turn.model,
-            }))
-        : []),
+            }))),
       ...timelineToolCalls
         .filter((toolCall) => !timelineCoveredToolCallIds.has(toolCall.id))
         .map((toolCall) => ({
@@ -269,7 +269,7 @@
   }
 
   function dedupeAppliedPlans(plans: AgentOperationPlanResponseDto[]) {
-    const plansByKey = new Map<string, AgentOperationPlanResponseDto>();
+    const plansByKey = new SvelteMap<string, AgentOperationPlanResponseDto>();
 
     for (const plan of plans) {
       plansByKey.set(`${plan.id}:${plan.revision}`, plan);
@@ -479,7 +479,7 @@
   };
 
   const mergeActivityEvents = (firstEvents: AgentActivityEvent[], secondEvents: AgentActivityEvent[]) => {
-    const eventsById = new Map<string, AgentActivityEvent>();
+    const eventsById = new SvelteMap<string, AgentActivityEvent>();
 
     for (const event of [...firstEvents, ...secondEvents]) {
       eventsById.set(event.id, event);
