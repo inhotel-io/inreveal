@@ -382,17 +382,17 @@ Implementation plans created from this spec must include:
 
 ## Test Coverage Matrix
 
-| Area | Required Coverage |
-| --- | --- |
-| Header cleanup | Component tests for title/status/metadata truncation, absence of persistent `New chat`, absence of persistent `Details`, absence of persistent activity mode button, and overflow-only secondary actions. |
-| Overflow menu | Component tests for keyboard open/close, click-outside/escape behavior if supported by the local menu primitive, focus return, activity mode radio state, details action, conditional stop action, and future delete action. |
-| Stop semantics | Unit/component tests that `Stop current run` only appears for stoppable states, calls the existing cancellation path, preserves transcript/action cards, and does not disable unrelated menu items while pending. |
-| Sidebar ownership | Component tests that sidebar `New chat` remains the creation path, selected-chat header does not duplicate it, and row-level menus do not disturb selected chat state. |
-| Resume/reconnect | Service/API tests for completed, cancelled, interrupted, failed, missing-runner-session, stale-runner-session, and runner-reconnect-failure flows; component tests for composer enabled/disabled states. |
-| Delete/archive | API ownership tests, confirmation UI tests, selected-chat deletion behavior, deletion of active/blocking chats, deletion failures, and another-user denial. |
-| Polling reduction | Tests for inactive-session no polling, active-session minimal polling, websocket-first updates, missed-event fallback, stale/out-of-order responses, HTTP 304/cached responses, and no-op dedupe before parent publication. |
-| Activity preview interaction | Tests that moving activity mode into the overflow menu preserves persisted per-chat visibility and does not flicker when equivalent tool-call/activity state is reloaded. |
-| Accessibility/mobile | Keyboard navigation, accessible names, screen-reader status labels, focus management, narrow viewport header layout, and touch target sizing for header/menu actions. |
+| Area                         | Required Coverage                                                                                                                                                                                                            |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Header cleanup               | Component tests for title/status/metadata truncation, absence of persistent `New chat`, absence of persistent `Details`, absence of persistent activity mode button, and overflow-only secondary actions.                    |
+| Overflow menu                | Component tests for keyboard open/close, click-outside/escape behavior if supported by the local menu primitive, focus return, activity mode radio state, details action, conditional stop action, and future delete action. |
+| Stop semantics               | Unit/component tests that `Stop current run` only appears for stoppable states, calls the existing cancellation path, preserves transcript/action cards, and does not disable unrelated menu items while pending.            |
+| Sidebar ownership            | Component tests that sidebar `New chat` remains the creation path, selected-chat header does not duplicate it, and row-level menus do not disturb selected chat state.                                                       |
+| Resume/reconnect             | Service/API tests for completed, cancelled, interrupted, failed, missing-runner-session, stale-runner-session, and runner-reconnect-failure flows; component tests for composer enabled/disabled states.                     |
+| Delete/archive               | API ownership tests, confirmation UI tests, selected-chat deletion behavior, deletion of active/blocking chats, deletion failures, and another-user denial.                                                                  |
+| Polling reduction            | Tests for inactive-session no polling, active-session minimal polling, websocket-first updates, missed-event fallback, stale/out-of-order responses, HTTP 304/cached responses, and no-op dedupe before parent publication.  |
+| Activity preview interaction | Tests that moving activity mode into the overflow menu preserves persisted per-chat visibility and does not flicker when equivalent tool-call/activity state is reloaded.                                                    |
+| Accessibility/mobile         | Keyboard navigation, accessible names, screen-reader status labels, focus management, narrow viewport header layout, and touch target sizing for header/menu actions.                                                        |
 
 ## Edge Cases
 
