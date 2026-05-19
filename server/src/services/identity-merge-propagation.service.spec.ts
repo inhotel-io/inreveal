@@ -1098,19 +1098,23 @@ describe('IdentityMergePropagationService', () => {
       ).rejects.toThrow('Source person not found');
     });
 
-    it('rejects mixed person and pet identities before execution', async () => {
+    it('allows mixed person and pet personal merges so the target type wins', async () => {
       const { sut } = makeService([
         profile({ kind: 'person', id: 'person-x', ownerId: 'owner-1', identityId: 'identity-x', type: 'person' }),
         profile({ kind: 'person', id: 'person-y', ownerId: 'owner-1', identityId: 'identity-y', type: 'pet' }),
       ]);
 
-      await expect(
-        sut.buildPersonalMergePlan({
-          actorUserId: 'owner-1',
-          targetPersonId: 'person-x',
-          sourcePersonIds: ['person-y'],
-        }),
-      ).rejects.toThrow('Cannot merge people of different types');
+      const plan = await sut.buildPersonalMergePlan({
+        actorUserId: 'owner-1',
+        targetPersonId: 'person-x',
+        sourcePersonIds: ['person-y'],
+      });
+
+      expect(plan.personalProfileMerges).toEqual([
+        { ownerId: 'owner-1', targetPersonId: 'person-x', sourcePersonIds: ['person-y'] },
+      ]);
+      expect(plan.targetIdentityId).toBe('identity-x');
+      expect(plan.sourceIdentityIds).toEqual(['identity-y']);
     });
 
     it('includes actor, follow-up jobs, and propagated activity events in the plan', async () => {
