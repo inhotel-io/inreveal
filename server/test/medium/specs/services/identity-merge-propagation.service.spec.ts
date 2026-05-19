@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { SharedSpaceActivityType } from 'src/enum';
+import { JobName, SharedSpaceActivityType } from 'src/enum';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
@@ -101,7 +101,16 @@ const getPeople = (db: Kysely<DB>, ids: string[]) => {
 };
 
 const getSpacePeople = (db: Kysely<DB>, ids: string[]) => {
-  return db.selectFrom('shared_space_person').select(['id', 'identityId']).where('id', 'in', ids).orderBy('id').execute();
+  return db
+    .selectFrom('shared_space_person')
+    .select(['id', 'identityId'])
+    .where('id', 'in', ids)
+    .orderBy('id')
+    .execute();
+};
+
+const getIdentityIds = (db: Kysely<DB>, ids: string[]) => {
+  return db.selectFrom('face_identity').select('id').where('id', 'in', ids).orderBy('id').execute();
 };
 
 describe('IdentityMergePropagationService medium tests', () => {
@@ -184,6 +193,212 @@ describe('IdentityMergePropagationService medium tests', () => {
       .where('assetFaceId', '=', orphanedSourceFace.id)
       .executeTakeFirstOrThrow();
     expect(faceLink).toEqual({ assetFaceId: orphanedSourceFace.id, identityId: targetIdentity.id, source: 'manual' });
+  });
+
+  it('propagates a personal merge across other owners and all affected spaces', async () => {
+    const { ctx, sut } = setup();
+    const jobRepository = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+    const { user: actor } = await ctx.newUser();
+    const { user: otherOwner } = await ctx.newUser();
+    const { space: duplicateSpaceA } = await ctx.newSharedSpace({ createdById: actor.id });
+    const { space: duplicateSpaceB } = await ctx.newSharedSpace({ createdById: otherOwner.id });
+    const { space: singletonSpace } = await ctx.newSharedSpace({ createdById: otherOwner.id });
+    const targetIdentity = await createIdentity(ctx.database);
+    const sourceIdentity = await createIdentity(ctx.database);
+    const actorTarget = await createPersonProfile(ctx, {
+      ownerId: actor.id,
+      identityId: targetIdentity.id,
+      name: 'Actor Target',
+    });
+    const actorSource = await createPersonProfile(ctx, {
+      ownerId: actor.id,
+      identityId: sourceIdentity.id,
+      name: 'Actor Source',
+    });
+    const otherTarget = await createPersonProfile(ctx, {
+      ownerId: otherOwner.id,
+      identityId: targetIdentity.id,
+      name: 'Other Target',
+    });
+    const otherSource = await createPersonProfile(ctx, {
+      ownerId: otherOwner.id,
+      identityId: sourceIdentity.id,
+      name: 'Other Source',
+    });
+    const spaceATarget = await createSpacePerson(ctx.database, {
+      spaceId: duplicateSpaceA.id,
+      identityId: targetIdentity.id,
+      name: 'Space A Target',
+    });
+    const spaceASource = await createSpacePerson(ctx.database, {
+      spaceId: duplicateSpaceA.id,
+      identityId: sourceIdentity.id,
+      name: 'Space A Source',
+    });
+    const spaceBTarget = await createSpacePerson(ctx.database, {
+      spaceId: duplicateSpaceB.id,
+      identityId: targetIdentity.id,
+      name: 'Space B Target',
+    });
+    const spaceBSource = await createSpacePerson(ctx.database, {
+      spaceId: duplicateSpaceB.id,
+      identityId: sourceIdentity.id,
+      name: 'Space B Source',
+    });
+    const singletonSource = await createSpacePerson(ctx.database, {
+      spaceId: singletonSpace.id,
+      identityId: sourceIdentity.id,
+      name: 'Singleton Source',
+    });
+
+    await expect(
+      sut.mergePersonalPeople(factory.auth({ user: actor }), actorTarget.id, [actorSource.id]),
+    ).resolves.toEqual([{ id: actorSource.id, success: true }]);
+
+    await expect(
+      getPeople(ctx.database, [actorTarget.id, actorSource.id, otherTarget.id, otherSource.id]),
+    ).resolves.toEqual(
+      [
+        { id: actorTarget.id, identityId: targetIdentity.id },
+        { id: otherTarget.id, identityId: targetIdentity.id },
+      ].toSorted((a, b) => a.id.localeCompare(b.id)),
+    );
+    await expect(
+      getSpacePeople(ctx.database, [
+        spaceATarget.id,
+        spaceASource.id,
+        spaceBTarget.id,
+        spaceBSource.id,
+        singletonSource.id,
+      ]),
+    ).resolves.toEqual(
+      [
+        { id: singletonSource.id, identityId: targetIdentity.id },
+        { id: spaceATarget.id, identityId: targetIdentity.id },
+        { id: spaceBTarget.id, identityId: targetIdentity.id },
+      ].toSorted((a, b) => a.id.localeCompare(b.id)),
+    );
+    await expect(getIdentityIds(ctx.database, [targetIdentity.id, sourceIdentity.id])).resolves.toEqual([
+      { id: targetIdentity.id },
+    ]);
+    expect(jobRepository.queue).toHaveBeenCalledWith({
+      name: JobName.SharedSpacePersonMetadataBackfill,
+      data: { identityId: targetIdentity.id },
+    });
+    expect(jobRepository.queue).toHaveBeenCalledWith({
+      name: JobName.SharedSpacePersonDedup,
+      data: { spaceId: duplicateSpaceA.id },
+    });
+    expect(jobRepository.queue).toHaveBeenCalledWith({
+      name: JobName.SharedSpacePersonDedup,
+      data: { spaceId: duplicateSpaceB.id },
+    });
+    expect(jobRepository.queue).toHaveBeenCalledWith({
+      name: JobName.SharedSpacePersonDedup,
+      data: { spaceId: singletonSpace.id },
+    });
+  });
+
+  it('propagates a space merge across other spaces and personal people for different owners', async () => {
+    const { ctx, sut } = setup();
+    const jobRepository = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+    const { user: actor } = await ctx.newUser();
+    const { user: otherOwner } = await ctx.newUser();
+    const { user: singletonOwner } = await ctx.newUser();
+    const { space: initiatingSpace } = await ctx.newSharedSpace({ createdById: actor.id });
+    const { space: duplicateSpace } = await ctx.newSharedSpace({ createdById: otherOwner.id });
+    const { space: singletonSpace } = await ctx.newSharedSpace({ createdById: singletonOwner.id });
+    const targetIdentity = await createIdentity(ctx.database);
+    const sourceIdentity = await createIdentity(ctx.database);
+    const initiatingTarget = await createSpacePerson(ctx.database, {
+      spaceId: initiatingSpace.id,
+      identityId: targetIdentity.id,
+      name: 'Initiating Target',
+    });
+    const initiatingSource = await createSpacePerson(ctx.database, {
+      spaceId: initiatingSpace.id,
+      identityId: sourceIdentity.id,
+      name: 'Initiating Source',
+    });
+    const duplicateSpaceTarget = await createSpacePerson(ctx.database, {
+      spaceId: duplicateSpace.id,
+      identityId: targetIdentity.id,
+      name: 'Other Space Target',
+    });
+    const duplicateSpaceSource = await createSpacePerson(ctx.database, {
+      spaceId: duplicateSpace.id,
+      identityId: sourceIdentity.id,
+      name: 'Other Space Source',
+    });
+    const singletonSpaceSource = await createSpacePerson(ctx.database, {
+      spaceId: singletonSpace.id,
+      identityId: sourceIdentity.id,
+      name: 'Singleton Space Source',
+    });
+    const otherOwnerTarget = await createPersonProfile(ctx, {
+      ownerId: otherOwner.id,
+      identityId: targetIdentity.id,
+      name: 'Other Owner Target',
+    });
+    const otherOwnerSource = await createPersonProfile(ctx, {
+      ownerId: otherOwner.id,
+      identityId: sourceIdentity.id,
+      name: 'Other Owner Source',
+    });
+    const singletonOwnerSource = await createPersonProfile(ctx, {
+      ownerId: singletonOwner.id,
+      identityId: sourceIdentity.id,
+      name: 'Singleton Owner Source',
+    });
+
+    await expect(
+      sut.mergeSpacePeople(factory.auth({ user: actor }), initiatingSpace.id, initiatingTarget.id, [
+        initiatingSource.id,
+      ]),
+    ).resolves.toBeUndefined();
+
+    await expect(
+      getSpacePeople(ctx.database, [
+        initiatingTarget.id,
+        initiatingSource.id,
+        duplicateSpaceTarget.id,
+        duplicateSpaceSource.id,
+        singletonSpaceSource.id,
+      ]),
+    ).resolves.toEqual(
+      [
+        { id: duplicateSpaceTarget.id, identityId: targetIdentity.id },
+        { id: initiatingTarget.id, identityId: targetIdentity.id },
+        { id: singletonSpaceSource.id, identityId: targetIdentity.id },
+      ].toSorted((a, b) => a.id.localeCompare(b.id)),
+    );
+    await expect(
+      getPeople(ctx.database, [otherOwnerTarget.id, otherOwnerSource.id, singletonOwnerSource.id]),
+    ).resolves.toEqual(
+      [
+        { id: otherOwnerTarget.id, identityId: targetIdentity.id },
+        { id: singletonOwnerSource.id, identityId: targetIdentity.id },
+      ].toSorted((a, b) => a.id.localeCompare(b.id)),
+    );
+    await expect(getIdentityIds(ctx.database, [targetIdentity.id, sourceIdentity.id])).resolves.toEqual([
+      { id: targetIdentity.id },
+    ]);
+    expect(jobRepository.queue).toHaveBeenCalledWith({
+      name: JobName.SharedSpacePersonMetadataBackfill,
+      data: { identityId: targetIdentity.id },
+    });
+    expect(jobRepository.queue).toHaveBeenCalledWith({
+      name: JobName.SharedSpacePersonDedup,
+      data: { spaceId: initiatingSpace.id },
+    });
+    expect(jobRepository.queue).toHaveBeenCalledWith({
+      name: JobName.SharedSpacePersonDedup,
+      data: { spaceId: duplicateSpace.id },
+    });
+    expect(jobRepository.queue).toHaveBeenCalledWith({
+      name: JobName.SharedSpacePersonDedup,
+      data: { spaceId: singletonSpace.id },
+    });
   });
 
   it('handles concurrent overlapping merges with one success and one clean retry or failure', async () => {
