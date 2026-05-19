@@ -118,34 +118,34 @@ No server or runner tests are required because this slice should not change back
 
 ## Edge Cases Covered In This Slice
 
-| Spec area | Case | Slice 6 expectation |
-| --- | --- | --- |
-| Reload | Completed tool calls reload | Completed activity summary reconstructs after the triggering user message |
-| Reload | Pending approval reload | Activity block says `Waiting for approval`; approval card/action dock remains visible |
-| Reload | Plan applied reload | Activity summary says applied changes; applied-plan card remains separate |
-| Reload | Running session reload | Persisted running/executing tool calls reconstruct a live `Pi is working` block |
-| Reload | Failed tool reload | Activity row shows safe failed state and no raw technical error outside details |
-| Reload | Denied tool reload | Activity row shows skipped/not-allowed state without reopening approval UI |
-| Reload | Approved tool reload before continuation | Activity row shows running/continuing state until assistant response arrives |
-| Turn grouping | One user, one tool, one assistant response | Activity block appears between user message and assistant response |
-| Turn grouping | Two user messages with separate tools | Each turn gets its own activity block; no cross-turn leakage |
-| Turn grouping | Same timestamp items | Stable sort by timestamp, type priority, then id keeps deterministic block placement |
-| Turn grouping | Tool call exactly at next user timestamp | Belongs to the next turn only if sorted after that user anchor; does not leak backward |
+| Spec area     | Case                                           | Slice 6 expectation                                                                                 |
+| ------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Reload        | Completed tool calls reload                    | Completed activity summary reconstructs after the triggering user message                           |
+| Reload        | Pending approval reload                        | Activity block says `Waiting for approval`; approval card/action dock remains visible               |
+| Reload        | Plan applied reload                            | Activity summary says applied changes; applied-plan card remains separate                           |
+| Reload        | Running session reload                         | Persisted running/executing tool calls reconstruct a live `Pi is working` block                     |
+| Reload        | Failed tool reload                             | Activity row shows safe failed state and no raw technical error outside details                     |
+| Reload        | Denied tool reload                             | Activity row shows skipped/not-allowed state without reopening approval UI                          |
+| Reload        | Approved tool reload before continuation       | Activity row shows running/continuing state until assistant response arrives                        |
+| Turn grouping | One user, one tool, one assistant response     | Activity block appears between user message and assistant response                                  |
+| Turn grouping | Two user messages with separate tools          | Each turn gets its own activity block; no cross-turn leakage                                        |
+| Turn grouping | Same timestamp items                           | Stable sort by timestamp, type priority, then id keeps deterministic block placement                |
+| Turn grouping | Tool call exactly at next user timestamp       | Belongs to the next turn only if sorted after that user anchor; does not leak backward              |
 | Turn grouping | Tool after terminal assistant before next user | Does not mutate the completed turn unless confidently tied to that turn; fallback card is preferred |
-| Legacy data | No user messages | No activity block is invented; fallback surfaces remain |
-| Legacy data | One user and missing tool timestamps | Tool call can attach to the only turn |
-| Legacy data | Multiple users and missing tool timestamps | Tool call remains fallback card to avoid wrong attribution |
-| Legacy data | Invalid message/tool timestamps | Invalid values do not throw; deterministic fallback applies |
-| Applied plans | Duplicate applied-plan revisions | Applied-plan card and apply activity are deduped by plan id and revision |
-| Applied plans | Applied plan before first user | Plan card remains fallback/standalone; no guessed activity block |
-| Current plan | Current plan exists after reload | Current plan activity attaches to latest user turn and plan review remains owned by action dock |
-| Live updates | Assistant streaming after reload | Streaming/writing row attaches to latest active turn only |
-| Live updates | New user message before old refresh resolves | New turn is created; late old refresh cannot move historical activity into the new turn |
-| Visibility | Mode `off` after reload | Activity blocks hide; approval/plan/applied/message surfaces remain visible |
-| Visibility | Mode `compact` after reload | Historical summaries render compactly |
-| Visibility | Mode `expanded` after reload | Historical activity rows and Slice 5 technical details remain available |
-| Safety | Technical fields on historical rows | Redaction/disclosure rules from Slice 5 still apply |
-| Errors | Message/applied-plan load fails | Existing error handling remains; no partial helper crash |
+| Legacy data   | No user messages                               | No activity block is invented; fallback surfaces remain                                             |
+| Legacy data   | One user and missing tool timestamps           | Tool call can attach to the only turn                                                               |
+| Legacy data   | Multiple users and missing tool timestamps     | Tool call remains fallback card to avoid wrong attribution                                          |
+| Legacy data   | Invalid message/tool timestamps                | Invalid values do not throw; deterministic fallback applies                                         |
+| Applied plans | Duplicate applied-plan revisions               | Applied-plan card and apply activity are deduped by plan id and revision                            |
+| Applied plans | Applied plan before first user                 | Plan card remains fallback/standalone; no guessed activity block                                    |
+| Current plan  | Current plan exists after reload               | Current plan activity attaches to latest user turn and plan review remains owned by action dock     |
+| Live updates  | Assistant streaming after reload               | Streaming/writing row attaches to latest active turn only                                           |
+| Live updates  | New user message before old refresh resolves   | New turn is created; late old refresh cannot move historical activity into the new turn             |
+| Visibility    | Mode `off` after reload                        | Activity blocks hide; approval/plan/applied/message surfaces remain visible                         |
+| Visibility    | Mode `compact` after reload                    | Historical summaries render compactly                                                               |
+| Visibility    | Mode `expanded` after reload                   | Historical activity rows and Slice 5 technical details remain available                             |
+| Safety        | Technical fields on historical rows            | Redaction/disclosure rules from Slice 5 still apply                                                 |
+| Errors        | Message/applied-plan load fails                | Existing error handling remains; no partial helper crash                                            |
 
 ## Edge Cases Deferred To Later Slices
 
@@ -576,7 +576,7 @@ If `activityVisibilityMode === 'off'`:
 - do not render activity blocks;
 - suppress covered non-required tool-call cards so `off` does not turn activity preview into raw technical logs;
 - keep approval, plan review, applied-plan cards, streamed text, final messages, and busy fallback visible.
-Unanchored legacy fallback cards may still render because no activity block is confidently covering them.
+  Unanchored legacy fallback cards may still render because no activity block is confidently covering them.
 
 - [ ] **Step 5: Preserve live latest-turn behavior**
 

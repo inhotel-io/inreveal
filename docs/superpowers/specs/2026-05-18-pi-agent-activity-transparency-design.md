@@ -297,17 +297,17 @@ Add explicit activity events only for gaps that cannot be inferred cleanly:
 
 Each known Gallery tool should map to a stable activity label. Examples:
 
-| Tool or source | Running title | Completed summary |
-| --- | --- | --- |
-| `listAlbums` | Searching albums | Found matching albums |
-| `searchAssets` | Searching photos | Found matching photos |
-| `readAssetMetadata` | Reading photo details | Read details for photos |
-| `readAssetPreviews` | Loading photo previews | Loaded photo previews |
-| plan proposal | Preparing a plan | Prepared a plan |
-| permission pending | Waiting for approval | Needs your approval to continue |
-| plan apply | Applying changes | Applied selected changes |
-| assistant delta | Writing response | Wrote a response |
-| runner error | Pi hit a problem | Could not finish this step |
+| Tool or source      | Running title          | Completed summary               |
+| ------------------- | ---------------------- | ------------------------------- |
+| `listAlbums`        | Searching albums       | Found matching albums           |
+| `searchAssets`      | Searching photos       | Found matching photos           |
+| `readAssetMetadata` | Reading photo details  | Read details for photos         |
+| `readAssetPreviews` | Loading photo previews | Loaded photo previews           |
+| plan proposal       | Preparing a plan       | Prepared a plan                 |
+| permission pending  | Waiting for approval   | Needs your approval to continue |
+| plan apply          | Applying changes       | Applied selected changes        |
+| assistant delta     | Writing response       | Wrote a response                |
+| runner error        | Pi hit a problem       | Could not finish this step      |
 
 Unknown tools should fall back safely:
 
@@ -419,38 +419,38 @@ Every implementation plan derived from this spec must list:
 
 ## Edge Case Matrix
 
-| Area | Case | Expected result |
-| --- | --- | --- |
-| Visibility | Activity preview off | No activity block renders; required permission/plan cards still render |
-| Visibility | Activity preview off, user wants it back | Session menu exposes an activity toggle that can restore compact or expanded mode |
-| Visibility | Compact default | Only safe step labels and `Show activity` render; technical details stay hidden |
-| Visibility | User expands one activity block | Block shows rows and remembers expanded state for that session view |
-| Visibility | User collapses while running | Live updates continue without forcing the block open |
-| Turn grouping | One user message, one tool, one response | Activity block appears between the user message and response |
-| Turn grouping | Two user messages close together | Each turn gets its own activity block; no cross-turn leakage |
-| Turn grouping | Same timestamp items | Deterministic sort by timestamp, type priority, then id |
-| Live updates | Tool call starts after user message | Block adds a running row without duplicating old rows |
-| Live updates | Tool completes | Row changes to completed and summary/count updates |
-| Live updates | Assistant streaming starts | Block can show `Writing response`; streamed text still renders normally |
-| Live updates | Plan becomes ready | Activity says `Prepared a plan`; plan review renders separately |
-| Live updates | Plan apply starts | Activity says `Applying changes`; applied-plan card renders after completion |
-| Permissions | Tool needs approval | Activity says `Waiting for approval`; approval card remains prominent |
-| Permissions | Approval accepted | Activity updates to approved/continuing; agent continuation can stream below |
-| Permissions | Approval denied | Activity shows denied/not allowed; denial reason appears only if product copy wants it |
-| Reload | Reload while running | Derived activity rehydrates from persisted tool calls/session status |
-| Reload | Reload during pending approval | Activity and approval card both return |
-| Reload | Reload after completion | Completed activity summary remains stable or is reconstructed |
-| Errors | Tool fails | Row shows safe failed state; technical details include redacted error |
-| Errors | Runner fails before first tool call | Block shows `Pi hit a problem`; composer recovery follows session state |
-| Errors | Unknown tool name | Generic human copy renders; raw name only in technical details |
-| Privacy | Provider key appears in error | Redacted from activity row and technical details |
-| Privacy | Runner token appears in metadata | Redacted from all UI and websocket payloads |
-| Privacy | Provider emits reasoning trace | Not displayed unless it is an explicitly safe summary; raw chain-of-thought never shown |
-| Performance | Long session with many tool calls | Activity rows are grouped/collapsed; chat stays responsive |
-| Performance | Many repeated metadata calls | Rows are coalesced into one `Reading photo details` group with aggregate counts |
-| Accessibility | Expanded row controls | Toggle buttons have labels, keyboard support, and visible focus |
-| Accessibility | Live updates | Use polite live regions; do not repeatedly announce every minor progress tick |
-| Accessibility | Activity expands while focused elsewhere | Focus is not stolen from composer, approval buttons, or plan controls |
+| Area          | Case                                     | Expected result                                                                         |
+| ------------- | ---------------------------------------- | --------------------------------------------------------------------------------------- |
+| Visibility    | Activity preview off                     | No activity block renders; required permission/plan cards still render                  |
+| Visibility    | Activity preview off, user wants it back | Session menu exposes an activity toggle that can restore compact or expanded mode       |
+| Visibility    | Compact default                          | Only safe step labels and `Show activity` render; technical details stay hidden         |
+| Visibility    | User expands one activity block          | Block shows rows and remembers expanded state for that session view                     |
+| Visibility    | User collapses while running             | Live updates continue without forcing the block open                                    |
+| Turn grouping | One user message, one tool, one response | Activity block appears between the user message and response                            |
+| Turn grouping | Two user messages close together         | Each turn gets its own activity block; no cross-turn leakage                            |
+| Turn grouping | Same timestamp items                     | Deterministic sort by timestamp, type priority, then id                                 |
+| Live updates  | Tool call starts after user message      | Block adds a running row without duplicating old rows                                   |
+| Live updates  | Tool completes                           | Row changes to completed and summary/count updates                                      |
+| Live updates  | Assistant streaming starts               | Block can show `Writing response`; streamed text still renders normally                 |
+| Live updates  | Plan becomes ready                       | Activity says `Prepared a plan`; plan review renders separately                         |
+| Live updates  | Plan apply starts                        | Activity says `Applying changes`; applied-plan card renders after completion            |
+| Permissions   | Tool needs approval                      | Activity says `Waiting for approval`; approval card remains prominent                   |
+| Permissions   | Approval accepted                        | Activity updates to approved/continuing; agent continuation can stream below            |
+| Permissions   | Approval denied                          | Activity shows denied/not allowed; denial reason appears only if product copy wants it  |
+| Reload        | Reload while running                     | Derived activity rehydrates from persisted tool calls/session status                    |
+| Reload        | Reload during pending approval           | Activity and approval card both return                                                  |
+| Reload        | Reload after completion                  | Completed activity summary remains stable or is reconstructed                           |
+| Errors        | Tool fails                               | Row shows safe failed state; technical details include redacted error                   |
+| Errors        | Runner fails before first tool call      | Block shows `Pi hit a problem`; composer recovery follows session state                 |
+| Errors        | Unknown tool name                        | Generic human copy renders; raw name only in technical details                          |
+| Privacy       | Provider key appears in error            | Redacted from activity row and technical details                                        |
+| Privacy       | Runner token appears in metadata         | Redacted from all UI and websocket payloads                                             |
+| Privacy       | Provider emits reasoning trace           | Not displayed unless it is an explicitly safe summary; raw chain-of-thought never shown |
+| Performance   | Long session with many tool calls        | Activity rows are grouped/collapsed; chat stays responsive                              |
+| Performance   | Many repeated metadata calls             | Rows are coalesced into one `Reading photo details` group with aggregate counts         |
+| Accessibility | Expanded row controls                    | Toggle buttons have labels, keyboard support, and visible focus                         |
+| Accessibility | Live updates                             | Use polite live regions; do not repeatedly announce every minor progress tick           |
+| Accessibility | Activity expands while focused elsewhere | Focus is not stolen from composer, approval buttons, or plan controls                   |
 
 ## Test Matrix
 

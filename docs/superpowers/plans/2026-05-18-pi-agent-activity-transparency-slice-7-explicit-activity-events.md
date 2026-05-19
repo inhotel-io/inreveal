@@ -135,47 +135,47 @@ rg -n "AgentSessionActivityEventResponseDto|getAgentSessionActivityEvents|agent/
 
 ## Edge Case Matrix
 
-| Area | Case | Expected Slice 7 Result |
-| --- | --- | --- |
-| Persistence | Create start-processing event | Event is stored with current user's session id, safe kind/status, server timestamp |
-| Persistence | List history for owned session | Returns ordered events by `createdAt`, then `id` |
-| Persistence | List history for another user's session | Returns not found/bad request through existing ownership path |
-| Persistence | Session deleted | Activity events cascade-delete with session |
-| Persistence | Terminal session receives new event | Event is ignored and not websocketed |
-| Persistence | Applying session receives apply-progress | Event is persisted/websocketed because `Applying` is active for this slice |
-| DTO safety | Unknown payload keys | Rejected or stripped before persistence |
-| DTO safety | Negative counts | Rejected |
-| DTO safety | Fractional counts | Rejected |
-| DTO safety | Very large counts | Accepted only within bounded integer range |
-| DTO safety | Summary with bearer token/API key/provider key | Redacted before persistence and websocket |
-| DTO safety | Summary too long | Capped after redaction |
-| DTO safety | Raw prompt/reasoning phrase | Suppressed to generic safe summary |
-| Runner protocol | Valid activity SSE | Parsed, validated, persisted, websocketed |
-| Runner protocol | Unknown activity kind | Normalized to safe `unknown` or ignored without killing stream |
-| Runner protocol | Invalid activity payload shape | Structurally invalid `activity` frame is ignored as an optional hint; malformed JSON keeps existing stream-error behavior; no unsafe persistence |
-| Runner protocol | Activity for wrong session/runnerSessionId | Ignored |
-| Runner protocol | Activity arrives after terminal assistant completed | Does not create visible post-terminal row |
-| Runner protocol | Activity races with assistant delta | Both are handled; sequence/order remains deterministic by timestamps |
-| Server lifecycle | Message dispatch begins | Gallery emits `start-processing` before runner deltas/tools/messages |
-| Server lifecycle | Duplicate dispatch attempt | No second start-processing event is persisted for rejected dispatch |
-| Server lifecycle | Resume after approval starts | Gallery emits `runner-recovery` or start/resume activity before resumed runner output |
-| Server lifecycle | Runner error after activity | Activity remains safe; runner-error behavior remains unchanged |
-| Plan composing | Plan proposal starts | `plan-composing` gives visibility before plan-ready when no better current-plan/tool signal is available |
-| Plan composing | Plan ready event follows | UI coalesces/suppresses duplicate plan-composing row rather than showing two plan rows |
-| Apply progress | Apply starts | Running apply-progress row appears with total selected count only |
-| Apply progress | Each operation completes | New aggregate event includes applied/skipped/failed counts only |
-| Apply progress | Apply fails mid-way | Failed progress event is persisted; no raw operation/asset ids are exposed |
-| Apply progress | Applying selected subset | Totals use selected operations, not all proposed operations |
-| Frontend history | Reload during long non-tool gap | Activity block reconstructs from event history after user message |
-| Frontend history | Reload after completion | Stale running start-processing is completed/suppressed once later terminal evidence exists |
-| Frontend history | Existing tool calls and explicit events | Tool-call rows remain primary; non-tool events fill gaps only |
-| Frontend history | Activity visibility off | Activity events are hidden; approval/plan/applied cards still render |
-| Frontend history | Multiple user turns | Activity events attach to the correct turn with Slice 6 anchoring |
-| Frontend history | Event before first user message | No invented activity block; fallback surfaces remain |
-| Frontend live | Live activity websocket event | Merged into current turn without duplicate history rows |
-| Frontend live | History load resolves after websocket event | Dedupe by event id; no flicker or duplicate activity item |
-| Frontend live | Unknown future event | Shows generic safe row or ignores safely |
-| Generated SDK | New endpoint generated | Web imports generated `getAgentSessionActivityEvents` instead of hand-written fetch |
+| Area             | Case                                                | Expected Slice 7 Result                                                                                                                          |
+| ---------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Persistence      | Create start-processing event                       | Event is stored with current user's session id, safe kind/status, server timestamp                                                               |
+| Persistence      | List history for owned session                      | Returns ordered events by `createdAt`, then `id`                                                                                                 |
+| Persistence      | List history for another user's session             | Returns not found/bad request through existing ownership path                                                                                    |
+| Persistence      | Session deleted                                     | Activity events cascade-delete with session                                                                                                      |
+| Persistence      | Terminal session receives new event                 | Event is ignored and not websocketed                                                                                                             |
+| Persistence      | Applying session receives apply-progress            | Event is persisted/websocketed because `Applying` is active for this slice                                                                       |
+| DTO safety       | Unknown payload keys                                | Rejected or stripped before persistence                                                                                                          |
+| DTO safety       | Negative counts                                     | Rejected                                                                                                                                         |
+| DTO safety       | Fractional counts                                   | Rejected                                                                                                                                         |
+| DTO safety       | Very large counts                                   | Accepted only within bounded integer range                                                                                                       |
+| DTO safety       | Summary with bearer token/API key/provider key      | Redacted before persistence and websocket                                                                                                        |
+| DTO safety       | Summary too long                                    | Capped after redaction                                                                                                                           |
+| DTO safety       | Raw prompt/reasoning phrase                         | Suppressed to generic safe summary                                                                                                               |
+| Runner protocol  | Valid activity SSE                                  | Parsed, validated, persisted, websocketed                                                                                                        |
+| Runner protocol  | Unknown activity kind                               | Normalized to safe `unknown` or ignored without killing stream                                                                                   |
+| Runner protocol  | Invalid activity payload shape                      | Structurally invalid `activity` frame is ignored as an optional hint; malformed JSON keeps existing stream-error behavior; no unsafe persistence |
+| Runner protocol  | Activity for wrong session/runnerSessionId          | Ignored                                                                                                                                          |
+| Runner protocol  | Activity arrives after terminal assistant completed | Does not create visible post-terminal row                                                                                                        |
+| Runner protocol  | Activity races with assistant delta                 | Both are handled; sequence/order remains deterministic by timestamps                                                                             |
+| Server lifecycle | Message dispatch begins                             | Gallery emits `start-processing` before runner deltas/tools/messages                                                                             |
+| Server lifecycle | Duplicate dispatch attempt                          | No second start-processing event is persisted for rejected dispatch                                                                              |
+| Server lifecycle | Resume after approval starts                        | Gallery emits `runner-recovery` or start/resume activity before resumed runner output                                                            |
+| Server lifecycle | Runner error after activity                         | Activity remains safe; runner-error behavior remains unchanged                                                                                   |
+| Plan composing   | Plan proposal starts                                | `plan-composing` gives visibility before plan-ready when no better current-plan/tool signal is available                                         |
+| Plan composing   | Plan ready event follows                            | UI coalesces/suppresses duplicate plan-composing row rather than showing two plan rows                                                           |
+| Apply progress   | Apply starts                                        | Running apply-progress row appears with total selected count only                                                                                |
+| Apply progress   | Each operation completes                            | New aggregate event includes applied/skipped/failed counts only                                                                                  |
+| Apply progress   | Apply fails mid-way                                 | Failed progress event is persisted; no raw operation/asset ids are exposed                                                                       |
+| Apply progress   | Applying selected subset                            | Totals use selected operations, not all proposed operations                                                                                      |
+| Frontend history | Reload during long non-tool gap                     | Activity block reconstructs from event history after user message                                                                                |
+| Frontend history | Reload after completion                             | Stale running start-processing is completed/suppressed once later terminal evidence exists                                                       |
+| Frontend history | Existing tool calls and explicit events             | Tool-call rows remain primary; non-tool events fill gaps only                                                                                    |
+| Frontend history | Activity visibility off                             | Activity events are hidden; approval/plan/applied cards still render                                                                             |
+| Frontend history | Multiple user turns                                 | Activity events attach to the correct turn with Slice 6 anchoring                                                                                |
+| Frontend history | Event before first user message                     | No invented activity block; fallback surfaces remain                                                                                             |
+| Frontend live    | Live activity websocket event                       | Merged into current turn without duplicate history rows                                                                                          |
+| Frontend live    | History load resolves after websocket event         | Dedupe by event id; no flicker or duplicate activity item                                                                                        |
+| Frontend live    | Unknown future event                                | Shows generic safe row or ignores safely                                                                                                         |
+| Generated SDK    | New endpoint generated                              | Web imports generated `getAgentSessionActivityEvents` instead of hand-written fetch                                                              |
 
 ## File Structure
 
