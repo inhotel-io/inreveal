@@ -16,7 +16,7 @@
     updateAgentSession,
   } from '@immich/sdk';
   import { Button, Icon } from '@immich/ui';
-  import { mdiAlertCircleOutline, mdiCheckCircleOutline, mdiDotsHorizontal } from '@mdi/js';
+  import { mdiAlertCircleOutline, mdiDotsHorizontal, mdiInformationOutline } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import AgentConversationPane from './agent-conversation-pane.svelte';
   import AgentProviderCredentialsModal from './agent-provider-credentials-modal.svelte';
@@ -25,6 +25,7 @@
     DEFAULT_AGENT_APPROVAL_MODE,
     DEFAULT_AGENT_PERMISSION_PRESET,
     approvalModeOptions,
+    assistantSettingsApprovalModeOptions,
     getDefaultModel,
     permissionPresetOptions,
   } from './agent-session-ui';
@@ -49,8 +50,9 @@
   const getInitialSelectedSessionId = () =>
     selectInitialAgentSessionId(getInitialSessions(), getInitialRequestedSessionId());
   const getInitialShouldReplaceSessionUrl = () => {
+    const initialRequestedSessionId = getInitialRequestedSessionId()?.trim() ?? '';
     const initialSelectedSessionId = getInitialSelectedSessionId();
-    return initialSelectedSessionId !== null && getInitialRequestedSessionId()?.trim() !== initialSelectedSessionId;
+    return initialRequestedSessionId.length > 0 && initialSelectedSessionId !== initialRequestedSessionId;
   };
 
   let sidebarOpen = $state(false);
@@ -64,6 +66,10 @@
   let sidebarCollapsed = $state(false);
   let credentialsModalOpen = $state(false);
   let assistantSettingsOpen = $state(false);
+  let modelSettingsExpanded = $state(false);
+  let apiKeysExpanded = $state(false);
+  let apiKeysInitialAddFormOpen = $state(false);
+  let assistantControlExpanded = $state(false);
   let newChatDraft = $state('');
   let newChatError = $state<string | null>(null);
   let isStartingFromMessage = $state(false);
@@ -73,6 +79,7 @@
   let assistantApprovalMode = $state<AgentApprovalMode>(DEFAULT_AGENT_APPROVAL_MODE);
   let assistantCredentialId = $state<string | null>(null);
   let assistantModel = $state('');
+  let runnerDetailsOpen = $state(false);
   let assistantDefaultsInitialized = false;
   let explicitNewChatPending = false;
   const defaultsStorageKey = 'gallery.assistant.defaults';
@@ -82,9 +89,7 @@
     selectedSession ? getAgentSessionTitle(selectedSession, titleBySessionId) : $t('assistant_new_chat'),
   );
   const isRunnerAvailable = $derived(runnerStatus.configured && runnerStatus.healthy);
-  const runnerStatusLabel = $derived(
-    isRunnerAvailable ? $t('assistant_runner_ready') : $t('assistant_unavailable_banner'),
-  );
+  const runnerStatusLabel = $derived($t('assistant_unavailable_banner'));
   const canSendNewChat = $derived(
     newChatDraft.trim().length > 0 && !isStartingFromMessage && isRunnerAvailable && localCredentials.length > 0,
   );
@@ -94,6 +99,23 @@
   const selectedAssistantModel = $derived(
     selectedAssistantCredential ? getValidModelForCredential(selectedAssistantCredential, assistantModel) : '',
   );
+  const selectedPermissionPresetOption = $derived(
+    permissionPresetOptions.find((option) => option.value === assistantPermissionPreset) ?? permissionPresetOptions[0],
+  );
+  const selectedApprovalModeOption = $derived(
+    assistantSettingsApprovalModeOptions.find((option) => option.value === assistantApprovalMode) ??
+      assistantSettingsApprovalModeOptions[0],
+  );
+  const modelSettingsSummary = $derived(
+    selectedAssistantCredential
+      ? $t('assistant_model_settings_summary', {
+          values: { credential: selectedAssistantCredential.label, model: selectedAssistantModel },
+        })
+      : $t('assistant_no_credentials_setup'),
+  );
+  const assistantControlSummary = $derived(
+    `${$t(selectedPermissionPresetOption.labelKey)} · ${$t(selectedApprovalModeOption.labelKey)}`,
+  );
 
   const isPermissionPreset = (value: unknown): value is AgentPermissionPreset =>
     permissionPresetOptions.some((option) => option.value === value);
@@ -101,6 +123,12 @@
   const isApprovalMode = (value: unknown): value is AgentApprovalMode =>
     approvalModeOptions.some((option) => option.value === value);
 
+  const isAssistantSettingsApprovalMode = (value: unknown): value is AgentApprovalMode =>
+    assistantSettingsApprovalModeOptions.some((option) => option.value === value);
+
+  const primaryApprovalModeOptions = assistantSettingsApprovalModeOptions.filter(
+    (option) => option.value !== AgentApprovalMode.DangerouslySkipPermissions,
+  );
   const readStoredAssistantDefaults = () => {
     try {
       return JSON.parse(localStorage.getItem(defaultsStorageKey) ?? '{}') as Partial<{
@@ -140,7 +168,7 @@
       permissionPreset: isPermissionPreset(parsed.permissionPreset)
         ? parsed.permissionPreset
         : assistantPermissionPreset,
-      approvalMode: isApprovalMode(parsed.approvalMode) ? parsed.approvalMode : assistantApprovalMode,
+      approvalMode: isAssistantSettingsApprovalMode(parsed.approvalMode) ? parsed.approvalMode : assistantApprovalMode,
     };
   };
 
@@ -214,6 +242,11 @@
     persistAssistantDefaults({ credentialId: selectedAssistantCredential.id, model: assistantModel });
   };
 
+  const toggleApiKeySettings = () => {
+    apiKeysInitialAddFormOpen = !apiKeysExpanded && localCredentials.length === 0;
+    apiKeysExpanded = !apiKeysExpanded;
+  };
+
   $effect(() => {
     if (assistantDefaultsInitialized) {
       return;
@@ -224,7 +257,7 @@
     if (isPermissionPreset(storedDefaults.permissionPreset)) {
       assistantPermissionPreset = storedDefaults.permissionPreset;
     }
-    if (isApprovalMode(storedDefaults.approvalMode)) {
+    if (isAssistantSettingsApprovalMode(storedDefaults.approvalMode)) {
       assistantApprovalMode = storedDefaults.approvalMode;
     }
     const storedCredential =
@@ -425,17 +458,36 @@
 
     explicitNewChatPending = false;
     selectedSessionId = selectInitialAgentSessionId(localSessions, requestedSessionId);
-    shouldReplaceSelectedSessionUrl = selectedSessionId !== null && requestedSessionId?.trim() !== selectedSessionId;
+    const normalizedRequestedSessionId = requestedSessionId?.trim() ?? '';
+    shouldReplaceSelectedSessionUrl =
+      normalizedRequestedSessionId.length > 0 && selectedSessionId !== normalizedRequestedSessionId;
   });
 
   $effect(() => {
-    if (!shouldReplaceSelectedSessionUrl || !selectedSessionId || syncedFallbackSessionId === selectedSessionId) {
+    if (!shouldReplaceSelectedSessionUrl) {
+      return;
+    }
+
+    if (!selectedSessionId) {
+      shouldReplaceSelectedSessionUrl = false;
+      syncedFallbackSessionId = null;
+      void updateSessionUrl(null, true);
+      return;
+    }
+
+    if (syncedFallbackSessionId === selectedSessionId) {
       return;
     }
 
     shouldReplaceSelectedSessionUrl = false;
     syncedFallbackSessionId = selectedSessionId;
     void updateSessionUrl(selectedSessionId, true);
+  });
+
+  $effect(() => {
+    if (isRunnerAvailable) {
+      runnerDetailsOpen = false;
+    }
   });
 </script>
 
@@ -461,13 +513,29 @@
             {$t('close')}
           </Button>
         </div>
-        <div class="grid gap-5">
+        <div class="grid gap-3">
           <section class="rounded-lg border border-gray-200 p-4 dark:border-neutral-800">
-            <h3 class="text-base font-semibold">{$t('assistant_model_provider')}</h3>
+            <div class="flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <h3 class="text-base font-semibold">{$t('assistant_model')}</h3>
+                <p class="mt-1 truncate text-sm text-gray-500 dark:text-gray-400">{modelSettingsSummary}</p>
+              </div>
+              {#if localCredentials.length > 0}
+                <button
+                  type="button"
+                  class="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                  aria-label={`${$t('assistant_change')} ${$t('assistant_model').toLocaleLowerCase()}`}
+                  aria-expanded={modelSettingsExpanded}
+                  onclick={() => (modelSettingsExpanded = !modelSettingsExpanded)}
+                >
+                  {$t('assistant_change')}
+                </button>
+              {/if}
+            </div>
             {#if localCredentials.length === 0}
               <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{$t('assistant_no_credentials_setup')}</p>
-            {:else}
-              <div class="mt-4 grid gap-4">
+            {:else if modelSettingsExpanded}
+              <div class="mt-3 grid gap-3 border-t border-gray-200 pt-3 dark:border-neutral-800">
                 <div class="grid gap-2">
                   <label class="text-sm font-medium" for="assistant-default-provider-credential">
                     {$t('assistant_provider_credential')}
@@ -516,53 +584,125 @@
 
           <section class="rounded-lg border border-gray-200 p-4 dark:border-neutral-800">
             <div class="flex items-center justify-between gap-3">
-              <div>
+              <div class="min-w-0">
                 <h3 class="text-base font-semibold">{$t('assistant_api_keys')}</h3>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{$t('assistant_api_keys_description')}</p>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{$t('assistant_api_keys_summary')}</p>
               </div>
-              <Button type="button" size="small" color="secondary" onclick={() => (credentialsModalOpen = true)}>
-                {localCredentials.length > 0 ? $t('assistant_manage_api_keys') : $t('assistant_add_api_key')}
-              </Button>
+              <button
+                type="button"
+                class="shrink-0 whitespace-nowrap rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-200 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700"
+                aria-label={localCredentials.length > 0 ? $t('assistant_manage_api_keys') : $t('assistant_add_api_key')}
+                aria-expanded={apiKeysExpanded}
+                onclick={toggleApiKeySettings}
+              >
+                {localCredentials.length > 0 ? $t('assistant_manage') : $t('assistant_add_api_key')}
+              </button>
             </div>
+            {#if apiKeysExpanded}
+              <AgentProviderCredentialsModal
+                open={apiKeysExpanded}
+                embedded
+                initialAddFormOpen={apiKeysInitialAddFormOpen}
+                credentials={localCredentials}
+                onCredentialsChanged={(nextCredentials) => (localCredentials = nextCredentials)}
+              />
+            {/if}
           </section>
 
           <section class="rounded-lg border border-gray-200 p-4 dark:border-neutral-800">
-            <h3 class="text-base font-semibold">{$t('assistant_permission_preset')}</h3>
-            <div class="mt-4 grid gap-4">
-              <div class="grid gap-2">
-                <label class="text-sm font-medium" for="assistant-default-permission-preset">
-                  {$t('assistant_permission_preset')}
-                </label>
-                <select
-                  id="assistant-default-permission-preset"
-                  aria-label={$t('assistant_permission_preset')}
-                  class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-immich-dark-gray"
-                  value={assistantPermissionPreset}
-                  onchange={handlePermissionPresetChange}
-                >
-                  {#each permissionPresetOptions as option (option.value)}
-                    <option value={option.value}>{$t(option.labelKey)}</option>
-                  {/each}
-                </select>
+            <div class="flex min-h-14 items-center justify-between gap-4">
+              <div class="min-w-0">
+                <h3 class="text-base font-semibold">{$t('assistant_control')}</h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{assistantControlSummary}</p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {$t('assistant_settings_apply_to_new_chats')}
+                </p>
               </div>
-
-              <div class="grid gap-2">
-                <label class="text-sm font-medium" for="assistant-default-approval-mode">
-                  {$t('assistant_approval_mode')}
-                </label>
-                <select
-                  id="assistant-default-approval-mode"
-                  aria-label={$t('assistant_approval_mode')}
-                  class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-immich-dark-gray"
-                  value={assistantApprovalMode}
-                  onchange={handleApprovalModeChange}
-                >
-                  {#each approvalModeOptions as option (option.value)}
-                    <option value={option.value}>{$t(option.labelKey)}</option>
-                  {/each}
-                </select>
-              </div>
+              <button
+                type="button"
+                class="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                aria-label={`${$t('assistant_change')} ${$t('assistant_control').toLocaleLowerCase()}`}
+                aria-expanded={assistantControlExpanded}
+                onclick={() => (assistantControlExpanded = !assistantControlExpanded)}
+              >
+                {$t('assistant_change')}
+              </button>
             </div>
+
+            {#if assistantControlExpanded}
+              <div class="mt-3 grid gap-5 border-t border-gray-200 pt-3 dark:border-neutral-800">
+                <fieldset aria-labelledby="assistant-photo-access-legend">
+                  <legend id="assistant-photo-access-legend" class="text-sm font-semibold">
+                    {$t('assistant_photo_access')}
+                  </legend>
+                  <div class="mt-3 grid gap-1.5">
+                    {#each permissionPresetOptions as option (option.value)}
+                      <label
+                        class={[
+                          'flex cursor-pointer gap-3 rounded-lg border px-3 py-2.5 text-sm leading-snug transition-colors',
+                          assistantPermissionPreset === option.value
+                            ? 'border-blue-500 bg-blue-50 text-blue-950 dark:border-blue-500/70 dark:bg-blue-950/30 dark:text-blue-100'
+                            : 'border-gray-200 hover:bg-gray-50 dark:border-neutral-800 dark:hover:bg-neutral-900',
+                        ]}
+                      >
+                        <input
+                          class="mt-1"
+                          type="radio"
+                          name="assistant-photo-access"
+                          value={option.value}
+                          checked={assistantPermissionPreset === option.value}
+                          onchange={handlePermissionPresetChange}
+                        />
+                        <span class="grid gap-0.5">
+                          <span class="flex items-center gap-1.5 font-medium">
+                            {$t(option.labelKey)}
+                            <span
+                              class="inline-flex text-gray-400 dark:text-gray-500"
+                              title={$t(option.detailsKey)}
+                              aria-label={$t(option.detailsKey)}
+                            >
+                              <Icon icon={mdiInformationOutline} size="15" />
+                            </span>
+                          </span>
+                          <span class="text-gray-500 dark:text-gray-400">{$t(option.descriptionKey)}</span>
+                        </span>
+                      </label>
+                    {/each}
+                  </div>
+                </fieldset>
+
+                <fieldset aria-labelledby="assistant-approval-behavior-legend">
+                  <legend id="assistant-approval-behavior-legend" class="text-sm font-semibold">
+                    {$t('assistant_approval_behavior')}
+                  </legend>
+                  <div class="mt-3 grid gap-1.5">
+                    {#each primaryApprovalModeOptions as option (option.value)}
+                      <label
+                        class={[
+                          'flex cursor-pointer gap-3 rounded-lg border px-3 py-2.5 text-sm leading-snug transition-colors',
+                          assistantApprovalMode === option.value
+                            ? 'border-blue-500 bg-blue-50 text-blue-950 dark:border-blue-500/70 dark:bg-blue-950/30 dark:text-blue-100'
+                            : 'border-gray-200 hover:bg-gray-50 dark:border-neutral-800 dark:hover:bg-neutral-900',
+                        ]}
+                      >
+                        <input
+                          class="mt-1"
+                          type="radio"
+                          name="assistant-approval-behavior"
+                          value={option.value}
+                          checked={assistantApprovalMode === option.value}
+                          onchange={handleApprovalModeChange}
+                        />
+                        <span class="grid gap-0.5">
+                          <span class="font-medium">{$t(option.labelKey)}</span>
+                          <span class="text-gray-500 dark:text-gray-400">{$t(option.descriptionKey)}</span>
+                        </span>
+                      </label>
+                    {/each}
+                  </div>
+                </fieldset>
+              </div>
+            {/if}
           </section>
         </div>
       </div>
@@ -643,19 +783,47 @@
         {/if}
       </div>
       <div class="ml-auto flex shrink-0 items-center gap-2">
-        <button
-          type="button"
-          class={[
-            'inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors',
-            isRunnerAvailable
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300'
-              : 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-300',
-          ]}
-          aria-label={runnerStatusLabel}
-          title={runnerStatusLabel}
-        >
-          <Icon icon={isRunnerAvailable ? mdiCheckCircleOutline : mdiAlertCircleOutline} size="18" />
-        </button>
+        {#if !isRunnerAvailable}
+          <div class="relative">
+            <button
+              type="button"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-500/40 bg-red-500/10 text-red-600 transition-colors hover:bg-red-500/15 dark:text-red-300"
+              aria-label={runnerStatusLabel}
+              aria-expanded={runnerDetailsOpen}
+              title={runnerStatusLabel}
+              onclick={() => (runnerDetailsOpen = !runnerDetailsOpen)}
+            >
+              <Icon icon={mdiAlertCircleOutline} size="18" />
+            </button>
+
+            {#if runnerDetailsOpen}
+              <div
+                class="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-red-200 bg-white p-3 text-sm shadow-lg dark:border-red-900 dark:bg-neutral-950"
+                role="status"
+              >
+                <p class="font-medium text-red-700 dark:text-red-200">{runnerStatusLabel}</p>
+                <dl class="mt-3 grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
+                  <dt>{$t('assistant_configured')}</dt>
+                  <dd>{runnerStatus.configured ? $t('assistant_yes') : $t('assistant_no')}</dd>
+                  <dt>{$t('assistant_healthy')}</dt>
+                  <dd>{runnerStatus.healthy ? $t('assistant_yes') : $t('assistant_no')}</dd>
+                  {#if runnerStatus.version}
+                    <dt>{$t('assistant_runner', { values: { version: runnerStatus.version } })}</dt>
+                    <dd>{runnerStatus.version}</dd>
+                  {/if}
+                  {#if runnerStatus.capabilities?.protocolVersion}
+                    <dt>
+                      {$t('assistant_protocol', {
+                        values: { protocol: runnerStatus.capabilities.protocolVersion },
+                      })}
+                    </dt>
+                    <dd>{runnerStatus.capabilities.protocolVersion}</dd>
+                  {/if}
+                </dl>
+              </div>
+            {/if}
+          </div>
+        {/if}
         <button
           type="button"
           class="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-black dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white"
@@ -697,9 +865,8 @@
             class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col justify-center gap-4 pb-20"
             data-testid="assistant-empty-chat-surface"
           >
-            <div>
-              <h2 class="text-2xl font-semibold">{$t('assistant_new_chat')}</h2>
-              <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{$t('assistant_subtitle')}</p>
+            <div class="text-center" data-testid="assistant-empty-chat-heading">
+              <h2 class="text-2xl font-semibold">{$t('assistant_new_chat_prompt')}</h2>
             </div>
 
             {#if newChatError}
