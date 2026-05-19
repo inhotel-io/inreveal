@@ -61,7 +61,7 @@ class PersonalMergeSelectBuilder {
     return this;
   }
 
-  async execute() {
+  execute() {
     if (this.table !== 'person') {
       return [];
     }
@@ -69,9 +69,9 @@ class PersonalMergeSelectBuilder {
     return this.idFilter ? this.db.people.filter((person) => this.idFilter?.includes(person.id)) : this.db.people;
   }
 
-  async executeTakeFirst() {
+  executeTakeFirst() {
     if (this.table !== 'asset_face') {
-      return undefined;
+      return null;
     }
 
     return this.db.faces.find((face) =>
@@ -111,7 +111,7 @@ class PersonalMergeUpdateBuilder {
     return this;
   }
 
-  async execute() {
+  execute() {
     if (this.table === 'person' && this.whereColumn === 'id') {
       for (const person of this.db.people) {
         if (person.id === this.whereValue) {
@@ -147,7 +147,7 @@ class PersonalMergeDeleteBuilder {
     return this;
   }
 
-  async execute() {
+  execute() {
     if (this.table === 'person' && this.whereColumn === 'id') {
       const before = this.db.people.length;
       this.db.people = this.db.people.filter((person) => person.id !== this.whereValue);
@@ -249,7 +249,7 @@ class SharedSpaceMergeSelectBuilder {
     return this;
   }
 
-  async execute() {
+  execute() {
     if (this.table === 'shared_space_person_alias') {
       return this.db.aliases.filter((alias) => alias.personId === this.whereValue);
     }
@@ -293,7 +293,7 @@ class SharedSpaceMergeUpdateBuilder {
     return this;
   }
 
-  async execute() {
+  execute() {
     if (this.table === 'shared_space_person_face' && this.whereColumn === 'personId') {
       for (const face of this.db.faces) {
         if (face.personId === this.whereValue) {
@@ -331,9 +331,9 @@ class SharedSpaceMergeDeleteBuilder {
     return this;
   }
 
-  async execute() {
+  execute() {
     if (this.table === 'shared_space_person_face') {
-      const duplicateFaceIds = new Set(this.duplicateFaceSubquery?.evaluateAssetFaceIds() ?? []);
+      const duplicateFaceIds = new Set(this.duplicateFaceSubquery?.evaluateAssetFaceIds());
       this.db.faces = this.db.faces.filter(
         (face) => face.personId !== this.personId || !duplicateFaceIds.has(face.assetFaceId),
       );
@@ -376,7 +376,7 @@ class SharedSpaceMergeInsertBuilder {
     return this;
   }
 
-  async execute() {
+  execute() {
     if (this.table !== 'shared_space_person_alias' || !this.row) {
       return [];
     }
@@ -399,14 +399,16 @@ class TestSharedSpaceRepository extends SharedSpaceRepository {
     super(fakeDb as never);
   }
 
-  override async reassignPersonFacesSafe(fromPersonId: string, toPersonId: string) {
+  override reassignPersonFacesSafe(fromPersonId: string, toPersonId: string) {
     this.reassignPersonFacesSafeCalls.push({ fromPersonId, toPersonId });
     this.fakeDb.removeDuplicateFaces(fromPersonId, toPersonId);
     this.fakeDb.moveFaces(fromPersonId, toPersonId);
+    return Promise.resolve();
   }
 
-  override async recountPersons(personIds: string[]) {
+  override recountPersons(personIds: string[]) {
     this.fakeDb.recount(personIds);
+    return Promise.resolve();
   }
 }
 
@@ -426,7 +428,7 @@ const makeService = (profiles: MergeProfile[]) => {
   const personRepository = {
     lockPeopleForMerge: vi.fn().mockResolvedValue(void 0),
     mergePersonProfile: vi.fn().mockResolvedValue({ deletedThumbnailPath: null, targetNeedsFeatureFaceRepair: false }),
-    getRandomFace: vi.fn().mockResolvedValue(undefined),
+    getRandomFace: vi.fn().mockResolvedValue(null),
     update: vi.fn().mockResolvedValue(void 0),
     updatePersonIdentity: vi.fn().mockResolvedValue(void 0),
   };
@@ -1054,7 +1056,7 @@ describe('IdentityMergePropagationService', () => {
           mode: 'identities',
           identityIds: ['identity-for-person-x', 'identity-for-person-y'],
         },
-        undefined,
+        void 0,
       );
       expect(plan.targetIdentityId).toBe('identity-for-person-x');
       expect(plan.sourceIdentityIds).toEqual(['identity-for-person-y']);

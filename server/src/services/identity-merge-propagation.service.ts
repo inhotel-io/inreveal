@@ -161,9 +161,7 @@ export class IdentityMergePropagationService {
 
     const personIds = [
       ...plan.personalProfileMerges.flatMap((step) => [step.targetPersonId, ...step.sourcePersonIds]),
-      ...plan.profileIdentityUpdates
-        .filter((update) => update.kind === 'person')
-        .map((update) => update.profileId),
+      ...plan.profileIdentityUpdates.filter((update) => update.kind === 'person').map((update) => update.profileId),
     ];
     const spacePersonIds = [
       ...plan.spaceProfileMerges.flatMap((step) => [step.targetPersonId, ...step.sourcePersonIds]),
