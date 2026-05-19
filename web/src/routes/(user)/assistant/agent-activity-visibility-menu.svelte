@@ -57,7 +57,8 @@
   };
 
   const moveFocus = async (delta: number) => {
-    const currentIndex = itemElements.indexOf(document.activeElement);
+    const activeElement = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+    const currentIndex = activeElement ? itemElements.indexOf(activeElement) : -1;
     const nextIndex = (Math.max(0, currentIndex) + delta + modes.length) % modes.length;
     await focusItem(nextIndex);
   };
