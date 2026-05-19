@@ -443,6 +443,14 @@ class ApiClient {
           return AgentSearchAssetsToolResponseDto.fromJson(value);
         case 'AgentSearchAssetsToolSuccessResponse':
           return AgentSearchAssetsToolSuccessResponse.fromJson(value);
+        case 'AgentSessionActivityEventCounts':
+          return AgentSessionActivityEventCounts.fromJson(value);
+        case 'AgentSessionActivityEventResponseDto':
+          return AgentSessionActivityEventResponseDto.fromJson(value);
+        case 'AgentSessionActivityEventSource':
+          return AgentSessionActivityEventSourceTypeTransformer().decode(value);
+        case 'AgentSessionActivityEventStatus':
+          return AgentSessionActivityEventStatusTypeTransformer().decode(value);
         case 'AgentSessionCreateDto':
           return AgentSessionCreateDto.fromJson(value);
         case 'AgentSessionResponseDto':
