@@ -2699,7 +2699,7 @@ export class FaceIdentityRepository {
     const incompatible = identities.some(
       (identity) => identity.id !== input.targetIdentityId && identity.type !== targetIdentity.type,
     );
-    if (incompatible) {
+    if (incompatible && input.source !== 'manual') {
       throw new Error('Cannot merge face identities with different types');
     }
 

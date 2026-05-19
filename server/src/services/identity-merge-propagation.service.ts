@@ -344,10 +344,6 @@ export class IdentityMergePropagationService {
         throw new BadRequestException('Source person not found');
       }
 
-      if (sourceProfile.type !== targetProfile.type) {
-        throw new BadRequestException('Cannot merge people of different types');
-      }
-
       return sourceProfile;
     });
 
