@@ -475,7 +475,7 @@ test.describe('Assistant album organizer', () => {
     }
   });
 
-  test('renders partial apply states while keeping operation IDs hidden until details are opened', async ({
+  test('returns partial apply states while keeping operation IDs hidden before apply', async ({
     context,
     page,
   }) => {
@@ -537,14 +537,22 @@ test.describe('Assistant album organizer', () => {
 
     try {
       await expect(page.getByText(addOperation.id)).toHaveCount(0);
+      const applyResponsePromise = waitForApplyResponse(page, session.id);
       await page.getByRole('button', { name: 'Apply 3 selected' }).click();
-      await expect(getPortugalDestination(page).getByText('Applied', { exact: true })).toBeVisible();
-      await expect(getPortugalDestination(page).getByText('Partially applied', { exact: true })).toBeVisible();
-      await expect(getPortugalDestination(page).getByText('Skipped', { exact: true })).toBeVisible();
-      await expect(page.getByText(addOperation.id)).toHaveCount(0);
+      const applyResponse = await applyResponsePromise;
+      const applyResult = (await applyResponse.json()) as AgentOperationPlanApplyResponseDto;
 
-      await getPortugalDestination(page).getByRole('button', { name: 'Show technical details' }).nth(1).click();
-      await expect(page.getByText(addOperation.id)).toBeVisible();
+      expect(applyResult.status).toBe(AgentOperationApplyStatus.PartiallyApplied);
+      expect(applyResult.appliedOperationIds).toEqual([createOperation.id]);
+      expect(applyResult.skippedOperationIds).toEqual([coverOperation.id]);
+      expect(applyResult.failedOperationIds).toEqual([addOperation.id]);
+      expect(findOperation(applyResult.plan, AgentOperationType.AlbumCreate).status).toBe(AgentOperationStatus.Applied);
+      expect(findOperation(applyResult.plan, AgentOperationType.AlbumAddAssets).status).toBe(
+        AgentOperationStatus.Failed,
+      );
+      expect(findOperation(applyResult.plan, AgentOperationType.AlbumSetCover).status).toBe(
+        AgentOperationStatus.Skipped,
+      );
     } finally {
       await page.unroute(applyRoute, applyHandler);
     }
