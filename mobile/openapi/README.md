@@ -97,8 +97,10 @@ Class | Method | HTTP request | Description
 *AgentSessionsApi* | [**deleteAgentSession**](doc//AgentSessionsApi.md#deleteagentsession) | **DELETE** /agent/sessions/{id} | Delete an agent session
 *AgentSessionsApi* | [**executeAgentSearchAssets**](doc//AgentSessionsApi.md#executeagentsearchassets) | **POST** /agent/sessions/{id}/tools/search-assets | Execute the internal searchAssets agent tool
 *AgentSessionsApi* | [**getAgentSession**](doc//AgentSessionsApi.md#getagentsession) | **GET** /agent/sessions/{id} | Retrieve an agent session
+*AgentSessionsApi* | [**getAgentSessionActivityEvents**](doc//AgentSessionsApi.md#getagentsessionactivityevents) | **GET** /agent/sessions/{id}/activity-events | List agent session activity events
 *AgentSessionsApi* | [**getAgentSessionMessages**](doc//AgentSessionsApi.md#getagentsessionmessages) | **GET** /agent/sessions/{id}/messages | List agent session messages
 *AgentSessionsApi* | [**getAgentSessions**](doc//AgentSessionsApi.md#getagentsessions) | **GET** /agent/sessions | List agent sessions
+*AgentSessionsApi* | [**getAppliedOperationPlans**](doc//AgentSessionsApi.md#getappliedoperationplans) | **GET** /agent/sessions/{id}/operation-plan/applied | Get applied agent operation plans
 *AgentSessionsApi* | [**getCurrentOperationPlan**](doc//AgentSessionsApi.md#getcurrentoperationplan) | **GET** /agent/sessions/{id}/operation-plan | Get the current agent operation plan
 *AgentSessionsApi* | [**getToolCalls**](doc//AgentSessionsApi.md#gettoolcalls) | **GET** /agent/sessions/{id}/tool-calls | List agent tool calls
 *AgentSessionsApi* | [**handle**](doc//AgentSessionsApi.md#handle) | **POST** /agent/internal/mcp/sessions/{id} | Handle the internal runner MCP endpoint
@@ -539,6 +541,10 @@ Class | Method | HTTP request | Description
  - [AgentSearchAssetsToolRequestDto](doc//AgentSearchAssetsToolRequestDto.md)
  - [AgentSearchAssetsToolResponseDto](doc//AgentSearchAssetsToolResponseDto.md)
  - [AgentSearchAssetsToolSuccessResponse](doc//AgentSearchAssetsToolSuccessResponse.md)
+ - [AgentSessionActivityEventCounts](doc//AgentSessionActivityEventCounts.md)
+ - [AgentSessionActivityEventResponseDto](doc//AgentSessionActivityEventResponseDto.md)
+ - [AgentSessionActivityEventSource](doc//AgentSessionActivityEventSource.md)
+ - [AgentSessionActivityEventStatus](doc//AgentSessionActivityEventStatus.md)
  - [AgentSessionCreateDto](doc//AgentSessionCreateDto.md)
  - [AgentSessionResponseDto](doc//AgentSessionResponseDto.md)
  - [AgentSessionStatus](doc//AgentSessionStatus.md)
