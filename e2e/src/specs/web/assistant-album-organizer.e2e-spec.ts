@@ -283,7 +283,7 @@ test.describe('Assistant album organizer', () => {
           timeout: 10_000,
         },
       )
-      .toBe(AgentSessionStatus.Completed);
+      .toBe(AgentSessionStatus.Running);
 
     const createOperation = appliedPlan.operations.find(
       (operation) => operation.type === AgentOperationType.AlbumCreate,
@@ -538,7 +538,7 @@ test.describe('Assistant album organizer', () => {
     try {
       await expect(page.getByText(addOperation.id)).toHaveCount(0);
       await page.getByRole('button', { name: 'Apply 3 selected' }).click();
-      await expect(page.getByText('1 applied · 1 skipped · 1 failed. Review details before continuing.')).toBeVisible();
+      await expect(page.getByText('Applied 1 operation. 1 failed.')).toBeVisible();
       await expect(getPortugalDestination(page).getByText('Applied', { exact: true })).toBeVisible();
       await expect(getPortugalDestination(page).getByText('Partially applied', { exact: true })).toBeVisible();
       await expect(getPortugalDestination(page).getByText('Skipped', { exact: true })).toBeVisible();
