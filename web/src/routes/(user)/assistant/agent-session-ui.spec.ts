@@ -7,6 +7,8 @@ import {
 } from '@immich/sdk';
 import {
   approvalModeOptions,
+  assistantSettingsApprovalModeOptions,
+  DEFAULT_AGENT_APPROVAL_MODE,
   getApprovalModeLabelKey,
   getDefaultModel,
   getInitialCredentialId,
@@ -89,6 +91,11 @@ describe('agent session UI helpers', () => {
       AgentApprovalMode.DangerouslySkipPermissions,
     ]);
     expect(approvalModeOptions.map((option) => option.value)).toEqual(supportedApprovalModes);
+    expect(assistantSettingsApprovalModeOptions.map((option) => option.value)).toEqual([
+      AgentApprovalMode.Strict,
+      AgentApprovalMode.PlanOnly,
+    ]);
+    expect(DEFAULT_AGENT_APPROVAL_MODE).toBe(AgentApprovalMode.PlanOnly);
   });
 
   it('has label keys for every exposed permission preset', () => {
@@ -101,10 +108,10 @@ describe('agent session UI helpers', () => {
 
   it('has label keys for every exposed approval mode', () => {
     expect(supportedApprovalModes.map((mode) => getApprovalModeLabelKey(mode))).toEqual([
-      'assistant_approval_mode_strict',
+      'assistant_approval_behavior_all_actions',
       'assistant_approval_mode_ask_on_escalation',
-      'assistant_approval_mode_plan_only',
-      'assistant_approval_mode_dangerously_skip_permissions',
+      'assistant_approval_behavior_apply_plans',
+      'assistant_approval_behavior_skip_prompts',
     ]);
   });
 
