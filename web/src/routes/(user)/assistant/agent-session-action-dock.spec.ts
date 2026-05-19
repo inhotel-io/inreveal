@@ -556,9 +556,7 @@ describe(AgentSessionActionDock.name, () => {
       props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
     });
     await waitFor(() =>
-      expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
-        expect.objectContaining({ id: completedToolCall.id }),
-      ]),
+      expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([expect.objectContaining({ id: completedToolCall.id })]),
     );
     const publishCountAfterInitialLoad = onRecentToolCallsChange.mock.calls.length;
 

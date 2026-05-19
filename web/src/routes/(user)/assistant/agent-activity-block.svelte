@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t, type Translations } from 'svelte-i18n';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import type { AgentActivityVisibilityMode } from './agent-activity-visibility-ui';
   import {
     buildAgentActivityTechnicalRows,
@@ -20,7 +21,7 @@
   let { model, compactLimit = 3, visibilityMode, onVisibilityModeChange }: Props = $props();
   const rowsId = $props.id();
   let uncontrolledVisibilityMode = $state<BlockVisibilityMode>('compact');
-  let expandedTechnicalRowIds = $state<Set<string>>(new Set());
+  let expandedTechnicalRowIds = new SvelteSet<string>();
 
   const statusLabels: Record<AgentActivityStatus, Translations> = {
     blocked: 'assistant_activity_status_blocked',
@@ -39,7 +40,7 @@
   const visibleItems = $derived(isExpanded ? model.items : compactItems);
 
   const technicalRowsByItemId = $derived.by(() => {
-    const rows = new Map<string, ReturnType<typeof buildAgentActivityTechnicalRows>>();
+    const rows = new SvelteMap<string, ReturnType<typeof buildAgentActivityTechnicalRows>>();
 
     for (const item of model.items) {
       rows.set(item.id, buildAgentActivityTechnicalRows(item));
@@ -61,7 +62,7 @@
       return items.slice(0, limit);
     }
 
-    const selectedIds = new Set<string>();
+    const selectedIds = new SvelteSet<string>();
     const selected: AgentActivityItem[] = [];
     const addItem = (item: AgentActivityItem | undefined) => {
       if (!item || selectedIds.has(item.id) || selected.length >= limit) {
@@ -82,15 +83,11 @@
   }
 
   function toggleTechnicalRow(itemId: string) {
-    const nextExpandedIds = new Set(expandedTechnicalRowIds);
-
-    if (nextExpandedIds.has(itemId)) {
-      nextExpandedIds.delete(itemId);
+    if (expandedTechnicalRowIds.has(itemId)) {
+      expandedTechnicalRowIds.delete(itemId);
     } else {
-      nextExpandedIds.add(itemId);
+      expandedTechnicalRowIds.add(itemId);
     }
-
-    expandedTechnicalRowIds = nextExpandedIds;
   }
 </script>
 
@@ -127,14 +124,23 @@
       </button>
     </header>
 
-    <div id={rowsId} class="mt-3 flex flex-col gap-2" role={isActive ? 'status' : undefined} aria-live={isActive ? 'polite' : undefined}>
+    <div
+      id={rowsId}
+      class="mt-3 flex flex-col gap-2"
+      role={isActive ? 'status' : undefined}
+      aria-live={isActive ? 'polite' : undefined}
+    >
       {#each visibleItems as item (item.id)}
         {@const technicalRows = technicalRowsByItemId.get(item.id) ?? []}
         {@const technicalDetailsId = `${rowsId}-${item.id}-technical`}
         {@const technicalDetailsExpanded = expandedTechnicalRowIds.has(item.id)}
-        <div class="min-w-0 rounded-md border border-gray-100 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900">
+        <div
+          class="min-w-0 rounded-md border border-gray-100 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900"
+        >
           <div class="flex flex-wrap items-center gap-2">
-            <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[0.7rem] font-medium text-gray-700 dark:bg-neutral-800 dark:text-gray-200">
+            <span
+              class="rounded-full bg-gray-100 px-2 py-0.5 text-[0.7rem] font-medium text-gray-700 dark:bg-neutral-800 dark:text-gray-200"
+            >
               {$t(statusLabels[item.status])}
             </span>
             {#if item.count !== undefined}

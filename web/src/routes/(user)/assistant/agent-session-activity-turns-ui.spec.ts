@@ -9,6 +9,7 @@ import {
   AgentOperationType,
   AgentPermissionPreset,
   AgentProviderType,
+  Kind as AgentSessionActivityEventKind,
   AgentSessionActivityEventSource,
   AgentSessionActivityEventStatus,
   AgentSessionStatus,
@@ -16,7 +17,6 @@ import {
   AgentToolCallStatus,
   AgentToolDataClass,
   AgentToolName,
-  Kind as AgentSessionActivityEventKind,
   type AgentMessageResponseDto,
   type AgentOperationPlanResponseDto,
   type AgentOperationResponseDto,
@@ -24,10 +24,10 @@ import {
   type AgentToolCallResponseDto,
 } from '@immich/sdk';
 import {
-  type AgentActivityEvent,
   buildAgentSessionActivityTurns,
   getAppliedPlanKeysForActivityTurns,
   getCoveredToolCallIdsForActivityTurns,
+  type AgentActivityEvent,
 } from './agent-session-activity-turns-ui';
 
 const sessionId = '00000000-0000-4000-8000-000000000100';
@@ -306,7 +306,9 @@ describe('agent session activity turn helpers', () => {
           id: `tool-${status}`,
           status,
           approvalDecision:
-            status === AgentToolCallStatus.Approved ? AgentToolApprovalDecision.Approved : AgentToolApprovalDecision.Denied,
+            status === AgentToolCallStatus.Approved
+              ? AgentToolApprovalDecision.Approved
+              : AgentToolApprovalDecision.Denied,
           responseSummary: status === AgentToolCallStatus.Approved ? null : '',
           error: status === AgentToolCallStatus.Failed ? 'Provider timed out' : null,
           completedAt: status === AgentToolCallStatus.Approved ? null : '2026-05-18T10:00:07.000Z',
@@ -314,9 +316,7 @@ describe('agent session activity turn helpers', () => {
       ],
     });
 
-    expect(turns[0].model.items).toEqual([
-      expect.objectContaining({ status: activityStatus, summary }),
-    ]);
+    expect(turns[0].model.items).toEqual([expect.objectContaining({ status: activityStatus, summary })]);
   });
 
   it('attaches applied plan activity to the preceding user turn even after assistant plan text', () => {

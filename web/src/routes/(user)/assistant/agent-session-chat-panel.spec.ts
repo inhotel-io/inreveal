@@ -11,6 +11,7 @@ import {
   AgentOperationType,
   AgentPermissionPreset,
   AgentProviderType,
+  Kind as AgentSessionActivityEventKind,
   AgentSessionActivityEventSource,
   AgentSessionActivityEventStatus,
   AgentSessionStatus,
@@ -18,7 +19,6 @@ import {
   AgentToolCallStatus,
   AgentToolDataClass,
   AgentToolName,
-  Kind as AgentSessionActivityEventKind,
   type AgentMessageResponseDto,
   type AgentOperationPlanResponseDto,
   type AgentOperationResponseDto,
@@ -28,8 +28,7 @@ import {
 } from '@immich/sdk';
 import { websocketMock } from '@test-data/mocks/websocket.mock';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
-import { createRawSnippet } from 'svelte';
-import { tick } from 'svelte';
+import { createRawSnippet, tick } from 'svelte';
 import { readable } from 'svelte/store';
 import AgentSessionChatPanel from './agent-session-chat-panel.svelte';
 
@@ -232,10 +231,13 @@ const makeActivityEvent = (
 ): AgentSessionActivityEventResponseDto => ({
   id: (overrides.id ?? 'activity-event-1') as string,
   sessionId: (overrides.sessionId ?? session.id) as string,
-  kind: (overrides.kind ?? AgentSessionActivityEventKind.StartProcessing) as AgentSessionActivityEventResponseDto['kind'],
-  status: (overrides.status ?? AgentSessionActivityEventStatus.Running) as AgentSessionActivityEventResponseDto['status'],
+  kind: (overrides.kind ??
+    AgentSessionActivityEventKind.StartProcessing) as AgentSessionActivityEventResponseDto['kind'],
+  status: (overrides.status ??
+    AgentSessionActivityEventStatus.Running) as AgentSessionActivityEventResponseDto['status'],
   summary: (overrides.summary ?? null) as AgentSessionActivityEventResponseDto['summary'],
-  source: (overrides.source ?? AgentSessionActivityEventSource.Server) as AgentSessionActivityEventResponseDto['source'],
+  source: (overrides.source ??
+    AgentSessionActivityEventSource.Server) as AgentSessionActivityEventResponseDto['source'],
   counts:
     overrides.counts ??
     (overrides.totalCount == null &&
@@ -438,7 +440,9 @@ describe(AgentSessionChatPanel.name, () => {
     render(AgentSessionChatPanel, {
       props: {
         session: { ...session, status: AgentSessionStatus.WaitingForToolApproval },
-        actionDock: createRawSnippet(() => ({ render: () => '<section aria-label="Approval request">Approve?</section>' })),
+        actionDock: createRawSnippet(() => ({
+          render: () => '<section aria-label="Approval request">Approve?</section>',
+        })),
         toolCalls: [
           makeToolCall({
             id: 'approval-tool',
@@ -1329,9 +1333,7 @@ describe(AgentSessionChatPanel.name, () => {
     });
 
     await waitFor(() => expect(getAppliedOperationPlans).toHaveBeenCalledTimes(3));
-    expect(await screen.findAllByRole('article', { name: 'Applied plan: Organize Portugal holiday' })).toHaveLength(
-      1,
-    );
+    expect(await screen.findAllByRole('article', { name: 'Applied plan: Organize Portugal holiday' })).toHaveLength(1);
   });
 
   it('submits a user message from the composer when Enter is pressed', async () => {
@@ -1888,9 +1890,7 @@ describe(AgentSessionChatPanel.name, () => {
       failedCount: 0,
     });
 
-    expect(await screen.findAllByRole('article', { name: 'Applied plan: Organize Portugal holiday' })).toHaveLength(
-      1,
-    );
+    expect(await screen.findAllByRole('article', { name: 'Applied plan: Organize Portugal holiday' })).toHaveLength(1);
     expect(screen.getAllByRole('article', { name: 'Activity summary' })).toHaveLength(1);
     expect(screen.getByRole('article', { name: 'Activity summary' })).toHaveTextContent('Applied selected changes');
   });

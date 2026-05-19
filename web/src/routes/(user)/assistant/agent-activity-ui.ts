@@ -9,6 +9,7 @@ import {
   type AgentSessionResponseDto,
   type AgentToolCallResponseDto,
 } from '@immich/sdk';
+import type { Translations } from 'svelte-i18n';
 
 export type AgentActivityKind =
   | 'understanding'
@@ -42,7 +43,7 @@ export type AgentActivityEvent = AgentSessionActivityEventResponseDto;
 
 export type AgentActivityTechnicalRow = {
   id: string;
-  labelKey: string;
+  labelKey: Translations;
   value: string;
   valueKind?: 'text' | 'code' | 'timestamp' | 'number';
 };
@@ -208,6 +209,8 @@ const compareActivityItems = (first: AgentActivityItem, second: AgentActivityIte
   return typePriority[first.kind] - typePriority[second.kind] || first.id.localeCompare(second.id);
 };
 
+const sortedBy = <T>(values: T[], compare: (first: T, second: T) => number) => [...values].sort(compare);
+
 const mapToolCallStatus = (status: AgentToolCallStatus): AgentActivityStatus => {
   switch (status) {
     case AgentToolCallStatus.PendingApproval: {
@@ -250,12 +253,12 @@ export const redactAgentActivityTechnicalText = (value: string) => {
   }
 
   const redacted = value
-    .replace(/\bBearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
-    .replace(/\bBasic\s+[^\s,;]+/gi, 'Basic [redacted]')
-    .replace(secretAssignmentPattern, '$1=[redacted]')
-    .replace(/\brunner\s+token\s+[^\s,;]+/gi, 'runner token [redacted]')
-    .replace(/\bprovider\s+key\s+[^\s,;]+/gi, 'provider key [redacted]')
-    .replace(/\bsk-[A-Za-z0-9_-]+/g, '[redacted]');
+    .replaceAll(/\bBearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
+    .replaceAll(/\bBasic\s+[^\s,;]+/gi, 'Basic [redacted]')
+    .replaceAll(secretAssignmentPattern, '$1=[redacted]')
+    .replaceAll(/\brunner\s+token\s+[^\s,;]+/gi, 'runner token [redacted]')
+    .replaceAll(/\bprovider\s+key\s+[^\s,;]+/gi, 'provider key [redacted]')
+    .replaceAll(/\bsk-[A-Za-z0-9_-]+/g, '[redacted]');
 
   if (redacted.length <= technicalTextLimit) {
     return redacted;
@@ -281,7 +284,7 @@ const formatToolCallIds = (toolCallIds: string[]) => {
 
 const technicalTextRow = (
   id: string,
-  labelKey: string,
+  labelKey: Translations,
   value: string | number | null | undefined,
   valueKind: AgentActivityTechnicalRow['valueKind'] = 'text',
 ): AgentActivityTechnicalRow | null => {
@@ -308,9 +311,7 @@ export const buildAgentActivityTechnicalRows = (item: AgentActivityItem): AgentA
     technicalTextRow('tool-name', 'assistant_activity_technical_tool', technical.toolName, 'code'),
     technicalTextRow(
       'tool-call-ids',
-      toolCallIds.length === 1
-        ? 'assistant_activity_technical_tool_call'
-        : 'assistant_activity_technical_tool_calls',
+      toolCallIds.length === 1 ? 'assistant_activity_technical_tool_call' : 'assistant_activity_technical_tool_calls',
       toolCallIds.length > 0 ? formatToolCallIds(toolCallIds) : undefined,
       'code',
     ),
@@ -355,7 +356,8 @@ const buildToolActivityCandidate = (toolCall: AgentToolCallResponseDto): ToolAct
           coalesceKey: `permission-${toolName}`,
         }
       : baseDefinition;
-  const count = toolCall.assetCount > 0 ? toolCall.assetCount : toolCall.albumCount > 0 ? toolCall.albumCount : undefined;
+  const count =
+    toolCall.assetCount > 0 ? toolCall.assetCount : toolCall.albumCount > 0 ? toolCall.albumCount : undefined;
 
   return {
     id: `tool-${definition.kind}-${toolCall.id}`,
@@ -366,7 +368,9 @@ const buildToolActivityCandidate = (toolCall: AgentToolCallResponseDto): ToolAct
     summary: getSummaryForStatus(definition, status),
     count,
     startedAt: normalizeStartedAt(toolCall.startedAt, toolCall.id),
-    ...(isValidIsoDate(toolCall.completedAt) && terminalStatuses.has(status) ? { completedAt: toolCall.completedAt } : {}),
+    ...(isValidIsoDate(toolCall.completedAt) && terminalStatuses.has(status)
+      ? { completedAt: toolCall.completedAt }
+      : {}),
     technical: {
       toolName,
       toolCallIds: [toolCall.id],
@@ -383,7 +387,7 @@ const buildToolActivityCandidate = (toolCall: AgentToolCallResponseDto): ToolAct
 };
 
 const pickStatus = (statuses: AgentActivityStatus[]) =>
-  statuses.toSorted((first, second) => statusPriority[first] - statusPriority[second])[0] ?? 'pending';
+  sortedBy(statuses, (first, second) => statusPriority[first] - statusPriority[second])[0] ?? 'pending';
 
 const coalesceToolActivities = (candidates: ToolActivityCandidate[]): AgentActivityItem[] => {
   const candidatesByKey = new Map<string, ToolActivityCandidate[]>();
@@ -395,15 +399,15 @@ const coalesceToolActivities = (candidates: ToolActivityCandidate[]): AgentActiv
   }
 
   return [...candidatesByKey.values()].map((group) => {
-    const sortedGroup = group.toSorted(compareActivityItems);
+    const sortedGroup = sortedBy(group, compareActivityItems);
     const first = sortedGroup[0];
     const status = pickStatus(sortedGroup.map((item) => item.status));
     const assetCount = sortedGroup.reduce((total, item) => total + (item.technical?.assetCount ?? 0), 0);
     const albumCount = sortedGroup.reduce((total, item) => total + (item.technical?.albumCount ?? 0), 0);
-    const validCompletedDates = sortedGroup
-      .map((item) => item.completedAt)
-      .filter(isValidIsoDate)
-      .toSorted((firstDate, secondDate) => firstDate.localeCompare(secondDate));
+    const validCompletedDates = sortedBy(
+      sortedGroup.map((item) => item.completedAt).filter(isValidIsoDate),
+      (firstDate, secondDate) => firstDate.localeCompare(secondDate),
+    );
     const allTerminal = sortedGroup.every((item) => terminalStatuses.has(item.status));
     const completedAt = allTerminal ? validCompletedDates.at(-1) : undefined;
     const summary =
@@ -411,7 +415,8 @@ const coalesceToolActivities = (candidates: ToolActivityCandidate[]): AgentActiv
       sortedGroup.find((item) => item.summary)?.summary;
 
     return {
-      id: sortedGroup.length === 1 ? first.id : `tool-${first.kind}-${first.coalesceKey.replace(/[^a-z0-9-]/gi, '-')}`,
+      id:
+        sortedGroup.length === 1 ? first.id : `tool-${first.kind}-${first.coalesceKey.replaceAll(/[^a-z0-9-]/gi, '-')}`,
       sessionId: first.sessionId,
       kind: first.kind,
       status,
@@ -483,14 +488,12 @@ const buildApplyItem = (session: AgentSessionResponseDto, appliedPlans: AgentOpe
     return null;
   }
 
-  const sortedPlans = appliedPlans.toSorted((first, second) =>
+  const sortedPlans = sortedBy(appliedPlans, (first, second) =>
     normalizeStartedAt(first.createdAt, first.id).localeCompare(normalizeStartedAt(second.createdAt, second.id)),
   );
-  const latestUpdatedAt = sortedPlans
-    .map((plan) => plan.updatedAt)
-    .filter(isValidIsoDate)
-    .toSorted((first, second) => first.localeCompare(second))
-    .at(-1);
+  const latestUpdatedAt = sortedBy(sortedPlans.map((plan) => plan.updatedAt).filter(isValidIsoDate), (first, second) =>
+    first.localeCompare(second),
+  ).at(-1);
 
   return {
     id: `apply-plans-${sortedPlans.map((plan) => `${plan.id}-${plan.revision}`).join('-')}`,
@@ -570,7 +573,12 @@ const buildEventActivityItem = (event: AgentActivityEvent): AgentActivityItem =>
         kind: 'plan',
         status,
         title: 'Preparing a plan',
-        summary: status === 'completed' ? 'Prepared a plan' : status === 'failed' ? 'Plan preparation failed' : 'Preparing the plan',
+        summary:
+          status === 'completed'
+            ? 'Prepared a plan'
+            : status === 'failed'
+              ? 'Plan preparation failed'
+              : 'Preparing the plan',
         startedAt,
         ...(terminal ? { completedAt: startedAt } : {}),
         technical: {
@@ -627,7 +635,12 @@ const buildEventActivityItem = (event: AgentActivityEvent): AgentActivityItem =>
         kind: 'unknown',
         status,
         title: 'Working with Gallery',
-        summary: status === 'failed' ? 'Gallery step failed' : status === 'skipped' ? 'Skipped this step' : 'Working with Gallery',
+        summary:
+          status === 'failed'
+            ? 'Gallery step failed'
+            : status === 'skipped'
+              ? 'Skipped this step'
+              : 'Working with Gallery',
         startedAt,
         ...(terminal ? { completedAt: startedAt } : {}),
         technical: {
@@ -714,7 +727,7 @@ const buildSummary = (items: AgentActivityItem[]) => {
 };
 
 export const buildAgentActivityModel = (input: BuildAgentActivityModelInput): AgentActivityModel => {
-  const toolItems = coalesceToolActivities(input.toolCalls.map(buildToolActivityCandidate));
+  const toolItems = coalesceToolActivities(input.toolCalls.map((toolCall) => buildToolActivityCandidate(toolCall)));
   const items = [...toolItems];
   const currentPlanItem = buildCurrentPlanItem(input.session, input.currentPlan);
   const applyItem = buildApplyItem(input.session, input.appliedPlans);
@@ -727,14 +740,19 @@ export const buildAgentActivityModel = (input: BuildAgentActivityModelInput): Ag
     items.push(applyItem);
   }
 
-  items.push(...filterSecondaryEventItems(dedupeActivityEvents(input.activityEvents ?? []).map(buildEventActivityItem), items));
+  items.push(
+    ...filterSecondaryEventItems(
+      dedupeActivityEvents(input.activityEvents ?? []).map((event) => buildEventActivityItem(event)),
+      items,
+    ),
+  );
 
   const messageItem = buildMessageItem(input, items);
   if (messageItem) {
     items.push(messageItem);
   }
 
-  const sortedItems = items.toSorted(compareActivityItems);
+  const sortedItems = sortedBy(items, compareActivityItems);
 
   return {
     items: sortedItems,
