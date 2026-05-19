@@ -234,7 +234,7 @@ describe(SearchController.name, () => {
           .send({ queryAssetId: 'not-a-uuid' });
 
         expect(status).toBe(400);
-        expect(body).toEqual(errorDto.badRequest([expect.stringContaining('[queryAssetId]')]));
+        expect(body).toEqual(errorDto.validationError([{ path: ['queryAssetId'], message: 'Invalid UUID' }]));
       });
     });
 
@@ -292,7 +292,7 @@ describe(SearchController.name, () => {
           .query({ type: 'country', albumId: 'not-a-uuid' });
 
         expect(status).toBe(400);
-        expect(body).toEqual(errorDto.badRequest([expect.stringContaining('[albumId]')]));
+        expect(body).toEqual(errorDto.validationError([{ path: ['albumId'], message: 'Invalid UUID' }]));
       });
 
       it('rejects albumId mixed with withSharedSpaces', async () => {
@@ -304,7 +304,7 @@ describe(SearchController.name, () => {
 
         expect(status).toBe(400);
         expect(body).toEqual(
-          errorDto.badRequest([expect.stringContaining('albumId cannot exist alongside withSharedSpaces')]),
+          errorDto.validationError([{ path: [], message: 'albumId cannot exist alongside withSharedSpaces' }]),
         );
       });
 
@@ -317,7 +317,7 @@ describe(SearchController.name, () => {
           .query({ type: 'country', albumId, spaceId });
 
         expect(status).toBe(400);
-        expect(body).toEqual(errorDto.badRequest([expect.stringContaining('albumId cannot exist alongside spaceId')]));
+        expect(body).toEqual(errorDto.validationError([{ path: [], message: 'albumId cannot exist alongside spaceId' }]));
       });
 
       it('accepts personIds for scoped city suggestions', async () => {
@@ -374,7 +374,9 @@ describe(SearchController.name, () => {
         });
 
         expect(status).toBe(400);
-        expect(body).toEqual(errorDto.badRequest([expect.stringContaining('[personIds.0]')]));
+        expect(body).toEqual(
+          errorDto.validationError([{ path: ['personIds', 0], message: expect.stringContaining('must match pattern') }]),
+        );
       });
     });
 
@@ -421,7 +423,7 @@ describe(SearchController.name, () => {
           .query({ albumId, spaceId });
 
         expect(status).toBe(400);
-        expect(body).toEqual(errorDto.badRequest([expect.stringContaining('albumId cannot exist alongside spaceId')]));
+        expect(body).toEqual(errorDto.validationError([{ path: [], message: 'albumId cannot exist alongside spaceId' }]));
       });
 
       it('rejects an invalid albumId query param', async () => {
@@ -430,7 +432,7 @@ describe(SearchController.name, () => {
           .query({ albumId: 'not-a-uuid' });
 
         expect(status).toBe(400);
-        expect(body).toEqual(errorDto.badRequest([expect.stringContaining('[albumId]')]));
+        expect(body).toEqual(errorDto.validationError([{ path: ['albumId'], message: 'Invalid UUID' }]));
       });
 
       it('rejects albumId mixed with withSharedSpaces', async () => {
@@ -442,7 +444,7 @@ describe(SearchController.name, () => {
 
         expect(status).toBe(400);
         expect(body).toEqual(
-          errorDto.badRequest([expect.stringContaining('albumId cannot exist alongside withSharedSpaces')]),
+          errorDto.validationError([{ path: [], message: 'albumId cannot exist alongside withSharedSpaces' }]),
         );
       });
 
@@ -479,7 +481,9 @@ describe(SearchController.name, () => {
           .query({ withSharedSpaces: true, personIds: 'bad:token' });
 
         expect(status).toBe(400);
-        expect(body).toEqual(errorDto.badRequest([expect.stringContaining('[personIds.0]')]));
+        expect(body).toEqual(
+          errorDto.validationError([{ path: ['personIds', 0], message: expect.stringContaining('must match pattern') }]),
+        );
       });
     });
   });
