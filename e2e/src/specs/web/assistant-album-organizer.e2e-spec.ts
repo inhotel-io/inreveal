@@ -475,10 +475,7 @@ test.describe('Assistant album organizer', () => {
     }
   });
 
-  test('returns partial apply states while keeping operation IDs hidden before apply', async ({
-    context,
-    page,
-  }) => {
+  test('returns partial apply states while keeping operation IDs hidden before apply', async ({ context, page }) => {
     await createLooseAssets(admin.accessToken);
     await utils.setAuthCookies(context, admin.accessToken);
 
