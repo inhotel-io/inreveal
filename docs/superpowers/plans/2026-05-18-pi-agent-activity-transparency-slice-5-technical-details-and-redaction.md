@@ -115,29 +115,29 @@ focused, and regression commands above before implementation continues.
 
 ## Edge Cases Covered In This Slice
 
-| Spec area | Case | Slice 5 expectation |
-| --- | --- | --- |
-| Default safety | Compact activity row has technical metadata | Raw tool name, ids, request summary, response summary, errors, and JSON are hidden |
-| Disclosure | Expanded activity row has technical metadata | Row shows a `Technical details` button |
-| Disclosure | User opens details | Safe labels/values render in a bounded details panel |
-| Disclosure | User closes details | Details disappear and focus remains on the toggle |
-| Disclosure | Activity item has no technical rows | No empty details button renders |
-| Tool data | Known tool call | Details can show tool name, capped tool call ids, counts, request/response summaries, redacted error, and timestamps |
-| Coalescing | Many tool call ids | Display caps the list and summarizes hidden ids |
-| Redaction | OpenAI/provider key appears | Key is replaced with `[redacted]` |
-| Redaction | Bearer/Basic token appears | Token is replaced with `[redacted]` |
-| Redaction | URL contains token query params | Secret query values are replaced with `[redacted]` |
-| Redaction | Runner token/session secret appears | Secret value is replaced with `[redacted]` |
-| Redaction | Error contains multiple secret forms | All supported patterns are redacted in the same string |
-| Privacy | Request summary contains raw prompt or reasoning marker | It is hidden or reduced to a redacted placeholder instead of displayed verbatim |
-| Unknown metadata | Arbitrary unknown DTO object exists | It is ignored by default and never stringified wholesale |
-| Unknown metadata | Explicit safe future metadata exists | Only safe scalar key/value rows render after redaction and length caps |
-| Robustness | Circular or invalid metadata shape | Formatter does not throw and omits unsupported values |
-| Robustness | Very large metadata payload | Values are capped; UI does not render thousands of characters |
-| Visibility | Mode is `off` | No activity block or technical details render; required action surfaces remain separate |
-| Visibility | Mode is `compact` | No technical-details controls render |
-| Visibility | Mode is `expanded` | Per-row technical controls can render without forcing any row open |
-| Accessibility | Technical toggle | Button has accessible name, `aria-expanded`, `aria-controls`, keyboard support, and visible focus |
+| Spec area        | Case                                                    | Slice 5 expectation                                                                                                  |
+| ---------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Default safety   | Compact activity row has technical metadata             | Raw tool name, ids, request summary, response summary, errors, and JSON are hidden                                   |
+| Disclosure       | Expanded activity row has technical metadata            | Row shows a `Technical details` button                                                                               |
+| Disclosure       | User opens details                                      | Safe labels/values render in a bounded details panel                                                                 |
+| Disclosure       | User closes details                                     | Details disappear and focus remains on the toggle                                                                    |
+| Disclosure       | Activity item has no technical rows                     | No empty details button renders                                                                                      |
+| Tool data        | Known tool call                                         | Details can show tool name, capped tool call ids, counts, request/response summaries, redacted error, and timestamps |
+| Coalescing       | Many tool call ids                                      | Display caps the list and summarizes hidden ids                                                                      |
+| Redaction        | OpenAI/provider key appears                             | Key is replaced with `[redacted]`                                                                                    |
+| Redaction        | Bearer/Basic token appears                              | Token is replaced with `[redacted]`                                                                                  |
+| Redaction        | URL contains token query params                         | Secret query values are replaced with `[redacted]`                                                                   |
+| Redaction        | Runner token/session secret appears                     | Secret value is replaced with `[redacted]`                                                                           |
+| Redaction        | Error contains multiple secret forms                    | All supported patterns are redacted in the same string                                                               |
+| Privacy          | Request summary contains raw prompt or reasoning marker | It is hidden or reduced to a redacted placeholder instead of displayed verbatim                                      |
+| Unknown metadata | Arbitrary unknown DTO object exists                     | It is ignored by default and never stringified wholesale                                                             |
+| Unknown metadata | Explicit safe future metadata exists                    | Only safe scalar key/value rows render after redaction and length caps                                               |
+| Robustness       | Circular or invalid metadata shape                      | Formatter does not throw and omits unsupported values                                                                |
+| Robustness       | Very large metadata payload                             | Values are capped; UI does not render thousands of characters                                                        |
+| Visibility       | Mode is `off`                                           | No activity block or technical details render; required action surfaces remain separate                              |
+| Visibility       | Mode is `compact`                                       | No technical-details controls render                                                                                 |
+| Visibility       | Mode is `expanded`                                      | Per-row technical controls can render without forcing any row open                                                   |
+| Accessibility    | Technical toggle                                        | Button has accessible name, `aria-expanded`, `aria-controls`, keyboard support, and visible focus                    |
 
 ## Edge Cases Deferred To Later Slices
 

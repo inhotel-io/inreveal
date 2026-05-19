@@ -126,35 +126,35 @@ If implementation appears to require runner changes, stop and re-evaluate. The d
 
 ## Edge Case Matrix
 
-| Area | Case | Expected Result |
-| --- | --- | --- |
-| Apply lifecycle | Fully applied selected operations | Session transitions `WaitingForPlanReview` -> `Applying` -> `Running`; `endedAt` remains `null`; websocket emits `operation-plan-applied` |
-| Apply lifecycle | Partially applied selected operations | Session returns to `Running`; applied card shows applied, skipped, and failed counts |
-| Apply lifecycle | All selected operations fail without throwing | Session returns to `Running`; applied card shows failed result; composer remains enabled |
-| Apply lifecycle | Fatal exception after claim | Session remains marked `Failed` with `endedAt`; no composer continuation |
-| Apply lifecycle | Apply request for non-waiting session | Still rejected with `Agent session is not waiting for plan review` |
-| Apply lifecycle | Concurrent double apply of same plan | One succeeds; stale/second call gets existing conflict/not-found behavior; no duplicate history card |
-| Plan history | No applied plans | History endpoint returns `[]`; chat renders no applied-plan card |
-| Plan history | One applied plan | History endpoint returns mapped plan with operations/results |
-| Plan history | Multiple applied plans over one session | History endpoint returns all applied revisions in chronological order |
-| Plan history | Superseded proposed revisions | History endpoint excludes superseded plans |
-| Plan history | Cross-user session | History endpoint rejects or returns not found consistently with existing session ownership |
-| Current plan | Plan applied | `getCurrentOperationPlan()` returns `null` |
-| Current plan | New plan proposed after applied plan | Current endpoint returns only the new proposed plan; history still returns prior applied plans |
-| Planning after apply | Assistant proposes another plan later in the same session | New proposed revision is accepted while the old applied plan remains applied history |
-| Messaging | User sends follow-up after apply | Message is persisted and runner dispatch is called |
-| Messaging | User sends while apply is still `Applying` | Append remains rejected |
-| Chat timeline | Local apply response plus websocket event | Exactly one applied-plan card appears |
-| Chat timeline | Remote apply event from another tab | Current plan dock clears, applied history refreshes, composer remains enabled after session refresh |
-| Chat timeline | Reload after apply | Applied card is restored from history and follow-up messages appear below it |
-| Chat timeline | Message/tool/apply same timestamp | Stable order by timestamp, then timeline type priority, then id/revision; no Svelte keyed-list churn |
-| Chat timeline | Applied plan with many assets | Card stays compact by default and reuses virtualized/overflow thumbnail behavior from existing plan UI |
-| Chat timeline | Applied plan with field overrides/item selections | Card shows final applied operation state and is read-only |
-| Chat timeline | Read-only applied card details | Expanded details do not render an apply bar, disabled apply button, checkboxes, or editable controls |
-| UI state | Proposed plan in dock | Review UI remains editable while status is `Proposed` |
-| UI state | Applied plan in dock component after local apply | Dock hides instead of showing stale applied review controls |
-| UI state | Completed legacy session | Existing terminal handling remains unchanged |
-| Accessibility | Applied plan card | Card has an article/region label, status text, keyboard-expandable details, and no unlabeled controls |
+| Area                 | Case                                                      | Expected Result                                                                                                                           |
+| -------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Apply lifecycle      | Fully applied selected operations                         | Session transitions `WaitingForPlanReview` -> `Applying` -> `Running`; `endedAt` remains `null`; websocket emits `operation-plan-applied` |
+| Apply lifecycle      | Partially applied selected operations                     | Session returns to `Running`; applied card shows applied, skipped, and failed counts                                                      |
+| Apply lifecycle      | All selected operations fail without throwing             | Session returns to `Running`; applied card shows failed result; composer remains enabled                                                  |
+| Apply lifecycle      | Fatal exception after claim                               | Session remains marked `Failed` with `endedAt`; no composer continuation                                                                  |
+| Apply lifecycle      | Apply request for non-waiting session                     | Still rejected with `Agent session is not waiting for plan review`                                                                        |
+| Apply lifecycle      | Concurrent double apply of same plan                      | One succeeds; stale/second call gets existing conflict/not-found behavior; no duplicate history card                                      |
+| Plan history         | No applied plans                                          | History endpoint returns `[]`; chat renders no applied-plan card                                                                          |
+| Plan history         | One applied plan                                          | History endpoint returns mapped plan with operations/results                                                                              |
+| Plan history         | Multiple applied plans over one session                   | History endpoint returns all applied revisions in chronological order                                                                     |
+| Plan history         | Superseded proposed revisions                             | History endpoint excludes superseded plans                                                                                                |
+| Plan history         | Cross-user session                                        | History endpoint rejects or returns not found consistently with existing session ownership                                                |
+| Current plan         | Plan applied                                              | `getCurrentOperationPlan()` returns `null`                                                                                                |
+| Current plan         | New plan proposed after applied plan                      | Current endpoint returns only the new proposed plan; history still returns prior applied plans                                            |
+| Planning after apply | Assistant proposes another plan later in the same session | New proposed revision is accepted while the old applied plan remains applied history                                                      |
+| Messaging            | User sends follow-up after apply                          | Message is persisted and runner dispatch is called                                                                                        |
+| Messaging            | User sends while apply is still `Applying`                | Append remains rejected                                                                                                                   |
+| Chat timeline        | Local apply response plus websocket event                 | Exactly one applied-plan card appears                                                                                                     |
+| Chat timeline        | Remote apply event from another tab                       | Current plan dock clears, applied history refreshes, composer remains enabled after session refresh                                       |
+| Chat timeline        | Reload after apply                                        | Applied card is restored from history and follow-up messages appear below it                                                              |
+| Chat timeline        | Message/tool/apply same timestamp                         | Stable order by timestamp, then timeline type priority, then id/revision; no Svelte keyed-list churn                                      |
+| Chat timeline        | Applied plan with many assets                             | Card stays compact by default and reuses virtualized/overflow thumbnail behavior from existing plan UI                                    |
+| Chat timeline        | Applied plan with field overrides/item selections         | Card shows final applied operation state and is read-only                                                                                 |
+| Chat timeline        | Read-only applied card details                            | Expanded details do not render an apply bar, disabled apply button, checkboxes, or editable controls                                      |
+| UI state             | Proposed plan in dock                                     | Review UI remains editable while status is `Proposed`                                                                                     |
+| UI state             | Applied plan in dock component after local apply          | Dock hides instead of showing stale applied review controls                                                                               |
+| UI state             | Completed legacy session                                  | Existing terminal handling remains unchanged                                                                                              |
+| Accessibility        | Applied plan card                                         | Card has an article/region label, status text, keyboard-expandable details, and no unlabeled controls                                     |
 
 ---
 
@@ -378,7 +378,7 @@ getAppliedOperationPlans(...)
 Run the repo's OpenAPI generation path and verify the SDK exports a function with a clear name, expected to be:
 
 ```ts
-getAppliedOperationPlans({ id })
+getAppliedOperationPlans({ id });
 ```
 
 If generation chooses a poor name, prefer adjusting the controller method name/summary rather than hand-editing generated SDK output.

@@ -94,26 +94,26 @@ No server or runner test commands are required for this slice because there are 
 
 ## Edge Cases Covered In This Slice
 
-| Spec area | Case | Slice 2 expectation |
-| --- | --- | --- |
-| Visibility | Compact default | Block renders in compact mode with safe row labels and `Show activity` |
-| Visibility | User expands one activity block | Block shows all rows and `Hide activity` |
-| Visibility | User collapses while active | Block returns to compact mode; activity rows remain available |
-| Visibility | Empty activity rows | No blank block renders |
-| Turn placement | User message triggers activity | Activity block renders after that user message |
-| Turn placement | Older historical tool call before latest user message | Existing standalone tool-call card remains visible and is not moved into the latest block |
-| Turn placement | No user message but activity exists | Block renders in timestamp order without throwing |
-| Timeline separation | Permission pending | Activity says `Waiting for approval`; approval card/action dock remains separate |
-| Timeline separation | Plan ready | Activity says `Prepared a plan`; plan review remains separate |
-| Timeline separation | Plan applied | Activity summary can mention applied changes; applied-plan card remains separate |
-| Duplication | Tool-call refresh/rerender | One activity block remains; no duplicate blocks |
-| Duplication | Covered handled tool calls | Standalone handled tool-call cards do not render in addition to the block |
-| Activity states | Running session with no tool calls | Block can show a generic `Writing response` or `Pi is working` row when response is pending |
-| Activity states | Terminal session | Completed summary renders without spinner/status animation |
-| Safety | Technical data | Raw tool names, request summaries, result summaries, JSON, and ids do not render in default or expanded block |
-| Accessibility | Toggle controls | Show/hide button has an accessible name and `aria-expanded` |
-| Accessibility | Active block | Active status uses a polite status/live region without taking focus |
-| Layout | Long row labels/counts | Text wraps and does not overflow compact or expanded block |
+| Spec area           | Case                                                  | Slice 2 expectation                                                                                           |
+| ------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Visibility          | Compact default                                       | Block renders in compact mode with safe row labels and `Show activity`                                        |
+| Visibility          | User expands one activity block                       | Block shows all rows and `Hide activity`                                                                      |
+| Visibility          | User collapses while active                           | Block returns to compact mode; activity rows remain available                                                 |
+| Visibility          | Empty activity rows                                   | No blank block renders                                                                                        |
+| Turn placement      | User message triggers activity                        | Activity block renders after that user message                                                                |
+| Turn placement      | Older historical tool call before latest user message | Existing standalone tool-call card remains visible and is not moved into the latest block                     |
+| Turn placement      | No user message but activity exists                   | Block renders in timestamp order without throwing                                                             |
+| Timeline separation | Permission pending                                    | Activity says `Waiting for approval`; approval card/action dock remains separate                              |
+| Timeline separation | Plan ready                                            | Activity says `Prepared a plan`; plan review remains separate                                                 |
+| Timeline separation | Plan applied                                          | Activity summary can mention applied changes; applied-plan card remains separate                              |
+| Duplication         | Tool-call refresh/rerender                            | One activity block remains; no duplicate blocks                                                               |
+| Duplication         | Covered handled tool calls                            | Standalone handled tool-call cards do not render in addition to the block                                     |
+| Activity states     | Running session with no tool calls                    | Block can show a generic `Writing response` or `Pi is working` row when response is pending                   |
+| Activity states     | Terminal session                                      | Completed summary renders without spinner/status animation                                                    |
+| Safety              | Technical data                                        | Raw tool names, request summaries, result summaries, JSON, and ids do not render in default or expanded block |
+| Accessibility       | Toggle controls                                       | Show/hide button has an accessible name and `aria-expanded`                                                   |
+| Accessibility       | Active block                                          | Active status uses a polite status/live region without taking focus                                           |
+| Layout              | Long row labels/counts                                | Text wraps and does not overflow compact or expanded block                                                    |
 
 ## Edge Cases Deferred To Later Slices
 
@@ -174,7 +174,10 @@ const activityItem = (overrides: Partial<AgentActivityItem> = {}): AgentActivity
 const activityModel = (items: AgentActivityItem[]): AgentActivityModel => ({
   items,
   activeItem: items.find((item) => ['blocked', 'running', 'pending'].includes(item.status)) ?? null,
-  summary: items.map((item) => item.summary ?? item.title).slice(0, 3).join(', '),
+  summary: items
+    .map((item) => item.summary ?? item.title)
+    .slice(0, 3)
+    .join(', '),
 });
 ```
 
