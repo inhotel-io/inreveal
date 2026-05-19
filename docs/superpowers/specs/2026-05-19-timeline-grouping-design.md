@@ -165,15 +165,42 @@ Representative asset lookup should be included in the bucket query or resolved i
 
 The current month index supports month bucketing. Year and day grouping may need query tuning or indexes after measuring generated SQL. The first implementation should include repository-level tests and SQL review for the new grouping modes.
 
+## Development Process
+
+Implementation must use test-driven development. For each slice, add the smallest failing tests that define the expected behavior before changing production code. Confirm the new tests fail on the current implementation, then implement the smallest change that makes them pass.
+
+The implementation plan should keep test ownership close to each slice:
+
+- Server/API slice starts with DTO, service, repository, and controller tests for `bucketSize` and representative metadata.
+- Web timeline model slice starts with manager tests for grouping transitions, bucket loading, stale request handling, and day-mode compatibility.
+- Filter integration slice starts with FilterPanel and active-chip synchronization tests.
+- UI slice starts with component tests for card rendering, keyboard activation, responsive placement, and overlay/selection conflicts.
+- Route adoption slice starts with route-level smoke tests for the first set of `Timeline` surfaces.
+
+Do not rely on manual screenshots as the only verification for visual behavior. Use component tests for state and accessibility, and use Playwright or route-level browser tests for the main Photos and Spaces flows where the interaction crosses the FilterPanel, timeline cards, routing, and scroll anchoring.
+
 ## Testing
 
 Server tests:
 
 - `bucketSize` defaults to month.
+- Invalid `bucketSize` is rejected.
+- Invalid or mismatched `timeBucket` values are rejected or normalized consistently for the requested bucket size.
+- Empty result sets return an empty bucket list and do not throw.
 - Year, month, and day bucket counts match filtered assets.
+- Bucket boundaries include assets at the start of the bucket and exclude assets at the start of the next bucket.
+- Year, month, day, leap-day, and year-boundary assets use the same local timeline semantics as current month bucketing.
 - Representative asset metadata respects permissions and filters.
+- Representative asset metadata is omitted or falls back cleanly when no representative thumbnail data is available.
+- Buckets containing only videos still provide a usable representative thumbnail asset.
 - `personIds`, `tagIds`, `spaceId`, `withSharedSpaces`, `withPartners`, `isFavorite`, `isTrashed`, `visibility`, `takenAfter`, and `takenBefore` pass through for all bucket sizes.
+- Album buckets preserve album access control and asset ordering semantics.
+- Shared-space buckets count assets reachable through direct asset membership and linked libraries without double-counting.
+- Partner/shared-space restrictions that currently reject unsupported combinations still reject them for all bucket sizes.
+- Stack filtering returns primary stack assets consistently in buckets and bucket asset responses.
+- Archive, locked, trash, hidden, and timeline visibility boundaries remain enforced.
 - `/timeline/bucket` returns only assets inside the requested bucket granularity.
+- `/timeline/bucket` and `/timeline/buckets` agree: every returned asset belongs to one of the counted buckets under the same filters.
 
 Web manager tests:
 
@@ -182,7 +209,14 @@ Web manager tests:
 - Clicking a year card sets year temporal state, switches to month grouping, and anchors.
 - Clicking a month card sets month temporal state, switches to day grouping, and anchors.
 - Clearing temporal state reloads broader buckets without losing non-time filters.
+- Rapid grouping/filter changes cancel or ignore stale bucket responses.
+- Grouping preference initializes consistently on first load and after component remount.
+- Browser navigation or route changes do not restore stale temporal anchors after filters are cleared.
+- Empty bucket lists show the route's existing empty state instead of a blank timeline.
+- Representative bucket cards do not load all bucket assets.
 - Day mode preserves current detailed timeline behavior.
+- Existing websocket, asset update, delete, archive, favorite, stack, and trash flows still update the active day timeline.
+- Day-mode range selection and group selection still work after visiting year/month modes.
 
 Component and route tests:
 
@@ -190,8 +224,40 @@ Component and route tests:
 - Grouping control renders as floating mobile/touch placement.
 - Selection mode and asset viewer overlays do not leave the floating control in an unusable position.
 - Representative card renders date, count, thumbnail, loading state, and fallback state.
+- Representative card is keyboard reachable, screen-reader named, and activates with Enter/Space.
+- Representative card labels and counts fit on narrow mobile widths and large desktop widths.
+- Missing thumbhash, missing representative ratio, failed thumbnail load, and video thumbnails degrade gracefully.
+- The grouping control remains usable with reduced motion, coarse pointer, and keyboard-only navigation.
 - Photos and Spaces FilterPanel stay synchronized with timeline card clicks.
+- Active temporal chips appear and clear correctly on pages without a full FilterPanel.
 - Timeline-based routes can mount with each grouping mode.
+- Main Photos and Spaces flows have browser-level coverage for `Years -> click year -> Months -> click month -> Days -> clear temporal filter`.
+
+## Edge Cases
+
+The implementation plan should explicitly account for these edge cases:
+
+- No matching assets for the current filters.
+- A single bucket with one asset.
+- Very large libraries with thousands of year/month/day buckets.
+- Assets on December 31 / January 1 boundaries.
+- Leap-day assets.
+- Assets with local capture dates that differ from UTC dates.
+- Inclusive `takenAfter` and `takenBefore` boundaries.
+- Active non-time filters when a year or month card is clicked.
+- Clearing temporal filters while keeping person, tag, location, media type, rating, favorite, space, album, and visibility filters intact.
+- Applying a new person/tag/location filter after a year/month filter is active.
+- Removing or changing the representative asset after buckets have loaded.
+- Representative asset belongs to a stack, shared space, partner asset, album, archived asset, locked asset, or trashed asset under the current route's permissions.
+- Selection mode active when the grouping control or representative cards would otherwise be clickable.
+- Asset viewer open while grouping state changes elsewhere.
+- In-flight bucket requests resolving after the user changes grouping, filters, route, or auth context.
+- Routes without a full FilterPanel still exposing clearable temporal state.
+- Mobile floating control overlapping bottom navigation, safe-area insets, scrubber, upload banners, or selection bars.
+- Desktop control coexisting with long filter-chip rows and narrow sidebars.
+- Localized month names and long labels fitting in cards and controls.
+- Dark mode, light mode, and high-contrast accessibility settings.
+- Reduced-motion users not receiving essential state changes only through animation.
 
 ## Implementation Slices
 
