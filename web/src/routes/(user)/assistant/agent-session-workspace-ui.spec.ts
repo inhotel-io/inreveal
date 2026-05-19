@@ -132,7 +132,7 @@ describe('agent session workspace UI helpers', () => {
       expect(selectInitialAgentSessionId(sessions, 'requested')).toBe('requested');
     });
 
-    it('falls back by actionable status priority, recency, then descending id', () => {
+    it('defaults to a fresh chat without a valid requested session', () => {
       const sessions = [
         session({
           id: 'running-newer',
@@ -156,9 +156,9 @@ describe('agent session workspace UI helpers', () => {
         }),
       ];
 
-      expect(selectInitialAgentSessionId(sessions, null)).toBe('tool-z');
-      expect(selectInitialAgentSessionId(sessions, '')).toBe('tool-z');
-      expect(selectInitialAgentSessionId(sessions, 'unknown')).toBe('tool-z');
+      expect(selectInitialAgentSessionId(sessions, null)).toBeNull();
+      expect(selectInitialAgentSessionId(sessions, '')).toBeNull();
+      expect(selectInitialAgentSessionId(sessions, 'unknown')).toBeNull();
     });
 
     it('returns null when no requested or actionable session exists', () => {
@@ -175,7 +175,7 @@ describe('agent session workspace UI helpers', () => {
       ).toBeNull();
     });
 
-    it('applies the full fallback status order', () => {
+    it('does not auto-select actionable sessions by status', () => {
       const statuses = [
         AgentSessionStatus.WaitingForToolApproval,
         AgentSessionStatus.WaitingForPlanReview,
@@ -193,7 +193,7 @@ describe('agent session workspace UI helpers', () => {
           }),
         );
 
-        expect(selectInitialAgentSessionId(lowerPrioritySessions, null)).toBe(status);
+        expect(selectInitialAgentSessionId(lowerPrioritySessions, null)).toBeNull();
       }
     });
   });
