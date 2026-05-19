@@ -122,12 +122,60 @@ describe('IdentityMergePropagationService', () => {
 The first test should arrange:
 
 ```ts
-const target = { kind: 'person', id: 'person-x', ownerId: 'owner-1', identityId: 'identity-x', type: 'person', name: 'X', faceCount: 10 };
-const source = { kind: 'person', id: 'person-y', ownerId: 'owner-1', identityId: 'identity-y', type: 'person', name: 'Y', faceCount: 4 };
-const spaceAX = { kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x', type: 'person', name: 'X', faceCount: 3 };
-const spaceAY = { kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y', type: 'person', name: 'Y', faceCount: 2 };
-const spaceBX = { kind: 'space-person', id: 'space-b-x', spaceId: 'space-b', identityId: 'identity-x', type: 'person', name: 'X', faceCount: 8 };
-const spaceBY = { kind: 'space-person', id: 'space-b-y', spaceId: 'space-b', identityId: 'identity-y', type: 'person', name: 'Y', faceCount: 1 };
+const target = {
+  kind: 'person',
+  id: 'person-x',
+  ownerId: 'owner-1',
+  identityId: 'identity-x',
+  type: 'person',
+  name: 'X',
+  faceCount: 10,
+};
+const source = {
+  kind: 'person',
+  id: 'person-y',
+  ownerId: 'owner-1',
+  identityId: 'identity-y',
+  type: 'person',
+  name: 'Y',
+  faceCount: 4,
+};
+const spaceAX = {
+  kind: 'space-person',
+  id: 'space-a-x',
+  spaceId: 'space-a',
+  identityId: 'identity-x',
+  type: 'person',
+  name: 'X',
+  faceCount: 3,
+};
+const spaceAY = {
+  kind: 'space-person',
+  id: 'space-a-y',
+  spaceId: 'space-a',
+  identityId: 'identity-y',
+  type: 'person',
+  name: 'Y',
+  faceCount: 2,
+};
+const spaceBX = {
+  kind: 'space-person',
+  id: 'space-b-x',
+  spaceId: 'space-b',
+  identityId: 'identity-x',
+  type: 'person',
+  name: 'X',
+  faceCount: 8,
+};
+const spaceBY = {
+  kind: 'space-person',
+  id: 'space-b-y',
+  spaceId: 'space-b',
+  identityId: 'identity-y',
+  type: 'person',
+  name: 'Y',
+  faceCount: 1,
+};
 ```
 
 Expected plan assertions:
@@ -142,7 +190,9 @@ expect(plan.origin).toEqual({
 });
 expect(plan.targetIdentityId).toBe('identity-x');
 expect(plan.sourceIdentityIds).toEqual(['identity-y']);
-expect(plan.personalProfileMerges).toEqual([{ ownerId: 'owner-1', targetPersonId: 'person-x', sourcePersonIds: ['person-y'] }]);
+expect(plan.personalProfileMerges).toEqual([
+  { ownerId: 'owner-1', targetPersonId: 'person-x', sourcePersonIds: ['person-y'] },
+]);
 expect(plan.spaceProfileMerges).toEqual([
   { spaceId: 'space-a', targetPersonId: 'space-a-x', sourcePersonIds: ['space-a-y'] },
   { spaceId: 'space-b', targetPersonId: 'space-b-x', sourcePersonIds: ['space-b-y'] },
@@ -986,37 +1036,37 @@ Only commit if verification required fixes. If no files changed, do not create a
 
 ## Edge-Case Coverage Map
 
-| Edge Case | Planned Test Location |
-| --- | --- |
-| Empty source list | `person.service.spec.ts`, `shared-space.service.spec.ts` |
-| Source id equals target id | `person.service.spec.ts`, `shared-space.service.spec.ts` |
-| Duplicate source ids | `identity-merge-propagation.service.spec.ts` |
-| Missing initiating target | `identity-merge-propagation.service.spec.ts`, service specs |
-| Missing/inaccessible initiating source | `person.service.spec.ts`, `shared-space.service.spec.ts` |
-| Source already has target identity | `identity-merge-propagation.service.spec.ts` |
-| Profile has no identity | `identity-merge-propagation.service.spec.ts` |
-| Identity has faces but no profile in a scope | medium spec |
-| Scope has one affected profile | planner unit spec |
-| Scope has multiple affected profiles | planner and executor unit specs |
-| No affected shared spaces | personal-origin planner and executor unit specs |
-| Other space has duplicates | space-to-space unit and integration specs |
-| Other space has only one profile | space-to-space unit spec |
-| Actor is not a member of another affected space | shared-space-origin planner unit spec |
-| Multiple owners have different profile layouts | shared-space-origin unit spec |
-| Hidden source or target profiles | metadata preservation unit spec |
-| Favorite source profile | metadata preservation unit spec |
-| Manual personal feature face | metadata preservation unit spec |
-| Moved personal faces are relinked to target identity with manual source | executor and metadata preservation unit specs |
-| Manual shared-space representative face | metadata preservation unit spec |
-| Shared-space target name, birth date, and hidden state preservation | metadata preservation unit spec |
-| Manual shared-space name or birthday source | metadata preservation unit spec |
-| Blank survivor metadata and useful source metadata | metadata preservation unit spec |
-| Conflicting aliases during space merge | metadata preservation unit spec |
-| Mixed `person` and `pet` identities | planner and executor specs |
-| Concurrent merge of overlapping identities | medium spec |
-| Follow-up queue failure after DB transaction | unit spec with failure injection proving best-effort logging and success response |
-| Activity write failure during transaction | medium or unit spec with failure injection |
-| Activity actor id, origin scope, initiating role, and propagated role | activity fanout unit spec |
-| Deduplicated follow-up jobs per affected space | executor unit spec |
-| Executor error midway | medium rollback spec |
-| Existing automatic reconciliation conflict | `shared-space.service.spec.ts` |
+| Edge Case                                                               | Planned Test Location                                                             |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Empty source list                                                       | `person.service.spec.ts`, `shared-space.service.spec.ts`                          |
+| Source id equals target id                                              | `person.service.spec.ts`, `shared-space.service.spec.ts`                          |
+| Duplicate source ids                                                    | `identity-merge-propagation.service.spec.ts`                                      |
+| Missing initiating target                                               | `identity-merge-propagation.service.spec.ts`, service specs                       |
+| Missing/inaccessible initiating source                                  | `person.service.spec.ts`, `shared-space.service.spec.ts`                          |
+| Source already has target identity                                      | `identity-merge-propagation.service.spec.ts`                                      |
+| Profile has no identity                                                 | `identity-merge-propagation.service.spec.ts`                                      |
+| Identity has faces but no profile in a scope                            | medium spec                                                                       |
+| Scope has one affected profile                                          | planner unit spec                                                                 |
+| Scope has multiple affected profiles                                    | planner and executor unit specs                                                   |
+| No affected shared spaces                                               | personal-origin planner and executor unit specs                                   |
+| Other space has duplicates                                              | space-to-space unit and integration specs                                         |
+| Other space has only one profile                                        | space-to-space unit spec                                                          |
+| Actor is not a member of another affected space                         | shared-space-origin planner unit spec                                             |
+| Multiple owners have different profile layouts                          | shared-space-origin unit spec                                                     |
+| Hidden source or target profiles                                        | metadata preservation unit spec                                                   |
+| Favorite source profile                                                 | metadata preservation unit spec                                                   |
+| Manual personal feature face                                            | metadata preservation unit spec                                                   |
+| Moved personal faces are relinked to target identity with manual source | executor and metadata preservation unit specs                                     |
+| Manual shared-space representative face                                 | metadata preservation unit spec                                                   |
+| Shared-space target name, birth date, and hidden state preservation     | metadata preservation unit spec                                                   |
+| Manual shared-space name or birthday source                             | metadata preservation unit spec                                                   |
+| Blank survivor metadata and useful source metadata                      | metadata preservation unit spec                                                   |
+| Conflicting aliases during space merge                                  | metadata preservation unit spec                                                   |
+| Mixed `person` and `pet` identities                                     | planner and executor specs                                                        |
+| Concurrent merge of overlapping identities                              | medium spec                                                                       |
+| Follow-up queue failure after DB transaction                            | unit spec with failure injection proving best-effort logging and success response |
+| Activity write failure during transaction                               | medium or unit spec with failure injection                                        |
+| Activity actor id, origin scope, initiating role, and propagated role   | activity fanout unit spec                                                         |
+| Deduplicated follow-up jobs per affected space                          | executor unit spec                                                                |
+| Executor error midway                                                   | medium rollback spec                                                              |
+| Existing automatic reconciliation conflict                              | `shared-space.service.spec.ts`                                                    |

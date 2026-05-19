@@ -87,4 +87,3 @@ Next session should:
 ## Open Agent State
 
 No active subagent work should be needed from the previous session. The Task 3 implementer finished and the worktree was clean.
-
