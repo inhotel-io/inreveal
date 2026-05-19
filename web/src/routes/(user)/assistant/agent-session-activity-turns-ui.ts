@@ -8,8 +8,6 @@ import {
 } from '@immich/sdk';
 import { buildAgentActivityModel, type AgentActivityEvent, type AgentActivityModel } from './agent-activity-ui';
 
-export type { AgentActivityEvent };
-
 export type AgentSessionActivityTurn = {
   id: string;
   anchorMessageId: string;
@@ -51,6 +49,8 @@ const compareByDateThenId = <T extends { id: string }>(
     first.id.localeCompare(second.id);
 };
 
+const sortedBy = <T>(values: T[], compare: (first: T, second: T) => number) => [...values].sort(compare);
+
 const getToolCallActivityAt = (toolCall: AgentToolCallResponseDto) => {
   if (isValidActivityDate(toolCall.startedAt)) {
     return toolCall.startedAt;
@@ -67,7 +67,8 @@ const getPlanActivityAt = (plan: AgentOperationPlanResponseDto) => {
   return isValidActivityDate(plan.createdAt) ? plan.createdAt : null;
 };
 
-const getEventActivityAt = (event: AgentActivityEvent) => (isValidActivityDate(event.createdAt) ? event.createdAt : null);
+const getEventActivityAt = (event: AgentActivityEvent) =>
+  isValidActivityDate(event.createdAt) ? event.createdAt : null;
 
 const isAtOrAfter = (value: string, boundary: string) => value >= boundary;
 
@@ -79,12 +80,14 @@ const getCoveredToolCallIds = (model: AgentActivityModel) =>
   new Set(model.items.flatMap((item) => item.technical?.toolCallIds ?? []));
 
 const buildStableTurnAnchors = (messages: AgentMessageResponseDto[]) => {
-  const validUserMessages = messages
-    .filter((message) => message.role === AgentMessageRole.User && isValidActivityDate(message.createdAt))
-    .toSorted(compareByDateThenId((message) => message.createdAt));
-  const validAssistantMessages = messages
-    .filter((message) => message.role === AgentMessageRole.Assistant && isValidActivityDate(message.createdAt))
-    .toSorted(compareByDateThenId((message) => message.createdAt));
+  const validUserMessages = sortedBy(
+    messages.filter((message) => message.role === AgentMessageRole.User && isValidActivityDate(message.createdAt)),
+    compareByDateThenId((message) => message.createdAt),
+  );
+  const validAssistantMessages = sortedBy(
+    messages.filter((message) => message.role === AgentMessageRole.Assistant && isValidActivityDate(message.createdAt)),
+    compareByDateThenId((message) => message.createdAt),
+  );
 
   return validUserMessages.map((message, index): UserTurnAnchor => {
     const nextUser = validUserMessages[index + 1] ?? null;
@@ -105,11 +108,7 @@ const buildStableTurnAnchors = (messages: AgentMessageResponseDto[]) => {
   });
 };
 
-const toolCallBelongsToTurn = (
-  toolCall: AgentToolCallResponseDto,
-  turn: UserTurnAnchor,
-  userTurnCount: number,
-) => {
+const toolCallBelongsToTurn = (toolCall: AgentToolCallResponseDto, turn: UserTurnAnchor, userTurnCount: number) => {
   const activityAt = getToolCallActivityAt(toolCall);
 
   if (!activityAt) {
@@ -171,9 +170,7 @@ export const buildAgentSessionActivityTurns = (input: BuildAgentSessionActivityT
 
   return anchors
     .map((turn): AgentSessionActivityTurn | null => {
-      const turnToolCalls = input.toolCalls.filter((toolCall) =>
-        toolCallBelongsToTurn(toolCall, turn, anchors.length),
-      );
+      const turnToolCalls = input.toolCalls.filter((toolCall) => toolCallBelongsToTurn(toolCall, turn, anchors.length));
       const turnAppliedPlans = input.appliedPlans.filter((plan) => appliedPlanBelongsToTurn(plan, turn));
       const turnActivityEvents = activityEvents.filter((event) => activityEventBelongsToTurn(event, turn));
       const model = buildAgentActivityModel({
@@ -197,7 +194,7 @@ export const buildAgentSessionActivityTurns = (input: BuildAgentSessionActivityT
         occurredAt: turn.startAt,
         model,
         coveredToolCallIds: getCoveredToolCallIds(model),
-        appliedPlanKeys: new Set(turnAppliedPlans.map(getAppliedPlanKey)),
+        appliedPlanKeys: new Set(turnAppliedPlans.map((plan) => getAppliedPlanKey(plan))),
       };
     })
     .filter((turn): turn is AgentSessionActivityTurn => turn !== null);
@@ -208,3 +205,5 @@ export const getCoveredToolCallIdsForActivityTurns = (turns: AgentSessionActivit
 
 export const getAppliedPlanKeysForActivityTurns = (turns: AgentSessionActivityTurn[]) =>
   new Set(turns.flatMap((turn) => [...turn.appliedPlanKeys]));
+
+export type { AgentActivityEvent } from './agent-activity-ui';

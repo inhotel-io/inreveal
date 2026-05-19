@@ -72,7 +72,10 @@
 
   <div class="mt-3 flex flex-col gap-3">
     {#each model.groups as group (group.id)}
-      <section class="rounded-md border border-gray-100 p-3 dark:border-neutral-800" aria-label={group.destination.name}>
+      <section
+        class="rounded-md border border-gray-100 p-3 dark:border-neutral-800"
+        aria-label={group.destination.name}
+      >
         <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
           <div class="min-w-0">
             <h4 class="break-words font-medium text-slate-950 dark:text-neutral-50">{group.destination.name}</h4>

@@ -1,7 +1,5 @@
 import {
   AgentApprovalMode,
-  AgentMessageRole,
-  AgentMessageTextBlockType,
   AgentOperationPlanStatus,
   AgentOperationRiskLevel,
   AgentOperationStatus,
@@ -9,14 +7,13 @@ import {
   AgentOperationType,
   AgentPermissionPreset,
   AgentProviderType,
+  Kind as AgentSessionActivityEventKind,
   AgentSessionActivityEventSource,
   AgentSessionActivityEventStatus,
   AgentSessionStatus,
   AgentToolCallStatus,
   AgentToolDataClass,
   AgentToolName,
-  Kind as AgentSessionActivityEventKind,
-  type AgentMessageResponseDto,
   type AgentOperationPlanResponseDto,
   type AgentOperationResponseDto,
   type AgentSessionResponseDto,
@@ -88,18 +85,6 @@ const makeSession = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSes
   createdAt: overrides.createdAt ?? '2026-05-18T10:00:00.000Z',
   updatedAt: overrides.updatedAt ?? '2026-05-18T10:00:10.000Z',
   endedAt: overrides.endedAt ?? null,
-});
-
-const makeMessage = (overrides: Partial<AgentMessageResponseDto> = {}): AgentMessageResponseDto => ({
-  id: overrides.id ?? 'message-1',
-  sessionId: overrides.sessionId ?? sessionId,
-  role: overrides.role ?? AgentMessageRole.User,
-  providerMessageId: overrides.providerMessageId ?? null,
-  toolCallId: overrides.toolCallId ?? null,
-  content: overrides.content ?? {
-    blocks: [{ type: AgentMessageTextBlockType.Text, text: 'Organize my Portugal photos' }],
-  },
-  createdAt: overrides.createdAt ?? '2026-05-18T10:00:00.000Z',
 });
 
 const makeToolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentToolCallResponseDto => ({
@@ -337,16 +322,15 @@ describe('agent activity UI helpers', () => {
       updatedAt: '2026-05-18T10:02:10.000Z',
     });
 
-    expect(
-      buildModel({ currentPlan: proposedPlan }).items.find((item) => item.kind === 'plan'),
-    ).toMatchObject({
+    expect(buildModel({ currentPlan: proposedPlan }).items.find((item) => item.kind === 'plan')).toMatchObject({
       status: 'completed',
       title: 'Preparing a plan',
       summary: 'Prepared a plan',
       count: 2,
     });
     expect(
-      buildModel({ session: makeSession({ status: AgentSessionStatus.WaitingForPlanReview }), currentPlan: null }).items,
+      buildModel({ session: makeSession({ status: AgentSessionStatus.WaitingForPlanReview }), currentPlan: null })
+        .items,
     ).toEqual([expect.objectContaining({ kind: 'plan', status: 'completed', title: 'Preparing a plan' })]);
     expect(buildModel({ session: makeSession({ status: AgentSessionStatus.Applying }) }).items).toEqual([
       expect.objectContaining({ kind: 'apply', status: 'running', title: 'Applying changes' }),
@@ -512,8 +496,7 @@ describe('agent activity UI helpers', () => {
           id: 'unknown',
           toolName: 'futureDangerTool' as AgentToolName,
           status: AgentToolCallStatus.Failed,
-          requestSummary:
-            'Read asset 00000000-0000-4000-8000-000000000001 with api_key=abc123 and Bearer secret-token',
+          requestSummary: 'Read asset 00000000-0000-4000-8000-000000000001 with api_key=abc123 and Bearer secret-token',
           responseSummary: null,
           error: 'provider key sk-123456 failed with token=topsecret',
           assetCount: 10_000,
