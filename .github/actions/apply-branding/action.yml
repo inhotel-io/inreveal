@@ -26,8 +26,16 @@ runs:
             packages+=(imagemagick)
           fi
           if (( ${#packages[@]} > 0 )); then
-            sudo apt-get update
-            sudo apt-get install -y "${packages[@]}"
+            for attempt in 1 2 3; do
+              sudo apt-get update
+              if sudo apt-get install -y --fix-missing "${packages[@]}"; then
+                break
+              fi
+              if (( attempt == 3 )); then
+                exit 1
+              fi
+              sleep $(( attempt * 15 ))
+            done
           fi
         fi
 
