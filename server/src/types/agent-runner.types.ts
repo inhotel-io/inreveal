@@ -49,7 +49,12 @@ export type AgentRunnerResumeRequest = {
   toolResult?: unknown;
 };
 
-export type AgentRunnerActivityKind = 'start-processing' | 'plan-composing' | 'apply-progress' | 'runner-recovery' | 'unknown';
+export type AgentRunnerActivityKind =
+  | 'start-processing'
+  | 'plan-composing'
+  | 'apply-progress'
+  | 'runner-recovery'
+  | 'unknown';
 
 export type AgentRunnerActivityStatus = 'running' | 'completed' | 'failed' | 'skipped';
 
