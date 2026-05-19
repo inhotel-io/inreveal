@@ -15,11 +15,20 @@
   interface Props {
     open: boolean;
     credentials: AgentProviderCredentialResponseDto[];
-    onClose: () => void;
+    onClose?: () => void;
     onCredentialsChanged: (credentials: AgentProviderCredentialResponseDto[]) => void;
+    embedded?: boolean;
+    initialAddFormOpen?: boolean;
   }
 
-  let { open, credentials, onClose, onCredentialsChanged }: Props = $props();
+  let {
+    open,
+    credentials,
+    onClose = () => {},
+    onCredentialsChanged,
+    embedded = false,
+    initialAddFormOpen = false,
+  }: Props = $props();
 
   type ProviderOption = ProviderType | 'ollama';
   const OLLAMA_SECRET_PLACEHOLDER = 'ollama';
@@ -38,6 +47,7 @@
   let confirmingDeleteCredentialId = $state<string | null>(null);
   let editingModelsCredentialId = $state<string | null>(null);
   let addFormOpen = $state(false);
+  let wasOpen = false;
   let errorMessage = $state<string | null>(null);
   let revealedCredentialIds = $state<Record<string, boolean>>({});
   let visibleSecretByCredentialId = $state<Record<string, string>>({});
@@ -197,6 +207,13 @@
   };
 
   $effect(() => {
+    if (open && !wasOpen && initialAddFormOpen) {
+      addFormOpen = true;
+    }
+    wasOpen = open;
+  });
+
+  $effect(() => {
     const nextDrafts = { ...modelDraftByCredentialId };
     const nextDefaultDrafts = { ...defaultModelDraftByCredentialId };
     let changed = false;
@@ -221,29 +238,35 @@
 </script>
 
 {#if open}
-  <div class="fixed inset-0 z-50 bg-black/55" role="presentation" onclick={onClose}></div>
+  {#if !embedded}
+    <div class="fixed inset-0 z-[60] bg-black/55" role="presentation" onclick={onClose}></div>
+  {/if}
   <div
-    class="fixed left-1/2 top-16 z-50 flex max-h-[calc(100vh-8rem)] w-[min(46rem,calc(100vw-2rem))] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white text-black shadow-2xl dark:border-neutral-800 dark:bg-neutral-950 dark:text-white"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="assistant-api-keys-title"
+    class={embedded
+      ? 'mt-4 border-t border-gray-200 pt-4 dark:border-neutral-800'
+      : 'fixed left-1/2 top-1/2 z-[60] flex max-h-[calc(100vh-2rem)] w-[min(46rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white text-black shadow-2xl dark:border-neutral-800 dark:bg-neutral-950 dark:text-white'}
+    role={embedded ? undefined : 'dialog'}
+    aria-modal={embedded ? undefined : 'true'}
+    aria-labelledby={embedded ? undefined : 'assistant-api-keys-title'}
   >
-    <div class="flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4 dark:border-neutral-800">
-      <div>
-        <h2 id="assistant-api-keys-title" class="text-lg font-semibold">{$t('assistant_api_keys')}</h2>
-        <Text size="small" color="muted">{$t('assistant_api_keys_description')}</Text>
+    {#if !embedded}
+      <div class="flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4 dark:border-neutral-800">
+        <div>
+          <h2 id="assistant-api-keys-title" class="text-lg font-semibold">{$t('assistant_api_keys')}</h2>
+          <Text size="small" color="muted">{$t('assistant_api_keys_description')}</Text>
+        </div>
+        <button
+          type="button"
+          class="rounded-md px-2 py-1 text-xl leading-none text-gray-500 hover:bg-gray-100 hover:text-black dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-white"
+          aria-label={$t('close')}
+          onclick={onClose}
+        >
+          &times;
+        </button>
       </div>
-      <button
-        type="button"
-        class="rounded-md px-2 py-1 text-xl leading-none text-gray-500 hover:bg-gray-100 hover:text-black dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-white"
-        aria-label={$t('close')}
-        onclick={onClose}
-      >
-        &times;
-      </button>
-    </div>
+    {/if}
 
-    <div class="min-h-0 overflow-y-auto px-5 py-5">
+    <div class={embedded ? '' : 'min-h-0 overflow-y-auto px-5 py-5'}>
       <section aria-labelledby="assistant-existing-api-keys-title">
         <h3
           id="assistant-existing-api-keys-title"
