@@ -1,0 +1,249 @@
+# Timeline Grouping Design
+
+## Problem
+
+Large photo timelines are hard to scan when every surface starts near the detailed thumbnail level. A person, tag, album, space, or filtered library can contain tens of thousands of assets, forcing users to scroll through dense day groups to reach an older year or month.
+
+Discussion #387 proposes a Photos-style compressed timeline with `Years`, `Months`, and detailed photos. The key requirement is that this works across timeline-style photo surfaces, not only the main `/photos` page.
+
+## Goals
+
+Add a shared timeline grouping mode:
+
+- `year` shows one representative photo card per matching year.
+- `month` shows one representative photo card per matching month.
+- `day` shows the current detailed thumbnail timeline with day headers.
+
+The grouping mode is a display density. It is not itself a filter. However, clicking a specific year or month card is a temporal navigation shortcut that updates the same temporal filter state used by the FilterPanel.
+
+The first implementation slice covers web `Timeline`-based surfaces:
+
+- Photos
+- Spaces
+- Albums
+- People detail
+- Space person detail
+- Tags
+- Archive
+- Favorites
+- Trash
+- Locked
+- Map timeline panel
+
+`GalleryViewer`-based surfaces are later slices: legacy Search, smart-search result grids, Folders, Memories gallery, individual shared views, and any other flat asset grid that does not use `TimelineManager`.
+
+Mobile parity is a later slice. The design should still align with the existing mobile `GroupAssetsBy` concept so web and mobile can converge on the same vocabulary.
+
+## User Experience
+
+The timeline has a grouping control with `Years`, `Months`, and `Days`.
+
+On desktop, the control lives in the page toolbar/header area, near active filter chips and other view controls. On mobile or coarse-pointer layouts, it floats near the bottom of the timeline, above navigation and selection affordances.
+
+Year and month modes render representative photo cards:
+
+- Large date label, such as `2015` or `Aug. 2015`.
+- One representative asset image per card.
+- Secondary count badge, such as `438 photos`.
+- The cards are photo-forward and visually strong, while surrounding controls stay quiet and utilitarian.
+
+Day mode preserves the current detailed thumbnail timeline behavior: day headers, justified thumbnails, scrubber behavior, selection, asset viewer navigation, and keyboard navigation should continue to work.
+
+Card clicks move the user to the next grouping density and update temporal filter state:
+
+- Clicking `2015` in `Years` sets the temporal filter to year `2015`, switches grouping to `Months`, and anchors to that year.
+- Clicking `Aug. 2015` in `Months` sets the temporal filter to August 2015, switches grouping to `Days`, and anchors to that month.
+- Clearing the temporal filter removes the year/month narrowing and reloads buckets for the remaining active filters.
+
+In day mode, day headers keep their current selection behavior. Clicking a day does not introduce another drill-down mode.
+
+## FilterPanel Behavior
+
+Filters and grouping are separate axes:
+
+- FilterPanel state determines which assets are eligible.
+- Grouping determines how eligible assets are displayed.
+
+Filter changes flow into timeline bucket requests. For example, selecting a person changes the bucket request to include `personIds`, so the timeline only shows years, months, or days containing that person.
+
+Timeline card clicks flow back into temporal filter state. On pages with a FilterPanel, the selected year/month must appear in that panel and in active filter chips. On pages without a full FilterPanel, the same reusable temporal state should still surface as a clearable active chip near the timeline controls.
+
+The FilterPanel remains the visible source of truth for temporal narrowing. The grouping control does not replace the temporal filter UI; it provides a faster visual way to set it.
+
+## Server API
+
+Add a bucket granularity parameter to timeline endpoints:
+
+- `GET /timeline/buckets?bucketSize=year|month|day`
+- `GET /timeline/bucket?bucketSize=year|month|day&timeBucket=...`
+
+`bucketSize` defaults to the current month behavior for compatibility.
+
+`/timeline/buckets` returns bucket metadata for the selected granularity:
+
+- `timeBucket`: start date of the bucket as an ISO-compatible date string.
+- `count`: number of matching assets in the bucket.
+- `representativeAssetId`: asset id used for the card thumbnail in year/month modes.
+- `representativeThumbhash`: optional placeholder data when available.
+- `representativeRatio`: optional aspect ratio when available.
+
+Representative assets must respect the same visibility, permission, ownership, stack, shared-space, partner, tag, person, location, favorite, trash, rating, media type, and temporal filters as the count query. If a bucket contains only videos, the representative asset can be a video thumbnail.
+
+`/timeline/bucket` returns assets for one selected bucket at the requested granularity. It uses the same filter contract as `/timeline/buckets`. Day mode can load day-sized buckets; the web client may still prefetch adjacent buckets to avoid excessive request churn while scrolling.
+
+Server date grouping must use the existing local timeline semantics. The current month grouping is based on `localDateTime` truncated in UTC-compatible form; year and day grouping should use the same source and time-zone assumptions so bucket counts match the assets returned for those buckets.
+
+## Web Architecture
+
+Introduce a shared web type:
+
+```ts
+type TimelineGrouping = 'year' | 'month' | 'day';
+```
+
+`TimelineManagerOptions` should include the selected grouping and the current temporal filter bounds. Timeline options continue to carry person, tag, location, rating, favorite, archive, trash, stack, space, album, partner, and shared-space filters.
+
+`TimelineManager` should stop exposing month-specific concepts as the primary public model. Today it assumes:
+
+- outer segments are months
+- inner groups are days
+- scrubber segments are months
+
+The grouping-aware model should represent timeline buckets generically. A bucket has a granularity, date key, count, height, top position, representative asset metadata, and loaded state. Day mode can preserve existing `TimelineMonth` and `TimelineDay` internals during the first refactor if the public surface is moving toward generic buckets.
+
+Year and month modes render card buckets instead of justified thumbnail groups. They should not load every asset in the bucket to show the card. They only need bucket metadata plus representative image information.
+
+Day mode keeps the existing detailed behavior and is the compatibility baseline. Existing asset update, websocket, stack, delete, archive, favorite, and selection flows must continue to update or remove assets from the active timeline.
+
+## UI Components
+
+Add a reusable timeline grouping control component with three states: `Years`, `Months`, and `Days`.
+
+Desktop placement:
+
+- Render in the page toolbar/header area.
+- Place near active filter chips when the page has filters.
+- Avoid overlaying timeline content or the scrubber.
+
+Mobile/touch placement:
+
+- Render as a floating segmented control near the bottom of the timeline.
+- Keep it above bottom navigation and below content whenever possible.
+- Hide, disable, or move it when selection mode or asset viewer overlays would conflict.
+
+Add a representative timeline card component for year and month buckets:
+
+- Stable dimensions so card labels and thumbnails do not shift layout.
+- One large date label.
+- Optional photo count badge.
+- Uses existing thumbnail delivery paths for the representative asset.
+- Accessible button semantics and keyboard activation.
+- Loading and error states that degrade to a neutral card with date and count.
+
+The visual direction is quiet photo-native utility: restrained controls, strong photo cards, large readable date typography, and visible filter chips. The card imagery carries the emotional weight; the surrounding interface should remain dense enough for repeated use.
+
+## Route Adoption
+
+The first slice should wire grouping into the existing `Timeline` component and then adopt it wherever `Timeline` is already used.
+
+Pages that already share `TimelineManager` should not each invent their own grouping logic. Route-specific work should be limited to:
+
+- passing grouping-aware options
+- placing the desktop control in the local toolbar/header
+- exposing active temporal chips where the page does not have a FilterPanel
+- handling route-specific empty states and selection bars
+
+Photos and Spaces must sync with the existing FilterPanel. Albums, People, Tags, Archive, Favorites, Trash, Locked, and Map timeline panel should use the same underlying temporal filter state even where a full filter panel is not present.
+
+## Performance
+
+The first slice must use server-side bucket granularity. Client-side merging of month buckets into years is not enough because it keeps large timelines coupled to month-level data and weakens representative card selection.
+
+Year and month views should request bucket metadata only, not all assets. Switching from year to month or month to day should issue new bucket requests with narrower temporal filters.
+
+Representative asset lookup should be included in the bucket query or resolved in a bounded follow-up path. It must not issue one unbounded asset query per bucket.
+
+The current month index supports month bucketing. Year and day grouping may need query tuning or indexes after measuring generated SQL. The first implementation should include repository-level tests and SQL review for the new grouping modes.
+
+## Testing
+
+Server tests:
+
+- `bucketSize` defaults to month.
+- Year, month, and day bucket counts match filtered assets.
+- Representative asset metadata respects permissions and filters.
+- `personIds`, `tagIds`, `spaceId`, `withSharedSpaces`, `withPartners`, `isFavorite`, `isTrashed`, `visibility`, `takenAfter`, and `takenBefore` pass through for all bucket sizes.
+- `/timeline/bucket` returns only assets inside the requested bucket granularity.
+
+Web manager tests:
+
+- Updating grouping requests the correct bucket size.
+- Selecting a person/tag/filter reloads only matching buckets.
+- Clicking a year card sets year temporal state, switches to month grouping, and anchors.
+- Clicking a month card sets month temporal state, switches to day grouping, and anchors.
+- Clearing temporal state reloads broader buckets without losing non-time filters.
+- Day mode preserves current detailed timeline behavior.
+
+Component and route tests:
+
+- Grouping control renders in desktop toolbar placement.
+- Grouping control renders as floating mobile/touch placement.
+- Selection mode and asset viewer overlays do not leave the floating control in an unusable position.
+- Representative card renders date, count, thumbnail, loading state, and fallback state.
+- Photos and Spaces FilterPanel stay synchronized with timeline card clicks.
+- Timeline-based routes can mount with each grouping mode.
+
+## Implementation Slices
+
+Slice 1: Server/API bucket granularity
+
+- Add `bucketSize` DTO validation.
+- Update repository grouping SQL.
+- Add representative asset metadata.
+- Regenerate OpenAPI and TypeScript SDK.
+- Cover server tests.
+
+Slice 2: Web timeline model
+
+- Add `TimelineGrouping`.
+- Generalize timeline bucket state.
+- Preserve day-mode behavior.
+- Add representative bucket loading.
+- Cover manager tests.
+
+Slice 3: Filter and navigation integration
+
+- Wire year/month card clicks to temporal filter state.
+- Keep FilterPanel and active chips synchronized.
+- Add clear behavior.
+
+Slice 4: UI controls and cards
+
+- Add grouping control.
+- Add representative card component.
+- Implement desktop and mobile placements.
+- Verify layout states.
+
+Slice 5: Route adoption
+
+- Adopt across web `Timeline` surfaces.
+- Add route smoke coverage for Photos, Spaces, Albums, People, Tags, Archive, Favorites, Trash, Locked, and Map timeline panel.
+
+Slice 6: Later grid parity
+
+- Bring `GalleryViewer` surfaces into the grouping model where appropriate: Search, Folders, Memories, shared views, and other flat grids.
+
+Slice 7: Mobile parity
+
+- Extend mobile grouping vocabulary to include year mode.
+- Align mobile settings, bucket queries, headers, cards, and scrubber behavior with the web model.
+
+## Out of Scope
+
+This design does not change asset sort order semantics beyond existing timeline order.
+
+This design does not replace the FilterPanel.
+
+This design does not add mosaic year/month cards in the first version. A multi-thumbnail mosaic can be a later enhancement after representative single-image cards ship.
+
+This design does not require GalleryViewer or mobile parity in the first implementation slice.
