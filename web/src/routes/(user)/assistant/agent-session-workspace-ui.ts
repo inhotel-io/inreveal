@@ -127,17 +127,6 @@ export const selectInitialAgentSessionId = (
     return normalizedRequestedSessionId;
   }
 
-  for (const status of actionableStatusPriority) {
-    const fallback = sessions
-      .filter((session) => session.status === status)
-      .sort(compareSessionsByRecency)
-      .at(0);
-
-    if (fallback) {
-      return fallback.id;
-    }
-  }
-
   return null;
 };
 

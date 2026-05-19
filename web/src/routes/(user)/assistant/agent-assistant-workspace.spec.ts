@@ -27,18 +27,25 @@ vi.mock('$lib/stores/websocket');
 
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
+    advanced: 'Advanced',
     assistant: 'Assistant',
     assistant_add_api_key: 'Add API key',
     assistant_add_api_key_collapsed_hint:
       'Add another provider account only when you need a different key, endpoint, or local model host.',
-    assistant_approval_mode: 'Approval mode',
-    assistant_approval_mode_ask_on_escalation: 'Ask on escalation',
-    assistant_approval_mode_dangerously_skip_permissions: 'Dangerously skip read approvals',
-    assistant_approval_mode_plan_only: 'Plan review only',
-    assistant_approval_mode_strict: 'Strict',
+    assistant_approval_behavior: 'Approval behavior',
+    assistant_approval_behavior_apply_plans: 'Ask before applying plans',
+    assistant_approval_behavior_apply_plans_description:
+      'Pi can inspect your gallery to prepare suggestions, but it must show you a plan before anything changes.',
+    assistant_approval_behavior_all_actions: 'Ask before all actions',
+    assistant_approval_behavior_all_actions_description:
+      'Pi asks before reading photo details, previews, or using any tool. Most transparent, but slower.',
+    assistant_approval_behavior_skip_prompts: 'Skip approval prompts',
+    assistant_approval_behavior_skip_prompts_description:
+      'Pi can inspect without asking. Changes still require plan approval unless auto-apply is enabled. Local testing only.',
     assistant_approval_request: 'Approval request',
     assistant_approval_tool_calls_error: 'Unable to load approval requests',
     assistant_cancel: 'Cancel',
+    assistant_change: 'Change',
     assistant_chat: 'Chat',
     assistant_chat_menu: 'Chat options',
     assistant_collapse_sessions: 'Collapse sessions',
@@ -77,13 +84,20 @@ vi.mock('svelte-i18n', () => {
     assistant_message_disabled_terminal: 'This session has ended. Start a new chat to continue.',
     assistant_message_placeholder: 'Ask the assistant to organize your albums.',
     assistant_new_chat_placeholder: 'Ask Gallery what to do with your photos.',
+    assistant_new_chat_prompt: "What's on the agenda for today?",
     assistant_runner_ready: 'Assistant ready',
     assistant_settings: 'Assistant settings',
+    assistant_settings_apply_to_new_chats: 'These defaults are used when you start a new chat.',
+    assistant_control: 'Assistant control',
+    assistant_control_description:
+      'Choose what Pi is allowed to access and when it should ask you first. Existing chats keep their original settings.',
     assistant_unavailable_banner: 'Assistant runner unavailable. Check configuration.',
     assistant_message_refresh_error: 'Message was sent, but the latest session state could not be refreshed.',
     assistant_message_resume_placeholder: 'Describe what changed or what the assistant should try next.',
     assistant_manage_api_keys: 'Manage API keys',
+    assistant_manage: 'Manage',
     assistant_model: 'Model',
+    assistant_model_settings_summary: '{credential} · {model}',
     assistant_model_provider: 'Model provider',
     assistant_model_selector: 'Select model',
     assistant_new_chat: 'New chat',
@@ -96,10 +110,23 @@ vi.mock('svelte-i18n', () => {
     assistant_ollama_no_api_key:
       'Ollama does not require an API key. The server will save a local placeholder secret for compatibility.',
     assistant_open_sessions: 'Open sessions',
-    assistant_permission_preset: 'Permission preset',
+    assistant_photo_access: 'Photo access',
+    assistant_api_keys_summary: 'Manage provider keys and available models',
     assistant_permission_preset_careful: 'Careful',
+    assistant_permission_preset_careful_description:
+      'Metadata only. No previews or original files; limited organizing actions.',
+    assistant_permission_preset_careful_details:
+      'Metadata only for your own library. Pi can organize albums/spaces, set covers, favorites, and tags, but cannot see previews/original files or remove/archive/edit photos.',
     assistant_permission_preset_local_power_user: 'Local power user',
+    assistant_permission_preset_local_power_user_description:
+      'Metadata, previews, and limited originals for trusted local use.',
+    assistant_permission_preset_local_power_user_details:
+      'Metadata, previews, and limited original-file access for local trusted use. Pi can use the full organization/editing toolset across your library and shared spaces.',
     assistant_permission_preset_visual_organizer: 'Visual organizer',
+    assistant_permission_preset_visual_organizer_description:
+      'Metadata and previews. Full organizing actions, no original files.',
+    assistant_permission_preset_visual_organizer_details:
+      'Metadata and previews for your library and shared spaces. Pi can visually curate, organize, edit, favorite, archive, and tag photos, but cannot access original files.',
     assistant_protocol: 'Protocol {protocol}',
     assistant_provider_credential: 'Provider credential',
     assistant_provider_type: 'Provider',
@@ -141,6 +168,8 @@ vi.mock('svelte-i18n', () => {
       (messages[key] ?? key)
         .replace('{protocol}', String(options?.values?.protocol ?? ''))
         .replace('{version}', String(options?.values?.version ?? ''))
+        .replace('{credential}', String(options?.values?.credential ?? ''))
+        .replace('{model}', String(options?.values?.model ?? ''))
         .replace('{label}', String(options?.values?.label ?? '')),
     ),
   };
@@ -309,7 +338,7 @@ describe(AgentAssistantWorkspace.name, () => {
     expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: requestedSession.id });
   });
 
-  it('falls back to the newest actionable session and replaces the missing query param', async () => {
+  it('opens the assistant page to a fresh new chat even when previous sessions exist', () => {
     render(AgentAssistantWorkspace, {
       props: {
         runnerStatus: healthyRunner,
@@ -319,17 +348,15 @@ describe(AgentAssistantWorkspace.name, () => {
       },
     });
 
-    await waitFor(() =>
-      expect(gotoMock).toHaveBeenCalledWith(`/assistant?session=${actionableSession.id}`, {
-        keepFocus: true,
-        noScroll: true,
-        replaceState: true,
-      }),
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
+    expect(screen.getByTestId(`agent-session-row-${actionableSession.id}`)).not.toHaveAttribute('aria-current');
+    expect(gotoMock).not.toHaveBeenCalledWith(
+      `/assistant?session=${actionableSession.id}`,
+      expect.objectContaining({ replaceState: true }),
     );
-    expect(screen.getAllByRole('heading', { name: 'New chat' })).not.toHaveLength(0);
   });
 
-  it('falls back from an unknown requested session and replaces the stale query param', async () => {
+  it('opens a fresh new chat when the requested session is unknown', () => {
     render(AgentAssistantWorkspace, {
       props: {
         runnerStatus: healthyRunner,
@@ -339,14 +366,9 @@ describe(AgentAssistantWorkspace.name, () => {
       },
     });
 
-    await waitFor(() =>
-      expect(gotoMock).toHaveBeenCalledWith(`/assistant?session=${actionableSession.id}`, {
-        keepFocus: true,
-        noScroll: true,
-        replaceState: true,
-      }),
-    );
-    expect(screen.getAllByRole('heading', { name: 'New chat' })).not.toHaveLength(0);
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
+    expect(screen.getByTestId(`agent-session-row-${actionableSession.id}`)).not.toHaveAttribute('aria-current');
+    expect(gotoMock).toHaveBeenCalledWith('/assistant', expect.objectContaining({ replaceState: true }));
   });
 
   it('uses push-style navigation when a user selects a session from a no-query new-chat state', async () => {
@@ -385,13 +407,16 @@ describe(AgentAssistantWorkspace.name, () => {
     expect(screen.queryByRole('heading', { name: 'Session setup' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('assistant-status-reason')).not.toBeInTheDocument();
     expect(screen.getByTestId('assistant-empty-chat-surface')).toHaveClass('justify-center');
+    expect(screen.getByTestId('assistant-empty-chat-heading')).toHaveClass('text-center');
+    expect(screen.getByRole('heading', { name: "What's on the agenda for today?" })).toBeInTheDocument();
+    expect(screen.queryByText('Album organization assistant')).not.toBeInTheDocument();
     expect(screen.getByTestId('assistant-new-chat-composer')).toHaveClass('mt-4');
     expect(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute(
       'placeholder',
       'Ask Gallery what to do with your photos.',
     );
     const settingsButton = screen.getByRole('button', { name: 'Assistant settings' });
-    expect(screen.getByRole('button', { name: 'Assistant ready' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Assistant ready' })).not.toBeInTheDocument();
     expect(settingsButton).toHaveAttribute('data-testid', 'assistant-settings-menu');
     expect(settingsButton.closest('header')).toBeInTheDocument();
   });
@@ -425,7 +450,7 @@ describe(AgentAssistantWorkspace.name, () => {
           providerCredentialId: credentials[0].id,
           model: 'gpt-5.1',
           permissionPreset: AgentPermissionPreset.Careful,
-          approvalMode: AgentApprovalMode.Strict,
+          approvalMode: AgentApprovalMode.PlanOnly,
         },
       }),
     );
@@ -519,7 +544,7 @@ describe(AgentAssistantWorkspace.name, () => {
       id: '00000000-0000-4000-8000-000000000401',
       status: AgentSessionStatus.Running,
       permissionPreset: AgentPermissionPreset.VisualOrganizer,
-      approvalMode: AgentApprovalMode.AskOnEscalation,
+      approvalMode: AgentApprovalMode.Strict,
     });
     sdkMock.createAgentSession.mockResolvedValue(createdSession);
     sdkMock.appendAgentSessionMessage.mockResolvedValue(makeUserMessage(createdSession.id, 'Organize screenshots'));
@@ -534,11 +559,11 @@ describe(AgentAssistantWorkspace.name, () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
-    await user.selectOptions(screen.getByLabelText('Permission preset'), AgentPermissionPreset.VisualOrganizer);
-    await user.selectOptions(screen.getByLabelText('Approval mode'), AgentApprovalMode.AskOnEscalation);
-    await user.click(
-      within(screen.getByRole('dialog', { name: 'Assistant settings' })).getByRole('button', { name: 'Close' }),
-    );
+    const settingsDialog = screen.getByRole('dialog', { name: 'Assistant settings' });
+    await user.click(within(settingsDialog).getByRole('button', { name: 'Change assistant control' }));
+    await user.click(within(settingsDialog).getByRole('radio', { name: /Visual organizer/ }));
+    await user.click(within(settingsDialog).getByRole('radio', { name: /Ask before all actions/ }));
+    await user.click(within(settingsDialog).getByRole('button', { name: 'Close' }));
 
     await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Organize screenshots');
     await user.click(screen.getByRole('button', { name: 'Send' }));
@@ -547,7 +572,110 @@ describe(AgentAssistantWorkspace.name, () => {
       expect(sdkMock.createAgentSession).toHaveBeenCalledWith({
         agentSessionCreateDto: expect.objectContaining({
           permissionPreset: AgentPermissionPreset.VisualOrganizer,
-          approvalMode: AgentApprovalMode.AskOnEscalation,
+          approvalMode: AgentApprovalMode.Strict,
+        }),
+      }),
+    );
+  });
+
+  it('opens assistant settings as compact rows with assistant control collapsed by default', async () => {
+    const user = userEvent.setup();
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
+    const settingsDialog = screen.getByRole('dialog', { name: 'Assistant settings' });
+
+    expect(within(settingsDialog).getByRole('heading', { name: 'Model' })).toBeInTheDocument();
+    expect(within(settingsDialog).getByText('OpenAI personal · gpt-5.1')).toBeInTheDocument();
+    expect(within(settingsDialog).getByText('Manage provider keys and available models')).toBeInTheDocument();
+    expect(within(settingsDialog).getByRole('heading', { name: 'Assistant control' })).toBeInTheDocument();
+    expect(within(settingsDialog).getByText('Careful · Ask before applying plans')).toBeInTheDocument();
+    expect(within(settingsDialog).getByText('These defaults are used when you start a new chat.')).toBeInTheDocument();
+
+    expect(within(settingsDialog).queryByRole('group', { name: 'Photo access' })).not.toBeInTheDocument();
+    expect(within(settingsDialog).queryByRole('group', { name: 'Approval behavior' })).not.toBeInTheDocument();
+    expect(within(settingsDialog).queryByText(/no original files/i)).not.toBeInTheDocument();
+    expect(within(settingsDialog).queryByText(/must show you a plan/i)).not.toBeInTheDocument();
+
+    const manageApiKeysButton = within(settingsDialog).getByRole('button', { name: 'Manage API keys' });
+    expect(manageApiKeysButton).toHaveClass('whitespace-nowrap');
+  });
+
+  it('expands assistant control settings into descriptive radio choices', async () => {
+    const user = userEvent.setup();
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
+    const settingsDialog = screen.getByRole('dialog', { name: 'Assistant settings' });
+    await user.click(within(settingsDialog).getByRole('button', { name: 'Change assistant control' }));
+
+    expect(within(settingsDialog).getByRole('group', { name: 'Photo access' })).toBeInTheDocument();
+    expect(within(settingsDialog).getByRole('group', { name: 'Approval behavior' })).toBeInTheDocument();
+
+    expect(within(settingsDialog).getByRole('radio', { name: /Careful/ })).toBeChecked();
+    expect(within(settingsDialog).getByRole('radio', { name: /Ask before applying plans/ })).toBeChecked();
+    expect(within(settingsDialog).getByText(/Metadata only/i)).toBeInTheDocument();
+    expect(within(settingsDialog).getByText(/Metadata and previews/i)).toBeInTheDocument();
+    expect(within(settingsDialog).getByText(/limited originals/i)).toBeInTheDocument();
+    expect(within(settingsDialog).getByLabelText(/cannot see previews/i)).toBeInTheDocument();
+    expect(within(settingsDialog).getByLabelText(/visually curate/i)).toBeInTheDocument();
+    expect(within(settingsDialog).getByLabelText(/full organization\/editing toolset/i)).toBeInTheDocument();
+    expect(within(settingsDialog).getByText(/Most transparent, but slower/i)).toBeInTheDocument();
+    expect(within(settingsDialog).getByText(/must show you a plan/i)).toBeInTheDocument();
+    expect(within(settingsDialog).queryByText('Advanced')).not.toBeInTheDocument();
+    expect(within(settingsDialog).queryByRole('radio', { name: /Skip approval prompts/ })).not.toBeInTheDocument();
+
+    expect(within(settingsDialog).queryByText('Permission preset')).not.toBeInTheDocument();
+    expect(within(settingsDialog).queryByText('Strict')).not.toBeInTheDocument();
+    expect(within(settingsDialog).queryByText('Ask on escalation')).not.toBeInTheDocument();
+  });
+
+  it('ignores old skip-approval defaults when creating the next session', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(
+      'gallery.assistant.defaults',
+      JSON.stringify({ approvalMode: AgentApprovalMode.DangerouslySkipPermissions }),
+    );
+    const createdSession = makeSession({
+      id: '00000000-0000-4000-8000-000000000403',
+      status: AgentSessionStatus.Running,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+    sdkMock.createAgentSession.mockResolvedValue(createdSession);
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(makeUserMessage(createdSession.id, 'Organize screenshots'));
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Organize screenshots');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() =>
+      expect(sdkMock.createAgentSession).toHaveBeenCalledWith({
+        agentSessionCreateDto: expect.objectContaining({
+          approvalMode: AgentApprovalMode.PlanOnly,
         }),
       }),
     );
@@ -580,6 +708,7 @@ describe(AgentAssistantWorkspace.name, () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
+    await user.click(screen.getByRole('button', { name: 'Change model' }));
     await user.selectOptions(screen.getByLabelText('Model'), 'gpt-5.1-mini');
     await user.click(
       within(screen.getByRole('dialog', { name: 'Assistant settings' })).getByRole('button', { name: 'Close' }),
@@ -600,6 +729,39 @@ describe(AgentAssistantWorkspace.name, () => {
       credentialId: credentials[0].id,
       model: 'gpt-5.1-mini',
     });
+  });
+
+  it('keeps healthy runner status hidden but exposes unhealthy runner details on demand', async () => {
+    const user = userEvent.setup();
+
+    const healthyView = render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    expect(screen.queryByRole('button', { name: 'Assistant ready' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Assistant runner unavailable. Check configuration.' }),
+    ).not.toBeInTheDocument();
+
+    await healthyView.rerender({
+      runnerStatus: unavailableRunner,
+      credentials,
+      sessions: [],
+      requestedSessionId: null,
+    });
+
+    const problemButton = screen.getByRole('button', { name: 'Assistant runner unavailable. Check configuration.' });
+    expect(problemButton).toBeInTheDocument();
+    await user.click(problemButton);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Assistant runner unavailable. Check configuration.');
+    expect(screen.getByText('Configured')).toBeInTheDocument();
+    expect(screen.getByText('no')).toBeInTheDocument();
   });
 
   it('keeps the composer visible but blocks sending with an inline runner-unavailable banner', () => {
@@ -773,8 +935,10 @@ describe(AgentAssistantWorkspace.name, () => {
     await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
     await user.click(screen.getByRole('button', { name: 'Manage API keys' }));
 
-    expect(screen.getByRole('dialog', { name: 'API keys' })).toBeInTheDocument();
-    expect(screen.getAllByText('OpenAI personal')).not.toHaveLength(0);
+    const settingsDialog = screen.getByRole('dialog', { name: 'Assistant settings' });
+    expect(screen.queryByRole('dialog', { name: 'API keys' })).not.toBeInTheDocument();
+    expect(within(settingsDialog).getByRole('heading', { name: 'Existing API keys' })).toBeInTheDocument();
+    expect(within(settingsDialog).getAllByText('OpenAI personal')).not.toHaveLength(0);
     expect(screen.getByTestId(`agent-api-key-secret-${credentials[0].id}`)).toHaveTextContent('************');
 
     await user.click(screen.getByRole('button', { name: 'Show API key' }));
@@ -844,9 +1008,10 @@ describe(AgentAssistantWorkspace.name, () => {
 
     await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
     await user.click(screen.getByRole('button', { name: 'Add API key' }));
-    await user.click(
-      within(screen.getByRole('dialog', { name: 'API keys' })).getByRole('button', { name: 'Add API key' }),
-    );
+
+    const settingsDialog = screen.getByRole('dialog', { name: 'Assistant settings' });
+    expect(screen.queryByRole('dialog', { name: 'API keys' })).not.toBeInTheDocument();
+    expect(within(settingsDialog).getByRole('heading', { name: 'Add API key' })).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Provider'), 'ollama');
 
     expect(screen.queryByLabelText('API key')).not.toBeInTheDocument();
@@ -870,10 +1035,7 @@ describe(AgentAssistantWorkspace.name, () => {
         },
       }),
     );
-    await user.click(within(screen.getByRole('dialog', { name: 'API keys' })).getByRole('button', { name: 'Close' }));
-    await user.click(
-      within(screen.getByRole('dialog', { name: 'Assistant settings' })).getByRole('button', { name: 'Close' }),
-    );
+    await user.click(within(settingsDialog).getByRole('button', { name: 'Close' }));
     await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Use local model');
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
@@ -930,8 +1092,10 @@ describe(AgentAssistantWorkspace.name, () => {
     await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
     await user.click(screen.getByRole('button', { name: 'Manage API keys' }));
 
-    expect(screen.getByRole('dialog', { name: 'API keys' })).toBeInTheDocument();
-    expect(screen.getAllByText('OpenAI personal')).not.toHaveLength(0);
+    const settingsDialog = screen.getByRole('dialog', { name: 'Assistant settings' });
+    expect(screen.queryByRole('dialog', { name: 'API keys' })).not.toBeInTheDocument();
+    expect(within(settingsDialog).getByRole('heading', { name: 'Existing API keys' })).toBeInTheDocument();
+    expect(within(settingsDialog).getAllByText('OpenAI personal')).not.toHaveLength(0);
   });
 
   it('guides first-time users to add an API key from assistant settings', async () => {
@@ -951,8 +1115,11 @@ describe(AgentAssistantWorkspace.name, () => {
     await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
     await user.click(screen.getByRole('button', { name: 'Add API key' }));
 
-    expect(screen.getByRole('dialog', { name: 'API keys' })).toBeInTheDocument();
-    expect(screen.getByText('No API keys have been added yet.')).toBeInTheDocument();
+    const settingsDialog = screen.getByRole('dialog', { name: 'Assistant settings' });
+    expect(screen.queryByRole('dialog', { name: 'API keys' })).not.toBeInTheDocument();
+    expect(within(settingsDialog).getByText('No API keys have been added yet.')).toBeInTheDocument();
+    expect(within(settingsDialog).getByLabelText('Provider')).toBeInTheDocument();
+    expect(within(settingsDialog).getByLabelText('Name')).toBeInTheDocument();
   });
 
   it('adds a newly created session from the first message to the sidebar and selects it', async () => {
