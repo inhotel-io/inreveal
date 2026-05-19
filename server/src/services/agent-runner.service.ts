@@ -7,8 +7,8 @@ import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository'
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
-import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
+import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AgentMessageContent } from 'src/types/agent-message.types';
 import {
   AgentRunnerActivityStreamEvent,
