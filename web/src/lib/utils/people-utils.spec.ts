@@ -231,7 +231,12 @@ describe(zoomImageToBase64.name, () => {
     }
 
     const drawImage = vi.fn();
-    const canvas = { width: 0, height: 0, getContext: () => ({ drawImage }), toDataURL: () => 'data:image/png;base64,face' };
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: () => ({ drawImage }),
+      toDataURL: () => 'data:image/png;base64,face',
+    };
     const originalCreateElement = document.createElement.bind(document);
     vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) =>
       tagName === 'canvas' ? canvas : originalCreateElement(tagName)) as typeof document.createElement);
