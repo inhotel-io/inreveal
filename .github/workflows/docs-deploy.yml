@@ -199,7 +199,7 @@ jobs:
         run: 'mise run //deployment:tf apply'
 
       - name: Comment
-        uses: actions-cool/maintain-one-comment@4b2dbf086015f892dcb5e8c1106f5fccd6c1476b # v3.2.0
+        uses: actions-cool/maintain-one-comment@4b2dbf086015f892dcb5e8c1106f5fccd6c1476b # v3.2.0; zizmor: ignore[impostor-commit] tag listing is forbidden upstream
         if: ${{ steps.parameters.outputs.event == 'pr' }}
         with:
           token: ${{ github.token }}
