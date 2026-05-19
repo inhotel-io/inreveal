@@ -268,7 +268,7 @@ test.describe('Assistant album organizer', () => {
     });
     const { plan: appliedPlan } = (await applyResponse.json()) as AgentOperationPlanApplyResponseDto;
 
-    await expect(page.getByText('Applied 2 operations. 0 failed.')).toBeVisible();
+    await expect(page.getByText('2 applied · 1 skipped · 0 failed.')).toBeVisible();
     await expect(page.getByText('Applied', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Skipped', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('0 failed').first()).toBeVisible();
@@ -357,7 +357,7 @@ test.describe('Assistant album organizer', () => {
       },
       planRevision: currentPlan.revision,
     });
-    await expect(page.getByText('Applied 2 operations. 0 failed.')).toBeVisible();
+    await expect(page.getByText('2 applied · 1 skipped · 0 failed.')).toBeVisible();
   });
 
   test('supersedes an older plan revision and applies only the latest revised plan', async ({ context, page }) => {
@@ -429,7 +429,7 @@ test.describe('Assistant album organizer', () => {
     expect(applyRequest.url()).toContain(`/operation-plan/${latestPlan.id}/apply`);
     expect(applyRequest.url()).not.toContain(`/operation-plan/${oldPlan.id}/apply`);
     expect(applyRequest.postDataJSON()).toMatchObject({ planRevision: latestPlan.revision });
-    await expect(page.getByText('Applied 3 operations. 0 failed.')).toBeVisible();
+    await expect(page.getByText('3 applied · 0 skipped · 0 failed.')).toBeVisible();
   });
 
   test('shows thumbnail fallback when a mounted thumbnail request fails while keeping the plan applicable', async ({
@@ -446,7 +446,7 @@ test.describe('Assistant album organizer', () => {
     await expect(page.getByRole('button', { name: 'Apply 3 selected' })).toBeEnabled();
 
     await applySelectedOperations(page, session.id, 'Apply 3 selected');
-    await expect(page.getByText('Applied 3 operations. 0 failed.')).toBeVisible();
+    await expect(page.getByText('3 applied · 0 skipped · 0 failed.')).toBeVisible();
   });
 
   test('keeps the visible plan after a stale apply response and tells the user to review the latest plan', async ({
@@ -538,7 +538,6 @@ test.describe('Assistant album organizer', () => {
     try {
       await expect(page.getByText(addOperation.id)).toHaveCount(0);
       await page.getByRole('button', { name: 'Apply 3 selected' }).click();
-      await expect(page.getByText('Applied 1 operation. 1 failed.')).toBeVisible();
       await expect(page.getByText('1 applied · 1 skipped · 1 failed. Review details before continuing.')).toBeVisible();
       await expect(getPortugalDestination(page).getByText('Applied', { exact: true })).toBeVisible();
       await expect(getPortugalDestination(page).getByText('Partially applied', { exact: true })).toBeVisible();
