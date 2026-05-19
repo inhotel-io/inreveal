@@ -80,21 +80,21 @@ No server or runner test commands are required for this slice because there are 
 
 ## Edge Cases Covered In This Slice
 
-| Spec area | Case | Slice 1 expectation |
-| --- | --- | --- |
-| Visibility/model safety | Compact/default row labels | View model exposes safe `title` and `summary` only; raw tool names stay in `technical` |
-| Turn grouping foundation | Same timestamp rows | Deterministic sort by timestamp, type priority, then id |
-| Live update foundation | Tool call starts after user message | Running row can be derived from active tool-call status |
-| Live update foundation | Tool completes | Completed row can be derived from completed tool-call status |
-| Live update foundation | Plan becomes ready | Plan row derives `Prepared a plan` from current proposed plan or `WaitingForPlanReview` status |
-| Live update foundation | Plan apply starts | Apply row derives `Applying changes` from `Applying` session status |
-| Permissions | Tool needs approval | Pending tool call derives a blocked `Waiting for approval` row |
-| Errors | Tool fails | Failed row derives safe failure state and redacted technical error |
-| Errors | Unknown tool name | Generic safe copy renders; raw tool name remains technical-only |
-| Privacy | Provider key appears in error | Redaction helper removes obvious key/token/secret patterns from technical error text |
-| Privacy | Runner token appears in metadata | Redaction helper removes obvious bearer/token/secret patterns from stringified technical values |
-| Performance | Many repeated metadata calls | Rows coalesce into one aggregate metadata activity item |
-| Performance | Large asset id arrays | Activity title/summary do not include raw ids; counts are aggregated |
+| Spec area                | Case                                | Slice 1 expectation                                                                             |
+| ------------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Visibility/model safety  | Compact/default row labels          | View model exposes safe `title` and `summary` only; raw tool names stay in `technical`          |
+| Turn grouping foundation | Same timestamp rows                 | Deterministic sort by timestamp, type priority, then id                                         |
+| Live update foundation   | Tool call starts after user message | Running row can be derived from active tool-call status                                         |
+| Live update foundation   | Tool completes                      | Completed row can be derived from completed tool-call status                                    |
+| Live update foundation   | Plan becomes ready                  | Plan row derives `Prepared a plan` from current proposed plan or `WaitingForPlanReview` status  |
+| Live update foundation   | Plan apply starts                   | Apply row derives `Applying changes` from `Applying` session status                             |
+| Permissions              | Tool needs approval                 | Pending tool call derives a blocked `Waiting for approval` row                                  |
+| Errors                   | Tool fails                          | Failed row derives safe failure state and redacted technical error                              |
+| Errors                   | Unknown tool name                   | Generic safe copy renders; raw tool name remains technical-only                                 |
+| Privacy                  | Provider key appears in error       | Redaction helper removes obvious key/token/secret patterns from technical error text            |
+| Privacy                  | Runner token appears in metadata    | Redaction helper removes obvious bearer/token/secret patterns from stringified technical values |
+| Performance              | Many repeated metadata calls        | Rows coalesce into one aggregate metadata activity item                                         |
+| Performance              | Large asset id arrays               | Activity title/summary do not include raw ids; counts are aggregated                            |
 
 ## Edge Cases Deferred To Later Slices
 
@@ -169,17 +169,17 @@ buildAgentActivityModel({
 
 Assert the safe activity labels:
 
-| Tool | Kind | Title | Summary |
-| --- | --- | --- | --- |
-| `SearchAssets` | `search` | `Searching photos` | `Found matching photos` |
-| `ReadAssetMetadata` | `metadata` | `Reading photo details` | `Read details for photos` |
-| `ReadAssetPreviews` | `preview` | `Loading photo previews` | `Loaded photo previews` |
-| `ReadAssetOriginals` | `preview` or `unknown` if intentionally conservative | `Opening original files` | `Opened original files` |
-| `ListAlbums` | `album` | `Searching albums` | `Found matching albums` |
-| `ReadAlbum` | `album` | `Reading album details` | `Read album details` |
-| `ProposeAlbumOperations` | `plan` | `Preparing a plan` | `Prepared a plan` |
-| `ReviseProposedOperations` | `plan` | `Revising the plan` | `Revised the plan` |
-| `SummarizePlan` | `plan` | `Summarizing the plan` | `Summarized the plan` |
+| Tool                       | Kind                                                 | Title                    | Summary                   |
+| -------------------------- | ---------------------------------------------------- | ------------------------ | ------------------------- |
+| `SearchAssets`             | `search`                                             | `Searching photos`       | `Found matching photos`   |
+| `ReadAssetMetadata`        | `metadata`                                           | `Reading photo details`  | `Read details for photos` |
+| `ReadAssetPreviews`        | `preview`                                            | `Loading photo previews` | `Loaded photo previews`   |
+| `ReadAssetOriginals`       | `preview` or `unknown` if intentionally conservative | `Opening original files` | `Opened original files`   |
+| `ListAlbums`               | `album`                                              | `Searching albums`       | `Found matching albums`   |
+| `ReadAlbum`                | `album`                                              | `Reading album details`  | `Read album details`      |
+| `ProposeAlbumOperations`   | `plan`                                               | `Preparing a plan`       | `Prepared a plan`         |
+| `ReviseProposedOperations` | `plan`                                               | `Revising the plan`      | `Revised the plan`        |
+| `SummarizePlan`            | `plan`                                               | `Summarizing the plan`   | `Summarized the plan`     |
 
 Expected red failure: `agent-activity-ui.ts` does not exist.
 

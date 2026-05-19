@@ -95,27 +95,27 @@ No server or runner test commands are required because this slice intentionally 
 
 ## Edge Cases Covered In This Slice
 
-| Spec area | Case | Slice 4 expectation |
-| --- | --- | --- |
-| Live updates | Tool-call event arrives | Existing activity block updates from refreshed tool-call state |
-| Live updates | Polling sees completed tool call | Running row changes to completed without appending a second block |
-| Live updates | Assistant delta starts | Activity block adds or updates `Writing response`; streamed text still renders separately |
-| Live updates | Assistant message created | `Writing response` clears and final assistant message appears |
-| Live updates | Plan becomes ready | `operation-plan-ready` refreshes current plan and shows `Prepared a plan` |
-| Live updates | Plan applied | `operation-plan-applied` refreshes applied history and shows applied-plan card separately |
-| Coalescing | Repeated metadata/previews refreshes | One aggregate row remains with updated status/count |
-| Coalescing | Duplicate websocket and poll refreshes | One activity block and one row per coalesced activity kind |
-| Visibility | Mode is `off` during live updates | Activity block stays hidden; busy fallback and required action cards remain |
-| Visibility | Mode is `expanded` during live updates | Newly refreshed rows appear expanded without requiring another click |
-| Required surfaces | Pending approval | Activity says waiting for approval; approval card remains actionable |
-| Required surfaces | Plan review | Activity says plan prepared; plan review remains actionable |
-| Required surfaces | Applied plan | Activity summary can mention applied changes; applied-plan card remains a separate item |
-| Races | Out-of-order tool-call refresh responses | Older response is ignored and cannot roll the UI backward |
-| Races | Session changes while refresh is in flight | Old response is ignored and cannot update the new session |
-| Races | Component destroyed while refresh is in flight | Late response is ignored and callbacks reset safely |
-| Errors | Tool-call refresh fails | Last known activity remains; no duplicate fallback tool cards appear |
-| Errors | Current-plan refresh fails | Existing activity remains usable; no raw error text appears in the activity block |
-| Safety | Unknown/technical tool payloads | Default activity UI remains human-labeled and technical data stays hidden |
+| Spec area         | Case                                           | Slice 4 expectation                                                                       |
+| ----------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Live updates      | Tool-call event arrives                        | Existing activity block updates from refreshed tool-call state                            |
+| Live updates      | Polling sees completed tool call               | Running row changes to completed without appending a second block                         |
+| Live updates      | Assistant delta starts                         | Activity block adds or updates `Writing response`; streamed text still renders separately |
+| Live updates      | Assistant message created                      | `Writing response` clears and final assistant message appears                             |
+| Live updates      | Plan becomes ready                             | `operation-plan-ready` refreshes current plan and shows `Prepared a plan`                 |
+| Live updates      | Plan applied                                   | `operation-plan-applied` refreshes applied history and shows applied-plan card separately |
+| Coalescing        | Repeated metadata/previews refreshes           | One aggregate row remains with updated status/count                                       |
+| Coalescing        | Duplicate websocket and poll refreshes         | One activity block and one row per coalesced activity kind                                |
+| Visibility        | Mode is `off` during live updates              | Activity block stays hidden; busy fallback and required action cards remain               |
+| Visibility        | Mode is `expanded` during live updates         | Newly refreshed rows appear expanded without requiring another click                      |
+| Required surfaces | Pending approval                               | Activity says waiting for approval; approval card remains actionable                      |
+| Required surfaces | Plan review                                    | Activity says plan prepared; plan review remains actionable                               |
+| Required surfaces | Applied plan                                   | Activity summary can mention applied changes; applied-plan card remains a separate item   |
+| Races             | Out-of-order tool-call refresh responses       | Older response is ignored and cannot roll the UI backward                                 |
+| Races             | Session changes while refresh is in flight     | Old response is ignored and cannot update the new session                                 |
+| Races             | Component destroyed while refresh is in flight | Late response is ignored and callbacks reset safely                                       |
+| Errors            | Tool-call refresh fails                        | Last known activity remains; no duplicate fallback tool cards appear                      |
+| Errors            | Current-plan refresh fails                     | Existing activity remains usable; no raw error text appears in the activity block         |
+| Safety            | Unknown/technical tool payloads                | Default activity UI remains human-labeled and technical data stays hidden                 |
 
 ## Edge Cases Deferred To Later Slices
 

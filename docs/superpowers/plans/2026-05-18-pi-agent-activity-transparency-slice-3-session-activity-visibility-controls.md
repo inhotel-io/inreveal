@@ -96,25 +96,25 @@ No server or runner test commands are required for this slice because there are 
 
 ## Edge Cases Covered In This Slice
 
-| Spec area | Case | Slice 3 expectation |
-| --- | --- | --- |
-| Visibility | No stored preference | Mode defaults to `compact` and renders compact teaser while activity exists |
-| Visibility | User clicks `Show activity` | Mode changes to `expanded`; all rows render |
-| Visibility | User clicks `Hide activity` | Mode changes to `compact`; compact rows render |
-| Visibility | Session menu selects `Off` | Activity block does not render |
-| Visibility | Session menu selects `Compact` | Activity block renders compact rows |
-| Visibility | Session menu selects `Expanded` | Activity block renders all rows |
-| Visibility | Off while Pi is active | Activity block is hidden and simple busy fallback can render |
-| Required surfaces | Off during pending approval | Approval card/action dock remains visible and actionable |
-| Required surfaces | Off during plan review | Plan review remains visible and actionable |
-| Required surfaces | Off after applied plan | Applied-plan timeline card remains visible |
-| Duplication | Off with completed current-turn tool calls | Current-turn standalone tool-call cards remain suppressed |
-| Persistence | Switch sessions | Each session loads its own stored mode; no expanded-state leakage |
-| Persistence | Unsupported stored value | Falls back to `compact` and does not throw |
-| Persistence | localStorage throws | Falls back to `compact`; UI stays usable |
-| Persistence | Multiple tabs update same session key | Storage event can update mode; malformed values cannot corrupt state |
-| Accessibility | Menu control | Button has name, popup state, keyboard/click support, and menuitemradio checked state |
-| Accessibility | Activity toggle focus | Show/hide control remains keyboard reachable and does not steal focus from approval or plan controls |
+| Spec area         | Case                                       | Slice 3 expectation                                                                                  |
+| ----------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Visibility        | No stored preference                       | Mode defaults to `compact` and renders compact teaser while activity exists                          |
+| Visibility        | User clicks `Show activity`                | Mode changes to `expanded`; all rows render                                                          |
+| Visibility        | User clicks `Hide activity`                | Mode changes to `compact`; compact rows render                                                       |
+| Visibility        | Session menu selects `Off`                 | Activity block does not render                                                                       |
+| Visibility        | Session menu selects `Compact`             | Activity block renders compact rows                                                                  |
+| Visibility        | Session menu selects `Expanded`            | Activity block renders all rows                                                                      |
+| Visibility        | Off while Pi is active                     | Activity block is hidden and simple busy fallback can render                                         |
+| Required surfaces | Off during pending approval                | Approval card/action dock remains visible and actionable                                             |
+| Required surfaces | Off during plan review                     | Plan review remains visible and actionable                                                           |
+| Required surfaces | Off after applied plan                     | Applied-plan timeline card remains visible                                                           |
+| Duplication       | Off with completed current-turn tool calls | Current-turn standalone tool-call cards remain suppressed                                            |
+| Persistence       | Switch sessions                            | Each session loads its own stored mode; no expanded-state leakage                                    |
+| Persistence       | Unsupported stored value                   | Falls back to `compact` and does not throw                                                           |
+| Persistence       | localStorage throws                        | Falls back to `compact`; UI stays usable                                                             |
+| Persistence       | Multiple tabs update same session key      | Storage event can update mode; malformed values cannot corrupt state                                 |
+| Accessibility     | Menu control                               | Button has name, popup state, keyboard/click support, and menuitemradio checked state                |
+| Accessibility     | Activity toggle focus                      | Show/hide control remains keyboard reachable and does not steal focus from approval or plan controls |
 
 ## Edge Cases Deferred To Later Slices
 
@@ -534,7 +534,7 @@ onActivityVisibilityModeChange?: (mode: AgentActivityVisibilityMode) => void;
 Default:
 
 ```ts
-activityVisibilityMode = 'compact'
+activityVisibilityMode = 'compact';
 ```
 
 Implementation notes:
