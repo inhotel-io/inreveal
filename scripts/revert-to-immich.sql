@@ -138,11 +138,12 @@ DROP TABLE IF EXISTS "classification_category" CASCADE;
 DROP TABLE IF EXISTS "storage_migration_log" CASCADE;
 DROP TABLE IF EXISTS "asset_duplicate_checksum" CASCADE;
 
--- Agent provider credentials, sessions, messages, tool calls, and operation plans
+-- Agent provider credentials, sessions, activity events, messages, tool calls, and operation plans
 DROP TABLE IF EXISTS "agent_operation" CASCADE;
 DROP TABLE IF EXISTS "agent_operation_plan" CASCADE;
 DROP TABLE IF EXISTS "agent_tool_call" CASCADE;
 DROP TABLE IF EXISTS "agent_message" CASCADE;
+DROP TABLE IF EXISTS "agent_session_activity_event" CASCADE;
 DROP TABLE IF EXISTS "agent_session" CASCADE;
 DROP TABLE IF EXISTS "agent_provider_credential" CASCADE;
 
@@ -368,6 +369,7 @@ DELETE FROM "kysely_migrations"
    '1778910000000-BackfillAgentReadSessionLimits',
    '1778920000000-AgentOperationPlan',
    '1778930000000-AgentSessionTitle',
+   '1778940000000-AgentSessionActivityEvent',
 
    -- Post-v2.7.5 upstream migrations pulled in by rebase. Paired with the
    -- schema rollbacks in step 7 above.
@@ -430,8 +432,8 @@ BEGIN
        'shared_space', 'user_group_member', 'user_group',
        'classification_prompt_embedding', 'classification_category',
        'storage_migration_log', 'asset_duplicate_checksum',
-       'agent_provider_credential', 'agent_session', 'agent_message', 'agent_tool_call',
-       'agent_operation_plan', 'agent_operation'
+       'agent_provider_credential', 'agent_session', 'agent_session_activity_event',
+       'agent_message', 'agent_tool_call', 'agent_operation_plan', 'agent_operation'
      );
   IF fork_tables_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery table(s) still present after cleanup — aborting.', fork_tables_left;
