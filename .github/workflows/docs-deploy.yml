@@ -199,12 +199,46 @@ jobs:
         run: 'mise run //deployment:tf apply'
 
       - name: Comment
-        uses: actions-cool/maintain-one-comment@4b2dbf086015f892dcb5e8c1106f5fccd6c1476b # v3.2.0; zizmor: ignore[impostor-commit] tag listing is forbidden upstream
         if: ${{ steps.parameters.outputs.event == 'pr' }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DOCS_SUBDOMAIN: ${{ steps.docs-output.outputs.subdomain }}
+          PR_NUMBER: ${{ fromJson(needs.checks.outputs.parameters).pr_number }}
         with:
-          token: ${{ github.token }}
-          number: ${{ fromJson(needs.checks.outputs.parameters).pr_number }}
-          body: |
-            📖 Documentation deployed to [${{ steps.docs-output.outputs.subdomain }}](https://${{ steps.docs-output.outputs.subdomain }})
-          emojis: 'rocket'
-          body-include: '<!-- Docs PR URL -->'
+          github-token: ${{ github.token }}
+          script: |
+            const issue_number = Number(process.env.PR_NUMBER);
+            if (!Number.isInteger(issue_number)) {
+              throw new Error(`Invalid PR number: ${process.env.PR_NUMBER}`);
+            }
+
+            const marker = '<!-- Docs PR URL -->';
+            const subdomain = process.env.DOCS_SUBDOMAIN;
+            const body = `${marker}\n📖 Documentation deployed to [${subdomain}](https://${subdomain})`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              per_page: 100,
+            });
+
+            const existing = comments.find(
+              (comment) => comment.user?.type === 'Bot' && comment.body?.includes(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body,
+              });
+            }
