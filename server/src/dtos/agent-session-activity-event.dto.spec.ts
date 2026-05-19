@@ -28,10 +28,11 @@ describe('AgentSessionActivityEventCreateDto', () => {
   });
 
   it('rejects unknown top-level and count keys', () => {
-    expect(AgentSessionActivityEventCreateDto.schema.safeParse({ ...input, raw: { assetIds: [factory.uuid()] } }))
-      .toMatchObject({
-        success: false,
-      });
+    expect(
+      AgentSessionActivityEventCreateDto.schema.safeParse({ ...input, raw: { assetIds: [factory.uuid()] } }),
+    ).toMatchObject({
+      success: false,
+    });
 
     expect(
       AgentSessionActivityEventCreateDto.schema.safeParse({
@@ -41,11 +42,7 @@ describe('AgentSessionActivityEventCreateDto', () => {
     ).toMatchObject({ success: false });
   });
 
-  it.each([
-    { total: -1 },
-    { total: 1.5 },
-    { total: 10_001 },
-  ])('rejects invalid counts %o', (counts) => {
+  it.each([{ total: -1 }, { total: 1.5 }, { total: 10_001 }])('rejects invalid counts %o', (counts) => {
     expect(AgentSessionActivityEventCreateDto.schema.safeParse({ ...input, counts })).toMatchObject({ success: false });
   });
 
