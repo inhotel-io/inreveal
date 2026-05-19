@@ -2,12 +2,12 @@ import { BadRequestException } from '@nestjs/common';
 import { AgentSession, AgentSessionActivityEvent } from 'src/database';
 import { AgentSessionActivityEventCreateDto } from 'src/dtos/agent-session-activity-event.dto';
 import {
-  AgentSessionActivityEventKind,
-  AgentSessionActivityEventSource,
-  AgentSessionActivityEventStatus,
   AgentApprovalMode,
   AgentPermissionPreset,
   AgentProviderType,
+  AgentSessionActivityEventKind,
+  AgentSessionActivityEventSource,
+  AgentSessionActivityEventStatus,
   AgentSessionStatus,
 } from 'src/enum';
 import { AgentSessionActivityEventRepository } from 'src/repositories/agent-session-activity-event.repository';

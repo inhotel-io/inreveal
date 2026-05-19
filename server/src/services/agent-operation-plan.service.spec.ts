@@ -34,8 +34,8 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
-import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
+import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
@@ -1770,7 +1770,12 @@ describe(AgentOperationPlanService.name, () => {
     const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [createOperation, addOperation] });
     const appliedPlan = applyUpdatesToPlan(plan, [
       { id: createOperation.id, status: AgentOperationStatus.Applied, result: { albumId }, error: null },
-      { id: addOperation.id, status: AgentOperationStatus.Applied, result: { albumId, assetIds: [assetId] }, error: null },
+      {
+        id: addOperation.id,
+        status: AgentOperationStatus.Applied,
+        result: { albumId, assetIds: [assetId] },
+        error: null,
+      },
     ]);
     sessionRepository.getById.mockResolvedValue(session);
     planRepository.getByIdForSession.mockResolvedValue(plan);

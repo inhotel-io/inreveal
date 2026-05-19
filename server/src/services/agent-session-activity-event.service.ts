@@ -1,14 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { AgentSessionActivityEvent } from 'src/database';
 import { AgentSessionActivityEventCreateDto } from 'src/dtos/agent-session-activity-event.dto';
-import {
-  AgentSessionActivityEventSource,
-  AgentSessionActivityEventStatus,
-  AgentSessionStatus,
-} from 'src/enum';
+import { AuthDto } from 'src/dtos/auth.dto';
+import { AgentSessionActivityEventSource, AgentSessionActivityEventStatus, AgentSessionStatus } from 'src/enum';
 import { AgentSessionActivityEventRepository } from 'src/repositories/agent-session-activity-event.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
-import { AuthDto } from 'src/dtos/auth.dto';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentRunnerActivityStreamEvent } from 'src/types/agent-runner.types';
 
