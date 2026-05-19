@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { t } from 'svelte-i18n';
+  import { t, type Translations } from 'svelte-i18n';
   import type { AgentActivityVisibilityMode } from './agent-activity-visibility-ui';
 
   interface Props {
@@ -15,7 +15,7 @@
   let itemElements: HTMLButtonElement[] = $state([]);
 
   const modes: AgentActivityVisibilityMode[] = ['off', 'compact', 'expanded'];
-  const labelKeys: Record<AgentActivityVisibilityMode, string> = {
+  const labelKeys: Record<AgentActivityVisibilityMode, Translations> = {
     compact: 'assistant_activity_visibility_compact',
     expanded: 'assistant_activity_visibility_expanded',
     off: 'assistant_activity_visibility_off',
@@ -57,7 +57,7 @@
   };
 
   const moveFocus = async (delta: number) => {
-    const currentIndex = itemElements.findIndex((element) => element === document.activeElement);
+    const currentIndex = itemElements.indexOf(document.activeElement);
     const nextIndex = (Math.max(0, currentIndex) + delta + modes.length) % modes.length;
     await focusItem(nextIndex);
   };

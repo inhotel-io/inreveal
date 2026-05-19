@@ -79,7 +79,7 @@ describe('agent activity visibility UI helpers', () => {
 
   it('handles missing and throwing storage without mutating caller state', () => {
     const storage = new ThrowingStorage();
-    let mode = 'expanded';
+    const mode = 'expanded';
 
     expect(readAgentActivityVisibilityMode('session-a', storage)).toBe('compact');
     expect(writeAgentActivityVisibilityMode('session-a', 'off', storage)).toBe(false);
