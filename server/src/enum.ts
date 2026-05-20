@@ -106,6 +106,8 @@ export enum AgentToolName {
   ReadAssetOriginals = 'readAssetOriginals',
   ListAlbums = 'listAlbums',
   ReadAlbum = 'readAlbum',
+  ListSpaces = 'listSpaces',
+  ReadSpace = 'readSpace',
   ProposeAlbumOperations = 'proposeAlbumOperations',
   ReviseProposedOperations = 'reviseProposedOperations',
   SummarizePlan = 'summarizePlan',
