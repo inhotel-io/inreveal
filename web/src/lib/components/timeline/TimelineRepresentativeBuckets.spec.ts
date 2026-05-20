@@ -152,4 +152,17 @@ describe('TimelineRepresentativeBuckets', () => {
     expect(card).toBeDisabled();
     expect(onTimelineBucketActivate).not.toHaveBeenCalled();
   });
+
+  it('keeps a large bucket list bounded to the viewport overscan', () => {
+    const buckets = Array.from({ length: 2500 }, (_, index) => bucket(1900 + index, index * 328));
+
+    render(TimelineRepresentativeBuckets, {
+      grouping: 'year',
+      buckets,
+      visibleWindow: { top: 0, bottom: 600 },
+      onTimelineBucketActivate: () => {},
+    });
+
+    expect(screen.getAllByTestId('timeline-bucket-card').length).toBeLessThan(10);
+  });
 });
