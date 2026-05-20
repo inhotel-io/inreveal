@@ -103,16 +103,16 @@ Do not ask the user to approve in chat and do not create a new read request with
 
 MCP tool name: `searchAssets`
 
-Find assets using Gallery search modes, metadata filters, and a bounded result page.
+Find assets using Gallery metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and a bounded result page.
 
-Put search filters under filters. Use mode metadata. Only page 1 and order desc are executable. Text, people, space, visibility, later pages, and non-desc order are later-slice contract fields and are not available yet. Use only toolCallId when retrying a Gallery-approved search.
+Put deterministic metadata search filters under filters. Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known. Only page 1 and order desc are executable. Text modes, later pages, and non-desc order are not available yet. Use only toolCallId when retrying a Gallery-approved search.
 
 Argument modes:
 
 - `empty-search`: Use when the user asks a broad library question and no narrower filters are known.
   Required fields: none.
   Forbidden fields: `toolCallId`.
-- `filtered-search`: Use when the user provides date, place, favorite, rating, album, tag, camera, or media filters. People, space, and visibility fields are contract fields but are not available yet.
+- `filtered-search`: Use when the user provides date, place, favorite, rating, album, tag, camera, media, people, space, or visibility filters.
   Required fields: `filters`.
   Forbidden fields: `toolCallId`, `query`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved search request.
@@ -179,6 +179,22 @@ Search favorite five-star assets.
   "filters": {
     "isFavorite": true,
     "rating": 5
+  },
+  "limit": 25
+}
+```
+
+#### space-filter-search
+
+Search assets in a known shared space for known space people.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="space-filter-search" -->
+
+```json
+{
+  "filters": {
+    "spaceId": "00000000-0000-4000-8000-000000000020",
+    "spacePersonIds": ["00000000-0000-4000-8000-000000000021"]
   },
   "limit": 25
 }
@@ -1591,9 +1607,9 @@ Summarize plan risks and selected changes.
 
 ### Search assets
 
-- `search-filters-outside-filters`: Place supported metadata filters for date, location, favorite, rating, album, tag, camera, and media inside filters. People, space, and visibility fields are accepted by the contract but are not available in Slice 1.
+- `search-filters-outside-filters`: Place supported metadata filters for date, location, favorite, rating, album, tag, camera, media, people, space, shared-space, and visibility inside filters.
 - `search-query-with-metadata-mode`: Omit query and use metadata filters for now. Text search modes are in the contract but are not available yet.
-- `search-space-person-without-space`: spacePersonIds requires filters.spaceId, but people and space-person filters are not available in the current slice. Use currently executable metadata filters for now.
+- `search-space-person-without-space`: spacePersonIds requires filters.spaceId. Resolve or choose the space first, then call searchAssets with both fields under filters.
 - `search-combined-filters-and-tool-call-id`: Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.
 - `search-limit-out-of-range`: Use a positive integer limit no greater than 10000.
 - `search-page-unavailable`: Only page 1 is executable in the current slice. Later pages are contract fields for a later slice.
