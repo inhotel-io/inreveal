@@ -1665,74 +1665,6 @@ describe(AgentToolService.name, () => {
       { mode: 'metadata', query: 'beach', filters: {}, limit: 5, page: 1, order: 'desc' },
       'query is only supported for smart, description, ocr, and filename search modes',
     ],
-    [
-      {
-        mode: 'metadata',
-        filters: { createdAfter: new Date('2026-05-01T00:00:00.000Z') },
-        limit: 5,
-        page: 1,
-        order: 'desc',
-      },
-      'createdAfter search is not available yet',
-    ],
-    [
-      {
-        mode: 'metadata',
-        filters: { createdBefore: new Date('2026-05-31T23:59:59.999Z') },
-        limit: 5,
-        page: 1,
-        order: 'desc',
-      },
-      'createdBefore search is not available yet',
-    ],
-    [
-      {
-        mode: 'metadata',
-        filters: { updatedAfter: new Date('2026-05-01T00:00:00.000Z') },
-        limit: 5,
-        page: 1,
-        order: 'desc',
-      },
-      'updatedAfter search is not available yet',
-    ],
-    [
-      {
-        mode: 'metadata',
-        filters: { updatedBefore: new Date('2026-05-31T23:59:59.999Z') },
-        limit: 5,
-        page: 1,
-        order: 'desc',
-      },
-      'updatedBefore search is not available yet',
-    ],
-    [
-      { mode: 'metadata', filters: { personIds: [newUuid()] }, limit: 5, page: 1, order: 'desc' },
-      'personIds search is not available yet',
-    ],
-    [
-      { mode: 'metadata', filters: { personIds: [] }, limit: 5, page: 1, order: 'desc' },
-      'personIds search is not available yet',
-    ],
-    [
-      { mode: 'metadata', filters: { spaceId: newUuid() }, limit: 5, page: 1, order: 'desc' },
-      'spaceId search is not available yet',
-    ],
-    [
-      { mode: 'metadata', filters: { spacePersonIds: [newUuid()] }, limit: 5, page: 1, order: 'desc' },
-      'spacePersonIds search is not available yet',
-    ],
-    [
-      { mode: 'metadata', filters: { spacePersonIds: [] }, limit: 5, page: 1, order: 'desc' },
-      'spacePersonIds search is not available yet',
-    ],
-    [
-      { mode: 'metadata', filters: { withSharedSpaces: true }, limit: 5, page: 1, order: 'desc' },
-      'withSharedSpaces search is not available yet',
-    ],
-    [
-      { mode: 'metadata', filters: { visibility: AssetVisibility.Timeline }, limit: 5, page: 1, order: 'desc' },
-      'visibility search is not available yet',
-    ],
     [{ mode: 'metadata', filters: {}, limit: 5, page: 2, order: 'desc' }, 'page search is not available yet'],
     [{ mode: 'metadata', filters: {}, limit: 5, page: 1, order: 'asc' }, 'asc order search is not available yet'],
     [
@@ -1761,6 +1693,236 @@ describe(AgentToolService.name, () => {
       expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
     },
   );
+
+  it('denies spacePersonIds without spaceId before repository execution', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { spacePersonIds: [newUuid()] },
+      limit: 5,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'spacePersonIds requires spaceId',
+      toolCall: expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        error: 'spacePersonIds requires spaceId',
+      }),
+    });
+    expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
+  });
+
+  it('denies conflicting spaceId and withSharedSpaces before repository execution', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { spaceId: newUuid(), withSharedSpaces: true },
+      limit: 5,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Cannot use both spaceId and withSharedSpaces',
+      toolCall: expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        error: 'Cannot use both spaceId and withSharedSpaces',
+      }),
+    });
+    expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
+  });
+
+  it('denies withSharedSpaces in owned-only permission plans before repository execution', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { withSharedSpaces: true },
+      limit: 5,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Shared spaces are not accessible for this session',
+      toolCall: expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        error: 'Shared spaces are not accessible for this session',
+      }),
+    });
+    expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
+  });
+
+  it('denies stale spaceId withSharedSpaces filters generically after checking membership before repository execution', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getMember.mockResolvedValue(null);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { spaceId },
+      limit: 5,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(sharedSpaceRepository.getMember).toHaveBeenCalledWith(spaceId, auth.user.id);
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'One or more search filters are not accessible',
+      toolCall: expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        error: 'One or more search filters are not accessible',
+      }),
+    });
+    expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
+  });
+
+  it('denies locked visibility unless permission plan and auth both allow locked assets before repository execution', async () => {
+    const cases = [
+      {
+        plan: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+        auth: AuthFactory.from().session({ hasElevatedPermission: true }).build(),
+      },
+      {
+        plan: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: true } }),
+        auth: AuthFactory.from().session({ hasElevatedPermission: false }).build(),
+      },
+    ];
+
+    for (const testCase of cases) {
+      vi.clearAllMocks();
+      toolCallRepository.create.mockImplementation((dto) =>
+        Promise.resolve(
+          makeToolCall({
+            ...(dto as Partial<AgentToolCall>),
+            id: newUuid(),
+            startedAt: now,
+            completedAt: (dto.completedAt as Date | null | undefined) ?? null,
+          }),
+        ),
+      );
+      const session = makeSession({
+        userId: testCase.auth.user.id,
+        approvalMode: AgentApprovalMode.PlanOnly,
+        permissionPlanSnapshot: testCase.plan,
+      });
+
+      sessionRepository.getById.mockResolvedValue(session);
+
+      const result = await sut.searchAssets(testCase.auth, session.id, {
+        mode: 'metadata',
+        filters: { visibility: AssetVisibility.Locked },
+        limit: 5,
+        page: 1,
+        order: 'desc',
+      });
+
+      expect(result).toEqual({
+        status: 'denied',
+        reason: 'Locked photos require elevated permission',
+        toolCall: expect.objectContaining({
+          status: AgentToolCallStatus.Denied,
+          error: 'Locked photos require elevated permission',
+        }),
+      });
+      expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
+    }
+  });
+
+  it('allows locked visibility when permission plan and auth both allow locked assets', async () => {
+    const auth = AuthFactory.from().session({ hasElevatedPermission: true }).build();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: true } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [], nextPage: null });
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { visibility: AssetVisibility.Locked },
+      limit: 5,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ status: 'success' }));
+    expect(assetRepository.searchAgentMetadata).toHaveBeenCalled();
+  });
+
+  it('denies inaccessible people filters before repository execution', async () => {
+    const auth = AuthFactory.create();
+    const accessiblePersonId = newUuid();
+    const inaccessiblePersonId = newUuid();
+    const personIds = [accessiblePersonId, inaccessiblePersonId];
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([accessiblePersonId]));
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { personIds },
+      limit: 5,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(accessRepository.person.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set(personIds));
+    expect(accessRepository.person.checkSharedSpaceAccess).toHaveBeenCalledWith(auth.user.id, new Set(personIds));
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'One or more search filters are not accessible',
+      toolCall: expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        error: 'One or more search filters are not accessible',
+      }),
+    });
+    expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
+  });
 
   it('listAlbums filters out owned albums when assetScope.owned is false', async () => {
     const auth = AuthFactory.create();
