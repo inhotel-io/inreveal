@@ -15,6 +15,8 @@ import {
   AgentReadSpaceToolResponseDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchAssetsToolResponseDto,
+  AgentSearchUsersToolRequestDto,
+  AgentSearchUsersToolResponseDto,
   AgentToolApprovalDto,
   AgentToolCallParamsDto,
   AgentToolCallResponseDto,
@@ -38,6 +40,7 @@ type AgentListAlbumsToolRequestInput = z.input<typeof AgentListAlbumsToolRequest
 type AgentListSpacesToolRequestInput = z.input<typeof AgentListSpacesToolRequestDto.schema>;
 type AgentReadAlbumToolRequestInput = z.input<typeof AgentReadAlbumToolRequestDto.schema>;
 type AgentReadSpaceToolRequestInput = z.input<typeof AgentReadSpaceToolRequestDto.schema>;
+type AgentSearchUsersToolRequestInput = z.input<typeof AgentSearchUsersToolRequestDto.schema>;
 type AgentToolApprovalInput = z.input<typeof AgentToolApprovalDto.schema>;
 
 const parseRequest = (input: AgentReadAssetMetadataToolRequestInput) =>
@@ -56,6 +59,8 @@ const parseReadAlbumRequest = (input: AgentReadAlbumToolRequestInput) =>
   AgentReadAlbumToolRequestDto.schema.safeParse(input);
 const parseReadSpaceRequest = (input: AgentReadSpaceToolRequestInput) =>
   AgentReadSpaceToolRequestDto.schema.safeParse(input);
+const parseSearchUsersRequest = (input: AgentSearchUsersToolRequestInput) =>
+  AgentSearchUsersToolRequestDto.schema.safeParse(input);
 
 const parseApproval = (input: AgentToolApprovalInput) => AgentToolApprovalDto.schema.safeParse(input);
 
@@ -303,6 +308,54 @@ describe('Agent tool DTOs', () => {
       const result = parseReadSpaceRequest({ spaceId: 'not-a-uuid' });
 
       expectIssue(result, ['spaceId'], 'Invalid UUID');
+    });
+  });
+
+  describe(AgentSearchUsersToolRequestDto.name, () => {
+    it('accepts a query and limit for visible user lookup', () => {
+      const result = parseSearchUsersRequest({ query: ' pierre ', limit: 5 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({ query: 'pierre', limit: 5 });
+      }
+    });
+
+    it('defaults to an empty query and bounded limit', () => {
+      const result = parseSearchUsersRequest({});
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({ query: '', limit: 20 });
+      }
+    });
+
+    it('accepts toolCallId for approved-call resume', () => {
+      const toolCallId = factory.uuid();
+      const result = parseSearchUsersRequest({ toolCallId });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({ toolCallId });
+      }
+    });
+
+    it('rejects requests containing both lookup fields and toolCallId', () => {
+      const result = parseSearchUsersRequest({ query: 'sam', limit: 2, toolCallId: factory.uuid() });
+
+      expectIssue(result, [], 'Provide either user search fields or toolCallId, not both');
+    });
+
+    it('rejects empty queries after trim when query is provided', () => {
+      const result = parseSearchUsersRequest({ query: '   ' });
+
+      expectIssue(result, ['query'], 'Too small');
+    });
+
+    it('rejects limits outside the user lookup bound', () => {
+      const result = parseSearchUsersRequest({ limit: 21 });
+
+      expectIssue(result, ['limit'], 'Too big');
     });
   });
 
@@ -581,6 +634,33 @@ describe('Agent tool DTOs', () => {
       expect(encoded.data.space.assetIdsTruncated).toBe(false);
       expect(encoded.data.space.members[0]).not.toHaveProperty('email');
       expect(AgentReadSpaceToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
+    });
+
+    it('encodes and parses search user responses without leaking unexpected user fields', () => {
+      const encoded = AgentSearchUsersToolResponseDto.schema.safeEncode({
+        status: 'success',
+        toolCall: makeToolCall({ toolName: AgentToolName.SearchUsers, assetCount: 0, albumCount: 0 }),
+        users: [
+          {
+            userId: factory.uuid(),
+            name: 'Pierre',
+            email: 'pierre@example.com',
+            avatarColor: 'blue',
+            profileImagePath: null,
+          },
+        ],
+      });
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success || encoded.data.status !== 'success') {
+        return;
+      }
+
+      expect(encoded.data.users[0]).toEqual(
+        expect.objectContaining({ name: 'Pierre', email: 'pierre@example.com' }),
+      );
+      expect(encoded.data.users[0]).not.toHaveProperty('password');
+      expect(AgentSearchUsersToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
     });
   });
 });

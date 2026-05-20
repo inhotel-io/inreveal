@@ -12,6 +12,7 @@ import z from 'zod';
 
 const MAX_ASSET_IDS_PER_TOOL_CALL = 10_000;
 const MAX_TOOL_LIMIT = 10_000;
+const MAX_USER_LOOKUP_LIMIT = 20;
 const uuid = z.uuidv4();
 const summary = z.string().trim().min(1).max(1000);
 const AgentToolApprovalDecisionSchema = z.enum(AgentToolApprovalDecision).meta({ id: 'AgentToolApprovalDecision' });
@@ -159,6 +160,23 @@ const AgentReadSpaceToolRequestSchema = z
   })
   .meta({ id: 'AgentReadSpaceToolRequestDto' });
 
+const AgentSearchUsersToolRequestSchema = z
+  .strictObject({
+    query: z.string().trim().min(1).max(120).optional(),
+    limit: z.number().int().min(1).max(MAX_USER_LOOKUP_LIMIT).optional(),
+    toolCallId: uuid.optional().describe('Approved tool call id when retrying after user approval'),
+  })
+  .superRefine((value, ctx) => {
+    if (value.toolCallId && (value.query !== undefined || value.limit !== undefined)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either user search fields or toolCallId, not both',
+      });
+    }
+  })
+  .transform((value) => (value.toolCallId ? value : { query: value.query ?? '', limit: value.limit ?? 20 }))
+  .meta({ id: 'AgentSearchUsersToolRequestDto' });
+
 export const AgentReadToolRequestSchemas = {
   [AgentToolName.SearchAssets]: AgentSearchAssetsToolRequestSchema,
   [AgentToolName.ReadAssetMetadata]: AgentReadAssetMetadataToolRequestSchema,
@@ -168,6 +186,7 @@ export const AgentReadToolRequestSchemas = {
   [AgentToolName.ReadAlbum]: AgentReadAlbumToolRequestSchema,
   [AgentToolName.ListSpaces]: AgentListSpacesToolRequestSchema,
   [AgentToolName.ReadSpace]: AgentReadSpaceToolRequestSchema,
+  [AgentToolName.SearchUsers]: AgentSearchUsersToolRequestSchema,
 } as const;
 
 const AgentToolApprovalSchema = z
@@ -292,6 +311,16 @@ const AgentSpaceDetailSchema = AgentSpaceSummarySchema.extend({
   assetIdsReturned: z.number().int().min(0),
   assetIdsTruncated: z.boolean(),
 }).meta({ id: 'AgentSpaceDetail' });
+
+const AgentUserLookupResultSchema = z
+  .object({
+    userId: uuid,
+    name: z.string(),
+    email: z.string().nullable(),
+    avatarColor: z.string().nullable(),
+    profileImagePath: z.string().nullable(),
+  })
+  .meta({ id: 'AgentUserLookupResult' });
 
 const approvalRequiredResponse = (schemaId: string) =>
   z
@@ -440,6 +469,20 @@ const AgentReadSpaceToolResponseSchema = z
   ])
   .meta({ id: 'AgentReadSpaceToolResponseDto' });
 
+const AgentSearchUsersToolResponseSchema = z
+  .discriminatedUnion('status', [
+    approvalRequiredResponse('AgentSearchUsersToolApprovalRequiredResponse'),
+    deniedResponse('AgentSearchUsersToolDeniedResponse'),
+    z
+      .object({
+        status: z.literal('success'),
+        toolCall: AgentToolCallResponseSchema,
+        users: z.array(AgentUserLookupResultSchema),
+      })
+      .meta({ id: 'AgentSearchUsersToolSuccessResponse' }),
+  ])
+  .meta({ id: 'AgentSearchUsersToolResponseDto' });
+
 const AgentToolCallParamsSchema = z
   .object({
     id: uuid,
@@ -461,6 +504,7 @@ export class AgentListAlbumsToolRequestDto extends createZodDto(AgentListAlbumsT
 export class AgentReadAlbumToolRequestDto extends createZodDto(AgentReadAlbumToolRequestSchema) {}
 export class AgentListSpacesToolRequestDto extends createZodDto(AgentListSpacesToolRequestSchema) {}
 export class AgentReadSpaceToolRequestDto extends createZodDto(AgentReadSpaceToolRequestSchema) {}
+export class AgentSearchUsersToolRequestDto extends createZodDto(AgentSearchUsersToolRequestSchema) {}
 export class AgentToolApprovalDto extends createZodDto(AgentToolApprovalSchema) {}
 export class AgentToolCallResponseDto extends createZodDto(AgentToolCallResponseSchema) {}
 export class AgentToolCallParamsDto extends createZodDto(AgentToolCallParamsSchema) {}
@@ -504,3 +548,8 @@ export const AgentReadSpaceToolResponseDto = namedZodDto(
   AgentReadSpaceToolResponseSchema,
 );
 export type AgentReadSpaceToolResponseDto = z.output<typeof AgentReadSpaceToolResponseSchema>;
+export const AgentSearchUsersToolResponseDto = namedZodDto(
+  'AgentSearchUsersToolResponseDto',
+  AgentSearchUsersToolResponseSchema,
+);
+export type AgentSearchUsersToolResponseDto = z.output<typeof AgentSearchUsersToolResponseSchema>;

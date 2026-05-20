@@ -21,6 +21,7 @@ import { AssetRepository } from 'src/repositories/asset.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
+import { UserService } from 'src/services/user.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import {
   AgentAlbumDetail,
@@ -29,6 +30,7 @@ import {
   AgentAssetMetadata,
   AgentSpaceDetail,
   AgentSpaceSummary,
+  AgentUserLookupResult,
 } from 'src/types/agent-tool.types';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { newAccessRepositoryMock } from 'test/repositories/access.repository.mock';
@@ -49,7 +51,15 @@ const permissionPlanSnapshot: AgentPermissionPlanSnapshot = {
     allowOriginalsForExternalProviders: false,
   },
   assetScope: { owned: true, sharedSpaces: false, locked: false },
-  writeScope: { createAlbum: true, addAssets: true, updateDetails: true, setCover: true },
+  writeScope: {
+    createAlbum: true,
+    addAssets: true,
+    updateDetails: true,
+    setCover: true,
+    addMembersToSpaces: false,
+    removeMembersFromSpaces: false,
+    updateSpaceMemberRoles: false,
+  },
   limits: {
     maxAssetsPerToolCall: 100,
     maxAssetsPerSession: 1000,
@@ -232,6 +242,25 @@ const makeSpaceMember = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const makeUserResult = (overrides: Partial<AgentUserLookupResult> = {}): AgentUserLookupResult => ({
+  userId: newUuid(),
+  name: 'Sam Example',
+  email: 'sam@example.com',
+  avatarColor: null,
+  profileImagePath: null,
+  ...overrides,
+});
+
+const makeUserResponse = (overrides: Record<string, unknown> = {}) => ({
+  id: newUuid(),
+  name: 'Sam Example',
+  email: 'sam@example.com',
+  avatarColor: null,
+  profileImagePath: '',
+  profileChangedAt: '2026-05-14T12:00:00.000Z',
+  ...overrides,
+});
+
 describe(AgentToolService.name, () => {
   let sut: AgentToolService;
   let accessRepository: ReturnType<typeof newAccessRepositoryMock>;
@@ -241,6 +270,7 @@ describe(AgentToolService.name, () => {
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
   let toolCallRepository: ReturnType<typeof automock<AgentToolCallRepository>>;
   let agentRunnerService: ReturnType<typeof automock<AgentRunnerService>>;
+  let userService: { search: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     accessRepository = newAccessRepositoryMock();
@@ -250,6 +280,7 @@ describe(AgentToolService.name, () => {
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
     toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
     agentRunnerService = automock(AgentRunnerService, { args: [] as never });
+    userService = { search: vi.fn() };
     sut = new AgentToolService(
       accessRepository as unknown as AccessRepository,
       assetRepository as unknown as AssetRepository,
@@ -258,6 +289,7 @@ describe(AgentToolService.name, () => {
       sessionRepository,
       toolCallRepository,
       agentRunnerService,
+      userService as unknown as UserService,
     );
 
     sessionRepository.update.mockImplementation((_userId, _id, dto) =>
@@ -305,6 +337,7 @@ describe(AgentToolService.name, () => {
     sharedSpaceRepository.getRecentAssets.mockResolvedValue([]);
     sharedSpaceRepository.getAssetIdsInSpacePage.mockResolvedValue([]);
     agentRunnerService.resumeAfterToolApproval.mockResolvedValue();
+    userService.search.mockResolvedValue([]);
   });
 
   it('returns approval-required and creates a pending audit row for strict metadata reads', async () => {
@@ -2401,6 +2434,98 @@ describe(AgentToolService.name, () => {
       AgentToolDataClass.Metadata,
       1,
     );
+  });
+
+  it('searchUsers returns visible users filtered by name or email without asset accounting', async () => {
+    const auth = AuthFactory.create();
+    const pierreId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    userService.search.mockResolvedValue([
+      makeUserResponse({ id: pierreId, name: 'Pierre Marais', email: 'pierre@example.com', avatarColor: 'blue' }),
+      makeUserResponse({ name: 'Sam Example', email: 'sam@example.com' }),
+    ] as never);
+    toolCallRepository.transition.mockImplementation((_sessionId, _id, _expectedStatus, dto) =>
+      Promise.resolve(
+        makeToolCall({
+          ...(dto as Partial<AgentToolCall>),
+          id: _id,
+          sessionId: _sessionId,
+          toolName: AgentToolName.SearchUsers,
+          dataClass: AgentToolDataClass.Metadata,
+        }),
+      ),
+    );
+
+    const result = await sut.searchUsers(auth, session.id, { query: 'pierre', limit: 10 });
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({
+        toolName: AgentToolName.SearchUsers,
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Returned 1 user(s)',
+        assetCount: 0,
+        albumCount: 0,
+      }),
+      users: [
+        makeUserResult({
+          userId: pierreId,
+          name: 'Pierre Marais',
+          email: 'pierre@example.com',
+          avatarColor: 'blue',
+          profileImagePath: null,
+        }),
+      ],
+    });
+    expect(userService.search).toHaveBeenCalledWith(auth);
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        redactedRequestMetadata: { query: 'pierre', limit: 10 },
+        assetCount: 0,
+        albumCount: 0,
+      }),
+    );
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      session.id,
+      expect.any(String),
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        redactedResponseMetadata: { userIds: [pierreId] },
+        assetCount: 0,
+        albumCount: 0,
+      }),
+    );
+  });
+
+  it('searchUsers creates a pending approval in strict mode and resumes from stored request', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const pending = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.SearchUsers,
+      status: AgentToolCallStatus.PendingApproval,
+      redactedRequestMetadata: { query: 'sam', limit: 2 },
+      assetCount: 0,
+      albumCount: 0,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.create.mockResolvedValueOnce(pending);
+
+    const pendingResult = await sut.searchUsers(auth, session.id, { query: 'sam', limit: 2 });
+
+    expect(pendingResult.status).toBe('approval-required');
+    expect(userService.search).not.toHaveBeenCalled();
+
+    toolCallRepository.getByIdForSession.mockResolvedValue({ ...pending, status: AgentToolCallStatus.Approved });
+    userService.search.mockResolvedValue([makeUserResponse({ name: 'Sam Example', email: 'sam@example.com' })] as never);
+
+    const resumed = await sut.searchUsers(auth, session.id, { toolCallId: pending.id });
+
+    expect(resumed.status).toBe('success');
+    expect(userService.search).toHaveBeenCalledWith(auth);
   });
 
   it('lists historical tool calls after completed session', async () => {
