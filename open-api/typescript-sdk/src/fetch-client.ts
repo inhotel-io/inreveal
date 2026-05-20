@@ -1365,21 +1365,34 @@ export type AgentSearchAssetsFilters = {
     albumIds?: string[];
     city?: string | null;
     country?: string | null;
+    createdAfter?: string;
+    createdBefore?: string;
     isFavorite?: boolean;
     isNotInAlbum?: boolean;
     lensModel?: string | null;
     make?: string | null;
     model?: string | null;
+    personIds?: string[];
     rating?: number | null;
+    spaceId?: string;
+    spacePersonIds?: string[];
     state?: string | null;
     tagIds?: string[];
     takenAfter?: string;
     takenBefore?: string;
     "type"?: AssetTypeEnum;
+    updatedAfter?: string;
+    updatedBefore?: string;
+    visibility?: AssetVisibility;
+    withSharedSpaces?: boolean;
 };
 export type AgentSearchAssetsToolRequestDto = {
     filters?: AgentSearchAssetsFilters;
     limit?: number;
+    mode?: AgentSearchAssetsMode;
+    order?: AgentSearchAssetsOrder;
+    page?: number;
+    query?: string;
     toolCallId?: string;
 };
 export type AgentSearchAssetsToolApprovalRequiredResponse = {
@@ -1392,10 +1405,14 @@ export type AgentSearchAssetsToolDeniedResponse = {
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentSearchAssetsToolSuccessResponse = {
+    approximateTotal?: number;
     assets: AgentAssetMetadata[];
+    hasMore: boolean;
     nextPage: string | null;
+    returnedCount: number;
     status: Status25;
     toolCall: AgentToolCallResponseDto;
+    totalCount?: number;
 };
 export type AgentSearchAssetsToolResponseDto = AgentSearchAssetsToolApprovalRequiredResponse | AgentSearchAssetsToolDeniedResponse | AgentSearchAssetsToolSuccessResponse;
 export type AgentSearchUsersToolRequestDto = {
@@ -10263,6 +10280,18 @@ export enum Status21 {
 }
 export enum Status22 {
     Success = "success"
+}
+export enum AgentSearchAssetsMode {
+    Metadata = "metadata",
+    Smart = "smart",
+    Description = "description",
+    Ocr = "ocr",
+    Filename = "filename"
+}
+export enum AgentSearchAssetsOrder {
+    Asc = "asc",
+    Desc = "desc",
+    Relevance = "relevance"
 }
 export enum Status23 {
     ApprovalRequired = "approval-required"
