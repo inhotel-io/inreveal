@@ -1253,6 +1253,10 @@ export class AgentToolService {
     const page = request.page ?? 1;
     const order = request.order ?? 'desc';
 
+    if (mode === 'metadata' && request.query !== undefined) {
+      return 'query is only supported for smart, description, ocr, and filename search modes';
+    }
+
     const modeReason = this.getUnsupportedSearchModeReason(mode);
     if (modeReason) {
       return modeReason;
