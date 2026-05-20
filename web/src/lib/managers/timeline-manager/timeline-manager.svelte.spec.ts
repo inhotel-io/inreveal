@@ -3,7 +3,7 @@ import { eventManager } from '$lib/managers/event-manager.svelte';
 import { getTimelineMonthByDate } from '$lib/managers/timeline-manager/internal/search-support.svelte';
 import { AbortError } from '$lib/utils';
 import { fromISODateTimeUTCToObject } from '$lib/utils/timeline-util';
-import { AssetVisibility, type AssetResponseDto, type TimeBucketAssetResponseDto } from '@immich/sdk';
+import { AssetVisibility, TimeBucketSize, type AssetResponseDto, type TimeBucketAssetResponseDto } from '@immich/sdk';
 import { assetFactory, timelineAssetFactory, toResponseDto } from '@test-data/factories/asset-factory';
 import { tick } from 'svelte';
 import { TimelineManager } from './timeline-manager.svelte';
@@ -850,7 +850,8 @@ describe('TimelineManager', () => {
       await timelineManager.updateViewport({ width: 1588, height: 0 });
 
       expect(sdkMock.getTimeBuckets).toHaveBeenCalledWith(
-        expect.objectContaining({ spaceId: 'space-1', withStacked: true }),
+        expect.objectContaining({ bucketSize: TimeBucketSize.Day, spaceId: 'space-1', withStacked: true }),
+        expect.anything(),
       );
     });
 
@@ -860,7 +861,7 @@ describe('TimelineManager', () => {
       await timelineManager.loadTimelineMonth({ year: 2024, month: 2 });
 
       expect(sdkMock.getTimeBucket).toHaveBeenCalledWith(
-        expect.objectContaining({ spaceId: 'space-1', withStacked: true }),
+        expect.objectContaining({ bucketSize: TimeBucketSize.Month, spaceId: 'space-1', withStacked: true }),
         expect.anything(),
       );
     });
@@ -895,7 +896,10 @@ describe('TimelineManager', () => {
       await timelineManager.updateOptions({ spaceId: 'space-1' });
       await timelineManager.updateViewport({ width: 1588, height: 0 });
 
-      expect(sdkMock.getTimeBuckets).toHaveBeenCalledWith(expect.objectContaining({ spaceId: 'space-1' }));
+      expect(sdkMock.getTimeBuckets).toHaveBeenCalledWith(
+        expect.objectContaining({ bucketSize: TimeBucketSize.Day, spaceId: 'space-1' }),
+        expect.anything(),
+      );
       const calledWith = sdkMock.getTimeBuckets.mock.calls[0][0];
       expect(calledWith.withStacked).toBeUndefined();
     });
@@ -966,13 +970,16 @@ describe('TimelineManager', () => {
       expect(sdkMock.getTimeBuckets).toHaveBeenCalledWith(
         expect.objectContaining({
           albumId: 'album-1',
+          bucketSize: TimeBucketSize.Day,
           tagIds: ['tag-1'],
           visibility: AssetVisibility.Timeline,
         }),
+        expect.anything(),
       );
       expect(sdkMock.getTimeBucket).toHaveBeenCalledWith(
         expect.objectContaining({
           albumId: 'album-1',
+          bucketSize: TimeBucketSize.Month,
           tagIds: ['tag-1'],
           timeBucket: '2024-04-01T00:00:00.000Z',
         }),

@@ -15,6 +15,7 @@
   import Skeleton from '$lib/elements/Skeleton.svelte';
   import type { AssetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
   import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
+  import { scrollTimelineToTemporalAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
   import type { TimelineDay } from '$lib/managers/timeline-manager/timeline-day.svelte';
   import { isIntersecting } from '$lib/managers/timeline-manager/internal/intersection-support.svelte';
   import type { TimelineMonth } from '$lib/managers/timeline-manager/timeline-month.svelte';
@@ -23,6 +24,7 @@
     TimelineAsset,
     TimelineGrouping,
     TimelineManagerOptions,
+    TimelineTemporalAnchor,
     ViewportTopMonth,
   } from '$lib/managers/timeline-manager/types';
   import { assetsSnapshot } from '$lib/managers/timeline-manager/utils.svelte';
@@ -59,6 +61,8 @@
     onTimelineBucketActivate?: (bucket: ActivatableTimelineBucket) => void;
     grouping?: TimelineGrouping;
     onGroupingChange?: (grouping: TimelineGrouping) => void;
+    temporalAnchor?: TimelineTemporalAnchor;
+    onTemporalAnchorResolved?: () => void;
     children?: Snippet;
     empty?: Snippet;
     customThumbnailLayout?: Snippet<[TimelineAsset]>;
@@ -95,6 +99,8 @@
     onTimelineBucketActivate,
     grouping = 'day',
     onGroupingChange,
+    temporalAnchor,
+    onTemporalAnchorResolved,
     children,
     empty,
     customThumbnailLayout,
@@ -144,6 +150,20 @@
 
   $effect(() => {
     timelineManager.scrollableElement = scrollableElement;
+  });
+
+  $effect(() => {
+    if (!temporalAnchor || !timelineManager.isInitialized) {
+      return;
+    }
+
+    if (scrollTimelineToTemporalAnchor(timelineManager, temporalAnchor)) {
+      onTemporalAnchorResolved?.();
+    }
+  });
+
+  $effect(() => {
+    void onTimelineBucketActivate;
   });
 
   const getAssetPosition = (assetId: string, timelineMonth: TimelineMonth) =>
