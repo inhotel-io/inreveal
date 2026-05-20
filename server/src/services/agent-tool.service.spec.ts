@@ -1961,6 +1961,43 @@ describe(AgentToolService.name, () => {
     );
   });
 
+  it('records failed search hydration instead of returning partial assets when metadata rows are missing', async () => {
+    const auth = AuthFactory.create();
+    const firstAssetId = newUuid();
+    const secondAssetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: [{ id: firstAssetId }, { id: secondAssetId }] as never,
+      hasNextPage: false,
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([firstAssetId, secondAssetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(firstAssetId)] as never);
+
+    const result = await sut.searchAssets(auth, session.id, { mode: 'metadata', filters: {}, limit: 2 });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'One or more search result assets were not found during metadata hydration',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Failed }),
+    });
+    expect(result).not.toHaveProperty('assets');
+    expect(toolCallRepository.transition).toHaveBeenLastCalledWith(
+      session.id,
+      expect.any(String),
+      AgentToolCallStatus.Executing,
+      {
+        status: AgentToolCallStatus.Failed,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: null,
+        redactedResponseMetadata: { assetIds: [firstAssetId] },
+        completedAt: expect.any(Date),
+        error: 'One or more search result assets were not found during metadata hydration',
+      },
+    );
+  });
+
   it('shared-space-only search uses empty user IDs and timeline space IDs from shared spaces', async () => {
     const auth = AuthFactory.create();
     const spaceId = newUuid();
