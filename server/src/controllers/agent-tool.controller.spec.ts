@@ -100,7 +100,7 @@ describe(AgentToolController.name, () => {
     ['readAlbum', AgentReadAlbumToolResponseDto, 'AgentReadAlbumToolResponseDto'],
     ['listSpaces', AgentListSpacesToolResponseDto, 'AgentListSpacesToolResponseDto'],
     ['readSpace', AgentReadSpaceToolResponseDto, 'AgentReadSpaceToolResponseDto'],
-    ['searchUsers', AgentSearchUsersToolResponseDto, 'AgentSearchUsersToolResponseDto'],
+    ['searchAgentUsers', AgentSearchUsersToolResponseDto, 'AgentSearchUsersToolResponseDto'],
   ] as const)('documents %s with its typed tool response DTO', (methodName, responseDto, schemaName) => {
     const responses = Reflect.getMetadata(DECORATORS.API_RESPONSE, AgentToolController.prototype[methodName]) as
       | Record<number, { type?: unknown }>
