@@ -1610,6 +1610,10 @@ describe(AgentToolService.name, () => {
       'filename search is not available yet',
     ],
     [
+      { mode: 'metadata', query: 'beach', filters: {}, limit: 5, page: 1, order: 'desc' },
+      'query is only supported for smart, description, ocr, and filename search modes',
+    ],
+    [
       {
         mode: 'metadata',
         filters: { createdAfter: new Date('2026-05-01T00:00:00.000Z') },
