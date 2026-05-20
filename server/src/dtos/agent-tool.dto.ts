@@ -119,6 +119,16 @@ const AgentSearchAssetsFiltersSchema = z
   })
   .meta({ id: 'AgentSearchAssetsFilters' });
 
+type AgentSearchAssetsToolRequestOutput = {
+  mode?: z.output<typeof AgentSearchAssetsModeSchema>;
+  query?: string;
+  filters?: z.output<typeof AgentSearchAssetsFiltersSchema>;
+  limit?: number;
+  page?: number;
+  order?: z.output<typeof AgentSearchAssetsOrderSchema>;
+  toolCallId?: string;
+};
+
 const AgentSearchAssetsToolRequestSchema = z
   .strictObject({
     mode: AgentSearchAssetsModeSchema.optional(),
@@ -162,7 +172,7 @@ const AgentSearchAssetsToolRequestSchema = z
       });
     }
   })
-  .transform((value) => {
+  .transform((value): AgentSearchAssetsToolRequestOutput => {
     if (value.toolCallId) {
       return value;
     }
