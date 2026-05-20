@@ -135,8 +135,9 @@ const defineAssetReadContract = (
 const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
   name: AgentToolName.SearchAssets,
   title: 'Search assets',
-  description: 'Find assets using Gallery metadata filters and a bounded result limit.',
-  usage: 'Put all search filters under filters. Use only toolCallId when retrying a Gallery-approved search.',
+  description: 'Find assets using Gallery search modes, metadata filters, and a bounded result page.',
+  usage:
+    'Put all search filters under filters. Use mode metadata for structured filters. Use only toolCallId when retrying a Gallery-approved search.',
   argumentModes: [
     {
       name: 'empty-search',
@@ -149,8 +150,16 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       name: 'filtered-search',
       description: 'Search visible assets with metadata filters.',
       requiredFields: ['filters'],
+      forbiddenFields: ['toolCallId', 'query'],
+      whenToUse:
+        'Use when the user provides date, place, favorite, rating, album, tag, camera, media, people, or space filters.',
+    },
+    {
+      name: 'text-search',
+      description: 'Search visible assets with an explicit text-search mode and query.',
+      requiredFields: ['mode', 'query'],
       forbiddenFields: ['toolCallId'],
-      whenToUse: 'Use when the user provides date, place, favorite, rating, album, tag, camera, or media filters.',
+      whenToUse: 'Use only when the user asks for smart, OCR, description, or filename search.',
     },
     approvedRetryMode,
   ],
@@ -174,6 +183,22 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       },
     },
     {
+      name: 'metadata-page-search',
+      description: 'Search a bounded metadata result page.',
+      arguments: {
+        mode: 'metadata',
+        filters: {
+          takenAfter: '2026-05-01T00:00:00.000Z',
+          takenBefore: '2026-05-18T23:59:59.999Z',
+          city: 'Berlin',
+          country: 'Germany',
+        },
+        limit: 50,
+        page: 1,
+        order: 'desc',
+      },
+    },
+    {
       name: 'favorite-rating-search',
       description: 'Search favorite five-star assets.',
       arguments: {
@@ -182,6 +207,20 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
           rating: 5,
         },
         limit: 25,
+      },
+    },
+    {
+      name: 'future-smart-search-contract',
+      description: 'Contract shape for smart search; execution is enabled in a later slice.',
+      arguments: {
+        mode: 'smart',
+        query: 'beach sunset',
+        filters: {
+          country: 'Portugal',
+        },
+        limit: 25,
+        page: 1,
+        order: 'relevance',
       },
     },
     approvedRetryExample,
@@ -194,6 +233,10 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
         unexpectedFields: [
           'takenAfter',
           'takenBefore',
+          'createdAfter',
+          'createdBefore',
+          'updatedAfter',
+          'updatedBefore',
           'city',
           'state',
           'country',
@@ -206,10 +249,28 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
           'rating',
           'tagIds',
           'albumIds',
+          'personIds',
+          'spaceId',
+          'spacePersonIds',
+          'withSharedSpaces',
+          'visibility',
         ],
       },
-      hint: 'Place date, location, favorite, rating, album, tag, camera, and media filters inside the filters object.',
-      exampleName: 'bounded-date-location-search',
+      hint:
+        'Place date, location, favorite, rating, album, tag, camera, people, space, visibility, and media filters inside the filters object.',
+      exampleName: 'metadata-page-search',
+    },
+    {
+      id: 'search-query-with-metadata-mode',
+      match: { issuePath: 'query', messageIncludes: 'query is only supported' },
+      hint: 'Use mode smart, description, ocr, or filename when passing query. Omit query for metadata-only searches.',
+      exampleName: 'future-smart-search-contract',
+    },
+    {
+      id: 'search-space-person-without-space',
+      match: { issuePath: 'filters.spacePersonIds', messageIncludes: 'spacePersonIds requires spaceId' },
+      hint: 'spacePersonIds requires filters.spaceId. Use global personIds outside a specific shared space.',
+      exampleName: 'metadata-page-search',
     },
     {
       id: 'search-combined-filters-and-tool-call-id',

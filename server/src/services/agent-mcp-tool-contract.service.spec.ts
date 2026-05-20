@@ -490,13 +490,22 @@ describe(AgentMcpToolContractService.name, () => {
         requestShape: 'tool-arguments',
         issues: [{ path: '', message: 'Unrecognized key: "rating"' }],
       });
+      const createdAfterCorrection = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: '', message: 'Unrecognized key: "createdAfter"' }],
+      });
+      const personIdsCorrection = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: '', message: 'Unrecognized key: "personIds"' }],
+      });
 
-      for (const correction of [countryCorrection, ratingCorrection]) {
+      for (const correction of [countryCorrection, ratingCorrection, createdAfterCorrection, personIdsCorrection]) {
         expect(correction?.mistakeId).toBe('search-filters-outside-filters');
         expect(correction?.hint).toBe(
-          'Place date, location, favorite, rating, album, tag, camera, and media filters inside the filters object.',
+          'Place date, location, favorite, rating, album, tag, camera, people, space, visibility, and media filters inside the filters object.',
         );
         expect(correction?.exampleArguments).toEqual({
+          mode: 'metadata',
           filters: {
             takenAfter: '2026-05-01T00:00:00.000Z',
             takenBefore: '2026-05-18T23:59:59.999Z',
@@ -504,8 +513,32 @@ describe(AgentMcpToolContractService.name, () => {
             country: 'Germany',
           },
           limit: 50,
+          page: 1,
+          order: 'desc',
         });
       }
+    });
+
+    it('returns a metadata query correction when a model sends query with metadata mode', () => {
+      const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+        requestShape: 'tool-arguments',
+        issues: [
+          { path: 'query', message: 'query is only supported for smart, description, ocr, and filename search modes' },
+        ],
+      });
+
+      expect(correction?.mistakeId).toBe('search-query-with-metadata-mode');
+      expect(correction?.hint).toContain('Use mode smart, description, ocr, or filename when passing query');
+    });
+
+    it('returns a space person scope correction', () => {
+      const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: 'filters.spacePersonIds', message: 'spacePersonIds requires spaceId' }],
+      });
+
+      expect(correction?.mistakeId).toBe('search-space-person-without-space');
+      expect(correction?.hint).toContain('spacePersonIds requires filters.spaceId');
     });
 
     it('returns a read-tool fallback when no common mistake matches', () => {
@@ -515,8 +548,10 @@ describe(AgentMcpToolContractService.name, () => {
       });
 
       expect(correction).toEqual({
-        expected: 'Put all search filters under filters. Use only toolCallId when retrying a Gallery-approved search.',
-        hint: 'Put all search filters under filters. Use only toolCallId when retrying a Gallery-approved search.',
+        expected:
+          'Put all search filters under filters. Use mode metadata for structured filters. Use only toolCallId when retrying a Gallery-approved search.',
+        hint:
+          'Put all search filters under filters. Use mode metadata for structured filters. Use only toolCallId when retrying a Gallery-approved search.',
         exampleArguments: {},
       });
     });
