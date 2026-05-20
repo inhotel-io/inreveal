@@ -635,8 +635,7 @@ describe(AgentMcpToolContractService.name, () => {
       expect(correction).toEqual({
         expected:
           'Put search filters under filters. Use mode metadata. Only page 1 and order desc are executable. Text, people, space, visibility, later pages, and non-desc order are later-slice contract fields and are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
-        hint:
-          'Put search filters under filters. Use mode metadata. Only page 1 and order desc are executable. Text, people, space, visibility, later pages, and non-desc order are later-slice contract fields and are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
+        hint: 'Put search filters under filters. Use mode metadata. Only page 1 and order desc are executable. Text, people, space, visibility, later pages, and non-desc order are later-slice contract fields and are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
         exampleArguments: {},
       });
     });
