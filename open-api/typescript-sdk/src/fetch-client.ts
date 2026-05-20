@@ -5766,7 +5766,7 @@ export function executeAgentSearchAssets({ id, agentSearchAssetsToolRequestDto }
 /**
  * Execute the internal searchUsers agent tool
  */
-export function searchUsers({ id, agentSearchUsersToolRequestDto }: {
+export function searchAgentUsers({ id, agentSearchUsersToolRequestDto }: {
     id: string;
     agentSearchUsersToolRequestDto: AgentSearchUsersToolRequestDto;
 }, opts?: Oazapfts.RequestOpts) {
@@ -9609,7 +9609,7 @@ export function setMembers({ id, userGroupMemberSetDto }: {
 /**
  * Get all users
  */
-export function searchUsers2(opts?: Oazapfts.RequestOpts) {
+export function searchUsers(opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: UserResponseDto[];
