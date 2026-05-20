@@ -330,8 +330,8 @@ describe(AgentToolService.name, () => {
     albumRepository.getAgentAlbums.mockResolvedValue([]);
     albumRepository.getAgentAlbumById.mockResolvedValue(null);
     sharedSpaceRepository.getAllByUserId.mockResolvedValue([]);
-    sharedSpaceRepository.getById.mockResolvedValue(undefined);
-    sharedSpaceRepository.getMember.mockResolvedValue(undefined);
+    sharedSpaceRepository.getById.mockResolvedValue();
+    sharedSpaceRepository.getMember.mockResolvedValue();
     sharedSpaceRepository.getMembers.mockResolvedValue([]);
     sharedSpaceRepository.getAssetCount.mockResolvedValue(0);
     sharedSpaceRepository.getRecentAssets.mockResolvedValue([]);
@@ -2256,7 +2256,7 @@ describe(AgentToolService.name, () => {
     });
 
     sessionRepository.getById.mockResolvedValue(session);
-    sharedSpaceRepository.getMember.mockResolvedValue(undefined);
+    sharedSpaceRepository.getMember.mockResolvedValue();
 
     const result = await sut.readSpace(auth, session.id, { spaceId });
 
@@ -2520,7 +2520,9 @@ describe(AgentToolService.name, () => {
     expect(userService.search).not.toHaveBeenCalled();
 
     toolCallRepository.getByIdForSession.mockResolvedValue({ ...pending, status: AgentToolCallStatus.Approved });
-    userService.search.mockResolvedValue([makeUserResponse({ name: 'Sam Example', email: 'sam@example.com' })] as never);
+    userService.search.mockResolvedValue([
+      makeUserResponse({ name: 'Sam Example', email: 'sam@example.com' }),
+    ] as never);
 
     const resumed = await sut.searchUsers(auth, session.id, { toolCallId: pending.id });
 
