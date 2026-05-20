@@ -48,7 +48,6 @@
   import {
     activateTimelineBucket,
     clearTimelineTemporalFilter,
-    getTimelineManagerTimeBuckets,
     type ActivatableTimelineBucket,
   } from '$lib/utils/timeline-filter-navigation';
   import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
@@ -99,7 +98,6 @@
     withSharedSpaces: true,
   });
   const options = $derived(buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping));
-  const timeBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
 
   let viewMode: PersonPageViewMode = $state(PersonPageViewMode.VIEW_ASSETS);
   let isEditingName = $state(false);

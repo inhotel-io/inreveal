@@ -104,7 +104,7 @@ describe('Map page query intersection', () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
+    Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 1024 });
   });
 
   it('keeps the existing marker flow when q is absent', async () => {
@@ -244,7 +244,7 @@ describe('Map page query intersection', () => {
   });
 
   it('does not leave panel-written temporal state in the mobile filter overlay after clearing map chips', async () => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 390 });
     sdkMock.getFilteredMapMarkers.mockResolvedValue([{ id: 'asset-1', lat: 1, lon: 2 } as never]);
 
     renderPage();

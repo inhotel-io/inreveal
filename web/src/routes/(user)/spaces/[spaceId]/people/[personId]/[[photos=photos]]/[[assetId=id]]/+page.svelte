@@ -36,7 +36,6 @@
   import {
     activateTimelineBucket,
     clearTimelineTemporalFilter,
-    getTimelineManagerTimeBuckets,
     type ActivatableTimelineBucket,
   } from '$lib/utils/timeline-filter-navigation';
   import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
@@ -120,7 +119,6 @@
     withStacked: true,
   });
   const options = $derived(buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping));
-  const timeBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
 
   const currentMember = $derived(members.find((member) => member.userId === authManager.user.id));
   const isEditor = $derived(
