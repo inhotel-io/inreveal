@@ -108,7 +108,7 @@ class Drift extends $Drift {
   }
 
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 30;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -291,11 +291,14 @@ class Drift extends $Drift {
             await customStatement('DROP INDEX IF EXISTS idx_remote_album_owner_id');
             await m.alterTable(TableMigration(v27.remoteAlbumEntity));
           },
-          from26To27: (m, v27) async {
-            await customStatement('ALTER TABLE metadata RENAME TO settings');
-          },
           from27To28: (m, v28) async {
-            await m.createIndex(v28.idxLocalAssetCreatedAt);
+            await m.createTable(v28.metadata);
+          },
+          from28To29: (m, v29) async {
+            await m.addColumn(v29.remoteAssetEntity, v29.remoteAssetEntity.uploadedAt);
+          },
+          from29To30: (m, v30) async {
+            await customStatement('ALTER TABLE metadata RENAME TO settings');
           },
         ),
       );
