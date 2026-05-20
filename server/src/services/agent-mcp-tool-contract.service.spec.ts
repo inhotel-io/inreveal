@@ -553,7 +553,9 @@ describe(AgentMcpToolContractService.name, () => {
       });
 
       expect(correction?.mistakeId).toBe('search-query-with-metadata-mode');
-      expect(correction?.hint).toContain('Use mode smart, description, ocr, or filename when passing query');
+      expect(correction?.hint).toContain('Omit query and use metadata filters for now');
+      expect(correction?.hint).toContain('Text search modes are in the contract but are not available yet');
+      expect(correction?.hint).not.toContain('Use mode smart, description, ocr, or filename');
       expect(correction?.exampleArguments).toEqual({
         mode: 'metadata',
         filters: {
