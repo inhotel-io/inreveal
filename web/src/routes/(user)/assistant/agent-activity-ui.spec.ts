@@ -188,6 +188,8 @@ describe('agent activity UI helpers', () => {
     [AgentToolName.ReadAssetOriginals, 'preview', 'Opening original files', 'Opened original files'],
     [AgentToolName.ListAlbums, 'album', 'Searching albums', 'Found matching albums'],
     [AgentToolName.ReadAlbum, 'album', 'Reading album details', 'Read album details'],
+    [AgentToolName.ListSpaces, 'space', 'Listing spaces', 'Found visible spaces'],
+    [AgentToolName.ReadSpace, 'space', 'Reading space details', 'Read space details'],
     [AgentToolName.ProposeAlbumOperations, 'plan', 'Preparing a plan', 'Prepared a plan'],
     [AgentToolName.ReviseProposedOperations, 'plan', 'Revising the plan', 'Revised the plan'],
     [AgentToolName.SummarizePlan, 'plan', 'Summarizing the plan', 'Summarized the plan'],
@@ -305,6 +307,22 @@ describe('agent activity UI helpers', () => {
       startedAt: '2026-05-18T10:00:06.000Z',
       completedAt: '2026-05-18T10:00:11.000Z',
     });
+  });
+
+  it('keeps space lookup activity separate from album activity', () => {
+    const model = buildModel({
+      toolCalls: [
+        makeToolCall({ id: 'list-spaces', toolName: AgentToolName.ListSpaces }),
+        makeToolCall({ id: 'read-space', toolName: AgentToolName.ReadSpace }),
+        makeToolCall({ id: 'list-albums', toolName: AgentToolName.ListAlbums }),
+      ],
+    });
+
+    expect(model.items.map((item) => [item.kind, item.title])).toEqual([
+      ['album', 'Searching albums'],
+      ['space', 'Listing spaces'],
+      ['space', 'Reading space details'],
+    ]);
   });
 
   it('derives plan, apply, and writing rows from session state and plans', () => {

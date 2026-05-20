@@ -587,7 +587,7 @@ function validateSpaceTarget(
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['temporaryTargetId'],
-      message: 'temporaryTargetId is only valid for new space targets',
+      message: 'Use targetId for existing spaces; temporaryTargetId is only for new spaces',
     });
   }
 

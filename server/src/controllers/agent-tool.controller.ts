@@ -4,6 +4,8 @@ import { Endpoint, HistoryBuilder } from 'src/decorators';
 import {
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
+  AgentListSpacesToolRequestDto,
+  AgentListSpacesToolResponseDto,
   AgentReadAlbumToolRequestDto,
   AgentReadAlbumToolResponseDto,
   AgentReadAssetMetadataToolRequestDto,
@@ -12,6 +14,8 @@ import {
   AgentReadAssetOriginalsToolResponseDto,
   AgentReadAssetPreviewsToolRequestDto,
   AgentReadAssetPreviewsToolResponseDto,
+  AgentReadSpaceToolRequestDto,
+  AgentReadSpaceToolResponseDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchAssetsToolResponseDto,
   AgentToolApprovalDto,
@@ -129,6 +133,40 @@ export class AgentToolController {
     @Body() dto: AgentReadAlbumToolRequestDto,
   ): Promise<AgentReadAlbumToolResponseDto> {
     return this.service.readAlbum(auth, id, dto);
+  }
+
+  @Post('tools/list-spaces')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @ApiCreatedResponse({ type: AgentListSpacesToolResponseDto })
+  @Endpoint({
+    summary: 'Execute the internal listSpaces agent tool',
+    description:
+      'Internal route for requesting or resuming a strict-approved shared-space list tool call for an AI agent session.',
+    history: new HistoryBuilder().added('v2.7.5').internal('v2.7.5'),
+  })
+  listSpaces(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: AgentListSpacesToolRequestDto,
+  ): Promise<AgentListSpacesToolResponseDto> {
+    return this.service.listSpaces(auth, id, dto);
+  }
+
+  @Post('tools/read-space')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @ApiCreatedResponse({ type: AgentReadSpaceToolResponseDto })
+  @Endpoint({
+    summary: 'Execute the internal readSpace agent tool',
+    description:
+      'Internal route for requesting or resuming a strict-approved shared-space read tool call for an AI agent session.',
+    history: new HistoryBuilder().added('v2.7.5').internal('v2.7.5'),
+  })
+  readSpace(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: AgentReadSpaceToolRequestDto,
+  ): Promise<AgentReadSpaceToolResponseDto> {
+    return this.service.readSpace(auth, id, dto);
   }
 
   @Get('tool-calls')

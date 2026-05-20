@@ -26,6 +26,9 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_status_skipped: 'Skipped',
     assistant_operation_type_album_add_assets: 'Add assets',
     assistant_operation_type_album_create: 'Create album',
+    assistant_operation_type_space_add_assets: 'Add to space',
+    assistant_operation_type_space_remove_assets: 'Remove from space',
+    assistant_operation_type_space_update_details: 'Update space details',
   };
 
   return {
@@ -122,5 +125,71 @@ describe(AgentAppliedPlanTimelineCard.name, () => {
     expect(within(card).queryByRole('button', { name: /Apply/i })).not.toBeInTheDocument();
     expect(within(card).queryByRole('checkbox')).not.toBeInTheDocument();
     expect(within(card).queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('renders existing-space add and remove operations as structured read-only cards', () => {
+    render(AgentAppliedPlanTimelineCard, {
+      props: {
+        plan: makePlan({
+          operations: [
+            makeOperation({
+              id: 'operation-space-add',
+              type: AgentOperationType.SpaceAddAssets,
+              summary: 'Add photos to Family',
+              targetKind: AgentOperationTargetKind.ExistingSpace,
+              targetId: 'space-1',
+              temporaryTargetId: null,
+              assetIds: ['asset-1', 'asset-2', 'asset-3'],
+              payload: { spaceName: 'Family' },
+            }),
+            makeOperation({
+              id: 'operation-space-remove',
+              type: AgentOperationType.SpaceRemoveAssets,
+              summary: 'Remove photos from Family',
+              targetKind: AgentOperationTargetKind.ExistingSpace,
+              targetId: 'space-1',
+              temporaryTargetId: null,
+              assetIds: ['asset-4'],
+              payload: { spaceName: 'Family' },
+            }),
+          ],
+        }),
+      },
+    });
+
+    const card = screen.getByRole('article', { name: 'Applied plan: Organize Portugal holiday' });
+    const group = within(card).getByRole('region', { name: 'Family' });
+    expect(group).toHaveTextContent('Existing space');
+    expect(group).toHaveTextContent('Add 3 photos');
+    expect(group).toHaveTextContent('Remove 1 photo');
+    expect(within(card).queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('summarizes applied existing-space detail changes in human wording', () => {
+    render(AgentAppliedPlanTimelineCard, {
+      props: {
+        plan: makePlan({
+          operations: [
+            makeOperation({
+              id: 'operation-space-update',
+              type: AgentOperationType.SpaceUpdateDetails,
+              summary: 'Update Family space details',
+              targetKind: AgentOperationTargetKind.ExistingSpace,
+              targetId: 'space-1',
+              temporaryTargetId: null,
+              payload: { spaceName: 'Family 2026', description: '', color: 'blue' },
+              result: { spaceId: 'space-1' },
+            }),
+          ],
+        }),
+      },
+    });
+
+    const card = screen.getByRole('article', { name: 'Applied plan: Organize Portugal holiday' });
+    const group = within(card).getByRole('region', { name: 'Family 2026' });
+    expect(group).toHaveTextContent('Existing space');
+    expect(group).toHaveTextContent('Renamed to "Family 2026"; Cleared description; Changed color to blue');
+    expect(group).toHaveTextContent('Update space details');
+    expect(group).not.toHaveTextContent('space-1');
   });
 });

@@ -117,7 +117,7 @@ Argument modes:
   Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
 
 #### empty-search
 
@@ -190,7 +190,7 @@ Argument modes:
   Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
 
 #### read-selected-assets
 
@@ -231,7 +231,7 @@ Argument modes:
   Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
 
 #### read-selected-assets
 
@@ -272,7 +272,7 @@ Argument modes:
   Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
 
 #### read-selected-assets
 
@@ -313,7 +313,7 @@ Argument modes:
   Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
 
 #### list-visible-albums
 
@@ -352,7 +352,7 @@ Argument modes:
   Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
 
 #### read-visible-album
 
@@ -371,6 +371,86 @@ Read an album by id.
 Retry an approved read request by id.
 
 <!-- mcp-docs:tool-arguments tool="readAlbum" example="approved-retry" -->
+
+```json
+{
+  "toolCallId": "00000000-0000-4000-8000-000000000111"
+}
+```
+
+### List spaces
+
+MCP tool name: `listSpaces`
+
+List shared spaces visible to the session user.
+
+Use an empty object for a new request. Use only toolCallId when retrying a Gallery-approved request.
+
+Argument modes:
+
+- `list-visible-spaces`: Use before answering shared-space count or shared-space lookup questions.
+  Required fields: none.
+  Forbidden fields: `toolCallId`, `spaceId`.
+- `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
+  Required fields: `toolCallId`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
+
+#### list-visible-spaces
+
+List visible shared spaces.
+
+<!-- mcp-docs:tool-arguments tool="listSpaces" example="list-visible-spaces" -->
+
+```json
+{}
+```
+
+#### approved-retry
+
+Retry an approved read request by id.
+
+<!-- mcp-docs:tool-arguments tool="listSpaces" example="approved-retry" -->
+
+```json
+{
+  "toolCallId": "00000000-0000-4000-8000-000000000111"
+}
+```
+
+### Read space
+
+MCP tool name: `readSpace`
+
+Read one visible shared space, member summaries, and bounded asset ids.
+
+Use spaceId for a new request. Use only toolCallId when retrying a Gallery-approved request.
+
+Argument modes:
+
+- `space-id`: Use after listSpaces returns the shared space id to inspect.
+  Required fields: `spaceId`.
+  Forbidden fields: `toolCallId`.
+- `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
+  Required fields: `toolCallId`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
+
+#### read-space-details
+
+Read a shared space by id.
+
+<!-- mcp-docs:tool-arguments tool="readSpace" example="read-space-details" -->
+
+```json
+{
+  "spaceId": "00000000-0000-4000-8000-000000000020"
+}
+```
+
+#### approved-retry
+
+Retry an approved read request by id.
+
+<!-- mcp-docs:tool-arguments tool="readSpace" example="approved-retry" -->
 
 ```json
 {
@@ -657,6 +737,98 @@ Update an existing shared space.
         "spaceName": "Family 2026",
         "description": "Updated family highlights.",
         "color": "amber"
+      }
+    }
+  ]
+}
+```
+
+#### rename-existing-space
+
+Rename an existing shared space.
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="rename-existing-space" -->
+
+```json
+{
+  "summary": "Rename Family space.",
+  "operations": [
+    {
+      "type": "space.updateDetails",
+      "summary": "Rename Family space.",
+      "targetKind": "existing_space",
+      "targetId": "00000000-0000-4000-8000-000000000020",
+      "payload": {
+        "spaceName": "Family 2026"
+      }
+    }
+  ]
+}
+```
+
+#### update-existing-space-description
+
+Update an existing shared space description.
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="update-existing-space-description" -->
+
+```json
+{
+  "summary": "Update Family space description.",
+  "operations": [
+    {
+      "type": "space.updateDetails",
+      "summary": "Update Family space description.",
+      "targetKind": "existing_space",
+      "targetId": "00000000-0000-4000-8000-000000000020",
+      "payload": {
+        "description": "Photos for everyone."
+      }
+    }
+  ]
+}
+```
+
+#### clear-existing-space-description
+
+Clear an existing shared space description.
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="clear-existing-space-description" -->
+
+```json
+{
+  "summary": "Clear Family space description.",
+  "operations": [
+    {
+      "type": "space.updateDetails",
+      "summary": "Clear Family space description.",
+      "targetKind": "existing_space",
+      "targetId": "00000000-0000-4000-8000-000000000020",
+      "payload": {
+        "description": ""
+      }
+    }
+  ]
+}
+```
+
+#### update-existing-space-color
+
+Update an existing shared space color.
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="update-existing-space-color" -->
+
+```json
+{
+  "summary": "Update Family space color.",
+  "operations": [
+    {
+      "type": "space.updateDetails",
+      "summary": "Update Family space color.",
+      "targetKind": "existing_space",
+      "targetId": "00000000-0000-4000-8000-000000000020",
+      "payload": {
+        "color": "blue"
       }
     }
   ]
@@ -1088,6 +1260,106 @@ Revise a plan to update an existing shared space.
 }
 ```
 
+#### revise-rename-existing-space
+
+Revise a plan to rename an existing shared space.
+
+<!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-rename-existing-space" -->
+
+```json
+{
+  "planId": "00000000-0000-4000-8000-000000000222",
+  "feedback": "Use this revised operation plan.",
+  "summary": "Rename Family space.",
+  "operations": [
+    {
+      "type": "space.updateDetails",
+      "summary": "Rename Family space.",
+      "targetKind": "existing_space",
+      "targetId": "00000000-0000-4000-8000-000000000020",
+      "payload": {
+        "spaceName": "Family 2026"
+      }
+    }
+  ]
+}
+```
+
+#### revise-update-existing-space-description
+
+Revise a plan to update an existing shared space description.
+
+<!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-update-existing-space-description" -->
+
+```json
+{
+  "planId": "00000000-0000-4000-8000-000000000222",
+  "feedback": "Use this revised operation plan.",
+  "summary": "Update Family space description.",
+  "operations": [
+    {
+      "type": "space.updateDetails",
+      "summary": "Update Family space description.",
+      "targetKind": "existing_space",
+      "targetId": "00000000-0000-4000-8000-000000000020",
+      "payload": {
+        "description": "Photos for everyone."
+      }
+    }
+  ]
+}
+```
+
+#### revise-clear-existing-space-description
+
+Revise a plan to clear an existing shared space description.
+
+<!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-clear-existing-space-description" -->
+
+```json
+{
+  "planId": "00000000-0000-4000-8000-000000000222",
+  "feedback": "Use this revised operation plan.",
+  "summary": "Clear Family space description.",
+  "operations": [
+    {
+      "type": "space.updateDetails",
+      "summary": "Clear Family space description.",
+      "targetKind": "existing_space",
+      "targetId": "00000000-0000-4000-8000-000000000020",
+      "payload": {
+        "description": ""
+      }
+    }
+  ]
+}
+```
+
+#### revise-update-existing-space-color
+
+Revise a plan to update an existing shared space color.
+
+<!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-update-existing-space-color" -->
+
+```json
+{
+  "planId": "00000000-0000-4000-8000-000000000222",
+  "feedback": "Use this revised operation plan.",
+  "summary": "Update Family space color.",
+  "operations": [
+    {
+      "type": "space.updateDetails",
+      "summary": "Update Family space color.",
+      "targetKind": "existing_space",
+      "targetId": "00000000-0000-4000-8000-000000000020",
+      "payload": {
+        "color": "blue"
+      }
+    }
+  ]
+}
+```
+
 #### revise-rotate-assets
 
 Revise a plan to rotate selected image assets.
@@ -1309,6 +1581,21 @@ Summarize plan risks and selected changes.
 - `tool-call-arguments-missing`: Put the album read arguments object at params.arguments in the MCP tools/call request.
 - `tool-call-arguments-not-object`: The params.arguments value must be a JSON object, not an array, primitive, or null.
 
+### List spaces
+
+- `list-spaces-unexpected-space-id`: Use {} to list spaces. Use readSpace with spaceId to inspect one space.
+- `tool-call-arguments-missing`: Use params.arguments: {} for a normal listSpaces tool call.
+- `tool-call-arguments-not-object`: The params.arguments value must be a JSON object. Use {} for a normal listSpaces call.
+
+### Read space
+
+- `read-space-missing-space-id-or-tool-call-id`: Use spaceId returned by listSpaces for a new space read, or only toolCallId for an approved retry.
+- `read-space-combined-space-id-and-tool-call-id`: Use either spaceId for a new request or toolCallId for an approved retry, not both.
+- `read-space-wrong-id-field`: Call listSpaces first, then call readSpace with the exact shape {"spaceId":"..."} using the returned id.
+- `read-space-invalid-space-id`: Space ids must be UUID strings returned by listSpaces.
+- `tool-call-arguments-missing`: Put the space read arguments object at params.arguments in the MCP tools/call request.
+- `tool-call-arguments-not-object`: The params.arguments value must be a JSON object, not an array, primitive, or null.
+
 ### Propose album operations
 
 - `planning-tool-arguments-missing`: Put the planning tool arguments object at params.arguments in the MCP tools/call request.
@@ -1317,7 +1604,13 @@ Summarize plan risks and selected changes.
 - `planning-missing-temporary-target-dependency`: Create the new album or space first, then reference the same temporaryTargetId from dependent add-assets or cover operations.
 - `planning-mismatched-temporary-target-kind`: Album dependencies require an album create operation; space dependencies require a space create operation using the same temporaryTargetId.
 - `planning-wrong-album-target-kind`: Album operations must use targetKind existing_album with targetId, or new_album with temporaryTargetId when the operation allows new albums.
-- `planning-wrong-space-target-kind`: Space operations must use targetKind existing_space with targetId, or new_space with temporaryTargetId when the operation allows new spaces.
+- `planning-wrong-space-target-kind`: Space operations must use targetKind "existing_space" with targetId from listSpaces/readSpace, or targetKind "new_space" with temporaryTargetId from a prior space.create operation.
+- `planning-existing-space-missing-target-id`: Existing-space asset operations require targetKind "existing_space" and targetId from listSpaces/readSpace.
+- `planning-existing-space-with-temporary-target`: Use targetId for existing spaces. Use temporaryTargetId only for new spaces created earlier in the same plan. Read readSpace.assetIdsTruncated before deciding membership: when false, exclude add candidates already in the space and only remove photos already in the space; when true, narrow or ask before claiming membership is complete.
+- `planning-space-update-empty-payload`: space.updateDetails payload must include at least one of spaceName, description, or color.
+- `planning-space-update-unsupported-fields`: space.updateDetails only supports spaceName, description, and color. Do not include thumbnail, pets, face recognition, linked libraries, or deletion fields.
+- `planning-space-update-missing-target-id`: Existing-space detail updates require targetKind "existing_space" and targetId from listSpaces/readSpace.
+- `planning-direct-space-mutation`: Do not call direct space mutation tools. Propose a reviewable space.updateDetails plan instead.
 - `planning-wrong-asset-batch-target-kind`: Favorite, archive, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.
 - `planning-wrong-image-edit-target-kind`: Rotate operations must use targetKind image_edit_batch without targetId or temporaryTargetId.
 - `planning-duplicate-asset-ids`: Provide each asset id only once within a planning operation.
@@ -1333,7 +1626,13 @@ Summarize plan risks and selected changes.
 - `planning-missing-temporary-target-dependency`: Create the new album or space first, then reference the same temporaryTargetId from dependent add-assets or cover operations.
 - `planning-mismatched-temporary-target-kind`: Album dependencies require an album create operation; space dependencies require a space create operation using the same temporaryTargetId.
 - `planning-wrong-album-target-kind`: Album operations must use targetKind existing_album with targetId, or new_album with temporaryTargetId when the operation allows new albums.
-- `planning-wrong-space-target-kind`: Space operations must use targetKind existing_space with targetId, or new_space with temporaryTargetId when the operation allows new spaces.
+- `planning-wrong-space-target-kind`: Space operations must use targetKind "existing_space" with targetId from listSpaces/readSpace, or targetKind "new_space" with temporaryTargetId from a prior space.create operation.
+- `planning-existing-space-missing-target-id`: Existing-space asset operations require targetKind "existing_space" and targetId from listSpaces/readSpace.
+- `planning-existing-space-with-temporary-target`: Use targetId for existing spaces. Use temporaryTargetId only for new spaces created earlier in the same plan. Read readSpace.assetIdsTruncated before deciding membership: when false, exclude add candidates already in the space and only remove photos already in the space; when true, narrow or ask before claiming membership is complete.
+- `planning-space-update-empty-payload`: space.updateDetails payload must include at least one of spaceName, description, or color.
+- `planning-space-update-unsupported-fields`: space.updateDetails only supports spaceName, description, and color. Do not include thumbnail, pets, face recognition, linked libraries, or deletion fields.
+- `planning-space-update-missing-target-id`: Existing-space detail updates require targetKind "existing_space" and targetId from listSpaces/readSpace.
+- `planning-direct-space-mutation`: Do not call direct space mutation tools. Propose a reviewable space.updateDetails plan instead.
 - `planning-wrong-asset-batch-target-kind`: Favorite, archive, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.
 - `planning-wrong-image-edit-target-kind`: Rotate operations must use targetKind image_edit_batch without targetId or temporaryTargetId.
 - `planning-duplicate-asset-ids`: Provide each asset id only once within a planning operation.

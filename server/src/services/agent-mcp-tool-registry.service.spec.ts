@@ -12,6 +12,8 @@ const expectedToolNames = [
   AgentToolName.ReadAssetOriginals,
   AgentToolName.ListAlbums,
   AgentToolName.ReadAlbum,
+  AgentToolName.ListSpaces,
+  AgentToolName.ReadSpace,
   AgentToolName.ProposeAlbumOperations,
   AgentToolName.ReviseProposedOperations,
   AgentToolName.SummarizePlan,
@@ -24,6 +26,8 @@ const expectedReadToolNames = [
   AgentToolName.ReadAssetOriginals,
   AgentToolName.ListAlbums,
   AgentToolName.ReadAlbum,
+  AgentToolName.ListSpaces,
+  AgentToolName.ReadSpace,
 ] as const;
 
 const expectedPlanningToolNames = [
@@ -92,7 +96,7 @@ describe(AgentMcpToolRegistryService.name, () => {
     sut = new AgentMcpToolRegistryService(contractService);
   });
 
-  it('returns exactly the initial nine Gallery MCP tools in stable order', () => {
+  it('returns exactly the Gallery MCP tools in stable order', () => {
     expect(sut.listTools().map((tool) => tool.name)).toEqual(expectedToolNames);
   });
 
@@ -189,6 +193,38 @@ describe(AgentMcpToolRegistryService.name, () => {
       }),
       toolCallId: expect.objectContaining({
         description: expect.stringContaining('approved retry'),
+      }),
+    });
+
+    const space = toolsByName.get(AgentToolName.ReadSpace)?.inputSchema;
+    expect(space?.properties).toMatchObject({
+      spaceId: expect.objectContaining({
+        description: expect.stringContaining('space id returned by listSpaces'),
+      }),
+      toolCallId: expect.objectContaining({
+        description: expect.stringContaining('approved retry'),
+      }),
+    });
+  });
+
+  it('publishes object input schemas for space tools with expected fields', () => {
+    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+    const listSpaces = toolsByName.get(AgentToolName.ListSpaces);
+    const readSpace = toolsByName.get(AgentToolName.ReadSpace);
+
+    expect(listSpaces?.inputSchema).toMatchObject({
+      type: 'object',
+      properties: expect.objectContaining({
+        toolCallId: expect.any(Object),
+      }),
+    });
+    expect(listSpaces?.inputSchema.required).toBeUndefined();
+
+    expect(readSpace?.inputSchema).toMatchObject({
+      type: 'object',
+      properties: expect.objectContaining({
+        spaceId: expect.any(Object),
+        toolCallId: expect.any(Object),
       }),
     });
   });

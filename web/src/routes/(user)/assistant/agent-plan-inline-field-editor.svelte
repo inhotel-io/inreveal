@@ -113,6 +113,23 @@
               </button>
             {/each}
           </div>
+        {:else if field.input === 'select'}
+          <label class="text-xs font-medium text-gray-600 dark:text-gray-300" for={`${item.id}-${field.key}`}>
+            {field.label}
+          </label>
+          <select
+            id={`${item.id}-${field.key}`}
+            class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            value={field.value}
+            disabled={!canChangeSelection}
+            aria-invalid={errors[field.key] ? 'true' : undefined}
+            aria-describedby={errors[field.key] ? `${item.id}-${field.key}-error` : undefined}
+            onchange={(event) => setFieldOverride(field.key, event.currentTarget.value)}
+          >
+            {#each field.options as option (option.value)}
+              <option value={option.value}>{option.label}</option>
+            {/each}
+          </select>
         {/if}
 
         {#if errors[field.key]}

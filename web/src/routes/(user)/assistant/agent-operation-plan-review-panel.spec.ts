@@ -91,6 +91,9 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_type_album_create: 'Create album',
     assistant_operation_type_album_set_cover: 'Set cover',
     assistant_operation_type_album_update_details: 'Update details',
+    assistant_operation_type_space_add_assets: 'Add to space',
+    assistant_operation_type_space_remove_assets: 'Remove from space',
+    assistant_operation_type_space_update_details: 'Update space details',
     assistant_operation_type_unknown: 'Review change',
   };
 
@@ -345,6 +348,101 @@ describe('AgentOperationPlanReviewPanel', () => {
         operationIds: [createId, addId, existingId],
       }),
     );
+  });
+
+  it('loads existing-space add and remove operations under one space destination', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(
+      plan([
+        operation({
+          id: 'operation-space-add',
+          type: AgentOperationType.SpaceAddAssets,
+          summary: 'Add photos to Family',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: 'space-1',
+          assetIds: ['asset-1', 'asset-2', 'asset-3'],
+          payload: { spaceName: 'Family' },
+        }),
+        operation({
+          id: 'operation-space-remove',
+          type: AgentOperationType.SpaceRemoveAssets,
+          summary: 'Remove photos from Family',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: 'space-1',
+          assetIds: ['asset-4'],
+          payload: { spaceName: 'Family' },
+        }),
+      ]),
+    );
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    const region = await screen.findByRole('region', { name: 'Plan review' });
+    expect(within(region).getByText('1 destinations')).toBeInTheDocument();
+    const spaceGroup = within(region).getByRole('region', { name: 'Family' });
+    expect(spaceGroup).toHaveTextContent('Existing space');
+    expect(spaceGroup).toHaveTextContent('Add 3 photos');
+    expect(spaceGroup).toHaveTextContent('Remove 1 photo');
+    expect(within(region).queryByText('space-1')).not.toBeInTheDocument();
+  });
+
+  it('renders existing-space detail updates without raw IDs and applies sparse field overrides', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(
+      plan([
+        operation({
+          id: 'operation-space-update',
+          type: AgentOperationType.SpaceUpdateDetails,
+          summary: 'Update Family space details',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: 'space-1',
+          payload: { spaceName: 'Family', description: 'Shared family photos', color: 'green' },
+        }),
+      ]),
+    );
+    sdkMock.applyApprovedOperations.mockResolvedValue({
+      status: AgentOperationApplyStatus.Applied,
+      plan: appliedPlan(),
+      appliedOperationIds: ['operation-space-update'],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 1 operation(s), skipped 0, failed 0.',
+    });
+    const onSelectionChange = vi.fn();
+
+    render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
+
+    const region = await screen.findByRole('region', { name: 'Plan review' });
+    expect(within(region).getByRole('region', { name: 'Family' })).toBeInTheDocument();
+    expect(within(region).getByText('Renamed to "Family"; Updated description; Changed color to green')).toBeInTheDocument();
+    expect(within(region).queryByText('space-1')).not.toBeInTheDocument();
+
+    await fireEvent.input(screen.getByLabelText('Space name'), { target: { value: 'Family 2026' } });
+    await fireEvent.input(screen.getByLabelText('Description'), { target: { value: '' } });
+    await fireEvent.change(screen.getByLabelText('Color'), { target: { value: 'blue' } });
+
+    expect(screen.getByRole('region', { name: 'Family 2026' })).toBeInTheDocument();
+    expect(screen.getByText('Renamed to "Family 2026"; Cleared description; Changed color to blue')).toBeInTheDocument();
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      planId,
+      planRevision: 1,
+      operationIds: ['operation-space-update'],
+      fieldOverrides: {
+        'operation-space-update': { spaceName: 'Family 2026', description: '', color: 'blue' },
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply 1 selected' }));
+
+    expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith({
+      id: session.id,
+      planId,
+      agentOperationPlanApplyRequestDto: {
+        operationIds: ['operation-space-update'],
+        fieldOverrides: {
+          'operation-space-update': { spaceName: 'Family 2026', description: '', color: 'blue' },
+        },
+        planRevision: 1,
+      },
+    });
   });
 
   it('reveals technical operation identifiers only inside the row details disclosure', async () => {
