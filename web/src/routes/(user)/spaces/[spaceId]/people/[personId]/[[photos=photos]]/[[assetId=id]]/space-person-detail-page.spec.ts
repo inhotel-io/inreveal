@@ -13,7 +13,7 @@ import { modalManager } from '@immich/ui';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import '@testing-library/jest-dom';
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import type { Component } from 'svelte';
 import { load } from './+page';
@@ -253,12 +253,88 @@ describe('Spaces person detail page', () => {
 
     expect(screen.getByTestId('space-person-timeline')).toHaveAttribute('data-enable-routing', 'true');
     expect(screen.getByTestId('space-person-timeline')).toHaveAttribute('data-space-id', 'space-1');
-    expect(JSON.parse(screen.getByTestId('timeline-options').textContent ?? '{}')).toEqual({
-      spaceId: 'space-1',
-      spacePersonId: 'person-1',
-      withStacked: true,
-    });
+    expect(JSON.parse(screen.getByTestId('timeline-options').textContent ?? '{}')).toEqual(
+      expect.objectContaining({
+        spaceId: 'space-1',
+        spacePersonId: 'person-1',
+        withStacked: true,
+        grouping: 'day',
+      }),
+    );
     expect(screen.queryByTestId('person-asset-asset-1')).not.toBeInTheDocument();
+  });
+
+  it('renders space person timeline grouping controls and passes mobile grouping props', async () => {
+    renderPage();
+
+    expect(await screen.findByTestId('timeline-desktop-grouping-control')).toBeInTheDocument();
+    expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('timeline-mobile-grouping-props')).toHaveTextContent(
+      JSON.stringify({ grouping: 'day', hasHandler: true }),
+    );
+  });
+
+  it('changes space person timeline grouping while preserving scope without temporal chips', async () => {
+    renderPage();
+
+    await fireEvent.click(await screen.findByTestId('timeline-grouping-year'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"year"');
+    });
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spacePersonId":"person-1"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withStacked":true');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+  });
+
+  it('activating space person year and month buckets preserves scope and sets temporal chips and anchors', async () => {
+    renderPage();
+
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spacePersonId":"person-1"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withStacked":true');
+      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
+    });
+
+    await fireEvent.click(screen.getByTestId('activate-month-bucket'));
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spacePersonId":"person-1"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withStacked":true');
+      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Aug 2015');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
+    });
+  });
+
+  it('clearing the space person temporal chip preserves scope and current grouping', async () => {
+    renderPage();
+
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Remove 2015 filter' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spacePersonId":"person-1"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withStacked":true');
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+    });
+  });
+
+  it('selection mode hides timeline grouping controls on the space person page', () => {
+    mockAssetMultiSelectManager.selectionActive = true;
+
+    renderPage();
+
+    expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument();
   });
 
   it('renders space-scoped asset and face counts in the person header', () => {

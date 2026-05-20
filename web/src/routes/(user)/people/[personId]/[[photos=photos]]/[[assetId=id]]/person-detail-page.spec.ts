@@ -6,7 +6,7 @@ import { modalManager } from '@immich/ui';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import type { Component } from 'svelte';
 import PersonDetailPage from './+page.svelte';
@@ -114,7 +114,9 @@ vi.mock('$lib/components/OnEvents.svelte', async () => {
 });
 
 vi.mock('$lib/components/timeline/Timeline.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/bindable-timeline.stub.svelte');
+  const { default: MockComponent } = await import(
+    './../../../../spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/mock-space-person-timeline.test-wrapper.svelte'
+  );
   return { default: MockComponent };
 });
 
@@ -285,6 +287,73 @@ describe('Person detail page', () => {
         withSharedSpaces: true,
       }),
     );
+  });
+
+  it('renders person timeline grouping controls and passes mobile grouping props', async () => {
+    renderPage();
+
+    expect(await screen.findByTestId('timeline-desktop-grouping-control')).toBeInTheDocument();
+    expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('timeline-mobile-grouping-props')).toHaveTextContent(
+      JSON.stringify({ grouping: 'day', hasHandler: true }),
+    );
+  });
+
+  it('changes person timeline grouping while preserving person scope without temporal chips', async () => {
+    renderPage();
+
+    await fireEvent.click(await screen.findByTestId('timeline-grouping-year'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"year"');
+    });
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"personIds":["person-1"]');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withSharedSpaces":true');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+  });
+
+  it('activating person year and month buckets preserves person scope and sets temporal chips and anchors', async () => {
+    renderPage();
+
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"personIds":["person-1"]');
+      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
+    });
+
+    await fireEvent.click(screen.getByTestId('activate-month-bucket'));
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"personIds":["person-1"]');
+      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Aug 2015');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
+    });
+  });
+
+  it('clearing the person temporal chip preserves person scope and current grouping', async () => {
+    renderPage();
+
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Remove 2015 filter' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"personIds":["person-1"]');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withSharedSpaces":true');
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+    });
+  });
+
+  it('selection mode hides timeline grouping controls on the person page', () => {
+    mockAssetMultiSelectManager.selectionActive = true;
+
+    renderPage();
+
+    expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument();
   });
 
   it('uses the shared-space thumbnail for a space-primary identity-wide person page', () => {

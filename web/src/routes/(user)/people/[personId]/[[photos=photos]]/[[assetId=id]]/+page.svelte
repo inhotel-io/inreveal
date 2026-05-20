@@ -12,6 +12,7 @@
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/button-context-menu.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/menu-option.svelte';
   import ControlAppBar from '$lib/components/shared-components/control-app-bar.svelte';
+  import { createFilterState } from '$lib/components/filter-panel/filter-panel';
   import ArchiveAction from '$lib/components/timeline/actions/ArchiveAction.svelte';
   import ChangeDate from '$lib/components/timeline/actions/ChangeDateAction.svelte';
   import ChangeDescription from '$lib/components/timeline/actions/ChangeDescriptionAction.svelte';
@@ -25,12 +26,13 @@
   import TagAction from '$lib/components/timeline/actions/TagAction.svelte';
   import AssetSelectControlBar from '$lib/components/timeline/AssetSelectControlBar.svelte';
   import Timeline from '$lib/components/timeline/Timeline.svelte';
+  import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
   import { PersonPageViewMode, QueryParameter, SessionStorageKey } from '$lib/constants';
   import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
-  import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
+  import type { TimelineAsset, TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
   import PersonMergeSuggestionModal from '$lib/modals/PersonMergeSuggestionModal.svelte';
   import RepresentativeFacePickerModal from '$lib/modals/RepresentativeFacePickerModal.svelte';
   import { Route } from '$lib/route';
@@ -43,6 +45,13 @@
   import { isExternalUrl } from '$lib/utils/navigation';
   import { getPersonFaceThumbnailUrl } from '$lib/utils/people-utils';
   import { isSpaceScopedPerson, toScopedPersonRef } from '$lib/utils/scoped-person-ref';
+  import {
+    activateTimelineBucket,
+    clearTimelineTemporalFilter,
+    getTimelineManagerTimeBuckets,
+    type ActivatableTimelineBucket,
+  } from '$lib/utils/timeline-filter-navigation';
+  import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
   import {
     AssetVisibility,
     detachScopedPerson,
@@ -80,12 +89,17 @@
   let { data }: Props = $props();
 
   let timelineManager = $state<TimelineManager>() as TimelineManager;
+  let timelineFilters = $state(createFilterState());
+  let timelineGrouping = $state<TimelineGrouping>('day');
+  let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
   let numberOfAssets = $derived(timelineManager?.isInitialized ? timelineManager.assetCount : data.statistics.assets);
-  const options = $derived({
+  const baseTimelineOptions = $derived({
     visibility: AssetVisibility.Timeline,
     personIds: [data.person.filterId ?? data.person.id],
     withSharedSpaces: true,
   });
+  const options = $derived(buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping));
+  const timeBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
 
   let viewMode: PersonPageViewMode = $state(PersonPageViewMode.VIEW_ASSETS);
   let isEditingName = $state(false);
@@ -350,6 +364,27 @@
     assetMultiSelectManager.clear();
   };
 
+  function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+    timelineGrouping = grouping;
+    temporalAnchor = undefined;
+  }
+
+  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+    const result = activateTimelineBucket(timelineFilters, bucket);
+    if (!result) {
+      return;
+    }
+
+    timelineFilters = result.filters;
+    timelineGrouping = result.grouping;
+    temporalAnchor = result.anchor;
+  }
+
+  function clearPersonTemporalFilter() {
+    timelineFilters = clearTimelineTemporalFilter(timelineFilters);
+    temporalAnchor = undefined;
+  }
+
   const onPersonUpdate = async (response: PersonResponseDto) => {
     if (response.id !== person.id) {
       return;
@@ -443,6 +478,14 @@
   }}
 >
   {#key person.id}
+    <TimelineRouteGroupingBar
+      grouping={timelineGrouping}
+      filters={timelineFilters}
+      resultCount={numberOfAssets}
+      hidden={assetMultiSelectManager.selectionActive || viewMode !== PersonPageViewMode.VIEW_ASSETS}
+      onGroupingChange={handleTimelineGroupingChange}
+      onClearTemporalFilter={clearPersonTemporalFilter}
+    />
     <Timeline
       enableRouting={true}
       {person}
@@ -450,6 +493,11 @@
       {options}
       assetInteraction={assetMultiSelectManager}
       onEscape={handleEscape}
+      {temporalAnchor}
+      onTimelineBucketActivate={handleTimelineBucketActivate}
+      onTemporalAnchorResolved={() => (temporalAnchor = undefined)}
+      grouping={timelineGrouping}
+      onGroupingChange={handleTimelineGroupingChange}
     >
       {#if viewMode === PersonPageViewMode.VIEW_ASSETS}
         <!-- Person information block -->

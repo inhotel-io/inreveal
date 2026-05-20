@@ -3,6 +3,7 @@
   import { clickOutside } from '$lib/actions/click-outside';
   import { listNavigation } from '$lib/actions/list-navigation';
   import ImageThumbnail from '$lib/components/assets/thumbnail/image-thumbnail.svelte';
+  import { createFilterState } from '$lib/components/filter-panel/filter-panel';
   import PeopleMergeSelector from '$lib/components/people/people-merge-selector.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/button-context-menu.svelte';
   import ControlAppBar from '$lib/components/shared-components/control-app-bar.svelte';
@@ -17,10 +18,12 @@
   import TagAction from '$lib/components/timeline/actions/TagAction.svelte';
   import AssetSelectControlBar from '$lib/components/timeline/AssetSelectControlBar.svelte';
   import Timeline from '$lib/components/timeline/Timeline.svelte';
+  import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
   import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
+  import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
   import { timeBeforeShowLoadingSpinner } from '$lib/constants';
   import PersonEditBirthDateModal from '$lib/modals/PersonEditBirthDateModal.svelte';
   import RepresentativeFacePickerModal from '$lib/modals/RepresentativeFacePickerModal.svelte';
@@ -30,6 +33,13 @@
   import { locale } from '$lib/stores/preferences.store';
   import { getSpacePersonFaceThumbnailUrl } from '$lib/utils/people-utils';
   import { toScopedPersonRef as toPersonScopedRef } from '$lib/utils/scoped-person-ref';
+  import {
+    activateTimelineBucket,
+    clearTimelineTemporalFilter,
+    getTimelineManagerTimeBuckets,
+    type ActivatableTimelineBucket,
+  } from '$lib/utils/timeline-filter-navigation';
+  import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
   import {
     detachScopedPerson,
     getSpacePersonFaces,
@@ -76,6 +86,9 @@
   const routeStateKey = $derived(`${data.space.id}:${data.person.id}:${data.person.updatedAt}:${data.action ?? ''}`);
 
   let timelineManager = $state<TimelineManager>() as TimelineManager;
+  let timelineFilters = $state(createFilterState());
+  let timelineGrouping = $state<TimelineGrouping>('day');
+  let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
   let personOverride = $state<SharedSpacePersonResponseDto>();
   let personOverrideKey = $state('');
   const person = $derived(personOverrideKey === routeStateKey && personOverride ? personOverride : data.person);
@@ -101,11 +114,13 @@
   let actionOverrideKey = $state('');
   const action = $derived(actionOverrideKey === routeStateKey ? actionOverride : data.action);
 
-  const options = $derived({
+  const baseTimelineOptions = $derived({
     spaceId: space.id,
     spacePersonId: person.id,
     withStacked: true,
   });
+  const options = $derived(buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping));
+  const timeBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
 
   const currentMember = $derived(members.find((member) => member.userId === authManager.user.id));
   const isEditor = $derived(
@@ -328,6 +343,27 @@
     await invalidateAll();
   };
 
+  function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+    timelineGrouping = grouping;
+    temporalAnchor = undefined;
+  }
+
+  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+    const result = activateTimelineBucket(timelineFilters, bucket);
+    if (!result) {
+      return;
+    }
+
+    timelineFilters = result.filters;
+    timelineGrouping = result.grouping;
+    temporalAnchor = result.anchor;
+  }
+
+  function clearSpacePersonTemporalFilter() {
+    timelineFilters = clearTimelineTemporalFilter(timelineFilters);
+    temporalAnchor = undefined;
+  }
+
   async function closeMergeFlow() {
     setAction(null);
     if (data.action === 'merge') {
@@ -490,6 +526,14 @@
 
 <main class="relative z-0 h-dvh overflow-hidden px-2 pt-(--navbar-height) md:px-6 md:pt-(--navbar-height-md)">
   {#key person.id}
+    <TimelineRouteGroupingBar
+      grouping={timelineGrouping}
+      filters={timelineFilters}
+      resultCount={statistics.assets}
+      hidden={assetMultiSelectManager.selectionActive || action === 'merge'}
+      onGroupingChange={handleTimelineGroupingChange}
+      onClearTemporalFilter={clearSpacePersonTemporalFilter}
+    />
     <Timeline
       enableRouting={true}
       bind:timelineManager
@@ -497,6 +541,11 @@
       assetInteraction={assetMultiSelectManager}
       onEscape={handleBack}
       spaceId={space.id}
+      {temporalAnchor}
+      onTimelineBucketActivate={handleTimelineBucketActivate}
+      onTemporalAnchorResolved={() => (temporalAnchor = undefined)}
+      grouping={timelineGrouping}
+      onGroupingChange={handleTimelineGroupingChange}
     >
       <div
         class="relative w-fit p-4 pt-12 sm:px-6"
