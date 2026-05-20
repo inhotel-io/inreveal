@@ -297,7 +297,20 @@ Slice 5: Route adoption
 
 Slice 6: Later grid parity
 
-- Bring `GalleryViewer` surfaces into the grouping model where appropriate: Search, Folders, Memories, shared views, and other flat grids.
+- Bring flat grid surfaces into the grouping model where appropriate.
+- The first Slice 6 implementation targets web `GalleryViewer` consumers:
+  - legacy Search results at `/search`
+  - Folders asset grids
+  - Memory viewer gallery grids
+  - individual shared-link gallery views
+- `GalleryViewer` grouping is a client-side display density over the assets already supplied to the component. This keeps it compatible with flat grids that do not use `TimelineManager` or server bucket APIs yet.
+- `year` and `month` modes render representative cards derived from the loaded assets. The representative card uses the first asset in that bucket and must not fetch all additional assets or call route pagination callbacks by itself.
+- Clicking a year card narrows the visible GalleryViewer assets to that year, switches grouping to `month`, and exposes a clearable temporal chip. Clicking a month card narrows to that month and switches grouping to `day`.
+- Clearing the temporal chip restores the original asset list while preserving any route-owned query, folder, memory, shared-link, or permission scope.
+- Manual grouping changes do not create temporal chips and do not mutate route state.
+- Selection mode hides the desktop grouping control and disables representative card activation.
+- Empty or single-asset grids keep their route-specific empty/asset viewer behavior; grouping controls must not render as orphaned UI when there are no grid assets.
+- Smart-search result grids that do not use `GalleryViewer` can be adopted after the shared `GalleryViewer` behavior lands, unless the implementation can reuse the same helper without changing result pagination semantics.
 
 Slice 7: Mobile parity
 
