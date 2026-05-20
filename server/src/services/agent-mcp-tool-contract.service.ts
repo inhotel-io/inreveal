@@ -51,6 +51,14 @@ const approvedRetryExample: AgentMcpToolExample = {
   arguments: { toolCallId: exampleToolCallId },
 };
 
+const searchApprovedRetryMode: AgentMcpArgumentMode = {
+  name: 'approved-retry',
+  description: 'Retry a search request that Gallery already approved.',
+  requiredFields: ['toolCallId'],
+  forbiddenFields: ['mode', 'query', 'filters', 'limit', 'page', 'order'],
+  whenToUse: 'Use only after Gallery resumes the assistant from an approved search request.',
+};
+
 const assetIdsMode: AgentMcpArgumentMode = {
   name: 'asset-ids',
   description: 'Start a new asset read request for selected assets.',
@@ -154,14 +162,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       whenToUse:
         'Use when the user provides date, place, favorite, rating, album, tag, camera, media, people, or space filters.',
     },
-    {
-      name: 'text-search',
-      description: 'Search visible assets with an explicit text-search mode and query.',
-      requiredFields: ['mode', 'query'],
-      forbiddenFields: ['toolCallId'],
-      whenToUse: 'Use only when the user asks for smart, OCR, description, or filename search.',
-    },
-    approvedRetryMode,
+    searchApprovedRetryMode,
   ],
   examples: [
     {
@@ -209,20 +210,6 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
         limit: 25,
       },
     },
-    {
-      name: 'future-smart-search-contract',
-      description: 'Contract shape for smart search; execution is enabled in a later slice.',
-      arguments: {
-        mode: 'smart',
-        query: 'beach sunset',
-        filters: {
-          country: 'Portugal',
-        },
-        limit: 25,
-        page: 1,
-        order: 'relevance',
-      },
-    },
     approvedRetryExample,
   ],
   commonMistakes: [
@@ -264,7 +251,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       id: 'search-query-with-metadata-mode',
       match: { issuePath: 'query', messageIncludes: 'query is only supported' },
       hint: 'Use mode smart, description, ocr, or filename when passing query. Omit query for metadata-only searches.',
-      exampleName: 'future-smart-search-contract',
+      exampleName: 'metadata-page-search',
     },
     {
       id: 'search-space-person-without-space',
@@ -274,8 +261,9 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
     },
     {
       id: 'search-combined-filters-and-tool-call-id',
-      match: { messageIncludes: 'Provide either search filters or toolCallId, not both' },
-      hint: 'Use either filters and limit for a new search or only toolCallId for an approved retry.',
+      match: { messageIncludes: 'Provide either search fields or toolCallId, not both' },
+      hint:
+        'Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.',
       exampleName: 'approved-retry',
     },
     {

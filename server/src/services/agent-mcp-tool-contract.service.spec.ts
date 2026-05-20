@@ -139,6 +139,31 @@ describe(AgentMcpToolContractService.name, () => {
     );
   });
 
+  it('does not advertise future text search modes or examples for searchAssets', () => {
+    const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+
+    expect(search?.argumentModes.map((mode) => mode.name)).not.toContain('text-search');
+    expect(search?.examples.map((example) => example.name)).not.toContain('future-smart-search-contract');
+    expect(search?.examples).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          arguments: expect.objectContaining({
+            mode: expect.stringMatching(/^(smart|description|ocr|filename)$/),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('defines a search-specific approved retry mode that forbids all new search fields', () => {
+    const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+
+    expect(search?.argumentModes.find((mode) => mode.name === 'approved-retry')).toMatchObject({
+      requiredFields: ['toolCallId'],
+      forbiddenFields: ['mode', 'query', 'filters', 'limit', 'page', 'order'],
+    });
+  });
+
   it('defines the required list and album read examples from the spec', () => {
     const listAlbums = sut.getReadToolContract(AgentToolName.ListAlbums);
     const readAlbum = sut.getReadToolContract(AgentToolName.ReadAlbum);
@@ -529,6 +554,31 @@ describe(AgentMcpToolContractService.name, () => {
 
       expect(correction?.mistakeId).toBe('search-query-with-metadata-mode');
       expect(correction?.hint).toContain('Use mode smart, description, ocr, or filename when passing query');
+      expect(correction?.exampleArguments).toEqual({
+        mode: 'metadata',
+        filters: {
+          takenAfter: '2026-05-01T00:00:00.000Z',
+          takenBefore: '2026-05-18T23:59:59.999Z',
+          city: 'Berlin',
+          country: 'Germany',
+        },
+        limit: 50,
+        page: 1,
+        order: 'desc',
+      });
+    });
+
+    it('returns a current search field and toolCallId correction', () => {
+      const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: '', message: 'Provide either search fields or toolCallId, not both' }],
+      });
+
+      expect(correction?.mistakeId).toBe('search-combined-filters-and-tool-call-id');
+      expect(correction?.hint).toContain('mode, query, filters, limit, page, or order');
+      expect(correction?.exampleArguments).toEqual({
+        toolCallId: '00000000-0000-4000-8000-000000000111',
+      });
     });
 
     it('returns a space person scope correction', () => {
