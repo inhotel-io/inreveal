@@ -48,6 +48,8 @@ describe('gallery viewer grouping helpers', () => {
     expect(getGalleryViewerAssetDate(asset('malformed', 'not-a-date'))).toBeUndefined();
     expect(getGalleryViewerAssetDate(asset('bad-month', '2024-99-01T00:00:00.000Z'))).toBeUndefined();
     expect(getGalleryViewerAssetDate(asset('bad-day', '2024-02-30T00:00:00.000Z'))).toBeUndefined();
+    expect(getGalleryViewerAssetDate(asset('prefixed-junk', '2024-02-29not-a-date'))).toBeUndefined();
+    expect(getGalleryViewerAssetDate(asset('bad-timestamp', '2024-02-29Tbad'))).toBeUndefined();
   });
 
   it('builds year buckets from loaded assets and uses the first asset as representative', () => {

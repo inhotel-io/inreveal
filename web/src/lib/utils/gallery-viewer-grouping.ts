@@ -23,9 +23,17 @@ export type GalleryViewerAssetDate = {
   day: number;
 };
 
+const galleryViewerDatePattern = /^(\d{4})-(\d{2})-(\d{2})(?:$|T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)$/;
+
 export function getGalleryViewerAssetDate(asset: AssetResponseDto): GalleryViewerAssetDate | undefined {
   const value = asset.localDateTime || asset.fileCreatedAt;
-  const [year, month, day] = value?.slice(0, 10).split('-').map(Number) ?? [];
+  const match = value?.match(galleryViewerDatePattern);
+  if (!match) {
+    return;
+  }
+
+  const [, yearValue, monthValue, dayValue] = match;
+  const [year, month, day] = [yearValue, monthValue, dayValue].map(Number);
 
   if (!year || !month || !day) {
     return;
@@ -49,8 +57,12 @@ export function filterGalleryViewerAssetsByTemporalState(
 
   return assets.filter((asset) => {
     const date = getGalleryViewerAssetDate(asset);
+    if (!date) {
+      return false;
+    }
+
     return (
-      date?.year === temporalState.selectedYear &&
+      date.year === temporalState.selectedYear &&
       (temporalState.selectedMonth === undefined || date.month === temporalState.selectedMonth)
     );
   });
