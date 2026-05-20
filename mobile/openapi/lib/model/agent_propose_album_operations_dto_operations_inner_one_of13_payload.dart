@@ -13,26 +13,26 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload({
-    required this.tagId,
+    required this.favorite,
   });
 
-  String tagId;
+  bool favorite;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload &&
-    other.tagId == tagId;
+    other.favorite == favorite;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (tagId.hashCode);
+    (favorite.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload[tagId=$tagId]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload[favorite=$favorite]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'tagId'] = this.tagId;
+      json[r'favorite'] = this.favorite;
     return json;
   }
 
@@ -45,7 +45,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload(
-        tagId: mapValueOfType<String>(json, r'tagId')!,
+        favorite: mapValueOfType<bool>(json, r'favorite')!,
       );
     }
     return null;
@@ -93,7 +93,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'tagId',
+    'favorite',
   };
 }
 
