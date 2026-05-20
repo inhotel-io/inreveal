@@ -602,6 +602,9 @@ describe(AgentMcpToolContractService.name, () => {
 
       expect(correction?.mistakeId).toBe('search-space-person-without-space');
       expect(correction?.hint).toContain('spacePersonIds requires filters.spaceId');
+      expect(correction?.hint).toContain('people and space-person filters are not available in the current slice');
+      expect(correction?.hint).toContain('Use currently executable metadata filters for now');
+      expect(correction?.hint).not.toContain('Use global personIds');
     });
 
     it('returns a read-tool fallback when no common mistake matches', () => {
