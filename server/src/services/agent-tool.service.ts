@@ -539,17 +539,18 @@ export class AgentToolService {
     return {
       toolName: AgentToolName.SearchAssets,
       dataClass: AgentToolDataClass.Metadata,
-      requestSummary: (request) => `Search ${request.mode ?? 'metadata'} assets (limit ${request.limit ?? 0})`,
+      requestSummary: (request) =>
+        `Search ${request.mode ?? 'metadata'} assets (limit ${this.getSearchLimit(request)})`,
       requestMetadata: (request) =>
         ({
           mode: request.mode ?? 'metadata',
           filters: request.filters ?? {},
-          limit: request.limit ?? 0,
+          limit: this.getSearchLimit(request),
           page: request.page ?? 1,
           order: request.order ?? 'desc',
           ...(request.query === undefined ? {} : { query: request.query }),
         }) as AgentToolSearchAssetsRequestMetadata,
-      requestedAssetCount: (request) => request.limit ?? 0,
+      requestedAssetCount: (request) => this.getSearchLimit(request),
       requestedAlbumCount: () => 0,
       perToolLimit: (plan) => plan.limits.maxAssetsPerToolCall,
       perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
@@ -558,7 +559,7 @@ export class AgentToolService {
         const result = await this.assetRepository.searchAgentMetadata({
           userId: auth.user.id,
           filters: request.filters ?? {},
-          limit: request.limit ?? 0,
+          limit: this.getSearchLimit(request),
           scope: this.getRepositoryScope(auth, session.permissionPlanSnapshot),
         });
         await this.assertReturnedAssetsAreAccessible(
@@ -579,6 +580,10 @@ export class AgentToolService {
       resultAlbumCount: () => 0,
       failedReason: 'Asset search failed',
     };
+  }
+
+  private getSearchLimit(request: AgentSearchAssetsToolRequestDto): number {
+    return request.limit ?? 10_000;
   }
 
   private readAssetMetadataDescriptor(): AgentReadToolDescriptor<
@@ -1235,8 +1240,7 @@ export class AgentToolService {
     ] as const;
 
     for (const field of futureFields) {
-      const value = filters[field];
-      if (Array.isArray(value) ? value.length > 0 : value !== undefined) {
+      if (Object.hasOwn(filters, field)) {
         return `${field} search is not available yet`;
       }
     }
