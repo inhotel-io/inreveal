@@ -256,7 +256,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
           'visibility',
         ],
       },
-      hint: 'Place supported metadata filters for date, location, favorite, rating, album, tag, camera, media, people, space, shared-space, and visibility inside filters.',
+      hint: 'Place supported metadata filters for date, location, favorite, rating, album, tag, camera, media, people, space, shared-space, and visibility inside the filters object.',
       exampleName: 'metadata-page-search',
     },
     {

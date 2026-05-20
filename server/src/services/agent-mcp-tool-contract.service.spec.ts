@@ -591,7 +591,7 @@ describe(AgentMcpToolContractService.name, () => {
       for (const correction of [countryCorrection, ratingCorrection, createdAfterCorrection, personIdsCorrection]) {
         expect(correction?.mistakeId).toBe('search-filters-outside-filters');
         expect(correction?.hint).toBe(
-          'Place supported metadata filters for date, location, favorite, rating, album, tag, camera, media, people, space, shared-space, and visibility inside filters.',
+          'Place supported metadata filters for date, location, favorite, rating, album, tag, camera, media, people, space, shared-space, and visibility inside the filters object.',
         );
         expect(correction?.hint).toContain('people, space, shared-space, and visibility');
         expect(correction?.exampleArguments).toEqual({
