@@ -251,6 +251,77 @@ describe('album detail filter panel route', () => {
     expect(screen.getByTestId('mock-disabled-asset')).toHaveAttribute('data-disabled', 'true');
   });
 
+  it('renders album browse grouping controls and passes mobile grouping props', async () => {
+    renderPage();
+
+    expect(await screen.findByTestId('timeline-desktop-grouping-control')).toBeInTheDocument();
+    expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('timeline-mobile-grouping-props')).toHaveTextContent(
+      JSON.stringify({ grouping: 'day', hasHandler: true }),
+    );
+  });
+
+  it('changes album grouping without changing album filters or URL state', async () => {
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByTestId('people-item-person-view')).toBeInTheDocument());
+    await user.click(screen.getByTestId('people-item-person-view'));
+    await user.click(screen.getByTestId('timeline-grouping-year'));
+
+    expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"year"');
+    expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Album Person');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+  });
+
+  it('clicking album year and month buckets syncs the album FilterPanel temporal state', async () => {
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId('activate-year-bucket'));
+    await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"'));
+    expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
+
+    await user.click(screen.getByTestId('activate-month-bucket'));
+    await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"day"'));
+    expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Aug 2015');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015, month: 8 }));
+  });
+
+  it('clears album temporal chips while preserving non-time album filters and grouping', async () => {
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByTestId('people-item-person-view')).toBeInTheDocument());
+    await user.click(screen.getByTestId('people-item-person-view'));
+    await user.click(screen.getByTestId('activate-year-bucket'));
+    await user.click(screen.getByRole('button', { name: 'Remove 2015 filter' }));
+
+    await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"'));
+    expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Album Person');
+    expect(screen.getByTestId('active-filters-bar')).not.toHaveTextContent('2015');
+  });
+
+  it('does not render browse grouping controls in album select-assets or select-thumbnail modes', async () => {
+    renderPage();
+    const user = userEvent.setup();
+
+    await fireEvent.click(screen.getByLabelText('add_photos'));
+    await waitFor(() => expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument());
+    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"grouping"');
+
+    await fireEvent.click(screen.getByLabelText('close'));
+    await user.click(screen.getByLabelText('album_options'));
+    await user.click(screen.getByText('select_album_cover'));
+
+    expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"grouping"');
+    expect(screen.getByTestId('timeline-mobile-grouping-props')).toHaveTextContent(
+      JSON.stringify({ grouping: 'day', hasHandler: false }),
+    );
+  });
+
   it('resets both filter states and label caches when navigating to another album', async () => {
     const firstAlbum = albumFactory.build({ id: 'album-1', assetCount: 2 });
     const secondAlbum = albumFactory.build({ id: 'album-2', assetCount: 2 });
