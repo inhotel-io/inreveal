@@ -209,18 +209,12 @@ describe(AssetRepository.name, () => {
       const { user } = await ctx.newUser();
       const auth = factory.auth({ user: { id: user.id } });
 
-      const laterTimeEarlierCreated = await createTimelineAsset(
-        ctx,
-        user.id,
-        new Date('2024-07-01T23:00:00.000Z'),
-        { fileCreatedAt: new Date('2024-07-01T10:00:00.000Z') },
-      );
-      const earlierTimeLaterCreated = await createTimelineAsset(
-        ctx,
-        user.id,
-        new Date('2024-07-01T01:00:00.000Z'),
-        { fileCreatedAt: new Date('2024-07-01T20:00:00.000Z') },
-      );
+      const laterTimeEarlierCreated = await createTimelineAsset(ctx, user.id, new Date('2024-07-01T23:00:00.000Z'), {
+        fileCreatedAt: new Date('2024-07-01T10:00:00.000Z'),
+      });
+      const earlierTimeLaterCreated = await createTimelineAsset(ctx, user.id, new Date('2024-07-01T01:00:00.000Z'), {
+        fileCreatedAt: new Date('2024-07-01T20:00:00.000Z'),
+      });
 
       await expect(
         sut.getTimeBuckets({
@@ -350,7 +344,11 @@ describe(AssetRepository.name, () => {
       const [tag] = await upsertTags(ctx.get(TagRepository), { userId: user.id, tags: ['trip'] });
       await ctx.newTagAsset({ tagIds: [tag.id], assetIds: [primary.id] });
 
-      const commonOptions = { userIds: [user.id], visibility: AssetVisibility.Timeline, bucketSize: TimeBucketSize.Year };
+      const commonOptions = {
+        userIds: [user.id],
+        visibility: AssetVisibility.Timeline,
+        bucketSize: TimeBucketSize.Year,
+      };
 
       await expect(sut.getTimeBuckets({ ...commonOptions, assetType: AssetType.Video })).resolves.toEqual([
         expect.objectContaining({ representativeAssetId: stacked.id, count: 2 }),
@@ -386,7 +384,11 @@ describe(AssetRepository.name, () => {
         isVisible: true,
       });
       const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
-      await faceIdentityRepository.linkFace({ assetFaceId: identityFace.id, identityId: identity.id, source: 'manual' });
+      await faceIdentityRepository.linkFace({
+        assetFaceId: identityFace.id,
+        identityId: identity.id,
+        source: 'manual',
+      });
 
       const { assetFace: visibleFace } = await ctx.newAssetFace({ assetId: spacePersonAsset.id, isVisible: true });
       const spacePerson = await sharedSpaceRepo.createPerson({
@@ -448,7 +450,11 @@ describe(AssetRepository.name, () => {
       ).resolves.toEqual([expect.objectContaining({ representativeAssetId: sharedAsset.id, count: 2 })]);
 
       await expect(
-        sut.getTimeBuckets({ userIds: [user.id], visibility: AssetVisibility.Timeline, bucketSize: TimeBucketSize.Day }),
+        sut.getTimeBuckets({
+          userIds: [user.id],
+          visibility: AssetVisibility.Timeline,
+          bucketSize: TimeBucketSize.Day,
+        }),
       ).resolves.toEqual([expect.objectContaining({ representativeAssetId: ownAsset.id, count: 1 })]);
     });
 
