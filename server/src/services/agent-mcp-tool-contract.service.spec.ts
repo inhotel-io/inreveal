@@ -164,6 +164,16 @@ describe(AgentMcpToolContractService.name, () => {
     });
   });
 
+  it('describes filtered search using only currently executable metadata filters', () => {
+    const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+    const filteredSearch = search?.argumentModes.find((mode) => mode.name === 'filtered-search');
+
+    expect(filteredSearch?.whenToUse).toContain('date, place, favorite, rating, album, tag, camera, or media');
+    expect(filteredSearch?.whenToUse).toContain('People, space, and visibility fields are contract fields');
+    expect(filteredSearch?.whenToUse).toContain('not available yet');
+    expect(filteredSearch?.whenToUse).not.toContain('people, or space filters');
+  });
+
   it('defines the required list and album read examples from the spec', () => {
     const listAlbums = sut.getReadToolContract(AgentToolName.ListAlbums);
     const readAlbum = sut.getReadToolContract(AgentToolName.ReadAlbum);
@@ -527,8 +537,9 @@ describe(AgentMcpToolContractService.name, () => {
       for (const correction of [countryCorrection, ratingCorrection, createdAfterCorrection, personIdsCorrection]) {
         expect(correction?.mistakeId).toBe('search-filters-outside-filters');
         expect(correction?.hint).toBe(
-          'Place date, location, favorite, rating, album, tag, camera, people, space, visibility, and media filters inside the filters object.',
+          'Place supported metadata filters for date, location, favorite, rating, album, tag, camera, and media inside filters. People, space, and visibility fields are accepted by the contract but are not available in Slice 1.',
         );
+        expect(correction?.hint).not.toContain('camera, people, space, visibility, and media filters');
         expect(correction?.exampleArguments).toEqual({
           mode: 'metadata',
           filters: {
