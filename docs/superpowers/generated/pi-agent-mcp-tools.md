@@ -1607,7 +1607,7 @@ Summarize plan risks and selected changes.
 
 ### Search assets
 
-- `search-filters-outside-filters`: Place supported metadata filters for date, location, favorite, rating, album, tag, camera, media, people, space, shared-space, and visibility inside filters.
+- `search-filters-outside-filters`: Place supported metadata filters for date, location, favorite, rating, album, tag, camera, media, people, space, shared-space, and visibility inside the filters object.
 - `search-query-with-metadata-mode`: Omit query and use metadata filters for now. Text search modes are in the contract but are not available yet.
 - `search-space-person-without-space`: spacePersonIds requires filters.spaceId. Resolve or choose the space first, then call searchAssets with both fields under filters.
 - `search-combined-filters-and-tool-call-id`: Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.
