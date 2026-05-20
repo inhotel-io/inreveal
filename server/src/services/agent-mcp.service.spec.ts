@@ -401,6 +401,7 @@ describe(AgentMcpService.name, () => {
     {
       toolName: AgentToolName.SearchAssets,
       args: { filters: { isFavorite: true }, limit: 5 },
+      expectedArgs: { mode: 'metadata', filters: { isFavorite: true }, limit: 5, page: 1, order: 'desc' },
       serviceMethod: 'searchAssets' as const,
       serviceResult: { status: 'success', toolCall: null, assets: [], nextPage: null },
     },
@@ -448,7 +449,7 @@ describe(AgentMcpService.name, () => {
     },
   ])(
     'delegates $toolName to AgentToolService and wraps the result',
-    async ({ toolName, args, serviceMethod, serviceResult }) => {
+    async ({ toolName, args, expectedArgs, serviceMethod, serviceResult }) => {
       toolService[serviceMethod].mockResolvedValue(serviceResult as never);
 
       const response = (await sut.handle(
@@ -458,7 +459,7 @@ describe(AgentMcpService.name, () => {
       )) as AgentMcpSuccessResponse;
 
       expect(toolService[serviceMethod]).toHaveBeenCalledTimes(1);
-      expect(toolService[serviceMethod]).toHaveBeenCalledWith(auth, sessionId, args);
+      expect(toolService[serviceMethod]).toHaveBeenCalledWith(auth, sessionId, expectedArgs ?? args);
       expectToolResult(response, `${toolName}-call`, serviceResult);
     },
   );
@@ -473,7 +474,13 @@ describe(AgentMcpService.name, () => {
       makeToolCallRequest(AgentToolName.SearchAssets, {}),
     )) as AgentMcpSuccessResponse;
 
-    expect(toolService.searchAssets).toHaveBeenCalledWith(auth, sessionId, { filters: {}, limit: 10_000 });
+    expect(toolService.searchAssets).toHaveBeenCalledWith(auth, sessionId, {
+      mode: 'metadata',
+      filters: {},
+      limit: 10_000,
+      page: 1,
+      order: 'desc',
+    });
     expectToolResult(response, `${AgentToolName.SearchAssets}-call`, serviceResult);
   });
 
@@ -631,8 +638,11 @@ describe(AgentMcpService.name, () => {
     expect(toolService.listSpaces).toHaveBeenCalledWith(auth, sessionId, {});
     expect(toolService.readSpace).toHaveBeenCalledWith(auth, sessionId, { spaceId: familySpaceId });
     expect(toolService.searchAssets).toHaveBeenCalledWith(auth, sessionId, {
+      mode: 'metadata',
       filters: { city: 'Berlin' },
       limit: 50,
+      page: 1,
+      order: 'desc',
     });
     expect(operationPlanService.proposeAlbumOperations).toHaveBeenCalledWith(auth, sessionId, {
       summary: 'Add recent Berlin photos to Family space.',
@@ -1093,6 +1103,7 @@ describe(AgentMcpService.name, () => {
         id: 'search-filters-outside-filters',
         hintIncludes: 'inside the filters object',
         exampleArguments: {
+          mode: 'metadata',
           filters: {
             takenAfter: '2026-05-01T00:00:00.000Z',
             takenBefore: '2026-05-18T23:59:59.999Z',
@@ -1100,6 +1111,8 @@ describe(AgentMcpService.name, () => {
             country: 'Germany',
           },
           limit: 50,
+          page: 1,
+          order: 'desc',
         },
       },
       {
