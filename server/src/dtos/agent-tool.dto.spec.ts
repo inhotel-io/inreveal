@@ -293,6 +293,13 @@ describe('Agent tool DTOs', () => {
           updatedBefore: new Date('2026-05-20T23:59:59.999Z'),
         }),
       );
+
+      const sharedSpacesResult = parseSearchAssetsRequest({ filters: { withSharedSpaces: true } });
+
+      expect(sharedSpacesResult.success).toBe(true);
+      if (sharedSpacesResult.success) {
+        expect(sharedSpacesResult.data.filters.withSharedSpaces).toBe(true);
+      }
     });
 
     it.each(['smart', 'description', 'ocr', 'filename'] as const)('accepts explicit %s mode with a query', (mode) => {
