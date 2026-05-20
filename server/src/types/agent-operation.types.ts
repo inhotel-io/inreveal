@@ -20,6 +20,8 @@ export type AgentOperationResult = {
   spaceId?: string;
   tagId?: string;
   assetIds?: string[];
+  userIds?: string[];
+  skippedUserIds?: string[];
   assetResults?: AgentOperationAssetResult[];
   skippedReason?: string;
 };

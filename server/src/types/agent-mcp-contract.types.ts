@@ -59,7 +59,8 @@ export type AgentMcpReadToolName =
   | AgentToolName.ListAlbums
   | AgentToolName.ReadAlbum
   | AgentToolName.ListSpaces
-  | AgentToolName.ReadSpace;
+  | AgentToolName.ReadSpace
+  | AgentToolName.SearchUsers;
 
 export type AgentMcpReadToolContract = AgentMcpToolContract<AgentMcpReadToolName>;
 
