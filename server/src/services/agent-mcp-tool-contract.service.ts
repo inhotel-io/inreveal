@@ -250,7 +250,8 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
     {
       id: 'search-query-with-metadata-mode',
       match: { issuePath: 'query', messageIncludes: 'query is only supported' },
-      hint: 'Use mode smart, description, ocr, or filename when passing query. Omit query for metadata-only searches.',
+      hint:
+        'Omit query and use metadata filters for now. Text search modes are in the contract but are not available yet.',
       exampleName: 'metadata-page-search',
     },
     {

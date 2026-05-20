@@ -180,10 +180,10 @@ describe(AgentMcpToolRegistryService.name, () => {
     });
     expect(search?.properties).toMatchObject({
       mode: expect.objectContaining({
-        description: expect.stringContaining('Search mode'),
+        description: expect.stringContaining('Metadata mode is currently executable'),
       }),
       query: expect.objectContaining({
-        description: expect.stringContaining('smart, description, ocr, or filename'),
+        description: expect.stringContaining('not available until a later slice'),
       }),
       filters: expect.objectContaining({
         description: expect.stringContaining('Put structured search filters here'),
@@ -199,6 +199,14 @@ describe(AgentMcpToolRegistryService.name, () => {
       }),
       toolCallId: expect.objectContaining({
         description: expect.stringContaining('approved retry'),
+      }),
+    });
+    expect(search?.properties).toMatchObject({
+      mode: expect.objectContaining({
+        description: expect.not.stringContaining('Use metadata for structured filters, or smart'),
+      }),
+      query: expect.objectContaining({
+        description: expect.not.stringContaining('use this with smart, description, ocr, or filename modes'),
       }),
     });
     expect(album?.properties).toMatchObject({
