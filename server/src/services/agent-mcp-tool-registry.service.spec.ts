@@ -186,16 +186,16 @@ describe(AgentMcpToolRegistryService.name, () => {
         description: expect.stringContaining('not available until a later slice'),
       }),
       filters: expect.objectContaining({
-        description: expect.stringContaining('Put structured search filters here'),
+        description: expect.stringContaining('Currently executable filters'),
       }),
       limit: expect.objectContaining({
         description: expect.stringContaining('10000'),
       }),
       page: expect.objectContaining({
-        description: expect.stringContaining('One-based result page'),
+        description: expect.stringContaining('Only page 1 is currently executable'),
       }),
       order: expect.objectContaining({
-        description: expect.stringContaining('Result order'),
+        description: expect.stringContaining('Only desc is currently executable'),
       }),
       toolCallId: expect.objectContaining({
         description: expect.stringContaining('approved retry'),
@@ -207,6 +207,15 @@ describe(AgentMcpToolRegistryService.name, () => {
       }),
       query: expect.objectContaining({
         description: expect.not.stringContaining('use this with smart, description, ocr, or filename modes'),
+      }),
+      filters: expect.objectContaining({
+        description: expect.not.stringContaining('people, space'),
+      }),
+      page: expect.objectContaining({
+        description: expect.not.stringContaining('continuing a previous search'),
+      }),
+      order: expect.objectContaining({
+        description: expect.not.stringContaining('Result order for the selected search mode'),
       }),
     });
     expect(album?.properties).toMatchObject({

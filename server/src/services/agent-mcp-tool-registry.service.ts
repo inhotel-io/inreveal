@@ -54,10 +54,10 @@ const propertyDescriptions = {
   mode: 'Search mode. Metadata mode is currently executable; text modes require query but are available in a later slice.',
   query: 'Query text. For searchAssets, text modes require query but are not available until a later slice; for searchUsers use a name or email.',
   filters:
-    'Put structured search filters here for date, place, people, space, camera, favorite, rating, album, tag, visibility, and media searches.',
+    'Currently executable filters include taken date, place, camera, favorite, rating, album, tag, and media. People, space, and visibility fields are contract fields for a later slice.',
   limit: 'Maximum number of results to return. Use a positive integer up to 10000.',
-  page: 'One-based result page for continuing a previous search with the same mode, query, filters, order, and limit.',
-  order: 'Result order for the selected search mode.',
+  page: 'One-based result page. Only page 1 is currently executable.',
+  order: 'Result order. Only desc is currently executable.',
   toolCallId: 'Use only for an approved retry after Gallery approves a pending read request.',
   summary: 'A human-readable plan summary describing what Gallery should review.',
   operations: 'The reviewable Gallery operations to propose or revise. Do not apply changes directly.',
