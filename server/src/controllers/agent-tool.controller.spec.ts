@@ -159,8 +159,11 @@ describe(AgentToolController.name, () => {
       serviceMethod: 'searchAssets' as const,
       body: { filters: { takenAfter: '2026-05-13T00:00:00.000Z' }, limit: 5 },
       expectedDto: {
+        mode: 'metadata',
         filters: { takenAfter: new Date('2026-05-13T00:00:00.000Z') },
         limit: 5,
+        page: 1,
+        order: 'desc',
       } satisfies AgentSearchAssetsToolRequestDto,
       invalidBody: { limit: 0 },
     },
