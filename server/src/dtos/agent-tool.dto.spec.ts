@@ -675,8 +675,17 @@ describe('Agent tool DTOs', () => {
   });
 
   describe('expanded agent tool response DTOs', () => {
-    it('encodes and parses search responses with assets and nextPage', () => {
-      const response = { status: 'success' as const, toolCall: makeToolCall(), assets: makeAssets(), nextPage: '2' };
+    it('encodes and parses search responses with result metadata', () => {
+      const response = {
+        status: 'success' as const,
+        toolCall: makeToolCall(),
+        assets: makeAssets(),
+        returnedCount: 1,
+        hasMore: true,
+        nextPage: '2',
+        totalCount: 12,
+        approximateTotal: false,
+      };
       const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode(response);
 
       expect(encoded.success).toBe(true);
@@ -689,12 +698,69 @@ describe('Agent tool DTOs', () => {
       }
 
       expect(encoded.data.assets[0].localDateTime).toBe('2026-05-14T12:00:00.000Z');
+      expect(encoded.data.returnedCount).toBe(1);
+      expect(encoded.data.hasMore).toBe(true);
       expect(encoded.data.nextPage).toBe('2');
+      expect(encoded.data.totalCount).toBe(12);
+      expect(encoded.data.approximateTotal).toBe(false);
       const parsed = AgentSearchAssetsToolResponseDto.schema.safeParse(encoded.data);
       expect(parsed.success).toBe(true);
       if (parsed.success && parsed.data.status === 'success') {
         expect(parsed.data.assets[0].localDateTime).toEqual(new Date('2026-05-14T12:00:00.000Z'));
+        expect(parsed.data.returnedCount).toBe(1);
+        expect(parsed.data.hasMore).toBe(true);
         expect(parsed.data.nextPage).toBe('2');
+        expect(parsed.data.totalCount).toBe(12);
+        expect(parsed.data.approximateTotal).toBe(false);
+      }
+    });
+
+    it('requires returnedCount and hasMore on search success responses', () => {
+      const parsed = AgentSearchAssetsToolResponseDto.schema.safeParse({
+        status: 'success',
+        toolCall: makeEncodedToolCall(),
+        assets: makeEncodedAssets(),
+        nextPage: null,
+      });
+
+      expectIssue(parsed, ['returnedCount'], 'Invalid input');
+      expectIssue(parsed, ['hasMore'], 'Invalid input');
+    });
+
+    it('encodes and parses final empty search pages', () => {
+      const response = {
+        status: 'success' as const,
+        toolCall: makeToolCall(),
+        assets: [],
+        returnedCount: 0,
+        hasMore: false,
+        nextPage: null,
+      };
+      const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode(response);
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success) {
+        return;
+      }
+
+      if (encoded.data.status !== 'success') {
+        return;
+      }
+
+      expect(encoded.data.assets).toEqual([]);
+      expect(encoded.data.returnedCount).toBe(0);
+      expect(encoded.data.hasMore).toBe(false);
+      expect(encoded.data.nextPage).toBeNull();
+      expect(encoded.data).not.toHaveProperty('totalCount');
+      expect(encoded.data).not.toHaveProperty('approximateTotal');
+
+      const parsed = AgentSearchAssetsToolResponseDto.schema.safeParse(encoded.data);
+      expect(parsed.success).toBe(true);
+      if (parsed.success && parsed.data.status === 'success') {
+        expect(parsed.data.assets).toEqual([]);
+        expect(parsed.data.returnedCount).toBe(0);
+        expect(parsed.data.hasMore).toBe(false);
+        expect(parsed.data.nextPage).toBeNull();
       }
     });
 
@@ -880,6 +946,12 @@ const makeToolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentT
   ...overrides,
 });
 
+const makeEncodedToolCall = () => ({
+  ...makeToolCall(),
+  startedAt: '2026-05-14T12:00:00.000Z',
+  completedAt: '2026-05-14T12:01:00.000Z',
+});
+
 const makeSuccessResponse = () => ({
   status: 'success' as const,
   toolCall: makeToolCall(),
@@ -912,6 +984,18 @@ const makeAssets = () => [
     tags: [{ id: factory.uuid(), value: 'travel', color: '#00ff00' }],
   },
 ];
+
+const makeEncodedAssets = () =>
+  makeAssets().map((asset) => ({
+    ...asset,
+    localDateTime: '2026-05-14T12:00:00.000Z',
+    fileCreatedAt: '2026-05-14T11:00:00.000Z',
+    fileModifiedAt: '2026-05-14T11:30:00.000Z',
+    exifInfo: {
+      ...asset.exifInfo,
+      dateTimeOriginal: '2026-05-14T10:00:00.000Z',
+    },
+  }));
 
 const makeMediaReference = () => ({
   assetId: factory.uuid(),
