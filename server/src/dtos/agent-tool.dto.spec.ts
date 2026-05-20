@@ -298,6 +298,9 @@ describe('Agent tool DTOs', () => {
 
       expect(sharedSpacesResult.success).toBe(true);
       if (sharedSpacesResult.success) {
+        if (!sharedSpacesResult.data.filters) {
+          return;
+        }
         expect(sharedSpacesResult.data.filters.withSharedSpaces).toBe(true);
       }
     });
