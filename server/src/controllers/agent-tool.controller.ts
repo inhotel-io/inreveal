@@ -18,6 +18,8 @@ import {
   AgentReadSpaceToolResponseDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchAssetsToolResponseDto,
+  AgentSearchUsersToolRequestDto,
+  AgentSearchUsersToolResponseDto,
   AgentToolApprovalDto,
   AgentToolCallParamsDto,
   AgentToolCallResponseDto,
@@ -167,6 +169,23 @@ export class AgentToolController {
     @Body() dto: AgentReadSpaceToolRequestDto,
   ): Promise<AgentReadSpaceToolResponseDto> {
     return this.service.readSpace(auth, id, dto);
+  }
+
+  @Post('tools/search-users')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @ApiCreatedResponse({ type: AgentSearchUsersToolResponseDto })
+  @Endpoint({
+    summary: 'Execute the internal searchUsers agent tool',
+    description:
+      'Internal route for requesting or resuming a strict-approved visible user lookup tool call for an AI agent session.',
+    history: new HistoryBuilder().added('v2.7.5').internal('v2.7.5'),
+  })
+  searchUsers(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: AgentSearchUsersToolRequestDto,
+  ): Promise<AgentSearchUsersToolResponseDto> {
+    return this.service.searchUsers(auth, id, dto);
   }
 
   @Get('tool-calls')
