@@ -315,7 +315,7 @@ describe(AgentRunnerMcpController.name, () => {
       expect(realToolService.searchAssets).toHaveBeenCalledWith(
         expect.objectContaining({ user: { id: userId } }),
         sessionId,
-        { filters: { tagIds: [assetId] }, limit: 10 },
+        { mode: 'metadata', filters: { tagIds: [assetId] }, limit: 10, page: 1, order: 'desc' },
       );
       expect(body).toEqual({
         jsonrpc: '2.0',

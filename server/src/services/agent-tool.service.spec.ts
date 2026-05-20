@@ -1538,7 +1538,9 @@ describe(AgentToolService.name, () => {
     const session = makeSession({
       userId: auth.user.id,
       approvalMode: AgentApprovalMode.PlanOnly,
-      permissionPlanSnapshot: makePlan(),
+      permissionPlanSnapshot: makePlan({
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 10_000, maxAssetsPerSession: 10_000 },
+      }),
     });
 
     sessionRepository.getById.mockResolvedValue(session);
@@ -1591,6 +1593,53 @@ describe(AgentToolService.name, () => {
         status: AgentToolCallStatus.Completed,
         redactedResponseMetadata: { assetIds: [assetId] },
         assetCount: 1,
+      }),
+    );
+  });
+
+  it('uses contract defaults for empty service-level search requests', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 10_000, maxAssetsPerSession: 10_000 },
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [], nextPage: null });
+
+    const result = await sut.searchAssets(auth, session.id, {});
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+      assets: [],
+      returnedCount: 0,
+      hasMore: false,
+      nextPage: null,
+    });
+    expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestSummary: 'Search metadata assets (limit 10000)',
+        redactedRequestMetadata: {
+          mode: 'metadata',
+          filters: {},
+          limit: 10_000,
+          page: 1,
+          order: 'desc',
+        },
+        assetCount: 10_000,
+      }),
+      expect.any(Object),
+      AgentToolDataClass.Metadata,
+      expect.any(Number),
+    );
+    expect(assetRepository.searchAgentMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: {},
+        limit: 10_000,
       }),
     );
   });
@@ -1661,11 +1710,19 @@ describe(AgentToolService.name, () => {
       'personIds search is not available yet',
     ],
     [
+      { mode: 'metadata', filters: { personIds: [] }, limit: 5, page: 1, order: 'desc' },
+      'personIds search is not available yet',
+    ],
+    [
       { mode: 'metadata', filters: { spaceId: newUuid() }, limit: 5, page: 1, order: 'desc' },
       'spaceId search is not available yet',
     ],
     [
       { mode: 'metadata', filters: { spacePersonIds: [newUuid()] }, limit: 5, page: 1, order: 'desc' },
+      'spacePersonIds search is not available yet',
+    ],
+    [
+      { mode: 'metadata', filters: { spacePersonIds: [] }, limit: 5, page: 1, order: 'desc' },
       'spacePersonIds search is not available yet',
     ],
     [
