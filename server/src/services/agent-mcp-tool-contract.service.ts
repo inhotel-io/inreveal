@@ -243,29 +243,25 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
           'visibility',
         ],
       },
-      hint:
-        'Place supported metadata filters for date, location, favorite, rating, album, tag, camera, and media inside filters. People, space, and visibility fields are accepted by the contract but are not available in Slice 1.',
+      hint: 'Place supported metadata filters for date, location, favorite, rating, album, tag, camera, and media inside filters. People, space, and visibility fields are accepted by the contract but are not available in Slice 1.',
       exampleName: 'metadata-page-search',
     },
     {
       id: 'search-query-with-metadata-mode',
       match: { issuePath: 'query', messageIncludes: 'query is only supported' },
-      hint:
-        'Omit query and use metadata filters for now. Text search modes are in the contract but are not available yet.',
+      hint: 'Omit query and use metadata filters for now. Text search modes are in the contract but are not available yet.',
       exampleName: 'metadata-page-search',
     },
     {
       id: 'search-space-person-without-space',
       match: { issuePath: 'filters.spacePersonIds', messageIncludes: 'spacePersonIds requires spaceId' },
-      hint:
-        'spacePersonIds requires filters.spaceId, but people and space-person filters are not available in the current slice. Use currently executable metadata filters for now.',
+      hint: 'spacePersonIds requires filters.spaceId, but people and space-person filters are not available in the current slice. Use currently executable metadata filters for now.',
       exampleName: 'metadata-page-search',
     },
     {
       id: 'search-combined-filters-and-tool-call-id',
       match: { messageIncludes: 'Provide either search fields or toolCallId, not both' },
-      hint:
-        'Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.',
+      hint: 'Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.',
       exampleName: 'approved-retry',
     },
     {
