@@ -31,6 +31,13 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('mcp_gallery_proposeAlbumOperations');
   });
 
+  it('marks search contract fields that are not executable in the current slice', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toContain('Only page 1 and order desc are executable');
+    expect(prompt).toContain('Text, people, space, visibility, later pages, and non-desc order');
+  });
+
   it('uses Pi-visible tool names and does not use bare tool-call names as instructions', () => {
     const prompt = sut.generatePromptCheatSheet();
 

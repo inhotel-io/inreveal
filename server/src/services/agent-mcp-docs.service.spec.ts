@@ -195,6 +195,15 @@ describe(AgentMcpDocsService.name, () => {
     expect(markdown).toContain('`mcp_gallery_searchAssets`');
   });
 
+  it('documents current search execution bounds for expanded contract fields', () => {
+    const markdown = sut.generateMarkdown();
+
+    expect(markdown).toContain('Only page 1 and order desc are executable');
+    expect(markdown).toContain('Text, people, space, visibility, later pages, and non-desc order');
+    expect(markdown).toContain('search-page-unavailable');
+    expect(markdown).toContain('search-order-unavailable');
+  });
+
   it('does not leak real secrets, stack traces, filesystem paths, or direct mutation tools', () => {
     const markdown = sut.generateMarkdown();
 

@@ -581,6 +581,25 @@ describe(AgentMcpToolContractService.name, () => {
       });
     });
 
+    it('documents unavailable search continuation and ordering fields as later-slice behavior', () => {
+      const contract = sut.listToolContracts().find((candidate) => candidate.name === AgentToolName.SearchAssets);
+
+      expect(contract?.usage).toContain('Only page 1 and order desc are executable');
+      expect(contract?.usage).toContain('Text, people, space, visibility, later pages, and non-desc order');
+      expect(contract?.commonMistakes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'search-page-unavailable',
+            hint: expect.stringContaining('Only page 1 is executable'),
+          }),
+          expect.objectContaining({
+            id: 'search-order-unavailable',
+            hint: expect.stringContaining('Only order desc is executable'),
+          }),
+        ]),
+      );
+    });
+
     it('returns a current search field and toolCallId correction', () => {
       const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
         requestShape: 'tool-arguments',
@@ -615,9 +634,9 @@ describe(AgentMcpToolContractService.name, () => {
 
       expect(correction).toEqual({
         expected:
-          'Put all search filters under filters. Use mode metadata for structured filters. Use only toolCallId when retrying a Gallery-approved search.',
+          'Put search filters under filters. Use mode metadata. Only page 1 and order desc are executable. Text, people, space, visibility, later pages, and non-desc order are later-slice contract fields and are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
         hint:
-          'Put all search filters under filters. Use mode metadata for structured filters. Use only toolCallId when retrying a Gallery-approved search.',
+          'Put search filters under filters. Use mode metadata. Only page 1 and order desc are executable. Text, people, space, visibility, later pages, and non-desc order are later-slice contract fields and are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
         exampleArguments: {},
       });
     });
