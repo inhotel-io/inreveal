@@ -39,6 +39,7 @@ export class AgentMcpService {
     AgentToolName.ReadAlbum,
     AgentToolName.ListSpaces,
     AgentToolName.ReadSpace,
+    AgentToolName.SearchUsers,
   ]);
 
   private readonly planningToolNames = new Set<AgentToolName>([
@@ -228,6 +229,9 @@ export class AgentMcpService {
       }
       case AgentToolName.ReadSpace: {
         return this.toolService.readSpace(auth, sessionId, dto);
+      }
+      case AgentToolName.SearchUsers: {
+        return this.toolService.searchUsers(auth, sessionId, dto);
       }
     }
   }

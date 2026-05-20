@@ -458,6 +458,48 @@ Retry an approved read request by id.
 }
 ```
 
+### Search users
+
+MCP tool name: `searchUsers`
+
+Find Gallery users visible to the session user before proposing shared-space member changes.
+
+Use query and limit for a new user lookup. Use only toolCallId when retrying a Gallery-approved request.
+
+Argument modes:
+
+- `user-query`: Use before proposing add, remove, or role-change operations for shared-space members.
+  Required fields: none.
+  Forbidden fields: `toolCallId`.
+- `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
+  Required fields: `toolCallId`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
+
+#### find-user-by-name
+
+Find a visible user by name or email text.
+
+<!-- mcp-docs:tool-arguments tool="searchUsers" example="find-user-by-name" -->
+
+```json
+{
+  "query": "sam",
+  "limit": 5
+}
+```
+
+#### approved-retry
+
+Retry an approved read request by id.
+
+<!-- mcp-docs:tool-arguments tool="searchUsers" example="approved-retry" -->
+
+```json
+{
+  "toolCallId": "00000000-0000-4000-8000-000000000111"
+}
+```
+
 ### Propose album operations
 
 MCP tool name: `proposeAlbumOperations`
@@ -1594,6 +1636,13 @@ Summarize plan risks and selected changes.
 - `read-space-wrong-id-field`: Call listSpaces first, then call readSpace with the exact shape {"spaceId":"..."} using the returned id.
 - `read-space-invalid-space-id`: Space ids must be UUID strings returned by listSpaces.
 - `tool-call-arguments-missing`: Put the space read arguments object at params.arguments in the MCP tools/call request.
+- `tool-call-arguments-not-object`: The params.arguments value must be a JSON object, not an array, primitive, or null.
+
+### Search users
+
+- `search-users-combined-query-and-tool-call-id`: Use query and limit for a new lookup, or only toolCallId for an approved retry.
+- `search-users-limit-out-of-range`: Use a positive integer limit no greater than 20.
+- `tool-call-arguments-missing`: Put the user search arguments object at params.arguments in the MCP tools/call request.
 - `tool-call-arguments-not-object`: The params.arguments value must be a JSON object, not an array, primitive, or null.
 
 ### Propose album operations

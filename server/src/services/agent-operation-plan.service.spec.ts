@@ -75,6 +75,9 @@ const expandedWriteScope = {
   addAssetsToSpaces: true,
   removeAssetsFromSpaces: true,
   updateSpaceDetails: true,
+  addMembersToSpaces: true,
+  removeMembersFromSpaces: true,
+  updateSpaceMemberRoles: true,
   editAssets: true,
   favoriteAssets: true,
   archiveAssets: true,
@@ -3046,6 +3049,223 @@ describe(AgentOperationPlanService.name, () => {
     expect(result.failedOperationIds).toEqual([removeOperation.id]);
     expect(sharedSpaceService.addAssets).toHaveBeenCalledWith(auth, spaceId, { assetIds: [allowedAssetId] });
     expect(sharedSpaceService.removeAssets).not.toHaveBeenCalled();
+  });
+
+  it('validates owner access and redacts user ids for shared-space member plans', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const userId = newUuid();
+    const otherUserId = newUuid();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const plan = makePlan({ sessionId: session.id });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sessionRepository.update.mockResolvedValue({ ...session, status: AgentSessionStatus.WaitingForPlanReview });
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([spaceId]));
+    planRepository.createReplacementRevision.mockResolvedValue(plan);
+    toolCallRepository.create.mockResolvedValue(makeToolCall({ sessionId: session.id }));
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Manage Family members.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceAddMembers,
+            summary: 'Add Alex as editor.',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: spaceId,
+            payload: { members: [{ userId, role: SharedSpaceRole.Editor }] },
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Low,
+          },
+          {
+            type: AgentOperationType.SpaceRemoveMembers,
+            summary: 'Remove Chris.',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: spaceId,
+            payload: { userIds: [otherUserId] },
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Medium,
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({ status: 'success' });
+
+    expect(accessRepository.sharedSpace.checkRoleAccess).toHaveBeenCalledWith(
+      auth.user.id,
+      new Set([spaceId]),
+      SharedSpaceRole.Owner,
+    );
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        redactedRequestMetadata: expect.objectContaining({
+          spaceIds: [spaceId],
+          userIds: [userId, otherUserId],
+        }),
+      }),
+    );
+  });
+
+  it('applies shared-space member operations with selected person ids and skipped no-op results', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const spaceId = newUuid();
+    const addUserId = newUuid();
+    const excludedAddUserId = newUuid();
+    const existingUserId = newUuid();
+    const missingUserId = newUuid();
+    const roleUserId = newUuid();
+    const sameRoleUserId = newUuid();
+    const addOperation = makeOperation({
+      id: newUuid(),
+      type: AgentOperationType.SpaceAddMembers,
+      targetKind: AgentOperationTargetKind.ExistingSpace,
+      targetId: spaceId,
+      temporaryTargetId: null,
+      payload: {
+        members: [
+          { userId: addUserId, role: SharedSpaceRole.Editor },
+          { userId: excludedAddUserId, role: SharedSpaceRole.Viewer },
+          { userId: existingUserId, role: SharedSpaceRole.Viewer },
+        ],
+      },
+    });
+    const removeOperation = makeOperation({
+      id: newUuid(),
+      type: AgentOperationType.SpaceRemoveMembers,
+      targetKind: AgentOperationTargetKind.ExistingSpace,
+      targetId: spaceId,
+      temporaryTargetId: null,
+      payload: { userIds: [existingUserId, missingUserId] },
+      position: 1,
+    });
+    const roleOperation = makeOperation({
+      id: newUuid(),
+      type: AgentOperationType.SpaceUpdateMemberRole,
+      targetKind: AgentOperationTargetKind.ExistingSpace,
+      targetId: spaceId,
+      temporaryTargetId: null,
+      payload: { userIds: [roleUserId, sameRoleUserId], role: SharedSpaceRole.Editor },
+      position: 2,
+    });
+    const plan = makePlan({ sessionId: session.id, operations: [addOperation, removeOperation, roleOperation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([spaceId]));
+    sharedSpaceService.getMembers
+      .mockResolvedValueOnce([
+        { userId: existingUserId, role: SharedSpaceRole.Viewer },
+        { userId: roleUserId, role: SharedSpaceRole.Viewer },
+        { userId: sameRoleUserId, role: SharedSpaceRole.Editor },
+      ] as never)
+      .mockResolvedValueOnce([
+        { userId: existingUserId, role: SharedSpaceRole.Viewer },
+        { userId: roleUserId, role: SharedSpaceRole.Viewer },
+        { userId: sameRoleUserId, role: SharedSpaceRole.Editor },
+      ] as never)
+      .mockResolvedValueOnce([
+        { userId: roleUserId, role: SharedSpaceRole.Viewer },
+        { userId: sameRoleUserId, role: SharedSpaceRole.Editor },
+      ] as never);
+    sharedSpaceService.addMember.mockResolvedValue({} as never);
+    sharedSpaceService.removeMember.mockResolvedValue(undefined as never);
+    sharedSpaceService.updateMember.mockResolvedValue({} as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [addOperation.id, removeOperation.id, roleOperation.id],
+      itemSelections: {
+        [addOperation.id]: { itemKind: 'person', mode: 'only', itemIds: [addUserId, existingUserId] },
+        [removeOperation.id]: { itemKind: 'person', mode: 'allExcept', itemIds: [missingUserId] },
+      },
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(sharedSpaceService.addMember).toHaveBeenCalledWith(auth, spaceId, {
+      userId: addUserId,
+      role: SharedSpaceRole.Editor,
+    });
+    expect(sharedSpaceService.addMember).not.toHaveBeenCalledWith(
+      auth,
+      spaceId,
+      expect.objectContaining({ userId: excludedAddUserId }),
+    );
+    expect(sharedSpaceService.removeMember).toHaveBeenCalledWith(auth, spaceId, existingUserId);
+    expect(sharedSpaceService.updateMember).toHaveBeenCalledWith(auth, spaceId, roleUserId, {
+      role: SharedSpaceRole.Editor,
+    });
+    expect(sharedSpaceService.updateMember).not.toHaveBeenCalledWith(
+      auth,
+      spaceId,
+      sameRoleUserId,
+      expect.anything(),
+    );
+    expect(planRepository.completeApply).toHaveBeenCalledWith(
+      plan.id,
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: addOperation.id,
+          result: expect.objectContaining({ userIds: [addUserId], skippedUserIds: [existingUserId] }),
+        }),
+        expect.objectContaining({
+          id: removeOperation.id,
+          result: expect.objectContaining({ userIds: [existingUserId], skippedUserIds: [] }),
+        }),
+        expect.objectContaining({
+          id: roleOperation.id,
+          result: expect.objectContaining({ userIds: [roleUserId], skippedUserIds: [sameRoleUserId] }),
+        }),
+      ]),
+    );
+  });
+
+  it('rejects current-user member changes and owner role assignments before mutating', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const spaceId = newUuid();
+    const ownerRoleOperation = makeOperation({
+      id: newUuid(),
+      type: AgentOperationType.SpaceUpdateMemberRole,
+      targetKind: AgentOperationTargetKind.ExistingSpace,
+      targetId: spaceId,
+      temporaryTargetId: null,
+      payload: { userIds: [auth.user.id], role: SharedSpaceRole.Owner },
+    });
+    const plan = makePlan({ sessionId: session.id, operations: [ownerRoleOperation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([spaceId]));
+    sharedSpaceService.getMembers.mockResolvedValue([
+      { userId: auth.user.id, role: SharedSpaceRole.Owner },
+      { userId: newUuid(), role: SharedSpaceRole.Owner },
+    ] as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [ownerRoleOperation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(sharedSpaceService.removeMember).not.toHaveBeenCalled();
+    expect(sharedSpaceService.updateMember).not.toHaveBeenCalled();
   });
 
   it('applies expanded album, space, asset, and tag operations with sparse selections and target overrides', async () => {

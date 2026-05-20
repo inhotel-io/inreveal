@@ -209,6 +209,9 @@ const typeLabelKeys: Partial<Record<AgentOperationType, Translations>> = {
   [AgentOperationType.SpaceAddAssets]: 'assistant_operation_type_space_add_assets' as Translations,
   [AgentOperationType.SpaceRemoveAssets]: 'assistant_operation_type_space_remove_assets' as Translations,
   [AgentOperationType.SpaceUpdateDetails]: 'assistant_operation_type_space_update_details' as Translations,
+  [AgentOperationType.SpaceAddMembers]: 'assistant_operation_type_space_add_members' as Translations,
+  [AgentOperationType.SpaceRemoveMembers]: 'assistant_operation_type_space_remove_members' as Translations,
+  [AgentOperationType.SpaceUpdateMemberRole]: 'assistant_operation_type_space_update_member_role' as Translations,
 };
 
 const riskLabelKeys = {
@@ -895,9 +898,13 @@ const validateEditableFields = (
 
 const buildOperationApplyState = (operation: AgentOperationResponseDto): OperationApplyState => {
   if (operation.status === AgentOperationStatus.Applied) {
+    const result = isRecord(operation.result) ? operation.result : undefined;
+    const appliedUserIds = getStringArray(result?.userIds);
+
     return {
       kind: 'applied',
       ...(operation.assetIds.length > 0 ? { appliedAssetCount: operation.assetIds.length } : {}),
+      ...(appliedUserIds && appliedUserIds.length > 0 ? { appliedAssetCount: appliedUserIds.length } : {}),
     };
   }
 
@@ -1019,17 +1026,18 @@ const getRawStringPayloadValue = (operation: AgentOperationResponseDto, key: str
 };
 
 const buildOperationReviewSelection = (
-  operation: Pick<AgentOperationResponseDto, 'assetIds'>,
+  operation: Pick<AgentOperationResponseDto, 'assetIds' | 'payload' | 'type'>,
   included: boolean,
   itemSelection?: AgentOperationItemSelectionPayload,
 ): AgentReviewSelection => {
-  const assetIds = [...new Set(operation.assetIds)];
-  const totalCount = assetIds.length;
+  const itemKind = getOperationItemKind(operation);
+  const itemIdsForOperation = getOperationSelectableItemIds(operation);
+  const totalCount = itemIdsForOperation.length;
   const supportsItemSelection = totalCount > 0;
 
   if (!included) {
     return {
-      itemKind: 'asset',
+      itemKind,
       totalCount,
       selectedCount: 0,
       mode: 'none',
@@ -1039,7 +1047,7 @@ const buildOperationReviewSelection = (
 
   if (!supportsItemSelection) {
     return {
-      itemKind: 'asset',
+      itemKind,
       totalCount,
       selectedCount: 0,
       mode: 'all',
@@ -1047,12 +1055,13 @@ const buildOperationReviewSelection = (
     };
   }
 
-  const selection = itemSelection ?? { itemKind: 'asset', mode: 'all' as const };
-  const itemIds = (selection.itemIds ?? []).filter((itemId) => assetIds.includes(itemId));
+  const selection =
+    itemSelection?.itemKind === itemKind ? itemSelection : { itemKind, mode: 'all' as const };
+  const itemIds = (selection.itemIds ?? []).filter((itemId) => itemIdsForOperation.includes(itemId));
 
   if (selection.mode === 'allExcept') {
     return {
-      itemKind: 'asset',
+      itemKind,
       totalCount,
       selectedCount: Math.max(totalCount - itemIds.length, 0),
       mode: 'allExcept',
@@ -1063,7 +1072,7 @@ const buildOperationReviewSelection = (
 
   if (selection.mode === 'only') {
     return {
-      itemKind: 'asset',
+      itemKind,
       totalCount,
       selectedCount: itemIds.length,
       mode: 'only',
@@ -1074,7 +1083,7 @@ const buildOperationReviewSelection = (
 
   if (selection.mode === 'none') {
     return {
-      itemKind: 'asset',
+      itemKind,
       totalCount,
       selectedCount: 0,
       mode: 'none',
@@ -1083,12 +1092,46 @@ const buildOperationReviewSelection = (
   }
 
   return {
-    itemKind: 'asset',
+    itemKind,
     totalCount,
     selectedCount: totalCount,
     mode: 'all',
     supportsItemSelection: true,
   };
+};
+
+const getOperationItemKind = (operation: Pick<AgentOperationResponseDto, 'type'>): AgentReviewItemKind =>
+  isMemberOperation(operation.type) ? 'person' : 'asset';
+
+const getOperationSelectableItemIds = (
+  operation: Pick<AgentOperationResponseDto, 'assetIds' | 'payload' | 'type'>,
+) => (isMemberOperation(operation.type) ? getOperationUserIds(operation) : [...new Set(operation.assetIds)]);
+
+const isMemberOperation = (operationType: AgentOperationType | string) =>
+  operationType === AgentOperationType.SpaceAddMembers ||
+  operationType === AgentOperationType.SpaceRemoveMembers ||
+  operationType === AgentOperationType.SpaceUpdateMemberRole;
+
+const getOperationUserIds = (operation: Pick<AgentOperationResponseDto, 'payload' | 'type'>) => {
+  if (operation.type === AgentOperationType.SpaceAddMembers) {
+    const members = Array.isArray(operation.payload.members) ? operation.payload.members : [];
+    return [
+      ...new Set(
+        members
+          .map((member) => (isRecord(member) && typeof member.userId === 'string' ? member.userId : undefined))
+          .filter((userId): userId is string => Boolean(userId)),
+      ),
+    ];
+  }
+
+  if (
+    operation.type === AgentOperationType.SpaceRemoveMembers ||
+    operation.type === AgentOperationType.SpaceUpdateMemberRole
+  ) {
+    return [...new Set(getStringArray(operation.payload.userIds) ?? [])];
+  }
+
+  return [];
 };
 
 const getSelectedAssetIds = (
@@ -1240,6 +1283,16 @@ const getOperationReviewSummary = (operation: AgentOperationResponseDto) => {
     case AgentOperationType.SpaceUpdateDetails: {
       return getSpaceUpdateDetailsSummary(operation);
     }
+    case AgentOperationType.SpaceAddMembers: {
+      return `Add ${formatPersonCount(getOperationUserIds(operation).length)}`;
+    }
+    case AgentOperationType.SpaceRemoveMembers: {
+      return `Remove ${formatPersonCount(getOperationUserIds(operation).length)}`;
+    }
+    case AgentOperationType.SpaceUpdateMemberRole: {
+      const role = typeof operation.payload.role === 'string' ? operation.payload.role : 'member';
+      return `Change ${formatPersonCount(getOperationUserIds(operation).length)} to ${role}`;
+    }
     default: {
       return operation.summary;
     }
@@ -1268,6 +1321,7 @@ const getSpaceUpdateDetailsSummary = (operation: AgentOperationResponseDto) => {
 };
 
 const formatPhotoCount = (count: number) => `${count} ${count === 1 ? 'photo' : 'photos'}`;
+const formatPersonCount = (count: number) => `${count} ${count === 1 ? 'person' : 'people'}`;
 
 const getReviewDestination = (
   operation: AgentOperationResponseDto,

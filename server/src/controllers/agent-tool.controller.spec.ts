@@ -17,6 +17,8 @@ import {
   AgentReadSpaceToolResponseDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchAssetsToolResponseDto,
+  AgentSearchUsersToolRequestDto,
+  AgentSearchUsersToolResponseDto,
   AgentToolApprovalDto,
   AgentToolCallResponseDto,
 } from 'src/dtos/agent-tool.dto';
@@ -98,6 +100,7 @@ describe(AgentToolController.name, () => {
     ['readAlbum', AgentReadAlbumToolResponseDto, 'AgentReadAlbumToolResponseDto'],
     ['listSpaces', AgentListSpacesToolResponseDto, 'AgentListSpacesToolResponseDto'],
     ['readSpace', AgentReadSpaceToolResponseDto, 'AgentReadSpaceToolResponseDto'],
+    ['searchUsers', AgentSearchUsersToolResponseDto, 'AgentSearchUsersToolResponseDto'],
   ] as const)('documents %s with its typed tool response DTO', (methodName, responseDto, schemaName) => {
     const responses = Reflect.getMetadata(DECORATORS.API_RESPONSE, AgentToolController.prototype[methodName]) as
       | Record<number, { type?: unknown }>
@@ -202,6 +205,13 @@ describe(AgentToolController.name, () => {
       body: { spaceId: albumId },
       expectedDto: { spaceId: albumId } satisfies AgentReadSpaceToolRequestDto,
       invalidBody: {},
+    },
+    {
+      path: 'search-users',
+      serviceMethod: 'searchUsers' as const,
+      body: { query: 'sam', limit: 5 },
+      expectedDto: { query: 'sam', limit: 5 } satisfies AgentSearchUsersToolRequestDto,
+      invalidBody: { limit: 0 },
     },
   ])('POST /agent/sessions/:id/tools/$path', ({ path, serviceMethod, body, expectedDto, invalidBody }) => {
     it('should be an authenticated route with update permission', async () => {

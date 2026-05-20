@@ -77,6 +77,7 @@ type SparseItemSelection = NonNullable<AgentOperationPlanApplyRequestDto['itemSe
 type ApplySelection = {
   selectedOperationIds: Set<string>;
   selectedAssetIdsByOperationId: Map<string, string[]>;
+  selectedItemIdsByOperationId: Map<string, string[]>;
   fieldOverridesByOperationId: Map<string, AgentOperationFieldOverride>;
 };
 
@@ -386,7 +387,7 @@ export class AgentOperationPlanService {
       operations
         .filter(
           (operation) =>
-            operation.type === AgentOperationType.SpaceUpdateDetails &&
+            this.requiresOwnerSpaceAccess(operation.type) &&
             operation.targetKind === AgentOperationTargetKind.ExistingSpace &&
             operation.targetId,
         )
@@ -409,7 +410,7 @@ export class AgentOperationPlanService {
       operations
         .filter(
           (operation) =>
-            operation.type !== AgentOperationType.SpaceUpdateDetails &&
+            !this.requiresOwnerSpaceAccess(operation.type) &&
             operation.targetKind === AgentOperationTargetKind.ExistingSpace &&
             operation.targetId,
         )
@@ -471,6 +472,15 @@ export class AgentOperationPlanService {
       AgentOperationType.AssetSetArchive,
       AgentOperationType.AssetAddTag,
       AgentOperationType.AssetRemoveTag,
+    ].includes(type);
+  }
+
+  private requiresOwnerSpaceAccess(type: AgentOperationType) {
+    return [
+      AgentOperationType.SpaceUpdateDetails,
+      AgentOperationType.SpaceAddMembers,
+      AgentOperationType.SpaceRemoveMembers,
+      AgentOperationType.SpaceUpdateMemberRole,
     ].includes(type);
   }
 
@@ -718,6 +728,18 @@ export class AgentOperationPlanService {
       throw new BadRequestException('Agent permission policy does not allow updating space details');
     }
 
+    if (type === AgentOperationType.SpaceAddMembers && !writeScope.addMembersToSpaces) {
+      throw new BadRequestException('Agent permission policy does not allow adding members to spaces');
+    }
+
+    if (type === AgentOperationType.SpaceRemoveMembers && !writeScope.removeMembersFromSpaces) {
+      throw new BadRequestException('Agent permission policy does not allow removing members from spaces');
+    }
+
+    if (type === AgentOperationType.SpaceUpdateMemberRole && !writeScope.updateSpaceMemberRoles) {
+      throw new BadRequestException('Agent permission policy does not allow updating space member roles');
+    }
+
     if (type === AgentOperationType.AssetRotate && !writeScope.editAssets) {
       throw new BadRequestException('Agent permission policy does not allow editing assets');
     }
@@ -784,6 +806,7 @@ export class AgentOperationPlanService {
     const selectedOperationIds = new Set(dto.operationIds);
     const operationById = new Map(plan.operations.map((operation) => [operation.id, operation]));
     const selectedAssetIdsByOperationId = new Map<string, string[]>();
+    const selectedItemIdsByOperationId = new Map<string, string[]>();
 
     for (const [operationId, selection] of Object.entries(dto.itemSelections ?? {})) {
       if (!selectedOperationIds.has(operationId)) {
@@ -795,8 +818,11 @@ export class AgentOperationPlanService {
         throw new BadRequestException('One or more item selection operation ids are not in the current plan');
       }
 
-      const selectedAssetIds = this.resolveSelectedAssetIds(operation, selection);
-      selectedAssetIdsByOperationId.set(operationId, selectedAssetIds);
+      const selectedItemIds = this.resolveSelectedItemIds(operation, selection);
+      selectedItemIdsByOperationId.set(operationId, selectedItemIds);
+      if (selection.itemKind === 'asset') {
+        selectedAssetIdsByOperationId.set(operationId, selectedItemIds);
+      }
     }
 
     const fieldOverridesByOperationId = this.validateFieldOverrides(
@@ -806,7 +832,7 @@ export class AgentOperationPlanService {
       selectedAssetIdsByOperationId,
     );
 
-    return { selectedOperationIds, selectedAssetIdsByOperationId, fieldOverridesByOperationId };
+    return { selectedOperationIds, selectedAssetIdsByOperationId, selectedItemIdsByOperationId, fieldOverridesByOperationId };
   }
 
   private validateFieldOverrides(
@@ -1012,32 +1038,34 @@ export class AgentOperationPlanService {
     return value as UserAvatarColor;
   }
 
-  private resolveSelectedAssetIds(
+  private resolveSelectedItemIds(
     operation: AgentOperationPlanWithOperations['operations'][number],
     selection: SparseItemSelection,
   ): string[] {
-    if (selection.itemKind !== 'asset' || operation.assetIds.length === 0) {
+    const affectedItemIds =
+      selection.itemKind === 'asset' ? [...new Set(operation.assetIds)] : this.getOperationUserIds(operation);
+
+    if (affectedItemIds.length === 0) {
       throw new BadRequestException('Item selection is not supported for one or more operations');
     }
 
-    const affectedAssetIds = [...new Set(operation.assetIds)];
-    const affectedAssetIdSet = new Set(affectedAssetIds);
+    const affectedItemIdSet = new Set(affectedItemIds);
     const itemIds = selection.itemIds ?? [];
 
-    if (itemIds.some((itemId) => !affectedAssetIdSet.has(itemId))) {
+    if (itemIds.some((itemId) => !affectedItemIdSet.has(itemId))) {
       throw new BadRequestException('One or more selected item ids are not affected by the operation');
     }
 
     switch (selection.mode) {
       case 'all': {
-        return affectedAssetIds;
+        return affectedItemIds;
       }
       case 'allExcept': {
-        const excludedAssetIds = new Set(itemIds);
-        return affectedAssetIds.filter((assetId) => !excludedAssetIds.has(assetId));
+        const excludedItemIds = new Set(itemIds);
+        return affectedItemIds.filter((itemId) => !excludedItemIds.has(itemId));
       }
       case 'only': {
-        return affectedAssetIds.filter((assetId) => itemIds.includes(assetId));
+        return affectedItemIds.filter((itemId) => itemIds.includes(itemId));
       }
       case 'none': {
         return [];
@@ -1051,7 +1079,7 @@ export class AgentOperationPlanService {
     plan: AgentOperationPlanWithOperations,
     applySelection: ApplySelection,
   ): Promise<AgentOperationApplyUpdate[]> {
-    const { selectedOperationIds, selectedAssetIdsByOperationId, fieldOverridesByOperationId } = applySelection;
+    const { selectedOperationIds, selectedAssetIdsByOperationId, selectedItemIdsByOperationId, fieldOverridesByOperationId } = applySelection;
     const appliedOperationIds = new Set<string>();
     const createdAlbumIdByTemporaryTargetId = new Map<string, string>();
     const createdSpaceIdByTemporaryTargetId = new Map<string, string>();
@@ -1076,11 +1104,12 @@ export class AgentOperationPlanService {
       }
 
       const selectedAssetIds = selectedAssetIdsByOperationId.get(operation.id);
+      const selectedItemIds = selectedItemIdsByOperationId.get(operation.id);
       const fieldOverride = fieldOverridesByOperationId.get(operation.id);
       const operationForApply =
-        selectedAssetIds === undefined && !fieldOverride
+        selectedAssetIds === undefined && selectedItemIds === undefined && !fieldOverride
           ? operation
-          : this.applyOperationOverrides(operation, selectedAssetIds, fieldOverride, plan.operations);
+          : this.applyOperationOverrides(operation, selectedAssetIds, fieldOverride, plan.operations, selectedItemIds);
 
       const dependencyApplied = operationForApply.dependencyIds.every((dependencyId) =>
         appliedOperationIds.has(dependencyId),
@@ -1098,7 +1127,7 @@ export class AgentOperationPlanService {
         continue;
       }
 
-      if (selectedAssetIds?.length === 0) {
+      if (selectedItemIds?.length === 0) {
         updates.push(this.skippedOperation(operation.id, 'No selected items for operation'));
         skippedCount++;
         await this.emitApplyProgress(auth, session.id, {
@@ -1194,15 +1223,17 @@ export class AgentOperationPlanService {
     selectedAssetIds: string[] | undefined,
     fieldOverride: AgentOperationFieldOverride | undefined,
     operations: AgentOperationPlanWithOperations['operations'],
+    selectedItemIds?: string[],
   ): AgentOperationPlanWithOperations['operations'][number] {
+    const originalPayload = this.requireObjectPayload(operation.payload);
     const overriddenOperation: AgentOperationPlanWithOperations['operations'][number] = {
       ...operation,
       assetIds: fieldOverride?.albumThumbnailAssetId
         ? [fieldOverride.albumThumbnailAssetId]
         : (selectedAssetIds ?? operation.assetIds),
       payload: fieldOverride?.payload
-        ? { ...this.requireObjectPayload(operation.payload), ...fieldOverride.payload }
-        : operation.payload,
+        ? { ...originalPayload, ...fieldOverride.payload }
+        : this.applySelectedUserIdsToPayload(operation.type, originalPayload, selectedItemIds),
     };
 
     if (fieldOverride?.targetAlbumId) {
@@ -1242,6 +1273,44 @@ export class AgentOperationPlanService {
       const dependency = operationById.get(dependencyId);
       return dependency?.type !== createType || dependency.temporaryTargetId !== operation.temporaryTargetId;
     });
+  }
+
+  private applySelectedUserIdsToPayload(
+    type: AgentOperationType,
+    payload: Record<string, unknown>,
+    selectedUserIds?: string[],
+  ): Record<string, unknown> {
+    if (selectedUserIds === undefined) {
+      return payload;
+    }
+
+    const selectedUserIdSet = new Set(selectedUserIds);
+    if (type === AgentOperationType.SpaceAddMembers) {
+      const members = this.getMemberPayloads(payload).filter((member) => selectedUserIdSet.has(member.userId));
+      return { ...payload, members };
+    }
+
+    if (type === AgentOperationType.SpaceRemoveMembers || type === AgentOperationType.SpaceUpdateMemberRole) {
+      const userIds = this.getUserIdsPayload(payload).filter((userId) => selectedUserIdSet.has(userId));
+      return { ...payload, userIds };
+    }
+
+    return payload;
+  }
+
+  private getOperationUserIds(operation: { type: AgentOperationType; payload?: unknown }): string[] {
+    if (operation.type === AgentOperationType.SpaceAddMembers) {
+      return [...new Set(this.getMemberPayloads(operation.payload).map((member) => member.userId))];
+    }
+
+    if (
+      operation.type === AgentOperationType.SpaceRemoveMembers ||
+      operation.type === AgentOperationType.SpaceUpdateMemberRole
+    ) {
+      return [...new Set(this.getUserIdsPayload(operation.payload))];
+    }
+
+    return [];
   }
 
   private async validateApplyAccess(
@@ -1387,6 +1456,75 @@ export class AgentOperationPlanService {
         const space = await this.sharedSpaceService.update(auth, spaceId, dto);
 
         return this.appliedOperation(operation.id, { spaceId: space.id });
+      }
+
+      case AgentOperationType.SpaceAddMembers: {
+        const spaceId = this.resolveTargetSpaceId(operation, createdSpaceIdByTemporaryTargetId);
+        const members = this.getMemberPayloads(operation.payload);
+        const currentMembers = await this.sharedSpaceService.getMembers(auth, spaceId);
+        const currentMemberIds = new Set(currentMembers.map((member) => member.userId));
+        const appliedUserIds: string[] = [];
+        const skippedUserIds: string[] = [];
+
+        for (const member of members) {
+          if (currentMemberIds.has(member.userId)) {
+            skippedUserIds.push(member.userId);
+            continue;
+          }
+
+          await this.sharedSpaceService.addMember(auth, spaceId, { userId: member.userId, role: member.role });
+          currentMemberIds.add(member.userId);
+          appliedUserIds.push(member.userId);
+        }
+
+        return this.appliedOperation(operation.id, { spaceId, userIds: appliedUserIds, skippedUserIds });
+      }
+
+      case AgentOperationType.SpaceRemoveMembers: {
+        const spaceId = this.resolveTargetSpaceId(operation, createdSpaceIdByTemporaryTargetId);
+        const userIds = this.getUserIdsPayload(operation.payload);
+        const currentMembers = await this.sharedSpaceService.getMembers(auth, spaceId);
+        this.assertSafeMemberRemovalOrRoleUpdate(auth.user.id, userIds, currentMembers, undefined);
+        const currentMemberIds = new Set(currentMembers.map((member) => member.userId));
+        const appliedUserIds: string[] = [];
+        const skippedUserIds: string[] = [];
+
+        for (const userId of userIds) {
+          if (!currentMemberIds.has(userId)) {
+            skippedUserIds.push(userId);
+            continue;
+          }
+
+          await this.sharedSpaceService.removeMember(auth, spaceId, userId);
+          currentMemberIds.delete(userId);
+          appliedUserIds.push(userId);
+        }
+
+        return this.appliedOperation(operation.id, { spaceId, userIds: appliedUserIds, skippedUserIds });
+      }
+
+      case AgentOperationType.SpaceUpdateMemberRole: {
+        const spaceId = this.resolveTargetSpaceId(operation, createdSpaceIdByTemporaryTargetId);
+        const payload = this.requireMemberRolePayload(operation.payload);
+        const currentMembers = await this.sharedSpaceService.getMembers(auth, spaceId);
+        this.assertSafeMemberRemovalOrRoleUpdate(auth.user.id, payload.userIds, currentMembers, payload.role);
+        const currentMemberRoleById = new Map(currentMembers.map((member) => [member.userId, member.role]));
+        const appliedUserIds: string[] = [];
+        const skippedUserIds: string[] = [];
+
+        for (const userId of payload.userIds) {
+          const currentRole = currentMemberRoleById.get(userId);
+          if (!currentRole || currentRole === payload.role) {
+            skippedUserIds.push(userId);
+            continue;
+          }
+
+          await this.sharedSpaceService.updateMember(auth, spaceId, userId, { role: payload.role });
+          currentMemberRoleById.set(userId, payload.role);
+          appliedUserIds.push(userId);
+        }
+
+        return this.appliedOperation(operation.id, { spaceId, userIds: appliedUserIds, skippedUserIds });
       }
 
       case AgentOperationType.AssetSetFavorite: {
@@ -1608,6 +1746,69 @@ export class AgentOperationPlanService {
     };
   }
 
+  private getMemberPayloads(payload: unknown): Array<{ userId: string; role: SharedSpaceRole.Editor | SharedSpaceRole.Viewer }> {
+    const objectPayload = this.requireObjectPayload(payload);
+    return Array.isArray(objectPayload.members)
+      ? objectPayload.members
+          .filter((member): member is { userId: string; role: SharedSpaceRole.Editor | SharedSpaceRole.Viewer } => {
+            if (!member || typeof member !== 'object' || Array.isArray(member)) {
+              return false;
+            }
+
+            const candidate = member as Record<string, unknown>;
+            return (
+              typeof candidate.userId === 'string' &&
+              (candidate.role === SharedSpaceRole.Editor || candidate.role === SharedSpaceRole.Viewer)
+            );
+          })
+          .map((member) => ({ userId: member.userId, role: member.role }))
+      : [];
+  }
+
+  private getUserIdsPayload(payload: unknown): string[] {
+    const objectPayload = this.requireObjectPayload(payload);
+    return Array.isArray(objectPayload.userIds)
+      ? objectPayload.userIds.filter((userId): userId is string => typeof userId === 'string')
+      : [];
+  }
+
+  private requireMemberRolePayload(payload: unknown): {
+    userIds: string[];
+    role: SharedSpaceRole.Editor | SharedSpaceRole.Viewer;
+  } {
+    const objectPayload = this.requireObjectPayload(payload);
+    if (objectPayload.role !== SharedSpaceRole.Editor && objectPayload.role !== SharedSpaceRole.Viewer) {
+      throw new BadRequestException('space.updateMemberRole requires viewer or editor role');
+    }
+
+    return {
+      userIds: this.getUserIdsPayload(payload),
+      role: objectPayload.role,
+    };
+  }
+
+  private assertSafeMemberRemovalOrRoleUpdate(
+    currentUserId: string,
+    userIds: string[],
+    currentMembers: Array<{ userId: string; role: string }>,
+    nextRole: SharedSpaceRole.Editor | SharedSpaceRole.Viewer | undefined,
+  ) {
+    if (userIds.includes(currentUserId)) {
+      throw new BadRequestException('Pi cannot remove or change your own space membership');
+    }
+
+    const currentMemberRoleById = new Map(currentMembers.map((member) => [member.userId, member.role]));
+    const ownerIds = currentMembers
+      .filter((member) => member.role === SharedSpaceRole.Owner)
+      .map((member) => member.userId);
+    const affectedOwnerIds = userIds.filter((userId) => currentMemberRoleById.get(userId) === SharedSpaceRole.Owner);
+    const demotesOrRemovesOwners = affectedOwnerIds.length > 0;
+
+    if (demotesOrRemovesOwners && ownerIds.length - affectedOwnerIds.length < 1) {
+      throw new BadRequestException('Pi cannot remove or demote the last owner of a space');
+    }
+  }
+
   private async upsertTag(auth: AuthDto, tagName: string | undefined) {
     if (!tagName) {
       throw new BadRequestException('asset.addTag requires tagId or tagName');
@@ -1755,6 +1956,7 @@ export class AgentOperationPlanService {
         }),
       ),
     ];
+    const userIds = [...new Set(operations.flatMap((operation) => this.getOperationUserIds(operation)))];
 
     return this.toolCallRepository.create({
       sessionId: session.id,
@@ -1770,6 +1972,7 @@ export class AgentOperationPlanService {
         albumIds,
         spaceIds,
         tagIds,
+        userIds,
         assetIds,
       }),
       redactedResponseMetadata: result.redactedResponseMetadata,
@@ -1821,7 +2024,7 @@ export class AgentOperationPlanService {
     _toolName: AgentToolName,
     request: PlanningRequest,
     operations: AgentAlbumOperationInput[],
-    ids: { albumIds: string[]; spaceIds: string[]; tagIds: string[]; assetIds: string[] },
+    ids: { albumIds: string[]; spaceIds: string[]; tagIds: string[]; userIds: string[]; assetIds: string[] },
   ): AgentToolOperationPlanRequestMetadata {
     const metadata: AgentToolOperationPlanRequestMetadata = {
       planId: request.planId,
@@ -1837,6 +2040,10 @@ export class AgentOperationPlanService {
 
     if (ids.tagIds.length > 0) {
       metadata.tagIds = ids.tagIds;
+    }
+
+    if (ids.userIds.length > 0) {
+      metadata.userIds = ids.userIds;
     }
 
     return metadata;

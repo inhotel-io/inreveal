@@ -33,10 +33,16 @@ export type AgentToolReadSpaceRequestMetadata = {
 
 export type AgentToolListSpacesRequestMetadata = Record<string, never>;
 
+export type AgentToolSearchUsersRequestMetadata = {
+  query: string;
+  limit: number;
+};
+
 export type AgentToolResponseIdsMetadata = {
   assetIds?: string[];
   albumIds?: string[];
   spaceIds?: string[];
+  userIds?: string[];
 };
 
 export type AgentToolOperationPlanRequestMetadata = {
@@ -46,6 +52,7 @@ export type AgentToolOperationPlanRequestMetadata = {
   albumIds: string[];
   spaceIds?: string[];
   tagIds?: string[];
+  userIds?: string[];
   assetIds: string[];
 };
 
@@ -122,6 +129,14 @@ export type AgentSpaceDetail = AgentSpaceSummary & {
   assetIdsTruncated: boolean;
 };
 
+export type AgentUserLookupResult = {
+  userId: string;
+  name: string;
+  email: string | null;
+  avatarColor: string | null;
+  profileImagePath: string | null;
+};
+
 export type AgentToolRequestMetadata =
   | AgentToolSearchAssetsRequestMetadata
   | AgentToolReadAssetIdsRequestMetadata
@@ -129,6 +144,7 @@ export type AgentToolRequestMetadata =
   | AgentToolListAlbumsRequestMetadata
   | AgentToolReadSpaceRequestMetadata
   | AgentToolListSpacesRequestMetadata
+  | AgentToolSearchUsersRequestMetadata
   | AgentToolOperationPlanRequestMetadata;
 
 export type AgentToolResponseMetadata = AgentToolResponseIdsMetadata | AgentToolOperationPlanResponseMetadata;

@@ -17,6 +17,8 @@ import {
   AgentReadSpaceToolResponseDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchAssetsToolResponseDto,
+  AgentSearchUsersToolRequestDto,
+  AgentSearchUsersToolResponseDto,
   AgentToolApprovalDto,
   AgentToolCallResponseDto,
 } from 'src/dtos/agent-tool.dto';
@@ -38,6 +40,7 @@ import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
+import { UserService } from 'src/services/user.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import {
   AgentAlbumDetail,
@@ -54,6 +57,8 @@ import {
   AgentToolReadSpaceRequestMetadata,
   AgentToolResponseMetadata,
   AgentToolSearchAssetsRequestMetadata,
+  AgentToolSearchUsersRequestMetadata,
+  AgentUserLookupResult,
 } from 'src/types/agent-tool.types';
 
 type AgentReadToolResponse<TResult extends Record<string, unknown>> =
@@ -119,6 +124,7 @@ export class AgentToolService {
     private readonly sessionRepository: AgentSessionRepository,
     private readonly toolCallRepository: AgentToolCallRepository,
     private readonly agentRunnerService: AgentRunnerService,
+    private readonly userService: UserService,
   ) {}
 
   async searchAssets(
@@ -183,6 +189,14 @@ export class AgentToolService {
     dto: AgentReadSpaceToolRequestDto,
   ): Promise<AgentReadSpaceToolResponseDto> {
     return this.runReadTool(auth, sessionId, dto, this.readSpaceDescriptor());
+  }
+
+  async searchUsers(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentSearchUsersToolRequestDto,
+  ): Promise<AgentSearchUsersToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.searchUsersDescriptor());
   }
 
   async approveToolCall(
@@ -299,6 +313,9 @@ export class AgentToolService {
       }
       case AgentToolName.ReadSpace: {
         return this.readSpace(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.SearchUsers: {
+        return this.searchUsers(auth, session.id, { toolCallId: toolCall.id });
       }
       default: {
         return Promise.resolve();
@@ -875,6 +892,50 @@ export class AgentToolService {
       resultAssetCount: (result) => result.space.assetIds.length,
       resultAlbumCount: () => 0,
       failedReason: 'Space read failed',
+    };
+  }
+
+  private searchUsersDescriptor(): AgentReadToolDescriptor<
+    AgentSearchUsersToolRequestDto,
+    { users: AgentUserLookupResult[] }
+  > {
+    return {
+      toolName: AgentToolName.SearchUsers,
+      dataClass: AgentToolDataClass.Metadata,
+      requestSummary: (request) => (request.query ? `Search users matching "${request.query}"` : 'Search users'),
+      requestMetadata: (request) =>
+        ({ query: request.query ?? '', limit: request.limit ?? 20 }) as AgentToolSearchUsersRequestMetadata,
+      requestedAssetCount: () => 0,
+      requestedAlbumCount: () => 0,
+      perToolLimit: () => Number.MAX_SAFE_INTEGER,
+      perSessionLimit: () => Number.MAX_SAFE_INTEGER,
+      validateAccess: () => Promise.resolve(null),
+      execute: async (auth, _session, request) => {
+        const query = (request.query ?? '').toLocaleLowerCase();
+        const users = (await this.userService.search(auth))
+          .filter((user) => {
+            if (!query) {
+              return true;
+            }
+
+            return user.name.toLocaleLowerCase().includes(query) || user.email.toLocaleLowerCase().includes(query);
+          })
+          .slice(0, request.limit ?? 20)
+          .map((user) => ({
+            userId: user.id,
+            name: user.name,
+            email: user.email ?? null,
+            avatarColor: user.avatarColor ?? null,
+            profileImagePath: user.profileImagePath || null,
+          }));
+
+        return { users };
+      },
+      responseSummary: (result) => `Returned ${result.users.length} user(s)`,
+      responseMetadata: (result) => ({ userIds: result.users.map((user) => user.userId) }),
+      resultAssetCount: () => 0,
+      resultAlbumCount: () => 0,
+      failedReason: 'User search failed',
     };
   }
 

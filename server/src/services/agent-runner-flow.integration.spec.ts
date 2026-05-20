@@ -402,6 +402,7 @@ const setup = () => {
     sessions as unknown as AgentSessionRepository,
     toolCalls as unknown as AgentToolCallRepository,
     runnerService,
+    { search: vi.fn(() => Promise.resolve([])) } as never,
   );
   toolServiceContainer.current = toolService;
 

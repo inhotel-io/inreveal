@@ -3188,6 +3188,73 @@
         "x-immich-state": "Internal"
       }
     },
+    "/agent/sessions/{id}/tools/list-spaces": {
+      "post": {
+        "description": "Internal route for requesting or resuming a strict-approved shared-space list tool call for an AI agent session.",
+        "operationId": "listSpaces",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentListSpacesToolRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentListSpacesToolResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Execute the internal listSpaces agent tool",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Internal"
+          }
+        ],
+        "x-immich-permission": "agentSession.update",
+        "x-immich-state": "Internal"
+      }
+    },
     "/agent/sessions/{id}/tools/read-album": {
       "post": {
         "description": "Internal route for requesting or resuming a strict-approved album read tool call for an AI agent session.",
@@ -3456,6 +3523,73 @@
         "x-immich-state": "Internal"
       }
     },
+    "/agent/sessions/{id}/tools/read-space": {
+      "post": {
+        "description": "Internal route for requesting or resuming a strict-approved shared-space read tool call for an AI agent session.",
+        "operationId": "readSpace",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentReadSpaceToolRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentReadSpaceToolResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Execute the internal readSpace agent tool",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Internal"
+          }
+        ],
+        "x-immich-permission": "agentSession.update",
+        "x-immich-state": "Internal"
+      }
+    },
     "/agent/sessions/{id}/tools/search-assets": {
       "post": {
         "description": "Internal route for requesting or resuming a strict-approved asset search tool call for an AI agent session.",
@@ -3506,6 +3640,73 @@
           }
         ],
         "summary": "Execute the internal searchAssets agent tool",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Internal"
+          }
+        ],
+        "x-immich-permission": "agentSession.update",
+        "x-immich-state": "Internal"
+      }
+    },
+    "/agent/sessions/{id}/tools/search-users": {
+      "post": {
+        "description": "Internal route for requesting or resuming a strict-approved visible user lookup tool call for an AI agent session.",
+        "operationId": "searchUsers",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentSearchUsersToolRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSearchUsersToolResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Execute the internal searchUsers agent tool",
         "tags": [
           "Agent sessions"
         ],
@@ -22220,6 +22421,13 @@
         ],
         "type": "string"
       },
+      "AgentAssignableSharedSpaceMemberRole": {
+        "enum": [
+          "editor",
+          "viewer"
+        ],
+        "type": "string"
+      },
       "AgentCredentialSnapshot": {
         "properties": {
           "baseUrl": {
@@ -22353,6 +22561,96 @@
         },
         "required": [
           "albums",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentListSpacesToolApprovalRequiredResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "approval-required"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentListSpacesToolDeniedResponse": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "denied"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentListSpacesToolRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "toolCallId": {
+            "description": "Approved tool call id when retrying after user approval",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AgentListSpacesToolResponseDto": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentListSpacesToolApprovalRequiredResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentListSpacesToolDeniedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentListSpacesToolSuccessResponse"
+          }
+        ]
+      },
+      "AgentListSpacesToolSuccessResponse": {
+        "properties": {
+          "spaces": {
+            "items": {
+              "$ref": "#/components/schemas/AgentSpaceSummary"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "success"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "spaces",
           "status",
           "toolCall"
         ],
@@ -23097,6 +23395,9 @@
           "space.addAssets",
           "space.removeAssets",
           "space.updateDetails",
+          "space.addMembers",
+          "space.removeMembers",
+          "space.updateMemberRole",
           "asset.rotate",
           "asset.setFavorite",
           "asset.setArchive",
@@ -23224,6 +23525,9 @@
               "addAssetsToSpaces": {
                 "type": "boolean"
               },
+              "addMembersToSpaces": {
+                "type": "boolean"
+              },
               "archiveAssets": {
                 "type": "boolean"
               },
@@ -23245,6 +23549,9 @@
               "removeAssetsFromSpaces": {
                 "type": "boolean"
               },
+              "removeMembersFromSpaces": {
+                "type": "boolean"
+              },
               "setCover": {
                 "type": "boolean"
               },
@@ -23255,6 +23562,9 @@
                 "type": "boolean"
               },
               "updateSpaceDetails": {
+                "type": "boolean"
+              },
+              "updateSpaceMemberRoles": {
                 "type": "boolean"
               }
             },
@@ -23268,6 +23578,9 @@
               "addAssetsToSpaces",
               "removeAssetsFromSpaces",
               "updateSpaceDetails",
+              "addMembersToSpaces",
+              "removeMembersFromSpaces",
+              "updateSpaceMemberRoles",
               "editAssets",
               "favoriteAssets",
               "archiveAssets",
@@ -23799,6 +24112,206 @@
                           "$ref": "#/components/schemas/UserAvatarColor"
                         }
                       },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentSpaceAddMembersOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationExistingSpaceTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "members": {
+                          "minItems": 1,
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "userId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                              },
+                              "role": {
+                                "$ref": "#/components/schemas/AgentAssignableSharedSpaceMemberRole"
+                              }
+                            },
+                            "required": [
+                              "userId",
+                              "role"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "members"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentSpaceRemoveMembersOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationExistingSpaceTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "userIds": {
+                          "minItems": 1,
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                          }
+                        }
+                      },
+                      "required": [
+                        "userIds"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentSpaceUpdateMemberRoleOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationExistingSpaceTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "userIds": {
+                          "minItems": 1,
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                          }
+                        },
+                        "role": {
+                          "$ref": "#/components/schemas/AgentAssignableSharedSpaceMemberRole"
+                        }
+                      },
+                      "required": [
+                        "userIds",
+                        "role"
+                      ],
                       "additionalProperties": false
                     }
                   },
@@ -24705,6 +25218,99 @@
         ],
         "type": "object"
       },
+      "AgentReadSpaceToolApprovalRequiredResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "approval-required"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentReadSpaceToolDeniedResponse": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "denied"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentReadSpaceToolRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "spaceId": {
+            "description": "Shared space id to inspect",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "toolCallId": {
+            "description": "Approved tool call id when retrying after user approval",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AgentReadSpaceToolResponseDto": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentReadSpaceToolApprovalRequiredResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentReadSpaceToolDeniedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentReadSpaceToolSuccessResponse"
+          }
+        ]
+      },
+      "AgentReadSpaceToolSuccessResponse": {
+        "properties": {
+          "space": {
+            "$ref": "#/components/schemas/AgentSpaceDetail"
+          },
+          "status": {
+            "enum": [
+              "success"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "space",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
       "AgentReviseAlbumOperationsDto": {
         "additionalProperties": false,
         "properties": {
@@ -25215,6 +25821,206 @@
                           "$ref": "#/components/schemas/UserAvatarColor"
                         }
                       },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentSpaceAddMembersOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationExistingSpaceTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "members": {
+                          "minItems": 1,
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "userId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                              },
+                              "role": {
+                                "$ref": "#/components/schemas/AgentAssignableSharedSpaceMemberRole"
+                              }
+                            },
+                            "required": [
+                              "userId",
+                              "role"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "members"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentSpaceRemoveMembersOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationExistingSpaceTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "userIds": {
+                          "minItems": 1,
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                          }
+                        }
+                      },
+                      "required": [
+                        "userIds"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentSpaceUpdateMemberRoleOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationExistingSpaceTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "userIds": {
+                          "minItems": 1,
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                          }
+                        },
+                        "role": {
+                          "$ref": "#/components/schemas/AgentAssignableSharedSpaceMemberRole"
+                        }
+                      },
+                      "required": [
+                        "userIds",
+                        "role"
+                      ],
                       "additionalProperties": false
                     }
                   },
@@ -25846,6 +26652,106 @@
         ],
         "type": "object"
       },
+      "AgentSearchUsersToolApprovalRequiredResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "approval-required"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentSearchUsersToolDeniedResponse": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "denied"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentSearchUsersToolRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "toolCallId": {
+            "description": "Approved tool call id when retrying after user approval",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AgentSearchUsersToolResponseDto": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentSearchUsersToolApprovalRequiredResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentSearchUsersToolDeniedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentSearchUsersToolSuccessResponse"
+          }
+        ]
+      },
+      "AgentSearchUsersToolSuccessResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "success"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          },
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/AgentUserLookupResult"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "toolCall",
+          "users"
+        ],
+        "type": "object"
+      },
       "AgentSessionActivityEventCounts": {
         "additionalProperties": false,
         "properties": {
@@ -26104,15 +27010,210 @@
         ],
         "type": "object"
       },
+      "AgentSpaceAddMembersOperationType": {
+        "enum": [
+          "space.addMembers"
+        ],
+        "type": "string"
+      },
       "AgentSpaceCreateOperationType": {
         "enum": [
           "space.create"
         ],
         "type": "string"
       },
+      "AgentSpaceDetail": {
+        "properties": {
+          "assetCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "assetIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "assetIdsReturned": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "assetIdsTruncated": {
+            "type": "boolean"
+          },
+          "color": {
+            "type": "string"
+          },
+          "createdById": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "memberCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/AgentSpaceMemberSummary"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "recentAssetIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "thumbnailAssetId": {
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assetCount",
+          "assetIds",
+          "assetIdsReturned",
+          "assetIdsTruncated",
+          "color",
+          "createdById",
+          "description",
+          "id",
+          "memberCount",
+          "members",
+          "name",
+          "recentAssetIds",
+          "thumbnailAssetId"
+        ],
+        "type": "object"
+      },
+      "AgentSpaceMemberSummary": {
+        "properties": {
+          "avatarColor": {
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "profileImagePath": {
+            "nullable": true,
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "userId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "avatarColor",
+          "name",
+          "profileImagePath",
+          "role",
+          "userId"
+        ],
+        "type": "object"
+      },
+      "AgentSpaceRemoveMembersOperationType": {
+        "enum": [
+          "space.removeMembers"
+        ],
+        "type": "string"
+      },
+      "AgentSpaceSummary": {
+        "properties": {
+          "assetCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "color": {
+            "type": "string"
+          },
+          "createdById": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "memberCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "recentAssetIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "thumbnailAssetId": {
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assetCount",
+          "color",
+          "createdById",
+          "description",
+          "id",
+          "memberCount",
+          "name",
+          "recentAssetIds",
+          "thumbnailAssetId"
+        ],
+        "type": "object"
+      },
       "AgentSpaceUpdateDetailsOperationType": {
         "enum": [
           "space.updateDetails"
+        ],
+        "type": "string"
+      },
+      "AgentSpaceUpdateMemberRoleOperationType": {
+        "enum": [
+          "space.updateMemberRole"
         ],
         "type": "string"
       },
@@ -26252,11 +27353,46 @@
           "readAssetOriginals",
           "listAlbums",
           "readAlbum",
+          "listSpaces",
+          "readSpace",
+          "searchUsers",
           "proposeAlbumOperations",
           "reviseProposedOperations",
           "summarizePlan"
         ],
         "type": "string"
+      },
+      "AgentUserLookupResult": {
+        "properties": {
+          "avatarColor": {
+            "nullable": true,
+            "type": "string"
+          },
+          "email": {
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "profileImagePath": {
+            "nullable": true,
+            "type": "string"
+          },
+          "userId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "avatarColor",
+          "email",
+          "name",
+          "profileImagePath",
+          "userId"
+        ],
+        "type": "object"
       },
       "AgentUserMessageContent": {
         "properties": {
@@ -29104,6 +30240,7 @@
           "SharedSpaceFaceMatch",
           "SharedSpaceFaceMatchAll",
           "SharedSpaceFaceMatchPage",
+          "SharedSpaceFaceMatchFromBackfill",
           "SharedSpaceLibraryFaceSync",
           "SharedSpaceIdentityReconciliation",
           "SharedSpacePersonDedup",
