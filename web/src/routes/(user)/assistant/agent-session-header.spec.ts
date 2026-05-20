@@ -14,7 +14,7 @@ import AgentSessionHeader from './agent-session-header.svelte';
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_approval_mode: 'Approval mode',
-        assistant_approval_behavior_all_actions: 'Strict',
+    assistant_approval_behavior_all_actions: 'Strict',
     assistant_activity_visibility: 'Activity preview',
     assistant_activity_visibility_compact: 'Compact',
     assistant_activity_visibility_expanded: 'Expanded',
