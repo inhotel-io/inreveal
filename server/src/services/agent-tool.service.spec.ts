@@ -1604,7 +1604,10 @@ describe(AgentToolService.name, () => {
       { mode: 'description', query: 'birthday', filters: {}, limit: 5, page: 1, order: 'desc' },
       'description search is not available yet',
     ],
-    [{ mode: 'ocr', query: 'invoice', filters: {}, limit: 5, page: 1, order: 'desc' }, 'ocr search is not available yet'],
+    [
+      { mode: 'ocr', query: 'invoice', filters: {}, limit: 5, page: 1, order: 'desc' },
+      'ocr search is not available yet',
+    ],
     [
       { mode: 'filename', query: 'IMG_2026', filters: {}, limit: 5, page: 1, order: 'desc' },
       'filename search is not available yet',

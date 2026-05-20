@@ -52,7 +52,8 @@ const propertyDescriptions = {
   albumId: 'The album id returned by listAlbums for a new album read request.',
   spaceId: 'The shared space id returned by listSpaces for a new space read request.',
   mode: 'Search mode. Metadata mode is currently executable; text modes require query but are available in a later slice.',
-  query: 'Query text. For searchAssets, text modes require query but are not available until a later slice; for searchUsers use a name or email.',
+  query:
+    'Query text. For searchAssets, text modes require query but are not available until a later slice; for searchUsers use a name or email.',
   filters:
     'Currently executable filters include taken date, place, camera, favorite, rating, album, tag, and media. People, space, and visibility fields are contract fields for a later slice.',
   limit: 'Maximum number of results to return. Use a positive integer up to 10000.',
