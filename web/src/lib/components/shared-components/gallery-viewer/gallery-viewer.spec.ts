@@ -49,6 +49,9 @@ const { assetViewerPropsCalls, mockAssetInteraction, mockAssetViewerManager } = 
   },
 }));
 
+const asAssetInteraction = (assetInteraction: typeof mockAssetInteraction) =>
+  assetInteraction as unknown as AssetMultiSelectManager;
+
 vi.mock('$lib/components/assets/thumbnail/thumbnail.svelte', async () => {
   const { default: MockComponent } = await import('@test-data/mocks/thumbnail-with-label.stub.svelte');
   return { default: MockComponent };
@@ -123,7 +126,7 @@ function asset(id: string, localDateTime: string, overrides: Partial<AssetRespon
 function renderViewer({
   assets = defaultAssets(),
   enableGrouping = true,
-  assetInteraction = mockAssetInteraction,
+  assetInteraction = asAssetInteraction(mockAssetInteraction),
   onIntersected,
   viewerAssets,
 }: {
@@ -349,7 +352,7 @@ describe('GalleryViewer grouping', () => {
     const view = renderViewer({ assets });
     await fireEvent.click(screen.getByTestId('timeline-grouping-year'));
 
-    const selectionInteraction = { ...mockAssetInteraction, selectionActive: true } as AssetMultiSelectManager;
+    const selectionInteraction = asAssetInteraction({ ...mockAssetInteraction, selectionActive: true });
     await view.rerender({
       component: GalleryViewer,
       componentProps: {

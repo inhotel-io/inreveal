@@ -183,16 +183,16 @@ function memory(id: string, assetIds: string[]): MemoryResponseDto {
     ),
     createdAt: '2020-01-01T00:00:00.000Z',
     updatedAt: '2020-01-01T00:00:00.000Z',
-    deletedAt: null,
+    deletedAt: undefined,
     ownerId: 'user-1',
     type: MemoryType.OnThisDay,
     data: { year: 2015 },
     isSaved: false,
     memoryAt: '2020-01-01T00:00:00.000Z',
-    seenAt: null,
+    seenAt: undefined,
     showAt: '2020-01-01T00:00:00.000Z',
-    hideAt: null,
-  } as MemoryResponseDto;
+    hideAt: undefined,
+  };
 }
 
 function renderViewer() {
