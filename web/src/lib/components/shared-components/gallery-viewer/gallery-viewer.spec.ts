@@ -7,7 +7,8 @@ import type { Component } from 'svelte';
 
 import GalleryViewer from './gallery-viewer.svelte';
 
-const { mockAssetInteraction, mockAssetViewerManager } = vi.hoisted(() => ({
+const { assetViewerPropsCalls, mockAssetInteraction, mockAssetViewerManager } = vi.hoisted(() => ({
+  assetViewerPropsCalls: [] as Array<Record<string, unknown>>,
   mockAssetInteraction: {
     selectionActive: false,
     assets: [],
@@ -24,8 +25,26 @@ const { mockAssetInteraction, mockAssetViewerManager } = vi.hoisted(() => ({
     setAssetSelectionStart: vi.fn(),
   },
   mockAssetViewerManager: {
-    asset: undefined,
-    isViewing: false,
+    _asset: undefined as AssetResponseDto | undefined,
+    _isViewing: false,
+    _notify: () => {},
+    _track: () => {},
+    get asset() {
+      this._track();
+      return this._asset;
+    },
+    set asset(asset: AssetResponseDto | undefined) {
+      this._asset = asset;
+      this._notify();
+    },
+    get isViewing() {
+      this._track();
+      return this._isViewing;
+    },
+    set isViewing(isViewing: boolean) {
+      this._isViewing = isViewing;
+      this._notify();
+    },
     showAssetViewer: vi.fn(),
   },
 }));
@@ -36,13 +55,35 @@ vi.mock('$lib/components/assets/thumbnail/thumbnail.svelte', async () => {
 });
 
 vi.mock('$lib/elements/Portal.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
+  const { default: MockComponent } = await import('@test-data/mocks/sidebar.stub.svelte');
   return { default: MockComponent };
 });
 
-vi.mock('$lib/managers/asset-viewer-manager.svelte', () => ({
-  assetViewerManager: mockAssetViewerManager,
-}));
+vi.mock('$lib/components/asset-viewer/asset-viewer.svelte', () => {
+  return {
+    default: function MockAssetViewer(_node: unknown, props: Record<string, unknown>) {
+      assetViewerPropsCalls.push(props);
+      return {
+        $set: (nextProps: Record<string, unknown>) => assetViewerPropsCalls.push(nextProps),
+        destroy: () => {},
+      };
+    },
+  };
+});
+
+vi.mock('$lib/managers/asset-viewer-manager.svelte', async () => {
+  const { createSubscriber } = await import('svelte/reactivity');
+  mockAssetViewerManager._track = createSubscriber((update) => {
+    mockAssetViewerManager._notify = update;
+    return () => {
+      mockAssetViewerManager._notify = () => {};
+    };
+  });
+
+  return {
+    assetViewerManager: mockAssetViewerManager,
+  };
+});
 
 vi.mock('$lib/managers/feature-flags-manager.svelte', () => ({
   featureFlagsManager: { value: { trash: true } },
@@ -84,14 +125,17 @@ function renderViewer({
   enableGrouping = true,
   assetInteraction = mockAssetInteraction,
   onIntersected,
+  viewerAssets,
 }: {
   assets?: AssetResponseDto[];
   enableGrouping?: boolean;
   assetInteraction?: AssetMultiSelectManager;
   onIntersected?: () => void;
+  viewerAssets?: AssetResponseDto[];
 } = {}) {
   const componentProps = {
     assets,
+    viewerAssets,
     assetInteraction,
     viewport: { width: 900, height: 700 },
     enableGrouping,
@@ -124,6 +168,7 @@ describe('GalleryViewer grouping', () => {
     mockAssetInteraction.startAsset = null;
     mockAssetViewerManager.asset = undefined;
     mockAssetViewerManager.isViewing = false;
+    assetViewerPropsCalls.length = 0;
   });
 
   it('renders the grouping control when grouping is enabled and assets exist', () => {
@@ -245,6 +290,58 @@ describe('GalleryViewer grouping', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(onIntersected).not.toHaveBeenCalled();
+  });
+
+  it('filters viewer asset navigation while a local temporal chip narrows the day grid', async () => {
+    const assets = defaultAssets();
+    const widerViewerAssets = [
+      asset('asset-2015-aug', '2015-08-03T00:00:00.000Z'),
+      asset('asset-2015-jan', '2015-01-01T00:00:00.000Z'),
+      asset('asset-2015-aug-extra', '2015-08-04T00:00:00.000Z'),
+      asset('asset-2016', '2016-01-02T00:00:00.000Z'),
+    ];
+    const view = renderViewer({ assets, viewerAssets: widerViewerAssets });
+
+    await fireEvent.click(screen.getByTestId('timeline-grouping-year'));
+    await fireEvent.click(screen.getByRole('button', { name: /2015, 2 photos/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /Aug 2015, 1 photo/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Aug 2015');
+      expect(screen.getByTestId('thumbnail-asset-2015-aug')).toBeInTheDocument();
+      expect(screen.queryByTestId('thumbnail-asset-2015-jan')).not.toBeInTheDocument();
+    });
+
+    assetViewerPropsCalls.length = 0;
+    mockAssetViewerManager.asset = widerViewerAssets[0];
+    mockAssetViewerManager.isViewing = true;
+    await view.rerender({
+      component: GalleryViewer,
+      componentProps: {
+        assets,
+        viewerAssets: widerViewerAssets,
+        assetInteraction: mockAssetInteraction,
+        viewport: { width: 900, height: 700 },
+        enableGrouping: true,
+      },
+    });
+
+    await waitFor(() => {
+      const latestAssetViewerProps = assetViewerPropsCalls.at(-1) as {
+        cursor: { nextAsset?: AssetResponseDto };
+      };
+      expect(latestAssetViewerProps.cursor.nextAsset?.id).toBe('asset-2015-aug-extra');
+    });
+    const assetViewerProps = assetViewerPropsCalls.at(-1) as {
+      cursor: { nextAsset?: AssetResponseDto; previousAsset?: AssetResponseDto };
+      onRandom: () => Promise<{ id: string } | undefined>;
+    };
+    expect(assetViewerProps.cursor.nextAsset?.id).toBe('asset-2015-aug-extra');
+    expect(assetViewerProps.cursor.previousAsset).toBeUndefined();
+
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.99);
+    await expect(assetViewerProps.onRandom()).resolves.toMatchObject({ id: 'asset-2015-aug-extra' });
+    randomSpy.mockRestore();
   });
 
   it('hides controls and disables representative card activation during selection mode', async () => {

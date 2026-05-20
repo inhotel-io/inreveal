@@ -92,7 +92,12 @@
     enableGrouping && assets.length > 0 && !assetInteraction.selectionActive && !assetViewerManager.isViewing,
   );
 
-  const navigationAssets = $derived(viewerAssets ?? visibleAssets);
+  const navigationBaseAssets = $derived(viewerAssets ?? visibleAssets);
+  const navigationAssets = $derived(
+    enableGrouping && hasGalleryTemporalFilter
+      ? filterGalleryViewerAssetsByTemporalState(navigationBaseAssets, galleryTemporalState)
+      : navigationBaseAssets,
+  );
 
   const geometry = $derived(
     getJustifiedLayoutFromAssets(visibleAssets, {
