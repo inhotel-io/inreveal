@@ -126,9 +126,7 @@
   const isAssistantSettingsApprovalMode = (value: unknown): value is AgentApprovalMode =>
     assistantSettingsApprovalModeOptions.some((option) => option.value === value);
 
-  const primaryApprovalModeOptions = assistantSettingsApprovalModeOptions.filter(
-    (option) => option.value !== AgentApprovalMode.DangerouslySkipPermissions,
-  );
+  const primaryApprovalModeOptions = assistantSettingsApprovalModeOptions;
   const readStoredAssistantDefaults = () => {
     try {
       return JSON.parse(localStorage.getItem(defaultsStorageKey) ?? '{}') as Partial<{
