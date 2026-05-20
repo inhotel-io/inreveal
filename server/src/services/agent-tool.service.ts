@@ -39,8 +39,10 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
+import { buildAgentMetadataSearch } from 'src/services/agent-search-filter-mapper';
 import { UserService } from 'src/services/user.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import {
@@ -122,6 +124,7 @@ export class AgentToolService {
   constructor(
     private readonly accessRepository: AccessRepository,
     private readonly assetRepository: AssetRepository,
+    private readonly searchRepository: SearchRepository,
     private readonly albumRepository: AlbumRepository,
     private readonly sharedSpaceRepository: SharedSpaceRepository,
     private readonly sessionRepository: AgentSessionRepository,
@@ -557,22 +560,24 @@ export class AgentToolService {
       perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
       validateAccess: (auth, session, request) => this.validateSearchRequest(auth, session, request),
       execute: async (auth, session, request) => {
-        const result = await this.assetRepository.searchAgentMetadata({
+        const timelineSpaceIds = await this.getSearchTimelineSpaceIds(auth, session, request.filters ?? {});
+        const search = buildAgentMetadataSearch({
           userId: auth.user.id,
-          filters: request.filters ?? {},
-          limit: this.getSearchLimit(request),
-          scope: this.getRepositoryScope(auth, session.permissionPlanSnapshot),
+          request,
+          scope: {
+            ...this.getRepositoryScope(auth, session.permissionPlanSnapshot),
+            timelineSpaceIds,
+          },
         });
-        await this.assertReturnedAssetsAreAccessible(
-          auth,
-          session,
-          result.assets.map((asset) => asset.id),
-        );
+        const result = await this.searchRepository.searchMetadata(search.pagination, search.options);
+        const assetIds = result.items.map((asset) => asset.id);
+        await this.assertReturnedAssetsAreAccessible(auth, session, assetIds);
+        const assets = await this.getOrderedAgentMetadata(assetIds);
         return {
-          assets: result.assets.map((asset) => this.mapAssetMetadata(asset)),
-          returnedCount: result.assets.length,
-          hasMore: result.nextPage !== null,
-          nextPage: result.nextPage,
+          assets,
+          returnedCount: assets.length,
+          hasMore: result.hasNextPage,
+          nextPage: result.hasNextPage ? String((request.page ?? 1) + 1) : null,
         };
       },
       responseSummary: (result) => this.getReturnedMetadataSummary(result.assets.length),
@@ -1431,6 +1436,41 @@ export class AgentToolService {
       sharedSpaces: plan.assetScope.sharedSpaces,
       locked: plan.assetScope.locked && auth.session?.hasElevatedPermission === true,
     };
+  }
+
+  private async getSearchTimelineSpaceIds(
+    auth: AuthDto,
+    session: AgentSession,
+    filters: AgentSearchAssetsFilters,
+  ): Promise<string[]> {
+    const plan = session.permissionPlanSnapshot;
+    const hasAlbumFilter = (filters.albumIds?.length ?? 0) > 0;
+    const shouldLoadTimelineSpaceIds =
+      !filters.spaceId &&
+      plan.assetScope.sharedSpaces &&
+      (filters.withSharedSpaces === true || !plan.assetScope.owned || hasAlbumFilter);
+
+    if (!shouldLoadTimelineSpaceIds) {
+      return [];
+    }
+
+    const spaceRows = await this.sharedSpaceRepository.getSpaceIdsForTimeline(auth.user.id);
+    return spaceRows.map((row) => row.spaceId);
+  }
+
+  private async getOrderedAgentMetadata(assetIds: string[]): Promise<AgentAssetMetadata[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+
+    const unorderedAssets = await this.assetRepository.getAgentMetadataByIds(assetIds);
+    const assetsById = new Map(
+      unorderedAssets.map((asset) => [asset.id, this.mapAssetMetadata(asset as AgentAssetMetadata)]),
+    );
+    return assetIds.flatMap((id) => {
+      const asset = assetsById.get(id);
+      return asset ? [asset] : [];
+    });
   }
 
   private async createDeniedAudit<TRequest, TResult extends Record<string, unknown>>(
