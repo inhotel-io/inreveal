@@ -695,7 +695,10 @@ export const buildOperationReviewModel = (
       destination: {
         ...group.destination,
         name: item.review.destination.name,
-        subtitle: group.operations[0]?.review.destination.subtitle ?? item.review.destination.subtitle ?? group.destination.subtitle,
+        subtitle:
+          group.operations[0]?.review.destination.subtitle ??
+          item.review.destination.subtitle ??
+          group.destination.subtitle,
       },
       assetCount: getOperationAssetCount(operations.map(({ operation }) => operation)),
       thumbnailSummary,
@@ -879,7 +882,9 @@ const validateEditableFields = (
 
     if (field.key === 'description' && field.value.trim().length > field.maxLength) {
       errors[field.key] =
-        field.maxLength === 500 ? 'Description must be 500 characters or fewer.' : 'Description must be 1,000 characters or fewer.';
+        field.maxLength === 500
+          ? 'Description must be 500 characters or fewer.'
+          : 'Description must be 1,000 characters or fewer.';
       continue;
     }
 
@@ -1055,8 +1060,7 @@ const buildOperationReviewSelection = (
     };
   }
 
-  const selection =
-    itemSelection?.itemKind === itemKind ? itemSelection : { itemKind, mode: 'all' as const };
+  const selection = itemSelection?.itemKind === itemKind ? itemSelection : { itemKind, mode: 'all' as const };
   const itemIds = (selection.itemIds ?? []).filter((itemId) => itemIdsForOperation.includes(itemId));
 
   if (selection.mode === 'allExcept') {
@@ -1103,9 +1107,8 @@ const buildOperationReviewSelection = (
 const getOperationItemKind = (operation: Pick<AgentOperationResponseDto, 'type'>): AgentReviewItemKind =>
   isMemberOperation(operation.type) ? 'person' : 'asset';
 
-const getOperationSelectableItemIds = (
-  operation: Pick<AgentOperationResponseDto, 'assetIds' | 'payload' | 'type'>,
-) => (isMemberOperation(operation.type) ? getOperationUserIds(operation) : [...new Set(operation.assetIds)]);
+const getOperationSelectableItemIds = (operation: Pick<AgentOperationResponseDto, 'assetIds' | 'payload' | 'type'>) =>
+  isMemberOperation(operation.type) ? getOperationUserIds(operation) : [...new Set(operation.assetIds)];
 
 const isMemberOperation = (operationType: AgentOperationType | string) =>
   operationType === AgentOperationType.SpaceAddMembers ||
@@ -1117,9 +1120,7 @@ const getOperationUserIds = (operation: Pick<AgentOperationResponseDto, 'payload
     const members = Array.isArray(operation.payload.members) ? operation.payload.members : [];
     return [
       ...new Set(
-        members
-          .map((member) => (isRecord(member) && typeof member.userId === 'string' ? member.userId : undefined))
-          .filter((userId): userId is string => Boolean(userId)),
+        members.flatMap((member) => (isRecord(member) && typeof member.userId === 'string' ? [member.userId] : [])),
       ),
     ];
   }
@@ -1128,7 +1129,7 @@ const getOperationUserIds = (operation: Pick<AgentOperationResponseDto, 'payload
     operation.type === AgentOperationType.SpaceRemoveMembers ||
     operation.type === AgentOperationType.SpaceUpdateMemberRole
   ) {
-    return [...new Set(getStringArray(operation.payload.userIds) ?? [])];
+    return [...new Set(getStringArray(operation.payload.userIds))];
   }
 
   return [];

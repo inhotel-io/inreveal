@@ -415,7 +415,9 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     const region = await screen.findByRole('region', { name: 'Plan review' });
     expect(within(region).getByRole('region', { name: 'Family' })).toBeInTheDocument();
-    expect(within(region).getByText('Renamed to "Family"; Updated description; Changed color to green')).toBeInTheDocument();
+    expect(
+      within(region).getByText('Renamed to "Family"; Updated description; Changed color to green'),
+    ).toBeInTheDocument();
     expect(within(region).queryByText('space-1')).not.toBeInTheDocument();
 
     await fireEvent.input(screen.getByLabelText('Space name'), { target: { value: 'Family 2026' } });
@@ -423,7 +425,9 @@ describe('AgentOperationPlanReviewPanel', () => {
     await fireEvent.change(screen.getByLabelText('Color'), { target: { value: 'blue' } });
 
     expect(screen.getByRole('region', { name: 'Family 2026' })).toBeInTheDocument();
-    expect(screen.getByText('Renamed to "Family 2026"; Cleared description; Changed color to blue')).toBeInTheDocument();
+    expect(
+      screen.getByText('Renamed to "Family 2026"; Cleared description; Changed color to blue'),
+    ).toBeInTheDocument();
     expect(onSelectionChange).toHaveBeenLastCalledWith({
       planId,
       planRevision: 1,
