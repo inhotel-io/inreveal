@@ -5,6 +5,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import TagsPage from './+page.svelte';
 
+type TimelineStubGlobals = typeof globalThis & {
+  __timelineStubAssetCount?: number;
+};
+
+const timelineStubGlobals = globalThis as TimelineStubGlobals;
+
 const { mockAssetMultiSelectManager, mockAuthManager, mockRegisterSelectionContext } = vi.hoisted(() => ({
   mockAssetMultiSelectManager: {
     selectionActive: false,
@@ -225,11 +231,11 @@ describe('Tags page timeline grouping', () => {
     vi.clearAllMocks();
     mockAssetMultiSelectManager.selectionActive = false;
     mockAssetMultiSelectManager.assets = [];
-    globalThis.__timelineStubAssetCount = undefined;
+    timelineStubGlobals.__timelineStubAssetCount = undefined;
   });
 
   afterEach(() => {
-    globalThis.__timelineStubAssetCount = undefined;
+    timelineStubGlobals.__timelineStubAssetCount = undefined;
   });
 
   it('selected tag with assets renders grouping controls, preserves tagId, and passes mobile grouping props', async () => {

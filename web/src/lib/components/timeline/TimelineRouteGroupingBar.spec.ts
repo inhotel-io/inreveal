@@ -26,7 +26,7 @@ describe('TimelineRouteGroupingBar', () => {
       props: {
         grouping: 'day',
         filters,
-        onGroupingChange: (grouping) => changes.push(grouping),
+        onGroupingChange: (grouping: TimelineGrouping) => changes.push(grouping),
       },
     });
 

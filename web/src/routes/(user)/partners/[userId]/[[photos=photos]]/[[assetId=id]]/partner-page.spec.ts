@@ -5,6 +5,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import PartnerPage from './+page.svelte';
 
+type TimelineStubGlobals = typeof globalThis & {
+  __timelineStubAssetCount?: number;
+};
+
+const timelineStubGlobals = globalThis as TimelineStubGlobals;
+
 const { gotoMock, mockAssetMultiSelectManager } = vi.hoisted(() => ({
   gotoMock: vi.fn(),
   mockAssetMultiSelectManager: {
@@ -90,11 +96,11 @@ describe('Partner page timeline grouping', () => {
     vi.clearAllMocks();
     mockAssetMultiSelectManager.selectionActive = false;
     mockAssetMultiSelectManager.assets = [];
-    globalThis.__timelineStubAssetCount = undefined;
+    timelineStubGlobals.__timelineStubAssetCount = undefined;
   });
 
   afterEach(() => {
-    globalThis.__timelineStubAssetCount = undefined;
+    timelineStubGlobals.__timelineStubAssetCount = undefined;
   });
 
   it('renders desktop grouping controls and mobile grouping props for partner assets', async () => {
@@ -159,7 +165,7 @@ describe('Partner page timeline grouping', () => {
   });
 
   it('unfiltered empty placeholder does not render orphaned grouping controls', async () => {
-    globalThis.__timelineStubAssetCount = 0;
+    timelineStubGlobals.__timelineStubAssetCount = 0;
 
     renderPage();
 
