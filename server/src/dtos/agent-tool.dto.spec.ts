@@ -33,7 +33,6 @@ import { factory } from 'test/small.factory';
 import z from 'zod';
 
 type AgentReadAssetMetadataToolRequestInput = z.input<typeof AgentReadAssetMetadataToolRequestDto.schema>;
-type AgentSearchAssetsToolRequestInput = z.input<typeof AgentSearchAssetsToolRequestDto.schema>;
 type AgentReadAssetPreviewsToolRequestInput = z.input<typeof AgentReadAssetPreviewsToolRequestDto.schema>;
 type AgentReadAssetOriginalsToolRequestInput = z.input<typeof AgentReadAssetOriginalsToolRequestDto.schema>;
 type AgentListAlbumsToolRequestInput = z.input<typeof AgentListAlbumsToolRequestDto.schema>;
@@ -45,8 +44,7 @@ type AgentToolApprovalInput = z.input<typeof AgentToolApprovalDto.schema>;
 
 const parseRequest = (input: AgentReadAssetMetadataToolRequestInput) =>
   AgentReadAssetMetadataToolRequestDto.schema.safeParse(input);
-const parseSearchAssetsRequest = (input: AgentSearchAssetsToolRequestInput) =>
-  AgentSearchAssetsToolRequestDto.schema.safeParse(input);
+const parseSearchAssetsRequest = (input: unknown) => AgentSearchAssetsToolRequestDto.schema.safeParse(input);
 const parseReadAssetPreviewsRequest = (input: AgentReadAssetPreviewsToolRequestInput) =>
   AgentReadAssetPreviewsToolRequestDto.schema.safeParse(input);
 const parseReadAssetOriginalsRequest = (input: AgentReadAssetOriginalsToolRequestInput) =>
@@ -181,7 +179,198 @@ describe('Agent tool DTOs', () => {
     it('rejects requests containing both filters/limit and toolCallId', () => {
       const result = parseSearchAssetsRequest({ filters: {}, limit: 10, toolCallId: factory.uuid() });
 
-      expectIssue(result, [], 'Provide either search filters or toolCallId, not both');
+      expectIssue(result, [], 'Provide either search fields or toolCallId, not both');
+    });
+
+    it('accepts toolCallId for approved-call resume without search defaults', () => {
+      const toolCallId = factory.uuid();
+      const result = parseSearchAssetsRequest({ toolCallId });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({ toolCallId });
+      }
+    });
+
+    it('accepts metadata search contract fields and defaults', () => {
+      const tagId = factory.uuid();
+      const albumId = factory.uuid();
+      const result = parseSearchAssetsRequest({
+        filters: {
+          type: AssetType.Image,
+          isFavorite: true,
+          isNotInAlbum: true,
+          takenAfter: '2026-05-01T00:00:00.000Z',
+          takenBefore: '2026-05-31T23:59:59.999Z',
+          city: 'Berlin',
+          state: 'Berlin',
+          country: 'Germany',
+          make: 'Sony',
+          model: 'A7',
+          lensModel: 'FE 35mm',
+          rating: null,
+          tagIds: [tagId],
+          albumIds: [albumId],
+        },
+      });
+
+      expect(result.success).toBe(true);
+      if (!result.success) {
+        return;
+      }
+
+      expect(result.data).toEqual(
+        expect.objectContaining({
+          mode: 'metadata',
+          limit: 10_000,
+          page: 1,
+          order: 'desc',
+        }),
+      );
+      expect(result.data).not.toHaveProperty('query');
+      expect(result.data.filters).toEqual(
+        expect.objectContaining({
+          type: AssetType.Image,
+          isFavorite: true,
+          isNotInAlbum: true,
+          city: 'Berlin',
+          state: 'Berlin',
+          country: 'Germany',
+          make: 'Sony',
+          model: 'A7',
+          lensModel: 'FE 35mm',
+          rating: null,
+          tagIds: [tagId],
+          albumIds: [albumId],
+          takenAfter: new Date('2026-05-01T00:00:00.000Z'),
+          takenBefore: new Date('2026-05-31T23:59:59.999Z'),
+        }),
+      );
+    });
+
+    it('accepts future search filter fields in the schema contract', () => {
+      const personId = factory.uuid();
+      const spaceId = factory.uuid();
+      const spacePersonId = factory.uuid();
+      const result = parseSearchAssetsRequest({
+        filters: {
+          createdAfter: '2026-04-01T00:00:00.000Z',
+          createdBefore: '2026-04-30T23:59:59.999Z',
+          updatedAfter: '2026-05-01T00:00:00.000Z',
+          updatedBefore: '2026-05-20T23:59:59.999Z',
+          personIds: [personId],
+          spaceId,
+          spacePersonIds: [spacePersonId],
+          visibility: AssetVisibility.Timeline,
+        },
+        limit: 25,
+        page: 2,
+        order: 'asc',
+      });
+
+      expect(result.success).toBe(true);
+      if (!result.success) {
+        return;
+      }
+
+      expect(result.data).toEqual(
+        expect.objectContaining({
+          mode: 'metadata',
+          limit: 25,
+          page: 2,
+          order: 'asc',
+        }),
+      );
+      expect(result.data.filters).toEqual(
+        expect.objectContaining({
+          personIds: [personId],
+          spaceId,
+          spacePersonIds: [spacePersonId],
+          visibility: AssetVisibility.Timeline,
+          createdAfter: new Date('2026-04-01T00:00:00.000Z'),
+          createdBefore: new Date('2026-04-30T23:59:59.999Z'),
+          updatedAfter: new Date('2026-05-01T00:00:00.000Z'),
+          updatedBefore: new Date('2026-05-20T23:59:59.999Z'),
+        }),
+      );
+    });
+
+    it.each(['smart', 'description', 'ocr', 'filename'] as const)('accepts explicit %s mode with a query', (mode) => {
+      const result = parseSearchAssetsRequest({ mode, query: 'beach sunset', filters: { city: 'Lisbon' }, limit: 5 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual(
+          expect.objectContaining({
+            mode,
+            query: 'beach sunset',
+            limit: 5,
+            page: 1,
+            order: 'desc',
+          }),
+        );
+      }
+    });
+
+    it.each(['smart', 'description', 'ocr', 'filename'] as const)('rejects %s mode without a query', (mode) => {
+      const result = parseSearchAssetsRequest({ mode, filters: {}, limit: 5 });
+
+      expectIssue(result, ['query'], `${mode} search requires a non-empty query`);
+    });
+
+    it('rejects metadata mode with a query', () => {
+      const result = parseSearchAssetsRequest({ mode: 'metadata', query: 'beach sunset', filters: {}, limit: 5 });
+
+      expectIssue(result, ['query'], 'query is only supported for smart, description, ocr, and filename search modes');
+    });
+
+    it('rejects root-level filter fields', () => {
+      const result = parseSearchAssetsRequest({ city: 'Berlin', createdAfter: '2026-05-01T00:00:00.000Z' });
+
+      expectIssue(result, [], 'Unrecognized');
+    });
+
+    it('rejects invalid order and page values', () => {
+      const invalidOrder = parseSearchAssetsRequest({ order: 'newest-first' });
+      const invalidPage = parseSearchAssetsRequest({ page: 0 });
+
+      expectIssue(invalidOrder, ['order'], 'Invalid option');
+      expectIssue(invalidPage, ['page'], 'Too small');
+    });
+
+    it('rejects invalid date, rating, and limit values', () => {
+      const invalidDate = parseSearchAssetsRequest({ filters: { takenAfter: 'yesterday' } });
+      const invalidRating = parseSearchAssetsRequest({ filters: { rating: 6 } });
+      const invalidLimit = parseSearchAssetsRequest({ limit: 10_001 });
+
+      expectIssue(invalidDate, ['filters', 'takenAfter'], 'Invalid');
+      expectIssue(invalidRating, ['filters', 'rating'], 'Too big');
+      expectIssue(invalidLimit, ['limit'], 'Too big');
+    });
+
+    it('rejects spacePersonIds without spaceId', () => {
+      const result = parseSearchAssetsRequest({ filters: { spacePersonIds: [factory.uuid()] } });
+
+      expectIssue(result, ['filters', 'spacePersonIds'], 'spacePersonIds requires spaceId');
+    });
+
+    it('rejects spaceId with withSharedSpaces', () => {
+      const result = parseSearchAssetsRequest({ filters: { spaceId: factory.uuid(), withSharedSpaces: true } });
+
+      expectIssue(result, ['filters', 'withSharedSpaces'], 'Cannot use both spaceId and withSharedSpaces');
+    });
+
+    it('rejects requests containing any new search field and toolCallId', () => {
+      for (const input of [
+        { mode: 'smart', query: 'beach', toolCallId: factory.uuid() },
+        { query: 'beach', toolCallId: factory.uuid() },
+        { order: 'asc', toolCallId: factory.uuid() },
+        { page: 2, toolCallId: factory.uuid() },
+      ] as const) {
+        const result = parseSearchAssetsRequest(input);
+
+        expectIssue(result, [], 'Provide either search fields or toolCallId, not both');
+      }
     });
   });
 
