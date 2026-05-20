@@ -41,7 +41,7 @@ const approvedRetryMode: AgentMcpArgumentMode = {
   name: 'approved-retry',
   description: 'Retry a read request that Gallery already approved.',
   requiredFields: ['toolCallId'],
-  forbiddenFields: ['assetIds', 'albumId', 'filters', 'limit'],
+  forbiddenFields: ['assetIds', 'albumId', 'spaceId', 'filters', 'limit'],
   whenToUse: 'Use only after Gallery resumes the assistant from an approved tool request.',
 };
 
@@ -346,6 +346,118 @@ const readAlbumContract: AgentMcpToolContract<AgentToolName.ReadAlbum> = {
   safety,
 };
 
+const listSpacesContract: AgentMcpToolContract<AgentToolName.ListSpaces> = {
+  name: AgentToolName.ListSpaces,
+  title: 'List spaces',
+  description: 'List shared spaces visible to the session user.',
+  usage: 'Use an empty object for a new request. Use only toolCallId when retrying a Gallery-approved request.',
+  argumentModes: [
+    {
+      name: 'list-visible-spaces',
+      description: 'Start a new shared space list request.',
+      requiredFields: [],
+      forbiddenFields: ['toolCallId', 'spaceId'],
+      whenToUse: 'Use before answering shared-space count or shared-space lookup questions.',
+    },
+    approvedRetryMode,
+  ],
+  examples: [
+    {
+      name: 'list-visible-spaces',
+      description: 'List visible shared spaces.',
+      arguments: {},
+    },
+    approvedRetryExample,
+  ],
+  commonMistakes: [
+    {
+      id: 'list-spaces-unexpected-space-id',
+      match: { unexpectedField: 'spaceId' },
+      hint: 'Use {} to list spaces. Use readSpace with spaceId to inspect one space.',
+      exampleName: 'list-visible-spaces',
+    },
+    {
+      id: 'tool-call-arguments-missing',
+      match: { missingField: 'arguments', requestShape: 'json-rpc' },
+      hint: 'Use params.arguments: {} for a normal listSpaces tool call.',
+      exampleName: 'list-visible-spaces',
+    },
+    {
+      id: 'tool-call-arguments-not-object',
+      match: { issuePath: 'arguments', requestShape: 'json-rpc' },
+      hint: 'The params.arguments value must be a JSON object. Use {} for a normal listSpaces call.',
+      exampleName: 'list-visible-spaces',
+    },
+  ],
+  approvalRetry,
+  safety,
+};
+
+const readSpaceContract: AgentMcpToolContract<AgentToolName.ReadSpace> = {
+  name: AgentToolName.ReadSpace,
+  title: 'Read space',
+  description: 'Read one visible shared space, member summaries, and bounded asset ids.',
+  usage: 'Use spaceId for a new request. Use only toolCallId when retrying a Gallery-approved request.',
+  argumentModes: [
+    {
+      name: 'space-id',
+      description: 'Start a new shared space read request.',
+      requiredFields: ['spaceId'],
+      forbiddenFields: ['toolCallId'],
+      whenToUse: 'Use after listSpaces returns the shared space id to inspect.',
+    },
+    approvedRetryMode,
+  ],
+  examples: [
+    {
+      name: 'read-space-details',
+      description: 'Read a shared space by id.',
+      arguments: { spaceId: exampleSpaceId },
+    },
+    approvedRetryExample,
+  ],
+  commonMistakes: [
+    {
+      id: 'read-space-missing-space-id-or-tool-call-id',
+      match: { messageIncludes: 'Provide spaceId, or retry an approved tool call with toolCallId' },
+      hint: 'Use spaceId returned by listSpaces for a new space read, or only toolCallId for an approved retry.',
+      exampleName: 'read-space-details',
+    },
+    {
+      id: 'read-space-combined-space-id-and-tool-call-id',
+      match: { messageIncludes: 'Use either spaceId or toolCallId, not both' },
+      hint: 'Use either spaceId for a new request or toolCallId for an approved retry, not both.',
+      exampleName: 'approved-retry',
+    },
+    {
+      id: 'read-space-wrong-id-field',
+      match: { unexpectedFields: ['id', 'name', 'spaceName'] },
+      hint: 'Call listSpaces first, then call readSpace with the exact shape {"spaceId":"..."} using the returned id.',
+      exampleName: 'read-space-details',
+    },
+    {
+      id: 'read-space-invalid-space-id',
+      match: { issuePath: 'spaceId' },
+      hint: 'Space ids must be UUID strings returned by listSpaces.',
+      exampleName: 'read-space-details',
+    },
+    {
+      id: 'tool-call-arguments-missing',
+      match: { missingField: 'arguments', requestShape: 'json-rpc' },
+      hint: 'Put the space read arguments object at params.arguments in the MCP tools/call request.',
+      exampleName: 'read-space-details',
+    },
+    {
+      id: 'tool-call-arguments-not-object',
+      match: { issuePath: 'arguments', requestShape: 'json-rpc' },
+      hint: 'The params.arguments value must be a JSON object, not an array, primitive, or null.',
+      exampleName: 'read-space-details',
+    },
+  ],
+  approvalRetry,
+  safety,
+};
+
 const readToolContracts: AgentMcpReadToolContract[] = [
   searchAssetsContract,
   defineAssetReadContract(
@@ -365,6 +477,8 @@ const readToolContracts: AgentMcpReadToolContract[] = [
   ),
   listAlbumsContract,
   readAlbumContract,
+  listSpacesContract,
+  readSpaceContract,
 ];
 
 const planningUsage =
@@ -590,6 +704,70 @@ const planningProposalExamples: AgentMcpToolExample[] = [
     },
   },
   {
+    name: 'rename-existing-space',
+    description: 'Rename an existing shared space.',
+    arguments: {
+      summary: 'Rename Family space.',
+      operations: [
+        {
+          type: AgentOperationType.SpaceUpdateDetails,
+          summary: 'Rename Family space.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: exampleSpaceId,
+          payload: { spaceName: 'Family 2026' },
+        },
+      ],
+    },
+  },
+  {
+    name: 'update-existing-space-description',
+    description: 'Update an existing shared space description.',
+    arguments: {
+      summary: 'Update Family space description.',
+      operations: [
+        {
+          type: AgentOperationType.SpaceUpdateDetails,
+          summary: 'Update Family space description.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: exampleSpaceId,
+          payload: { description: 'Photos for everyone.' },
+        },
+      ],
+    },
+  },
+  {
+    name: 'clear-existing-space-description',
+    description: 'Clear an existing shared space description.',
+    arguments: {
+      summary: 'Clear Family space description.',
+      operations: [
+        {
+          type: AgentOperationType.SpaceUpdateDetails,
+          summary: 'Clear Family space description.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: exampleSpaceId,
+          payload: { description: '' },
+        },
+      ],
+    },
+  },
+  {
+    name: 'update-existing-space-color',
+    description: 'Update an existing shared space color.',
+    arguments: {
+      summary: 'Update Family space color.',
+      operations: [
+        {
+          type: AgentOperationType.SpaceUpdateDetails,
+          summary: 'Update Family space color.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: exampleSpaceId,
+          payload: { color: 'blue' },
+        },
+      ],
+    },
+  },
+  {
     name: 'rotate-assets',
     description: 'Rotate selected image assets.',
     arguments: {
@@ -714,8 +892,57 @@ const planningCommonMistakes: AgentMcpCommonMistake[] = [
   {
     id: 'planning-wrong-space-target-kind',
     match: { messageIncludes: 'space operations require a space target' },
-    hint: 'Space operations must use targetKind existing_space with targetId, or new_space with temporaryTargetId when the operation allows new spaces.',
+    hint: 'Space operations must use targetKind "existing_space" with targetId from listSpaces/readSpace, or targetKind "new_space" with temporaryTargetId from a prior space.create operation.',
     exampleName: 'create-space-and-add-assets',
+  },
+  {
+    id: 'planning-existing-space-missing-target-id',
+    match: {
+      issuePath: 'operations.0.targetId',
+      messageIncludes: 'targetId is required for existing space targets',
+      requestShape: 'tool-arguments',
+    },
+    hint: 'Existing-space asset operations require targetKind "existing_space" and targetId from listSpaces/readSpace.',
+    exampleName: 'add-assets-to-existing-space',
+  },
+  {
+    id: 'planning-existing-space-with-temporary-target',
+    match: {
+      issuePath: 'operations.0.temporaryTargetId',
+      messageIncludes: 'Use targetId for existing spaces',
+      requestShape: 'tool-arguments',
+    },
+    hint: 'Use targetId for existing spaces. Use temporaryTargetId only for new spaces created earlier in the same plan. Read readSpace.assetIdsTruncated before deciding membership: when false, exclude add candidates already in the space and only remove photos already in the space; when true, narrow or ask before claiming membership is complete.',
+    exampleName: 'remove-assets-from-existing-space',
+  },
+  {
+    id: 'planning-space-update-empty-payload',
+    match: { issuePath: 'operations.0.payload', messageIncludes: 'Provide spaceName, description, or color' },
+    hint: 'space.updateDetails payload must include at least one of spaceName, description, or color.',
+    exampleName: 'rename-existing-space',
+  },
+  {
+    id: 'planning-space-update-unsupported-fields',
+    match: { issuePath: 'operations.0.payload', messageIncludes: 'Unrecognized key' },
+    hint:
+      'space.updateDetails only supports spaceName, description, and color. Do not include thumbnail, pets, face recognition, linked libraries, or deletion fields.',
+    exampleName: 'update-existing-space-description',
+  },
+  {
+    id: 'planning-space-update-missing-target-id',
+    match: {
+      issuePath: 'operations.0.targetId',
+      messageIncludes: 'targetId is required for existing space targets',
+      requestShape: 'tool-arguments',
+    },
+    hint: 'Existing-space detail updates require targetKind "existing_space" and targetId from listSpaces/readSpace.',
+    exampleName: 'rename-existing-space',
+  },
+  {
+    id: 'planning-direct-space-mutation',
+    match: { messageIncludes: 'Unknown tool', requestShape: 'json-rpc' },
+    hint: 'Do not call direct space mutation tools. Propose a reviewable space.updateDetails plan instead.',
+    exampleName: 'update-existing-space-color',
   },
   {
     id: 'planning-wrong-asset-batch-target-kind',
@@ -1011,6 +1238,56 @@ const slice1RuntimeFailureMatrixCases: AgentMcpFailureMatrixCase[] = [
     expectedContractMistakeId: 'read-album-invalid-album-id',
   },
   {
+    id: 'list-spaces-unexpected-space-id',
+    category: 'space-read',
+    description: 'Model sends a space id to listSpaces instead of using readSpace for detail.',
+    toolName: AgentToolName.ListSpaces,
+    request: toolCallRequest('list-spaces-unexpected-space-id', AgentToolName.ListSpaces, {
+      spaceId: exampleSpaceId,
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: '' },
+    expectedContractMistakeId: 'list-spaces-unexpected-space-id',
+  },
+  {
+    id: 'read-space-missing-space-id-or-tool-call-id',
+    category: 'space-read',
+    description: 'Model sends an empty readSpace argument object.',
+    toolName: AgentToolName.ReadSpace,
+    request: toolCallRequest('read-space-missing-space-id-or-tool-call-id', AgentToolName.ReadSpace, {}),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: '' },
+    expectedContractMistakeId: 'read-space-missing-space-id-or-tool-call-id',
+  },
+  {
+    id: 'read-space-combined-space-id-and-tool-call-id',
+    category: 'space-read',
+    description: 'Model combines spaceId and approved retry toolCallId.',
+    toolName: AgentToolName.ReadSpace,
+    request: toolCallRequest('read-space-combined-space-id-and-tool-call-id', AgentToolName.ReadSpace, {
+      spaceId: exampleSpaceId,
+      toolCallId: exampleToolCallId,
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: '' },
+    expectedContractMistakeId: 'read-space-combined-space-id-and-tool-call-id',
+  },
+  {
+    id: 'read-space-wrong-id-field',
+    category: 'space-read',
+    description: 'Model uses a name-like field instead of the spaceId returned by listSpaces.',
+    toolName: AgentToolName.ReadSpace,
+    request: toolCallRequest('read-space-wrong-id-field', AgentToolName.ReadSpace, { spaceName: 'Family' }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: '' },
+    expectedContractMistakeId: 'read-space-wrong-id-field',
+  },
+  {
+    id: 'read-space-invalid-space-id',
+    category: 'space-read',
+    description: 'Model sends a non-UUID shared space id.',
+    toolName: AgentToolName.ReadSpace,
+    request: toolCallRequest('read-space-invalid-space-id', AgentToolName.ReadSpace, { spaceId: 'not-a-uuid' }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'spaceId' },
+    expectedContractMistakeId: 'read-space-invalid-space-id',
+  },
+  {
     id: 'search-filters-outside-filters',
     category: 'search',
     description: 'Model puts date or location filters at the argument root.',
@@ -1145,6 +1422,107 @@ const slice4PlanningFailureMatrixCases: AgentMcpFailureMatrixCase[] = [
     }),
     expectedResult: { kind: 'tool-validation', expectedIssuePath: 'operations.0.targetKind' },
     expectedContractMistakeId: 'planning-wrong-space-target-kind',
+  },
+  {
+    id: 'planning-existing-space-missing-target-id',
+    category: 'planning-target',
+    description: 'Model proposes an existing-space asset operation without targetId.',
+    toolName: AgentToolName.ProposeAlbumOperations,
+    request: toolCallRequest('planning-existing-space-missing-target-id', AgentToolName.ProposeAlbumOperations, {
+      summary: 'Add photos to Family space.',
+      operations: [
+        {
+          type: AgentOperationType.SpaceAddAssets,
+          summary: 'Add photos to Family space.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          assetIds: [exampleAssetId],
+          payload: {},
+        },
+      ],
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'operations.0.targetId' },
+    expectedContractMistakeId: 'planning-existing-space-missing-target-id',
+  },
+  {
+    id: 'planning-existing-space-with-temporary-target',
+    category: 'planning-target',
+    description: 'Model uses temporaryTargetId on an existing-space asset operation.',
+    toolName: AgentToolName.ProposeAlbumOperations,
+    request: toolCallRequest('planning-existing-space-with-temporary-target', AgentToolName.ProposeAlbumOperations, {
+      summary: 'Remove photos from Family space.',
+      operations: [
+        {
+          type: AgentOperationType.SpaceRemoveAssets,
+          summary: 'Remove photos from Family space.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: exampleSpaceId,
+          temporaryTargetId: 'tmp-family-space',
+          assetIds: [exampleAssetId],
+          payload: {},
+        },
+      ],
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'operations.0.temporaryTargetId' },
+    expectedContractMistakeId: 'planning-existing-space-with-temporary-target',
+  },
+  {
+    id: 'planning-space-update-empty-payload',
+    category: 'planning-payload',
+    description: 'Model proposes a space detail update without any supported update fields.',
+    toolName: AgentToolName.ProposeAlbumOperations,
+    request: toolCallRequest('planning-space-update-empty-payload', AgentToolName.ProposeAlbumOperations, {
+      summary: 'Update Family space.',
+      operations: [
+        {
+          type: AgentOperationType.SpaceUpdateDetails,
+          summary: 'Update Family space.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: exampleSpaceId,
+          payload: {},
+        },
+      ],
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'operations.0.payload' },
+    expectedContractMistakeId: 'planning-space-update-empty-payload',
+  },
+  {
+    id: 'planning-space-update-unsupported-fields',
+    category: 'planning-payload',
+    description: 'Model proposes unsupported fields for a space detail update.',
+    toolName: AgentToolName.ProposeAlbumOperations,
+    request: toolCallRequest('planning-space-update-unsupported-fields', AgentToolName.ProposeAlbumOperations, {
+      summary: 'Update Family space thumbnail.',
+      operations: [
+        {
+          type: AgentOperationType.SpaceUpdateDetails,
+          summary: 'Update Family space thumbnail.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: exampleSpaceId,
+          payload: { thumbnailAssetId: exampleAssetId },
+        },
+      ],
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'operations.0.payload' },
+    expectedContractMistakeId: 'planning-space-update-unsupported-fields',
+  },
+  {
+    id: 'planning-space-update-missing-target-id',
+    category: 'planning-target',
+    description: 'Model proposes an existing-space detail update without targetId.',
+    toolName: AgentToolName.ProposeAlbumOperations,
+    request: toolCallRequest('planning-space-update-missing-target-id', AgentToolName.ProposeAlbumOperations, {
+      summary: 'Rename Family space.',
+      operations: [
+        {
+          type: AgentOperationType.SpaceUpdateDetails,
+          summary: 'Rename Family space.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          payload: { spaceName: 'Family 2026' },
+        },
+      ],
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'operations.0.targetId' },
+    expectedContractMistakeId: 'planning-space-update-missing-target-id',
   },
   {
     id: 'planning-wrong-asset-batch-target-kind',

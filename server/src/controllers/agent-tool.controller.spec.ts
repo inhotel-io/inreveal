@@ -3,6 +3,8 @@ import { AgentToolController } from 'src/controllers/agent-tool.controller';
 import {
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
+  AgentListSpacesToolRequestDto,
+  AgentListSpacesToolResponseDto,
   AgentReadAlbumToolRequestDto,
   AgentReadAlbumToolResponseDto,
   AgentReadAssetMetadataToolRequestDto,
@@ -11,6 +13,8 @@ import {
   AgentReadAssetOriginalsToolResponseDto,
   AgentReadAssetPreviewsToolRequestDto,
   AgentReadAssetPreviewsToolResponseDto,
+  AgentReadSpaceToolRequestDto,
+  AgentReadSpaceToolResponseDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchAssetsToolResponseDto,
   AgentToolApprovalDto,
@@ -92,6 +96,8 @@ describe(AgentToolController.name, () => {
     ['readAssetOriginals', AgentReadAssetOriginalsToolResponseDto, 'AgentReadAssetOriginalsToolResponseDto'],
     ['listAlbums', AgentListAlbumsToolResponseDto, 'AgentListAlbumsToolResponseDto'],
     ['readAlbum', AgentReadAlbumToolResponseDto, 'AgentReadAlbumToolResponseDto'],
+    ['listSpaces', AgentListSpacesToolResponseDto, 'AgentListSpacesToolResponseDto'],
+    ['readSpace', AgentReadSpaceToolResponseDto, 'AgentReadSpaceToolResponseDto'],
   ] as const)('documents %s with its typed tool response DTO', (methodName, responseDto, schemaName) => {
     const responses = Reflect.getMetadata(DECORATORS.API_RESPONSE, AgentToolController.prototype[methodName]) as
       | Record<number, { type?: unknown }>
@@ -181,6 +187,20 @@ describe(AgentToolController.name, () => {
       serviceMethod: 'readAlbum' as const,
       body: { albumId },
       expectedDto: { albumId } satisfies AgentReadAlbumToolRequestDto,
+      invalidBody: {},
+    },
+    {
+      path: 'list-spaces',
+      serviceMethod: 'listSpaces' as const,
+      body: {},
+      expectedDto: {} satisfies AgentListSpacesToolRequestDto,
+      invalidBody: { spaceId: factory.uuid() },
+    },
+    {
+      path: 'read-space',
+      serviceMethod: 'readSpace' as const,
+      body: { spaceId: albumId },
+      expectedDto: { spaceId: albumId } satisfies AgentReadSpaceToolRequestDto,
       invalidBody: {},
     },
   ])('POST /agent/sessions/:id/tools/$path', ({ path, serviceMethod, body, expectedDto, invalidBody }) => {

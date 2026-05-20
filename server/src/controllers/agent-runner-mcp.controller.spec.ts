@@ -278,10 +278,16 @@ describe(AgentRunnerMcpController.name, () => {
         AgentToolName.ReadAssetOriginals,
         AgentToolName.ListAlbums,
         AgentToolName.ReadAlbum,
+        AgentToolName.ListSpaces,
+        AgentToolName.ReadSpace,
         AgentToolName.ProposeAlbumOperations,
         AgentToolName.ReviseProposedOperations,
         AgentToolName.SummarizePlan,
       ]);
+      const listSpaces = body.result.tools.find((tool: { name: string }) => tool.name === AgentToolName.ListSpaces);
+      const readSpace = body.result.tools.find((tool: { name: string }) => tool.name === AgentToolName.ReadSpace);
+      expect(listSpaces.inputSchema).toMatchObject({ type: 'object' });
+      expect(readSpace.inputSchema).toMatchObject({ type: 'object' });
     });
 
     it('passes runner auth and session id through for read tools/call', async () => {

@@ -1371,7 +1371,7 @@ export class AgentOperationPlanService {
       }
 
       case AgentOperationType.SpaceUpdateDetails: {
-        const payload = this.requireSpacePayload(operation.payload, operation.summary);
+        const payload = this.requireSpaceUpdateDetailsPayload(operation.payload, operation.summary);
         const spaceId = this.resolveTargetSpaceId(operation, createdSpaceIdByTemporaryTargetId);
         const dto: { name?: string; description?: string; color?: UserAvatarColor } = {};
         if (payload.spaceName !== undefined) {
@@ -1561,6 +1561,30 @@ export class AgentOperationPlanService {
       description: normalizedDescription,
       color: color as UserAvatarColor | undefined,
     };
+  }
+
+  private requireSpaceUpdateDetailsPayload(
+    payload: unknown,
+    summary: string,
+  ): { spaceName?: string; description?: string; color?: UserAvatarColor } {
+    const objectPayload = this.requireObjectPayload(payload);
+    const unsupportedFields = Object.keys(objectPayload).filter(
+      (field) => field !== 'spaceName' && field !== 'description' && field !== 'color',
+    );
+    if (unsupportedFields.length > 0) {
+      throw new BadRequestException(`Invalid space payload for ${summary}`);
+    }
+
+    const updatePayload = this.requireSpacePayload(payload, summary);
+    if (
+      updatePayload.spaceName === undefined &&
+      updatePayload.description === undefined &&
+      updatePayload.color === undefined
+    ) {
+      throw new BadRequestException(`Invalid space payload for ${summary}`);
+    }
+
+    return updatePayload;
   }
 
   private requireBooleanPayload(

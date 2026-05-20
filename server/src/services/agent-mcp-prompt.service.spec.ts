@@ -26,6 +26,8 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt.length).toBeLessThanOrEqual(3000);
     expect(prompt).toContain('mcp_gallery_searchAssets');
     expect(prompt).toContain('mcp_gallery_readAssetMetadata');
+    expect(prompt).toContain('mcp_gallery_listSpaces');
+    expect(prompt).toContain('mcp_gallery_readSpace');
     expect(prompt).toContain('mcp_gallery_proposeAlbumOperations');
   });
 
@@ -67,6 +69,112 @@ describe(AgentMcpPromptService.name, () => {
         expect.objectContaining({ exampleName: 'create-album-and-add-assets' }),
       ]),
     );
+  });
+
+  it('includes a normal space lookup example that validates against the read schemas', () => {
+    const prompt = sut.generatePromptCheatSheet();
+    const examples = sut.listPromptExamples();
+    const listSpaces = examples.find(
+      (example) => example.toolName === AgentToolName.ListSpaces && example.exampleName === 'list-visible-spaces',
+    );
+    const readSpace = examples.find(
+      (example) => example.toolName === AgentToolName.ReadSpace && example.exampleName === 'read-space-details',
+    );
+
+    expect(prompt).toContain('Space lookup');
+    expect(prompt).toContain('mcp_gallery_listSpaces');
+    expect(prompt).toContain('mcp_gallery_readSpace');
+    expect(listSpaces?.arguments).toEqual({});
+    expect(readSpace?.arguments).toEqual({ spaceId: '00000000-0000-4000-8000-000000000020' });
+    AgentReadToolRequestSchemas[AgentToolName.ListSpaces].parse(listSpaces?.arguments);
+    AgentReadToolRequestSchemas[AgentToolName.ReadSpace].parse(readSpace?.arguments);
+  });
+
+  it('includes existing-space asset plan examples and membership guidance', () => {
+    const prompt = sut.generatePromptCheatSheet();
+    const examples = sut.listPromptExamples();
+
+    expect(examples).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          toolName: AgentToolName.ProposeAlbumOperations,
+          exampleName: 'add-assets-to-existing-space',
+        }),
+        expect.objectContaining({
+          toolName: AgentToolName.ProposeAlbumOperations,
+          exampleName: 'remove-assets-from-existing-space',
+        }),
+      ]),
+    );
+
+    expect(prompt).toContain('mcp_gallery_listSpaces');
+    expect(prompt).toContain('mcp_gallery_readSpace');
+    expect(prompt).toContain('space.addAssets');
+    expect(prompt).toContain('space.removeAssets');
+    expect(prompt).toContain('"targetKind":"existing_space"');
+    expect(prompt).toContain('assetIdsTruncated');
+    expect(prompt).toMatch(/exclude .*already .*space/i);
+    expect(prompt).toMatch(/only remove .*already .*space/i);
+    expect(prompt).toMatch(/ambiguous|multiple spaces/i);
+    expect(prompt).toMatch(/no matching space|no space/i);
+    expect(prompt).toMatch(/no matching assets|no photos/i);
+  });
+
+  it('guides the runner through existing-space detail updates without direct writes', () => {
+    const prompt = sut.generatePromptCheatSheet();
+    const examples = sut.listPromptExamples();
+
+    expect(examples).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ exampleName: 'rename-existing-space' }),
+        expect.objectContaining({ exampleName: 'update-existing-space-description' }),
+        expect.objectContaining({ exampleName: 'clear-existing-space-description' }),
+        expect.objectContaining({ exampleName: 'update-existing-space-color' }),
+      ]),
+    );
+    expect(prompt).toContain('mcp_gallery_listSpaces');
+    expect(prompt).toContain('mcp_gallery_readSpace');
+    expect(prompt).toContain('space.updateDetails');
+    expect(prompt).toContain('spaceName');
+    expect(prompt).toContain('description');
+    expect(prompt).toContain('color');
+    expect(prompt).toMatch(/already|no-op|no change/i);
+    expect(prompt).not.toContain('mcp_gallery_updateSpace');
+  });
+
+  it('tells the runner not to propose no-op or ambiguous existing-space detail plans', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toMatch(/ambiguous|ask/i);
+    expect(prompt).toMatch(/no matching space|ask/i);
+    expect(prompt).toMatch(/already|no change|no-op/i);
+    expect(prompt).toMatch(/same name|same description|same color/i);
+  });
+
+  it('tells the runner what to do when existing-space membership is complete or truncated', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toMatch(/assetIdsTruncated.*false/i);
+    expect(prompt).toMatch(/exclude .*already .*space/i);
+    expect(prompt).toMatch(/only remove .*already .*space/i);
+    expect(prompt).toMatch(/assetIdsTruncated.*true/i);
+    expect(prompt).toMatch(/narrow|ask/i);
+  });
+
+  it('guides the runner not to propose empty existing-space asset plans', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toMatch(/all .*already .*space|already .*in .*space/i);
+    expect(prompt).toMatch(/none .*in .*space|not .*in .*space/i);
+    expect(prompt).toMatch(/no matching assets|no photos/i);
+  });
+
+  it('guides the runner to ask before planning ambiguous or missing spaces', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toMatch(/ambiguous|multiple spaces/i);
+    expect(prompt).toMatch(/no matching space|no space/i);
+    expect(prompt).toMatch(/ask before planning|ask/i);
   });
 
   it('documents validation-error recovery', () => {

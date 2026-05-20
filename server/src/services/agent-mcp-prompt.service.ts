@@ -21,8 +21,16 @@ export type AgentMcpPromptExample = {
 const promptExampleSelections = [
   { toolName: AgentToolName.SearchAssets, exampleName: 'bounded-date-location-search' },
   { toolName: AgentToolName.ReadAssetMetadata, exampleName: 'approved-retry' },
+  { toolName: AgentToolName.ListSpaces, exampleName: 'list-visible-spaces' },
+  { toolName: AgentToolName.ReadSpace, exampleName: 'read-space-details' },
   { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'create-empty-album' },
   { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'create-album-and-add-assets' },
+  { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'add-assets-to-existing-space' },
+  { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'remove-assets-from-existing-space' },
+  { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'rename-existing-space' },
+  { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'update-existing-space-description' },
+  { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'clear-existing-space-description' },
+  { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'update-existing-space-color' },
 ] as const;
 
 @Injectable()
@@ -32,17 +40,11 @@ export class AgentMcpPromptService {
   generatePromptCheatSheet(): string {
     const examples = this.listPromptExamples();
     const contracts = this.contractService.listToolContracts();
-    const toolList = contracts
-      .map((contract) => `- ${this.toPiToolName(contract.name)}: ${contract.description}`)
-      .join('\n');
+    const toolList = contracts.map((contract) => `- ${this.toPiToolName(contract.name)}`).join('\n');
     const normalRead = this.getPromptExample(examples, AgentToolName.SearchAssets, 'bounded-date-location-search');
     const retryRead = this.getPromptExample(examples, AgentToolName.ReadAssetMetadata, 'approved-retry');
-    const createAlbum = this.getPromptExample(examples, AgentToolName.ProposeAlbumOperations, 'create-empty-album');
-    const createAndAdd = this.getPromptExample(
-      examples,
-      AgentToolName.ProposeAlbumOperations,
-      'create-album-and-add-assets',
-    );
+    const listSpaces = this.getPromptExample(examples, AgentToolName.ListSpaces, 'list-visible-spaces');
+    const readSpace = this.getPromptExample(examples, AgentToolName.ReadSpace, 'read-space-details');
     const searchContract = this.getContract(AgentToolName.SearchAssets);
     const metadataContract = this.getContract(AgentToolName.ReadAssetMetadata);
     const planContract = this.getContract(AgentToolName.ProposeAlbumOperations);
@@ -52,20 +54,18 @@ export class AgentMcpPromptService {
     return this.sanitizePrompt(
       [
         'Gallery MCP tool-use cheat sheet',
-        'Pi-visible tools:',
-        toolList,
+        `Pi-visible tools:\n${toolList}`,
         `Read before planning: ${searchContract.usage}`,
         `For writes, call ${this.toPiToolName(planContract.name)}: ${planContract.usage}`,
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
-        `Read example for ${normalRead.piToolName}:`,
-        this.formatJson(normalRead.arguments),
-        `Retry example for ${retryRead.piToolName}:`,
-        this.formatJson(retryRead.arguments),
-        `Plan ${createAlbum.piToolName} (${createAlbum.exampleName}):`,
-        this.formatJson(createAlbum.arguments),
-        `Plan ${createAndAdd.piToolName} (${createAndAdd.exampleName}):`,
-        this.formatJson(createAndAdd.arguments),
+        `Read ${normalRead.piToolName}: ${this.formatJson(normalRead.arguments)}`,
+        `Retry ${retryRead.piToolName}: ${this.formatJson(retryRead.arguments)}`,
+        `Space lookup: call ${listSpaces.piToolName}, choose an id, then ${readSpace.piToolName}:`,
+        `${this.formatJson(listSpaces.arguments)} -> ${this.formatJson(readSpace.arguments)}`,
+        'Existing-space plans: use listSpaces/readSpace first. If ambiguous/no matching space, ask. If no matching assets/no photos or none to remove in space, explain without an empty plan. If assetIdsTruncated false, exclude already in space adds and only remove photos already in space; if true, narrow or ask.',
+        'Space detail updates: use listSpaces/readSpace first. For existing_space targetId only, plan space.updateDetails payload fields: spaceName, description, color. description "" clears it; omitted fields stay unchanged. If same name, same description, or same color already, answer without a no-op/no change plan. Never update thumbnails, pets, face recognition, linked libraries, or delete spaces.',
+        `Plan ${this.toPiToolName(AgentToolName.ProposeAlbumOperations)} examples: album.create new_album temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id>"]}; space.updateDetails payload {spaceName,description,color}.`,
         this.renderValidationRecoveryGuidance(validationMistake),
       ].join('\n'),
     );
@@ -139,7 +139,49 @@ export class AgentMcpPromptService {
   }
 
   private formatJson(value: unknown): string {
-    return JSON.stringify(value);
+    return JSON.stringify(this.compactPromptValue(value));
+  }
+
+  private compactPromptValue(value: unknown): unknown {
+    if (!value || typeof value !== 'object' || !('operations' in value)) {
+      return value;
+    }
+
+    const plan = value as { operations?: unknown[] };
+    if (!Array.isArray(plan.operations)) {
+      return value;
+    }
+
+    return {
+      operations: plan.operations.map((operation) => {
+        if (!operation || typeof operation !== 'object') {
+          return operation;
+        }
+
+        const {
+          type,
+          targetKind,
+          targetId,
+          temporaryTargetId,
+          assetIds,
+          payload,
+        } = operation as Record<string, unknown>;
+
+        return Object.fromEntries(
+          Object.entries({
+            type,
+            targetKind,
+            targetId: targetId ? '<target-id>' : undefined,
+            temporaryTargetId,
+            assetIds: Array.isArray(assetIds) ? ['<asset-id>'] : undefined,
+            payload:
+              payload && typeof payload === 'object' && !Array.isArray(payload) && Object.keys(payload).length > 0
+                ? payload
+                : undefined,
+          }).filter(([, fieldValue]) => fieldValue !== undefined),
+        );
+      }),
+    };
   }
 
   private renderApprovalRetryGuidance(

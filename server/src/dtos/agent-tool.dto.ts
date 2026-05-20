@@ -131,6 +131,34 @@ const AgentReadAlbumToolRequestSchema = z
   })
   .meta({ id: 'AgentReadAlbumToolRequestDto' });
 
+const AgentListSpacesToolRequestSchema = z
+  .strictObject({
+    toolCallId: uuid.optional().describe('Approved tool call id when retrying after user approval'),
+  })
+  .meta({ id: 'AgentListSpacesToolRequestDto' });
+
+const AgentReadSpaceToolRequestSchema = z
+  .strictObject({
+    spaceId: uuid.optional().describe('Shared space id to inspect'),
+    toolCallId: uuid.optional().describe('Approved tool call id when retrying after user approval'),
+  })
+  .superRefine((value, ctx) => {
+    if (value.spaceId && value.toolCallId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Use either spaceId or toolCallId, not both',
+      });
+    }
+
+    if (!value.spaceId && !value.toolCallId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide spaceId, or retry an approved tool call with toolCallId',
+      });
+    }
+  })
+  .meta({ id: 'AgentReadSpaceToolRequestDto' });
+
 export const AgentReadToolRequestSchemas = {
   [AgentToolName.SearchAssets]: AgentSearchAssetsToolRequestSchema,
   [AgentToolName.ReadAssetMetadata]: AgentReadAssetMetadataToolRequestSchema,
@@ -138,6 +166,8 @@ export const AgentReadToolRequestSchemas = {
   [AgentToolName.ReadAssetOriginals]: AgentReadAssetOriginalsToolRequestSchema,
   [AgentToolName.ListAlbums]: AgentListAlbumsToolRequestSchema,
   [AgentToolName.ReadAlbum]: AgentReadAlbumToolRequestSchema,
+  [AgentToolName.ListSpaces]: AgentListSpacesToolRequestSchema,
+  [AgentToolName.ReadSpace]: AgentReadSpaceToolRequestSchema,
 } as const;
 
 const AgentToolApprovalSchema = z
@@ -231,6 +261,37 @@ const AgentAlbumSummarySchema = z
 const AgentAlbumDetailSchema = AgentAlbumSummarySchema.extend({
   assetIds: z.array(uuid),
 }).meta({ id: 'AgentAlbumDetail' });
+
+const AgentSpaceMemberSummarySchema = z
+  .object({
+    userId: uuid,
+    name: z.string(),
+    role: z.string(),
+    avatarColor: z.string().nullable(),
+    profileImagePath: z.string().nullable(),
+  })
+  .meta({ id: 'AgentSpaceMemberSummary' });
+
+const AgentSpaceSummarySchema = z
+  .object({
+    id: uuid,
+    name: z.string(),
+    description: z.string().nullable(),
+    color: z.string(),
+    createdById: uuid,
+    assetCount: z.number().int().min(0),
+    memberCount: z.number().int().min(0),
+    thumbnailAssetId: uuid.nullable(),
+    recentAssetIds: z.array(uuid),
+  })
+  .meta({ id: 'AgentSpaceSummary' });
+
+const AgentSpaceDetailSchema = AgentSpaceSummarySchema.extend({
+  members: z.array(AgentSpaceMemberSummarySchema),
+  assetIds: z.array(uuid),
+  assetIdsReturned: z.number().int().min(0),
+  assetIdsTruncated: z.boolean(),
+}).meta({ id: 'AgentSpaceDetail' });
 
 const approvalRequiredResponse = (schemaId: string) =>
   z
@@ -351,6 +412,34 @@ const AgentReadAlbumToolResponseSchema = z
   ])
   .meta({ id: 'AgentReadAlbumToolResponseDto' });
 
+const AgentListSpacesToolResponseSchema = z
+  .discriminatedUnion('status', [
+    approvalRequiredResponse('AgentListSpacesToolApprovalRequiredResponse'),
+    deniedResponse('AgentListSpacesToolDeniedResponse'),
+    z
+      .object({
+        status: z.literal('success'),
+        toolCall: AgentToolCallResponseSchema,
+        spaces: z.array(AgentSpaceSummarySchema),
+      })
+      .meta({ id: 'AgentListSpacesToolSuccessResponse' }),
+  ])
+  .meta({ id: 'AgentListSpacesToolResponseDto' });
+
+const AgentReadSpaceToolResponseSchema = z
+  .discriminatedUnion('status', [
+    approvalRequiredResponse('AgentReadSpaceToolApprovalRequiredResponse'),
+    deniedResponse('AgentReadSpaceToolDeniedResponse'),
+    z
+      .object({
+        status: z.literal('success'),
+        toolCall: AgentToolCallResponseSchema,
+        space: AgentSpaceDetailSchema,
+      })
+      .meta({ id: 'AgentReadSpaceToolSuccessResponse' }),
+  ])
+  .meta({ id: 'AgentReadSpaceToolResponseDto' });
+
 const AgentToolCallParamsSchema = z
   .object({
     id: uuid,
@@ -370,6 +459,8 @@ export class AgentReadAssetPreviewsToolRequestDto extends createZodDto(AgentRead
 export class AgentReadAssetOriginalsToolRequestDto extends createZodDto(AgentReadAssetOriginalsToolRequestSchema) {}
 export class AgentListAlbumsToolRequestDto extends createZodDto(AgentListAlbumsToolRequestSchema) {}
 export class AgentReadAlbumToolRequestDto extends createZodDto(AgentReadAlbumToolRequestSchema) {}
+export class AgentListSpacesToolRequestDto extends createZodDto(AgentListSpacesToolRequestSchema) {}
+export class AgentReadSpaceToolRequestDto extends createZodDto(AgentReadSpaceToolRequestSchema) {}
 export class AgentToolApprovalDto extends createZodDto(AgentToolApprovalSchema) {}
 export class AgentToolCallResponseDto extends createZodDto(AgentToolCallResponseSchema) {}
 export class AgentToolCallParamsDto extends createZodDto(AgentToolCallParamsSchema) {}
@@ -403,3 +494,13 @@ export const AgentReadAlbumToolResponseDto = namedZodDto(
   AgentReadAlbumToolResponseSchema,
 );
 export type AgentReadAlbumToolResponseDto = z.output<typeof AgentReadAlbumToolResponseSchema>;
+export const AgentListSpacesToolResponseDto = namedZodDto(
+  'AgentListSpacesToolResponseDto',
+  AgentListSpacesToolResponseSchema,
+);
+export type AgentListSpacesToolResponseDto = z.output<typeof AgentListSpacesToolResponseSchema>;
+export const AgentReadSpaceToolResponseDto = namedZodDto(
+  'AgentReadSpaceToolResponseDto',
+  AgentReadSpaceToolResponseSchema,
+);
+export type AgentReadSpaceToolResponseDto = z.output<typeof AgentReadSpaceToolResponseSchema>;

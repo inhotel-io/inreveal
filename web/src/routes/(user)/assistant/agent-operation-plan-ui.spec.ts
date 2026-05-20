@@ -35,7 +35,11 @@ const createId = '00000000-0000-4000-8000-000000000101';
 const addId = '00000000-0000-4000-8000-000000000102';
 const coverId = '00000000-0000-4000-8000-000000000103';
 const updateId = '00000000-0000-4000-8000-000000000104';
+const spaceAddId = '00000000-0000-4000-8000-000000000105';
+const spaceRemoveId = '00000000-0000-4000-8000-000000000106';
+const spaceUpdateId = '00000000-0000-4000-8000-000000000107';
 const albumId = '00000000-0000-4000-8000-000000000301';
+const spaceId = '00000000-0000-4000-8000-000000000401';
 const assetA = '00000000-0000-4000-8000-000000000201';
 const assetB = '00000000-0000-4000-8000-000000000202';
 
@@ -268,6 +272,189 @@ describe('agent operation plan UI helpers', () => {
       representativeAssetIds: assetIds.slice(0, 12),
       hasMore: true,
     });
+  });
+
+  it('groups existing-space add and remove operations by shared target with human summaries', () => {
+    const assetIds = manyAssetIds(100);
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: spaceAddId,
+          type: AgentOperationType.SpaceAddAssets,
+          summary: 'Add screenshots to Family',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: spaceId,
+          assetIds,
+          payload: { spaceName: 'Family' },
+        }),
+        operation({
+          id: spaceRemoveId,
+          type: AgentOperationType.SpaceRemoveAssets,
+          summary: 'Remove blurry photos from Family',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: spaceId,
+          assetIds: [assetA, assetB],
+          payload: { spaceName: 'Family' },
+        }),
+      ]),
+      { [spaceAddId]: true, [spaceRemoveId]: true },
+    );
+
+    expect(model.groups).toHaveLength(1);
+    expect(model.groups[0]).toEqual(
+      expect.objectContaining({
+        id: `existing-space:${spaceId}`,
+        title: 'Family',
+        subtitle: '2 operations',
+        destination: expect.objectContaining({
+          kind: 'space',
+          id: spaceId,
+          name: 'Family',
+          title: 'Family',
+          subtitle: 'Existing space',
+        }),
+        assetCount: 102,
+        representativeAssetIds: expect.arrayContaining(assetIds.slice(0, 11)),
+      }),
+    );
+    expect(model.groups[0].thumbnailSummary).toEqual({
+      totalCount: 102,
+      representativeAssetIds: expect.arrayContaining(assetIds.slice(0, 11)),
+      hasMore: true,
+    });
+    expect(model.groups[0].representativeAssetIds).toHaveLength(12);
+    expect(model.operationsById.get(spaceAddId)?.review).toEqual(
+      expect.objectContaining({
+        destination: {
+          kind: 'space',
+          id: spaceId,
+          name: 'Family',
+          subtitle: 'Existing space',
+        },
+        summary: 'Add 100 photos',
+      }),
+    );
+    expect(model.operationsById.get(spaceRemoveId)?.review).toEqual(
+      expect.objectContaining({
+        destination: {
+          kind: 'space',
+          id: spaceId,
+          name: 'Family',
+          subtitle: 'Existing space',
+        },
+        summary: 'Remove 2 photos',
+      }),
+    );
+  });
+
+  it('exposes editable existing-space detail fields and applies sparse overrides to the display model', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: spaceUpdateId,
+          type: AgentOperationType.SpaceUpdateDetails,
+          summary: 'Update Family space details',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: spaceId,
+          payload: { spaceName: 'Family', description: 'Shared family photos', color: 'green' },
+        }),
+      ]),
+      { [spaceUpdateId]: true },
+      {},
+      { [spaceUpdateId]: { spaceName: 'Family 2026', description: '', color: 'blue' } },
+    );
+
+    expect(model.groups[0]).toEqual(
+      expect.objectContaining({
+        id: `existing-space:${spaceId}`,
+        title: 'Family 2026',
+        destination: expect.objectContaining({
+          kind: 'space',
+          id: spaceId,
+          name: 'Family 2026',
+          title: 'Family 2026',
+          subtitle: 'Existing space',
+        }),
+      }),
+    );
+    expect(model.operationsById.get(spaceUpdateId)?.editableFields).toEqual([
+      {
+        key: 'spaceName',
+        label: 'Space name',
+        input: 'text',
+        originalValue: 'Family',
+        value: 'Family 2026',
+        required: true,
+        maxLength: 100,
+      },
+      {
+        key: 'description',
+        label: 'Description',
+        input: 'textarea',
+        originalValue: 'Shared family photos',
+        value: '',
+        required: false,
+        maxLength: 500,
+      },
+      {
+        key: 'color',
+        label: 'Color',
+        input: 'select',
+        originalValue: 'green',
+        value: 'blue',
+        required: false,
+        options: [
+          { value: 'primary', label: 'Primary' },
+          { value: 'pink', label: 'Pink' },
+          { value: 'red', label: 'Red' },
+          { value: 'yellow', label: 'Yellow' },
+          { value: 'blue', label: 'Blue' },
+          { value: 'green', label: 'Green' },
+          { value: 'purple', label: 'Purple' },
+          { value: 'orange', label: 'Orange' },
+          { value: 'gray', label: 'Gray' },
+          { value: 'amber', label: 'Amber' },
+        ],
+      },
+    ]);
+    expect(model.operationsById.get(spaceUpdateId)?.summary).toBe(
+      'Renamed to "Family 2026"; Cleared description; Changed color to blue',
+    );
+    expect(buildSelectionPayload(model)).toEqual({
+      planId,
+      planRevision: 1,
+      operationIds: [spaceUpdateId],
+      fieldOverrides: {
+        [spaceUpdateId]: { spaceName: 'Family 2026', description: '', color: 'blue' },
+      },
+    });
+  });
+
+  it('validates existing-space detail edits before building the apply payload', () => {
+    const tooLongDescription = 'x'.repeat(501);
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: spaceUpdateId,
+          type: AgentOperationType.SpaceUpdateDetails,
+          summary: 'Update Family space details',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: spaceId,
+          payload: { spaceName: 'Family', description: 'Shared family photos', color: 'green' },
+        }),
+      ]),
+      { [spaceUpdateId]: true },
+      {},
+      { [spaceUpdateId]: { spaceName: '   ', description: tooLongDescription, color: 'teal' } },
+    );
+
+    expect(model.operationsById.get(spaceUpdateId)?.fieldErrors).toEqual({
+      spaceName: 'Space name is required.',
+      description: 'Description must be 500 characters or fewer.',
+      color: 'Choose a valid Gallery color.',
+    });
+    expect(model.operationsById.get(spaceUpdateId)?.enabled).toBe(false);
+    expect(buildSelectionPayload(model)).toEqual({ planId, planRevision: 1, operationIds: [] });
   });
 
   describe('buildAgentPlanThumbnailStrip', () => {

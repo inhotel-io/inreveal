@@ -18,6 +18,7 @@ import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.reposi
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentMessageService } from 'src/services/agent-message.service';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
@@ -26,7 +27,7 @@ import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import { AgentMessageContent } from 'src/types/agent-message.types';
-import { AgentAlbumSummary } from 'src/types/agent-tool.types';
+import { AgentAlbumSummary, AgentSpaceSummary } from 'src/types/agent-tool.types';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { newUuid } from 'test/small.factory';
 
@@ -57,6 +58,20 @@ const album = (ownerId: string): AgentAlbumSummary => ({
   startDate: new Date('2026-05-01T00:00:00.000Z'),
   endDate: new Date('2026-05-02T00:00:00.000Z'),
   albumThumbnailAssetId: null,
+});
+
+const space = (createdById: string): AgentSpaceSummary & { createdAt: Date; updatedAt: Date } => ({
+  id: '00000000-0000-4000-8000-000000000401',
+  name: 'Family',
+  description: 'Shared family photos',
+  color: 'blue',
+  createdById,
+  assetCount: 0,
+  memberCount: 1,
+  thumbnailAssetId: null,
+  recentAssetIds: [],
+  createdAt: new Date('2026-05-01T00:00:00.000Z'),
+  updatedAt: new Date('2026-05-02T00:00:00.000Z'),
 });
 
 const resolveZero = () => Promise.resolve(0);
@@ -260,9 +275,9 @@ const setup = () => {
     }: {
       body: { gallerySessionId: string; content: AgentMessageContent };
     }) {
-      const result = await toolServiceContainer.current.listAlbums(auth, body.gallerySessionId, {});
+      const result = await toolServiceContainer.current.listSpaces(auth, body.gallerySessionId, {});
       if (result.status !== 'approval-required') {
-        throw new Error('Expected listAlbums to request approval');
+        throw new Error('Expected listSpaces to request approval');
       }
 
       yield {
@@ -289,7 +304,7 @@ const setup = () => {
         type: 'assistant-message-delta',
         sessionId: body.gallerySessionId,
         runnerSessionId: 'runner-session-1',
-        delta: 'I found one album.',
+        delta: 'I found one space.',
         sequence: 1,
       };
       yield {
@@ -297,7 +312,7 @@ const setup = () => {
         sessionId: body.gallerySessionId,
         runnerSessionId: 'runner-session-1',
         providerMessageId: 'provider-message-1',
-        content: { blocks: [{ type: 'text', text: 'I found one album.' }] },
+        content: { blocks: [{ type: 'text', text: 'I found one space.' }] },
       };
     }),
   };
@@ -355,10 +370,35 @@ const setup = () => {
     runnerService,
   );
   const albumRepository = { getAgentAlbums: vi.fn(() => Promise.resolve([album(auth.user.id)])) };
+  const currentSpace = space(auth.user.id);
+  const sharedSpaceRepository = {
+    getAllByUserId: vi.fn(() => Promise.resolve([currentSpace])),
+    getMembers: vi.fn(() =>
+      Promise.resolve([
+        {
+          spaceId: currentSpace.id,
+          userId: auth.user.id,
+          role: 'owner',
+          joinedAt: now(),
+          showInTimeline: true,
+          sharePersonMetadata: true,
+          lastViewedAt: null,
+          name: 'Pierre',
+          email: 'pierre@example.com',
+          profileImagePath: null,
+          profileChangedAt: now(),
+          avatarColor: null,
+        },
+      ]),
+    ),
+    getAssetCount: vi.fn(() => Promise.resolve(0)),
+    getRecentAssets: vi.fn(() => Promise.resolve([])),
+  };
   const toolService = new AgentToolService(
     {} as AccessRepository,
     {} as AssetRepository,
     albumRepository as unknown as AlbumRepository,
+    sharedSpaceRepository as unknown as SharedSpaceRepository,
     sessions as unknown as AgentSessionRepository,
     toolCalls as unknown as AgentToolCallRepository,
     runnerService,
@@ -375,6 +415,7 @@ const setup = () => {
     setResumeMode: (mode: 'success' | 'error') => {
       resumeMode = mode;
     },
+    toolCalls,
     toolService,
     websocketEvents,
   };
@@ -386,7 +427,7 @@ describe('Pi agent runner flow harness', () => {
     const session = await harness.sessionService.create(harness.auth, {
       providerCredentialId: '00000000-0000-4000-8000-000000000201',
       model: 'gpt-5.1',
-      permissionPreset: AgentPermissionPreset.Careful,
+      permissionPreset: AgentPermissionPreset.VisualOrganizer,
       approvalMode: AgentApprovalMode.Strict,
       initialContext: { entrypoint: 'assistant-page' },
     });
@@ -394,7 +435,7 @@ describe('Pi agent runner flow harness', () => {
     expect(session.status).toBe(AgentSessionStatus.Running);
 
     const userMessage = await harness.messageService.appendUserMessage(harness.auth, session.id, {
-      content: { blocks: [{ type: 'text', text: 'List my albums.' }] },
+      content: { blocks: [{ type: 'text', text: 'List my spaces.' }] },
     });
 
     expect(userMessage.role).toBe(AgentMessageRole.User);
@@ -406,9 +447,9 @@ describe('Pi agent runner flow harness', () => {
       const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
       expect(pendingCalls).toEqual([
         expect.objectContaining({
-          toolName: AgentToolName.ListAlbums,
+          toolName: AgentToolName.ListSpaces,
           status: AgentToolCallStatus.PendingApproval,
-          requestSummary: 'List albums',
+          requestSummary: 'List spaces',
         }),
       ]);
       expect(reloadedSession?.status).toBe(AgentSessionStatus.WaitingForToolApproval);
@@ -447,7 +488,7 @@ describe('Pi agent runner flow harness', () => {
         expect.objectContaining({
           role: AgentMessageRole.Assistant,
           providerMessageId: 'provider-message-1',
-          content: { blocks: [{ type: 'text', text: 'I found one album.' }] },
+          content: { blocks: [{ type: 'text', text: 'I found one space.' }] },
         }),
       ]);
       expect(toolCalls).toEqual([
@@ -455,10 +496,14 @@ describe('Pi agent runner flow harness', () => {
           id: pendingToolCall.id,
           status: AgentToolCallStatus.Completed,
           approvalDecision: AgentToolApprovalDecision.Approved,
-          responseSummary: 'Returned 1 album(s)',
-          albumCount: 1,
+          responseSummary: 'Returned 1 space(s)',
+          albumCount: 0,
+          assetCount: 0,
         }),
       ]);
+      expect(harness.toolCalls.toolCalls[0].redactedResponseMetadata).toEqual({
+        spaceIds: ['00000000-0000-4000-8000-000000000401'],
+      });
       expect(reloadedSession?.status).toBe(AgentSessionStatus.Running);
     });
 
@@ -482,12 +527,12 @@ describe('Pi agent runner flow harness', () => {
     const session = await harness.sessionService.create(harness.auth, {
       providerCredentialId: '00000000-0000-4000-8000-000000000201',
       model: 'gpt-5.1',
-      permissionPreset: AgentPermissionPreset.Careful,
+      permissionPreset: AgentPermissionPreset.VisualOrganizer,
       approvalMode: AgentApprovalMode.Strict,
       initialContext: {},
     });
     await harness.messageService.appendUserMessage(harness.auth, session.id, {
-      content: { blocks: [{ type: 'text', text: 'List my albums.' }] },
+      content: { blocks: [{ type: 'text', text: 'List my spaces.' }] },
     });
     await waitFor(async () => {
       const toolCalls = await harness.toolService.getToolCalls(harness.auth, session.id);
@@ -509,7 +554,7 @@ describe('Pi agent runner flow harness', () => {
         expect.objectContaining({
           id: pendingToolCall.id,
           status: AgentToolCallStatus.Completed,
-          responseSummary: 'Returned 1 album(s)',
+          responseSummary: 'Returned 1 space(s)',
         }),
       ]);
       expect(harness.websocketEvents.map(({ event }) => event.type)).toContain('runner-error');

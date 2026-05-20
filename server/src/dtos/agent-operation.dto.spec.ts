@@ -196,6 +196,108 @@ describe('Agent operation DTOs', () => {
     expect(result.success).toBe(true);
   });
 
+  it('validates supported existing-space detail update payload shapes', () => {
+    const spaceId = factory.uuid();
+    const base = {
+      summary: 'Update Family space.',
+      operations: [
+        {
+          type: AgentOperationType.SpaceUpdateDetails,
+          summary: 'Update Family space.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: spaceId,
+          payload: {},
+        },
+      ],
+    };
+
+    for (const payload of [
+      { spaceName: 'Family 2026' },
+      { description: 'Photos for everyone.' },
+      { description: '' },
+      { color: 'blue' },
+      { spaceName: 'Family 2026', description: '', color: 'amber' },
+    ]) {
+      expect(
+        AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse({
+          ...base,
+          operations: [{ ...base.operations[0], payload }],
+        }).success,
+      ).toBe(true);
+    }
+  });
+
+  it('rejects invalid existing-space detail update payloads with actionable messages', () => {
+    const spaceId = factory.uuid();
+    const parse = (operation: Record<string, unknown>) =>
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse({
+        summary: 'Update Family space.',
+        operations: [operation],
+      });
+    const base = {
+      type: AgentOperationType.SpaceUpdateDetails,
+      summary: 'Update Family space.',
+      targetKind: AgentOperationTargetKind.ExistingSpace,
+      targetId: spaceId,
+    };
+
+    const emptyPayload = parse({ ...base, payload: {} });
+    expect(emptyPayload.success).toBe(false);
+    if (emptyPayload.success) {
+      throw new Error('Expected empty space update payload to fail validation');
+    }
+    expect(z.treeifyError(emptyPayload.error).properties?.operations?.items?.[0]?.properties?.payload?.errors).toContain(
+      'Provide spaceName, description, or color',
+    );
+
+    for (const payload of [
+      { thumbnailAssetId: factory.uuid() },
+      { petsEnabled: false },
+      { faceRecognitionEnabled: true },
+      { linkedLibraryIds: [factory.uuid()] },
+      { delete: true },
+    ]) {
+      const result = parse({ ...base, payload });
+      expect(result.success).toBe(false);
+      if (result.success) {
+        throw new Error(`Expected unsupported space update payload ${JSON.stringify(payload)} to fail validation`);
+      }
+      expect(JSON.stringify(z.treeifyError(result.error))).toMatch(/Unrecognized key|unsupported/i);
+    }
+
+    const invalidColor = parse({ ...base, payload: { color: '#80c7ff' } });
+    expect(invalidColor.success).toBe(false);
+    if (invalidColor.success) {
+      throw new Error('Expected invalid space color to fail validation');
+    }
+    expect(JSON.stringify(z.treeifyError(invalidColor.error))).toMatch(/color/i);
+  });
+
+  it('requires existing-space target id and rejects temporary targets or asset ids for detail updates', () => {
+    const spaceId = factory.uuid();
+    const base = {
+      type: AgentOperationType.SpaceUpdateDetails,
+      summary: 'Update Family space.',
+      targetKind: AgentOperationTargetKind.ExistingSpace,
+      targetId: spaceId,
+      payload: { spaceName: 'Family 2026' },
+    };
+
+    for (const operation of [
+      { ...base, targetId: undefined },
+      { ...base, targetKind: AgentOperationTargetKind.NewSpace, temporaryTargetId: 'tmp-space', targetId: undefined },
+      { ...base, temporaryTargetId: 'tmp-space' },
+      { ...base, assetIds: [factory.uuid()] },
+    ]) {
+      expect(
+        AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse({
+          summary: 'Update Family space.',
+          operations: [operation],
+        }).success,
+      ).toBe(false);
+    }
+  });
+
   it('accepts asset.addTag with a new tag name', () => {
     const result = AgentProposeAlbumOperationsDto.schema.safeParse({
       summary: 'Tag receipts.',
@@ -312,6 +414,64 @@ describe('Agent operation DTOs', () => {
       }),
       ['operations', 0, 'targetKind'],
       'asset.rotate requires an image_edit_batch target',
+    );
+  });
+
+  it('requires existing-space asset operations to use targetId without temporaryTargetId', () => {
+    const targetId = '00000000-0000-4000-8000-000000000020';
+    const assetId = '00000000-0000-4000-8000-000000000001';
+
+    expect(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].parse({
+        summary: 'Add selected photos to Family.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceAddAssets,
+            summary: 'Add selected photos to Family.',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId,
+            assetIds: [assetId],
+            payload: {},
+          },
+        ],
+      }).operations[0],
+    ).toMatchObject({ targetKind: AgentOperationTargetKind.ExistingSpace, targetId });
+
+    expectIssue(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse({
+        summary: 'Add selected photos to Family.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceAddAssets,
+            summary: 'Add selected photos to Family.',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId,
+            assetIds: [assetId],
+            payload: {},
+          },
+        ],
+      }),
+      ['operations', 0, 'targetKind'],
+      'space operations require a space target',
+    );
+
+    expectIssue(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse({
+        summary: 'Remove selected photos from Family.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceRemoveAssets,
+            summary: 'Remove selected photos from Family.',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId,
+            temporaryTargetId: 'tmp-family',
+            assetIds: [assetId],
+            payload: {},
+          },
+        ],
+      }),
+      ['operations', 0, 'temporaryTargetId'],
+      'Use targetId for existing spaces',
     );
   });
 

@@ -128,6 +128,8 @@ const expectNoMcpDownstreamServicesCalled = (
   expect(toolService.readAssetOriginals).not.toHaveBeenCalled();
   expect(toolService.listAlbums).not.toHaveBeenCalled();
   expect(toolService.readAlbum).not.toHaveBeenCalled();
+  expect(toolService.listSpaces).not.toHaveBeenCalled();
+  expect(toolService.readSpace).not.toHaveBeenCalled();
   expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
   expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
   expect(operationPlanService.summarizePlan).not.toHaveBeenCalled();
@@ -432,6 +434,18 @@ describe(AgentMcpService.name, () => {
       serviceMethod: 'readAlbum' as const,
       serviceResult: { status: 'success', toolCall: null, album: { id: factory.uuid(), assetIds: [] } },
     },
+    {
+      toolName: AgentToolName.ListSpaces,
+      args: {},
+      serviceMethod: 'listSpaces' as const,
+      serviceResult: { status: 'success', toolCall: null, spaces: [] },
+    },
+    {
+      toolName: AgentToolName.ReadSpace,
+      args: { spaceId: factory.uuid() },
+      serviceMethod: 'readSpace' as const,
+      serviceResult: { status: 'success', toolCall: null, space: { id: factory.uuid(), assetIds: [] } },
+    },
   ])(
     'delegates $toolName to AgentToolService and wraps the result',
     async ({ toolName, args, serviceMethod, serviceResult }) => {
@@ -511,6 +525,277 @@ describe(AgentMcpService.name, () => {
 
     expect(toolService.readAssetPreviews).toHaveBeenCalledWith(auth, sessionId, { toolCallId });
     expectToolResult(response, `${AgentToolName.ReadAssetPreviews}-call`, serviceResult);
+  });
+
+  it.each([
+    {
+      toolName: AgentToolName.ListSpaces,
+      serviceMethod: 'listSpaces' as const,
+      serviceResult: { status: 'success', toolCall: null, spaces: [] },
+    },
+    {
+      toolName: AgentToolName.ReadSpace,
+      serviceMethod: 'readSpace' as const,
+      serviceResult: { status: 'success', toolCall: null, space: { id: factory.uuid(), assetIds: [] } },
+    },
+  ])('passes approved retry toolCallId only for $toolName', async ({ toolName, serviceMethod, serviceResult }) => {
+    const toolCallId = factory.uuid();
+    toolService[serviceMethod].mockResolvedValue(serviceResult as never);
+
+    const response = (await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(toolName, { toolCallId }),
+    )) as AgentMcpSuccessResponse;
+
+    expect(toolService[serviceMethod]).toHaveBeenCalledWith(auth, sessionId, { toolCallId });
+    expectToolResult(response, `${toolName}-call`, serviceResult);
+  });
+
+  it('supports the first-party runner sequence for adding assets to an existing space', async () => {
+    const familySpaceId = '00000000-0000-4000-8000-000000000401';
+    const alreadyInSpaceAssetId = '00000000-0000-4000-8000-000000000501';
+    const newCandidateAssetId = '00000000-0000-4000-8000-000000000502';
+    const secondNewCandidateAssetId = '00000000-0000-4000-8000-000000000503';
+    const serviceResult = makePlanningServiceResult('plan-space-add');
+
+    toolService.listSpaces.mockResolvedValue({
+      status: 'success',
+      toolCall: null,
+      spaces: [
+        {
+          id: familySpaceId,
+          name: 'Family',
+          description: null,
+          color: 'blue',
+          createdById: userId,
+          assetCount: 1,
+          memberCount: 1,
+          thumbnailAssetId: null,
+          recentAssetIds: [],
+        },
+      ],
+    } as never);
+    toolService.readSpace.mockResolvedValue({
+      status: 'success',
+      toolCall: null,
+      space: {
+        id: familySpaceId,
+        name: 'Family',
+        description: null,
+        color: 'blue',
+        createdById: userId,
+        assetCount: 1,
+        memberCount: 1,
+        thumbnailAssetId: null,
+        recentAssetIds: [],
+        assetIds: [alreadyInSpaceAssetId],
+        assetIdsReturned: 1,
+        assetIdsTruncated: false,
+        members: [{ userId, name: 'Pierre', role: 'owner', avatarColor: null, profileImagePath: null }],
+      },
+    } as never);
+    toolService.searchAssets.mockResolvedValue({
+      status: 'success',
+      toolCall: null,
+      assets: [{ id: alreadyInSpaceAssetId }, { id: newCandidateAssetId }, { id: secondNewCandidateAssetId }],
+      total: 3,
+    } as never);
+    operationPlanService.proposeAlbumOperations.mockResolvedValue(serviceResult as never);
+
+    await sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.ListSpaces, {}));
+    await sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.ReadSpace, { spaceId: familySpaceId }));
+    await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(AgentToolName.SearchAssets, { filters: { city: 'Berlin' }, limit: 50 }),
+    );
+    const response = (await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(AgentToolName.ProposeAlbumOperations, {
+        summary: 'Add recent Berlin photos to Family space.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceAddAssets,
+            summary: 'Add 2 Berlin photos to Family space.',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: familySpaceId,
+            assetIds: [newCandidateAssetId, secondNewCandidateAssetId],
+            payload: {},
+          },
+        ],
+      }),
+    )) as AgentMcpSuccessResponse;
+
+    expect(toolService.listSpaces).toHaveBeenCalledWith(auth, sessionId, {});
+    expect(toolService.readSpace).toHaveBeenCalledWith(auth, sessionId, { spaceId: familySpaceId });
+    expect(toolService.searchAssets).toHaveBeenCalledWith(auth, sessionId, {
+      filters: { city: 'Berlin' },
+      limit: 50,
+    });
+    expect(operationPlanService.proposeAlbumOperations).toHaveBeenCalledWith(auth, sessionId, {
+      summary: 'Add recent Berlin photos to Family space.',
+      operations: [
+        expect.objectContaining({
+          type: AgentOperationType.SpaceAddAssets,
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: familySpaceId,
+          assetIds: [newCandidateAssetId, secondNewCandidateAssetId],
+          payload: {},
+        }),
+      ],
+    });
+    expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalledWith(
+      auth,
+      sessionId,
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            assetIds: expect.arrayContaining([alreadyInSpaceAssetId]),
+          }),
+        ],
+      }),
+    );
+    expectToolResult(response, `${AgentToolName.ProposeAlbumOperations}-call`, serviceResult);
+  });
+
+  it('supports the first-party runner sequence for removing assets from an existing space', async () => {
+    const familySpaceId = '00000000-0000-4000-8000-000000000401';
+    const inSpaceAssetId = '00000000-0000-4000-8000-000000000501';
+    const absentAssetId = '00000000-0000-4000-8000-000000000502';
+    const serviceResult = makePlanningServiceResult('plan-space-remove');
+
+    toolService.listSpaces.mockResolvedValue({
+      status: 'success',
+      toolCall: null,
+      spaces: [{ id: familySpaceId, name: 'Family' }],
+    } as never);
+    toolService.readSpace.mockResolvedValue({
+      status: 'success',
+      toolCall: null,
+      space: {
+        id: familySpaceId,
+        name: 'Family',
+        assetIds: [inSpaceAssetId],
+        assetIdsReturned: 1,
+        assetIdsTruncated: false,
+      },
+    } as never);
+    toolService.searchAssets.mockResolvedValue({
+      status: 'success',
+      toolCall: null,
+      assets: [{ id: inSpaceAssetId }, { id: absentAssetId }],
+      total: 2,
+    } as never);
+    operationPlanService.proposeAlbumOperations.mockResolvedValue(serviceResult as never);
+
+    await sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.ListSpaces, {}));
+    await sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.ReadSpace, { spaceId: familySpaceId }));
+    await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(AgentToolName.SearchAssets, { filters: { type: 'screenshot' }, limit: 50 }),
+    );
+    await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(AgentToolName.ProposeAlbumOperations, {
+        summary: 'Remove screenshots from Family space.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceRemoveAssets,
+            summary: 'Remove screenshots from Family space.',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: familySpaceId,
+            assetIds: [inSpaceAssetId],
+            payload: {},
+          },
+        ],
+      }),
+    );
+
+    expect(operationPlanService.proposeAlbumOperations).toHaveBeenCalledWith(auth, sessionId, {
+      summary: 'Remove screenshots from Family space.',
+      operations: [
+        expect.objectContaining({
+          type: AgentOperationType.SpaceRemoveAssets,
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: familySpaceId,
+          assetIds: [inSpaceAssetId],
+        }),
+      ],
+    });
+    expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalledWith(
+      auth,
+      sessionId,
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            assetIds: expect.arrayContaining([absentAssetId]),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('supports the first-party runner sequence for updating existing space details', async () => {
+    const familySpaceId = '00000000-0000-4000-8000-000000000401';
+    const serviceResult = makePlanningServiceResult('plan-space-update');
+
+    toolService.listSpaces.mockResolvedValue({
+      status: 'success',
+      toolCall: null,
+      spaces: [{ id: familySpaceId, name: 'Family', description: 'Old notes', color: 'gray' }],
+    } as never);
+    toolService.readSpace.mockResolvedValue({
+      status: 'success',
+      toolCall: null,
+      space: {
+        id: familySpaceId,
+        name: 'Family',
+        description: 'Old notes',
+        color: 'gray',
+        assetIds: [],
+        assetIdsReturned: 0,
+        assetIdsTruncated: false,
+      },
+    } as never);
+    operationPlanService.proposeAlbumOperations.mockResolvedValue(serviceResult as never);
+
+    await sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.ListSpaces, {}));
+    await sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.ReadSpace, { spaceId: familySpaceId }));
+    const response = (await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(AgentToolName.ProposeAlbumOperations, {
+        summary: 'Update Family space details.',
+        operations: [
+          {
+            type: AgentOperationType.SpaceUpdateDetails,
+            summary: 'Rename Family and update its description and color.',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: familySpaceId,
+            payload: { spaceName: 'Family 2026', description: 'Photos for everyone.', color: 'blue' },
+          },
+        ],
+      }),
+    )) as AgentMcpSuccessResponse;
+
+    expect(toolService.listSpaces).toHaveBeenCalledWith(auth, sessionId, {});
+    expect(toolService.readSpace).toHaveBeenCalledWith(auth, sessionId, { spaceId: familySpaceId });
+    expect(operationPlanService.proposeAlbumOperations).toHaveBeenCalledWith(auth, sessionId, {
+      summary: 'Update Family space details.',
+      operations: [
+        expect.objectContaining({
+          type: AgentOperationType.SpaceUpdateDetails,
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: familySpaceId,
+          payload: { spaceName: 'Family 2026', description: 'Photos for everyone.', color: 'blue' },
+        }),
+      ],
+    });
+    expectToolResult(response, `${AgentToolName.ProposeAlbumOperations}-call`, serviceResult);
   });
 
   it.each([
@@ -684,6 +969,24 @@ describe(AgentMcpService.name, () => {
       toolName: AgentToolName.ReadAlbum,
     },
     {
+      name: 'missing readSpace spaceId or toolCallId',
+      args: {},
+      expectedPath: '',
+      toolName: AgentToolName.ReadSpace,
+    },
+    {
+      name: 'combined readSpace spaceId and toolCallId',
+      args: { spaceId: factory.uuid(), toolCallId: factory.uuid() },
+      expectedPath: '',
+      toolName: AgentToolName.ReadSpace,
+    },
+    {
+      name: 'readSpace wrong spaceName field',
+      args: { spaceName: 'Family' },
+      expectedPath: '',
+      toolName: AgentToolName.ReadSpace,
+    },
+    {
       name: 'wrong primitive search limit',
       args: { limit: 'ten' },
       expectedPath: 'limit',
@@ -709,6 +1012,8 @@ describe(AgentMcpService.name, () => {
     expect(toolService.searchAssets).not.toHaveBeenCalled();
     expect(toolService.readAssetMetadata).not.toHaveBeenCalled();
     expect(toolService.readAlbum).not.toHaveBeenCalled();
+    expect(toolService.listSpaces).not.toHaveBeenCalled();
+    expect(toolService.readSpace).not.toHaveBeenCalled();
   });
 
   it('does not serialize raw malformed argument values, secrets, routes, or filesystem paths in validation errors', async () => {
@@ -753,6 +1058,8 @@ describe(AgentMcpService.name, () => {
       expect(toolService.readAssetOriginals).not.toHaveBeenCalled();
       expect(toolService.listAlbums).not.toHaveBeenCalled();
       expect(toolService.readAlbum).not.toHaveBeenCalled();
+      expect(toolService.listSpaces).not.toHaveBeenCalled();
+      expect(toolService.readSpace).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -886,6 +1193,8 @@ describe(AgentMcpService.name, () => {
         AgentToolName.ReadAssetOriginals,
         AgentToolName.ListAlbums,
         AgentToolName.ReadAlbum,
+        AgentToolName.ListSpaces,
+        AgentToolName.ReadSpace,
       ]);
       const isExpectedReadToolName = (toolName: AgentToolName): toolName is AgentMcpReadToolName =>
         expectedReadToolNames.has(toolName as AgentMcpReadToolName);
@@ -974,6 +1283,21 @@ describe(AgentMcpService.name, () => {
       {
         id: 'planning-invalid-tag-payload',
         hintIncludes: 'exactly one of tagId or tagName',
+        expectedIncludes: 'reviewable Gallery operation plan',
+      },
+      {
+        id: 'planning-space-update-empty-payload',
+        hintIncludes: 'spaceName',
+        expectedIncludes: 'reviewable Gallery operation plan',
+      },
+      {
+        id: 'planning-space-update-unsupported-fields',
+        hintIncludes: 'thumbnail',
+        expectedIncludes: 'reviewable Gallery operation plan',
+      },
+      {
+        id: 'planning-space-update-missing-target-id',
+        hintIncludes: 'targetId',
         expectedIncludes: 'reviewable Gallery operation plan',
       },
     ])('returns an actionable planning correction for $id', async (expectation) => {
@@ -1113,6 +1437,40 @@ describe(AgentMcpService.name, () => {
         expectedPath: 'operations.0.payload.albumName',
       },
       {
+        name: 'space detail update empty payload',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: {
+          summary: 'Update Family.',
+          operations: [
+            {
+              type: AgentOperationType.SpaceUpdateDetails,
+              summary: 'Update Family.',
+              targetKind: AgentOperationTargetKind.ExistingSpace,
+              targetId: factory.uuid(),
+              payload: {},
+            },
+          ],
+        },
+        expectedPath: 'operations.0.payload',
+      },
+      {
+        name: 'space detail update unsupported field',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        args: {
+          summary: 'Update Family thumbnail.',
+          operations: [
+            {
+              type: AgentOperationType.SpaceUpdateDetails,
+              summary: 'Update Family thumbnail.',
+              targetKind: AgentOperationTargetKind.ExistingSpace,
+              targetId: factory.uuid(),
+              payload: { thumbnailAssetId: factory.uuid() },
+            },
+          ],
+        },
+        expectedPath: 'operations.0.payload',
+      },
+      {
         name: 'revision missing planId',
         toolName: AgentToolName.ReviseProposedOperations,
         args: makePlanningRequest(),
@@ -1219,6 +1577,32 @@ describe(AgentMcpService.name, () => {
         }),
       });
       expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+    });
+
+    it('returns a correction hint when a space asset operation uses an album target kind', async () => {
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(AgentToolName.ProposeAlbumOperations, {
+          summary: 'Add photos to a space.',
+          operations: [
+            {
+              type: AgentOperationType.SpaceAddAssets,
+              summary: 'Add photos to Family.',
+              targetKind: AgentOperationTargetKind.ExistingAlbum,
+              targetId: '00000000-0000-4000-8000-000000000010',
+              assetIds: ['00000000-0000-4000-8000-000000000001'],
+              payload: {},
+            },
+          ],
+        }),
+      )) as AgentMcpSuccessResponse;
+
+      expectEnrichedToolValidationError(response, {
+        toolName: AgentToolName.ProposeAlbumOperations,
+        path: 'operations.0.targetKind',
+        hintIncludes: 'existing_space',
+      });
     });
   });
 
