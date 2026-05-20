@@ -1,6 +1,8 @@
 import {
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
+  AgentListSpacesToolRequestDto,
+  AgentListSpacesToolResponseDto,
   AgentReadAlbumToolRequestDto,
   AgentReadAlbumToolResponseDto,
   AgentReadAssetMetadataToolRequestDto,
@@ -9,6 +11,8 @@ import {
   AgentReadAssetOriginalsToolResponseDto,
   AgentReadAssetPreviewsToolRequestDto,
   AgentReadAssetPreviewsToolResponseDto,
+  AgentReadSpaceToolRequestDto,
+  AgentReadSpaceToolResponseDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchAssetsToolResponseDto,
   AgentToolApprovalDto,
@@ -31,7 +35,9 @@ type AgentSearchAssetsToolRequestInput = z.input<typeof AgentSearchAssetsToolReq
 type AgentReadAssetPreviewsToolRequestInput = z.input<typeof AgentReadAssetPreviewsToolRequestDto.schema>;
 type AgentReadAssetOriginalsToolRequestInput = z.input<typeof AgentReadAssetOriginalsToolRequestDto.schema>;
 type AgentListAlbumsToolRequestInput = z.input<typeof AgentListAlbumsToolRequestDto.schema>;
+type AgentListSpacesToolRequestInput = z.input<typeof AgentListSpacesToolRequestDto.schema>;
 type AgentReadAlbumToolRequestInput = z.input<typeof AgentReadAlbumToolRequestDto.schema>;
+type AgentReadSpaceToolRequestInput = z.input<typeof AgentReadSpaceToolRequestDto.schema>;
 type AgentToolApprovalInput = z.input<typeof AgentToolApprovalDto.schema>;
 
 const parseRequest = (input: AgentReadAssetMetadataToolRequestInput) =>
@@ -44,8 +50,12 @@ const parseReadAssetOriginalsRequest = (input: AgentReadAssetOriginalsToolReques
   AgentReadAssetOriginalsToolRequestDto.schema.safeParse(input);
 const parseListAlbumsRequest = (input: AgentListAlbumsToolRequestInput) =>
   AgentListAlbumsToolRequestDto.schema.safeParse(input);
+const parseListSpacesRequest = (input: AgentListSpacesToolRequestInput) =>
+  AgentListSpacesToolRequestDto.schema.safeParse(input);
 const parseReadAlbumRequest = (input: AgentReadAlbumToolRequestInput) =>
   AgentReadAlbumToolRequestDto.schema.safeParse(input);
+const parseReadSpaceRequest = (input: AgentReadSpaceToolRequestInput) =>
+  AgentReadSpaceToolRequestDto.schema.safeParse(input);
 
 const parseApproval = (input: AgentToolApprovalInput) => AgentToolApprovalDto.schema.safeParse(input);
 
@@ -226,6 +236,73 @@ describe('Agent tool DTOs', () => {
       const result = parseListAlbumsRequest({ albumId: factory.uuid() } as AgentListAlbumsToolRequestInput);
 
       expectIssue(result, [], 'Unrecognized key');
+    });
+  });
+
+  describe(AgentListSpacesToolRequestDto.name, () => {
+    it('accepts empty new tool requests', () => {
+      const result = parseListSpacesRequest({});
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({});
+      }
+    });
+
+    it('accepts toolCallId for approved-call resume', () => {
+      const toolCallId = factory.uuid();
+      const result = parseListSpacesRequest({ toolCallId });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({ toolCallId });
+      }
+    });
+
+    it('rejects unknown keys including spaceId', () => {
+      const result = parseListSpacesRequest({ spaceId: factory.uuid() } as AgentListSpacesToolRequestInput);
+
+      expectIssue(result, [], 'Unrecognized key');
+    });
+  });
+
+  describe(AgentReadSpaceToolRequestDto.name, () => {
+    it('accepts spaceId for a new tool request', () => {
+      const spaceId = factory.uuid();
+      const result = parseReadSpaceRequest({ spaceId });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({ spaceId });
+      }
+    });
+
+    it('accepts toolCallId for approved-call resume', () => {
+      const toolCallId = factory.uuid();
+      const result = parseReadSpaceRequest({ toolCallId });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({ toolCallId });
+      }
+    });
+
+    it('requires spaceId or toolCallId', () => {
+      const result = parseReadSpaceRequest({});
+
+      expectIssue(result, [], 'Provide spaceId, or retry an approved tool call with toolCallId');
+    });
+
+    it('rejects requests containing both spaceId and toolCallId', () => {
+      const result = parseReadSpaceRequest({ spaceId: factory.uuid(), toolCallId: factory.uuid() });
+
+      expectIssue(result, [], 'Use either spaceId or toolCallId, not both');
+    });
+
+    it('rejects invalid spaceId UUIDs', () => {
+      const result = parseReadSpaceRequest({ spaceId: 'not-a-uuid' });
+
+      expectIssue(result, ['spaceId'], 'Invalid UUID');
     });
   });
 
@@ -455,6 +532,56 @@ describe('Agent tool DTOs', () => {
       expect(encoded.data.album.assetIds).toEqual(assetIds);
       expect(AgentReadAlbumToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
     });
+
+    it('encodes and parses list spaces responses without assetIds', () => {
+      const encoded = AgentListSpacesToolResponseDto.schema.safeEncode({
+        status: 'success',
+        toolCall: makeToolCall({ toolName: AgentToolName.ListSpaces, albumCount: 0, assetCount: 0 }),
+        spaces: [makeSpaceSummary({ recentAssetIds: [factory.uuid()] })],
+      });
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success || encoded.data.status !== 'success') {
+        return;
+      }
+
+      expect(encoded.data.spaces[0]).not.toHaveProperty('assetIds');
+      expect(AgentListSpacesToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
+    });
+
+    it('encodes and parses read space responses with redacted members and truncation metadata', () => {
+      const assetIds = [factory.uuid(), factory.uuid()];
+      const encoded = AgentReadSpaceToolResponseDto.schema.safeEncode({
+        status: 'success',
+        toolCall: makeToolCall({ toolName: AgentToolName.ReadSpace, albumCount: 0, assetCount: assetIds.length }),
+        space: {
+          ...makeSpaceSummary({ assetCount: assetIds.length }),
+          assetIds,
+          assetIdsReturned: assetIds.length,
+          assetIdsTruncated: false,
+          members: [
+            {
+              userId: factory.uuid(),
+              name: 'Sam',
+              role: 'viewer',
+              avatarColor: null,
+              profileImagePath: null,
+            },
+          ],
+        },
+      });
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success || encoded.data.status !== 'success') {
+        return;
+      }
+
+      expect(encoded.data.space.assetIds).toEqual(assetIds);
+      expect(encoded.data.space.assetIdsReturned).toBe(assetIds.length);
+      expect(encoded.data.space.assetIdsTruncated).toBe(false);
+      expect(encoded.data.space.members[0]).not.toHaveProperty('email');
+      expect(AgentReadSpaceToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
+    });
   });
 });
 
@@ -532,5 +659,18 @@ const makeAlbumSummary = (
   startDate: new Date('2026-05-01T00:00:00.000Z'),
   endDate: new Date('2026-05-31T23:59:59.999Z'),
   albumThumbnailAssetId: null,
+  ...overrides,
+});
+
+const makeSpaceSummary = (overrides: Record<string, unknown> = {}) => ({
+  id: factory.uuid(),
+  name: 'Family',
+  description: null,
+  color: 'primary',
+  createdById: factory.uuid(),
+  assetCount: 0,
+  memberCount: 1,
+  thumbnailAssetId: null,
+  recentAssetIds: [],
   ...overrides,
 });
