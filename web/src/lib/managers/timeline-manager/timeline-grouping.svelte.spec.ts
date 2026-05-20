@@ -672,7 +672,9 @@ describe('TimelineManager grouping metadata', () => {
     sdkMock.getTimeBuckets
       .mockResolvedValueOnce([{ timeBucket: '2024-01-15', count: 1 }])
       .mockResolvedValueOnce([{ timeBucket: '2024-01-16', count: 1 }]);
-    sdkMock.getTimeBucket.mockResolvedValueOnce(toResponseDto(pickerAsset)).mockResolvedValueOnce(toResponseDto(albumAsset));
+    sdkMock.getTimeBucket
+      .mockResolvedValueOnce(toResponseDto(pickerAsset))
+      .mockResolvedValueOnce(toResponseDto(albumAsset));
 
     const timelineManager = new TimelineManager();
     await timelineManager.updateOptions({ grouping: 'day', timelineAlbumId: 'album-1' });
@@ -693,7 +695,9 @@ describe('TimelineManager grouping metadata', () => {
     const libraryAsset = buildTimelineAssetAt('library-asset', '2024-01-15T12:00:00.000Z');
     const spaceAsset = buildTimelineAssetAt('space-asset', '2024-01-16T12:00:00.000Z');
     sdkMock.getTimeBuckets.mockResolvedValueOnce([{ timeBucket: '2024-01-15', count: 1 }]);
-    sdkMock.getTimeBucket.mockResolvedValueOnce(toResponseDto(libraryAsset)).mockResolvedValueOnce(toResponseDto(spaceAsset));
+    sdkMock.getTimeBucket
+      .mockResolvedValueOnce(toResponseDto(libraryAsset))
+      .mockResolvedValueOnce(toResponseDto(spaceAsset));
 
     const timelineManager = new TimelineManager();
     await timelineManager.updateOptions({ grouping: 'day', timelineSpaceId: 'space-1' });
@@ -941,9 +945,9 @@ describe('TimelineManager grouping metadata', () => {
     await yearUpdate;
 
     expect(timelineManager.grouping).toBe('month');
-    expect(timelineManager.timelineBuckets.map((bucket) => [bucket.grouping, bucket.timeBucket, bucket.count])).toEqual([
-      ['month', '2024-05-01', 5],
-    ]);
+    expect(timelineManager.timelineBuckets.map((bucket) => [bucket.grouping, bucket.timeBucket, bucket.count])).toEqual(
+      [['month', '2024-05-01', 5]],
+    );
     expect(timelineManager.isInitialized).toBe(true);
   });
 

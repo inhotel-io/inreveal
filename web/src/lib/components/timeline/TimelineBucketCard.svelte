@@ -22,12 +22,12 @@
 
   let { bucket, locale = 'en-US', loading = false, disabled = false, onActivate }: Props = $props();
 
-  let loadedImageKey = $state<string>();
-  let failedImageKey = $state<string>();
+  let loadedImageKey: string | undefined = $state();
+  let failedImageKey: string | undefined = $state();
 
   let imageKey = $derived(`${bucket.representativeAssetId ?? ''}:${bucket.representativeThumbhash ?? ''}`);
-  let imageLoaded = $derived(loadedImageKey === imageKey);
-  let imageFailed = $derived(failedImageKey === imageKey);
+  let imageLoaded: boolean = $derived(loadedImageKey === imageKey);
+  let imageFailed: boolean = $derived(failedImageKey === imageKey);
 
   let title = $derived.by(() => {
     if (bucket.grouping === 'month') {
@@ -44,7 +44,7 @@
     return `${count} ${bucket.count === 1 ? 'photo' : 'photos'}`;
   });
 
-  let hasImage = $derived(Boolean(bucket.representativeAssetId) && !loading && !imageFailed);
+  let hasImage: boolean = $derived(Boolean(bucket.representativeAssetId) && !loading && !imageFailed);
   let imageUrl = $derived.by(() => {
     if (!hasImage || !bucket.representativeAssetId) {
       return undefined;
@@ -56,11 +56,9 @@
       cacheKey: bucket.representativeThumbhash ?? undefined,
     });
   });
-  let state = $derived(loading ? 'loading' : hasImage ? 'image' : 'fallback');
+  let renderState: 'loading' | 'image' | 'fallback' = $derived(loading ? 'loading' : hasImage ? 'image' : 'fallback');
   let mediaClass = $derived(bucket.representativeRatio ? '' : 'aspect-[16/9]');
-  let mediaStyle = $derived(
-    bucket.representativeRatio ? `aspect-ratio: ${bucket.representativeRatio};` : undefined,
-  );
+  let mediaStyle = $derived(bucket.representativeRatio ? `aspect-ratio: ${bucket.representativeRatio};` : undefined);
 
   const activate = () => {
     if (disabled) {
@@ -92,7 +90,7 @@
   class="group block w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50 text-left transition hover:border-gray-300 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700 dark:hover:bg-gray-800"
   aria-label={`${title}, ${countLabel}`}
   {disabled}
-  data-state={state}
+  data-state={renderState}
   data-testid="timeline-bucket-card"
   onclick={activate}
 >

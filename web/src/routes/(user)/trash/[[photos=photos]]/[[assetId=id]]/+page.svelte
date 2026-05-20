@@ -42,9 +42,9 @@
   const hasTemporalFilters = $derived(
     Boolean(
       timelineFilters.dateAfter ||
-        timelineFilters.dateBefore ||
-        timelineFilters.selectedYear ||
-        timelineFilters.selectedMonth,
+      timelineFilters.dateBefore ||
+      timelineFilters.selectedYear ||
+      timelineFilters.selectedMonth,
     ),
   );
   const hideGroupingControls = $derived(

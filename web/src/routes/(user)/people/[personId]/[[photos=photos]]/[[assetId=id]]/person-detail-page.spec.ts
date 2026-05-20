@@ -114,9 +114,8 @@ vi.mock('$lib/components/OnEvents.svelte', async () => {
 });
 
 vi.mock('$lib/components/timeline/Timeline.svelte', async () => {
-  const { default: MockComponent } = await import(
-    './../../../../spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/mock-space-person-timeline.test-wrapper.svelte'
-  );
+  const { default: MockComponent } =
+    await import('./../../../../spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/mock-space-person-timeline.test-wrapper.svelte');
   return { default: MockComponent };
 });
 

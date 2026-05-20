@@ -125,8 +125,6 @@ describe('timeline filter navigation helpers', () => {
       months: [{ yearMonth: { year: 2024, month: 2 }, assetsCount: 5 }],
     };
 
-    expect(getTimelineManagerTimeBuckets(manager)).toEqual([
-      { timeBucket: '2024-02-01T00:00:00.000Z', count: 5 },
-    ]);
+    expect(getTimelineManagerTimeBuckets(manager)).toEqual([{ timeBucket: '2024-02-01T00:00:00.000Z', count: 5 }]);
   });
 });

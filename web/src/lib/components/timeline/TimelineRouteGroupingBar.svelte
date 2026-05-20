@@ -45,7 +45,10 @@
 
 {#if !hidden}
   <div
-    class={twMerge('hidden flex-col gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2 dark:border-gray-700 dark:bg-gray-900 md:flex', className)}
+    class={twMerge(
+      'hidden flex-col gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2 dark:border-gray-700 dark:bg-gray-900 md:flex',
+      className,
+    )}
   >
     <div class="flex items-center justify-end" data-testid="timeline-desktop-grouping-control">
       <TimelineGroupingControl {grouping} {onGroupingChange} />

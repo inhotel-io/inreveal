@@ -442,7 +442,11 @@
     data-grouping={galleryGrouping}
   >
     {#each galleryBuckets as bucket (bucket.viewId)}
-      <TimelineBucketCard {bucket} disabled={assetInteraction.selectionActive} onActivate={handleGalleryBucketActivate} />
+      <TimelineBucketCard
+        {bucket}
+        disabled={assetInteraction.selectionActive}
+        onActivate={handleGalleryBucketActivate}
+      />
     {/each}
   </div>
 {:else if visibleAssets.length > 0}

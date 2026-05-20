@@ -1,7 +1,7 @@
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { findMemoryAsset } from '$lib/utils/memory-viewer-source';
-import { assetFactory } from '@test-data/factories/asset-factory';
 import { AssetTypeEnum, MemoryType, type MemoryResponseDto } from '@immich/sdk';
+import { assetFactory } from '@test-data/factories/asset-factory';
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/svelte';
 import type { Component } from 'svelte';

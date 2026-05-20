@@ -18,13 +18,7 @@
     { grouping: 'day', label: 'Days' },
   ];
 
-  let {
-    grouping,
-    variant = 'inline',
-    disabled = false,
-    class: className = '',
-    onGroupingChange,
-  }: Props = $props();
+  let { grouping, variant = 'inline', disabled = false, class: className = '', onGroupingChange }: Props = $props();
 
   const rootClass = $derived(
     twMerge(

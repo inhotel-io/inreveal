@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 
-import TimelineGroupingControl from './TimelineGroupingControl.svelte';
 import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
+import TimelineGroupingControl from './TimelineGroupingControl.svelte';
 
 describe('TimelineGroupingControl', () => {
   it('renders the three grouping modes with the active mode pressed', () => {

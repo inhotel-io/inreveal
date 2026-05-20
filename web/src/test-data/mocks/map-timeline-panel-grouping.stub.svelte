@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FilterState } from '$lib/components/filter-panel/filter-panel';
+  import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
 
   interface Props {
     filters?: FilterState;
@@ -7,7 +7,7 @@
     [key: string]: unknown;
   }
 
-  let { filters = $bindable(), onClose, ...rest }: Props = $props();
+  let { filters = $bindable(createFilterState()), onClose, ...rest }: Props = $props();
 
   function activateYear() {
     filters = { ...filters, selectedYear: 2015 };

@@ -1,7 +1,7 @@
 import TestWrapper from '$lib/components/TestWrapper.svelte';
+import { SharedLinkType, type SharedLinkResponseDto } from '@immich/sdk';
 import { assetFactory } from '@test-data/factories/asset-factory';
 import { sharedLinkFactory } from '@test-data/factories/shared-link-factory';
-import { SharedLinkType, type SharedLinkResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
@@ -107,13 +107,10 @@ function renderViewer(sharedLinkOverrides: Partial<SharedLinkResponseDto>) {
     isOwned: false,
   };
 
-  return render(
-    TestWrapper as Component<{ component: typeof IndividualSharedViewer; componentProps: typeof props }>,
-    {
-      component: IndividualSharedViewer,
-      componentProps: props,
-    },
-  );
+  return render(TestWrapper as Component<{ component: typeof IndividualSharedViewer; componentProps: typeof props }>, {
+    component: IndividualSharedViewer,
+    componentProps: props,
+  });
 }
 
 describe('IndividualSharedViewer GalleryViewer grouping', () => {

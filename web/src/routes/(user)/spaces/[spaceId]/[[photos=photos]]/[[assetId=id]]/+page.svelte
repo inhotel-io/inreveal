@@ -772,10 +772,7 @@
       !showSearchResults,
   );
   const isFilteredTimelineEmpty = $derived(
-    timelineManager?.isInitialized &&
-      totalAssetCount === 0 &&
-      getActiveFilterCount(filters) > 0 &&
-      !showSearchResults,
+    timelineManager?.isInitialized && totalAssetCount === 0 && getActiveFilterCount(filters) > 0 && !showSearchResults,
   );
   const timelineBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
   const smartFacetBuckets = $derived(showSearchResults ? (smartFacets?.timeBuckets ?? []) : timelineBuckets);
