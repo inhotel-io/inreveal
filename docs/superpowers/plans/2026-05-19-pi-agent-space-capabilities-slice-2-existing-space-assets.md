@@ -51,17 +51,17 @@ Out of scope:
 
 ## Test Matrix
 
-| Layer | Cases |
-| --- | --- |
-| MCP contract examples | Existing-space add/remove examples parse through `AgentOperationPlanToolRequestSchemas`, use `targetKind: "existing_space"`, include `targetId`, include asset ids, and do not include `temporaryTargetId`. |
-| MCP validation hints | Album target kinds for space operations return an actionable correction hint. Existing-space operations missing `targetId` or carrying `temporaryTargetId` return hints that explain the right shape. |
-| Runner prompt | Prompt includes `mcp_gallery_listSpaces`, `mcp_gallery_readSpace`, existing-space add/remove plan examples, and membership guidance for `assetIdsTruncated`. Prompt stays compact and does not expose direct apply/write tools. |
-| Generated docs | Generated MCP docs include existing-space add/remove examples, common mistakes, and membership guidance. Generated prompt module matches `AgentMcpPromptService`. |
-| Plan apply | Existing-space add/remove apply calls `SharedSpaceService.addAssets` / `removeAssets` with selected asset ids only. Disabled operations, unselected operations, and user-excluded assets are skipped. |
-| Access and failures | Lack of space editor access is denied before downstream mutation. A stale/inaccessible asset produces a failed operation without mutating. One successful operation plus one failed operation reports partial success. |
-| Assistant flow | Pi lists spaces, reads the chosen space, searches/reads candidate assets, proposes an existing-space asset plan, the UI shows a plan card, apply creates an applied-plan card, and the session returns to active chat state. |
-| Frontend plan UI | Review cards label space destinations as spaces, show `Add N photos` / `Remove N photos`, support item selection, cap thumbnails, and do not leak raw operation ids unless technical details are expanded. |
-| Edge cases | Ambiguous space names, no matching space, no matching assets, all add candidates already present, no remove candidates present, truncated membership, permission denial, partial apply, and hundreds/thousands of affected assets. |
+| Layer                 | Cases                                                                                                                                                                                                                              |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MCP contract examples | Existing-space add/remove examples parse through `AgentOperationPlanToolRequestSchemas`, use `targetKind: "existing_space"`, include `targetId`, include asset ids, and do not include `temporaryTargetId`.                        |
+| MCP validation hints  | Album target kinds for space operations return an actionable correction hint. Existing-space operations missing `targetId` or carrying `temporaryTargetId` return hints that explain the right shape.                              |
+| Runner prompt         | Prompt includes `mcp_gallery_listSpaces`, `mcp_gallery_readSpace`, existing-space add/remove plan examples, and membership guidance for `assetIdsTruncated`. Prompt stays compact and does not expose direct apply/write tools.    |
+| Generated docs        | Generated MCP docs include existing-space add/remove examples, common mistakes, and membership guidance. Generated prompt module matches `AgentMcpPromptService`.                                                                  |
+| Plan apply            | Existing-space add/remove apply calls `SharedSpaceService.addAssets` / `removeAssets` with selected asset ids only. Disabled operations, unselected operations, and user-excluded assets are skipped.                              |
+| Access and failures   | Lack of space editor access is denied before downstream mutation. A stale/inaccessible asset produces a failed operation without mutating. One successful operation plus one failed operation reports partial success.             |
+| Assistant flow        | Pi lists spaces, reads the chosen space, searches/reads candidate assets, proposes an existing-space asset plan, the UI shows a plan card, apply creates an applied-plan card, and the session returns to active chat state.       |
+| Frontend plan UI      | Review cards label space destinations as spaces, show `Add N photos` / `Remove N photos`, support item selection, cap thumbnails, and do not leak raw operation ids unless technical details are expanded.                         |
+| Edge cases            | Ambiguous space names, no matching space, no matching assets, all add candidates already present, no remove candidates present, truncated membership, permission denial, partial apply, and hundreds/thousands of affected assets. |
 
 ---
 
@@ -623,8 +623,16 @@ it('does not call shared-space mutation services for disabled or unselected exis
     status: AgentOperationPlanStatus.Applied,
     operations: [
       { ...selected, status: AgentOperationStatus.Applied, result: { spaceId, assetIds: [assetId] } },
-      { ...disabled, status: AgentOperationStatus.Skipped, result: { skippedReason: 'Operation was not selected for apply' } },
-      { ...unselected, status: AgentOperationStatus.Skipped, result: { skippedReason: 'Operation was not selected for apply' } },
+      {
+        ...disabled,
+        status: AgentOperationStatus.Skipped,
+        result: { skippedReason: 'Operation was not selected for apply' },
+      },
+      {
+        ...unselected,
+        status: AgentOperationStatus.Skipped,
+        result: { skippedReason: 'Operation was not selected for apply' },
+      },
     ],
   });
   sharedSpaceService.addAssets.mockResolvedValue(undefined as never);
@@ -641,38 +649,38 @@ it('does not call shared-space mutation services for disabled or unselected exis
 Add a permission denial test if the current one only covers one operation type.
 
 ```ts
-it.each([
-  AgentOperationType.SpaceAddAssets,
-  AgentOperationType.SpaceRemoveAssets,
-])('denies %s when the user cannot edit the existing space', async (operationType) => {
-  const auth = AuthFactory.create();
-  const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
-  const spaceId = newUuid();
-  const assetId = newUuid();
-  sessionRepository.getById.mockResolvedValue(session);
-  toolCallRepository.create.mockResolvedValue(
-    makeToolCall({ sessionId: session.id, status: AgentToolCallStatus.Executing }),
-  );
-  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
-  accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([assetId]));
-  accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set());
+it.each([AgentOperationType.SpaceAddAssets, AgentOperationType.SpaceRemoveAssets])(
+  'denies %s when the user cannot edit the existing space',
+  async (operationType) => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const spaceId = newUuid();
+    const assetId = newUuid();
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.create.mockResolvedValue(
+      makeToolCall({ sessionId: session.id, status: AgentToolCallStatus.Executing }),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set());
 
-  await expect(
-    sut.proposeAlbumOperations(auth, session.id, {
-      summary: 'Change Family space.',
-      operations: [
-        {
-          type: operationType,
-          summary: 'Change Family space.',
-          targetKind: AgentOperationTargetKind.ExistingSpace,
-          targetId: spaceId,
-          assetIds: [assetId],
-          payload: {},
-        },
-      ],
-    }),
-  ).rejects.toThrow(/space/i);
-});
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Change Family space.',
+        operations: [
+          {
+            type: operationType,
+            summary: 'Change Family space.',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: spaceId,
+            assetIds: [assetId],
+            payload: {},
+          },
+        ],
+      }),
+    ).rejects.toThrow(/space/i);
+  },
+);
 ```
 
 Add operation-level partial apply coverage.
@@ -841,11 +849,7 @@ it('supports the first-party runner sequence for adding assets to an existing sp
   toolService.searchAssets.mockResolvedValue({
     status: 'success',
     toolCall: null,
-    assets: [
-      { id: alreadyInSpaceAssetId },
-      { id: newCandidateAssetId },
-      { id: secondNewCandidateAssetId },
-    ],
+    assets: [{ id: alreadyInSpaceAssetId }, { id: newCandidateAssetId }, { id: secondNewCandidateAssetId }],
     total: 3,
   } as never);
   operationPlanService.proposeAlbumOperations.mockResolvedValue(makePlanningServiceResult('plan-space-add') as never);
@@ -893,7 +897,11 @@ it('supports the first-party runner sequence for adding assets to an existing sp
       }),
     ],
   });
-  expectToolResult(response, `${AgentToolName.ProposeAlbumOperations}-call`, makePlanningServiceResult('plan-space-add'));
+  expectToolResult(
+    response,
+    `${AgentToolName.ProposeAlbumOperations}-call`,
+    makePlanningServiceResult('plan-space-add'),
+  );
 });
 ```
 
@@ -931,7 +939,9 @@ it('supports the first-party runner sequence for removing assets from an existin
     assets: [{ id: inSpaceAssetId }, { id: absentAssetId }],
     total: 2,
   } as never);
-  operationPlanService.proposeAlbumOperations.mockResolvedValue(makePlanningServiceResult('plan-space-remove') as never);
+  operationPlanService.proposeAlbumOperations.mockResolvedValue(
+    makePlanningServiceResult('plan-space-remove') as never,
+  );
 
   await sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.ListSpaces, {}));
   await sut.handle(auth, sessionId, makeToolCallRequest(AgentToolName.ReadSpace, { spaceId: familySpaceId }));
@@ -1118,8 +1128,9 @@ Add capped-thumbnail coverage for large space selections.
 
 ```ts
 it('caps representative thumbnails for large existing-space selections', () => {
-  const assetIds = Array.from({ length: 1000 }, (_, index) =>
-    `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+  const assetIds = Array.from(
+    { length: 1000 },
+    (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
   );
   const addId = '00000000-0000-4000-8000-000000000101';
 

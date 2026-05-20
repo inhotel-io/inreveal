@@ -29,6 +29,9 @@ class AgentToolName {
   static const readAssetOriginals = AgentToolName._(r'readAssetOriginals');
   static const listAlbums = AgentToolName._(r'listAlbums');
   static const readAlbum = AgentToolName._(r'readAlbum');
+  static const listSpaces = AgentToolName._(r'listSpaces');
+  static const readSpace = AgentToolName._(r'readSpace');
+  static const searchUsers = AgentToolName._(r'searchUsers');
   static const proposeAlbumOperations = AgentToolName._(r'proposeAlbumOperations');
   static const reviseProposedOperations = AgentToolName._(r'reviseProposedOperations');
   static const summarizePlan = AgentToolName._(r'summarizePlan');
@@ -41,6 +44,9 @@ class AgentToolName {
     readAssetOriginals,
     listAlbums,
     readAlbum,
+    listSpaces,
+    readSpace,
+    searchUsers,
     proposeAlbumOperations,
     reviseProposedOperations,
     summarizePlan,
@@ -88,6 +94,9 @@ class AgentToolNameTypeTransformer {
         case r'readAssetOriginals': return AgentToolName.readAssetOriginals;
         case r'listAlbums': return AgentToolName.listAlbums;
         case r'readAlbum': return AgentToolName.readAlbum;
+        case r'listSpaces': return AgentToolName.listSpaces;
+        case r'readSpace': return AgentToolName.readSpace;
+        case r'searchUsers': return AgentToolName.searchUsers;
         case r'proposeAlbumOperations': return AgentToolName.proposeAlbumOperations;
         case r'reviseProposedOperations': return AgentToolName.reviseProposedOperations;
         case r'summarizePlan': return AgentToolName.summarizePlan;

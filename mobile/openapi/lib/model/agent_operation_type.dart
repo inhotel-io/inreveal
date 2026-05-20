@@ -32,6 +32,9 @@ class AgentOperationType {
   static const spacePeriodAddAssets = AgentOperationType._(r'space.addAssets');
   static const spacePeriodRemoveAssets = AgentOperationType._(r'space.removeAssets');
   static const spacePeriodUpdateDetails = AgentOperationType._(r'space.updateDetails');
+  static const spacePeriodAddMembers = AgentOperationType._(r'space.addMembers');
+  static const spacePeriodRemoveMembers = AgentOperationType._(r'space.removeMembers');
+  static const spacePeriodUpdateMemberRole = AgentOperationType._(r'space.updateMemberRole');
   static const assetPeriodRotate = AgentOperationType._(r'asset.rotate');
   static const assetPeriodSetFavorite = AgentOperationType._(r'asset.setFavorite');
   static const assetPeriodSetArchive = AgentOperationType._(r'asset.setArchive');
@@ -49,6 +52,9 @@ class AgentOperationType {
     spacePeriodAddAssets,
     spacePeriodRemoveAssets,
     spacePeriodUpdateDetails,
+    spacePeriodAddMembers,
+    spacePeriodRemoveMembers,
+    spacePeriodUpdateMemberRole,
     assetPeriodRotate,
     assetPeriodSetFavorite,
     assetPeriodSetArchive,
@@ -101,6 +107,9 @@ class AgentOperationTypeTypeTransformer {
         case r'space.addAssets': return AgentOperationType.spacePeriodAddAssets;
         case r'space.removeAssets': return AgentOperationType.spacePeriodRemoveAssets;
         case r'space.updateDetails': return AgentOperationType.spacePeriodUpdateDetails;
+        case r'space.addMembers': return AgentOperationType.spacePeriodAddMembers;
+        case r'space.removeMembers': return AgentOperationType.spacePeriodRemoveMembers;
+        case r'space.updateMemberRole': return AgentOperationType.spacePeriodUpdateMemberRole;
         case r'asset.rotate': return AgentOperationType.assetPeriodRotate;
         case r'asset.setFavorite': return AgentOperationType.assetPeriodSetFavorite;
         case r'asset.setArchive': return AgentOperationType.assetPeriodSetArchive;

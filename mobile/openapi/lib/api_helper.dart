@@ -88,6 +88,9 @@ String parameterToString(dynamic value) {
   if (value is AgentAssetSetFavoriteOperationType) {
     return AgentAssetSetFavoriteOperationTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentAssignableSharedSpaceMemberRole) {
+    return AgentAssignableSharedSpaceMemberRoleTypeTransformer().encode(value).toString();
+  }
   if (value is AgentMessageAssetBlockType) {
     return AgentMessageAssetBlockTypeTypeTransformer().encode(value).toString();
   }
@@ -154,11 +157,20 @@ String parameterToString(dynamic value) {
   if (value is AgentSessionStatus) {
     return AgentSessionStatusTypeTransformer().encode(value).toString();
   }
+  if (value is AgentSpaceAddMembersOperationType) {
+    return AgentSpaceAddMembersOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentSpaceCreateOperationType) {
     return AgentSpaceCreateOperationTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentSpaceRemoveMembersOperationType) {
+    return AgentSpaceRemoveMembersOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentSpaceUpdateDetailsOperationType) {
     return AgentSpaceUpdateDetailsOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentSpaceUpdateMemberRoleOperationType) {
+    return AgentSpaceUpdateMemberRoleOperationTypeTypeTransformer().encode(value).toString();
   }
   if (value is AgentToolApprovalDecision) {
     return AgentToolApprovalDecisionTypeTransformer().encode(value).toString();

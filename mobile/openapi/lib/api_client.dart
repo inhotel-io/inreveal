@@ -226,6 +226,8 @@ class ApiClient {
           return AgentAssetSetArchiveOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetSetFavoriteOperationType':
           return AgentAssetSetFavoriteOperationTypeTypeTransformer().decode(value);
+        case 'AgentAssignableSharedSpaceMemberRole':
+          return AgentAssignableSharedSpaceMemberRoleTypeTransformer().decode(value);
         case 'AgentCredentialSnapshot':
           return AgentCredentialSnapshot.fromJson(value);
         case 'AgentListAlbumsToolApprovalRequiredResponse':
@@ -238,6 +240,16 @@ class ApiClient {
           return AgentListAlbumsToolResponseDto.fromJson(value);
         case 'AgentListAlbumsToolSuccessResponse':
           return AgentListAlbumsToolSuccessResponse.fromJson(value);
+        case 'AgentListSpacesToolApprovalRequiredResponse':
+          return AgentListSpacesToolApprovalRequiredResponse.fromJson(value);
+        case 'AgentListSpacesToolDeniedResponse':
+          return AgentListSpacesToolDeniedResponse.fromJson(value);
+        case 'AgentListSpacesToolRequestDto':
+          return AgentListSpacesToolRequestDto.fromJson(value);
+        case 'AgentListSpacesToolResponseDto':
+          return AgentListSpacesToolResponseDto.fromJson(value);
+        case 'AgentListSpacesToolSuccessResponse':
+          return AgentListSpacesToolSuccessResponse.fromJson(value);
         case 'AgentMessageAssetBlock':
           return AgentMessageAssetBlock.fromJson(value);
         case 'AgentMessageAssetBlockType':
@@ -348,6 +360,18 @@ class ApiClient {
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf13.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf14':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf14.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf14Payload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf14Payload.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf15':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf15.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf16':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf16.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf2':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf2.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3':
@@ -372,6 +396,8 @@ class ApiClient {
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf9.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadMembersInner':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadMembersInner.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload.fromJson(value);
         case 'AgentProviderCredentialCreateDto':
@@ -422,6 +448,16 @@ class ApiClient {
           return AgentReadAssetPreviewsToolResponseDto.fromJson(value);
         case 'AgentReadAssetPreviewsToolSuccessResponse':
           return AgentReadAssetPreviewsToolSuccessResponse.fromJson(value);
+        case 'AgentReadSpaceToolApprovalRequiredResponse':
+          return AgentReadSpaceToolApprovalRequiredResponse.fromJson(value);
+        case 'AgentReadSpaceToolDeniedResponse':
+          return AgentReadSpaceToolDeniedResponse.fromJson(value);
+        case 'AgentReadSpaceToolRequestDto':
+          return AgentReadSpaceToolRequestDto.fromJson(value);
+        case 'AgentReadSpaceToolResponseDto':
+          return AgentReadSpaceToolResponseDto.fromJson(value);
+        case 'AgentReadSpaceToolSuccessResponse':
+          return AgentReadSpaceToolSuccessResponse.fromJson(value);
         case 'AgentReviseAlbumOperationsDto':
           return AgentReviseAlbumOperationsDto.fromJson(value);
         case 'AgentRunnerCapabilitiesDto':
@@ -442,6 +478,16 @@ class ApiClient {
           return AgentSearchAssetsToolResponseDto.fromJson(value);
         case 'AgentSearchAssetsToolSuccessResponse':
           return AgentSearchAssetsToolSuccessResponse.fromJson(value);
+        case 'AgentSearchUsersToolApprovalRequiredResponse':
+          return AgentSearchUsersToolApprovalRequiredResponse.fromJson(value);
+        case 'AgentSearchUsersToolDeniedResponse':
+          return AgentSearchUsersToolDeniedResponse.fromJson(value);
+        case 'AgentSearchUsersToolRequestDto':
+          return AgentSearchUsersToolRequestDto.fromJson(value);
+        case 'AgentSearchUsersToolResponseDto':
+          return AgentSearchUsersToolResponseDto.fromJson(value);
+        case 'AgentSearchUsersToolSuccessResponse':
+          return AgentSearchUsersToolSuccessResponse.fromJson(value);
         case 'AgentSessionActivityEventCounts':
           return AgentSessionActivityEventCounts.fromJson(value);
         case 'AgentSessionActivityEventResponseDto':
@@ -458,10 +504,22 @@ class ApiClient {
           return AgentSessionStatusTypeTransformer().decode(value);
         case 'AgentSessionUpdateDto':
           return AgentSessionUpdateDto.fromJson(value);
+        case 'AgentSpaceAddMembersOperationType':
+          return AgentSpaceAddMembersOperationTypeTypeTransformer().decode(value);
         case 'AgentSpaceCreateOperationType':
           return AgentSpaceCreateOperationTypeTypeTransformer().decode(value);
+        case 'AgentSpaceDetail':
+          return AgentSpaceDetail.fromJson(value);
+        case 'AgentSpaceMemberSummary':
+          return AgentSpaceMemberSummary.fromJson(value);
+        case 'AgentSpaceRemoveMembersOperationType':
+          return AgentSpaceRemoveMembersOperationTypeTypeTransformer().decode(value);
+        case 'AgentSpaceSummary':
+          return AgentSpaceSummary.fromJson(value);
         case 'AgentSpaceUpdateDetailsOperationType':
           return AgentSpaceUpdateDetailsOperationTypeTypeTransformer().decode(value);
+        case 'AgentSpaceUpdateMemberRoleOperationType':
+          return AgentSpaceUpdateMemberRoleOperationTypeTypeTransformer().decode(value);
         case 'AgentToolApprovalDecision':
           return AgentToolApprovalDecisionTypeTransformer().decode(value);
         case 'AgentToolApprovalDto':
@@ -474,6 +532,8 @@ class ApiClient {
           return AgentToolDataClassTypeTransformer().decode(value);
         case 'AgentToolName':
           return AgentToolNameTypeTransformer().decode(value);
+        case 'AgentUserLookupResult':
+          return AgentUserLookupResult.fromJson(value);
         case 'AgentUserMessageContent':
           return AgentUserMessageContent.fromJson(value);
         case 'AlbumNameDto':
