@@ -138,4 +138,39 @@ describe('AgentPlanInlineFieldEditor', () => {
     expect(screen.getByText('Preview unavailable')).toBeInTheDocument();
     expect(onSetFieldOverride).toHaveBeenCalledWith(operationId, 'albumThumbnailAssetId', assetA);
   });
+
+  it('renders select fields and sends selected option overrides', async () => {
+    const onSetFieldOverride = vi.fn();
+    const onResetFieldOverride = vi.fn();
+
+    render(AgentPlanInlineFieldEditor, {
+      props: {
+        item: item({
+          editableFields: [
+            {
+              key: 'color',
+              label: 'Color',
+              input: 'select',
+              originalValue: 'green',
+              value: 'blue',
+              required: false,
+              options: [
+                { value: 'green', label: 'Green' },
+                { value: 'blue', label: 'Blue' },
+              ],
+            },
+          ],
+        }),
+        canChangeSelection: true,
+        onSetFieldOverride,
+        onResetFieldOverride,
+      },
+    });
+
+    await fireEvent.change(screen.getByLabelText('Color'), { target: { value: 'green' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Reset Color' }));
+
+    expect(onSetFieldOverride).toHaveBeenCalledWith(operationId, 'color', 'green');
+    expect(onResetFieldOverride).toHaveBeenCalledWith(operationId, 'color');
+  });
 });

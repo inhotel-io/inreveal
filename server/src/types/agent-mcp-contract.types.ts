@@ -57,7 +57,9 @@ export type AgentMcpReadToolName =
   | AgentToolName.ReadAssetPreviews
   | AgentToolName.ReadAssetOriginals
   | AgentToolName.ListAlbums
-  | AgentToolName.ReadAlbum;
+  | AgentToolName.ReadAlbum
+  | AgentToolName.ListSpaces
+  | AgentToolName.ReadSpace;
 
 export type AgentMcpReadToolContract = AgentMcpToolContract<AgentMcpReadToolName>;
 
@@ -103,6 +105,7 @@ export type AgentMcpFailureMatrixCase = {
     | 'read-retry'
     | 'read-request'
     | 'album-read'
+    | 'space-read'
     | 'search'
     | 'safety'
     | 'planning-wrapper'

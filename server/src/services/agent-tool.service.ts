@@ -3,6 +3,8 @@ import { AgentSession, AgentToolCall } from 'src/database';
 import {
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
+  AgentListSpacesToolRequestDto,
+  AgentListSpacesToolResponseDto,
   AgentReadAlbumToolRequestDto,
   AgentReadAlbumToolResponseDto,
   AgentReadAssetMetadataToolRequestDto,
@@ -11,6 +13,8 @@ import {
   AgentReadAssetOriginalsToolResponseDto,
   AgentReadAssetPreviewsToolRequestDto,
   AgentReadAssetPreviewsToolResponseDto,
+  AgentReadSpaceToolRequestDto,
+  AgentReadSpaceToolResponseDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchAssetsToolResponseDto,
   AgentToolApprovalDto,
@@ -32,6 +36,7 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import {
@@ -40,8 +45,13 @@ import {
   AgentAssetMediaReference,
   AgentAssetMetadata,
   AgentSearchAssetsFilters,
+  AgentSpaceDetail,
+  AgentSpaceMemberSummary,
+  AgentSpaceSummary,
   AgentToolListAlbumsRequestMetadata,
+  AgentToolListSpacesRequestMetadata,
   AgentToolReadAssetIdsRequestMetadata,
+  AgentToolReadSpaceRequestMetadata,
   AgentToolResponseMetadata,
   AgentToolSearchAssetsRequestMetadata,
 } from 'src/types/agent-tool.types';
@@ -89,6 +99,8 @@ const isReadAssetIdsRequestMetadata = (
 ): metadata is AgentToolReadAssetIdsRequestMetadata =>
   'assetIds' in metadata && Array.isArray(metadata.assetIds) && metadata.assetIds.every((id) => typeof id === 'string');
 
+const maxAgentSpaceAssetIds = 10_000;
+
 @Injectable()
 export class AgentToolService {
   private static readonly activeStatuses = [
@@ -103,6 +115,7 @@ export class AgentToolService {
     private readonly accessRepository: AccessRepository,
     private readonly assetRepository: AssetRepository,
     private readonly albumRepository: AlbumRepository,
+    private readonly sharedSpaceRepository: SharedSpaceRepository,
     private readonly sessionRepository: AgentSessionRepository,
     private readonly toolCallRepository: AgentToolCallRepository,
     private readonly agentRunnerService: AgentRunnerService,
@@ -154,6 +167,22 @@ export class AgentToolService {
     dto: AgentReadAlbumToolRequestDto,
   ): Promise<AgentReadAlbumToolResponseDto> {
     return this.runReadTool(auth, sessionId, dto, this.readAlbumDescriptor());
+  }
+
+  async listSpaces(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentListSpacesToolRequestDto,
+  ): Promise<AgentListSpacesToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.listSpacesDescriptor());
+  }
+
+  async readSpace(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentReadSpaceToolRequestDto,
+  ): Promise<AgentReadSpaceToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.readSpaceDescriptor());
   }
 
   async approveToolCall(
@@ -264,6 +293,12 @@ export class AgentToolService {
       }
       case AgentToolName.ReadAlbum: {
         return this.readAlbum(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.ListSpaces: {
+        return this.listSpaces(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.ReadSpace: {
+        return this.readSpace(auth, session.id, { toolCallId: toolCall.id });
       }
       default: {
         return Promise.resolve();
@@ -722,6 +757,127 @@ export class AgentToolService {
     };
   }
 
+  private listSpacesDescriptor(): AgentReadToolDescriptor<
+    AgentListSpacesToolRequestDto,
+    { spaces: AgentSpaceSummary[] }
+  > {
+    return {
+      toolName: AgentToolName.ListSpaces,
+      dataClass: AgentToolDataClass.Metadata,
+      requestSummary: () => 'List spaces',
+      requestMetadata: () => ({}) as AgentToolListSpacesRequestMetadata,
+      requestedAssetCount: () => 0,
+      requestedAlbumCount: () => 0,
+      perToolLimit: () => Number.MAX_SAFE_INTEGER,
+      perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
+      validateAccess: (_auth, session) =>
+        Promise.resolve(
+          session.permissionPlanSnapshot.assetScope.sharedSpaces
+            ? null
+            : 'Shared spaces are not accessible for this session',
+        ),
+      execute: async (auth) => {
+        const spaces = await this.sharedSpaceRepository.getAllByUserId(auth.user.id);
+        const summaries: AgentSpaceSummary[] = [];
+
+        for (const space of spaces) {
+          summaries.push(await this.mapAgentSpaceSummary(space));
+        }
+
+        return { spaces: summaries };
+      },
+      responseSummary: (result) => `Returned ${result.spaces.length} space(s)`,
+      responseMetadata: (result) => ({ spaceIds: result.spaces.map((space) => space.id) }),
+      resultAssetCount: () => 0,
+      resultAlbumCount: () => 0,
+      failedReason: 'Space list failed',
+    };
+  }
+
+  private readSpaceDescriptor(): AgentReadToolDescriptor<AgentReadSpaceToolRequestDto, { space: AgentSpaceDetail }> {
+    return {
+      toolName: AgentToolName.ReadSpace,
+      dataClass: AgentToolDataClass.Metadata,
+      requestSummary: (request) => `Read space ${request.spaceId}`,
+      requestMetadata: (request) => ({ spaceId: request.spaceId ?? '' }) as AgentToolReadSpaceRequestMetadata,
+      requestedAssetCount: () => 0,
+      requestedAlbumCount: () => 0,
+      perToolLimit: () => Number.MAX_SAFE_INTEGER,
+      perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
+      validateAccess: (auth, session, request) => this.validateSharedSpaceAccess(auth, session, request.spaceId ?? ''),
+      execute: async (auth, session, request, toolCallId) => {
+        const spaceId = request.spaceId ?? '';
+        const denialReason = await this.validateSharedSpaceAccess(auth, session, spaceId);
+        if (denialReason) {
+          throw new AgentToolDeniedError(denialReason);
+        }
+
+        const spaceRow = await this.sharedSpaceRepository.getById(spaceId);
+        if (!spaceRow) {
+          throw new AgentToolDeniedError('Space is not accessible');
+        }
+
+        const members = await this.sharedSpaceRepository.getMembers(spaceId);
+        const assetCount = await this.sharedSpaceRepository.getAssetCount(spaceId);
+        const recentAssets = await this.sharedSpaceRepository.getRecentAssets(spaceId);
+        const assetRows = await this.sharedSpaceRepository.getAssetIdsInSpacePage(spaceId, {
+          limit: maxAgentSpaceAssetIds + 1,
+        });
+        const assetIds = assetRows.slice(0, maxAgentSpaceAssetIds).map((row) => row.assetId);
+        const assetIdsTruncated = assetRows.length > maxAgentSpaceAssetIds || assetCount > maxAgentSpaceAssetIds;
+
+        const reservation = await this.toolCallRepository.transitionWithSessionLimit(
+          session.id,
+          toolCallId,
+          AgentToolCallStatus.Executing,
+          {
+            status: AgentToolCallStatus.Executing,
+            approvalDecision: AgentToolApprovalDecision.Approved,
+            responseSummary: 'Tool call execution started',
+            redactedResponseMetadata: null,
+            assetCount: assetIds.length,
+            albumCount: 0,
+            completedAt: null,
+            error: null,
+          },
+          AgentToolDataClass.Metadata,
+          session.permissionPlanSnapshot.limits.maxAssetsPerSession,
+        );
+
+        await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+
+        if (reservation.status === 'stale') {
+          throw new BadRequestException('Agent tool call is already executing or completed');
+        }
+
+        if (reservation.status === 'limit-exceeded') {
+          throw new AgentToolRecordedDeniedError(
+            this.getSessionLimitReason(session.permissionPlanSnapshot.limits.maxAssetsPerSession),
+            reservation.toolCall,
+          );
+        }
+
+        return {
+          space: {
+            ...this.mapAgentSpaceSummaryFromParts(spaceRow, members.length, assetCount, recentAssets),
+            members: members.map((member) => this.mapAgentSpaceMember(member)),
+            assetIds,
+            assetIdsReturned: assetIds.length,
+            assetIdsTruncated,
+          },
+        };
+      },
+      responseSummary: (result) =>
+        result.space.assetIdsTruncated
+          ? `Returned space with ${result.space.assetIdsReturned} of ${result.space.assetCount} asset id(s)`
+          : `Returned space with ${result.space.assetIdsReturned} asset id(s)`,
+      responseMetadata: (result) => ({ spaceIds: [result.space.id], assetIds: result.space.assetIds }),
+      resultAssetCount: (result) => result.space.assetIds.length,
+      resultAlbumCount: () => 0,
+      failedReason: 'Space read failed',
+    };
+  }
+
   private async createExecutingAuditWithSessionLimit<TRequest, TResult extends Record<string, unknown>>(
     session: AgentSession,
     request: TRequest,
@@ -947,6 +1103,23 @@ export class AgentToolService {
     const albumIds = albumId ? new Set([albumId]) : new Set<string>();
     const readableIds = await this.getReadableAlbumIds(auth, session.permissionPlanSnapshot, albumIds);
     return readableIds.size === 1 ? null : 'Album is not accessible';
+  }
+
+  private async validateSharedSpaceAccess(
+    auth: AuthDto,
+    session: AgentSession,
+    spaceId: string,
+  ): Promise<string | null> {
+    if (!session.permissionPlanSnapshot.assetScope.sharedSpaces) {
+      return 'Shared spaces are not accessible for this session';
+    }
+
+    if (!spaceId) {
+      return 'Space is not accessible';
+    }
+
+    const member = await this.sharedSpaceRepository.getMember(spaceId, auth.user.id);
+    return member ? null : 'Space is not accessible';
   }
 
   private async validateSearchFilters(
@@ -1274,6 +1447,62 @@ export class AgentToolService {
           }
         : null,
       tags: asset.tags.map((tag) => ({ id: tag.id, value: tag.value, color: tag.color })),
+    };
+  }
+
+  private async mapAgentSpaceSummary(space: {
+    id: string;
+    name: string;
+    description: string | null;
+    color?: string | null;
+    createdById: string;
+    thumbnailAssetId?: string | null;
+  }): Promise<AgentSpaceSummary> {
+    const members = await this.sharedSpaceRepository.getMembers(space.id);
+    const assetCount = await this.sharedSpaceRepository.getAssetCount(space.id);
+    const recentAssets = await this.sharedSpaceRepository.getRecentAssets(space.id);
+    return this.mapAgentSpaceSummaryFromParts(space, members.length, assetCount, recentAssets);
+  }
+
+  private mapAgentSpaceSummaryFromParts(
+    space: {
+      id: string;
+      name: string;
+      description: string | null;
+      color?: string | null;
+      createdById: string;
+      thumbnailAssetId?: string | null;
+    },
+    memberCount: number,
+    assetCount: number,
+    recentAssets: Array<{ id: string }>,
+  ): AgentSpaceSummary {
+    return {
+      id: space.id,
+      name: space.name,
+      description: space.description,
+      color: space.color ?? 'primary',
+      createdById: space.createdById,
+      assetCount,
+      memberCount,
+      thumbnailAssetId: space.thumbnailAssetId ?? null,
+      recentAssetIds: recentAssets.map((asset) => asset.id),
+    };
+  }
+
+  private mapAgentSpaceMember(member: {
+    userId: string;
+    name: string;
+    role: string;
+    avatarColor: string | null;
+    profileImagePath: string | null;
+  }): AgentSpaceMemberSummary {
+    return {
+      userId: member.userId,
+      name: member.name,
+      role: member.role,
+      avatarColor: member.avatarColor ?? null,
+      profileImagePath: member.profileImagePath ?? null,
     };
   }
 }

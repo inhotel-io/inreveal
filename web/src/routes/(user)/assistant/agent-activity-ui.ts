@@ -135,6 +135,18 @@ const toolActivityDefinitions: Partial<Record<AgentToolName, ToolActivityDefinit
     completedSummary: 'Read album details',
     coalesceKey: 'read-album',
   },
+  [AgentToolName.ListSpaces]: {
+    kind: 'space',
+    title: 'Listing spaces',
+    completedSummary: 'Found visible spaces',
+    coalesceKey: 'list-spaces',
+  },
+  [AgentToolName.ReadSpace]: {
+    kind: 'space',
+    title: 'Reading space details',
+    completedSummary: 'Read space details',
+    coalesceKey: 'read-space',
+  },
   [AgentToolName.ProposeAlbumOperations]: {
     kind: 'plan',
     title: 'Preparing a plan',
@@ -168,15 +180,15 @@ const typePriority: Record<AgentActivityKind, number> = {
   permission: 0,
   search: 1,
   album: 2,
-  metadata: 3,
-  preview: 4,
-  plan: 5,
-  apply: 6,
-  message: 7,
-  error: 8,
-  unknown: 9,
-  understanding: 10,
-  space: 11,
+  space: 3,
+  metadata: 4,
+  preview: 5,
+  plan: 6,
+  apply: 7,
+  message: 8,
+  error: 9,
+  unknown: 10,
+  understanding: 11,
 };
 
 const activeStatuses = new Set<AgentActivityStatus>(['blocked', 'running', 'pending']);

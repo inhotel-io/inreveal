@@ -7,6 +7,8 @@ import {
 } from '@immich/sdk';
 import {
   buildToolApprovalPayload,
+  getAgentToolCallCompletedText,
+  getAgentToolCallPendingText,
   getAgentToolDataClassLabelKey,
   getAgentToolNameLabelKey,
   getPendingToolCalls,
@@ -34,6 +36,18 @@ describe('agent tool approval UI helpers', () => {
     for (const toolName of Object.values(AgentToolName)) {
       expect(getAgentToolNameLabelKey(toolName)).toBe(`assistant_agent_tool_name_${toolName}`);
     }
+  });
+
+  it('maps space tools to labels and user-facing pending/completed copy', () => {
+    const listSpaces = toolCall({ toolName: AgentToolName.ListSpaces });
+    const readSpace = toolCall({ toolName: AgentToolName.ReadSpace });
+
+    expect(getAgentToolNameLabelKey(AgentToolName.ListSpaces)).toBe('assistant_agent_tool_name_listSpaces');
+    expect(getAgentToolNameLabelKey(AgentToolName.ReadSpace)).toBe('assistant_agent_tool_name_readSpace');
+    expect(getAgentToolCallPendingText(listSpaces)).toBe('Pi wants to check your spaces.');
+    expect(getAgentToolCallPendingText(readSpace)).toBe('Pi wants to inspect a space.');
+    expect(getAgentToolCallCompletedText(listSpaces)).toBe('Pi checked your spaces.');
+    expect(getAgentToolCallCompletedText(readSpace)).toBe('Pi inspected a space.');
   });
 
   it('maps every current data class to a label key', () => {

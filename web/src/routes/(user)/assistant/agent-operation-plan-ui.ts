@@ -67,13 +67,22 @@ export type AgentReviewDependency = {
 
 export type AgentOperationEditableField =
   | {
-      key: 'albumName' | 'description';
+      key: 'albumName' | 'spaceName' | 'description';
       label: string;
       input: 'text' | 'textarea';
       originalValue: string;
       value: string;
       required: boolean;
       maxLength: number;
+    }
+  | {
+      key: 'color';
+      label: string;
+      input: 'select';
+      originalValue: string;
+      value: string;
+      required: boolean;
+      options: { value: string; label: string }[];
     }
   | {
       key: 'albumThumbnailAssetId';
@@ -197,6 +206,9 @@ const typeLabelKeys: Partial<Record<AgentOperationType, Translations>> = {
   [AgentOperationType.AlbumAddAssets]: 'assistant_operation_type_album_add_assets' as Translations,
   [AgentOperationType.AlbumUpdateDetails]: 'assistant_operation_type_album_update_details' as Translations,
   [AgentOperationType.AlbumSetCover]: 'assistant_operation_type_album_set_cover' as Translations,
+  [AgentOperationType.SpaceAddAssets]: 'assistant_operation_type_space_add_assets' as Translations,
+  [AgentOperationType.SpaceRemoveAssets]: 'assistant_operation_type_space_remove_assets' as Translations,
+  [AgentOperationType.SpaceUpdateDetails]: 'assistant_operation_type_space_update_details' as Translations,
 };
 
 const riskLabelKeys = {
@@ -211,6 +223,12 @@ const representativeAssetLimit = 12;
 export const AGENT_PLAN_ITEM_REVIEW_VISIBLE_LIMIT = 48;
 export const AGENT_PLAN_THUMBNAIL_STRIP_DEFAULT_LIMIT = 6;
 export const AGENT_PLAN_THUMBNAIL_STRIP_MAX_LIMIT = 12;
+
+const gallerySpaceColors = ['primary', 'pink', 'red', 'yellow', 'blue', 'green', 'purple', 'orange', 'gray', 'amber'];
+const gallerySpaceColorOptions = gallerySpaceColors.map((value) => ({
+  value,
+  label: value.charAt(0).toUpperCase() + value.slice(1),
+}));
 
 export const createInitialOperationEnabledState = (plan: AgentOperationPlanResponseDto): OperationEnabledState =>
   Object.fromEntries(plan.operations.map((operation) => [operation.id, operation.enabled]));
@@ -674,7 +692,7 @@ export const buildOperationReviewModel = (
       destination: {
         ...group.destination,
         name: item.review.destination.name,
-        subtitle,
+        subtitle: group.operations[0]?.review.destination.subtitle ?? item.review.destination.subtitle ?? group.destination.subtitle,
       },
       assetCount: getOperationAssetCount(operations.map(({ operation }) => operation)),
       thumbnailSummary,
@@ -700,6 +718,13 @@ export const buildOperationReviewModel = (
 const getReviewGroupTitle = (item: Pick<OperationReviewItem, 'operation' | 'review'>) => {
   if (item.operation.targetKind === AgentOperationTargetKind.NewAlbum) {
     return `New album "${item.review.destination.name}"`;
+  }
+
+  if (
+    item.operation.targetKind === AgentOperationTargetKind.NewSpace ||
+    item.operation.targetKind === AgentOperationTargetKind.ExistingSpace
+  ) {
+    return item.review.destination.name;
   }
 
   return getGroupTitle(item.operation);
@@ -781,6 +806,42 @@ const buildEditableFields = (
     ];
   }
 
+  if (operation.type === AgentOperationType.SpaceUpdateDetails) {
+    const spaceName = getRawStringPayloadValue(operation, 'spaceName');
+    const description = getRawStringPayloadValue(operation, 'description');
+    const color = getRawStringPayloadValue(operation, 'color');
+
+    return [
+      {
+        key: 'spaceName',
+        label: 'Space name',
+        input: 'text',
+        originalValue: spaceName,
+        value: getStringOverride(fieldOverrides, 'spaceName') ?? spaceName,
+        required: true,
+        maxLength: 100,
+      },
+      {
+        key: 'description',
+        label: 'Description',
+        input: 'textarea',
+        originalValue: description,
+        value: getStringOverride(fieldOverrides, 'description') ?? description,
+        required: false,
+        maxLength: 500,
+      },
+      {
+        key: 'color',
+        label: 'Color',
+        input: 'select',
+        originalValue: color,
+        value: getStringOverride(fieldOverrides, 'color') ?? color,
+        required: false,
+        options: gallerySpaceColorOptions,
+      },
+    ];
+  }
+
   return [];
 };
 
@@ -802,8 +863,25 @@ const validateEditableFields = (
       continue;
     }
 
+    if (field.key === 'spaceName') {
+      const trimmedValue = field.value.trim();
+      const shouldValidateBlankName = field.originalValue.trim().length > 0 || field.value !== field.originalValue;
+      if (trimmedValue.length === 0 && shouldValidateBlankName) {
+        errors[field.key] = 'Space name is required.';
+      } else if (trimmedValue.length > field.maxLength) {
+        errors[field.key] = 'Space name must be 100 characters or fewer.';
+      }
+      continue;
+    }
+
     if (field.key === 'description' && field.value.trim().length > field.maxLength) {
-      errors[field.key] = 'Description must be 1,000 characters or fewer.';
+      errors[field.key] =
+        field.maxLength === 500 ? 'Description must be 500 characters or fewer.' : 'Description must be 1,000 characters or fewer.';
+      continue;
+    }
+
+    if (field.key === 'color' && !gallerySpaceColors.includes(field.value)) {
+      errors[field.key] = 'Choose a valid Gallery color.';
       continue;
     }
 
@@ -898,21 +976,33 @@ const applyOperationFieldOverrides = (
 ) => {
   if (
     !fieldOverrides ||
-    (operation.type !== AgentOperationType.AlbumCreate && operation.type !== AgentOperationType.AlbumUpdateDetails)
+    (operation.type !== AgentOperationType.AlbumCreate &&
+      operation.type !== AgentOperationType.AlbumUpdateDetails &&
+      operation.type !== AgentOperationType.SpaceUpdateDetails)
   ) {
     return operation;
   }
 
   const payload = { ...operation.payload };
   const albumName = getStringOverride(fieldOverrides, 'albumName');
+  const spaceName = getStringOverride(fieldOverrides, 'spaceName');
   const description = getStringOverride(fieldOverrides, 'description');
+  const color = getStringOverride(fieldOverrides, 'color');
 
   if (albumName !== undefined) {
     payload.albumName = albumName;
   }
 
+  if (spaceName !== undefined) {
+    payload.spaceName = spaceName;
+  }
+
   if (description !== undefined) {
     payload.description = description;
+  }
+
+  if (color !== undefined) {
+    payload.color = color;
   }
 
   return { ...operation, payload };
@@ -1091,6 +1181,14 @@ const getGroupId = (operation: AgentOperationResponseDto) => {
     return `existing-album:${operation.targetId}`;
   }
 
+  if (operation.targetKind === AgentOperationTargetKind.NewSpace) {
+    return `new-space:${operation.temporaryTargetId ?? operation.id}`;
+  }
+
+  if (operation.targetKind === AgentOperationTargetKind.ExistingSpace && operation.targetId) {
+    return `existing-space:${operation.targetId}`;
+  }
+
   return `operation:${operation.id}`;
 };
 
@@ -1101,6 +1199,14 @@ const getGroupTitle = (operation: AgentOperationResponseDto) => {
 
   if (operation.targetKind === AgentOperationTargetKind.ExistingAlbum) {
     return operation.targetId ? `Existing album ${operation.targetId}` : 'Existing album';
+  }
+
+  if (operation.targetKind === AgentOperationTargetKind.NewSpace) {
+    return `New space "${getSpaceName(operation) ?? operation.temporaryTargetId ?? 'Untitled space'}"`;
+  }
+
+  if (operation.targetKind === AgentOperationTargetKind.ExistingSpace) {
+    return operation.targetId ? `Existing space ${operation.targetId}` : 'Existing space';
   }
 
   return operation.summary;
@@ -1125,10 +1231,40 @@ const getOperationReviewSummary = (operation: AgentOperationResponseDto) => {
 
       return 'Update album details';
     }
+    case AgentOperationType.SpaceAddAssets: {
+      return `Add ${formatPhotoCount(getOperationAssetCount([operation]))}`;
+    }
+    case AgentOperationType.SpaceRemoveAssets: {
+      return `Remove ${formatPhotoCount(getOperationAssetCount([operation]))}`;
+    }
+    case AgentOperationType.SpaceUpdateDetails: {
+      return getSpaceUpdateDetailsSummary(operation);
+    }
     default: {
       return operation.summary;
     }
   }
+};
+
+const getSpaceUpdateDetailsSummary = (operation: AgentOperationResponseDto) => {
+  const summaries: string[] = [];
+  const spaceName = getSpaceName(operation);
+  const description = getRawStringPayloadValue(operation, 'description');
+  const color = getRawStringPayloadValue(operation, 'color');
+
+  if (spaceName) {
+    summaries.push(`Renamed to "${spaceName}"`);
+  }
+
+  if (typeof operation.payload.description === 'string') {
+    summaries.push(description.trim().length === 0 ? 'Cleared description' : 'Updated description');
+  }
+
+  if (color) {
+    summaries.push(`Changed color to ${color}`);
+  }
+
+  return summaries.length > 0 ? summaries.join('; ') : 'Update space details';
 };
 
 const formatPhotoCount = (count: number) => `${count} ${count === 1 ? 'photo' : 'photos'}`;
@@ -1154,6 +1290,36 @@ const getReviewDestination = (
       kind: 'album',
       name: albumName ?? getGroupTitle(operation),
       subtitle: operation.targetKind === AgentOperationTargetKind.NewAlbum ? 'New album' : 'Existing album',
+    };
+
+    if (operation.targetId) {
+      destination.id = operation.targetId;
+    }
+
+    if (operation.temporaryTargetId) {
+      destination.temporaryId = operation.temporaryTargetId;
+    }
+
+    return destination;
+  }
+
+  if (
+    operation.targetKind === AgentOperationTargetKind.NewSpace ||
+    operation.targetKind === AgentOperationTargetKind.ExistingSpace
+  ) {
+    const createOperation =
+      operation.temporaryTargetId === null
+        ? undefined
+        : [...operationById.values()].find(
+            (candidate) =>
+              candidate.targetKind === AgentOperationTargetKind.NewSpace &&
+              candidate.temporaryTargetId === operation.temporaryTargetId,
+          );
+    const spaceName = getSpaceName(operation) ?? (createOperation ? getSpaceName(createOperation) : undefined);
+    const destination: AgentReviewDestination = {
+      kind: 'space',
+      name: spaceName ?? getGroupTitle(operation),
+      subtitle: operation.targetKind === AgentOperationTargetKind.NewSpace ? 'New space' : 'Existing space',
     };
 
     if (operation.targetId) {
@@ -1194,4 +1360,10 @@ const getAlbumName = (operation: AgentOperationResponseDto) => {
   const albumName = operation.payload.albumName;
 
   return typeof albumName === 'string' && albumName.trim().length > 0 ? albumName.trim() : undefined;
+};
+
+const getSpaceName = (operation: AgentOperationResponseDto) => {
+  const spaceName = operation.payload.spaceName;
+
+  return typeof spaceName === 'string' && spaceName.trim().length > 0 ? spaceName.trim() : undefined;
 };

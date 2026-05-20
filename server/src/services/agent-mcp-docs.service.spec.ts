@@ -44,6 +44,54 @@ describe(AgentMcpDocsService.name, () => {
     }
   });
 
+  it('includes the space lookup tools and parseable documented examples', () => {
+    const markdown = sut.generateMarkdown();
+    const examples = sut
+      .listDocumentedToolArgumentExamples()
+      .filter((example) => [AgentToolName.ListSpaces, AgentToolName.ReadSpace].includes(example.toolName));
+
+    expect(markdown).toContain('`listSpaces`');
+    expect(markdown).toContain('`readSpace`');
+    expect(markdown).toContain('list-visible-spaces');
+    expect(markdown).toContain('read-space-details');
+    expect(examples.map((example) => example.exampleName)).toEqual(
+      expect.arrayContaining(['list-visible-spaces', 'read-space-details', 'approved-retry']),
+    );
+
+    for (const example of examples) {
+      expect(
+        AgentReadToolRequestSchemas[example.toolName as keyof typeof AgentReadToolRequestSchemas].safeParse(
+          example.arguments,
+        ).success,
+      ).toBe(true);
+    }
+  });
+
+  it('documents existing-space add and remove asset plans with membership cautions', () => {
+    const markdown = sut.generateMarkdown();
+
+    expect(markdown).toContain('add-assets-to-existing-space');
+    expect(markdown).toContain('remove-assets-from-existing-space');
+    expect(markdown).toContain('"targetKind": "existing_space"');
+    expect(markdown).toContain('"targetId"');
+    expect(markdown).toContain('assetIdsTruncated');
+    expect(markdown).toMatch(/listSpaces.*readSpace/is);
+  });
+
+  it('documents existing-space detail updates, supported fields, and no-op guidance', () => {
+    const markdown = sut.generateMarkdown();
+
+    expect(markdown).toContain('rename-existing-space');
+    expect(markdown).toContain('update-existing-space-description');
+    expect(markdown).toContain('clear-existing-space-description');
+    expect(markdown).toContain('update-existing-space-color');
+    expect(markdown).toContain('space.updateDetails');
+    expect(markdown).toContain('spaceName');
+    expect(markdown).toContain('description');
+    expect(markdown).toContain('color');
+    expect(markdown).toMatch(/thumbnail|pets|face|linked|delete/i);
+  });
+
   it('documents every argument mode and common mistake from the contract', () => {
     const markdown = sut.generateMarkdown();
 

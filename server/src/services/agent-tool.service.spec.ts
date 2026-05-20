@@ -18,6 +18,7 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
@@ -26,6 +27,8 @@ import {
   AgentAlbumSummary,
   AgentAssetMediaReference,
   AgentAssetMetadata,
+  AgentSpaceDetail,
+  AgentSpaceSummary,
 } from 'src/types/agent-tool.types';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { newAccessRepositoryMock } from 'test/repositories/access.repository.mock';
@@ -192,11 +195,49 @@ const makeAlbumDetail = (overrides: Partial<AgentAlbumDetail> = {}): AgentAlbumD
   };
 };
 
+const makeSpaceRow = (overrides: Partial<AgentSpaceSummary> = {}) => ({
+  id: newUuid(),
+  name: 'Family',
+  description: null,
+  color: 'primary',
+  createdById: newUuid(),
+  assetCount: 0,
+  memberCount: 0,
+  thumbnailAssetId: null,
+  thumbnailCropY: null,
+  faceRecognitionEnabled: true,
+  petsEnabled: true,
+  lastActivityAt: null,
+  recentAssetIds: [],
+  createdAt: now,
+  updatedAt: now,
+  createId: newUuid(),
+  updateId: newUuid(),
+  ...overrides,
+});
+
+const makeSpaceMember = (overrides: Record<string, unknown> = {}) => ({
+  spaceId: newUuid(),
+  userId: newUuid(),
+  role: 'viewer',
+  joinedAt: now,
+  showInTimeline: true,
+  sharePersonMetadata: true,
+  lastViewedAt: null,
+  name: 'Sam',
+  email: 'sam@example.com',
+  profileImagePath: '',
+  profileChangedAt: now,
+  avatarColor: null,
+  ...overrides,
+});
+
 describe(AgentToolService.name, () => {
   let sut: AgentToolService;
   let accessRepository: ReturnType<typeof newAccessRepositoryMock>;
   let assetRepository: ReturnType<typeof newAssetRepositoryMock>;
   let albumRepository: ReturnType<typeof automock<AlbumRepository>>;
+  let sharedSpaceRepository: ReturnType<typeof automock<SharedSpaceRepository>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
   let toolCallRepository: ReturnType<typeof automock<AgentToolCallRepository>>;
   let agentRunnerService: ReturnType<typeof automock<AgentRunnerService>>;
@@ -205,6 +246,7 @@ describe(AgentToolService.name, () => {
     accessRepository = newAccessRepositoryMock();
     assetRepository = newAssetRepositoryMock();
     albumRepository = automock(AlbumRepository, { args: [{} as never] });
+    sharedSpaceRepository = automock(SharedSpaceRepository, { args: [{} as never] });
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
     toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
     agentRunnerService = automock(AgentRunnerService, { args: [] as never });
@@ -212,6 +254,7 @@ describe(AgentToolService.name, () => {
       accessRepository as unknown as AccessRepository,
       assetRepository as unknown as AssetRepository,
       albumRepository,
+      sharedSpaceRepository,
       sessionRepository,
       toolCallRepository,
       agentRunnerService,
@@ -254,6 +297,13 @@ describe(AgentToolService.name, () => {
     toolCallRepository.getCountedAssetCountBySessionAndDataClass.mockResolvedValue(0);
     albumRepository.getAgentAlbums.mockResolvedValue([]);
     albumRepository.getAgentAlbumById.mockResolvedValue(null);
+    sharedSpaceRepository.getAllByUserId.mockResolvedValue([]);
+    sharedSpaceRepository.getById.mockResolvedValue(undefined);
+    sharedSpaceRepository.getMember.mockResolvedValue(undefined);
+    sharedSpaceRepository.getMembers.mockResolvedValue([]);
+    sharedSpaceRepository.getAssetCount.mockResolvedValue(0);
+    sharedSpaceRepository.getRecentAssets.mockResolvedValue([]);
+    sharedSpaceRepository.getAssetIdsInSpacePage.mockResolvedValue([]);
     agentRunnerService.resumeAfterToolApproval.mockResolvedValue();
   });
 
@@ -2002,6 +2052,354 @@ describe(AgentToolService.name, () => {
         assetCount: album.assetCount,
         albumCount: 1,
       }),
+    );
+  });
+
+  it('listSpaces returns visible space summaries without full asset ids', async () => {
+    const auth = AuthFactory.create();
+    const first = makeSpaceRow({ name: 'Family', description: 'People', color: 'blue' });
+    const second = makeSpaceRow({ name: 'Family!', description: 'Emoji ✨', color: 'green' });
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getAllByUserId.mockResolvedValue([first, second]);
+    sharedSpaceRepository.getMembers
+      .mockResolvedValueOnce([makeSpaceMember()])
+      .mockResolvedValueOnce([makeSpaceMember(), makeSpaceMember()]);
+    sharedSpaceRepository.getAssetCount.mockResolvedValueOnce(2).mockResolvedValueOnce(0);
+    sharedSpaceRepository.getRecentAssets
+      .mockResolvedValueOnce([{ id: newUuid(), thumbhash: null }])
+      .mockResolvedValueOnce([]);
+
+    const result = await sut.listSpaces(auth, session.id, {});
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Returned 2 space(s)',
+        albumCount: 0,
+        assetCount: 0,
+      }),
+      spaces: [
+        expect.objectContaining({ id: first.id, name: 'Family', assetCount: 2, memberCount: 1 }),
+        expect.objectContaining({ id: second.id, name: 'Family!', assetCount: 0, memberCount: 2 }),
+      ],
+    });
+    if (result.status === 'success') {
+      expect(result.spaces[0]).not.toHaveProperty('assetIds');
+    }
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      session.id,
+      expect.any(String),
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        redactedResponseMetadata: { spaceIds: [first.id, second.id] },
+        albumCount: 0,
+        assetCount: 0,
+      }),
+    );
+  });
+
+  it('listSpaces returns an empty list for zero visible spaces', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.listSpaces(auth, session.id, {});
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({ responseSummary: 'Returned 0 space(s)' }),
+      spaces: [],
+    });
+  });
+
+  it('listSpaces denies when shared spaces are disabled for the session', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.listSpaces(auth, session.id, {});
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Shared spaces are not accessible for this session',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    expect(sharedSpaceRepository.getAllByUserId).not.toHaveBeenCalled();
+  });
+
+  it('readSpace returns redacted members and bounded asset ids for a visible space', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const space = makeSpaceRow({ id: newUuid(), name: 'Family', thumbnailAssetId: assetIds[0] });
+    const member = makeSpaceMember({
+      spaceId: space.id,
+      userId: auth.user.id,
+      name: 'Pierre',
+      email: 'pierre@example.com',
+      avatarColor: 'blue',
+      profileImagePath: '/profile.jpg',
+    });
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getMember.mockResolvedValue(member);
+    sharedSpaceRepository.getById.mockResolvedValue(space);
+    sharedSpaceRepository.getMembers.mockResolvedValue([member]);
+    sharedSpaceRepository.getAssetCount.mockResolvedValue(assetIds.length);
+    sharedSpaceRepository.getRecentAssets.mockResolvedValue([{ id: assetIds[0], thumbhash: null }]);
+    sharedSpaceRepository.getAssetIdsInSpacePage.mockResolvedValue(assetIds.map((assetId) => ({ assetId })));
+
+    const result = await sut.readSpace(auth, session.id, { spaceId: space.id });
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Returned space with 2 asset id(s)',
+        assetCount: 2,
+        albumCount: 0,
+      }),
+      space: expect.objectContaining({
+        id: space.id,
+        assetCount: 2,
+        assetIds,
+        assetIdsReturned: 2,
+        assetIdsTruncated: false,
+        members: [
+          {
+            userId: auth.user.id,
+            name: 'Pierre',
+            role: 'viewer',
+            avatarColor: 'blue',
+            profileImagePath: '/profile.jpg',
+          },
+        ],
+      } satisfies Partial<AgentSpaceDetail>),
+    });
+    if (result.status === 'success') {
+      expect(result.space.members[0]).not.toHaveProperty('email');
+    }
+    expect(sharedSpaceRepository.getAssetIdsInSpacePage).toHaveBeenCalledWith(space.id, { limit: 10_001 });
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      session.id,
+      expect.any(String),
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        redactedResponseMetadata: { spaceIds: [space.id], assetIds },
+        albumCount: 0,
+        assetCount: 2,
+      }),
+    );
+  });
+
+  it('readSpace rejects inaccessible or removed-membership spaces', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getMember.mockResolvedValue(undefined);
+
+    const result = await sut.readSpace(auth, session.id, { spaceId });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Space is not accessible',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    expect(sharedSpaceRepository.getById).not.toHaveBeenCalled();
+  });
+
+  it('readSpace truncates many asset ids at 10000 without denying on total asset count', async () => {
+    const auth = AuthFactory.create();
+    const space = makeSpaceRow({ id: newUuid() });
+    const member = makeSpaceMember({ spaceId: space.id, userId: auth.user.id });
+    const returnedRows = Array.from({ length: 10_001 }, () => ({ assetId: newUuid() }));
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        assetScope: { owned: false, sharedSpaces: true, locked: false },
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1, maxAssetsPerSession: 20_000 },
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getMember.mockResolvedValue(member);
+    sharedSpaceRepository.getById.mockResolvedValue(space);
+    sharedSpaceRepository.getMembers.mockResolvedValue([member]);
+    sharedSpaceRepository.getAssetCount.mockResolvedValue(10_005);
+    sharedSpaceRepository.getAssetIdsInSpacePage.mockResolvedValue(returnedRows);
+
+    const result = await sut.readSpace(auth, session.id, { spaceId: space.id });
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({
+        responseSummary: 'Returned space with 10000 of 10005 asset id(s)',
+        assetCount: 10_000,
+      }),
+      space: expect.objectContaining({
+        assetIds: returnedRows.slice(0, 10_000).map((row) => row.assetId),
+        assetIdsReturned: 10_000,
+        assetIdsTruncated: true,
+        assetCount: 10_005,
+      }),
+    });
+  });
+
+  it('readSpace denies when returned asset ids exceed the remaining metadata session limit', async () => {
+    const auth = AuthFactory.create();
+    const space = makeSpaceRow({ id: newUuid() });
+    const member = makeSpaceMember({ spaceId: space.id, userId: auth.user.id });
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        assetScope: { owned: false, sharedSpaces: true, locked: false },
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerSession: 1 },
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getMember.mockResolvedValue(member);
+    sharedSpaceRepository.getById.mockResolvedValue(space);
+    sharedSpaceRepository.getMembers.mockResolvedValue([member]);
+    sharedSpaceRepository.getAssetCount.mockResolvedValue(assetIds.length);
+    sharedSpaceRepository.getAssetIdsInSpacePage.mockResolvedValue(assetIds.map((assetId) => ({ assetId })));
+    toolCallRepository.transitionWithSessionLimit.mockResolvedValue({
+      status: 'limit-exceeded',
+      toolCall: makeToolCall({
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: 'Session policy allows at most 1 assets per session',
+      }),
+    });
+
+    const result = await sut.readSpace(auth, session.id, { spaceId: space.id });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Session policy allows at most 1 assets per session',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    expect(toolCallRepository.transitionWithSessionLimit).toHaveBeenCalledWith(
+      session.id,
+      expect.any(String),
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({ assetCount: 2, albumCount: 0 }),
+      AgentToolDataClass.Metadata,
+      1,
+    );
+  });
+
+  it('strict listSpaces creates pending approval and approved retry resumes stored empty metadata', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
+    });
+    const pending = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.ListSpaces,
+      status: AgentToolCallStatus.PendingApproval,
+      redactedRequestMetadata: {},
+      assetCount: 0,
+      albumCount: 0,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.create.mockResolvedValueOnce(pending);
+
+    const pendingResult = await sut.listSpaces(auth, session.id, {});
+
+    expect(pendingResult.status).toBe('approval-required');
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: AgentToolName.ListSpaces, redactedRequestMetadata: {} }),
+    );
+
+    toolCallRepository.getByIdForSession.mockResolvedValue({ ...pending, status: AgentToolCallStatus.Approved });
+    toolCallRepository.transition.mockResolvedValueOnce(
+      makeToolCall({ ...pending, status: AgentToolCallStatus.Executing }),
+    );
+
+    const resumed = await sut.listSpaces(auth, session.id, { toolCallId: pending.id });
+
+    expect(resumed.status).toBe('success');
+    expect(sharedSpaceRepository.getAllByUserId).toHaveBeenCalledWith(auth.user.id);
+  });
+
+  it('strict readSpace approved retry revalidates membership and excludes the current tool call from session accounting', async () => {
+    const auth = AuthFactory.create();
+    const space = makeSpaceRow({ id: newUuid() });
+    const member = makeSpaceMember({ spaceId: space.id, userId: auth.user.id });
+    const assetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: makePlan({
+        assetScope: { owned: false, sharedSpaces: true, locked: false },
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerSession: 1 },
+      }),
+    });
+    const approved = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.ReadSpace,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      requestSummary: `Read space ${space.id}`,
+      redactedRequestMetadata: { spaceId: space.id },
+      assetCount: 0,
+      albumCount: 0,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(approved);
+    toolCallRepository.transition.mockResolvedValueOnce(
+      makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }),
+    );
+    sharedSpaceRepository.getMember.mockResolvedValue(member);
+    sharedSpaceRepository.getById.mockResolvedValue(space);
+    sharedSpaceRepository.getMembers.mockResolvedValue([member]);
+    sharedSpaceRepository.getAssetCount.mockResolvedValue(1);
+    sharedSpaceRepository.getAssetIdsInSpacePage.mockResolvedValue([{ assetId }]);
+
+    const result = await sut.readSpace(auth, session.id, { toolCallId: approved.id });
+
+    expect(result.status).toBe('success');
+    expect(sharedSpaceRepository.getMember).toHaveBeenCalledWith(space.id, auth.user.id);
+    expect(toolCallRepository.transitionWithSessionLimit).toHaveBeenCalledWith(
+      session.id,
+      approved.id,
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({ assetCount: 1 }),
+      AgentToolDataClass.Metadata,
+      1,
     );
   });
 

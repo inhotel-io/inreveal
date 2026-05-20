@@ -75,6 +75,7 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_status_skipped: 'Skipped',
     assistant_operation_type_album_add_assets: 'Add assets',
     assistant_operation_type_album_create: 'Create album',
+    assistant_operation_type_space_update_details: 'Update space details',
   };
 
   return {
@@ -1294,6 +1295,53 @@ describe(AgentSessionChatPanel.name, () => {
       expect.stringContaining('Now add Porto'),
       expect.stringContaining('Writing response'),
     ]);
+  });
+
+  it('keeps an applied space detail plan in history and leaves composer usable for continuation', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-before', AgentMessageRole.User, 'Rename Family to Family 2026'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+      {
+        ...makeMessage('message-after', AgentMessageRole.Assistant, 'Done. What should we do next?'),
+        createdAt: '2026-05-16T10:02:00.000Z',
+      },
+    ]);
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(
+      makeMessage('message-created', AgentMessageRole.User, 'Now make it blue'),
+    );
+    setAppliedPlanHistory([
+      makeAppliedPlan({
+        updatedAt: '2026-05-16T10:01:00.000Z',
+        operations: [
+          makeOperation({
+            id: 'operation-space-update',
+            type: AgentOperationType.SpaceUpdateDetails,
+            summary: 'Update Family space details',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: 'space-1',
+            temporaryTargetId: null,
+            payload: { spaceName: 'Family 2026', description: '', color: 'blue' },
+            result: { spaceId: 'space-1' },
+          }),
+        ],
+      }),
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session: { ...session, status: AgentSessionStatus.Running } } });
+
+    const appliedCard = await screen.findByRole('article', { name: 'Applied plan: Organize Portugal holiday' });
+    expect(appliedCard).toHaveTextContent('Renamed to "Family 2026"; Cleared description; Changed color to blue');
+    expect(appliedCard).not.toHaveTextContent('space-1');
+
+    const input = screen.getByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Now make it blue' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('article', { name: 'Applied plan: Organize Portugal holiday' })).toBeInTheDocument();
+    expect(input).toHaveValue('');
   });
 
   it('refreshes applied plan history for plan-applied events without duplicating cards', async () => {

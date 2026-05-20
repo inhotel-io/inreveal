@@ -80,6 +80,12 @@ This keeps the mental model simple for Pi:
 permission gates as the rest of the agent read tools. They should only expose
 spaces visible to that user.
 
+Space write operations must be gated by explicit agent write-scope flags, not
+only by the final shared-space service call. Existing flags cover create,
+add-assets, remove-assets, and update-details. Member management should add
+separate write-scope flags for add-member, remove-member, and update-member-role
+so permission presets can allow or deny those actions independently.
+
 The space read response should be purpose-built for Pi rather than reusing a
 large UI DTO wholesale. It should include:
 
@@ -130,9 +136,14 @@ Start with failing tests for:
 - MCP `tools/list` includes `listSpaces` and `readSpace` with object
   `inputSchema`.
 - Valid `listSpaces` and `readSpace` examples parse and execute.
+- `listSpaces` returns only spaces visible to the session user and does not
+  include full asset lists.
 - `readSpace` requires `spaceId`.
 - `readSpace` rejects non-visible spaces.
+- `readSpace` returns asset ids, member summaries, and truncation metadata using
+  the purpose-built Pi response shape.
 - Approval retry for both tools uses only `toolCallId`.
+- Invalid argument shapes return model-actionable correction hints.
 - Generated MCP docs include the new tools and examples.
 - Activity preview shows user-readable labels such as `Listing spaces` and
   `Reading space details`.
@@ -181,6 +192,9 @@ Start with failing tests for:
 - Assistant flow lists spaces, resolves the intended space, searches/reads
   candidate assets, proposes a space asset plan, shows a plan card, applies it,
   shows the applied-plan card, and leaves chat open.
+- Apply calls the existing shared-space asset add/remove service path with only
+  the selected asset ids.
+- Disabled operations and user-excluded assets are not applied.
 - `space.addAssets` excludes assets already in the space when `readSpace`
   returned a complete asset list.
 - `space.removeAssets` only proposes assets that are in the space when
@@ -228,6 +242,10 @@ Start with failing tests for:
 - DTO validation rejects empty update payloads with a model-actionable hint.
 - Assistant flow resolves a visible space by name and proposes
   `space.updateDetails`.
+- Apply calls the existing shared-space update service path with only allowed
+  fields: name, description, and color.
+- Field overrides reject unsupported fields such as thumbnail, pets, face
+  recognition, linked libraries, and deletion.
 - Plan review shows changed fields without exposing operation ids by default.
 - Inline field edits for space details persist into apply payloads when the
   review UI supports editable fields.
@@ -280,13 +298,21 @@ Start with failing tests for:
 - DTO schemas for the three member operation types.
 - Operation-plan validation requires existing-space target ids for member
   operations.
+- Agent write-scope validation denies member operations unless the session has
+  the matching member-management flag.
 - Add-member payload requires a user id and role.
 - Remove-member payload requires user ids.
 - Update-role payload requires user ids and target role.
+- `searchUsers` MCP contract, examples, and generated docs exist when no
+  equivalent lookup tool is available.
+- `searchUsers` returns only fields allowed for disambiguation and redacts
+  private fields by default.
 - Planning contract examples cover add, remove, and role update.
 - Validation rejects direct member mutation tool names and points Pi to
   reviewable plans.
 - Apply service calls the existing shared-space member service methods.
+- Apply rejects removing the current user and removing the last owner/admin.
+- Disabled member operations are not applied.
 - Plan review labels are human-readable: `Add Alex as editor`, `Remove Chris`,
   `Change Sam to viewer`.
 - Assistant flow resolves the space, resolves or asks for the member, proposes a
@@ -333,9 +359,12 @@ Minimum test categories:
 - MCP contract tests.
 - DTO validation tests.
 - Service permission tests.
+- Agent write-scope and permission-preset tests.
 - Operation-plan creation and apply tests.
+- Plan item selection, disabled-operation, and field-override tests.
 - Generated docs/prompt sync tests.
 - Assistant chat/plan/apply UI tests.
+- Privacy/redaction tests for member and user lookup responses.
 - Edge-case tests listed in each slice.
 
 ## Suggested Implementation Order
