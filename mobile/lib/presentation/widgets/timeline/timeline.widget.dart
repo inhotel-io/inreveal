@@ -23,6 +23,7 @@ import 'package:immich_mobile/presentation/widgets/timeline/scrubber.widget.dart
 import 'package:immich_mobile/presentation/widgets/timeline/segment.model.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.state.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_drag_region.dart';
+import 'package:immich_mobile/presentation/widgets/timeline/timeline_scroll_target.dart';
 import 'package:immich_mobile/providers/asset_viewer/scroll_to_date_notifier.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/readonly_mode.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/setting.provider.dart';
@@ -471,6 +472,9 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
           if (widget.withScrubber) {
             timeline = Scrubber(
               snapToMonth: widget.snapToMonth,
+              groupBy:
+                  ref.watch(timelineArgsProvider).groupBy ??
+                  GroupAssetsBy.values[ref.watch(settingsProvider).get(Setting.groupAssetsBy)],
               layoutSegments: segments,
               timelineHeight: maxHeight,
               topPadding: topPadding,

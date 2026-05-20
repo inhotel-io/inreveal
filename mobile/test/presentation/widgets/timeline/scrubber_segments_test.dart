@@ -1,0 +1,71 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:immich_mobile/domain/models/timeline.model.dart';
+import 'package:immich_mobile/presentation/widgets/timeline/fixed/segment.model.dart';
+import 'package:immich_mobile/presentation/widgets/timeline/scrubber_segments.dart';
+
+void main() {
+  test('year grouping builds year labels and counts unique years', () {
+    final segments = [_segment(DateTime(2026, 4), 0, 100), _segment(DateTime(2025, 12), 100, 200)];
+
+    final scrubberSegments = buildScrubberSegments(
+      layoutSegments: segments,
+      timelineHeight: 300,
+      groupBy: GroupAssetsBy.year,
+    );
+
+    expect(scrubberSegments.map((segment) => segment.scrollLabel), ['2026', '2025']);
+    expect(countScrubberSnapSegments([...segments, _segment(DateTime(2026, 3), 200, 300)], GroupAssetsBy.year), 2);
+  });
+
+  test('month grouping builds month labels and counts unique months', () {
+    final segments = [
+      _segment(DateTime(2026, 4), 0, 100),
+      _segment(DateTime(2026, 4, 12), 100, 200),
+      _segment(DateTime(2026, 3), 200, 300),
+    ];
+
+    final scrubberSegments = buildScrubberSegments(
+      layoutSegments: segments,
+      timelineHeight: 300,
+      groupBy: GroupAssetsBy.month,
+    );
+
+    expect(scrubberSegments.map((segment) => segment.scrollLabel), ['Apr 2026', 'Apr 2026', 'Mar 2026']);
+    expect(countScrubberSnapSegments(segments, GroupAssetsBy.month), 2);
+  });
+
+  test('empty layout returns empty scrubber segments', () {
+    expect(buildScrubberSegments(layoutSegments: [], timelineHeight: 300, groupBy: GroupAssetsBy.year), isEmpty);
+  });
+
+  test('findScrubberLayoutSegmentIndex matches by year for year grouping', () {
+    final segments = [_segment(DateTime(2026, 4), 0, 100), _segment(DateTime(2025, 12), 100, 200)];
+    final scrubberSegment = ScrubberSegment(date: DateTime(2026, 1), startOffset: 0, scrollLabel: '2026');
+
+    expect(findScrubberLayoutSegmentIndex(segments, scrubberSegment, GroupAssetsBy.year), 0);
+  });
+
+  test('findScrubberLayoutSegmentIndex matches by year and month for month and day grouping', () {
+    final segments = [_segment(DateTime(2026, 4), 0, 100), _segment(DateTime(2026, 3), 100, 200)];
+    final scrubberSegment = ScrubberSegment(date: DateTime(2026, 3, 20), startOffset: 0, scrollLabel: 'Mar 2026');
+
+    expect(findScrubberLayoutSegmentIndex(segments, scrubberSegment, GroupAssetsBy.month), 1);
+    expect(findScrubberLayoutSegmentIndex(segments, scrubberSegment, GroupAssetsBy.day), 1);
+  });
+}
+
+FixedSegment _segment(DateTime date, double startOffset, double endOffset) {
+  return FixedSegment(
+    firstIndex: 0,
+    lastIndex: 1,
+    startOffset: startOffset,
+    endOffset: endOffset,
+    firstAssetIndex: 0,
+    bucket: TimeBucket(date: date, assetCount: 1),
+    tileHeight: 100,
+    columnCount: 4,
+    headerExtent: 40,
+    spacing: 2,
+    header: HeaderType.month,
+  );
+}
