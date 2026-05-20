@@ -113,7 +113,7 @@ Common filters should include:
 - `visibility` where the session permission plan allows it
 - `order`
 - `limit`
-- `page` or cursor
+- `page`
 
 The response should include:
 
@@ -121,7 +121,7 @@ The response should include:
 - compact metadata suitable for model reasoning
 - a result count for the returned page
 - total or approximate total when available
-- `nextPage` or cursor when more results exist
+- `nextPage` when more results exist
 - explicit `truncated` or `hasMore` flags
 - a plain-language summary suitable for the chat activity preview
 
@@ -197,7 +197,7 @@ Edge cases:
 - Text mode without query.
 - `rating: null` for unrated assets.
 - Limit above max.
-- Page/cursor with no further results.
+- Page with no further results.
 
 ### Slice 2: UI Filter Parity
 
@@ -301,7 +301,7 @@ TDD requirements:
 
 - Write pagination and UI regression tests before implementation.
 - Result truncation and `hasMore` are visible.
-- Next page/cursor returns the next bounded batch.
+- Next page returns the next bounded batch.
 - Plan preview does not render all assets eagerly.
 - Applying a large plan uses existing chunking/limits and reports partial
   success/failure.
@@ -387,13 +387,21 @@ Coverage should include:
 - Plan review behavior for result sets from search.
 - Large-result pagination and rendering caps.
 
-## Open Decisions
+## Decisions
 
-- The pagination token format should be chosen in Slice 1. Prefer reusing
-  Gallery's existing `page`/`nextPage` behavior unless it cannot preserve stable
-  continuation for agent workflows.
-- Total counts should be exact where Gallery already provides them. If exact
-  counts require expensive queries, the response may use `approximateTotal` plus
-  `hasMore`.
-- Smart search should remain optional by mode. Deterministic metadata filters
-  should not silently become semantic search.
+- Pagination will use Gallery's existing one-based `page` request and `nextPage`
+  response for this phase. The agent must repeat the same mode, query, filters,
+  order, and limit with the returned `nextPage` value to continue. We will not
+  introduce opaque cursor tokens until there is evidence that page-based
+  continuation is unstable enough to block agent workflows.
+- Search responses must always include `returnedCount` and `hasMore`.
+  `totalCount` should be exact only where Gallery already computes it cheaply.
+  Slices 1-4 should not add expensive count queries solely for Pi. If a future
+  search path can provide a cheap estimate, it may expose `approximateTotal`,
+  but the UI and model prompt should treat `hasMore` as the reliable scale
+  signal.
+- `metadata` is the default mode for structured filters. `smart`, `ocr`,
+  `description`, and `filename` must be selected explicitly through the `mode`
+  field and must include a non-empty `query`. The server must not silently
+  upgrade metadata search into smart search or fall back from one text mode to
+  another.
