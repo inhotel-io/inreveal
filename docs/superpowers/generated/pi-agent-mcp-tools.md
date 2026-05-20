@@ -103,21 +103,21 @@ Do not ask the user to approve in chat and do not create a new read request with
 
 MCP tool name: `searchAssets`
 
-Find assets using Gallery metadata filters and a bounded result limit.
+Find assets using Gallery search modes, metadata filters, and a bounded result page.
 
-Put all search filters under filters. Use only toolCallId when retrying a Gallery-approved search.
+Put all search filters under filters. Use mode metadata for structured filters. Use only toolCallId when retrying a Gallery-approved search.
 
 Argument modes:
 
 - `empty-search`: Use when the user asks a broad library question and no narrower filters are known.
   Required fields: none.
   Forbidden fields: `toolCallId`.
-- `filtered-search`: Use when the user provides date, place, favorite, rating, album, tag, camera, or media filters.
+- `filtered-search`: Use when the user provides date, place, favorite, rating, album, tag, camera, or media filters. People, space, and visibility fields are contract fields but are not available yet.
   Required fields: `filters`.
-  Forbidden fields: `toolCallId`.
-- `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
+  Forbidden fields: `toolCallId`, `query`.
+- `approved-retry`: Use only after Gallery resumes the assistant from an approved search request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
+  Forbidden fields: `mode`, `query`, `filters`, `limit`, `page`, `order`.
 
 #### empty-search
 
@@ -144,6 +144,27 @@ Search photos from a known place and date window.
     "country": "Germany"
   },
   "limit": 50
+}
+```
+
+#### metadata-page-search
+
+Search a bounded metadata result page.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="metadata-page-search" -->
+
+```json
+{
+  "mode": "metadata",
+  "filters": {
+    "takenAfter": "2026-05-01T00:00:00.000Z",
+    "takenBefore": "2026-05-18T23:59:59.999Z",
+    "city": "Berlin",
+    "country": "Germany"
+  },
+  "limit": 50,
+  "page": 1,
+  "order": "desc"
 }
 ```
 
@@ -1570,8 +1591,10 @@ Summarize plan risks and selected changes.
 
 ### Search assets
 
-- `search-filters-outside-filters`: Place date, location, favorite, rating, album, tag, camera, and media filters inside the filters object.
-- `search-combined-filters-and-tool-call-id`: Use either filters and limit for a new search or only toolCallId for an approved retry.
+- `search-filters-outside-filters`: Place supported metadata filters for date, location, favorite, rating, album, tag, camera, and media inside filters. People, space, and visibility fields are accepted by the contract but are not available in Slice 1.
+- `search-query-with-metadata-mode`: Omit query and use metadata filters for now. Text search modes are in the contract but are not available yet.
+- `search-space-person-without-space`: spacePersonIds requires filters.spaceId, but people and space-person filters are not available in the current slice. Use currently executable metadata filters for now.
+- `search-combined-filters-and-tool-call-id`: Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.
 - `search-limit-out-of-range`: Use a positive integer limit no greater than 10000.
 - `tool-call-arguments-missing`: Put the search arguments object at params.arguments in the MCP tools/call request.
 - `tool-call-arguments-not-object`: The params.arguments value must be a JSON object, not an array, primitive, or null.

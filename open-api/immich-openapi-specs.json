@@ -26479,6 +26479,7 @@
         "type": "string"
       },
       "AgentSearchAssetsFilters": {
+        "additionalProperties": false,
         "properties": {
           "albumIds": {
             "items": {
@@ -26494,6 +26495,18 @@
           },
           "country": {
             "nullable": true,
+            "type": "string"
+          },
+          "createdAfter": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "createdBefore": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
             "type": "string"
           },
           "isFavorite": {
@@ -26514,11 +26527,32 @@
             "nullable": true,
             "type": "string"
           },
+          "personIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
+          },
           "rating": {
             "maximum": 5,
             "minimum": 1,
             "nullable": true,
             "type": "integer"
+          },
+          "spaceId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "spacePersonIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
           },
           "state": {
             "nullable": true,
@@ -26546,9 +26580,45 @@
           },
           "type": {
             "$ref": "#/components/schemas/AssetTypeEnum"
+          },
+          "updatedAfter": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "updatedBefore": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/AssetVisibility"
+          },
+          "withSharedSpaces": {
+            "type": "boolean"
           }
         },
         "type": "object"
+      },
+      "AgentSearchAssetsMode": {
+        "enum": [
+          "metadata",
+          "smart",
+          "description",
+          "ocr",
+          "filename"
+        ],
+        "type": "string"
+      },
+      "AgentSearchAssetsOrder": {
+        "enum": [
+          "asc",
+          "desc",
+          "relevance"
+        ],
+        "type": "string"
       },
       "AgentSearchAssetsToolApprovalRequiredResponse": {
         "properties": {
@@ -26601,6 +26671,22 @@
             "minimum": 1,
             "type": "integer"
           },
+          "mode": {
+            "$ref": "#/components/schemas/AgentSearchAssetsMode"
+          },
+          "order": {
+            "$ref": "#/components/schemas/AgentSearchAssetsOrder"
+          },
+          "page": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
           "toolCallId": {
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
@@ -26624,15 +26710,28 @@
       },
       "AgentSearchAssetsToolSuccessResponse": {
         "properties": {
+          "approximateTotal": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
           "assets": {
             "items": {
               "$ref": "#/components/schemas/AgentAssetMetadata"
             },
             "type": "array"
           },
+          "hasMore": {
+            "type": "boolean"
+          },
           "nextPage": {
             "nullable": true,
             "type": "string"
+          },
+          "returnedCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
           },
           "status": {
             "enum": [
@@ -26642,11 +26741,18 @@
           },
           "toolCall": {
             "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          },
+          "totalCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
           "assets",
+          "hasMore",
           "nextPage",
+          "returnedCount",
           "status",
           "toolCall"
         ],
