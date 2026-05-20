@@ -80,6 +80,9 @@
     selectedYear: galleryTemporalFilters.selectedYear,
     selectedMonth: galleryTemporalFilters.selectedMonth,
   });
+  let hasGalleryTemporalFilter = $derived(
+    galleryTemporalFilters.selectedYear !== undefined || galleryTemporalFilters.selectedMonth !== undefined,
+  );
   let visibleAssets = $derived(filterGalleryViewerAssetsByTemporalState(assets, galleryTemporalState));
   let galleryBuckets = $derived(
     galleryGrouping === 'day' ? [] : buildGalleryViewerBuckets(visibleAssets, galleryGrouping),
@@ -135,7 +138,7 @@
 
   let lastIntersectedHeight = 0;
   $effect(() => {
-    if (enableGrouping && galleryGrouping !== 'day') {
+    if (enableGrouping && (showRepresentativeBuckets || hasGalleryTemporalFilter)) {
       return;
     }
 

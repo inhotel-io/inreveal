@@ -53,6 +53,14 @@ vi.mock('$lib/utils/navigation', () => ({
   navigate: vi.fn(),
 }));
 
+vi.mock('lodash-es', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('lodash-es')>();
+  return {
+    ...actual,
+    debounce: <T extends (...args: never[]) => unknown>(fn: T) => fn,
+  };
+});
+
 function asset(id: string, localDateTime: string, overrides: Partial<AssetResponseDto> = {}): AssetResponseDto {
   return {
     id,
@@ -197,6 +205,43 @@ describe('GalleryViewer grouping', () => {
     await fireEvent.click(screen.getByTestId('timeline-grouping-year'));
     onIntersected.mockClear();
     await fireEvent.click(screen.getByRole('button', { name: /2015, 2 photos/i }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onIntersected).not.toHaveBeenCalled();
+  });
+
+  it('does not request more assets while a local temporal chip narrows the day grid', async () => {
+    const onIntersected = vi.fn();
+    const assets = defaultAssets();
+    const view = renderViewer({ assets, onIntersected });
+
+    await fireEvent.click(screen.getByTestId('timeline-grouping-year'));
+    await fireEvent.click(screen.getByRole('button', { name: /2015, 2 photos/i }));
+    onIntersected.mockClear();
+    await fireEvent.click(screen.getByRole('button', { name: /Aug 2015, 1 photo/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Aug 2015');
+      expect(screen.getByTestId('thumbnail-asset-2015-aug')).toBeInTheDocument();
+      expect(screen.queryByTestId('thumbnail-asset-2015-jan')).not.toBeInTheDocument();
+    });
+
+    onIntersected.mockClear();
+    const expandedAssets = [
+      ...assets,
+      asset('asset-2015-aug-extra-1', '2015-08-04T00:00:00.000Z'),
+      asset('asset-2015-aug-extra-2', '2015-08-05T00:00:00.000Z'),
+    ];
+    await view.rerender({
+      component: GalleryViewer,
+      componentProps: {
+        assets: expandedAssets,
+        assetInteraction: mockAssetInteraction,
+        viewport: { width: 900, height: 700 },
+        enableGrouping: true,
+        onIntersected,
+      },
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(onIntersected).not.toHaveBeenCalled();
