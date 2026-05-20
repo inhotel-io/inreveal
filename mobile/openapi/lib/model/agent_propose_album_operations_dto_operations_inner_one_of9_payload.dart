@@ -13,28 +13,26 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload({
-    required this.angle,
+    this.members = const [],
   });
 
-  /// Minimum value: -9007199254740991
-  /// Maximum value: 9007199254740991
-  int angle;
+  List<AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadMembersInner> members;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload &&
-    other.angle == angle;
+    _deepEquality.equals(other.members, members);
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (angle.hashCode);
+    (members.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload[angle=$angle]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload[members=$members]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'angle'] = this.angle;
+      json[r'members'] = this.members;
     return json;
   }
 
@@ -47,7 +45,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload(
-        angle: mapValueOfType<int>(json, r'angle')!,
+        members: AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadMembersInner.listFromJson(json[r'members']),
       );
     }
     return null;
@@ -95,7 +93,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'angle',
+    'members',
   };
 }
 

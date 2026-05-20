@@ -13,26 +13,26 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf10Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf10Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf10Payload({
-    required this.favorite,
+    this.userIds = const [],
   });
 
-  bool favorite;
+  List<String> userIds;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf10Payload &&
-    other.favorite == favorite;
+    _deepEquality.equals(other.userIds, userIds);
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (favorite.hashCode);
+    (userIds.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf10Payload[favorite=$favorite]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf10Payload[userIds=$userIds]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'favorite'] = this.favorite;
+      json[r'userIds'] = this.userIds;
     return json;
   }
 
@@ -45,7 +45,9 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf10Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf10Payload(
-        favorite: mapValueOfType<bool>(json, r'favorite')!,
+        userIds: json[r'userIds'] is Iterable
+            ? (json[r'userIds'] as Iterable).cast<String>().toList(growable: false)
+            : const [],
       );
     }
     return null;
@@ -93,7 +95,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf10Payload {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'favorite',
+    'userIds',
   };
 }
 
