@@ -199,7 +199,10 @@ describe(AgentMcpDocsService.name, () => {
     const markdown = sut.generateMarkdown();
 
     expect(markdown).toContain('Only page 1 and order desc are executable');
-    expect(markdown).toContain('Text, people, space, visibility, later pages, and non-desc order');
+    expect(markdown).toContain(
+      'people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types',
+    );
+    expect(markdown).toContain('Text modes, later pages, and non-desc order');
     expect(markdown).toContain('search-page-unavailable');
     expect(markdown).toContain('search-order-unavailable');
   });
