@@ -31,6 +31,11 @@ export function getGalleryViewerAssetDate(asset: AssetResponseDto): GalleryViewe
     return;
   }
 
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    return;
+  }
+
   return { year, month, day };
 }
 
