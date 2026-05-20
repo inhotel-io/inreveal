@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { AgentSession, AgentToolCall } from 'src/database';
-import { AgentToolApprovalDto } from 'src/dtos/agent-tool.dto';
+import { AgentSearchAssetsToolRequestDto, AgentToolApprovalDto } from 'src/dtos/agent-tool.dto';
 import {
   AgentApprovalMode,
   AgentPermissionPreset,
@@ -1523,12 +1523,127 @@ describe(AgentToolService.name, () => {
       status: 'success',
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       assets: [expect.objectContaining({ id: sharedAssetId })],
+      returnedCount: 1,
+      hasMore: false,
       nextPage: null,
     });
     expect(assetRepository.searchAgentMetadata).toHaveBeenCalledWith(
       expect.objectContaining({ scope: { owned: false, sharedSpaces: true, locked: false } }),
     );
   });
+
+  it('returns search page metadata and stores expanded request metadata', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan(),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [makeMetadata(assetId)], nextPage: '2' });
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { isFavorite: true },
+      limit: 1,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+      assets: [expect.objectContaining({ id: assetId })],
+      returnedCount: 1,
+      hasMore: true,
+      nextPage: '2',
+    });
+    expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestSummary: 'Search metadata assets (limit 1)',
+        redactedRequestMetadata: {
+          mode: 'metadata',
+          filters: { isFavorite: true },
+          limit: 1,
+          page: 1,
+          order: 'desc',
+        },
+      }),
+      expect.any(Object),
+      AgentToolDataClass.Metadata,
+      expect.any(Number),
+    );
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      session.id,
+      expect.any(String),
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        status: AgentToolCallStatus.Completed,
+        redactedResponseMetadata: { assetIds: [assetId] },
+        assetCount: 1,
+      }),
+    );
+  });
+
+  it.each([
+    [
+      { mode: 'smart', query: 'beach', filters: {}, limit: 5, page: 1, order: 'desc' },
+      'smart search is not available yet',
+    ],
+    [
+      { mode: 'description', query: 'birthday', filters: {}, limit: 5, page: 1, order: 'desc' },
+      'description search is not available yet',
+    ],
+    [{ mode: 'ocr', query: 'invoice', filters: {}, limit: 5, page: 1, order: 'desc' }, 'ocr search is not available yet'],
+    [
+      { mode: 'filename', query: 'IMG_2026', filters: {}, limit: 5, page: 1, order: 'desc' },
+      'filename search is not available yet',
+    ],
+    [
+      {
+        mode: 'metadata',
+        filters: { createdAfter: new Date('2026-05-01T00:00:00.000Z') },
+        limit: 5,
+        page: 1,
+        order: 'desc',
+      },
+      'createdAfter search is not available yet',
+    ],
+    [
+      { mode: 'metadata', filters: { personIds: [newUuid()] }, limit: 5, page: 1, order: 'desc' },
+      'personIds search is not available yet',
+    ],
+    [
+      { mode: 'metadata', filters: { spaceId: newUuid() }, limit: 5, page: 1, order: 'desc' },
+      'spaceId search is not available yet',
+    ],
+    [{ mode: 'metadata', filters: {}, limit: 5, page: 2, order: 'desc' }, 'page search is not available yet'],
+    [{ mode: 'metadata', filters: {}, limit: 5, page: 1, order: 'asc' }, 'asc order search is not available yet'],
+  ] satisfies Array<[AgentSearchAssetsToolRequestDto, string]>)(
+    'denies future search contract fields before repository execution: %#',
+    async (request, reason) => {
+      const auth = AuthFactory.create();
+      const session = makeSession({
+        userId: auth.user.id,
+        approvalMode: AgentApprovalMode.PlanOnly,
+        permissionPlanSnapshot: makePlan(),
+      });
+
+      sessionRepository.getById.mockResolvedValue(session);
+
+      const result = await sut.searchAssets(auth, session.id, request);
+
+      expect(result).toEqual({
+        status: 'denied',
+        reason,
+        toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied, error: reason }),
+      });
+      expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
+    },
+  );
 
   it('listAlbums filters out owned albums when assetScope.owned is false', async () => {
     const auth = AuthFactory.create();
