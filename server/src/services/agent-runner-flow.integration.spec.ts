@@ -397,6 +397,7 @@ const setup = () => {
   const toolService = new AgentToolService(
     {} as AccessRepository,
     {} as AssetRepository,
+    { searchMetadata: vi.fn(() => Promise.resolve({ items: [], hasNextPage: false })) } as never,
     albumRepository as unknown as AlbumRepository,
     sharedSpaceRepository as unknown as SharedSpaceRepository,
     sessions as unknown as AgentSessionRepository,
