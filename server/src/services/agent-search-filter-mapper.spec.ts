@@ -73,6 +73,19 @@ describe(buildAgentMetadataSearch.name, () => {
     );
   });
 
+  it('does not leak pagination dto fields into repository options', () => {
+    const result = buildAgentMetadataSearch({
+      userId,
+      request: { mode: 'metadata', filters: {}, limit: 25, page: 2, order: 'desc' },
+      scope: { owned: true, sharedSpaces: false, locked: false, timelineSpaceIds: [] },
+    });
+
+    expect(result.pagination).toEqual({ page: 2, size: 25 });
+    expect(result.options).not.toHaveProperty('order');
+    expect(result.options).not.toHaveProperty('page');
+    expect(result.options).not.toHaveProperty('size');
+  });
+
   it('uses shared-space timeline IDs without owned user IDs for shared-space-only plans', () => {
     const result = buildAgentMetadataSearch({
       userId,
@@ -120,6 +133,23 @@ describe(buildAgentMetadataSearch.name, () => {
     );
   });
 
+  it('does not force empty results when owned scope requests shared spaces without timeline spaces', () => {
+    const result = buildAgentMetadataSearch({
+      userId,
+      request: {
+        mode: 'metadata',
+        filters: { withSharedSpaces: true },
+        limit: 10,
+        page: 1,
+        order: 'desc',
+      },
+      scope: { owned: true, sharedSpaces: true, locked: false, timelineSpaceIds: [] },
+    });
+
+    expect(result.options).toEqual(expect.objectContaining({ userIds: [userId] }));
+    expect(result.options).not.toHaveProperty('forceEmptyResult');
+  });
+
   it('includes timeline shared spaces for album filters when the session allows shared spaces', () => {
     const albumId = newUuid();
     const result = buildAgentMetadataSearch({
@@ -135,6 +165,23 @@ describe(buildAgentMetadataSearch.name, () => {
         albumIds: [albumId],
       }),
     );
+  });
+
+  it('does not force empty results for owned album filters without timeline spaces', () => {
+    const albumId = newUuid();
+    const result = buildAgentMetadataSearch({
+      userId,
+      request: { mode: 'metadata', filters: { albumIds: [albumId] }, limit: 10, page: 1, order: 'desc' },
+      scope: { owned: true, sharedSpaces: true, locked: false, timelineSpaceIds: [] },
+    });
+
+    expect(result.options).toEqual(
+      expect.objectContaining({
+        userIds: [userId],
+        albumIds: [albumId],
+      }),
+    );
+    expect(result.options).not.toHaveProperty('forceEmptyResult');
   });
 
   it('maps explicit space scope without broad timeline shared-space inclusion', () => {

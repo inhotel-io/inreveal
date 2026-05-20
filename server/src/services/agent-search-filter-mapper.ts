@@ -1,5 +1,4 @@
 import { type AgentSearchAssetsToolRequestDto } from 'src/dtos/agent-tool.dto';
-import { type MetadataSearchDto } from 'src/dtos/search.dto';
 import { AssetOrder } from 'src/enum';
 import { type AssetSearchOptions, type SearchPaginationOptions } from 'src/repositories/search.repository';
 
@@ -43,7 +42,7 @@ export const buildAgentMetadataSearch = ({
   const timelineSpaceIds = wantsBroadSharedScope ? scope.timelineSpaceIds : undefined;
   const hasTimelineSpaces = !!timelineSpaceIds && timelineSpaceIds.length > 0;
 
-  const galleryDto = omitUndefined({
+  const mappedFilters = omitUndefined({
     type: filters.type,
     isFavorite: filters.isFavorite,
     isNotInAlbum: filters.isNotInAlbum,
@@ -66,17 +65,14 @@ export const buildAgentMetadataSearch = ({
     spaceId: filters.spaceId,
     spacePersonIds: nonEmpty(filters.spacePersonIds),
     visibility: filters.visibility,
-    order: AssetOrder.Desc,
-    page,
-    size: limit,
-  } satisfies Partial<MetadataSearchDto>);
+  } satisfies Partial<AssetSearchOptions>);
 
   const options = omitUndefined({
-    ...galleryDto,
+    ...mappedFilters,
     orderDirection: AssetOrder.Desc,
     userIds: filters.spaceId ? undefined : scope.owned ? [userId] : wantsBroadSharedScope ? [] : [userId],
     timelineSpaceIds: hasTimelineSpaces ? timelineSpaceIds : undefined,
-    forceEmptyResult: wantsBroadSharedScope && !hasTimelineSpaces ? true : undefined,
+    forceEmptyResult: !scope.owned && wantsBroadSharedScope && !hasTimelineSpaces ? true : undefined,
   } satisfies Partial<AssetSearchOptions>) as AssetSearchOptions;
 
   return {
