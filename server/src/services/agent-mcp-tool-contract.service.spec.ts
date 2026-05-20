@@ -12,6 +12,7 @@ const expectedReadToolNames = [
   AgentToolName.ReadAlbum,
   AgentToolName.ListSpaces,
   AgentToolName.ReadSpace,
+  AgentToolName.SearchUsers,
 ] as const;
 
 const expectedPlanningToolNames = [
