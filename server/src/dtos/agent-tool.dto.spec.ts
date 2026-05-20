@@ -684,7 +684,7 @@ describe('Agent tool DTOs', () => {
         hasMore: true,
         nextPage: '2',
         totalCount: 12,
-        approximateTotal: false,
+        approximateTotal: 15,
       };
       const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode(response);
 
@@ -702,7 +702,7 @@ describe('Agent tool DTOs', () => {
       expect(encoded.data.hasMore).toBe(true);
       expect(encoded.data.nextPage).toBe('2');
       expect(encoded.data.totalCount).toBe(12);
-      expect(encoded.data.approximateTotal).toBe(false);
+      expect(encoded.data.approximateTotal).toBe(15);
       const parsed = AgentSearchAssetsToolResponseDto.schema.safeParse(encoded.data);
       expect(parsed.success).toBe(true);
       if (parsed.success && parsed.data.status === 'success') {
@@ -711,7 +711,7 @@ describe('Agent tool DTOs', () => {
         expect(parsed.data.hasMore).toBe(true);
         expect(parsed.data.nextPage).toBe('2');
         expect(parsed.data.totalCount).toBe(12);
-        expect(parsed.data.approximateTotal).toBe(false);
+        expect(parsed.data.approximateTotal).toBe(15);
       }
     });
 
