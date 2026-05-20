@@ -83,16 +83,16 @@ Member apply rule: load current members once before mutating a member operation,
 
 ## TDD And Edge Coverage Matrix
 
-| Area | Required tests |
-| --- | --- |
-| DTO schemas | Three operation types parse valid payloads; reject new-space targets, missing `targetId`, `temporaryTargetId`, duplicate user ids, empty arrays, invalid roles, owner target roles, missing role, missing members/userIds, and unsupported payload keys. |
-| Session permissions | New write-scope flags are required in custom permission plans, legacy snapshots normalize them to `false`, presets expose them intentionally, and write-scope validation denies each operation when its flag is false. |
-| User lookup | `searchUsers` schema has object `inputSchema`, supports approved retry, filters by query/limit, delegates visibility to `UserService.search(auth)`, returns only allowed users, redacts private fields, handles zero and multiple matches, and never exposes deleted/admin/storage/OAuth fields. |
-| MCP contract | Tool list includes `searchUsers`; planning examples cover add/remove/update role; common mistakes reject direct member mutation tools, missing user ids, wrong target kinds, and direct email-only member writes without resolved user ids. |
-| Prompt/docs | Prompt tells Pi to `listSpaces` -> `readSpace` -> `searchUsers` before member plans, ask on ambiguous/no user matches, avoid no-op same-role updates, and use reviewable plans only. Generated docs and prompt stay in sync. |
-| Apply service | Calls existing shared-space member methods, skips disabled operations, honors selected person ids, rejects current-user removal/update, rejects owner assignment, rejects last owner removal/demotion before mutating, handles already-member/member-missing/same-role/stale-membership as per-user skipped results, and keeps chat open. |
-| Frontend | Plan review labels are human-readable, group member operations under space cards, show member counts instead of photo counts, support member selection, hide raw ids by default, and applied cards summarize member changes. |
-| Assistant flow | Runner resolves space, resolves user or asks for clarification, proposes member plan, shows review card, applies plan, shows applied history, and composer remains usable. |
+| Area                | Required tests                                                                                                                                                                                                                                                                                                                            |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DTO schemas         | Three operation types parse valid payloads; reject new-space targets, missing `targetId`, `temporaryTargetId`, duplicate user ids, empty arrays, invalid roles, owner target roles, missing role, missing members/userIds, and unsupported payload keys.                                                                                  |
+| Session permissions | New write-scope flags are required in custom permission plans, legacy snapshots normalize them to `false`, presets expose them intentionally, and write-scope validation denies each operation when its flag is false.                                                                                                                    |
+| User lookup         | `searchUsers` schema has object `inputSchema`, supports approved retry, filters by query/limit, delegates visibility to `UserService.search(auth)`, returns only allowed users, redacts private fields, handles zero and multiple matches, and never exposes deleted/admin/storage/OAuth fields.                                          |
+| MCP contract        | Tool list includes `searchUsers`; planning examples cover add/remove/update role; common mistakes reject direct member mutation tools, missing user ids, wrong target kinds, and direct email-only member writes without resolved user ids.                                                                                               |
+| Prompt/docs         | Prompt tells Pi to `listSpaces` -> `readSpace` -> `searchUsers` before member plans, ask on ambiguous/no user matches, avoid no-op same-role updates, and use reviewable plans only. Generated docs and prompt stay in sync.                                                                                                              |
+| Apply service       | Calls existing shared-space member methods, skips disabled operations, honors selected person ids, rejects current-user removal/update, rejects owner assignment, rejects last owner removal/demotion before mutating, handles already-member/member-missing/same-role/stale-membership as per-user skipped results, and keeps chat open. |
+| Frontend            | Plan review labels are human-readable, group member operations under space cards, show member counts instead of photo counts, support member selection, hide raw ids by default, and applied cards summarize member changes.                                                                                                              |
+| Assistant flow      | Runner resolves space, resolves user or asks for clarification, proposes member plan, shows review card, applies plan, shows applied history, and composer remains usable.                                                                                                                                                                |
 
 ---
 
@@ -181,10 +181,7 @@ it.each([
       targetKind: AgentOperationTargetKind.ExistingSpace,
       targetId: '00000000-0000-4000-8000-000000000020',
       payload: {
-        userIds: [
-          '00000000-0000-4000-8000-000000000030',
-          '00000000-0000-4000-8000-000000000030',
-        ],
+        userIds: ['00000000-0000-4000-8000-000000000030', '00000000-0000-4000-8000-000000000030'],
       },
     },
     path: ['operations', 0, 'payload', 'userIds'],
@@ -323,9 +320,9 @@ it.each([
   });
   const operation = makeExistingSpaceMemberOperation({ type });
 
-  await expect(sut.proposeAlbumOperations(auth, session.id, { summary: 'Manage members.', operations: [operation] })).rejects.toThrow(
-    `Agent permission policy does not allow ${message}`,
-  );
+  await expect(
+    sut.proposeAlbumOperations(auth, session.id, { summary: 'Manage members.', operations: [operation] }),
+  ).rejects.toThrow(`Agent permission policy does not allow ${message}`);
 });
 ```
 
@@ -909,7 +906,9 @@ it('defines searchUsers and shared-space member planning examples', () => {
   for (const exampleName of ['add-space-member', 'remove-space-member', 'update-space-member-role'] as const) {
     const example = planning.examples.find((candidate) => candidate.name === exampleName);
     expect(example).toBeDefined();
-    expect(() => AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].parse(example?.arguments)).not.toThrow();
+    expect(() =>
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].parse(example?.arguments),
+    ).not.toThrow();
   }
 });
 
@@ -1037,7 +1036,8 @@ const searchUsersContract: AgentMcpToolContract<AgentToolName.SearchUsers> = {
   name: AgentToolName.SearchUsers,
   title: 'Search users',
   description: 'Search users visible to the session user for shared-space member planning.',
-  usage: 'Use query and optional limit for a new request. Use only toolCallId when retrying a Gallery-approved request.',
+  usage:
+    'Use query and optional limit for a new request. Use only toolCallId when retrying a Gallery-approved request.',
   argumentModes: [
     {
       name: 'search-users-by-name',
@@ -1282,11 +1282,7 @@ git commit -m "feat: document pi space member planning"
 Add to `server/src/services/agent-operation-plan.service.spec.ts`:
 
 ```ts
-const makeSharedSpaceMember = (overrides: {
-  userId: string;
-  role: SharedSpaceRole;
-  name?: string;
-}) => ({
+const makeSharedSpaceMember = (overrides: { userId: string; role: SharedSpaceRole; name?: string }) => ({
   userId: overrides.userId,
   name: overrides.name ?? 'Member',
   email: `${overrides.userId}@example.com`,
@@ -1306,11 +1302,13 @@ const createProposedMemberPlan = ({
   session?: AgentSession;
   operations: AgentOperationPlanWithOperations['operations'];
 }) => {
-  const session = sessionOverride ?? makeSession({
-    userId: auth.user.id,
-    status: AgentSessionStatus.WaitingForPlanReview,
-    permissionPlanSnapshot: expandedPermissionPlanSnapshot,
-  });
+  const session =
+    sessionOverride ??
+    makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
   const plan = makePlan({ id: 'member-plan-id', sessionId: session.id, operations });
 
   sessionRepository.getById.mockResolvedValue(session);
@@ -1323,14 +1321,18 @@ const createProposedMemberPlan = ({
 
   const spaceIds = new Set(operations.flatMap((operation) => (operation.targetId ? [operation.targetId] : [])));
   accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(spaceIds);
-  sharedSpaceService.addMember.mockResolvedValue(makeSharedSpaceMember({
-    userId: '00000000-0000-4000-8000-000000000030',
-    role: SharedSpaceRole.Editor,
-  }) as never);
-  sharedSpaceService.updateMember.mockResolvedValue(makeSharedSpaceMember({
-    userId: '00000000-0000-4000-8000-000000000032',
-    role: SharedSpaceRole.Viewer,
-  }) as never);
+  sharedSpaceService.addMember.mockResolvedValue(
+    makeSharedSpaceMember({
+      userId: '00000000-0000-4000-8000-000000000030',
+      role: SharedSpaceRole.Editor,
+    }) as never,
+  );
+  sharedSpaceService.updateMember.mockResolvedValue(
+    makeSharedSpaceMember({
+      userId: '00000000-0000-4000-8000-000000000032',
+      role: SharedSpaceRole.Viewer,
+    }) as never,
+  );
   sharedSpaceService.removeMember.mockResolvedValue(undefined);
   if (!sharedSpaceService.getMembers.getMockImplementation()) {
     sharedSpaceService.getMembers.mockResolvedValue([
@@ -1376,7 +1378,10 @@ it('applies selected shared-space member operations through SharedSpaceService',
     operationIds: plan.operations.map((operation) => operation.id),
   });
 
-  expect(sharedSpaceService.addMember).toHaveBeenCalledWith(auth, spaceId, { userId: alexId, role: SharedSpaceRole.Editor });
+  expect(sharedSpaceService.addMember).toHaveBeenCalledWith(auth, spaceId, {
+    userId: alexId,
+    role: SharedSpaceRole.Editor,
+  });
   expect(sharedSpaceService.removeMember).toHaveBeenCalledWith(auth, spaceId, chrisId);
   expect(sharedSpaceService.updateMember).toHaveBeenCalledWith(auth, spaceId, samId, { role: SharedSpaceRole.Viewer });
 });
@@ -1413,7 +1418,10 @@ it('filters member operation payloads by selected person ids', async () => {
   });
 
   expect(sharedSpaceService.addMember).toHaveBeenCalledTimes(1);
-  expect(sharedSpaceService.addMember).toHaveBeenCalledWith(auth, spaceId, { userId: beaId, role: SharedSpaceRole.Viewer });
+  expect(sharedSpaceService.addMember).toHaveBeenCalledWith(auth, spaceId, {
+    userId: beaId,
+    role: SharedSpaceRole.Viewer,
+  });
 });
 ```
 
@@ -1540,7 +1548,10 @@ it('skips already-member, missing-member, and same-role member changes before mu
   });
 
   expect(sharedSpaceService.addMember).toHaveBeenCalledTimes(1);
-  expect(sharedSpaceService.addMember).toHaveBeenCalledWith(auth, spaceId, { userId: beaId, role: SharedSpaceRole.Viewer });
+  expect(sharedSpaceService.addMember).toHaveBeenCalledWith(auth, spaceId, {
+    userId: beaId,
+    role: SharedSpaceRole.Viewer,
+  });
   expect(sharedSpaceService.removeMember).not.toHaveBeenCalled();
   expect(sharedSpaceService.updateMember).not.toHaveBeenCalled();
   expect(result.plan.operations[0].result).toMatchObject({
@@ -1582,7 +1593,9 @@ it('rejects owner assignment before mutating members', async () => {
 it('rejects last-owner demotion before mutating members', async () => {
   const spaceId = '00000000-0000-4000-8000-000000000020';
   const ownerId = '00000000-0000-4000-8000-000000000030';
-  sharedSpaceService.getMembers.mockResolvedValue([makeSharedSpaceMember({ userId: ownerId, role: SharedSpaceRole.Owner })]);
+  sharedSpaceService.getMembers.mockResolvedValue([
+    makeSharedSpaceMember({ userId: ownerId, role: SharedSpaceRole.Owner }),
+  ]);
   const { session, plan } = createProposedMemberPlan({
     operations: [
       makeExistingSpaceMemberOperation({
@@ -1908,11 +1921,7 @@ Add an in-memory `AgentOperationPlanRepository` to `server/src/services/agent-ru
 Add this helper near the existing `space()` helper:
 
 ```ts
-const makeSharedSpaceMember = (overrides: {
-  userId: string;
-  role: SharedSpaceRole;
-  name?: string;
-}) => ({
+const makeSharedSpaceMember = (overrides: { userId: string; role: SharedSpaceRole; name?: string }) => ({
   spaceId: '00000000-0000-4000-8000-000000000401',
   userId: overrides.userId,
   role: overrides.role,
@@ -2024,10 +2033,15 @@ it('resolves a space and user, proposes and applies a member plan, shows applied
 
   const currentPlan = await harness.operationPlanService.getCurrentPlan(harness.auth, session.id);
   expect(currentPlan).not.toBeNull();
-  const applyResult = await harness.operationPlanService.applyApprovedOperations(harness.auth, session.id, currentPlan!.id, {
-    planRevision: currentPlan!.revision,
-    operationIds: currentPlan!.operations.map((operation) => operation.id),
-  });
+  const applyResult = await harness.operationPlanService.applyApprovedOperations(
+    harness.auth,
+    session.id,
+    currentPlan!.id,
+    {
+      planRevision: currentPlan!.revision,
+      operationIds: currentPlan!.operations.map((operation) => operation.id),
+    },
+  );
 
   expect(applyResult.plan.operations[0]).toMatchObject({
     status: AgentOperationStatus.Applied,
@@ -2177,13 +2191,14 @@ const getMemberIds = (operation: AgentOperationResponseDto) => {
   if (operation.type === AgentOperationType.SpaceAddMembers) {
     const members = operation.payload.members;
     return Array.isArray(members)
-      ? members.flatMap((member) =>
-          isRecord(member) && typeof member.userId === 'string' ? [member.userId] : [],
-        )
+      ? members.flatMap((member) => (isRecord(member) && typeof member.userId === 'string' ? [member.userId] : []))
       : [];
   }
 
-  if (operation.type === AgentOperationType.SpaceRemoveMembers || operation.type === AgentOperationType.SpaceUpdateMemberRole) {
+  if (
+    operation.type === AgentOperationType.SpaceRemoveMembers ||
+    operation.type === AgentOperationType.SpaceUpdateMemberRole
+  ) {
     return getStringArray(operation.payload.userIds) ?? [];
   }
 

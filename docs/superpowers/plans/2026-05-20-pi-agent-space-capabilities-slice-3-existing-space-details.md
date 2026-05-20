@@ -53,18 +53,18 @@ Out of scope:
 
 ## Test Matrix
 
-| Layer | Cases |
-| --- | --- |
-| MCP contract examples | Separate examples parse for rename, description update/clear, and color update. Every example uses `targetKind: "existing_space"`, includes `targetId`, has no `temporaryTargetId`, has no `assetIds`, and includes only supported payload fields. |
-| MCP validation hints | Empty payload, wrong target kind, missing target id, direct mutation names, and unsupported fields such as `thumbnail`, `petsEnabled`, `faceRecognitionEnabled`, `libraryIds`, and `delete` produce model-actionable correction hints. |
-| Runner prompt | Prompt includes `mcp_gallery_listSpaces`, `mcp_gallery_readSpace`, `space.updateDetails`, supported field names, color values, no-op guidance, and direct-write prohibition while staying under the prompt size guard. |
-| Generated docs | Generated MCP docs include focused detail-update examples, common mistakes, supported fields, no-op guidance, and remain in sync with the renderer. |
-| DTO validation | `space.updateDetails` accepts name-only, description-only, color-only, multi-field, and description-clear payloads. It rejects empty payloads, invalid colors, unsupported fields, album/new-space target shapes, missing target id, `temporaryTargetId`, and accidental `assetIds`. |
-| Apply service | Apply calls `SharedSpaceService.update(auth, spaceId, dto)` with only `{ name, description, color }`; field overrides merge into the payload; unsupported overrides fail before claiming the plan; permission denial and stale membership fail before downstream update. |
-| Assistant flow | Pi lists spaces, resolves the intended visible space, reads current details, proposes a field-level update plan, shows a review card, applies it, shows the applied-plan card, and keeps chat open. Ambiguous/no-match/no-op prompts produce chat guidance instead of guessed plans. |
-| Frontend review UI | Review cards group the update under the space destination, show changed fields without operation ids, expose inline editable fields for `spaceName`, `description`, and `color`, validate edits, and send sparse `fieldOverrides`. |
-| Applied-plan UI | Applied cards summarize changed fields such as `Renamed to "Family 2026"`, `Updated description`, `Cleared description`, and `Changed color to blue`. |
-| Edge cases | Ambiguous space name, no matching space, requested name equals current name, description cleared versus unchanged, invalid color, permission denial, deleted/removed membership before apply, multiple fields changed in one operation. |
+| Layer                 | Cases                                                                                                                                                                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| MCP contract examples | Separate examples parse for rename, description update/clear, and color update. Every example uses `targetKind: "existing_space"`, includes `targetId`, has no `temporaryTargetId`, has no `assetIds`, and includes only supported payload fields.                                   |
+| MCP validation hints  | Empty payload, wrong target kind, missing target id, direct mutation names, and unsupported fields such as `thumbnail`, `petsEnabled`, `faceRecognitionEnabled`, `libraryIds`, and `delete` produce model-actionable correction hints.                                               |
+| Runner prompt         | Prompt includes `mcp_gallery_listSpaces`, `mcp_gallery_readSpace`, `space.updateDetails`, supported field names, color values, no-op guidance, and direct-write prohibition while staying under the prompt size guard.                                                               |
+| Generated docs        | Generated MCP docs include focused detail-update examples, common mistakes, supported fields, no-op guidance, and remain in sync with the renderer.                                                                                                                                  |
+| DTO validation        | `space.updateDetails` accepts name-only, description-only, color-only, multi-field, and description-clear payloads. It rejects empty payloads, invalid colors, unsupported fields, album/new-space target shapes, missing target id, `temporaryTargetId`, and accidental `assetIds`. |
+| Apply service         | Apply calls `SharedSpaceService.update(auth, spaceId, dto)` with only `{ name, description, color }`; field overrides merge into the payload; unsupported overrides fail before claiming the plan; permission denial and stale membership fail before downstream update.             |
+| Assistant flow        | Pi lists spaces, resolves the intended visible space, reads current details, proposes a field-level update plan, shows a review card, applies it, shows the applied-plan card, and keeps chat open. Ambiguous/no-match/no-op prompts produce chat guidance instead of guessed plans. |
+| Frontend review UI    | Review cards group the update under the space destination, show changed fields without operation ids, expose inline editable fields for `spaceName`, `description`, and `color`, validate edits, and send sparse `fieldOverrides`.                                                   |
+| Applied-plan UI       | Applied cards summarize changed fields such as `Renamed to "Family 2026"`, `Updated description`, `Cleared description`, and `Changed color to blue`.                                                                                                                                |
+| Edge cases            | Ambiguous space name, no matching space, requested name equals current name, description cleared versus unchanged, invalid color, permission denial, deleted/removed membership before apply, multiple fields changed in one operation.                                              |
 
 ---
 
@@ -124,9 +124,7 @@ it('defines focused existing-space detail update examples with only supported fi
     const example = contract?.examples.find((candidate) => candidate.name === expectation.name);
 
     expect(example, expectation.name).toBeDefined();
-    const parsed = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].parse(
-      example?.arguments,
-    );
+    const parsed = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].parse(example?.arguments);
     expect(parsed.operations).toHaveLength(1);
     expect(parsed.operations[0]).toMatchObject({
       type: AgentOperationType.SpaceUpdateDetails,
@@ -928,18 +926,7 @@ it('exposes editable space detail fields and sparse field overrides', () => {
       originalValue: 'gray',
       value: 'blue',
       required: false,
-      options: [
-        'primary',
-        'pink',
-        'red',
-        'yellow',
-        'blue',
-        'green',
-        'purple',
-        'orange',
-        'gray',
-        'amber',
-      ],
+      options: ['primary', 'pink', 'red', 'yellow', 'blue', 'green', 'purple', 'orange', 'gray', 'amber'],
     },
   ]);
   expect(model.operationsById.get(spaceUpdateId)?.summary).toBe('Rename space to "Family 2026"');
@@ -970,9 +957,14 @@ it('validates inline existing-space detail edits before apply', () => {
     }),
   ]);
 
-  const invalidName = buildOperationReviewModel(currentPlan, { [spaceUpdateId]: true }, {}, {
-    [spaceUpdateId]: { spaceName: '' },
-  });
+  const invalidName = buildOperationReviewModel(
+    currentPlan,
+    { [spaceUpdateId]: true },
+    {},
+    {
+      [spaceUpdateId]: { spaceName: '' },
+    },
+  );
   expect(invalidName.operationsById.get(spaceUpdateId)?.fieldErrors).toEqual({
     spaceName: 'Space name is required.',
   });
@@ -983,9 +975,14 @@ it('validates inline existing-space detail edits before apply', () => {
     fieldOverrides: { [spaceUpdateId]: { spaceName: '' } },
   });
 
-  const invalidColor = buildOperationReviewModel(currentPlan, { [spaceUpdateId]: true }, {}, {
-    [spaceUpdateId]: { color: '#80c7ff' },
-  });
+  const invalidColor = buildOperationReviewModel(
+    currentPlan,
+    { [spaceUpdateId]: true },
+    {},
+    {
+      [spaceUpdateId]: { color: '#80c7ff' },
+    },
+  );
   expect(invalidColor.operationsById.get(spaceUpdateId)?.fieldErrors).toEqual({
     color: 'Choose a valid space color.',
   });

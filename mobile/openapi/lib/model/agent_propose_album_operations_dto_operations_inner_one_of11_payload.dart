@@ -13,26 +13,32 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf11Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf11Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf11Payload({
-    required this.archived,
+    this.userIds = const [],
+    required this.role,
   });
 
-  bool archived;
+  List<String> userIds;
+
+  AgentAssignableSharedSpaceMemberRole role;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf11Payload &&
-    other.archived == archived;
+    _deepEquality.equals(other.userIds, userIds) &&
+    other.role == role;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (archived.hashCode);
+    (userIds.hashCode) +
+    (role.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf11Payload[archived=$archived]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf11Payload[userIds=$userIds, role=$role]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'archived'] = this.archived;
+      json[r'userIds'] = this.userIds;
+      json[r'role'] = this.role;
     return json;
   }
 
@@ -45,7 +51,10 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf11Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf11Payload(
-        archived: mapValueOfType<bool>(json, r'archived')!,
+        userIds: json[r'userIds'] is Iterable
+            ? (json[r'userIds'] as Iterable).cast<String>().toList(growable: false)
+            : const [],
+        role: AgentAssignableSharedSpaceMemberRole.fromJson(json[r'role'])!,
       );
     }
     return null;
@@ -93,7 +102,8 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf11Payload {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'archived',
+    'userIds',
+    'role',
   };
 }
 
