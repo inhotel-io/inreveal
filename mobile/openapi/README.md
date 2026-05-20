@@ -105,12 +105,15 @@ Class | Method | HTTP request | Description
 *AgentSessionsApi* | [**getToolCalls**](doc//AgentSessionsApi.md#gettoolcalls) | **GET** /agent/sessions/{id}/tool-calls | List agent tool calls
 *AgentSessionsApi* | [**handle**](doc//AgentSessionsApi.md#handle) | **POST** /agent/internal/mcp/sessions/{id} | Handle the internal runner MCP endpoint
 *AgentSessionsApi* | [**listAlbums**](doc//AgentSessionsApi.md#listalbums) | **POST** /agent/sessions/{id}/tools/list-albums | Execute the internal listAlbums agent tool
+*AgentSessionsApi* | [**listSpaces**](doc//AgentSessionsApi.md#listspaces) | **POST** /agent/sessions/{id}/tools/list-spaces | Execute the internal listSpaces agent tool
 *AgentSessionsApi* | [**proposeAlbumOperations**](doc//AgentSessionsApi.md#proposealbumoperations) | **POST** /agent/sessions/{id}/operation-plan/proposals | Propose agent album operations
 *AgentSessionsApi* | [**readAlbum**](doc//AgentSessionsApi.md#readalbum) | **POST** /agent/sessions/{id}/tools/read-album | Execute the internal readAlbum agent tool
 *AgentSessionsApi* | [**readAssetMetadata**](doc//AgentSessionsApi.md#readassetmetadata) | **POST** /agent/sessions/{id}/tools/read-asset-metadata | Execute the internal readAssetMetadata agent tool
 *AgentSessionsApi* | [**readAssetOriginals**](doc//AgentSessionsApi.md#readassetoriginals) | **POST** /agent/sessions/{id}/tools/read-asset-originals | Execute the internal readAssetOriginals agent tool
 *AgentSessionsApi* | [**readAssetPreviews**](doc//AgentSessionsApi.md#readassetpreviews) | **POST** /agent/sessions/{id}/tools/read-asset-previews | Execute the internal readAssetPreviews agent tool
+*AgentSessionsApi* | [**readSpace**](doc//AgentSessionsApi.md#readspace) | **POST** /agent/sessions/{id}/tools/read-space | Execute the internal readSpace agent tool
 *AgentSessionsApi* | [**reviseProposedOperations**](doc//AgentSessionsApi.md#reviseproposedoperations) | **POST** /agent/sessions/{id}/operation-plan/{planId}/revisions | Revise agent album operations
+*AgentSessionsApi* | [**searchAgentUsers**](doc//AgentSessionsApi.md#searchagentusers) | **POST** /agent/sessions/{id}/tools/search-users | Execute the internal searchUsers agent tool
 *AgentSessionsApi* | [**summarizePlan**](doc//AgentSessionsApi.md#summarizeplan) | **POST** /agent/sessions/{id}/operation-plan/{planId}/summary | Summarize an agent operation plan
 *AgentSessionsApi* | [**updateAgentSession**](doc//AgentSessionsApi.md#updateagentsession) | **PUT** /agent/sessions/{id} | Update an agent session
 *AgentSessionsApi* | [**validateAgentSession**](doc//AgentSessionsApi.md#validateagentsession) | **POST** /agent/sessions/validate | Validate an agent session setup
@@ -438,12 +441,18 @@ Class | Method | HTTP request | Description
  - [AgentAssetRotateOperationType](doc//AgentAssetRotateOperationType.md)
  - [AgentAssetSetArchiveOperationType](doc//AgentAssetSetArchiveOperationType.md)
  - [AgentAssetSetFavoriteOperationType](doc//AgentAssetSetFavoriteOperationType.md)
+ - [AgentAssignableSharedSpaceMemberRole](doc//AgentAssignableSharedSpaceMemberRole.md)
  - [AgentCredentialSnapshot](doc//AgentCredentialSnapshot.md)
  - [AgentListAlbumsToolApprovalRequiredResponse](doc//AgentListAlbumsToolApprovalRequiredResponse.md)
  - [AgentListAlbumsToolDeniedResponse](doc//AgentListAlbumsToolDeniedResponse.md)
  - [AgentListAlbumsToolRequestDto](doc//AgentListAlbumsToolRequestDto.md)
  - [AgentListAlbumsToolResponseDto](doc//AgentListAlbumsToolResponseDto.md)
  - [AgentListAlbumsToolSuccessResponse](doc//AgentListAlbumsToolSuccessResponse.md)
+ - [AgentListSpacesToolApprovalRequiredResponse](doc//AgentListSpacesToolApprovalRequiredResponse.md)
+ - [AgentListSpacesToolDeniedResponse](doc//AgentListSpacesToolDeniedResponse.md)
+ - [AgentListSpacesToolRequestDto](doc//AgentListSpacesToolRequestDto.md)
+ - [AgentListSpacesToolResponseDto](doc//AgentListSpacesToolResponseDto.md)
+ - [AgentListSpacesToolSuccessResponse](doc//AgentListSpacesToolSuccessResponse.md)
  - [AgentMessageAssetBlock](doc//AgentMessageAssetBlock.md)
  - [AgentMessageAssetBlockType](doc//AgentMessageAssetBlockType.md)
  - [AgentMessageBlock](doc//AgentMessageBlock.md)
@@ -499,6 +508,12 @@ Class | Method | HTTP request | Description
  - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf12Payload](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf12Payload.md)
  - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf13](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf13.md)
  - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf14](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf14.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf14Payload](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf14Payload.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf15](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf15.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf16](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf16.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload.md)
  - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf2](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf2.md)
  - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf3](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf3.md)
  - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload.md)
@@ -511,6 +526,7 @@ Class | Method | HTTP request | Description
  - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload.md)
  - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf9](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf9.md)
  - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf9Payload.md)
+ - [AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadMembersInner](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOf9PayloadMembersInner.md)
  - [AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload](doc//AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload.md)
  - [AgentProviderCredentialCreateDto](doc//AgentProviderCredentialCreateDto.md)
  - [AgentProviderCredentialResponseDto](doc//AgentProviderCredentialResponseDto.md)
@@ -536,6 +552,11 @@ Class | Method | HTTP request | Description
  - [AgentReadAssetPreviewsToolRequestDto](doc//AgentReadAssetPreviewsToolRequestDto.md)
  - [AgentReadAssetPreviewsToolResponseDto](doc//AgentReadAssetPreviewsToolResponseDto.md)
  - [AgentReadAssetPreviewsToolSuccessResponse](doc//AgentReadAssetPreviewsToolSuccessResponse.md)
+ - [AgentReadSpaceToolApprovalRequiredResponse](doc//AgentReadSpaceToolApprovalRequiredResponse.md)
+ - [AgentReadSpaceToolDeniedResponse](doc//AgentReadSpaceToolDeniedResponse.md)
+ - [AgentReadSpaceToolRequestDto](doc//AgentReadSpaceToolRequestDto.md)
+ - [AgentReadSpaceToolResponseDto](doc//AgentReadSpaceToolResponseDto.md)
+ - [AgentReadSpaceToolSuccessResponse](doc//AgentReadSpaceToolSuccessResponse.md)
  - [AgentReviseAlbumOperationsDto](doc//AgentReviseAlbumOperationsDto.md)
  - [AgentRunnerCapabilitiesDto](doc//AgentRunnerCapabilitiesDto.md)
  - [AgentRunnerStatusDto](doc//AgentRunnerStatusDto.md)
@@ -546,6 +567,11 @@ Class | Method | HTTP request | Description
  - [AgentSearchAssetsToolRequestDto](doc//AgentSearchAssetsToolRequestDto.md)
  - [AgentSearchAssetsToolResponseDto](doc//AgentSearchAssetsToolResponseDto.md)
  - [AgentSearchAssetsToolSuccessResponse](doc//AgentSearchAssetsToolSuccessResponse.md)
+ - [AgentSearchUsersToolApprovalRequiredResponse](doc//AgentSearchUsersToolApprovalRequiredResponse.md)
+ - [AgentSearchUsersToolDeniedResponse](doc//AgentSearchUsersToolDeniedResponse.md)
+ - [AgentSearchUsersToolRequestDto](doc//AgentSearchUsersToolRequestDto.md)
+ - [AgentSearchUsersToolResponseDto](doc//AgentSearchUsersToolResponseDto.md)
+ - [AgentSearchUsersToolSuccessResponse](doc//AgentSearchUsersToolSuccessResponse.md)
  - [AgentSessionActivityEventCounts](doc//AgentSessionActivityEventCounts.md)
  - [AgentSessionActivityEventResponseDto](doc//AgentSessionActivityEventResponseDto.md)
  - [AgentSessionActivityEventSource](doc//AgentSessionActivityEventSource.md)
@@ -554,14 +580,21 @@ Class | Method | HTTP request | Description
  - [AgentSessionResponseDto](doc//AgentSessionResponseDto.md)
  - [AgentSessionStatus](doc//AgentSessionStatus.md)
  - [AgentSessionUpdateDto](doc//AgentSessionUpdateDto.md)
+ - [AgentSpaceAddMembersOperationType](doc//AgentSpaceAddMembersOperationType.md)
  - [AgentSpaceCreateOperationType](doc//AgentSpaceCreateOperationType.md)
+ - [AgentSpaceDetail](doc//AgentSpaceDetail.md)
+ - [AgentSpaceMemberSummary](doc//AgentSpaceMemberSummary.md)
+ - [AgentSpaceRemoveMembersOperationType](doc//AgentSpaceRemoveMembersOperationType.md)
+ - [AgentSpaceSummary](doc//AgentSpaceSummary.md)
  - [AgentSpaceUpdateDetailsOperationType](doc//AgentSpaceUpdateDetailsOperationType.md)
+ - [AgentSpaceUpdateMemberRoleOperationType](doc//AgentSpaceUpdateMemberRoleOperationType.md)
  - [AgentToolApprovalDecision](doc//AgentToolApprovalDecision.md)
  - [AgentToolApprovalDto](doc//AgentToolApprovalDto.md)
  - [AgentToolCallResponseDto](doc//AgentToolCallResponseDto.md)
  - [AgentToolCallStatus](doc//AgentToolCallStatus.md)
  - [AgentToolDataClass](doc//AgentToolDataClass.md)
  - [AgentToolName](doc//AgentToolName.md)
+ - [AgentUserLookupResult](doc//AgentUserLookupResult.md)
  - [AgentUserMessageContent](doc//AgentUserMessageContent.md)
  - [AlbumNameDto](doc//AlbumNameDto.md)
  - [AlbumResponseDto](doc//AlbumResponseDto.md)
