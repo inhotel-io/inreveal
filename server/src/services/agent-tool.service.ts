@@ -48,6 +48,8 @@ import {
   AgentAssetMediaReference,
   AgentAssetMetadata,
   AgentSearchAssetsFilters,
+  AgentSearchAssetsMode,
+  AgentSearchAssetsOrder,
   AgentSpaceDetail,
   AgentSpaceMemberSummary,
   AgentSpaceSummary,
@@ -525,19 +527,33 @@ export class AgentToolService {
 
   private searchAssetsDescriptor(): AgentReadToolDescriptor<
     AgentSearchAssetsToolRequestDto,
-    { assets: AgentAssetMetadata[]; nextPage: string | null }
+    {
+      assets: AgentAssetMetadata[];
+      returnedCount: number;
+      hasMore: boolean;
+      nextPage: string | null;
+      totalCount?: number;
+      approximateTotal?: number;
+    }
   > {
     return {
       toolName: AgentToolName.SearchAssets,
       dataClass: AgentToolDataClass.Metadata,
-      requestSummary: (request) => `Search assets (limit ${request.limit ?? 0})`,
+      requestSummary: (request) => `Search ${request.mode ?? 'metadata'} assets (limit ${request.limit ?? 0})`,
       requestMetadata: (request) =>
-        ({ filters: request.filters ?? {}, limit: request.limit ?? 0 }) as AgentToolSearchAssetsRequestMetadata,
+        ({
+          mode: request.mode ?? 'metadata',
+          filters: request.filters ?? {},
+          limit: request.limit ?? 0,
+          page: request.page ?? 1,
+          order: request.order ?? 'desc',
+          ...(request.query === undefined ? {} : { query: request.query }),
+        }) as AgentToolSearchAssetsRequestMetadata,
       requestedAssetCount: (request) => request.limit ?? 0,
       requestedAlbumCount: () => 0,
       perToolLimit: (plan) => plan.limits.maxAssetsPerToolCall,
       perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
-      validateAccess: (auth, session, request) => this.validateSearchFilters(auth, session, request.filters ?? {}),
+      validateAccess: (auth, session, request) => this.validateSearchRequest(auth, session, request),
       execute: async (auth, session, request) => {
         const result = await this.assetRepository.searchAgentMetadata({
           userId: auth.user.id,
@@ -550,7 +566,12 @@ export class AgentToolService {
           session,
           result.assets.map((asset) => asset.id),
         );
-        return { assets: result.assets.map((asset) => this.mapAssetMetadata(asset)), nextPage: result.nextPage };
+        return {
+          assets: result.assets.map((asset) => this.mapAssetMetadata(asset)),
+          returnedCount: result.assets.length,
+          hasMore: result.nextPage !== null,
+          nextPage: result.nextPage,
+        };
       },
       responseSummary: (result) => this.getReturnedMetadataSummary(result.assets.length),
       responseMetadata: (result) => ({ assetIds: result.assets.map((asset) => asset.id) }),
@@ -1184,11 +1205,70 @@ export class AgentToolService {
     return member ? null : 'Space is not accessible';
   }
 
-  private async validateSearchFilters(
+  private getUnsupportedSearchModeReason(mode: AgentSearchAssetsMode): string | null {
+    return mode === 'metadata' ? null : `${mode} search is not available yet`;
+  }
+
+  private getUnsupportedSearchPagingReason(page: number, order: AgentSearchAssetsOrder): string | null {
+    if (page !== 1) {
+      return 'page search is not available yet';
+    }
+
+    if (order !== 'desc') {
+      return `${order} order search is not available yet`;
+    }
+
+    return null;
+  }
+
+  private getUnsupportedSearchFilterReason(filters: AgentSearchAssetsFilters): string | null {
+    const futureFields = [
+      'createdAfter',
+      'createdBefore',
+      'updatedAfter',
+      'updatedBefore',
+      'personIds',
+      'spaceId',
+      'spacePersonIds',
+      'withSharedSpaces',
+      'visibility',
+    ] as const;
+
+    for (const field of futureFields) {
+      const value = filters[field];
+      if (Array.isArray(value) ? value.length > 0 : value !== undefined) {
+        return `${field} search is not available yet`;
+      }
+    }
+
+    return null;
+  }
+
+  private async validateSearchRequest(
     auth: AuthDto,
     session: AgentSession,
-    filters: AgentSearchAssetsFilters,
+    request: AgentSearchAssetsToolRequestDto,
   ): Promise<string | null> {
+    const mode = request.mode ?? 'metadata';
+    const page = request.page ?? 1;
+    const order = request.order ?? 'desc';
+
+    const modeReason = this.getUnsupportedSearchModeReason(mode);
+    if (modeReason) {
+      return modeReason;
+    }
+
+    const pagingReason = this.getUnsupportedSearchPagingReason(page, order);
+    if (pagingReason) {
+      return pagingReason;
+    }
+
+    const filterReason = this.getUnsupportedSearchFilterReason(request.filters ?? {});
+    if (filterReason) {
+      return filterReason;
+    }
+
+    const filters = request.filters ?? {};
     const albumIds = filters.albumIds ? new Set(filters.albumIds) : new Set<string>();
     if (albumIds.size > 0) {
       const readableAlbumIds = await this.getReadableAlbumIds(auth, session.permissionPlanSnapshot, albumIds);

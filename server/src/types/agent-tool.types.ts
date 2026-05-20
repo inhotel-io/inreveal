@@ -12,9 +12,17 @@ export type AgentToolReadAssetMetadataRequestMetadata = AgentToolReadAssetIdsReq
 
 export type AgentToolReadAssetMetadataResponseMetadata = AgentToolResponseIdsMetadata;
 
+export type AgentSearchAssetsMode = 'metadata' | 'smart' | 'description' | 'ocr' | 'filename';
+
+export type AgentSearchAssetsOrder = 'asc' | 'desc' | 'relevance';
+
 export type AgentToolSearchAssetsRequestMetadata = {
+  mode: AgentSearchAssetsMode;
+  query?: string;
   filters: AgentSearchAssetsFilters;
   limit: number;
+  page: number;
+  order: AgentSearchAssetsOrder;
 };
 
 export type AgentToolReadAssetIdsRequestMetadata = {
@@ -64,6 +72,10 @@ export type AgentToolOperationPlanResponseMetadata = {
 export type AgentSearchAssetsFilters = {
   takenAfter?: Date;
   takenBefore?: Date;
+  createdAfter?: Date;
+  createdBefore?: Date;
+  updatedAfter?: Date;
+  updatedBefore?: Date;
   city?: string | null;
   state?: string | null;
   country?: string | null;
@@ -76,6 +88,11 @@ export type AgentSearchAssetsFilters = {
   rating?: number | null;
   tagIds?: string[];
   albumIds?: string[];
+  personIds?: string[];
+  spaceId?: string;
+  spacePersonIds?: string[];
+  withSharedSpaces?: boolean;
+  visibility?: AssetVisibility;
 };
 
 export type AgentAssetMediaReference = {
