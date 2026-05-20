@@ -93,3 +93,41 @@ int findScrubberLayoutSegmentIndex(List<Segment> layoutSegments, ScrubberSegment
     return bucket.date.year == segment.date.year && bucket.date.month == segment.date.month;
   });
 }
+
+bool shouldRebuildScrubberSegments({
+  required List<Segment> oldLayoutSegments,
+  required List<Segment> layoutSegments,
+  required GroupAssetsBy oldGroupBy,
+  required GroupAssetsBy groupBy,
+  required double oldScrubberHeight,
+  required double scrubberHeight,
+}) {
+  if (oldGroupBy != groupBy || oldScrubberHeight != scrubberHeight) {
+    return true;
+  }
+
+  if (oldLayoutSegments.length != layoutSegments.length) {
+    return true;
+  }
+
+  for (var i = 0; i < layoutSegments.length; i++) {
+    final oldSegment = oldLayoutSegments[i];
+    final segment = layoutSegments[i];
+
+    if (oldSegment.startOffset != segment.startOffset || oldSegment.endOffset != segment.endOffset) {
+      return true;
+    }
+
+    if (oldSegment.bucket is TimeBucket || segment.bucket is TimeBucket) {
+      if (oldSegment.bucket is! TimeBucket || segment.bucket is! TimeBucket) {
+        return true;
+      }
+
+      if ((oldSegment.bucket as TimeBucket).date != (segment.bucket as TimeBucket).date) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}

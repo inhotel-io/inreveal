@@ -2,8 +2,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/fixed/segment.model.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/scrubber_segments.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 
 void main() {
+  String? previousDefaultLocale;
+
+  setUpAll(() async {
+    await initializeDateFormatting('en');
+  });
+
+  setUp(() {
+    previousDefaultLocale = Intl.defaultLocale;
+    Intl.defaultLocale = 'en';
+  });
+
+  tearDown(() {
+    Intl.defaultLocale = previousDefaultLocale;
+  });
+
   test('year grouping builds year labels and counts unique years', () {
     final segments = [_segment(DateTime(2026, 4), 0, 100), _segment(DateTime(2025, 12), 100, 200)];
 
@@ -83,6 +100,72 @@ void main() {
     expect(
       findScrubberLayoutSegmentIndex([_segment(DateTime(2025, 3), 0, 100)], scrubberSegment, GroupAssetsBy.day),
       -1,
+    );
+  });
+
+  test('shouldRebuildScrubberSegments returns true when dates change but final end offset is unchanged', () {
+    final oldSegments = [_segment(DateTime(2026, 4), 0, 100), _segment(DateTime(2026, 3), 100, 200)];
+    final newSegments = [_segment(DateTime(2025, 4), 0, 100), _segment(DateTime(2026, 3), 100, 200)];
+
+    expect(
+      shouldRebuildScrubberSegments(
+        oldLayoutSegments: oldSegments,
+        layoutSegments: newSegments,
+        oldGroupBy: GroupAssetsBy.day,
+        groupBy: GroupAssetsBy.day,
+        oldScrubberHeight: 300,
+        scrubberHeight: 300,
+      ),
+      isTrue,
+    );
+  });
+
+  test('shouldRebuildScrubberSegments returns true when groupBy changes', () {
+    final segments = [_segment(DateTime(2026, 4), 0, 100)];
+
+    expect(
+      shouldRebuildScrubberSegments(
+        oldLayoutSegments: segments,
+        layoutSegments: segments,
+        oldGroupBy: GroupAssetsBy.day,
+        groupBy: GroupAssetsBy.year,
+        oldScrubberHeight: 300,
+        scrubberHeight: 300,
+      ),
+      isTrue,
+    );
+  });
+
+  test('shouldRebuildScrubberSegments returns false when segment content is unchanged', () {
+    final oldSegments = [_segment(DateTime(2026, 4), 0, 100), _segment(DateTime(2026, 3), 100, 200)];
+    final newSegments = [_segment(DateTime(2026, 4), 0, 100), _segment(DateTime(2026, 3), 100, 200)];
+
+    expect(
+      shouldRebuildScrubberSegments(
+        oldLayoutSegments: oldSegments,
+        layoutSegments: newSegments,
+        oldGroupBy: GroupAssetsBy.day,
+        groupBy: GroupAssetsBy.day,
+        oldScrubberHeight: 300,
+        scrubberHeight: 300,
+      ),
+      isFalse,
+    );
+  });
+
+  test('shouldRebuildScrubberSegments returns true when scrubber height changes', () {
+    final segments = [_segment(DateTime(2026, 4), 0, 100)];
+
+    expect(
+      shouldRebuildScrubberSegments(
+        oldLayoutSegments: segments,
+        layoutSegments: segments,
+        oldGroupBy: GroupAssetsBy.day,
+        groupBy: GroupAssetsBy.day,
+        oldScrubberHeight: 300,
+        scrubberHeight: 280,
+      ),
+      isTrue,
     );
   });
 }
