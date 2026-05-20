@@ -464,7 +464,11 @@ const AgentSearchAssetsToolResponseSchema = z
         status: z.literal('success'),
         toolCall: AgentToolCallResponseSchema,
         assets: z.array(AgentAssetMetadataSchema),
+        returnedCount: z.number().int().min(0),
+        hasMore: z.boolean(),
         nextPage: z.string().nullable(),
+        totalCount: z.number().int().min(0).optional(),
+        approximateTotal: z.boolean().optional(),
       })
       .meta({ id: 'AgentSearchAssetsToolSuccessResponse' }),
   ])
