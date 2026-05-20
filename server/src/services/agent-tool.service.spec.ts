@@ -330,8 +330,8 @@ describe(AgentToolService.name, () => {
     albumRepository.getAgentAlbums.mockResolvedValue([]);
     albumRepository.getAgentAlbumById.mockResolvedValue(null);
     sharedSpaceRepository.getAllByUserId.mockResolvedValue([]);
-    sharedSpaceRepository.getById.mockResolvedValue();
-    sharedSpaceRepository.getMember.mockResolvedValue();
+    sharedSpaceRepository.getById.mockImplementation(() => Promise.resolve(void 0));
+    sharedSpaceRepository.getMember.mockImplementation(() => Promise.resolve(void 0));
     sharedSpaceRepository.getMembers.mockResolvedValue([]);
     sharedSpaceRepository.getAssetCount.mockResolvedValue(0);
     sharedSpaceRepository.getRecentAssets.mockResolvedValue([]);
@@ -2256,7 +2256,7 @@ describe(AgentToolService.name, () => {
     });
 
     sessionRepository.getById.mockResolvedValue(session);
-    sharedSpaceRepository.getMember.mockResolvedValue();
+    sharedSpaceRepository.getMember.mockImplementation(() => Promise.resolve(void 0));
 
     const result = await sut.readSpace(auth, session.id, { spaceId });
 
