@@ -51,6 +51,7 @@ const propertyDescriptions = {
   assetIds: 'Asset ids for a new asset read request or planning operation. Use ids returned by Gallery tools.',
   albumId: 'The album id returned by listAlbums for a new album read request.',
   spaceId: 'The shared space id returned by listSpaces for a new space read request.',
+  query: 'Search visible Gallery users by name or email before proposing shared-space member changes.',
   filters: 'Put search filters here for date, place, camera, favorite, rating, album, tag, and media searches.',
   limit: 'Maximum number of results to return. Use a positive integer up to 10000.',
   toolCallId: 'Use only for an approved retry after Gallery approves a pending read request.',
@@ -168,6 +169,13 @@ const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolCont
       title: 'Read space',
       description: `Read one visible shared space with summary fields, member summaries, and bounded asset identifiers.${approvedRequestInstruction}`,
       schema: AgentReadToolRequestSchemas[AgentToolName.ReadSpace],
+      annotations: readToolAnnotations,
+    }),
+    defineTool({
+      name: AgentToolName.SearchUsers,
+      title: 'Search users',
+      description: `Search Gallery users visible to the authenticated session user before proposing shared-space member changes.${approvedRequestInstruction}`,
+      schema: AgentReadToolRequestSchemas[AgentToolName.SearchUsers],
       annotations: readToolAnnotations,
     }),
     defineTool({

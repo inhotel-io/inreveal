@@ -536,6 +536,7 @@ export type AgentPermissionPlan = {
     writeScope: {
         addAssets: boolean;
         addAssetsToSpaces: boolean;
+        addMembersToSpaces: boolean;
         archiveAssets: boolean;
         createAlbum: boolean;
         createSpace: boolean;
@@ -543,10 +544,12 @@ export type AgentPermissionPlan = {
         favoriteAssets: boolean;
         removeAssets: boolean;
         removeAssetsFromSpaces: boolean;
+        removeMembersFromSpaces: boolean;
         setCover: boolean;
         tagAssets: boolean;
         updateDetails: boolean;
         updateSpaceDetails: boolean;
+        updateSpaceMemberRoles: boolean;
     };
 };
 export type AgentRunnerCapabilitiesSnapshot = {
@@ -765,6 +768,43 @@ export type AgentProposeAlbumOperationsDto = {
             spaceName?: string;
             description?: string;
             color?: UserAvatarColor;
+        };
+    } | {
+        "type": AgentSpaceAddMembersOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingSpaceTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            members: {
+                userId: string;
+                role: AgentAssignableSharedSpaceMemberRole;
+            }[];
+        };
+    } | {
+        "type": AgentSpaceRemoveMembersOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingSpaceTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            userIds: string[];
+        };
+    } | {
+        "type": AgentSpaceUpdateMemberRoleOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingSpaceTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            userIds: string[];
+            role: AgentAssignableSharedSpaceMemberRole;
         };
     } | {
         "type": AgentAssetRotateOperationType;
@@ -986,6 +1026,43 @@ export type AgentReviseAlbumOperationsDto = {
             spaceName?: string;
             description?: string;
             color?: UserAvatarColor;
+        };
+    } | {
+        "type": AgentSpaceAddMembersOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingSpaceTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            members: {
+                userId: string;
+                role: AgentAssignableSharedSpaceMemberRole;
+            }[];
+        };
+    } | {
+        "type": AgentSpaceRemoveMembersOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingSpaceTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            userIds: string[];
+        };
+    } | {
+        "type": AgentSpaceUpdateMemberRoleOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingSpaceTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            userIds: string[];
+            role: AgentAssignableSharedSpaceMemberRole;
         };
     } | {
         "type": AgentAssetRotateOperationType;
@@ -1321,6 +1398,34 @@ export type AgentSearchAssetsToolSuccessResponse = {
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentSearchAssetsToolResponseDto = AgentSearchAssetsToolApprovalRequiredResponse | AgentSearchAssetsToolDeniedResponse | AgentSearchAssetsToolSuccessResponse;
+export type AgentSearchUsersToolRequestDto = {
+    limit?: number;
+    query?: string;
+    /** Approved tool call id when retrying after user approval */
+    toolCallId?: string;
+};
+export type AgentSearchUsersToolApprovalRequiredResponse = {
+    status: Status26;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentSearchUsersToolDeniedResponse = {
+    reason: string;
+    status: Status27;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentUserLookupResult = {
+    avatarColor: string | null;
+    email: string | null;
+    name: string;
+    profileImagePath: string | null;
+    userId: string;
+};
+export type AgentSearchUsersToolSuccessResponse = {
+    status: Status28;
+    toolCall: AgentToolCallResponseDto;
+    users: AgentUserLookupResult[];
+};
+export type AgentSearchUsersToolResponseDto = AgentSearchUsersToolApprovalRequiredResponse | AgentSearchUsersToolDeniedResponse | AgentSearchUsersToolSuccessResponse;
 export type AlbumUserResponseDto = {
     role: AlbumUserRole;
     user: UserResponseDto;
@@ -5659,6 +5764,22 @@ export function executeAgentSearchAssets({ id, agentSearchAssetsToolRequestDto }
     })));
 }
 /**
+ * Execute the internal searchUsers agent tool
+ */
+export function searchUsers({ id, agentSearchUsersToolRequestDto }: {
+    id: string;
+    agentSearchUsersToolRequestDto: AgentSearchUsersToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentSearchUsersToolResponseDto;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/search-users`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentSearchUsersToolRequestDto
+    })));
+}
+/**
  * List all albums
  */
 export function getAllAlbums({ assetId, shared }: {
@@ -9488,7 +9609,7 @@ export function setMembers({ id, userGroupMemberSetDto }: {
 /**
  * Get all users
  */
-export function searchUsers(opts?: Oazapfts.RequestOpts) {
+export function searchUsers2(opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: UserResponseDto[];
@@ -9927,6 +10048,9 @@ export enum AgentOperationType {
     SpaceAddAssets = "space.addAssets",
     SpaceRemoveAssets = "space.removeAssets",
     SpaceUpdateDetails = "space.updateDetails",
+    SpaceAddMembers = "space.addMembers",
+    SpaceRemoveMembers = "space.removeMembers",
+    SpaceUpdateMemberRole = "space.updateMemberRole",
     AssetRotate = "asset.rotate",
     AssetSetFavorite = "asset.setFavorite",
     AssetSetArchive = "asset.setArchive",
@@ -9978,6 +10102,19 @@ export enum AgentSpaceUpdateDetailsOperationType {
 export enum AgentOperationExistingSpaceTargetKind {
     ExistingSpace = "existing_space"
 }
+export enum AgentSpaceAddMembersOperationType {
+    SpaceAddMembers = "space.addMembers"
+}
+export enum AgentAssignableSharedSpaceMemberRole {
+    Editor = "editor",
+    Viewer = "viewer"
+}
+export enum AgentSpaceRemoveMembersOperationType {
+    SpaceRemoveMembers = "space.removeMembers"
+}
+export enum AgentSpaceUpdateMemberRoleOperationType {
+    SpaceUpdateMemberRole = "space.updateMemberRole"
+}
 export enum AgentAssetRotateOperationType {
     AssetRotate = "asset.rotate"
 }
@@ -10023,6 +10160,7 @@ export enum AgentToolName {
     ReadAlbum = "readAlbum",
     ListSpaces = "listSpaces",
     ReadSpace = "readSpace",
+    SearchUsers = "searchUsers",
     ProposeAlbumOperations = "proposeAlbumOperations",
     ReviseProposedOperations = "reviseProposedOperations",
     SummarizePlan = "summarizePlan"
@@ -10133,6 +10271,15 @@ export enum Status24 {
     Denied = "denied"
 }
 export enum Status25 {
+    Success = "success"
+}
+export enum Status26 {
+    ApprovalRequired = "approval-required"
+}
+export enum Status27 {
+    Denied = "denied"
+}
+export enum Status28 {
     Success = "success"
 }
 export enum AlbumUserRole {

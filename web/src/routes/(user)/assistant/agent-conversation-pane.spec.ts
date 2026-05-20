@@ -32,7 +32,7 @@ vi.mock('$lib/stores/websocket');
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_approval_mode: 'Approval mode',
-    assistant_approval_mode_strict: 'Strict',
+        assistant_approval_behavior_all_actions: 'Strict',
     assistant_approval_review_pending: 'Review pending approvals before sending a message.',
     assistant_approval_request: 'Approval request',
     assistant_approval_album_count: '{count} albums',
@@ -165,6 +165,7 @@ const makeSession = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSes
       writeScope: {
         addAssets: true,
         addAssetsToSpaces: true,
+      addMembersToSpaces: true,
         archiveAssets: true,
         createAlbum: true,
         createSpace: true,
@@ -172,10 +173,12 @@ const makeSession = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSes
         favoriteAssets: true,
         removeAssets: true,
         removeAssetsFromSpaces: true,
+      removeMembersFromSpaces: true,
         setCover: true,
         tagAssets: true,
         updateDetails: true,
         updateSpaceDetails: true,
+      updateSpaceMemberRoles: true,
       },
     },
     permissionPreset: AgentPermissionPreset.Careful,

@@ -280,6 +280,7 @@ describe(AgentRunnerMcpController.name, () => {
         AgentToolName.ReadAlbum,
         AgentToolName.ListSpaces,
         AgentToolName.ReadSpace,
+        AgentToolName.SearchUsers,
         AgentToolName.ProposeAlbumOperations,
         AgentToolName.ReviseProposedOperations,
         AgentToolName.SummarizePlan,
