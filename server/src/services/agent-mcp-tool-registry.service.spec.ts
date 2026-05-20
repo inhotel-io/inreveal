@@ -179,11 +179,23 @@ describe(AgentMcpToolRegistryService.name, () => {
       }),
     });
     expect(search?.properties).toMatchObject({
+      mode: expect.objectContaining({
+        description: expect.stringContaining('Search mode'),
+      }),
+      query: expect.objectContaining({
+        description: expect.stringContaining('smart, description, ocr, or filename'),
+      }),
       filters: expect.objectContaining({
-        description: expect.stringContaining('Put search filters here'),
+        description: expect.stringContaining('Put structured search filters here'),
       }),
       limit: expect.objectContaining({
         description: expect.stringContaining('10000'),
+      }),
+      page: expect.objectContaining({
+        description: expect.stringContaining('One-based result page'),
+      }),
+      order: expect.objectContaining({
+        description: expect.stringContaining('Result order'),
       }),
       toolCallId: expect.objectContaining({
         description: expect.stringContaining('approved retry'),
@@ -377,20 +389,25 @@ describe(AgentMcpToolRegistryService.name, () => {
     }
   });
 
-  it('advertises trip-album metadata filters on searchAssets', () => {
+  it('advertises expanded search contract fields on searchAssets', () => {
     const searchTool = sut.listTools().find((tool) => tool.name === AgentToolName.SearchAssets);
     const searchFiltersSchema = searchTool
       ? getSchemaDefinition(searchTool.inputSchema, 'AgentSearchAssetsFilters')
       : undefined;
 
     expect(searchTool).toBeDefined();
-    expect(searchTool?.description).toContain('date');
-    expect(searchTool?.description).toContain('place');
+    expect(searchTool?.description).toContain('metadata');
+    expect(searchTool?.description).toContain('mode');
+    expect(searchTool?.description).toContain('page');
     expect(searchTool?.inputSchema).toEqual(
       expect.objectContaining({
         properties: expect.objectContaining({
+          mode: expect.any(Object),
+          query: expect.any(Object),
           filters: expect.objectContaining({ $ref: '#/$defs/AgentSearchAssetsFilters' }),
           limit: expect.any(Object),
+          page: expect.any(Object),
+          order: expect.any(Object),
         }),
       }),
     );
@@ -399,9 +416,18 @@ describe(AgentMcpToolRegistryService.name, () => {
         properties: expect.objectContaining({
           takenAfter: expect.any(Object),
           takenBefore: expect.any(Object),
+          createdAfter: expect.any(Object),
+          createdBefore: expect.any(Object),
+          updatedAfter: expect.any(Object),
+          updatedBefore: expect.any(Object),
           city: expect.any(Object),
           state: expect.any(Object),
           country: expect.any(Object),
+          personIds: expect.any(Object),
+          spaceId: expect.any(Object),
+          spacePersonIds: expect.any(Object),
+          withSharedSpaces: expect.any(Object),
+          visibility: expect.any(Object),
           isNotInAlbum: expect.any(Object),
         }),
       }),
