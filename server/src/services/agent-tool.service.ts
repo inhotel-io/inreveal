@@ -32,6 +32,7 @@ import {
   AgentToolDataClass,
   AgentToolName,
   AlbumUserRole,
+  AssetVisibility,
 } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
@@ -1226,25 +1227,7 @@ export class AgentToolService {
     return null;
   }
 
-  private getUnsupportedSearchFilterReason(filters: AgentSearchAssetsFilters): string | null {
-    const futureFields = [
-      'createdAfter',
-      'createdBefore',
-      'updatedAfter',
-      'updatedBefore',
-      'personIds',
-      'spaceId',
-      'spacePersonIds',
-      'withSharedSpaces',
-      'visibility',
-    ] as const;
-
-    for (const field of futureFields) {
-      if (Object.hasOwn(filters, field)) {
-        return `${field} search is not available yet`;
-      }
-    }
-
+  private getUnsupportedSearchFilterReason(_filters: AgentSearchAssetsFilters): string | null {
     return null;
   }
 
@@ -1277,6 +1260,34 @@ export class AgentToolService {
     }
 
     const filters = request.filters ?? {};
+    const spacePersonIds = filters.spacePersonIds ? new Set(filters.spacePersonIds) : new Set<string>();
+    const hasSpacePersonIds = spacePersonIds.size > 0;
+    if (hasSpacePersonIds && !filters.spaceId) {
+      return 'spacePersonIds requires spaceId';
+    }
+
+    if (filters.spaceId && filters.withSharedSpaces === true) {
+      return 'Cannot use both spaceId and withSharedSpaces';
+    }
+
+    const usesSharedFilters = filters.withSharedSpaces === true || Boolean(filters.spaceId) || hasSpacePersonIds;
+    if (usesSharedFilters && !session.permissionPlanSnapshot.assetScope.sharedSpaces) {
+      return 'Shared spaces are not accessible for this session';
+    }
+
+    const allowLockedAssets =
+      session.permissionPlanSnapshot.assetScope.locked && auth.session?.hasElevatedPermission === true;
+    if (filters.visibility === AssetVisibility.Locked && !allowLockedAssets) {
+      return 'Locked photos require elevated permission';
+    }
+
+    if (filters.spaceId) {
+      const member = await this.sharedSpaceRepository.getMember(filters.spaceId, auth.user.id);
+      if (!member) {
+        return 'One or more search filters are not accessible';
+      }
+    }
+
     const albumIds = filters.albumIds ? new Set(filters.albumIds) : new Set<string>();
     if (albumIds.size > 0) {
       const readableAlbumIds = await this.getReadableAlbumIds(auth, session.permissionPlanSnapshot, albumIds);
@@ -1289,6 +1300,14 @@ export class AgentToolService {
     if (tagIds.size > 0) {
       const readableTagIds = await this.accessRepository.tag.checkOwnerAccess(auth.user.id, tagIds);
       if (readableTagIds.size !== tagIds.size) {
+        return 'One or more search filters are not accessible';
+      }
+    }
+
+    const personIds = filters.personIds ? new Set(filters.personIds) : new Set<string>();
+    if (personIds.size > 0) {
+      const readablePersonIds = await this.getReadablePersonIds(auth, session.permissionPlanSnapshot, personIds);
+      if (readablePersonIds.size !== personIds.size) {
         return 'One or more search filters are not accessible';
       }
     }
@@ -1330,6 +1349,30 @@ export class AgentToolService {
         albumIds,
         AlbumUserRole.Viewer,
       );
+      for (const id of sharedIds) {
+        readableIds.add(id);
+      }
+    }
+
+    return readableIds;
+  }
+
+  private async getReadablePersonIds(
+    auth: AuthDto,
+    plan: AgentPermissionPlanSnapshot,
+    personIds: Set<string>,
+  ): Promise<Set<string>> {
+    const readableIds = new Set<string>();
+
+    if (plan.assetScope.owned) {
+      const ownerIds = await this.accessRepository.person.checkOwnerAccess(auth.user.id, personIds);
+      for (const id of ownerIds) {
+        readableIds.add(id);
+      }
+    }
+
+    if (plan.assetScope.sharedSpaces) {
+      const sharedIds = await this.accessRepository.person.checkSharedSpaceAccess(auth.user.id, personIds);
       for (const id of sharedIds) {
         readableIds.add(id);
       }
