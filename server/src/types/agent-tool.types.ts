@@ -27,9 +27,16 @@ export type AgentToolReadAlbumRequestMetadata = {
 
 export type AgentToolListAlbumsRequestMetadata = Record<string, never>;
 
+export type AgentToolReadSpaceRequestMetadata = {
+  spaceId: string;
+};
+
+export type AgentToolListSpacesRequestMetadata = Record<string, never>;
+
 export type AgentToolResponseIdsMetadata = {
   assetIds?: string[];
   albumIds?: string[];
+  spaceIds?: string[];
 };
 
 export type AgentToolOperationPlanRequestMetadata = {
@@ -88,11 +95,40 @@ export type AgentAlbumDetail = AgentAlbumSummary & {
   assetIds: string[];
 };
 
+export type AgentSpaceMemberSummary = {
+  userId: string;
+  name: string;
+  role: string;
+  avatarColor: string | null;
+  profileImagePath: string | null;
+};
+
+export type AgentSpaceSummary = {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  createdById: string;
+  assetCount: number;
+  memberCount: number;
+  thumbnailAssetId: string | null;
+  recentAssetIds: string[];
+};
+
+export type AgentSpaceDetail = AgentSpaceSummary & {
+  members: AgentSpaceMemberSummary[];
+  assetIds: string[];
+  assetIdsReturned: number;
+  assetIdsTruncated: boolean;
+};
+
 export type AgentToolRequestMetadata =
   | AgentToolSearchAssetsRequestMetadata
   | AgentToolReadAssetIdsRequestMetadata
   | AgentToolReadAlbumRequestMetadata
   | AgentToolListAlbumsRequestMetadata
+  | AgentToolReadSpaceRequestMetadata
+  | AgentToolListSpacesRequestMetadata
   | AgentToolOperationPlanRequestMetadata;
 
 export type AgentToolResponseMetadata = AgentToolResponseIdsMetadata | AgentToolOperationPlanResponseMetadata;
