@@ -1,7 +1,7 @@
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { AssetVisibility, type TagResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import TagsPage from './+page.svelte';
 
@@ -57,8 +57,7 @@ vi.mock('$lib/components/sidebar/sidebar.svelte', async () => {
 });
 
 vi.mock('$lib/components/timeline/Timeline.svelte', async () => {
-  const { default: MockComponent } =
-    await import('../../../albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]/mock-timeline.test-wrapper.svelte');
+  const { default: MockComponent } = await import('@test-data/mocks/bindable-timeline.stub.svelte');
   return { default: MockComponent };
 });
 
@@ -164,12 +163,13 @@ function makeTag(overrides: Partial<TagResponseDto> = {}): TagResponseDto {
   } as TagResponseDto;
 }
 
-function renderPage() {
+function renderPage(overrides: { tags?: TagResponseDto[]; path?: string; title?: string } = {}) {
+  const title = overrides.title ?? 'Trips';
   const props = {
     data: {
-      tags: [makeTag()],
-      path: 'Trips',
-      meta: { title: 'Trips' },
+      tags: overrides.tags ?? [makeTag()],
+      path: overrides.path ?? 'Trips',
+      meta: { title },
     },
   };
 
@@ -217,5 +217,68 @@ describe('Tags page timeline scope', () => {
     expect(options).toContain('"tagId":"tag-1"');
     expect(options).toContain('"withSharedSpaces":true');
     expect(options).toContain(`"visibility":"${AssetVisibility.Timeline}"`);
+  });
+});
+
+describe('Tags page timeline grouping', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAssetMultiSelectManager.selectionActive = false;
+    mockAssetMultiSelectManager.assets = [];
+    globalThis.__timelineStubAssetCount = undefined;
+  });
+
+  afterEach(() => {
+    globalThis.__timelineStubAssetCount = undefined;
+  });
+
+  it('selected tag with assets renders grouping controls, preserves tagId, and passes mobile grouping props', async () => {
+    renderPage({ tags: [makeTag({ id: 'tag-with-assets', value: 'Trips' })] });
+
+    expect(await screen.findByTestId('timeline-desktop-grouping-control')).toBeInTheDocument();
+    expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"tagId":"tag-with-assets"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-mobile-grouping-props')).toHaveTextContent(
+      JSON.stringify({ grouping: 'day', hasHandler: true }),
+    );
+  });
+
+  it('year bucket activation keeps tag scope, switches grouping to month, and shows clearable temporal chip', async () => {
+    renderPage({ tags: [makeTag({ id: 'tag-with-assets', value: 'Trips' })] });
+
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"tagId":"tag-with-assets"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
+    });
+  });
+
+  it('clearing temporal chip preserves grouping and removes ActiveFiltersBar', async () => {
+    renderPage({ tags: [makeTag({ id: 'tag-with-assets', value: 'Trips' })] });
+
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Remove 2015 filter' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"tagId":"tag-with-assets"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+    });
+  });
+
+  it('selected tag with only child tags does not render orphaned grouping controls', () => {
+    renderPage({
+      tags: [makeTag({ id: 'child-tag', value: 'Trips/Paris' })],
+      path: 'Trips',
+      title: 'Trips',
+    });
+
+    expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('timeline-stub')).not.toBeInTheDocument();
   });
 });

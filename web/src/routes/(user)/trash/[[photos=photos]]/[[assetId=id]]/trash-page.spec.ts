@@ -2,26 +2,23 @@ import TestWrapper from '$lib/components/TestWrapper.svelte';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
-import ArchivePage from './+page.svelte';
+import TrashPage from './+page.svelte';
 
-const { mockAssetMultiSelectManager, mockRegisterSelectionContext } = vi.hoisted(() => ({
+const { gotoMock, mockAssetMultiSelectManager, mockFeatureFlagsManager, mockServerConfigManager } = vi.hoisted(() => ({
+  gotoMock: vi.fn(),
   mockAssetMultiSelectManager: {
     selectionActive: false,
     assets: [],
     clear: vi.fn(),
-    isAllFavorite: false,
-    isAllUserOwned: true,
   },
-  mockRegisterSelectionContext: vi.fn(),
+  mockFeatureFlagsManager: { value: { trash: true } },
+  mockServerConfigManager: { value: { trashDays: 30 } },
 }));
+
+vi.mock('$app/navigation', () => ({ goto: gotoMock }));
 
 vi.mock('$lib/components/layouts/user-page-layout.svelte', async () => {
   const { default: MockComponent } = await import('$lib/components/spaces/mock-user-page-layout.test-wrapper.svelte');
-  return { default: MockComponent };
-});
-
-vi.mock('$lib/components/shared-components/context-menu/button-context-menu.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
   return { default: MockComponent };
 });
 
@@ -40,32 +37,7 @@ vi.mock('$lib/components/timeline/AssetSelectControlBar.svelte', async () => {
   return { default: MockComponent };
 });
 
-vi.mock('$lib/components/timeline/actions/ArchiveAction.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
-  return { default: MockComponent };
-});
-
-vi.mock('$lib/components/timeline/actions/CreateSharedLinkAction.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
-  return { default: MockComponent };
-});
-
 vi.mock('$lib/components/timeline/actions/DeleteAssetsAction.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
-  return { default: MockComponent };
-});
-
-vi.mock('$lib/components/timeline/actions/DownloadAction.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
-  return { default: MockComponent };
-});
-
-vi.mock('$lib/components/timeline/actions/FavoriteAction.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
-  return { default: MockComponent };
-});
-
-vi.mock('$lib/components/timeline/actions/RotateAction.svelte', async () => {
   const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
   return { default: MockComponent };
 });
@@ -75,7 +47,7 @@ vi.mock('$lib/components/timeline/actions/SelectAllAction.svelte', async () => {
   return { default: MockComponent };
 });
 
-vi.mock('$lib/components/timeline/actions/SetVisibilityAction.svelte', async () => {
+vi.mock('./RestoreAction.svelte', async () => {
   const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
   return { default: MockComponent };
 });
@@ -84,54 +56,33 @@ vi.mock('$lib/managers/asset-multi-select-manager.svelte', () => ({
   assetMultiSelectManager: mockAssetMultiSelectManager,
 }));
 
-vi.mock('$lib/managers/command-context-manager.svelte', () => ({
-  registerSelectionContext: mockRegisterSelectionContext,
+vi.mock('$lib/managers/feature-flags-manager.svelte', () => ({
+  featureFlagsManager: mockFeatureFlagsManager,
 }));
 
-vi.mock('$lib/services/asset.service', () => ({
-  getAssetBulkActions: vi.fn(() => ({})),
+vi.mock('$lib/managers/server-config-manager.svelte', () => ({
+  serverConfigManager: mockServerConfigManager,
+}));
+
+vi.mock('$lib/services/trash.service', () => ({
+  getTrashActions: vi.fn(() => ({ Empty: {}, RestoreAll: {} })),
 }));
 
 function renderPage() {
-  const props = {
-    data: {
-      meta: { title: 'Archive' },
-    },
-  };
+  const props = { data: { meta: { title: 'Trash' } } };
 
-  return render(TestWrapper as Component<{ component: typeof ArchivePage; componentProps: typeof props }>, {
-    component: ArchivePage,
+  return render(TestWrapper as Component<{ component: typeof TrashPage; componentProps: typeof props }>, {
+    component: TrashPage,
     componentProps: props,
   });
 }
 
-describe('Archive page cmdk selection context', () => {
+describe('Trash page timeline grouping', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAssetMultiSelectManager.selectionActive = false;
     mockAssetMultiSelectManager.assets = [];
-  });
-
-  it('registers add-to-album, favorite, and delete without archive or undo callbacks', () => {
-    renderPage();
-
-    expect(mockRegisterSelectionContext).toHaveBeenCalledOnce();
-    const options = mockRegisterSelectionContext.mock.calls[0][0];
-    expect(options.getAssets()).toBe(mockAssetMultiSelectManager.assets);
-    expect(options.canAddToAlbum()).toBe(true);
-    expect(options.getOnFavorite()).toEqual(expect.any(Function));
-    expect(options.getOnArchive?.()).toBeUndefined();
-    expect(options.getOnDelete()).toEqual(expect.any(Function));
-    expect(options.getOnUndoDelete?.()).toBeUndefined();
-    expect(options.getAddSelectedToCurrentSpace?.()).toBeUndefined();
-  });
-});
-
-describe('Archive page timeline grouping', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockAssetMultiSelectManager.selectionActive = false;
-    mockAssetMultiSelectManager.assets = [];
+    mockFeatureFlagsManager.value.trash = true;
     globalThis.__timelineStubAssetCount = undefined;
   });
 
@@ -139,7 +90,7 @@ describe('Archive page timeline grouping', () => {
     globalThis.__timelineStubAssetCount = undefined;
   });
 
-  it('renders desktop grouping controls and mobile grouping props for archive', async () => {
+  it('renders desktop grouping controls and mobile grouping props for trash', async () => {
     renderPage();
 
     expect(await screen.findByTestId('timeline-desktop-grouping-control')).toBeInTheDocument();
@@ -147,17 +98,17 @@ describe('Archive page timeline grouping', () => {
     expect(screen.getByTestId('timeline-mobile-grouping-props')).toHaveTextContent(
       JSON.stringify({ grouping: 'day', hasHandler: true }),
     );
-    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"visibility":"archive"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"isTrashed":true');
     expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
   });
 
-  it('year and month buckets keep archive options and show temporal chips', async () => {
+  it('year and month buckets keep trash options and show temporal chips', async () => {
     renderPage();
 
     await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"visibility":"archive"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"isTrashed":true');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
       expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');

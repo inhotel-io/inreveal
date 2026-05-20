@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import OnEvents from '$lib/components/OnEvents.svelte';
+  import { createFilterState } from '$lib/components/filter-panel/filter-panel';
   import UserPageLayout, { headerId } from '$lib/components/layouts/user-page-layout.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/button-context-menu.svelte';
   import Breadcrumbs from '$lib/components/shared-components/tree/breadcrumbs.svelte';
@@ -27,9 +28,17 @@
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { registerSelectionContext } from '$lib/managers/command-context-manager.svelte';
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
+  import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
   import { Route } from '$lib/route';
   import { getAssetBulkActions } from '$lib/services/asset.service';
   import { getTagActions } from '$lib/services/tag.service';
+  import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
+  import {
+    activateTimelineBucket,
+    clearTimelineTemporalFilter,
+    type ActivatableTimelineBucket,
+  } from '$lib/utils/timeline-filter-navigation';
+  import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
   import { joinPaths, TreeNode } from '$lib/utils/tree-utils';
   import { AssetVisibility, getAllTags, type TagResponseDto } from '@immich/sdk';
   import { ActionButton, CommandPaletteDefaultProvider, Text } from '@immich/ui';
@@ -48,15 +57,19 @@
   const tag = $derived(tree.traverse(data.path));
 
   let timelineManager = $state<TimelineManager>() as TimelineManager;
+  let timelineFilters = $state(createFilterState());
+  let timelineGrouping = $state<TimelineGrouping>('day');
+  let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
   // Tags can belong to a space's owner while the tagged assets are only reachable
   // through the shared space. Opt into shared-space assets (which requires an explicit
   // timeline visibility) so non-admin members actually see photos under a tag (#647).
-  const options = $derived({
+  const baseTimelineOptions = $derived({
     deferInit: !tag,
     tagId: tag?.id,
     visibility: AssetVisibility.Timeline,
     withSharedSpaces: true,
   });
+  const options = $derived(buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping));
 
   const handleNavigation = (tag: string) => navigateToView(joinPaths(data.path, tag));
 
@@ -68,6 +81,27 @@
     timelineManager.removeAssets(assetIds);
     assetMultiSelectManager.clear();
   };
+
+  function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+    timelineGrouping = grouping;
+    temporalAnchor = undefined;
+  }
+
+  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+    const result = activateTimelineBucket(timelineFilters, bucket);
+    if (!result) {
+      return;
+    }
+
+    timelineFilters = result.filters;
+    timelineGrouping = result.grouping;
+    temporalAnchor = result.anchor;
+  }
+
+  function clearRouteTemporalFilter() {
+    timelineFilters = clearTimelineTemporalFilter(timelineFilters);
+    temporalAnchor = undefined;
+  }
 
   registerSelectionContext({
     getAssets: () => assetMultiSelectManager.assets,
@@ -119,12 +153,25 @@
 
   <section class="mt-2 h-[calc(100%-(--spacing(20)))] overflow-auto immich-scrollbar">
     {#if tag.hasAssets}
+      <TimelineRouteGroupingBar
+        grouping={timelineGrouping}
+        filters={timelineFilters}
+        resultCount={timelineManager?.assetCount}
+        hidden={assetMultiSelectManager.selectionActive}
+        onGroupingChange={handleTimelineGroupingChange}
+        onClearTemporalFilter={clearRouteTemporalFilter}
+      />
       <Timeline
         enableRouting={true}
         bind:timelineManager
         {options}
         assetInteraction={assetMultiSelectManager}
         removeAction={AssetAction.UNARCHIVE}
+        {temporalAnchor}
+        onTimelineBucketActivate={handleTimelineBucketActivate}
+        onTemporalAnchorResolved={() => (temporalAnchor = undefined)}
+        grouping={timelineGrouping}
+        onGroupingChange={handleTimelineGroupingChange}
       >
         {#snippet empty()}
           <TreeItemThumbnails items={tag.children} icon={mdiTag} onClick={handleNavigation} />

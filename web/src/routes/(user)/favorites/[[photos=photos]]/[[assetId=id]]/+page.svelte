@@ -1,5 +1,6 @@
 <script lang="ts">
   import UserPageLayout from '$lib/components/layouts/user-page-layout.svelte';
+  import { createFilterState } from '$lib/components/filter-panel/filter-panel';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/button-context-menu.svelte';
   import EmptyPlaceholder from '$lib/components/shared-components/empty-placeholder.svelte';
   import ArchiveAction from '$lib/components/timeline/actions/ArchiveAction.svelte';
@@ -16,10 +17,18 @@
   import TagAction from '$lib/components/timeline/actions/TagAction.svelte';
   import AssetSelectControlBar from '$lib/components/timeline/AssetSelectControlBar.svelte';
   import Timeline from '$lib/components/timeline/Timeline.svelte';
+  import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
   import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
+  import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
   import { getAssetBulkActions } from '$lib/services/asset.service';
+  import {
+    activateTimelineBucket,
+    clearTimelineTemporalFilter,
+    type ActivatableTimelineBucket,
+  } from '$lib/utils/timeline-filter-navigation';
+  import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
   import { ActionButton, CommandPaletteDefaultProvider } from '@immich/ui';
   import { mdiDotsVertical } from '@mdi/js';
   import { t } from 'svelte-i18n';
@@ -32,7 +41,23 @@
   let { data }: Props = $props();
 
   let timelineManager = $state<TimelineManager>() as TimelineManager;
-  const options = { isFavorite: true, withStacked: true };
+  let timelineFilters = $state(createFilterState());
+  let timelineGrouping = $state<TimelineGrouping>('day');
+  let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+  const baseTimelineOptions = { isFavorite: true, withStacked: true };
+  const options = $derived(buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping));
+  const hasTemporalFilters = $derived(
+    Boolean(
+      timelineFilters.dateAfter ||
+        timelineFilters.dateBefore ||
+        timelineFilters.selectedYear ||
+        timelineFilters.selectedMonth,
+    ),
+  );
+  const hideGroupingControls = $derived(
+    assetMultiSelectManager.selectionActive ||
+      (!hasTemporalFilters && Boolean(timelineManager?.isInitialized && timelineManager.assetCount === 0)),
+  );
 
   const handleEscape = () => {
     if (assetMultiSelectManager.selectionActive) {
@@ -45,9 +70,38 @@
     timelineManager.removeAssets(assetIds);
     assetMultiSelectManager.clear();
   };
+
+  function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+    timelineGrouping = grouping;
+    temporalAnchor = undefined;
+  }
+
+  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+    const result = activateTimelineBucket(timelineFilters, bucket);
+    if (!result) {
+      return;
+    }
+
+    timelineFilters = result.filters;
+    timelineGrouping = result.grouping;
+    temporalAnchor = result.anchor;
+  }
+
+  function clearRouteTemporalFilter() {
+    timelineFilters = clearTimelineTemporalFilter(timelineFilters);
+    temporalAnchor = undefined;
+  }
 </script>
 
 <UserPageLayout hideNavbar={assetMultiSelectManager.selectionActive} title={data.meta.title} scrollbar={false}>
+  <TimelineRouteGroupingBar
+    grouping={timelineGrouping}
+    filters={timelineFilters}
+    resultCount={timelineManager?.assetCount}
+    hidden={hideGroupingControls}
+    onGroupingChange={handleTimelineGroupingChange}
+    onClearTemporalFilter={clearRouteTemporalFilter}
+  />
   <Timeline
     enableRouting={true}
     withStacked={true}
@@ -55,6 +109,11 @@
     {options}
     assetInteraction={assetMultiSelectManager}
     onEscape={handleEscape}
+    {temporalAnchor}
+    onTimelineBucketActivate={handleTimelineBucketActivate}
+    onTemporalAnchorResolved={() => (temporalAnchor = undefined)}
+    grouping={timelineGrouping}
+    onGroupingChange={handleTimelineGroupingChange}
   >
     {#snippet empty()}
       <EmptyPlaceholder text={$t('no_favorites_message')} class="mt-10 mx-auto" />

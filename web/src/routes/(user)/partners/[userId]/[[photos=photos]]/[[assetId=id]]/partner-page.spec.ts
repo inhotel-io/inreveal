@@ -1,31 +1,22 @@
 import TestWrapper from '$lib/components/TestWrapper.svelte';
+import type { UserResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
-import ArchivePage from './+page.svelte';
+import PartnerPage from './+page.svelte';
 
-const { mockAssetMultiSelectManager, mockRegisterSelectionContext } = vi.hoisted(() => ({
+const { gotoMock, mockAssetMultiSelectManager } = vi.hoisted(() => ({
+  gotoMock: vi.fn(),
   mockAssetMultiSelectManager: {
     selectionActive: false,
     assets: [],
     clear: vi.fn(),
-    isAllFavorite: false,
-    isAllUserOwned: true,
   },
-  mockRegisterSelectionContext: vi.fn(),
 }));
 
-vi.mock('$lib/components/layouts/user-page-layout.svelte', async () => {
-  const { default: MockComponent } = await import('$lib/components/spaces/mock-user-page-layout.test-wrapper.svelte');
-  return { default: MockComponent };
-});
+vi.mock('$app/navigation', () => ({ goto: gotoMock }));
 
-vi.mock('$lib/components/shared-components/context-menu/button-context-menu.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
-  return { default: MockComponent };
-});
-
-vi.mock('$lib/components/shared-components/empty-placeholder.svelte', async () => {
+vi.mock('$lib/components/shared-components/control-app-bar.svelte', async () => {
   const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
   return { default: MockComponent };
 });
@@ -40,17 +31,7 @@ vi.mock('$lib/components/timeline/AssetSelectControlBar.svelte', async () => {
   return { default: MockComponent };
 });
 
-vi.mock('$lib/components/timeline/actions/ArchiveAction.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
-  return { default: MockComponent };
-});
-
 vi.mock('$lib/components/timeline/actions/CreateSharedLinkAction.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
-  return { default: MockComponent };
-});
-
-vi.mock('$lib/components/timeline/actions/DeleteAssetsAction.svelte', async () => {
   const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
   return { default: MockComponent };
 });
@@ -60,74 +41,51 @@ vi.mock('$lib/components/timeline/actions/DownloadAction.svelte', async () => {
   return { default: MockComponent };
 });
 
-vi.mock('$lib/components/timeline/actions/FavoriteAction.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
-  return { default: MockComponent };
-});
-
-vi.mock('$lib/components/timeline/actions/RotateAction.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
-  return { default: MockComponent };
-});
-
-vi.mock('$lib/components/timeline/actions/SelectAllAction.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
-  return { default: MockComponent };
-});
-
-vi.mock('$lib/components/timeline/actions/SetVisibilityAction.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
-  return { default: MockComponent };
-});
-
 vi.mock('$lib/managers/asset-multi-select-manager.svelte', () => ({
   assetMultiSelectManager: mockAssetMultiSelectManager,
-}));
-
-vi.mock('$lib/managers/command-context-manager.svelte', () => ({
-  registerSelectionContext: mockRegisterSelectionContext,
 }));
 
 vi.mock('$lib/services/asset.service', () => ({
   getAssetBulkActions: vi.fn(() => ({})),
 }));
 
+function makePartner(overrides: Partial<UserResponseDto> = {}): UserResponseDto {
+  return {
+    id: 'partner-user-id',
+    name: 'Partner User',
+    email: 'partner@example.com',
+    profileImagePath: '',
+    avatarColor: 'primary',
+    profileChangedAt: '2026-01-01T00:00:00.000Z',
+    isAdmin: false,
+    shouldChangePassword: false,
+    status: 'active',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    deletedAt: null,
+    oauthId: '',
+    storageLabel: null,
+    quotaSizeInBytes: null,
+    quotaUsageInBytes: 0,
+    ...overrides,
+  } as UserResponseDto;
+}
+
 function renderPage() {
   const props = {
     data: {
-      meta: { title: 'Archive' },
+      partner: makePartner(),
+      meta: { title: 'Partner User' },
     },
   };
 
-  return render(TestWrapper as Component<{ component: typeof ArchivePage; componentProps: typeof props }>, {
-    component: ArchivePage,
+  return render(TestWrapper as Component<{ component: typeof PartnerPage; componentProps: typeof props }>, {
+    component: PartnerPage,
     componentProps: props,
   });
 }
 
-describe('Archive page cmdk selection context', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockAssetMultiSelectManager.selectionActive = false;
-    mockAssetMultiSelectManager.assets = [];
-  });
-
-  it('registers add-to-album, favorite, and delete without archive or undo callbacks', () => {
-    renderPage();
-
-    expect(mockRegisterSelectionContext).toHaveBeenCalledOnce();
-    const options = mockRegisterSelectionContext.mock.calls[0][0];
-    expect(options.getAssets()).toBe(mockAssetMultiSelectManager.assets);
-    expect(options.canAddToAlbum()).toBe(true);
-    expect(options.getOnFavorite()).toEqual(expect.any(Function));
-    expect(options.getOnArchive?.()).toBeUndefined();
-    expect(options.getOnDelete()).toEqual(expect.any(Function));
-    expect(options.getOnUndoDelete?.()).toBeUndefined();
-    expect(options.getAddSelectedToCurrentSpace?.()).toBeUndefined();
-  });
-});
-
-describe('Archive page timeline grouping', () => {
+describe('Partner page timeline grouping', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAssetMultiSelectManager.selectionActive = false;
@@ -139,7 +97,7 @@ describe('Archive page timeline grouping', () => {
     globalThis.__timelineStubAssetCount = undefined;
   });
 
-  it('renders desktop grouping controls and mobile grouping props for archive', async () => {
+  it('renders desktop grouping controls and mobile grouping props for partner assets', async () => {
     renderPage();
 
     expect(await screen.findByTestId('timeline-desktop-grouping-control')).toBeInTheDocument();
@@ -147,17 +105,17 @@ describe('Archive page timeline grouping', () => {
     expect(screen.getByTestId('timeline-mobile-grouping-props')).toHaveTextContent(
       JSON.stringify({ grouping: 'day', hasHandler: true }),
     );
-    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"visibility":"archive"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"userId":"partner-user-id"');
     expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
   });
 
-  it('year and month buckets keep archive options and show temporal chips', async () => {
+  it('year and month buckets keep partner options and show temporal chips', async () => {
     renderPage();
 
     await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"visibility":"archive"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"userId":"partner-user-id"');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
       expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
