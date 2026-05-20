@@ -34,8 +34,31 @@ void main() {
     expect(countScrubberSnapSegments(segments, GroupAssetsBy.month), 2);
   });
 
+  test('day grouping builds month labels and counts unique months', () {
+    final segments = [
+      _segment(DateTime(2026, 4, 12), 0, 100),
+      _segment(DateTime(2026, 4, 10), 100, 200),
+      _segment(DateTime(2026, 3, 30), 200, 300),
+    ];
+
+    final scrubberSegments = buildScrubberSegments(
+      layoutSegments: segments,
+      timelineHeight: 300,
+      groupBy: GroupAssetsBy.day,
+    );
+
+    expect(scrubberSegments.map((segment) => segment.scrollLabel), ['Apr 2026', 'Apr 2026', 'Mar 2026']);
+    expect(countScrubberSnapSegments(segments, GroupAssetsBy.day), 2);
+  });
+
   test('empty layout returns empty scrubber segments', () {
     expect(buildScrubberSegments(layoutSegments: [], timelineHeight: 300, groupBy: GroupAssetsBy.year), isEmpty);
+  });
+
+  test('layout starting with non-time bucket returns empty scrubber segments', () {
+    final segments = [_nonTimeSegment(0, 100), _segment(DateTime(2026, 4), 100, 200)];
+
+    expect(buildScrubberSegments(layoutSegments: segments, timelineHeight: 300, groupBy: GroupAssetsBy.day), isEmpty);
   });
 
   test('findScrubberLayoutSegmentIndex matches by year for year grouping', () {
@@ -52,6 +75,16 @@ void main() {
     expect(findScrubberLayoutSegmentIndex(segments, scrubberSegment, GroupAssetsBy.month), 1);
     expect(findScrubberLayoutSegmentIndex(segments, scrubberSegment, GroupAssetsBy.day), 1);
   });
+
+  test('findScrubberLayoutSegmentIndex returns -1 for non-time and no-match cases', () {
+    final scrubberSegment = ScrubberSegment(date: DateTime(2026, 3), startOffset: 0, scrollLabel: 'Mar 2026');
+
+    expect(findScrubberLayoutSegmentIndex([_nonTimeSegment(0, 100)], scrubberSegment, GroupAssetsBy.day), -1);
+    expect(
+      findScrubberLayoutSegmentIndex([_segment(DateTime(2025, 3), 0, 100)], scrubberSegment, GroupAssetsBy.day),
+      -1,
+    );
+  });
 }
 
 FixedSegment _segment(DateTime date, double startOffset, double endOffset) {
@@ -67,5 +100,21 @@ FixedSegment _segment(DateTime date, double startOffset, double endOffset) {
     headerExtent: 40,
     spacing: 2,
     header: HeaderType.month,
+  );
+}
+
+FixedSegment _nonTimeSegment(double startOffset, double endOffset) {
+  return FixedSegment(
+    firstIndex: 0,
+    lastIndex: 1,
+    startOffset: startOffset,
+    endOffset: endOffset,
+    firstAssetIndex: 0,
+    bucket: const Bucket(assetCount: 1),
+    tileHeight: 100,
+    columnCount: 4,
+    headerExtent: 0,
+    spacing: 2,
+    header: HeaderType.none,
   );
 }

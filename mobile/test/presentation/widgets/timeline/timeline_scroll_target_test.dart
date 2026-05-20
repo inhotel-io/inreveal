@@ -31,6 +31,13 @@ void main() {
 
     expect(findTimelineScrollTargetSegment(segments, DateTime(2026, 4, 3)), isNull);
   });
+
+  test('findTimelineScrollTargetSegment ignores non-time bucket segments', () {
+    final segments = [_nonTimeSegment(0, 100), _segment(DateTime(2026, 4, 3), 100, 200)];
+
+    expect(findTimelineScrollTargetSegment(segments, DateTime(2026, 4, 3)), segments[1]);
+    expect(findTimelineScrollTargetSegment([_nonTimeSegment(0, 100)], DateTime(2026, 4, 3)), isNull);
+  });
 }
 
 FixedSegment _segment(DateTime date, double startOffset, double endOffset) {
@@ -46,5 +53,21 @@ FixedSegment _segment(DateTime date, double startOffset, double endOffset) {
     headerExtent: 40,
     spacing: 2,
     header: HeaderType.month,
+  );
+}
+
+FixedSegment _nonTimeSegment(double startOffset, double endOffset) {
+  return FixedSegment(
+    firstIndex: 0,
+    lastIndex: 1,
+    startOffset: startOffset,
+    endOffset: endOffset,
+    firstAssetIndex: 0,
+    bucket: const Bucket(assetCount: 1),
+    tileHeight: 100,
+    columnCount: 4,
+    headerExtent: 0,
+    spacing: 2,
+    header: HeaderType.none,
   );
 }
