@@ -1792,7 +1792,7 @@ describe(AgentToolService.name, () => {
     });
 
     sessionRepository.getById.mockResolvedValue(session);
-    sharedSpaceRepository.getMember.mockResolvedValue(null);
+    sharedSpaceRepository.getMember.mockResolvedValue(undefined);
 
     const result = await sut.searchAssets(auth, session.id, {
       mode: 'metadata',
