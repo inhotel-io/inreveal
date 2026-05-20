@@ -257,7 +257,8 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
     {
       id: 'search-space-person-without-space',
       match: { issuePath: 'filters.spacePersonIds', messageIncludes: 'spacePersonIds requires spaceId' },
-      hint: 'spacePersonIds requires filters.spaceId. Use global personIds outside a specific shared space.',
+      hint:
+        'spacePersonIds requires filters.spaceId, but people and space-person filters are not available in the current slice. Use currently executable metadata filters for now.',
       exampleName: 'metadata-page-search',
     },
     {
