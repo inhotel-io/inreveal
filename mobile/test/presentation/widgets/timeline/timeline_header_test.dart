@@ -8,6 +8,9 @@ import 'package:immich_mobile/presentation/widgets/timeline/header.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/readonly_mode.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
+// easy_localization initializes shared_preferences internally; the mobile app
+// gets it transitively, but tests need the mock initializer.
+// ignore: depend_on_referenced_packages
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeReadonly extends ReadOnlyModeNotifier {

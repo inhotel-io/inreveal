@@ -578,26 +578,3 @@ class _SlideFadeTransition extends StatelessWidget {
     );
   }
 }
-
-class _Segment {
-  final DateTime date;
-  final double startOffset;
-  final String scrollLabel;
-  final bool showSegment;
-
-  const _Segment({required this.date, required this.startOffset, required this.scrollLabel, this.showSegment = false});
-
-  _Segment copyWith({DateTime? date, double? startOffset, String? scrollLabel, bool? showSegment}) {
-    return _Segment(
-      date: date ?? this.date,
-      startOffset: startOffset ?? this.startOffset,
-      scrollLabel: scrollLabel ?? this.scrollLabel,
-      showSegment: showSegment ?? this.showSegment,
-    );
-  }
-
-  @override
-  String toString() {
-    return 'Segment(scrollLabel: $scrollLabel, date: $date)';
-  }
-}
