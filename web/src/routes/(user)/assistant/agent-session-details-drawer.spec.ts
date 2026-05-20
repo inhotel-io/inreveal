@@ -14,7 +14,7 @@ import AgentSessionDetailsDrawer from './agent-session-details-drawer.svelte';
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_approval_mode: 'Approval mode',
-        assistant_approval_behavior_all_actions: 'Strict',
+    assistant_approval_behavior_all_actions: 'Strict',
     assistant_close_details: 'Close details',
     assistant_created_at: 'Created',
     assistant_dismiss_details: 'Dismiss details',

@@ -61,7 +61,7 @@ const session = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSession
       writeScope: {
         addAssets: true,
         addAssetsToSpaces: true,
-      addMembersToSpaces: true,
+        addMembersToSpaces: true,
         archiveAssets: true,
         createAlbum: true,
         createSpace: true,
@@ -69,12 +69,12 @@ const session = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSession
         favoriteAssets: true,
         removeAssets: true,
         removeAssetsFromSpaces: true,
-      removeMembersFromSpaces: true,
+        removeMembersFromSpaces: true,
         setCover: true,
         tagAssets: true,
         updateDetails: true,
         updateSpaceDetails: true,
-      updateSpaceMemberRoles: true,
+        updateSpaceMemberRoles: true,
       },
     },
     initialContextSnapshot: {},
@@ -187,7 +187,7 @@ describe('agent session workspace UI helpers', () => {
         AgentSessionStatus.Applying,
       ];
 
-      for (const [index, status] of statuses.entries()) {
+      for (const index of statuses.keys()) {
         const lowerPrioritySessions = statuses.slice(index).map((candidateStatus) =>
           session({
             id: candidateStatus,
