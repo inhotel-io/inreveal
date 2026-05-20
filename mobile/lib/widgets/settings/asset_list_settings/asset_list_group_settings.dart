@@ -26,7 +26,7 @@ class GroupSettings extends HookConsumerWidget {
     void changeGroupValue(GroupAssetsBy? value) {
       if (value != null) {
         groupByIndex.value = value.index;
-        unawaited(updateAppSettings(groupBy));
+        unawaited(updateAppSettings(value));
       }
     }
 
@@ -42,6 +42,10 @@ class GroupSettings extends HookConsumerWidget {
             SettingsRadioGroup(
               title: 'asset_list_layout_settings_group_by_month_day'.t(context: context),
               value: GroupAssetsBy.day,
+            ),
+            SettingsRadioGroup(
+              title: 'year'.t(context: context),
+              value: GroupAssetsBy.year,
             ),
             SettingsRadioGroup(
               title: 'month'.t(context: context),
