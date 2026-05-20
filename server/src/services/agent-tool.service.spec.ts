@@ -18,6 +18,7 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
@@ -265,6 +266,7 @@ describe(AgentToolService.name, () => {
   let sut: AgentToolService;
   let accessRepository: ReturnType<typeof newAccessRepositoryMock>;
   let assetRepository: ReturnType<typeof newAssetRepositoryMock>;
+  let searchRepository: ReturnType<typeof automock<SearchRepository>>;
   let albumRepository: ReturnType<typeof automock<AlbumRepository>>;
   let sharedSpaceRepository: ReturnType<typeof automock<SharedSpaceRepository>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
@@ -275,6 +277,7 @@ describe(AgentToolService.name, () => {
   beforeEach(() => {
     accessRepository = newAccessRepositoryMock();
     assetRepository = newAssetRepositoryMock();
+    searchRepository = automock(SearchRepository, { args: [{} as never] });
     albumRepository = automock(AlbumRepository, { args: [{} as never] });
     sharedSpaceRepository = automock(SharedSpaceRepository, { args: [{} as never] });
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
@@ -284,6 +287,7 @@ describe(AgentToolService.name, () => {
     sut = new AgentToolService(
       accessRepository as unknown as AccessRepository,
       assetRepository as unknown as AssetRepository,
+      searchRepository,
       albumRepository,
       sharedSpaceRepository,
       sessionRepository,
@@ -329,10 +333,12 @@ describe(AgentToolService.name, () => {
     toolCallRepository.getCountedAssetCountBySessionAndDataClass.mockResolvedValue(0);
     albumRepository.getAgentAlbums.mockResolvedValue([]);
     albumRepository.getAgentAlbumById.mockResolvedValue(null);
+    searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false });
     sharedSpaceRepository.getAllByUserId.mockResolvedValue([]);
     sharedSpaceRepository.getById.mockImplementation(() => Promise.resolve(void 0));
     sharedSpaceRepository.getMember.mockImplementation(() => Promise.resolve(void 0));
     sharedSpaceRepository.getMembers.mockResolvedValue([]);
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
     sharedSpaceRepository.getAssetCount.mockResolvedValue(0);
     sharedSpaceRepository.getRecentAssets.mockResolvedValue([]);
     sharedSpaceRepository.getAssetIdsInSpacePage.mockResolvedValue([]);
@@ -1485,22 +1491,17 @@ describe(AgentToolService.name, () => {
     });
 
     sessionRepository.getById.mockResolvedValue(session);
-    assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [], nextPage: null });
 
     await sut.searchAssets(elevatedAuth, session.id, { filters: {}, limit: 1 });
-    expect(assetRepository.searchAgentMetadata).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        userId: elevatedAuth.user.id,
-        scope: { owned: true, sharedSpaces: true, locked: true },
-      }),
+    expect(searchRepository.searchMetadata).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ userIds: [elevatedAuth.user.id] }),
     );
 
     await sut.searchAssets(runnerAuth, session.id, { filters: {}, limit: 1 });
-    expect(assetRepository.searchAgentMetadata).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        userId: elevatedAuth.user.id,
-        scope: { owned: true, sharedSpaces: true, locked: false },
-      }),
+    expect(searchRepository.searchMetadata).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ userIds: [elevatedAuth.user.id] }),
     );
   });
 
@@ -1515,7 +1516,9 @@ describe(AgentToolService.name, () => {
 
     sessionRepository.getById.mockResolvedValue(session);
     accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set([sharedAssetId]));
-    assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [makeMetadata(sharedAssetId)], nextPage: null });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId: newUuid() }]);
+    searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: sharedAssetId }] as never, hasNextPage: false });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(sharedAssetId)] as never);
 
     const result = await sut.searchAssets(auth, session.id, { filters: {}, limit: 1 });
 
@@ -1527,8 +1530,9 @@ describe(AgentToolService.name, () => {
       hasMore: false,
       nextPage: null,
     });
-    expect(assetRepository.searchAgentMetadata).toHaveBeenCalledWith(
-      expect.objectContaining({ scope: { owned: false, sharedSpaces: true, locked: false } }),
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ userIds: [], timelineSpaceIds: expect.any(Array) }),
     );
   });
 
@@ -1545,7 +1549,8 @@ describe(AgentToolService.name, () => {
 
     sessionRepository.getById.mockResolvedValue(session);
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
-    assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [makeMetadata(assetId)], nextPage: '2' });
+    searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: true });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
 
     const result = await sut.searchAssets(auth, session.id, {
       filters: { isFavorite: true },
@@ -1595,6 +1600,7 @@ describe(AgentToolService.name, () => {
         assetCount: 1,
       }),
     );
+    expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
   });
 
   it('uses contract defaults for empty service-level search requests', async () => {
@@ -1608,7 +1614,6 @@ describe(AgentToolService.name, () => {
     });
 
     sessionRepository.getById.mockResolvedValue(session);
-    assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [], nextPage: null });
 
     const result = await sut.searchAssets(auth, session.id, {});
 
@@ -1636,12 +1641,8 @@ describe(AgentToolService.name, () => {
       AgentToolDataClass.Metadata,
       expect.any(Number),
     );
-    expect(assetRepository.searchAgentMetadata).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filters: {},
-        limit: 10_000,
-      }),
-    );
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith({ page: 1, size: 10_000 }, expect.any(Object));
+    expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1874,7 +1875,6 @@ describe(AgentToolService.name, () => {
     });
 
     sessionRepository.getById.mockResolvedValue(session);
-    assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [], nextPage: null });
 
     const result = await sut.searchAssets(auth, session.id, {
       mode: 'metadata',
@@ -1885,7 +1885,245 @@ describe(AgentToolService.name, () => {
     });
 
     expect(result).toEqual(expect.objectContaining({ status: 'success' }));
-    expect(assetRepository.searchAgentMetadata).toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ visibility: AssetVisibility.Locked }),
+    );
+  });
+
+  it('Gallery search semantics route metadata filters through searchMetadata and hydrate in search order', async () => {
+    const auth = AuthFactory.create();
+    const firstAssetId = newUuid();
+    const secondAssetId = newUuid();
+    const tagId = newUuid();
+    const albumId = newUuid();
+    const personId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        assetScope: { owned: true, sharedSpaces: false, locked: false },
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 10, maxAssetsPerSession: 10 },
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([personId]));
+    accessRepository.tag.checkOwnerAccess.mockResolvedValue(new Set([tagId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([firstAssetId, secondAssetId]));
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: [{ id: secondAssetId }, { id: firstAssetId }] as never,
+      hasNextPage: true,
+    });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      makeMetadata(firstAssetId),
+      makeMetadata(secondAssetId),
+    ] as never);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: {
+        createdAfter: new Date('2026-05-01T00:00:00.000Z'),
+        createdBefore: new Date('2026-05-31T23:59:59.999Z'),
+        rating: null,
+        tagIds: [tagId],
+        albumIds: [albumId],
+        personIds: [personId],
+      },
+      limit: 2,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      { page: 1, size: 2 },
+      expect.objectContaining({
+        userIds: [auth.user.id],
+        createdAfter: new Date('2026-05-01T00:00:00.000Z'),
+        createdBefore: new Date('2026-05-31T23:59:59.999Z'),
+        rating: null,
+        tagIds: [tagId],
+        albumIds: [albumId],
+        personIds: [personId],
+      }),
+    );
+    expect(assetRepository.getAgentMetadataByIds).toHaveBeenCalledWith([secondAssetId, firstAssetId]);
+    expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        returnedCount: 2,
+        hasMore: true,
+        nextPage: '2',
+        assets: [expect.objectContaining({ id: secondAssetId }), expect.objectContaining({ id: firstAssetId })],
+      }),
+    );
+  });
+
+  it('shared-space-only search uses empty user IDs and timeline space IDs from shared spaces', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+
+    await sut.searchAssets(auth, session.id, { mode: 'metadata', filters: {}, limit: 5, page: 1, order: 'desc' });
+
+    expect(sharedSpaceRepository.getSpaceIdsForTimeline).toHaveBeenCalledWith(auth.user.id);
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      { page: 1, size: 5 },
+      expect.objectContaining({ userIds: [], timelineSpaceIds: [spaceId] }),
+    );
+  });
+
+  it('favorites with shared-space search includes owned user ID, timeline space IDs, and favorite filter', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+
+    await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { withSharedSpaces: true, isFavorite: true },
+      limit: 5,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      { page: 1, size: 5 },
+      expect.objectContaining({ userIds: [auth.user.id], timelineSpaceIds: [spaceId], isFavorite: true }),
+    );
+  });
+
+  it('accessible people filters reach Gallery search', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([personId]));
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+
+    await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { personIds: [personId] },
+      limit: 5,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      { page: 1, size: 5 },
+      expect.objectContaining({ personIds: [personId] }),
+    );
+  });
+
+  it('space person filters use explicit space scope without broad timeline IDs', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const spacePersonId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getMember.mockResolvedValue(makeSpaceMember({ spaceId, userId: auth.user.id }));
+
+    await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { spaceId, spacePersonIds: [spacePersonId] },
+      limit: 5,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(sharedSpaceRepository.getSpaceIdsForTimeline).not.toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      { page: 1, size: 5 },
+      expect.objectContaining({ spaceId, spacePersonIds: [spacePersonId] }),
+    );
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.not.objectContaining({ timelineSpaceIds: expect.anything() }),
+    );
+  });
+
+  it('album filters include timeline shared spaces when permission plan allows shared spaces', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const spaceId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+
+    await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { albumIds: [albumId] },
+      limit: 5,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      { page: 1, size: 5 },
+      expect.objectContaining({ userIds: [auth.user.id], timelineSpaceIds: [spaceId], albumIds: [albumId] }),
+    );
+  });
+
+  it('locked visibility search calls returned-asset owner access with elevated locked access after validation allows it', async () => {
+    const auth = AuthFactory.from().session({ hasElevatedPermission: true }).build();
+    const assetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: true } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { visibility: AssetVisibility.Locked },
+      limit: 5,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(result.status).toBe('success');
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      { page: 1, size: 5 },
+      expect.objectContaining({ visibility: AssetVisibility.Locked }),
+    );
+    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([assetId]), true);
   });
 
   it('denies inaccessible people filters before repository execution', async () => {
@@ -2033,7 +2271,7 @@ describe(AgentToolService.name, () => {
 
     sessionRepository.getById.mockResolvedValue(session);
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
-    assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [makeMetadata(assetId)], nextPage: null });
+    searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
 
     const result = await sut.searchAssets(auth, session.id, { filters: {}, limit: 1 });
 
