@@ -618,11 +618,10 @@ export class AgentToolService {
         });
 
         if (assets.length !== assetIds.length) {
-          const error = new AgentToolFailedError('One or more assets were not found during metadata read');
-          (error as AgentToolFailedError & { metadata: AgentToolResponseMetadata }).metadata = {
-            assetIds: assets.map((asset) => asset.id),
-          };
-          throw error;
+          throw this.getAgentMetadataHydrationError(
+            assets.map((asset) => asset.id),
+            'One or more assets were not found during metadata read',
+          );
         }
 
         return { assets };
@@ -1467,10 +1466,27 @@ export class AgentToolService {
     const assetsById = new Map(
       unorderedAssets.map((asset) => [asset.id, this.mapAssetMetadata(asset as AgentAssetMetadata)]),
     );
-    return assetIds.flatMap((id) => {
+    const assets = assetIds.flatMap((id) => {
       const asset = assetsById.get(id);
       return asset ? [asset] : [];
     });
+
+    if (assets.length !== assetIds.length) {
+      throw this.getAgentMetadataHydrationError(
+        assets.map((asset) => asset.id),
+        'One or more search result assets were not found during metadata hydration',
+      );
+    }
+
+    return assets;
+  }
+
+  private getAgentMetadataHydrationError(hydratedAssetIds: string[], message: string): AgentToolFailedError {
+    const error = new AgentToolFailedError(message);
+    (error as AgentToolFailedError & { metadata: AgentToolResponseMetadata }).metadata = {
+      assetIds: hydratedAssetIds,
+    };
+    return error;
   }
 
   private async createDeniedAudit<TRequest, TResult extends Record<string, unknown>>(
