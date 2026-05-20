@@ -3,6 +3,7 @@ import TestWrapper from '$lib/components/TestWrapper.svelte';
 import type { FilterState } from '$lib/components/filter-panel/filter-panel';
 import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
 import { lang } from '$lib/stores/preferences.store';
+import { buildSpaceTimelineOptions } from '$lib/utils/space-filter-options';
 import { storeTypedSearchNames } from '$lib/utils/typed-search/typed-search-name-cache';
 import type { SharedSpaceMemberResponseDto, SharedSpaceResponseDto } from '@immich/sdk';
 import { AssetTypeEnum, AssetVisibility, SharedSpaceRole } from '@immich/sdk';
@@ -147,6 +148,14 @@ vi.mock('$lib/utils/space-hero-storage', () => ({
   loadHeroCollapsed: vi.fn().mockReturnValue(false),
   persistHeroCollapsed: vi.fn(),
 }));
+
+vi.mock('$lib/utils/space-filter-options', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('$lib/utils/space-filter-options')>();
+  return {
+    ...actual,
+    buildSpaceTimelineOptions: vi.fn(actual.buildSpaceTimelineOptions),
+  };
+});
 
 function makeSpace(overrides: Partial<SharedSpaceResponseDto> = {}): SharedSpaceResponseDto {
   return {
@@ -648,6 +657,196 @@ describe('Spaces page search URL state', () => {
     expect(sdkMock.addAssets).toHaveBeenCalledWith({
       id: 'space-1',
       sharedSpaceAssetAddDto: { assetIds: ['asset-2'] },
+    });
+  });
+
+  it('passes default day grouping into space timeline options', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    });
+  });
+
+  it('clicking a space year bucket sets temporal filter state, switches to month grouping, and anchors the year', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+
+    renderPage();
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '2015');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
+    });
+  });
+
+  it('clicking a space month bucket sets month temporal state, switches to day grouping, and anchors the month', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+
+    renderPage();
+    await fireEvent.click(await screen.findByTestId('activate-month-bucket'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '8');
+      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '2015');
+      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-month', '8');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
+    });
+  });
+
+  it('keeps space temporal state transient across URL sync for non-time filter changes', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+
+    renderPage();
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+    await waitFor(() => expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}'));
+
+    await fireEvent.click(screen.getByTestId('filter-panel-set-country'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
+    });
+    expect(gotoMock).toHaveBeenCalledWith('/spaces/space-1/photos?country=Germany', {
+      replaceState: true,
+      keepFocus: true,
+      noScroll: true,
+    });
+  });
+
+  it('lets custom space date range override selected timeline year state', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+
+    renderPage();
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+    await waitFor(() => expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}'));
+
+    await fireEvent.click(screen.getByTestId('filter-panel-set-custom-range'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-after', '2024-01-01');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-before', '2024-12-31');
+      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-date-after', '2024-01-01');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+    });
+    expect(buildSpaceTimelineOptions).toHaveBeenLastCalledWith(
+      'space-1',
+      expect.objectContaining({
+        dateAfter: '2024-01-01',
+        dateBefore: '2024-12-31',
+        selectedYear: undefined,
+        selectedMonth: undefined,
+      }),
+    );
+  });
+
+  it('clearing the space temporal chip keeps the current grouping and clears the anchor', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+
+    renderPage();
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+    await fireEvent.click(await screen.findByTestId('active-filters-remove-timeline'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+    });
+  });
+
+  it('select-assets mode keeps space timeline options without grouping', async () => {
+    renderPage();
+
+    await fireEvent.click(screen.getByLabelText('add_photos'));
+
+    await waitFor(() => {
+      const optionsText = screen.getByTestId('timeline-options').textContent ?? '';
+      expect(optionsText).toContain('"visibility":"timeline"');
+      expect(optionsText).toContain('"timelineSpaceId":"space-1"');
+      expect(optionsText).not.toContain('"grouping"');
+    });
+  });
+
+  it('renders a desktop grouping control on the space browse timeline', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+
+    renderPage();
+
+    expect(await screen.findByTestId('timeline-desktop-grouping-control')).toBeInTheDocument();
+    expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('changes space grouping from the desktop control without changing filters or URL params', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?people=space-person-1');
+
+    renderPage();
+    await fireEvent.click(await screen.findByTestId('timeline-grouping-year'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"year"');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+    });
+    expect(gotoMock).not.toHaveBeenCalledWith(expect.stringContaining('selectedYear'), expect.anything());
+  });
+
+  it('does not render grouping controls in space select-assets mode', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+
+    renderPage();
+    await fireEvent.click(screen.getByLabelText('add_photos'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"grouping"');
+    });
+    expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument();
+  });
+
+  it('does not show the desktop grouping control during space search results', () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?q=nature');
+
+    renderPage();
+
+    expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument();
+  });
+
+  it('shows the filtered empty state for a filtered space timeline with no assets', () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?people=empty-person');
+
+    renderPage();
+
+    expect(screen.getByTestId('empty-state-message')).toHaveTextContent('No photos match your filters');
+    expect(screen.queryByTestId('timeline-stub')).not.toBeInTheDocument();
+  });
+
+  it('passes grouping state and change handler into the space Timeline for mobile placement', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+
+    renderPage();
+
+    expect(await screen.findByTestId('timeline-mobile-grouping-props')).toHaveTextContent(
+      JSON.stringify({ grouping: 'day', hasHandler: true }),
+    );
+
+    await fireEvent.click(screen.getByTestId('timeline-mobile-set-year'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"year"');
+      expect(screen.getByTestId('timeline-mobile-grouping-props')).toHaveTextContent(
+        JSON.stringify({ grouping: 'year', hasHandler: true }),
+      );
     });
   });
 });

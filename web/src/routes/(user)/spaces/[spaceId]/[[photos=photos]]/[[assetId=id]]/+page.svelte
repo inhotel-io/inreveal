@@ -36,7 +36,9 @@
   import TagAction from '$lib/components/timeline/actions/TagAction.svelte';
   import AssetSelectControlBar from '$lib/components/timeline/AssetSelectControlBar.svelte';
   import Timeline from '$lib/components/timeline/Timeline.svelte';
+  import TimelineGroupingControl from '$lib/components/timeline/TimelineGroupingControl.svelte';
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
+  import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
   import { registerSelectionContext, registerSpaceContext } from '$lib/managers/command-context-manager.svelte';
   import { eventManager } from '$lib/managers/event-manager.svelte';
   import { globalSearchManager } from '$lib/managers/global-search-manager.svelte';
@@ -62,6 +64,11 @@
   } from '$lib/utils/space-search';
   import { loadHeroCollapsed, persistHeroCollapsed } from '$lib/utils/space-hero-storage';
   import { buildSpaceTimelineOptions, handleSpaceRemoveFilter } from '$lib/utils/space-filter-options';
+  import {
+    activateTimelineBucket,
+    type ActivatableTimelineBucket,
+    getTimelineManagerTimeBuckets,
+  } from '$lib/utils/timeline-filter-navigation';
   import {
     addAssets,
     bulkAddAssets,
@@ -148,6 +155,8 @@
       smartFacetInFlight = undefined;
       committedSearchQuery = nextSearchState.query;
       lastHandledSearchState = `${nextSearchState.query}:${nextSearchState.sortOrder}:${page.url.search}`;
+      timelineGrouping = 'day';
+      temporalAnchor = undefined;
       heroCollapsed = loadHeroCollapsed(data.space.id);
       panelOpen = false;
       viewMode = 'view';
@@ -177,6 +186,13 @@
     ...initialFilterState,
     sortOrder: initialSearchState.sortOrder,
   });
+  let filtersBeforePanelChange: FilterState = {
+    ...createFilterState(),
+    ...initialFilterState,
+    sortOrder: initialSearchState.sortOrder,
+  };
+  let timelineGrouping = $state<TimelineGrouping>('day');
+  let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
   let personNames = new SvelteMap<string, string>();
   let tagNames = new SvelteMap<string, string>();
   consumeTypedSearchNamesInto(page.url.pathname + page.url.search, personNames, tagNames);
@@ -395,6 +411,9 @@
 
   function handleRemoveFilter(type: string, id?: string) {
     const nextFilters = handleSpaceRemoveFilter(filters, type, id);
+    if (type === 'timeline') {
+      temporalAnchor = undefined;
+    }
     filters = nextFilters;
     syncFilterUrl(nextFilters);
   }
@@ -426,7 +445,13 @@
     if (viewMode === 'select-assets') {
       return { visibility: AssetVisibility.Timeline, timelineSpaceId: space.id };
     }
-    return buildSpaceTimelineOptions(space.id, filters);
+    return {
+      ...buildSpaceTimelineOptions(space.id, filters),
+      grouping: timelineGrouping,
+    };
+  });
+  $effect(() => {
+    filtersBeforePanelChange = filters;
   });
 
   const isSelectionMode = $derived(viewMode === 'select-assets' || viewMode === 'select-cover');
@@ -746,12 +771,13 @@
       getActiveFilterCount(filters) === 0 &&
       !showSearchResults,
   );
-  const timelineBuckets = $derived(
-    timelineManager?.months?.map((m) => ({
-      timeBucket: `${m.yearMonth.year}-${String(m.yearMonth.month).padStart(2, '0')}-01T00:00:00.000Z`,
-      count: m.assetsCount,
-    })) ?? [],
+  const isFilteredTimelineEmpty = $derived(
+    timelineManager?.isInitialized &&
+      totalAssetCount === 0 &&
+      getActiveFilterCount(filters) > 0 &&
+      !showSearchResults,
   );
+  const timelineBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
   const smartFacetBuckets = $derived(showSearchResults ? (smartFacets?.timeBuckets ?? []) : timelineBuckets);
   const smartFacetTotal = $derived(showSearchResults ? smartFacets?.total : undefined);
 
@@ -790,6 +816,50 @@
       keepFocus: true,
       noScroll: true,
     });
+  }
+
+  function handleFiltersChange(nextFilters: FilterState) {
+    const temporalChanged =
+      nextFilters.dateAfter !== filtersBeforePanelChange.dateAfter ||
+      nextFilters.dateBefore !== filtersBeforePanelChange.dateBefore ||
+      nextFilters.selectedYear !== filtersBeforePanelChange.selectedYear ||
+      nextFilters.selectedMonth !== filtersBeforePanelChange.selectedMonth;
+
+    if (temporalChanged) {
+      temporalAnchor = undefined;
+    }
+
+    syncFilterUrl(nextFilters);
+  }
+
+  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+    if (viewMode !== 'view') {
+      return;
+    }
+
+    const result = activateTimelineBucket(filters, bucket);
+    if (!result) {
+      return;
+    }
+
+    filters = result.filters;
+    timelineGrouping = result.grouping;
+    temporalAnchor = result.anchor;
+    syncFilterUrl(result.filters);
+  }
+
+  function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+    timelineGrouping = grouping;
+    temporalAnchor = undefined;
+  }
+
+  function handleClearAllFilters() {
+    const nextFilters = clearFilters(filters);
+    temporalAnchor = undefined;
+    filters = nextFilters;
+    if (!committedSearchQuery.trim()) {
+      syncFilterUrl(nextFilters);
+    }
   }
 
   $effect(() => {
@@ -964,13 +1034,22 @@
           hidden={isTimelineEmpty}
           {personNames}
           {tagNames}
-          onFiltersChange={syncFilterUrl}
+          onFiltersChange={handleFiltersChange}
         />
       {/key}
     {/if}
 
     <!-- Main Content — pl-4 adds breathing room between filter panel and content -->
     <div class="flex flex-1 flex-col overflow-hidden pl-4">
+      {#if viewMode === 'view' && !showSearchResults && !assetMultiSelectManager.selectionActive}
+        <div
+          class="hidden shrink-0 items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2 dark:border-gray-700 dark:bg-gray-900 md:flex"
+          data-testid="timeline-desktop-grouping-control"
+        >
+          <TimelineGroupingControl grouping={timelineGrouping} onGroupingChange={handleTimelineGroupingChange} />
+        </div>
+      {/if}
+
       <!-- Active filter chips -->
       {#if viewMode === 'view' && (getActiveFilterCount(filters) > 0 || committedSearchQuery.trim().length > 0)}
         <ActiveFiltersBar
@@ -979,13 +1058,7 @@
           {personNames}
           {tagNames}
           onRemoveFilter={handleRemoveFilter}
-          onClearAll={() => {
-            const nextFilters = clearFilters(filters);
-            filters = nextFilters;
-            if (!committedSearchQuery.trim()) {
-              syncFilterUrl(nextFilters);
-            }
-          }}
+          onClearAll={handleClearAllFilters}
           searchQuery={committedSearchQuery}
           onClearSearch={clearSearch}
         />
@@ -1004,16 +1077,10 @@
       {/if}
 
       {#if !showSearchResults}
-        {#if totalAssetCount === 0 && getActiveFilterCount(filters) > 0}
+        {#if isFilteredTimelineEmpty}
           <div class="flex flex-1 flex-col items-center justify-center gap-2" data-testid="empty-state-message">
             <p class="text-sm text-[var(--fg-muted)]">No photos match your filters</p>
-            <button
-              type="button"
-              class="text-sm text-[var(--primary)]"
-              onclick={() => {
-                filters = clearFilters(filters);
-              }}
-            >
+            <button type="button" class="text-sm text-[var(--primary)]" onclick={handleClearAllFilters}>
               Clear all filters
             </button>
           </div>
@@ -1026,6 +1093,11 @@
             {isSelectionMode}
             onEscape={handleEscape}
             spaceId={space.id}
+            onTimelineBucketActivate={handleTimelineBucketActivate}
+            {temporalAnchor}
+            onTemporalAnchorResolved={() => (temporalAnchor = undefined)}
+            grouping={timelineGrouping}
+            onGroupingChange={handleTimelineGroupingChange}
           >
             {#if viewMode === 'view'}
               <section class="px-4 pt-4">
