@@ -51,8 +51,8 @@ const propertyDescriptions = {
   assetIds: 'Asset ids for a new asset read request or planning operation. Use ids returned by Gallery tools.',
   albumId: 'The album id returned by listAlbums for a new album read request.',
   spaceId: 'The shared space id returned by listSpaces for a new space read request.',
-  mode: 'Search mode. Use metadata for structured filters, or smart, description, ocr, or filename with query.',
-  query: 'Query text. For searchAssets use this with smart, description, ocr, or filename modes; for searchUsers use a name or email.',
+  mode: 'Search mode. Metadata mode is currently executable; text modes require query but are available in a later slice.',
+  query: 'Query text. For searchAssets, text modes require query but are not available until a later slice; for searchUsers use a name or email.',
   filters:
     'Put structured search filters here for date, place, people, space, camera, favorite, rating, album, tag, visibility, and media searches.',
   limit: 'Maximum number of results to return. Use a positive integer up to 10000.',
