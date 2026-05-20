@@ -21,6 +21,7 @@ const exampleAssetId = '00000000-0000-4000-8000-000000000001';
 const exampleSecondAssetId = '00000000-0000-4000-8000-000000000002';
 const exampleAlbumId = '00000000-0000-4000-8000-000000000010';
 const exampleSpaceId = '00000000-0000-4000-8000-000000000020';
+const exampleSpacePersonId = '00000000-0000-4000-8000-000000000021';
 const exampleTagId = '00000000-0000-4000-8000-000000000030';
 const exampleToolCallId = '00000000-0000-4000-8000-000000000111';
 const examplePlanId = '00000000-0000-4000-8000-000000000222';
@@ -143,9 +144,10 @@ const defineAssetReadContract = (
 const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
   name: AgentToolName.SearchAssets,
   title: 'Search assets',
-  description: 'Find assets using Gallery search modes, metadata filters, and a bounded result page.',
+  description:
+    'Find assets using Gallery metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and a bounded result page.',
   usage:
-    'Put search filters under filters. Use mode metadata. Only page 1 and order desc are executable. Text, people, space, visibility, later pages, and non-desc order are later-slice contract fields and are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
+    'Put deterministic metadata search filters under filters. Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known. Only page 1 and order desc are executable. Text modes, later pages, and non-desc order are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
   argumentModes: [
     {
       name: 'empty-search',
@@ -160,7 +162,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       requiredFields: ['filters'],
       forbiddenFields: ['toolCallId', 'query'],
       whenToUse:
-        'Use when the user provides date, place, favorite, rating, album, tag, camera, or media filters. People, space, and visibility fields are contract fields but are not available yet.',
+        'Use when the user provides date, place, favorite, rating, album, tag, camera, media, people, space, or visibility filters.',
     },
     searchApprovedRetryMode,
   ],
@@ -210,6 +212,17 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
         limit: 25,
       },
     },
+    {
+      name: 'space-filter-search',
+      description: 'Search assets in a known shared space for known space people.',
+      arguments: {
+        filters: {
+          spaceId: exampleSpaceId,
+          spacePersonIds: [exampleSpacePersonId],
+        },
+        limit: 25,
+      },
+    },
     approvedRetryExample,
   ],
   commonMistakes: [
@@ -243,7 +256,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
           'visibility',
         ],
       },
-      hint: 'Place supported metadata filters for date, location, favorite, rating, album, tag, camera, and media inside filters. People, space, and visibility fields are accepted by the contract but are not available in Slice 1.',
+      hint: 'Place supported metadata filters for date, location, favorite, rating, album, tag, camera, media, people, space, shared-space, and visibility inside filters.',
       exampleName: 'metadata-page-search',
     },
     {
@@ -255,8 +268,8 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
     {
       id: 'search-space-person-without-space',
       match: { issuePath: 'filters.spacePersonIds', messageIncludes: 'spacePersonIds requires spaceId' },
-      hint: 'spacePersonIds requires filters.spaceId, but people and space-person filters are not available in the current slice. Use currently executable metadata filters for now.',
-      exampleName: 'metadata-page-search',
+      hint: 'spacePersonIds requires filters.spaceId. Resolve or choose the space first, then call searchAssets with both fields under filters.',
+      exampleName: 'space-filter-search',
     },
     {
       id: 'search-combined-filters-and-tool-call-id',
