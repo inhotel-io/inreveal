@@ -3660,7 +3660,7 @@
     "/agent/sessions/{id}/tools/search-users": {
       "post": {
         "description": "Internal route for requesting or resuming a strict-approved visible user lookup tool call for an AI agent session.",
-        "operationId": "searchUsers",
+        "operationId": "searchAgentUsers",
         "parameters": [
           {
             "name": "id",

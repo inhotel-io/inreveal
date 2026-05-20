@@ -180,7 +180,7 @@ export class AgentToolController {
       'Internal route for requesting or resuming a strict-approved visible user lookup tool call for an AI agent session.',
     history: new HistoryBuilder().added('v2.7.5').internal('v2.7.5'),
   })
-  searchUsers(
+  searchAgentUsers(
     @Auth() auth: AuthDto,
     @Param() { id }: UUIDParamDto,
     @Body() dto: AgentSearchUsersToolRequestDto,
