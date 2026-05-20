@@ -314,8 +314,28 @@ Slice 6: Later grid parity
 
 Slice 7: Mobile parity
 
-- Extend mobile grouping vocabulary to include year mode.
-- Align mobile settings, bucket queries, headers, cards, and scrubber behavior with the web model.
+- Extend the mobile grouping vocabulary to include a persisted-index-safe `year` mode. Existing stored values for `day`, `month`, `auto`, and `none` must keep their current enum indexes.
+- Add a `Year` option to the mobile asset-list grouping settings, keep `Month`, `Month + day`, and `Automatic`, and fix the setting write path so selecting any option persists the newly selected value rather than the stale previous value.
+- Add year bucket support to all existing mobile timeline bucket query paths:
+  - shared main timeline `mergedBucket` custom Drift SQL for remote and local assets
+  - generic remote bucket builders
+  - local album, remote album, shared-space, video, place, person, and map buckets
+  - date formatting and bucket-date parsing helpers
+- Preserve existing mobile behavior for `day`, `month`, `auto`, and `none`. `auto` still falls back to day until mobile automatic grouping is redesigned, and `none` remains a flat chunking mode for search-like timelines.
+- Add mobile year headers and scrubber behavior that align with the selected bucket size:
+  - `year` buckets render year-only headers and keep bulk-selection semantics for that bucket.
+  - `month` buckets keep month headers.
+  - `day` buckets keep the current month-and-day/day header behavior.
+  - the scrubber uses year-only labels and year matching for `year` grouping, while preserving month labels and month matching for `day` and `month`.
+  - programmatic scroll-to-date falls back from exact day, to month, to year so year buckets can be targeted.
+- Cover the mobile slice with TDD:
+  - repository tests for year grouping, year boundaries, local-date fallback, and preserved month/day/none behavior
+  - Drift custom SQL tests proving `mergedBucket` supports the appended `year` enum index without changing existing indexes
+  - settings widget tests for the new `Year` option and the stale-value persistence regression
+  - segment/header tests for `HeaderType.year`, month/day compatibility, empty buckets, and `none`
+  - scrubber tests for year labels, year matching, empty/non-time segments, and unchanged month snapping
+
+Mobile Slice 7 does not introduce web-style representative cards or card-driven temporal filter drill-down. The current mobile `Timeline` renders detailed asset grids per bucket and does not yet have route-scoped temporal filter state for every timeline origin. A later mobile interaction slice can add compressed representative cards and year/month drill-down after mobile temporal narrowing is defined across main timeline, spaces, albums, people, tags, search, and route-specific timelines.
 
 ## Out of Scope
 
