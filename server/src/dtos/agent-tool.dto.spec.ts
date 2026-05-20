@@ -298,8 +298,9 @@ describe('Agent tool DTOs', () => {
 
       expect(sharedSpacesResult.success).toBe(true);
       if (sharedSpacesResult.success) {
+        expect(sharedSpacesResult.data.filters).toEqual(expect.objectContaining({ withSharedSpaces: true }));
         if (!sharedSpacesResult.data.filters) {
-          return;
+          throw new Error('Expected parsed search request to include filters');
         }
         expect(sharedSpacesResult.data.filters.withSharedSpaces).toBe(true);
       }
