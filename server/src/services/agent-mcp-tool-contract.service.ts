@@ -145,7 +145,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
   title: 'Search assets',
   description: 'Find assets using Gallery search modes, metadata filters, and a bounded result page.',
   usage:
-    'Put all search filters under filters. Use mode metadata for structured filters. Use only toolCallId when retrying a Gallery-approved search.',
+    'Put search filters under filters. Use mode metadata. Only page 1 and order desc are executable. Text, people, space, visibility, later pages, and non-desc order are later-slice contract fields and are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
   argumentModes: [
     {
       name: 'empty-search',
@@ -273,6 +273,18 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       match: { issuePath: 'limit' },
       hint: 'Use a positive integer limit no greater than 10000.',
       exampleName: 'favorite-rating-search',
+    },
+    {
+      id: 'search-page-unavailable',
+      match: { issuePath: 'page' },
+      hint: 'Only page 1 is executable in the current slice. Later pages are contract fields for a later slice.',
+      exampleName: 'metadata-page-search',
+    },
+    {
+      id: 'search-order-unavailable',
+      match: { issuePath: 'order' },
+      hint: 'Only order desc is executable in the current slice. Non-desc order is a contract field for a later slice.',
+      exampleName: 'metadata-page-search',
     },
     {
       id: 'tool-call-arguments-missing',
