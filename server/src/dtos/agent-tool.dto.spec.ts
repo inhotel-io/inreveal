@@ -656,9 +656,7 @@ describe('Agent tool DTOs', () => {
         return;
       }
 
-      expect(encoded.data.users[0]).toEqual(
-        expect.objectContaining({ name: 'Pierre', email: 'pierre@example.com' }),
-      );
+      expect(encoded.data.users[0]).toEqual(expect.objectContaining({ name: 'Pierre', email: 'pierre@example.com' }));
       expect(encoded.data.users[0]).not.toHaveProperty('password');
       expect(AgentSearchUsersToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
     });
