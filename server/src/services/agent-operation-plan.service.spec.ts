@@ -3203,12 +3203,7 @@ describe(AgentOperationPlanService.name, () => {
     expect(sharedSpaceService.updateMember).toHaveBeenCalledWith(auth, spaceId, roleUserId, {
       role: SharedSpaceRole.Editor,
     });
-    expect(sharedSpaceService.updateMember).not.toHaveBeenCalledWith(
-      auth,
-      spaceId,
-      sameRoleUserId,
-      expect.anything(),
-    );
+    expect(sharedSpaceService.updateMember).not.toHaveBeenCalledWith(auth, spaceId, sameRoleUserId, expect.anything());
     expect(planRepository.completeApply).toHaveBeenCalledWith(
       plan.id,
       expect.arrayContaining([

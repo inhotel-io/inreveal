@@ -38,6 +38,12 @@ const expectIssue = (
   );
 };
 
+const parseSingleOperationProposal = (operation: Record<string, unknown>) =>
+  AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse({
+    summary: 'Update Family space.',
+    operations: [operation],
+  });
+
 const makeCreateAlbumOperation = () => ({
   type: AgentOperationType.AlbumCreate,
   summary: 'Create Portugal highlights.',
@@ -268,10 +274,7 @@ describe('Agent operation DTOs', () => {
         targetKind: AgentOperationTargetKind.ExistingSpace,
         targetId: factory.uuid(),
         payload: {
-          userIds: [
-            '00000000-0000-4000-8000-000000000030',
-            '00000000-0000-4000-8000-000000000030',
-          ],
+          userIds: ['00000000-0000-4000-8000-000000000030', '00000000-0000-4000-8000-000000000030'],
         },
       },
       path: ['operations', 0, 'payload', 'userIds'],
@@ -357,11 +360,6 @@ describe('Agent operation DTOs', () => {
 
   it('rejects invalid existing-space detail update payloads with actionable messages', () => {
     const spaceId = factory.uuid();
-    const parse = (operation: Record<string, unknown>) =>
-      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse({
-        summary: 'Update Family space.',
-        operations: [operation],
-      });
     const base = {
       type: AgentOperationType.SpaceUpdateDetails,
       summary: 'Update Family space.',
@@ -369,14 +367,14 @@ describe('Agent operation DTOs', () => {
       targetId: spaceId,
     };
 
-    const emptyPayload = parse({ ...base, payload: {} });
+    const emptyPayload = parseSingleOperationProposal({ ...base, payload: {} });
     expect(emptyPayload.success).toBe(false);
     if (emptyPayload.success) {
       throw new Error('Expected empty space update payload to fail validation');
     }
-    expect(z.treeifyError(emptyPayload.error).properties?.operations?.items?.[0]?.properties?.payload?.errors).toContain(
-      'Provide spaceName, description, or color',
-    );
+    expect(
+      z.treeifyError(emptyPayload.error).properties?.operations?.items?.[0]?.properties?.payload?.errors,
+    ).toContain('Provide spaceName, description, or color');
 
     for (const payload of [
       { thumbnailAssetId: factory.uuid() },
@@ -385,7 +383,7 @@ describe('Agent operation DTOs', () => {
       { linkedLibraryIds: [factory.uuid()] },
       { delete: true },
     ]) {
-      const result = parse({ ...base, payload });
+      const result = parseSingleOperationProposal({ ...base, payload });
       expect(result.success).toBe(false);
       if (result.success) {
         throw new Error(`Expected unsupported space update payload ${JSON.stringify(payload)} to fail validation`);
@@ -393,7 +391,7 @@ describe('Agent operation DTOs', () => {
       expect(JSON.stringify(z.treeifyError(result.error))).toMatch(/Unrecognized key|unsupported/i);
     }
 
-    const invalidColor = parse({ ...base, payload: { color: '#80c7ff' } });
+    const invalidColor = parseSingleOperationProposal({ ...base, payload: { color: '#80c7ff' } });
     expect(invalidColor.success).toBe(false);
     if (invalidColor.success) {
       throw new Error('Expected invalid space color to fail validation');

@@ -158,14 +158,10 @@ export class AgentMcpPromptService {
           return operation;
         }
 
-        const {
-          type,
-          targetKind,
-          targetId,
-          temporaryTargetId,
-          assetIds,
-          payload,
-        } = operation as Record<string, unknown>;
+        const { type, targetKind, targetId, temporaryTargetId, assetIds, payload } = operation as Record<
+          string,
+          unknown
+        >;
 
         return Object.fromEntries(
           Object.entries({

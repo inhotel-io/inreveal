@@ -339,9 +339,7 @@ const spaceRemoveMembersOperationSchema = z
 
 const spaceUpdateMemberRoleOperationSchema = z
   .strictObject({
-    type: z
-      .literal(AgentOperationType.SpaceUpdateMemberRole)
-      .meta({ id: 'AgentSpaceUpdateMemberRoleOperationType' }),
+    type: z.literal(AgentOperationType.SpaceUpdateMemberRole).meta({ id: 'AgentSpaceUpdateMemberRoleOperationType' }),
     summary,
     targetKind: ExistingSpaceTargetKindSchema,
     targetId: uuid.optional(),
