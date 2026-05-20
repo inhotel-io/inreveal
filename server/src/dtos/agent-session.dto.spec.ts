@@ -28,6 +28,9 @@ const fullWriteScope = {
   favoriteAssets: true,
   archiveAssets: true,
   tagAssets: true,
+  addMembersToSpaces: true,
+  removeMembersFromSpaces: true,
+  updateSpaceMemberRoles: true,
 };
 const expandedWriteScopeKeys = [
   'removeAssets',
@@ -39,6 +42,9 @@ const expandedWriteScopeKeys = [
   'favoriteAssets',
   'archiveAssets',
   'tagAssets',
+  'addMembersToSpaces',
+  'removeMembersFromSpaces',
+  'updateSpaceMemberRoles',
 ];
 
 const makePermissionPlan = (): AgentNormalizedPermissionPlanSnapshot => ({
@@ -146,6 +152,22 @@ describe('AgentPermissionPlanSchema', () => {
     expect(result.error?.issues).toEqual([
       expect.objectContaining({
         path: ['writeScope', 'archiveAssets'],
+        message: 'Invalid input: expected boolean, received undefined',
+      }),
+    ]);
+  });
+
+  it('requires shared-space member write-scope flags in custom permission plans', () => {
+    const permissionPlan = makePermissionPlan();
+    const writeScope = { ...permissionPlan.writeScope };
+    delete (writeScope as Partial<typeof writeScope>).addMembersToSpaces;
+
+    const result = AgentPermissionPlanSchema.safeParse({ ...permissionPlan, writeScope });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        path: ['writeScope', 'addMembersToSpaces'],
         message: 'Invalid input: expected boolean, received undefined',
       }),
     ]);
@@ -387,6 +409,9 @@ describe('AgentSessionResponseDto', () => {
       favoriteAssets: false,
       archiveAssets: false,
       tagAssets: false,
+      addMembersToSpaces: false,
+      removeMembersFromSpaces: false,
+      updateSpaceMemberRoles: false,
     });
   });
 });

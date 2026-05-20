@@ -458,6 +458,59 @@ const readSpaceContract: AgentMcpToolContract<AgentToolName.ReadSpace> = {
   safety,
 };
 
+const searchUsersContract: AgentMcpToolContract<AgentToolName.SearchUsers> = {
+  name: AgentToolName.SearchUsers,
+  title: 'Search users',
+  description: 'Find Gallery users visible to the session user before proposing shared-space member changes.',
+  usage: 'Use query and limit for a new user lookup. Use only toolCallId when retrying a Gallery-approved request.',
+  argumentModes: [
+    {
+      name: 'user-query',
+      description: 'Start a new visible user lookup.',
+      requiredFields: [],
+      forbiddenFields: ['toolCallId'],
+      whenToUse: 'Use before proposing add, remove, or role-change operations for shared-space members.',
+    },
+    approvedRetryMode,
+  ],
+  examples: [
+    {
+      name: 'find-user-by-name',
+      description: 'Find a visible user by name or email text.',
+      arguments: { query: 'sam', limit: 5 },
+    },
+    approvedRetryExample,
+  ],
+  commonMistakes: [
+    {
+      id: 'search-users-combined-query-and-tool-call-id',
+      match: { messageIncludes: 'Provide either user search fields or toolCallId, not both' },
+      hint: 'Use query and limit for a new lookup, or only toolCallId for an approved retry.',
+      exampleName: 'approved-retry',
+    },
+    {
+      id: 'search-users-limit-out-of-range',
+      match: { issuePath: 'limit' },
+      hint: 'Use a positive integer limit no greater than 20.',
+      exampleName: 'find-user-by-name',
+    },
+    {
+      id: 'tool-call-arguments-missing',
+      match: { missingField: 'arguments', requestShape: 'json-rpc' },
+      hint: 'Put the user search arguments object at params.arguments in the MCP tools/call request.',
+      exampleName: 'find-user-by-name',
+    },
+    {
+      id: 'tool-call-arguments-not-object',
+      match: { issuePath: 'arguments', requestShape: 'json-rpc' },
+      hint: 'The params.arguments value must be a JSON object, not an array, primitive, or null.',
+      exampleName: 'find-user-by-name',
+    },
+  ],
+  approvalRetry,
+  safety,
+};
+
 const readToolContracts: AgentMcpReadToolContract[] = [
   searchAssetsContract,
   defineAssetReadContract(
@@ -479,6 +532,7 @@ const readToolContracts: AgentMcpReadToolContract[] = [
   readAlbumContract,
   listSpacesContract,
   readSpaceContract,
+  searchUsersContract,
 ];
 
 const planningUsage =

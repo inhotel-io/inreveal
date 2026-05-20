@@ -17,6 +17,7 @@ import {
   AgentOperationTargetKind,
   AgentOperationType,
   AgentToolName,
+  SharedSpaceRole,
 } from 'src/enum';
 import { factory } from 'test/small.factory';
 import z from 'zod';
@@ -194,6 +195,133 @@ describe('Agent operation DTOs', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it('accepts shared-space member management operations for existing spaces', () => {
+    const spaceId = factory.uuid();
+    const userId = factory.uuid();
+    const otherUserId = factory.uuid();
+
+    const result = AgentProposeAlbumOperationsDto.schema.safeParse({
+      summary: 'Manage Family space members.',
+      operations: [
+        {
+          type: AgentOperationType.SpaceAddMembers,
+          summary: 'Add Alex as editor.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: spaceId,
+          payload: { members: [{ userId, role: SharedSpaceRole.Editor }] },
+        },
+        {
+          type: AgentOperationType.SpaceRemoveMembers,
+          summary: 'Remove Chris.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: spaceId,
+          payload: { userIds: [otherUserId] },
+        },
+        {
+          type: AgentOperationType.SpaceUpdateMemberRole,
+          summary: 'Make Sam a viewer.',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: spaceId,
+          payload: { userIds: [userId], role: SharedSpaceRole.Viewer },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.operations).toHaveLength(3);
+    }
+  });
+
+  it.each([
+    {
+      name: 'add members without members',
+      operation: {
+        type: AgentOperationType.SpaceAddMembers,
+        summary: 'Add member.',
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: factory.uuid(),
+        payload: { members: [] },
+      },
+      path: ['operations', 0, 'payload', 'members'],
+      message: 'Too small',
+    },
+    {
+      name: 'add member as owner',
+      operation: {
+        type: AgentOperationType.SpaceAddMembers,
+        summary: 'Add owner.',
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: factory.uuid(),
+        payload: { members: [{ userId: factory.uuid(), role: SharedSpaceRole.Owner }] },
+      },
+      path: ['operations', 0, 'payload', 'members', 0, 'role'],
+      message: 'Invalid option',
+    },
+    {
+      name: 'remove duplicate members',
+      operation: {
+        type: AgentOperationType.SpaceRemoveMembers,
+        summary: 'Remove duplicate member.',
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: factory.uuid(),
+        payload: {
+          userIds: [
+            '00000000-0000-4000-8000-000000000030',
+            '00000000-0000-4000-8000-000000000030',
+          ],
+        },
+      },
+      path: ['operations', 0, 'payload', 'userIds'],
+      message: 'userIds must be unique',
+    },
+    {
+      name: 'role update without target id',
+      operation: {
+        type: AgentOperationType.SpaceUpdateMemberRole,
+        summary: 'Make Sam viewer.',
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        payload: { userIds: [factory.uuid()], role: SharedSpaceRole.Viewer },
+      },
+      path: ['operations', 0, 'targetId'],
+      message: 'targetId is required',
+    },
+    {
+      name: 'role update to owner',
+      operation: {
+        type: AgentOperationType.SpaceUpdateMemberRole,
+        summary: 'Make Sam owner.',
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: factory.uuid(),
+        payload: { userIds: [factory.uuid()], role: SharedSpaceRole.Owner },
+      },
+      path: ['operations', 0, 'payload', 'role'],
+      message: 'Invalid option',
+    },
+    {
+      name: 'member operation with temporary target',
+      operation: {
+        type: AgentOperationType.SpaceRemoveMembers,
+        summary: 'Remove member.',
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: factory.uuid(),
+        temporaryTargetId: 'tmp-space',
+        payload: { userIds: [factory.uuid()] },
+      },
+      path: ['operations', 0, 'temporaryTargetId'],
+      message: 'Use targetId',
+    },
+  ])('rejects invalid shared-space member operation: $name', ({ operation, path, message }) => {
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Invalid member plan.',
+        operations: [operation],
+      }),
+      path,
+      message,
+    );
   });
 
   it('validates supported existing-space detail update payload shapes', () => {
