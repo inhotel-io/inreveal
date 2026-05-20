@@ -947,6 +947,67 @@ class AgentSessionsApi {
     return null;
   }
 
+  /// Execute the internal listSpaces agent tool
+  ///
+  /// Internal route for requesting or resuming a strict-approved shared-space list tool call for an AI agent session.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentListSpacesToolRequestDto] agentListSpacesToolRequestDto (required):
+  Future<Response> listSpacesWithHttpInfo(String id, AgentListSpacesToolRequestDto agentListSpacesToolRequestDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/{id}/tools/list-spaces'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = agentListSpacesToolRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Execute the internal listSpaces agent tool
+  ///
+  /// Internal route for requesting or resuming a strict-approved shared-space list tool call for an AI agent session.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentListSpacesToolRequestDto] agentListSpacesToolRequestDto (required):
+  Future<AgentListSpacesToolResponseDto?> listSpaces(String id, AgentListSpacesToolRequestDto agentListSpacesToolRequestDto,) async {
+    final response = await listSpacesWithHttpInfo(id, agentListSpacesToolRequestDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentListSpacesToolResponseDto',) as AgentListSpacesToolResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Propose agent album operations
   ///
   /// Internal route for storing a structured album operation proposal for an AI agent session.
@@ -1252,6 +1313,67 @@ class AgentSessionsApi {
     return null;
   }
 
+  /// Execute the internal readSpace agent tool
+  ///
+  /// Internal route for requesting or resuming a strict-approved shared-space read tool call for an AI agent session.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentReadSpaceToolRequestDto] agentReadSpaceToolRequestDto (required):
+  Future<Response> readSpaceWithHttpInfo(String id, AgentReadSpaceToolRequestDto agentReadSpaceToolRequestDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/{id}/tools/read-space'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = agentReadSpaceToolRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Execute the internal readSpace agent tool
+  ///
+  /// Internal route for requesting or resuming a strict-approved shared-space read tool call for an AI agent session.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentReadSpaceToolRequestDto] agentReadSpaceToolRequestDto (required):
+  Future<AgentReadSpaceToolResponseDto?> readSpace(String id, AgentReadSpaceToolRequestDto agentReadSpaceToolRequestDto,) async {
+    final response = await readSpaceWithHttpInfo(id, agentReadSpaceToolRequestDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentReadSpaceToolResponseDto',) as AgentReadSpaceToolResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Revise agent album operations
   ///
   /// Internal route for replacing a proposed operation plan with a new revision.
@@ -1313,6 +1435,67 @@ class AgentSessionsApi {
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentOperationPlanToolResponseDto',) as AgentOperationPlanToolResponseDto;
+    
+    }
+    return null;
+  }
+
+  /// Execute the internal searchUsers agent tool
+  ///
+  /// Internal route for requesting or resuming a strict-approved visible user lookup tool call for an AI agent session.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentSearchUsersToolRequestDto] agentSearchUsersToolRequestDto (required):
+  Future<Response> searchAgentUsersWithHttpInfo(String id, AgentSearchUsersToolRequestDto agentSearchUsersToolRequestDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/{id}/tools/search-users'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = agentSearchUsersToolRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Execute the internal searchUsers agent tool
+  ///
+  /// Internal route for requesting or resuming a strict-approved visible user lookup tool call for an AI agent session.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentSearchUsersToolRequestDto] agentSearchUsersToolRequestDto (required):
+  Future<AgentSearchUsersToolResponseDto?> searchAgentUsers(String id, AgentSearchUsersToolRequestDto agentSearchUsersToolRequestDto,) async {
+    final response = await searchAgentUsersWithHttpInfo(id, agentSearchUsersToolRequestDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentSearchUsersToolResponseDto',) as AgentSearchUsersToolResponseDto;
     
     }
     return null;
