@@ -33,7 +33,6 @@ linter:
     unrelated_type_equality_checks: true
     prefer_const_constructors: true
     always_use_package_imports: true
-    always_put_control_body_on_new_line: true
     unnecessary_null_checks: true
     unnecessary_parenthesis: true
     prefer_final_locals: true
@@ -76,7 +75,6 @@ analyzer:
   # our Flutter version and the required old riverpod_lint 2.x
   errors:
     unawaited_futures: warning
-    always_put_control_body_on_new_line: warning
 
 dart_code_metrics:
   rules:
