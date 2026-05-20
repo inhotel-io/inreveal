@@ -160,7 +160,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       requiredFields: ['filters'],
       forbiddenFields: ['toolCallId', 'query'],
       whenToUse:
-        'Use when the user provides date, place, favorite, rating, album, tag, camera, media, people, or space filters.',
+        'Use when the user provides date, place, favorite, rating, album, tag, camera, or media filters. People, space, and visibility fields are contract fields but are not available yet.',
     },
     searchApprovedRetryMode,
   ],
@@ -244,7 +244,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
         ],
       },
       hint:
-        'Place date, location, favorite, rating, album, tag, camera, people, space, visibility, and media filters inside the filters object.',
+        'Place supported metadata filters for date, location, favorite, rating, album, tag, camera, and media inside filters. People, space, and visibility fields are accepted by the contract but are not available in Slice 1.',
       exampleName: 'metadata-page-search',
     },
     {
