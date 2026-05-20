@@ -191,7 +191,13 @@ describe(buildAgentMetadataSearch.name, () => {
   it('maps explicit withSharedSpaces for owned plus shared sessions', () => {
     const result = buildAgentMetadataSearch({
       userId,
-      request: { mode: 'metadata', filters: { withSharedSpaces: true, isFavorite: true }, limit: 10, page: 1, order: 'desc' },
+      request: {
+        mode: 'metadata',
+        filters: { withSharedSpaces: true, isFavorite: true },
+        limit: 10,
+        page: 1,
+        order: 'desc',
+      },
       scope: { owned: true, sharedSpaces: true, locked: false, timelineSpaceIds: [sharedSpaceId] },
     });
 
@@ -320,7 +326,9 @@ export const buildAgentMetadataSearch = ({
   const hasAlbumFilter = (filters.albumIds?.length ?? 0) > 0;
   const wantsBroadSharedScope = filters.spaceId
     ? false
-    : filters.withSharedSpaces === true || (!scope.owned && scope.sharedSpaces) || (hasAlbumFilter && scope.sharedSpaces);
+    : filters.withSharedSpaces === true ||
+      (!scope.owned && scope.sharedSpaces) ||
+      (hasAlbumFilter && scope.sharedSpaces);
   const timelineSpaceIds = wantsBroadSharedScope ? scope.timelineSpaceIds : undefined;
   const hasTimelineSpaces = !!timelineSpaceIds && timelineSpaceIds.length > 0;
 
@@ -436,7 +444,9 @@ it('denies conflicting spaceId and withSharedSpaces before executing search', as
     order: 'desc',
   });
 
-  expect(result).toEqual(expect.objectContaining({ status: 'denied', reason: 'Cannot use both spaceId and withSharedSpaces' }));
+  expect(result).toEqual(
+    expect.objectContaining({ status: 'denied', reason: 'Cannot use both spaceId and withSharedSpaces' }),
+  );
   expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
 });
 
@@ -489,14 +499,22 @@ it('denies stale or inaccessible space filters without leaking details', async (
 });
 
 it.each([
-  ['permission plan does not allow locked assets', makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }), AuthFactory.create()],
+  [
+    'permission plan does not allow locked assets',
+    makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    AuthFactory.create(),
+  ],
   [
     'auth session is not elevated',
     makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: true } }),
     AuthFactory.from().session({ hasElevatedPermission: false }).build(),
   ],
 ] as const)('denies locked visibility when %s', async (_name, plan, auth) => {
-  const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly, permissionPlanSnapshot: plan });
+  const session = makeSession({
+    userId: auth.user.id,
+    approvalMode: AgentApprovalMode.PlanOnly,
+    permissionPlanSnapshot: plan,
+  });
   sessionRepository.getById.mockResolvedValue(session);
 
   const result = await sut.searchAssets(auth, session.id, {
@@ -507,7 +525,9 @@ it.each([
     order: 'desc',
   });
 
-  expect(result).toEqual(expect.objectContaining({ status: 'denied', reason: 'Locked photos require elevated permission' }));
+  expect(result).toEqual(
+    expect.objectContaining({ status: 'denied', reason: 'Locked photos require elevated permission' }),
+  );
 });
 
 it('denies inaccessible people filters before executing search', async () => {
@@ -738,7 +758,13 @@ it('executes shared-space-only search with timeline space IDs and no owned asset
   accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set([assetId]));
   assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
 
-  const result = await sut.searchAssets(auth, session.id, { mode: 'metadata', filters: {}, limit: 5, page: 1, order: 'desc' });
+  const result = await sut.searchAssets(auth, session.id, {
+    mode: 'metadata',
+    filters: {},
+    limit: 5,
+    page: 1,
+    order: 'desc',
+  });
 
   expect(result).toEqual(expect.objectContaining({ status: 'success', returnedCount: 1 }));
   expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
@@ -878,7 +904,9 @@ it('executes locked visibility search only when the plan and elevated auth allow
   });
   sessionRepository.getById.mockResolvedValue(session);
   searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
-  assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId, { visibility: AssetVisibility.Locked })]);
+  assetRepository.getAgentMetadataByIds.mockResolvedValue([
+    makeMetadata(assetId, { visibility: AssetVisibility.Locked }),
+  ]);
   accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
   assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
 
@@ -1040,7 +1068,9 @@ it('advertises deterministic people, space, shared-space, visibility, and create
   const filtered = search.examples.find((example) => example.name === 'filtered-search');
   const spaceExample = search.examples.find((example) => example.name === 'space-filter-search');
 
-  expect(search.description).toContain('people, shared-space, visibility, created, updated, taken, album, tag, camera, rating, and media filters');
+  expect(search.description).toContain(
+    'people, shared-space, visibility, created, updated, taken, album, tag, camera, rating, and media filters',
+  );
   expect(filtered?.whenToUse).toContain('people, space, visibility');
   expect(spaceExample?.arguments).toEqual({
     filters: { spaceId: expect.any(String), spacePersonIds: [expect.any(String)] },
@@ -1069,7 +1099,9 @@ In `server/src/services/agent-mcp-prompt.service.spec.ts`, add:
 it('does not tell Pi that deterministic people or shared-space filters are unavailable', () => {
   const prompt = sut.generatePromptCheatSheet();
 
-  expect(prompt).toContain('Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known.');
+  expect(prompt).toContain(
+    'Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known.',
+  );
   expect(prompt).not.toContain('People, space, and visibility fields are contract fields but are not available yet.');
 });
 ```
