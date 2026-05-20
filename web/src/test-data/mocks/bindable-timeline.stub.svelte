@@ -1,9 +1,3 @@
-<script lang="ts" module>
-  declare global {
-    var __timelineStubAssetCount: number | undefined;
-  }
-</script>
-
 <script lang="ts">
   import type { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
@@ -36,7 +30,7 @@
   const serializedOptions = $derived(JSON.stringify(options ?? {}));
 
   $effect(() => {
-    const assetCount = globalThis.__timelineStubAssetCount ?? 1;
+    const assetCount = (globalThis as { __timelineStubAssetCount?: number }).__timelineStubAssetCount ?? 1;
     const nextTimelineManager = {
       months: assetCount > 0 ? [{ yearMonth: { year: 2024, month: 4 }, assetsCount: assetCount }] : [],
       timelineBuckets:
