@@ -14,7 +14,7 @@ import AgentSessionHeader from './agent-session-header.svelte';
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_approval_mode: 'Approval mode',
-    assistant_approval_mode_strict: 'Strict',
+        assistant_approval_behavior_all_actions: 'Strict',
     assistant_activity_visibility: 'Activity preview',
     assistant_activity_visibility_compact: 'Compact',
     assistant_activity_visibility_expanded: 'Expanded',
@@ -60,6 +60,7 @@ const makeSession = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSes
     writeScope: {
       addAssets: true,
       addAssetsToSpaces: true,
+      addMembersToSpaces: true,
       archiveAssets: true,
       createAlbum: true,
       createSpace: true,
@@ -67,10 +68,12 @@ const makeSession = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSes
       favoriteAssets: true,
       removeAssets: true,
       removeAssetsFromSpaces: true,
+      removeMembersFromSpaces: true,
       setCover: true,
       tagAssets: true,
       updateDetails: true,
       updateSpaceDetails: true,
+      updateSpaceMemberRoles: true,
     },
   },
   permissionPreset: AgentPermissionPreset.Careful,

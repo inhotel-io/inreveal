@@ -8,6 +8,7 @@ import {
   AgentOperationTargetKind,
   AgentOperationType,
   AgentToolName,
+  SharedSpaceRole,
   UserAvatarColorSchema,
 } from 'src/enum';
 import { isoDatetimeToDate } from 'src/validation';
@@ -282,6 +283,78 @@ const updateSpaceDetailsOperationSchema = z
   })
   .superRefine((operation, ctx) => validateSpaceTarget(operation, ctx));
 
+const AgentAssignableSharedSpaceRoleSchema = z
+  .enum([SharedSpaceRole.Editor, SharedSpaceRole.Viewer])
+  .meta({ id: 'AgentAssignableSharedSpaceMemberRole' });
+const uniqueUserIds = z
+  .array(uuid)
+  .min(1)
+  .max(100)
+  .superRefine((userIds, ctx) => {
+    if (new Set(userIds).size !== userIds.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'userIds must be unique' });
+    }
+  });
+const memberPayloads = z
+  .array(
+    z.strictObject({
+      userId: uuid,
+      role: AgentAssignableSharedSpaceRoleSchema,
+    }),
+  )
+  .min(1)
+  .max(100)
+  .superRefine((members, ctx) => {
+    const userIds = members.map((member) => member.userId);
+    if (new Set(userIds).size !== userIds.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'members must contain unique userIds' });
+    }
+  });
+
+const spaceAddMembersOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.SpaceAddMembers).meta({ id: 'AgentSpaceAddMembersOperationType' }),
+    summary,
+    targetKind: ExistingSpaceTargetKindSchema,
+    targetId: uuid.optional(),
+    temporaryTargetId: temporaryTargetId.optional(),
+    riskLevel: operationDefaults.riskLevel,
+    enabled: operationDefaults.enabled,
+    payload: z.strictObject({ members: memberPayloads }),
+  })
+  .superRefine((operation, ctx) => validateSpaceTarget(operation, ctx));
+
+const spaceRemoveMembersOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.SpaceRemoveMembers).meta({ id: 'AgentSpaceRemoveMembersOperationType' }),
+    summary,
+    targetKind: ExistingSpaceTargetKindSchema,
+    targetId: uuid.optional(),
+    temporaryTargetId: temporaryTargetId.optional(),
+    riskLevel: operationDefaults.riskLevel,
+    enabled: operationDefaults.enabled,
+    payload: z.strictObject({ userIds: uniqueUserIds }),
+  })
+  .superRefine((operation, ctx) => validateSpaceTarget(operation, ctx));
+
+const spaceUpdateMemberRoleOperationSchema = z
+  .strictObject({
+    type: z
+      .literal(AgentOperationType.SpaceUpdateMemberRole)
+      .meta({ id: 'AgentSpaceUpdateMemberRoleOperationType' }),
+    summary,
+    targetKind: ExistingSpaceTargetKindSchema,
+    targetId: uuid.optional(),
+    temporaryTargetId: temporaryTargetId.optional(),
+    riskLevel: operationDefaults.riskLevel,
+    enabled: operationDefaults.enabled,
+    payload: z.strictObject({
+      userIds: uniqueUserIds,
+      role: AgentAssignableSharedSpaceRoleSchema,
+    }),
+  })
+  .superRefine((operation, ctx) => validateSpaceTarget(operation, ctx));
+
 const assetBatchBase = {
   summary,
   targetKind: AgentOperationTargetKindSchema,
@@ -366,6 +439,9 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   spaceAssetsOperationSchema(AgentOperationType.SpaceAddAssets),
   spaceAssetsOperationSchema(AgentOperationType.SpaceRemoveAssets),
   updateSpaceDetailsOperationSchema,
+  spaceAddMembersOperationSchema,
+  spaceRemoveMembersOperationSchema,
+  spaceUpdateMemberRoleOperationSchema,
   rotateOperationSchema,
   setFavoriteOperationSchema,
   setArchiveOperationSchema,

@@ -17,6 +17,7 @@ const toolNameLabelKeys: Record<AgentToolName, Translations> = {
   [AgentToolName.ReadAlbum]: 'assistant_agent_tool_name_readAlbum',
   [AgentToolName.ListSpaces]: 'assistant_agent_tool_name_listSpaces',
   [AgentToolName.ReadSpace]: 'assistant_agent_tool_name_readSpace',
+  [AgentToolName.SearchUsers]: 'assistant_agent_tool_name_searchUsers' as Translations,
   [AgentToolName.ProposeAlbumOperations]: 'assistant_agent_tool_name_proposeAlbumOperations',
   [AgentToolName.ReviseProposedOperations]: 'assistant_agent_tool_name_reviseProposedOperations',
   [AgentToolName.SummarizePlan]: 'assistant_agent_tool_name_summarizePlan',
@@ -43,6 +44,7 @@ export const getAgentToolDataClassLabelKey = (dataClass: AgentToolDataClass) =>
 
 const pendingActionText: Partial<Record<AgentToolName, string>> = {
   [AgentToolName.SearchAssets]: 'Pi wants to search your photos.',
+  [AgentToolName.SearchUsers]: 'Pi wants to find visible Gallery users.',
   [AgentToolName.ReadAssetMetadata]: 'Pi wants to read photo details.',
   [AgentToolName.ReadAssetPreviews]: 'Pi wants to view photo previews.',
   [AgentToolName.ReadAssetOriginals]: 'Pi wants to open original files.',

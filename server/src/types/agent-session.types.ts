@@ -43,6 +43,9 @@ export type AgentPermissionPlanSnapshot = {
     addAssetsToSpaces?: boolean;
     removeAssetsFromSpaces?: boolean;
     updateSpaceDetails?: boolean;
+    addMembersToSpaces?: boolean;
+    removeMembersFromSpaces?: boolean;
+    updateSpaceMemberRoles?: boolean;
     editAssets?: boolean;
     favoriteAssets?: boolean;
     archiveAssets?: boolean;
@@ -70,6 +73,9 @@ export type AgentNormalizedPermissionPlanSnapshot = Omit<AgentPermissionPlanSnap
     addAssetsToSpaces: boolean;
     removeAssetsFromSpaces: boolean;
     updateSpaceDetails: boolean;
+    addMembersToSpaces: boolean;
+    removeMembersFromSpaces: boolean;
+    updateSpaceMemberRoles: boolean;
     editAssets: boolean;
     favoriteAssets: boolean;
     archiveAssets: boolean;
