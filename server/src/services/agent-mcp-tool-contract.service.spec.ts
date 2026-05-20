@@ -134,6 +134,7 @@ describe(AgentMcpToolContractService.name, () => {
         'empty-search',
         'bounded-date-location-search',
         'favorite-rating-search',
+        'space-filter-search',
         'approved-retry',
       ]),
     );
@@ -164,14 +165,67 @@ describe(AgentMcpToolContractService.name, () => {
     });
   });
 
-  it('describes filtered search using only currently executable metadata filters', () => {
+  it('describes filtered search using deterministic executable metadata filters', () => {
     const search = sut.getReadToolContract(AgentToolName.SearchAssets);
     const filteredSearch = search?.argumentModes.find((mode) => mode.name === 'filtered-search');
 
-    expect(filteredSearch?.whenToUse).toContain('date, place, favorite, rating, album, tag, camera, or media');
-    expect(filteredSearch?.whenToUse).toContain('People, space, and visibility fields are contract fields');
-    expect(filteredSearch?.whenToUse).toContain('not available yet');
-    expect(filteredSearch?.whenToUse).not.toContain('people, or space filters');
+    expect(filteredSearch?.whenToUse).toContain(
+      'date, place, favorite, rating, album, tag, camera, media, people, space, or visibility filters',
+    );
+    expect(filteredSearch?.whenToUse).not.toContain('People, space, and visibility fields are contract fields');
+    expect(filteredSearch?.whenToUse).not.toContain('not available yet');
+  });
+
+  it('advertises deterministic people and search filters as executable metadata filters', () => {
+    const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+    const serialized = JSON.stringify({
+      description: search?.description,
+      usage: search?.usage,
+      filteredSearch: search?.argumentModes.find((mode) => mode.name === 'filtered-search'),
+      examples: search?.examples,
+      commonMistakes: search?.commonMistakes,
+    });
+
+    for (const filter of [
+      'personIds',
+      'spaceId',
+      'spacePersonIds',
+      'withSharedSpaces',
+      'visibility',
+      'createdAfter',
+      'createdBefore',
+      'updatedAfter',
+      'updatedBefore',
+      'takenAfter',
+      'takenBefore',
+      'albumIds',
+      'tagIds',
+      'make',
+      'model',
+      'lensModel',
+      'rating',
+      'type',
+    ]) {
+      expect(serialized).toContain(filter);
+    }
+
+    expect(search?.usage).toContain(
+      'people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types',
+    );
+    expect(search?.usage).toContain('Text modes, later pages, and non-desc order are not available yet');
+    expect(search?.usage).not.toContain('people, space, visibility, later pages');
+  });
+
+  it('defines a space-filter-search example for scoped people filters', () => {
+    const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+
+    expect(search?.examples.find((example) => example.name === 'space-filter-search')?.arguments).toEqual({
+      filters: {
+        spaceId: '00000000-0000-4000-8000-000000000020',
+        spacePersonIds: ['00000000-0000-4000-8000-000000000021'],
+      },
+      limit: 25,
+    });
   });
 
   it('defines the required list and album read examples from the spec', () => {
@@ -537,9 +591,9 @@ describe(AgentMcpToolContractService.name, () => {
       for (const correction of [countryCorrection, ratingCorrection, createdAfterCorrection, personIdsCorrection]) {
         expect(correction?.mistakeId).toBe('search-filters-outside-filters');
         expect(correction?.hint).toBe(
-          'Place supported metadata filters for date, location, favorite, rating, album, tag, camera, and media inside filters. People, space, and visibility fields are accepted by the contract but are not available in Slice 1.',
+          'Place supported metadata filters for date, location, favorite, rating, album, tag, camera, media, people, space, shared-space, and visibility inside filters.',
         );
-        expect(correction?.hint).not.toContain('camera, people, space, visibility, and media filters');
+        expect(correction?.hint).toContain('people, space, shared-space, and visibility');
         expect(correction?.exampleArguments).toEqual({
           mode: 'metadata',
           filters: {
@@ -585,7 +639,7 @@ describe(AgentMcpToolContractService.name, () => {
       const contract = sut.listToolContracts().find((candidate) => candidate.name === AgentToolName.SearchAssets);
 
       expect(contract?.usage).toContain('Only page 1 and order desc are executable');
-      expect(contract?.usage).toContain('Text, people, space, visibility, later pages, and non-desc order');
+      expect(contract?.usage).toContain('Text modes, later pages, and non-desc order are not available yet');
       expect(contract?.commonMistakes).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -613,16 +667,23 @@ describe(AgentMcpToolContractService.name, () => {
       });
     });
 
-    it('returns a space person scope correction', () => {
+    it('returns a spacePersonIds scope correction', () => {
       const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
         requestShape: 'tool-arguments',
         issues: [{ path: 'filters.spacePersonIds', message: 'spacePersonIds requires spaceId' }],
       });
 
       expect(correction?.mistakeId).toBe('search-space-person-without-space');
-      expect(correction?.hint).toContain('spacePersonIds requires filters.spaceId');
-      expect(correction?.hint).toContain('people and space-person filters are not available in the current slice');
-      expect(correction?.hint).toContain('Use currently executable metadata filters for now');
+      expect(correction?.hint).toBe(
+        'spacePersonIds requires filters.spaceId. Resolve or choose the space first, then call searchAssets with both fields under filters.',
+      );
+      expect(correction?.exampleArguments).toEqual({
+        filters: {
+          spaceId: '00000000-0000-4000-8000-000000000020',
+          spacePersonIds: ['00000000-0000-4000-8000-000000000021'],
+        },
+        limit: 25,
+      });
       expect(correction?.hint).not.toContain('Use global personIds');
     });
 
@@ -634,8 +695,8 @@ describe(AgentMcpToolContractService.name, () => {
 
       expect(correction).toEqual({
         expected:
-          'Put search filters under filters. Use mode metadata. Only page 1 and order desc are executable. Text, people, space, visibility, later pages, and non-desc order are later-slice contract fields and are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
-        hint: 'Put search filters under filters. Use mode metadata. Only page 1 and order desc are executable. Text, people, space, visibility, later pages, and non-desc order are later-slice contract fields and are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
+          'Put deterministic metadata search filters under filters. Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known. Only page 1 and order desc are executable. Text modes, later pages, and non-desc order are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
+        hint: 'Put deterministic metadata search filters under filters. Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known. Only page 1 and order desc are executable. Text modes, later pages, and non-desc order are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
         exampleArguments: {},
       });
     });
