@@ -912,7 +912,8 @@ export class AgentToolService {
       validateAccess: () => Promise.resolve(null),
       execute: async (auth, _session, request) => {
         const query = (request.query ?? '').toLocaleLowerCase();
-        const users = (await this.userService.search(auth))
+        const visibleUsers = await this.userService.search(auth);
+        const users = visibleUsers
           .filter((user) => {
             if (!query) {
               return true;

@@ -978,8 +978,7 @@ const planningCommonMistakes: AgentMcpCommonMistake[] = [
   {
     id: 'planning-space-update-unsupported-fields',
     match: { issuePath: 'operations.0.payload', messageIncludes: 'Unrecognized key' },
-    hint:
-      'space.updateDetails only supports spaceName, description, and color. Do not include thumbnail, pets, face recognition, linked libraries, or deletion fields.',
+    hint: 'space.updateDetails only supports spaceName, description, and color. Do not include thumbnail, pets, face recognition, linked libraries, or deletion fields.',
     exampleName: 'update-existing-space-description',
   },
   {

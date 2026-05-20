@@ -832,7 +832,12 @@ export class AgentOperationPlanService {
       selectedAssetIdsByOperationId,
     );
 
-    return { selectedOperationIds, selectedAssetIdsByOperationId, selectedItemIdsByOperationId, fieldOverridesByOperationId };
+    return {
+      selectedOperationIds,
+      selectedAssetIdsByOperationId,
+      selectedItemIdsByOperationId,
+      fieldOverridesByOperationId,
+    };
   }
 
   private validateFieldOverrides(
@@ -1079,7 +1084,12 @@ export class AgentOperationPlanService {
     plan: AgentOperationPlanWithOperations,
     applySelection: ApplySelection,
   ): Promise<AgentOperationApplyUpdate[]> {
-    const { selectedOperationIds, selectedAssetIdsByOperationId, selectedItemIdsByOperationId, fieldOverridesByOperationId } = applySelection;
+    const {
+      selectedOperationIds,
+      selectedAssetIdsByOperationId,
+      selectedItemIdsByOperationId,
+      fieldOverridesByOperationId,
+    } = applySelection;
     const appliedOperationIds = new Set<string>();
     const createdAlbumIdByTemporaryTargetId = new Map<string, string>();
     const createdSpaceIdByTemporaryTargetId = new Map<string, string>();
@@ -1484,7 +1494,7 @@ export class AgentOperationPlanService {
         const spaceId = this.resolveTargetSpaceId(operation, createdSpaceIdByTemporaryTargetId);
         const userIds = this.getUserIdsPayload(operation.payload);
         const currentMembers = await this.sharedSpaceService.getMembers(auth, spaceId);
-        this.assertSafeMemberRemovalOrRoleUpdate(auth.user.id, userIds, currentMembers, undefined);
+        this.assertSafeMemberRemovalOrRoleUpdate(auth.user.id, userIds, currentMembers);
         const currentMemberIds = new Set(currentMembers.map((member) => member.userId));
         const appliedUserIds: string[] = [];
         const skippedUserIds: string[] = [];
@@ -1507,7 +1517,7 @@ export class AgentOperationPlanService {
         const spaceId = this.resolveTargetSpaceId(operation, createdSpaceIdByTemporaryTargetId);
         const payload = this.requireMemberRolePayload(operation.payload);
         const currentMembers = await this.sharedSpaceService.getMembers(auth, spaceId);
-        this.assertSafeMemberRemovalOrRoleUpdate(auth.user.id, payload.userIds, currentMembers, payload.role);
+        this.assertSafeMemberRemovalOrRoleUpdate(auth.user.id, payload.userIds, currentMembers);
         const currentMemberRoleById = new Map(currentMembers.map((member) => [member.userId, member.role]));
         const appliedUserIds: string[] = [];
         const skippedUserIds: string[] = [];
@@ -1746,7 +1756,9 @@ export class AgentOperationPlanService {
     };
   }
 
-  private getMemberPayloads(payload: unknown): Array<{ userId: string; role: SharedSpaceRole.Editor | SharedSpaceRole.Viewer }> {
+  private getMemberPayloads(
+    payload: unknown,
+  ): Array<{ userId: string; role: SharedSpaceRole.Editor | SharedSpaceRole.Viewer }> {
     const objectPayload = this.requireObjectPayload(payload);
     return Array.isArray(objectPayload.members)
       ? objectPayload.members
@@ -1791,7 +1803,6 @@ export class AgentOperationPlanService {
     currentUserId: string,
     userIds: string[],
     currentMembers: Array<{ userId: string; role: string }>,
-    nextRole: SharedSpaceRole.Editor | SharedSpaceRole.Viewer | undefined,
   ) {
     if (userIds.includes(currentUserId)) {
       throw new BadRequestException('Pi cannot remove or change your own space membership');
