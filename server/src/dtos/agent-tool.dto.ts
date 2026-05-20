@@ -468,7 +468,7 @@ const AgentSearchAssetsToolResponseSchema = z
         hasMore: z.boolean(),
         nextPage: z.string().nullable(),
         totalCount: z.number().int().min(0).optional(),
-        approximateTotal: z.boolean().optional(),
+        approximateTotal: z.number().int().min(0).optional(),
       })
       .meta({ id: 'AgentSearchAssetsToolSuccessResponse' }),
   ])
