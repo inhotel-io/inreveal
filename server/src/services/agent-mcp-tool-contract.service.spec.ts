@@ -10,6 +10,8 @@ const expectedReadToolNames = [
   AgentToolName.ReadAssetOriginals,
   AgentToolName.ListAlbums,
   AgentToolName.ReadAlbum,
+  AgentToolName.ListSpaces,
+  AgentToolName.ReadSpace,
 ] as const;
 
 const expectedPlanningToolNames = [
@@ -30,6 +32,10 @@ const expectedProposalExampleNames = [
   'add-assets-to-existing-space',
   'remove-assets-from-existing-space',
   'update-space-details',
+  'rename-existing-space',
+  'update-existing-space-description',
+  'clear-existing-space-description',
+  'update-existing-space-color',
   'rotate-assets',
   'favorite-assets',
   'archive-assets',
@@ -144,6 +150,49 @@ describe(AgentMcpToolContractService.name, () => {
     );
   });
 
+  it('defines the required list and space read examples from the spec', () => {
+    const listSpaces = sut.getReadToolContract(AgentToolName.ListSpaces);
+    const readSpace = sut.getReadToolContract(AgentToolName.ReadSpace);
+
+    expect(listSpaces?.examples.map((example) => example.name)).toEqual(
+      expect.arrayContaining(['list-visible-spaces', 'approved-retry']),
+    );
+    expect(readSpace?.examples.map((example) => example.name)).toEqual(
+      expect.arrayContaining(['read-space-details', 'approved-retry']),
+    );
+    expect(readSpace?.argumentModes.find((mode) => mode.name === 'approved-retry')?.forbiddenFields).toContain(
+      'spaceId',
+    );
+  });
+
+  it('returns model-actionable corrections for invalid space payloads', () => {
+    const missing = sut.getReadToolValidationCorrection(AgentToolName.ReadSpace, {
+      requestShape: 'tool-arguments',
+      issues: [{ path: '', message: 'Provide spaceId, or retry an approved tool call with toolCallId' }],
+    });
+    const mixed = sut.getReadToolValidationCorrection(AgentToolName.ReadSpace, {
+      requestShape: 'tool-arguments',
+      issues: [{ path: '', message: 'Use either spaceId or toolCallId, not both' }],
+    });
+    const wrongField = sut.getReadToolValidationCorrection(AgentToolName.ReadSpace, {
+      requestShape: 'tool-arguments',
+      issues: [{ path: '', message: 'Unrecognized key: "spaceName"' }],
+    });
+
+    expect(missing).toMatchObject({
+      hint: expect.stringContaining('spaceId'),
+      exampleArguments: { spaceId: '00000000-0000-4000-8000-000000000020' },
+    });
+    expect(mixed).toMatchObject({
+      hint: expect.stringContaining('toolCallId'),
+      exampleArguments: { toolCallId: '00000000-0000-4000-8000-000000000111' },
+    });
+    expect(wrongField).toMatchObject({
+      hint: expect.stringContaining('Call listSpaces first'),
+      exampleArguments: { spaceId: '00000000-0000-4000-8000-000000000020' },
+    });
+  });
+
   it('defines the required planning examples from the spec', () => {
     const proposal = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations);
     const revise = sut.getPlanningToolContract(AgentToolName.ReviseProposedOperations);
@@ -170,6 +219,34 @@ describe(AgentMcpToolContractService.name, () => {
 
         expect(result.success, `${contract.name} example "${example.name}" should parse`).toBe(true);
       }
+    }
+  });
+
+  it('defines focused existing-space detail update examples with only supported fields', () => {
+    const contract = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations);
+    const expected = [
+      { name: 'rename-existing-space', payload: { spaceName: 'Family 2026' } },
+      { name: 'update-existing-space-description', payload: { description: 'Photos for everyone.' } },
+      { name: 'clear-existing-space-description', payload: { description: '' } },
+      { name: 'update-existing-space-color', payload: { color: 'blue' } },
+    ];
+
+    for (const expectation of expected) {
+      const example = contract?.examples.find((candidate) => candidate.name === expectation.name);
+
+      expect(example, expectation.name).toBeDefined();
+      const parsed = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].parse(
+        example?.arguments,
+      );
+      expect(parsed.operations).toHaveLength(1);
+      expect(parsed.operations[0]).toMatchObject({
+        type: AgentOperationType.SpaceUpdateDetails,
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: '00000000-0000-4000-8000-000000000020',
+        payload: expectation.payload,
+      });
+      expect(parsed.operations[0]).not.toHaveProperty('temporaryTargetId');
+      expect(parsed.operations[0]).not.toHaveProperty('assetIds');
     }
   });
 
@@ -217,6 +294,27 @@ describe(AgentMcpToolContractService.name, () => {
     });
   });
 
+  it('defines existing-space asset planning examples with targetId and no temporary target', () => {
+    const contract = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations);
+
+    for (const exampleName of ['add-assets-to-existing-space', 'remove-assets-from-existing-space'] as const) {
+      const example = contract?.examples.find((candidate) => candidate.name === exampleName);
+
+      expect(example, exampleName).toBeDefined();
+      const parsed = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].parse(
+        example?.arguments,
+      );
+
+      const operation = parsed.operations[0];
+      expect(operation).toMatchObject({
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: '00000000-0000-4000-8000-000000000020',
+        payload: {},
+      });
+      expect(operation).not.toHaveProperty('temporaryTargetId');
+    }
+  });
+
   it('does not include secrets, internal routes, or direct apply language', () => {
     const serialized = JSON.stringify(sut.listReadToolContracts().map(({ safety: _safety, ...contract }) => contract));
 
@@ -261,6 +359,31 @@ describe(AgentMcpToolContractService.name, () => {
         }
       }
     }
+  });
+
+  it('provides actionable correction hints for wrong existing-space asset target shapes', () => {
+    const contract = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations);
+    const mistakeIds = contract?.commonMistakes.map((mistake) => mistake.id);
+    const failureCaseIds = sut.listRuntimeFailureMatrixCases().map((failureCase) => failureCase.id);
+
+    expect(mistakeIds).toEqual(
+      expect.arrayContaining([
+        'planning-wrong-space-target-kind',
+        'planning-existing-space-missing-target-id',
+        'planning-existing-space-with-temporary-target',
+      ]),
+    );
+    expect(failureCaseIds).toEqual(
+      expect.arrayContaining([
+        'planning-wrong-space-target-kind',
+        'planning-existing-space-missing-target-id',
+        'planning-existing-space-with-temporary-target',
+      ]),
+    );
+
+    const wrongKind = contract?.commonMistakes.find((mistake) => mistake.id === 'planning-wrong-space-target-kind');
+    expect(wrongKind?.hint).toMatch(/existing_space/i);
+    expect(wrongKind?.hint).toMatch(/targetId/i);
   });
 
   it('does not include secrets, internal routes, or direct apply tool names in planning contracts', () => {
@@ -556,6 +679,36 @@ describe(AgentMcpToolContractService.name, () => {
         failureCase.expectedContractMistakeId,
       );
     }
+  });
+
+  it('documents actionable correction hints for invalid space detail updates', () => {
+    const contract = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations);
+    const mistakeIds = contract?.commonMistakes.map((mistake) => mistake.id);
+    const failureCaseIds = sut.listRuntimeFailureMatrixCases().map((failureCase) => failureCase.id);
+
+    expect(mistakeIds).toEqual(
+      expect.arrayContaining([
+        'planning-space-update-empty-payload',
+        'planning-space-update-unsupported-fields',
+        'planning-space-update-missing-target-id',
+        'planning-direct-space-mutation',
+      ]),
+    );
+    expect(failureCaseIds).toEqual(
+      expect.arrayContaining([
+        'planning-space-update-empty-payload',
+        'planning-space-update-unsupported-fields',
+        'planning-space-update-missing-target-id',
+      ]),
+    );
+
+    const unsupported = contract?.commonMistakes.find(
+      (mistake) => mistake.id === 'planning-space-update-unsupported-fields',
+    );
+    expect(unsupported?.hint).toMatch(/spaceName/i);
+    expect(unsupported?.hint).toMatch(/description/i);
+    expect(unsupported?.hint).toMatch(/color/i);
+    expect(unsupported?.hint).toMatch(/thumbnail|pets|face|linked|delete/i);
   });
 
   describe('Slice 7 runtime failure matrix contract', () => {
