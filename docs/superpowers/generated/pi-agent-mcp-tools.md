@@ -105,7 +105,7 @@ MCP tool name: `searchAssets`
 
 Find assets using Gallery search modes, metadata filters, and a bounded result page.
 
-Put all search filters under filters. Use mode metadata for structured filters. Use only toolCallId when retrying a Gallery-approved search.
+Put search filters under filters. Use mode metadata. Only page 1 and order desc are executable. Text, people, space, visibility, later pages, and non-desc order are later-slice contract fields and are not available yet. Use only toolCallId when retrying a Gallery-approved search.
 
 Argument modes:
 
@@ -1596,6 +1596,8 @@ Summarize plan risks and selected changes.
 - `search-space-person-without-space`: spacePersonIds requires filters.spaceId, but people and space-person filters are not available in the current slice. Use currently executable metadata filters for now.
 - `search-combined-filters-and-tool-call-id`: Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.
 - `search-limit-out-of-range`: Use a positive integer limit no greater than 10000.
+- `search-page-unavailable`: Only page 1 is executable in the current slice. Later pages are contract fields for a later slice.
+- `search-order-unavailable`: Only order desc is executable in the current slice. Non-desc order is a contract field for a later slice.
 - `tool-call-arguments-missing`: Put the search arguments object at params.arguments in the MCP tools/call request.
 - `tool-call-arguments-not-object`: The params.arguments value must be a JSON object, not an array, primitive, or null.
 
