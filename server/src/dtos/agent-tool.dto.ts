@@ -13,12 +13,20 @@ import z from 'zod';
 const MAX_ASSET_IDS_PER_TOOL_CALL = 10_000;
 const MAX_TOOL_LIMIT = 10_000;
 const MAX_USER_LOOKUP_LIMIT = 20;
+const DEFAULT_SEARCH_MODE = 'metadata';
+const DEFAULT_SEARCH_ORDER = 'desc';
+const DEFAULT_SEARCH_PAGE = 1;
+const searchTextModes = new Set(['smart', 'description', 'ocr', 'filename']);
 const uuid = z.uuidv4();
 const summary = z.string().trim().min(1).max(1000);
 const AgentToolApprovalDecisionSchema = z.enum(AgentToolApprovalDecision).meta({ id: 'AgentToolApprovalDecision' });
 const AgentToolCallStatusSchema = z.enum(AgentToolCallStatus).meta({ id: 'AgentToolCallStatus' });
 const AgentToolDataClassSchema = z.enum(AgentToolDataClass).meta({ id: 'AgentToolDataClass' });
 const AgentToolNameSchema = z.enum(AgentToolName).meta({ id: 'AgentToolName' });
+const AgentSearchAssetsModeSchema = z
+  .enum(['metadata', 'smart', 'description', 'ocr', 'filename'])
+  .meta({ id: 'AgentSearchAssetsMode' });
+const AgentSearchAssetsOrderSchema = z.enum(['asc', 'desc', 'relevance']).meta({ id: 'AgentSearchAssetsOrder' });
 
 const assetIdRequest = (schemaId: string, missingMessage: string) =>
   z
@@ -67,9 +75,13 @@ const AgentReadAssetOriginalsToolRequestSchema = assetIdRequest(
 );
 
 const AgentSearchAssetsFiltersSchema = z
-  .object({
+  .strictObject({
     takenAfter: isoDatetimeToDate.optional(),
     takenBefore: isoDatetimeToDate.optional(),
+    createdAfter: isoDatetimeToDate.optional(),
+    createdBefore: isoDatetimeToDate.optional(),
+    updatedAfter: isoDatetimeToDate.optional(),
+    updatedBefore: isoDatetimeToDate.optional(),
     city: z.string().trim().nullable().optional(),
     state: z.string().trim().nullable().optional(),
     country: z.string().trim().nullable().optional(),
@@ -82,26 +94,89 @@ const AgentSearchAssetsFiltersSchema = z
     rating: z.number().int().min(1).max(5).nullable().optional(),
     tagIds: z.array(uuid).optional(),
     albumIds: z.array(uuid).optional(),
+    personIds: z.array(uuid).optional(),
+    spaceId: uuid.optional(),
+    spacePersonIds: z.array(uuid).optional(),
+    withSharedSpaces: z.boolean().optional(),
+    visibility: AssetVisibilitySchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.spacePersonIds?.length && !value.spaceId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['spacePersonIds'],
+        message: 'spacePersonIds requires spaceId',
+      });
+    }
+
+    if (value.spaceId && value.withSharedSpaces) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['withSharedSpaces'],
+        message: 'Cannot use both spaceId and withSharedSpaces',
+      });
+    }
   })
   .meta({ id: 'AgentSearchAssetsFilters' });
 
 const AgentSearchAssetsToolRequestSchema = z
   .strictObject({
+    mode: AgentSearchAssetsModeSchema.optional(),
+    query: z.string().trim().min(1).max(500).optional(),
     filters: AgentSearchAssetsFiltersSchema.optional(),
     limit: z.number().int().min(1).max(MAX_TOOL_LIMIT).optional(),
+    page: z.number().int().min(1).optional(),
+    order: AgentSearchAssetsOrderSchema.optional(),
     toolCallId: uuid.optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.toolCallId && (value.filters || value.limit !== undefined)) {
+    const mode = value.mode ?? DEFAULT_SEARCH_MODE;
+    const hasNewSearchFields =
+      value.filters !== undefined ||
+      value.limit !== undefined ||
+      value.query !== undefined ||
+      value.page !== undefined ||
+      value.order !== undefined ||
+      value.mode !== undefined;
+
+    if (value.toolCallId && hasNewSearchFields) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Provide either search filters or toolCallId, not both',
+        message: 'Provide either search fields or toolCallId, not both',
+      });
+    }
+
+    if (mode === 'metadata' && value.query !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['query'],
+        message: 'query is only supported for smart, description, ocr, and filename search modes',
+      });
+    }
+
+    if (searchTextModes.has(mode) && value.query === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['query'],
+        message: `${mode} search requires a non-empty query`,
       });
     }
   })
-  .transform((value) =>
-    value.toolCallId ? value : { filters: value.filters ?? {}, limit: value.limit ?? MAX_TOOL_LIMIT },
-  )
+  .transform((value) => {
+    if (value.toolCallId) {
+      return value;
+    }
+
+    const request = {
+      mode: value.mode ?? DEFAULT_SEARCH_MODE,
+      filters: value.filters ?? {},
+      limit: value.limit ?? MAX_TOOL_LIMIT,
+      page: value.page ?? DEFAULT_SEARCH_PAGE,
+      order: value.order ?? DEFAULT_SEARCH_ORDER,
+    };
+
+    return value.query === undefined ? request : { ...request, query: value.query };
+  })
   .meta({ id: 'AgentSearchAssetsToolRequestDto' });
 
 const AgentListAlbumsToolRequestSchema = z
