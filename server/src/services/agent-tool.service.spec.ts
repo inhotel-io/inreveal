@@ -1532,7 +1532,7 @@ describe(AgentToolService.name, () => {
     );
   });
 
-  it('returns search page metadata and stores expanded request metadata', async () => {
+  it('returns search page metadata and stores defaulted request metadata without absent query', async () => {
     const auth = AuthFactory.create();
     const assetId = newUuid();
     const session = makeSession({
@@ -1546,11 +1546,8 @@ describe(AgentToolService.name, () => {
     assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [makeMetadata(assetId)], nextPage: '2' });
 
     const result = await sut.searchAssets(auth, session.id, {
-      mode: 'metadata',
       filters: { isFavorite: true },
       limit: 1,
-      page: 1,
-      order: 'desc',
     });
 
     expect(result).toEqual({
@@ -1564,6 +1561,16 @@ describe(AgentToolService.name, () => {
     expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
       expect.objectContaining({
         requestSummary: 'Search metadata assets (limit 1)',
+        redactedRequestMetadata: expect.not.objectContaining({
+          query: expect.anything(),
+        }),
+      }),
+      expect.any(Object),
+      AgentToolDataClass.Metadata,
+      expect.any(Number),
+    );
+    expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
         redactedRequestMetadata: {
           mode: 'metadata',
           filters: { isFavorite: true },
@@ -1613,6 +1620,36 @@ describe(AgentToolService.name, () => {
       'createdAfter search is not available yet',
     ],
     [
+      {
+        mode: 'metadata',
+        filters: { createdBefore: new Date('2026-05-31T23:59:59.999Z') },
+        limit: 5,
+        page: 1,
+        order: 'desc',
+      },
+      'createdBefore search is not available yet',
+    ],
+    [
+      {
+        mode: 'metadata',
+        filters: { updatedAfter: new Date('2026-05-01T00:00:00.000Z') },
+        limit: 5,
+        page: 1,
+        order: 'desc',
+      },
+      'updatedAfter search is not available yet',
+    ],
+    [
+      {
+        mode: 'metadata',
+        filters: { updatedBefore: new Date('2026-05-31T23:59:59.999Z') },
+        limit: 5,
+        page: 1,
+        order: 'desc',
+      },
+      'updatedBefore search is not available yet',
+    ],
+    [
       { mode: 'metadata', filters: { personIds: [newUuid()] }, limit: 5, page: 1, order: 'desc' },
       'personIds search is not available yet',
     ],
@@ -1620,8 +1657,24 @@ describe(AgentToolService.name, () => {
       { mode: 'metadata', filters: { spaceId: newUuid() }, limit: 5, page: 1, order: 'desc' },
       'spaceId search is not available yet',
     ],
+    [
+      { mode: 'metadata', filters: { spacePersonIds: [newUuid()] }, limit: 5, page: 1, order: 'desc' },
+      'spacePersonIds search is not available yet',
+    ],
+    [
+      { mode: 'metadata', filters: { withSharedSpaces: true }, limit: 5, page: 1, order: 'desc' },
+      'withSharedSpaces search is not available yet',
+    ],
+    [
+      { mode: 'metadata', filters: { visibility: AssetVisibility.Timeline }, limit: 5, page: 1, order: 'desc' },
+      'visibility search is not available yet',
+    ],
     [{ mode: 'metadata', filters: {}, limit: 5, page: 2, order: 'desc' }, 'page search is not available yet'],
     [{ mode: 'metadata', filters: {}, limit: 5, page: 1, order: 'asc' }, 'asc order search is not available yet'],
+    [
+      { mode: 'metadata', filters: {}, limit: 5, page: 1, order: 'relevance' },
+      'relevance order search is not available yet',
+    ],
   ] satisfies Array<[AgentSearchAssetsToolRequestDto, string]>)(
     'denies future search contract fields before repository execution: %#',
     async (request, reason) => {
