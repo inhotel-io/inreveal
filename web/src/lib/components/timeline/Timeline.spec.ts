@@ -119,7 +119,7 @@ vi.mock('$lib/managers/timeline-manager/timeline-manager.svelte', () => ({
     loadTimelineMonth = vi.fn();
     getTimelineMonthByAssetId = vi.fn();
     findTimelineMonthForAsset = vi.fn();
-    retrieveRange = vi.fn(async () => []);
+    retrieveRange = vi.fn(() => Promise.resolve([]));
     getRandomAsset = vi.fn();
   },
 }));

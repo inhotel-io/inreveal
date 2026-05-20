@@ -105,7 +105,7 @@ describe('TimelineRepresentativeBuckets', () => {
       grouping: 'year',
       buckets: [bucket(2016, 120)],
       visibleWindow: { top: 0, bottom: 1000 },
-      onTimelineBucketActivate: (activation) => activations.push(activation),
+      onTimelineBucketActivate: (activation: ActivatableTimelineBucket) => activations.push(activation),
     });
 
     await user.click(screen.getByTestId('timeline-bucket-card'));

@@ -25,7 +25,7 @@ describe('TimelineGroupingControl', () => {
     render(TimelineGroupingControl, {
       props: {
         grouping: 'day',
-        onGroupingChange: (grouping) => changes.push(grouping),
+        onGroupingChange: (grouping: TimelineGrouping) => changes.push(grouping),
       },
     });
 
@@ -39,7 +39,7 @@ describe('TimelineGroupingControl', () => {
     render(TimelineGroupingControl, {
       props: {
         grouping: 'day',
-        onGroupingChange: (grouping) => changes.push(grouping),
+        onGroupingChange: (grouping: TimelineGrouping) => changes.push(grouping),
       },
     });
 
@@ -53,7 +53,7 @@ describe('TimelineGroupingControl', () => {
     const { rerender } = render(TimelineGroupingControl, {
       props: {
         grouping: 'month',
-        onGroupingChange: (grouping) => changes.push(grouping),
+        onGroupingChange: (grouping: TimelineGrouping) => changes.push(grouping),
       },
     });
 
@@ -63,7 +63,7 @@ describe('TimelineGroupingControl', () => {
 
     await rerender({
       grouping: 'day',
-      onGroupingChange: (grouping) => changes.push(grouping),
+      onGroupingChange: (grouping: TimelineGrouping) => changes.push(grouping),
     });
     await fireEvent.keyDown(focusedButton, { key: 'ArrowRight' });
 
@@ -75,7 +75,7 @@ describe('TimelineGroupingControl', () => {
     const { rerender } = render(TimelineGroupingControl, {
       props: {
         grouping: 'month',
-        onGroupingChange: (grouping) => changes.push(grouping),
+        onGroupingChange: (grouping: TimelineGrouping) => changes.push(grouping),
       },
     });
 
@@ -85,7 +85,7 @@ describe('TimelineGroupingControl', () => {
 
     await rerender({
       grouping: 'year',
-      onGroupingChange: (grouping) => changes.push(grouping),
+      onGroupingChange: (grouping: TimelineGrouping) => changes.push(grouping),
     });
     await fireEvent.keyDown(focusedButton, { key: 'ArrowLeft' });
 
@@ -97,7 +97,7 @@ describe('TimelineGroupingControl', () => {
     const { rerender } = render(TimelineGroupingControl, {
       props: {
         grouping: 'day',
-        onGroupingChange: (grouping) => changes.push(grouping),
+        onGroupingChange: (grouping: TimelineGrouping) => changes.push(grouping),
       },
     });
 
@@ -105,7 +105,7 @@ describe('TimelineGroupingControl', () => {
 
     await rerender({
       grouping: 'year',
-      onGroupingChange: (grouping) => changes.push(grouping),
+      onGroupingChange: (grouping: TimelineGrouping) => changes.push(grouping),
     });
     await fireEvent.keyDown(screen.getByTestId('timeline-grouping-year'), { key: 'ArrowLeft' });
 
@@ -118,7 +118,7 @@ describe('TimelineGroupingControl', () => {
       props: {
         grouping: 'day',
         disabled: true,
-        onGroupingChange: (grouping) => changes.push(grouping),
+        onGroupingChange: (grouping: TimelineGrouping) => changes.push(grouping),
       },
     });
 

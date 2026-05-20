@@ -67,7 +67,7 @@
   role="group"
   aria-label="Timeline grouping"
 >
-  {#each modes as mode}
+  {#each modes as mode (mode.grouping)}
     <button
       class={buttonClass}
       type="button"
