@@ -110,6 +110,14 @@ export const buildAgentSearch = (input: AgentSearchBuildInput): AgentSearchBuild
   const baseSearch = buildBaseSearch(input);
 
   if (mode === 'smart') {
+    if (input.request.query === undefined) {
+      throw new Error('smart search requires query');
+    }
+
+    if (input.smartEmbedding === undefined) {
+      throw new Error('smart search requires smartEmbedding');
+    }
+
     const structuredFilters = omitUndefined({
       ...baseSearch.options,
       description: undefined,

@@ -311,6 +311,22 @@ describe(buildAgentSearch.name, () => {
     expect(result.options).not.toHaveProperty('orderDirection');
   });
 
+  it('throws before building smart search options without an embedding', () => {
+    expect(() =>
+      buildAgentSearch({
+        userId,
+        request: {
+          mode: 'smart',
+          query: 'beach sunset',
+          filters: {},
+          limit: 5,
+          page: 1,
+        },
+        scope: { owned: true, sharedSpaces: false, locked: false, timelineSpaceIds: [] },
+      }),
+    ).toThrow('smart search requires smartEmbedding');
+  });
+
   it('maps shared-space smart search to timeline space scope', () => {
     const result = buildAgentSearch({
       userId,
