@@ -43,7 +43,7 @@ const approvedRetryMode: AgentMcpArgumentMode = {
   name: 'approved-retry',
   description: 'Retry a read request that Gallery already approved.',
   requiredFields: ['toolCallId'],
-  forbiddenFields: ['assetIds', 'albumId', 'spaceId', 'filters', 'limit'],
+  forbiddenFields: ['assetIds', 'albumId', 'spaceId', 'filters', 'limit', 'detail', 'fields'],
   whenToUse: 'Use only after Gallery resumes the assistant from an approved tool request.',
 };
 
@@ -57,7 +57,7 @@ const searchApprovedRetryMode: AgentMcpArgumentMode = {
   name: 'approved-retry',
   description: 'Retry a search request that Gallery already approved.',
   requiredFields: ['toolCallId'],
-  forbiddenFields: ['mode', 'query', 'filters', 'limit', 'page', 'order'],
+  forbiddenFields: ['mode', 'query', 'filters', 'limit', 'page', 'order', 'detail', 'fields', 'sampleSize'],
   whenToUse: 'Use only after Gallery resumes the assistant from an approved search request.',
 };
 
@@ -73,6 +73,35 @@ const assetIdsExample: AgentMcpToolExample = {
   name: 'read-selected-assets',
   description: 'Read selected assets by id.',
   arguments: { assetIds: [exampleAssetId] },
+};
+
+const metadataDetailMode: AgentMcpArgumentMode = {
+  name: 'metadata-detail',
+  description: 'Read selected assets using a named metadata detail preset.',
+  requiredFields: ['assetIds'],
+  forbiddenFields: ['fields', 'toolCallId'],
+  whenToUse: 'Use when basic, descriptive, technical, or allSafe metadata coverage is enough.',
+};
+
+const metadataFieldsMode: AgentMcpArgumentMode = {
+  name: 'metadata-fields',
+  description: 'Read selected assets using exact metadata field groups.',
+  requiredFields: ['assetIds', 'fields'],
+  forbiddenFields: ['detail', 'toolCallId'],
+  whenToUse:
+    'Use when the task only needs specific field groups such as filename, rating, tags, location, camera, favorite, visibility, type, or dates.',
+};
+
+const readBasicMetadataExample: AgentMcpToolExample = {
+  name: 'read-basic-metadata',
+  description: 'Read basic type and date metadata for selected assets.',
+  arguments: { assetIds: [exampleAssetId], detail: 'basic' },
+};
+
+const readSelectedMetadataFieldsExample: AgentMcpToolExample = {
+  name: 'read-selected-metadata-fields',
+  description: 'Read selected metadata field groups for selected assets.',
+  arguments: { assetIds: [exampleAssetId], fields: ['filename', 'rating', 'tags'] },
 };
 
 const assetIdMistakes: AgentMcpCommonMistake[] = [
@@ -141,6 +170,19 @@ const defineAssetReadContract = (
   approvalRetry,
   safety,
 });
+
+const readAssetMetadataContract: AgentMcpToolContract<AgentToolName.ReadAssetMetadata> = {
+  name: AgentToolName.ReadAssetMetadata,
+  title: 'Read asset metadata',
+  description: 'Read selected metadata for selected assets.',
+  usage:
+    'Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.',
+  argumentModes: [metadataDetailMode, metadataFieldsMode, approvedRetryMode],
+  examples: [assetIdsExample, readBasicMetadataExample, readSelectedMetadataFieldsExample, approvedRetryExample],
+  commonMistakes: assetIdMistakes,
+  approvalRetry,
+  safety,
+};
 
 const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
   name: AgentToolName.SearchAssets,
@@ -834,11 +876,7 @@ const searchUsersContract: AgentMcpToolContract<AgentToolName.SearchUsers> = {
 const readToolContracts: AgentMcpReadToolContract[] = [
   resolveAssetSearchFiltersContract,
   searchAssetsContract,
-  defineAssetReadContract(
-    AgentToolName.ReadAssetMetadata,
-    'Read asset metadata',
-    'Read timestamps, location labels, camera fields, ratings, favorites, visibility, and tags for selected assets.',
-  ),
+  readAssetMetadataContract,
   defineAssetReadContract(
     AgentToolName.ReadAssetPreviews,
     'Read asset previews',
