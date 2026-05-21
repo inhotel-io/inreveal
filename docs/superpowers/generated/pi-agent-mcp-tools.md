@@ -158,9 +158,9 @@ Retry an approved read request by id.
 
 MCP tool name: `searchAssets`
 
-Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and a bounded result page. Text modes, later pages, and non-desc order are split: text modes are executable; later pages and non-desc order are deferred.
+Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and bounded result pages.
 
-Put deterministic metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose operation plans with the returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Only page 1 and order desc are executable; later pages and non-desc order are not available yet.
+Put deterministic metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose operation plans with the returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Search responses are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit with nextPage to continue.
 
 Argument modes:
 
@@ -222,6 +222,27 @@ Search a bounded metadata result page.
   },
   "limit": 50,
   "page": 1,
+  "order": "desc"
+}
+```
+
+#### metadata-next-page-search
+
+Continue a previous metadata search using the returned nextPage value.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="metadata-next-page-search" -->
+
+```json
+{
+  "mode": "metadata",
+  "filters": {
+    "takenAfter": "2026-05-01T00:00:00.000Z",
+    "takenBefore": "2026-05-18T23:59:59.999Z",
+    "city": "Berlin",
+    "country": "Germany"
+  },
+  "limit": 50,
+  "page": 2,
   "order": "desc"
 }
 ```
@@ -1793,7 +1814,7 @@ Summarize plan risks and selected changes.
 - `search-filter-name-in-space-person-ids`: Use resolveAssetSearchFilters for user-facing shared-space person names, then call searchAssets with the returned spacePersonIds under filters.
 - `search-combined-filters-and-tool-call-id`: Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.
 - `search-limit-out-of-range`: Use a positive integer limit no greater than 10000.
-- `search-page-unavailable`: Only page 1 is executable in the current slice. Later pages are contract fields for a later slice.
+- `search-page-continuation`: Use the returned nextPage value as page, and keep the same mode, query, filters, order, and limit from the previous bounded search.
 - `search-order-unavailable`: Only order desc is executable in the current slice. Non-desc order is a contract field for a later slice.
 - `tool-call-arguments-missing`: Put the search arguments object at params.arguments in the MCP tools/call request.
 - `tool-call-arguments-not-object`: The params.arguments value must be a JSON object, not an array, primitive, or null.

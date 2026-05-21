@@ -719,18 +719,40 @@ describe(AgentMcpToolContractService.name, () => {
       });
     });
 
-    it('documents unavailable search continuation and ordering fields without deferring text modes', () => {
+    it('documents executable search page continuation', () => {
+      const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+
+      expect(search?.description).toContain('bounded result pages');
+      expect(search?.usage).toContain('repeat the same mode, query, filters, order, and limit with nextPage');
+      expect(search?.usage).not.toContain('Only page 1');
+      expect(search?.usage).not.toContain('later pages and non-desc order are not available yet');
+      expect(search?.examples.map((example) => example.name)).toContain('metadata-next-page-search');
+    });
+
+    it('parses the search next-page example against the live schema', () => {
+      const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+      const example = search?.examples.find((candidate) => candidate.name === 'metadata-next-page-search');
+
+      expect(example).toBeDefined();
+      expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(example?.arguments).success).toBe(true);
+    });
+
+    it('uses page correction hints to explain nextPage instead of denying later pages', () => {
+      const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+      const hint = search?.commonMistakes.find((mistake) => mistake.id === 'search-page-continuation');
+
+      expect(hint?.hint).toContain('Use the returned nextPage value');
+      expect(hint?.hint).not.toContain('Only page 1');
+    });
+
+    it('documents unavailable search ordering fields without deferring text modes', () => {
       const contract = sut.listToolContracts().find((candidate) => candidate.name === AgentToolName.SearchAssets);
 
-      expect(contract?.usage).toContain('Only page 1 and order desc are executable');
-      expect(contract?.usage).toContain('later pages and non-desc order are not available yet');
+      expect(contract?.usage).not.toContain('Only page 1');
+      expect(contract?.usage).not.toContain('later pages and non-desc order are not available yet');
       expect(contract?.usage).not.toContain('Text modes, later pages, and non-desc order are not available yet');
       expect(contract?.commonMistakes).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({
-            id: 'search-page-unavailable',
-            hint: expect.stringContaining('Only page 1 is executable'),
-          }),
           expect.objectContaining({
             id: 'search-order-unavailable',
             hint: expect.stringContaining('Only order desc is executable'),
@@ -865,7 +887,7 @@ describe(AgentMcpToolContractService.name, () => {
       });
 
       const expectedUsage =
-        'Put deterministic metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose operation plans with the returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Only page 1 and order desc are executable; later pages and non-desc order are not available yet.';
+        'Put deterministic metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose operation plans with the returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Search responses are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit with nextPage to continue.';
       expect(correction).toEqual({
         expected: expectedUsage,
         hint: expectedUsage,
