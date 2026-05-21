@@ -622,7 +622,7 @@ export class AgentToolService {
           nextPage: result.hasNextPage ? String((request.page ?? 1) + 1) : null,
         };
       },
-      responseSummary: (result) => this.getReturnedMetadataSummary(result.assets.length),
+      responseSummary: (result) => this.getSearchAssetsResponseSummary(result),
       responseMetadata: (result) => ({ assetIds: result.assets.map((asset) => asset.id) }),
       resultAssetCount: (result) => result.assets.length,
       resultAlbumCount: () => 0,
@@ -632,6 +632,17 @@ export class AgentToolService {
 
   private getSearchLimit(request: AgentSearchAssetsToolRequestDto): number {
     return request.limit ?? 10_000;
+  }
+
+  private getSearchAssetsResponseSummary(result: {
+    assets: AgentAssetMetadata[];
+    hasMore: boolean;
+    nextPage: string | null;
+  }) {
+    const summary = this.getReturnedMetadataSummary(result.assets.length);
+    return result.hasMore && result.nextPage
+      ? `${summary}; more results available on page ${result.nextPage}`
+      : summary;
   }
 
   private resolveAssetSearchFiltersDescriptor(): AgentReadToolDescriptor<
@@ -1710,14 +1721,10 @@ export class AgentToolService {
   }
 
   private getUnsupportedSearchPagingReason(
-    page: number,
+    _page: number,
     order: AgentSearchAssetsOrder,
     mode: AgentSearchAssetsMode,
   ): string | null {
-    if (page !== 1) {
-      return 'page search is not available yet';
-    }
-
     if (mode === 'smart') {
       return order === 'asc' ? 'asc order search is not available yet' : null;
     }
