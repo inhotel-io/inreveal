@@ -16,6 +16,19 @@ export type AgentSearchAssetsMode = 'metadata' | 'smart' | 'description' | 'ocr'
 
 export type AgentSearchAssetsOrder = 'asc' | 'desc' | 'relevance';
 
+export type AgentSearchAssetsDetail = 'ids' | 'summary' | 'metadata';
+
+export type AgentSearchAssetsField =
+  | 'type'
+  | 'dates'
+  | 'location'
+  | 'camera'
+  | 'tags'
+  | 'rating'
+  | 'filename'
+  | 'favorite'
+  | 'visibility';
+
 export type AgentToolSearchAssetsRequestMetadata = {
   mode: AgentSearchAssetsMode;
   query?: string;
@@ -23,6 +36,9 @@ export type AgentToolSearchAssetsRequestMetadata = {
   limit: number;
   page: number;
   order?: AgentSearchAssetsOrder;
+  detail: AgentSearchAssetsDetail;
+  fields: AgentSearchAssetsField[];
+  sampleSize?: number;
 };
 
 export type AgentResolveAssetSearchFiltersScope = {
@@ -242,3 +258,10 @@ export type AgentAssetMetadata = {
     color: string | null;
   }>;
 };
+
+export type AgentSearchAssetExif = Partial<NonNullable<AgentAssetMetadata['exifInfo']>>;
+
+export type AgentSearchAssetResult = Omit<Partial<AgentAssetMetadata>, 'exifInfo'> &
+  Pick<AgentAssetMetadata, 'id'> & {
+    exifInfo?: AgentSearchAssetExif | null;
+  };
