@@ -264,6 +264,25 @@ describe('agent plan large item review UI helpers', () => {
     expect(getAgentPlanSparseSelectedCount(allAssetIds.length, state['operation-1'])).toBe(8);
   });
 
+  it('keeps 10,000 asset exclusions sparse when a user revises a large plan', () => {
+    const ids = assetIds(10_000);
+    const excludedIds = ['asset-0001', 'asset-0999', 'asset-4999', 'asset-7000', 'asset-9999'];
+    const state = applyAgentPlanBulkItemSelection({
+      state: {},
+      operationId: 'operation-1',
+      allAssetIds: ids,
+      targetAssetIds: excludedIds,
+      selected: false,
+    });
+
+    expect(state['operation-1']).toEqual({
+      itemKind: 'asset',
+      mode: 'allExcept',
+      itemIds: excludedIds,
+    });
+    expect(getAgentPlanSparseSelectedCount(ids.length, state['operation-1'])).toBe(9995);
+  });
+
   it('includes exclusions back into allExcept selection', () => {
     const allAssetIds = assetIds(10);
     const initialState: OperationItemSelectionState = {
