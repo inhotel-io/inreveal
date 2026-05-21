@@ -22,7 +22,7 @@ export type AgentToolSearchAssetsRequestMetadata = {
   filters: AgentSearchAssetsFilters;
   limit: number;
   page: number;
-  order: AgentSearchAssetsOrder;
+  order?: AgentSearchAssetsOrder;
 };
 
 export type AgentResolveAssetSearchFiltersScope = {
