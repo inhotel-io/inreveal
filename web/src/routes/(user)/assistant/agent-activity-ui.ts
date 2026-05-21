@@ -37,6 +37,7 @@ export type AgentActivityTechnicalDetails = {
   albumCount?: number;
   startedAt?: string;
   completedAt?: string;
+  resultSize?: AgentToolCallResponseDto['resultSize'];
 };
 
 export type AgentActivityEvent = AgentSessionActivityEventResponseDto;
@@ -312,6 +313,18 @@ const technicalTextRow = (
   };
 };
 
+const formatBytes = (bytes: number | null | undefined) => {
+  if (bytes === null || bytes === undefined) {
+    return 'not estimated';
+  }
+
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  return `${Math.round(bytes / 1024)} KB`;
+};
+
 export const buildAgentActivityTechnicalRows = (item: AgentActivityItem): AgentActivityTechnicalRow[] => {
   const technical = item.technical;
   if (!technical) {
@@ -331,6 +344,29 @@ export const buildAgentActivityTechnicalRows = (item: AgentActivityItem): AgentA
     technicalTextRow('album-count', 'assistant_activity_technical_albums', technical.albumCount, 'number'),
     technicalTextRow('request-summary', 'assistant_activity_technical_request', technical.requestSummary),
     technicalTextRow('response-summary', 'assistant_activity_technical_response', technical.responseSummary),
+    technicalTextRow(
+      'result-size',
+      'assistant_activity_technical_result_size',
+      technical.resultSize ? formatBytes(technical.resultSize.estimatedBytes) : undefined,
+      'number',
+    ),
+    technicalTextRow(
+      'result-items',
+      'assistant_activity_technical_result_items',
+      technical.resultSize?.returnedItems,
+      'number',
+    ),
+    technicalTextRow(
+      'result-truncated',
+      'assistant_activity_technical_truncated',
+      technical.resultSize ? (technical.resultSize.truncated ? 'yes' : 'no') : undefined,
+    ),
+    technicalTextRow(
+      'result-omitted-fields',
+      'assistant_activity_technical_omitted_fields',
+      technical.resultSize?.omittedFields.length ? technical.resultSize.omittedFields.join(', ') : undefined,
+    ),
+    technicalTextRow('result-next-page', 'assistant_activity_technical_next_page', technical.resultSize?.nextPage),
     technicalTextRow('error', 'assistant_activity_technical_error', technical.error),
     technicalTextRow('started-at', 'assistant_activity_technical_started', technical.startedAt, 'timestamp'),
     technicalTextRow('completed-at', 'assistant_activity_technical_completed', technical.completedAt, 'timestamp'),
@@ -398,6 +434,7 @@ const buildToolActivityCandidate = (toolCall: AgentToolCallResponseDto): ToolAct
       error: optionalRedacted(toolCall.error),
       ...(toolCall.assetCount > 0 ? { assetCount: toolCall.assetCount } : {}),
       ...(toolCall.albumCount > 0 ? { albumCount: toolCall.albumCount } : {}),
+      ...(toolCall.resultSize ? { resultSize: toolCall.resultSize } : {}),
       startedAt: toolCall.startedAt,
       ...(toolCall.completedAt ? { completedAt: toolCall.completedAt } : {}),
     },
@@ -423,6 +460,7 @@ const coalesceToolActivities = (candidates: ToolActivityCandidate[]): AgentActiv
     const status = pickStatus(sortedGroup.map((item) => item.status));
     const assetCount = sortedGroup.reduce((total, item) => total + (item.technical?.assetCount ?? 0), 0);
     const albumCount = sortedGroup.reduce((total, item) => total + (item.technical?.albumCount ?? 0), 0);
+    const resultSize = sortedGroup.find((item) => item.technical?.resultSize)?.technical?.resultSize;
     const validCompletedDates = sortedBy(
       sortedGroup.map((item) => item.completedAt).filter(isValidIsoDate),
       (firstDate, secondDate) => firstDate.localeCompare(secondDate),
@@ -454,6 +492,7 @@ const coalesceToolActivities = (candidates: ToolActivityCandidate[]): AgentActiv
         error: sortedGroup.find((item) => item.technical?.error)?.technical?.error,
         ...(assetCount > 0 ? { assetCount } : {}),
         ...(albumCount > 0 ? { albumCount } : {}),
+        ...(resultSize ? { resultSize } : {}),
         startedAt: first.technical?.startedAt,
         ...(completedAt ? { completedAt } : {}),
       },
