@@ -9,6 +9,8 @@ import {
   AgentToolApprovalDecision,
   AgentToolCallStatus,
   AgentToolName,
+  AssetType,
+  AssetVisibility,
 } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AgentMessageRepository } from 'src/repositories/agent-message.repository';
@@ -30,8 +32,9 @@ import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import { AgentMessageContent } from 'src/types/agent-message.types';
-import { AgentAlbumSummary, AgentSpaceSummary } from 'src/types/agent-tool.types';
+import { AgentAlbumSummary, AgentAssetMetadata, AgentSpaceSummary } from 'src/types/agent-tool.types';
 import { AuthFactory } from 'test/factories/auth.factory';
+import { newAccessRepositoryMock } from 'test/repositories/access.repository.mock';
 import { newUuid } from 'test/small.factory';
 
 const waitFor = async (assertion: () => void | Promise<void>) => {
@@ -78,6 +81,20 @@ const space = (createdById: string): AgentSpaceSummary & { createdAt: Date; upda
 });
 
 const resolveZero = () => Promise.resolve(0);
+
+const metadata = (id: string): AgentAssetMetadata => ({
+  id,
+  ownerId: '00000000-0000-4000-8000-000000000101',
+  type: AssetType.Image,
+  originalFileName: `${id}.jpg`,
+  localDateTime: new Date('2026-05-01T10:00:00.000Z'),
+  fileCreatedAt: new Date('2026-05-01T10:00:00.000Z'),
+  fileModifiedAt: new Date('2026-05-01T10:00:00.000Z'),
+  isFavorite: false,
+  visibility: AssetVisibility.Timeline,
+  exifInfo: null,
+  tags: [],
+});
 
 class InMemoryAgentSessionRepository {
   sessions = new Map<string, AgentSession>();
@@ -265,6 +282,23 @@ const setup = () => {
 
   const toolServiceContainer = {} as { current: AgentToolService };
   let resumeMode: 'success' | 'error' = 'success';
+  let runnerMessageHandler: (input: {
+    body: { gallerySessionId: string; content: AgentMessageContent };
+  }) => AsyncGenerator<Record<string, unknown>>;
+
+  runnerMessageHandler = async function* ({ body }) {
+    const result = await toolServiceContainer.current.listSpaces(auth, body.gallerySessionId, {});
+    if (result.status !== 'approval-required') {
+      throw new Error('Expected listSpaces to request approval');
+    }
+
+    yield {
+      type: 'tool-approval-needed',
+      sessionId: body.gallerySessionId,
+      runnerSessionId: 'runner-session-1',
+      toolCallId: result.toolCall.id,
+    };
+  };
 
   const runnerRepository = {
     createSession: vi.fn(() =>
@@ -273,23 +307,9 @@ const setup = () => {
         capabilities: { protocolVersion: '2026-05-14', streaming: true, tools: ['gallery'], models: [] },
       }),
     ),
-    streamMessage: vi.fn(async function* ({
-      body,
-    }: {
-      body: { gallerySessionId: string; content: AgentMessageContent };
-    }) {
-      const result = await toolServiceContainer.current.listSpaces(auth, body.gallerySessionId, {});
-      if (result.status !== 'approval-required') {
-        throw new Error('Expected listSpaces to request approval');
-      }
-
-      yield {
-        type: 'tool-approval-needed',
-        sessionId: body.gallerySessionId,
-        runnerSessionId: 'runner-session-1',
-        toolCallId: result.toolCall.id,
-      };
-    }),
+    streamMessage: vi.fn((input: { body: { gallerySessionId: string; content: AgentMessageContent } }) =>
+      runnerMessageHandler(input),
+    ),
     streamResume: vi.fn(async function* ({ body }: { body: { gallerySessionId: string } }) {
       await Promise.resolve();
       runnerResumeBodies.push(body);
@@ -397,10 +417,17 @@ const setup = () => {
     getAssetCount: vi.fn(() => Promise.resolve(0)),
     getRecentAssets: vi.fn(() => Promise.resolve([])),
   };
+  const accessRepository = newAccessRepositoryMock();
+  const assetRepository = {
+    getAgentReadableIds: vi.fn((assetIds: Set<string>) => Promise.resolve(new Set(assetIds))),
+    getAgentLockedIds: vi.fn(() => Promise.resolve(new Set())),
+    getAgentMetadataByIds: vi.fn((assetIds: string[]) => Promise.resolve(assetIds.map((assetId) => metadata(assetId)))),
+  };
+  const searchRepository = { searchMetadata: vi.fn(() => Promise.resolve({ items: [], hasNextPage: false })) };
   const toolService = new AgentToolService(
-    {} as AccessRepository,
-    {} as AssetRepository,
-    { searchMetadata: vi.fn(() => Promise.resolve({ items: [], hasNextPage: false })) } as never,
+    accessRepository as unknown as AccessRepository,
+    assetRepository as unknown as AssetRepository,
+    searchRepository as never,
     { error: vi.fn(), warn: vi.fn() } as unknown as LoggingRepository,
     { getEnv: vi.fn(() => ({ configFile: undefined })) } as unknown as ConfigRepository,
     { encodeText: vi.fn(() => Promise.resolve('[1, 2, 3]')) } as unknown as MachineLearningRepository,
@@ -421,6 +448,16 @@ const setup = () => {
     runnerResumeBodies,
     sessionService,
     sessions,
+    configureRunnerMessage: (
+      handler: (input: {
+        body: { gallerySessionId: string; content: AgentMessageContent };
+      }) => AsyncGenerator<Record<string, unknown>>,
+    ) => {
+      runnerMessageHandler = handler;
+    },
+    accessRepository,
+    assetRepository,
+    searchRepository,
     setResumeMode: (mode: 'success' | 'error') => {
       resumeMode = mode;
     },
@@ -569,5 +606,104 @@ describe('Pi agent runner flow harness', () => {
       expect(harness.websocketEvents.map(({ event }) => event.type)).toContain('runner-error');
       expect(messages).toEqual([expect.objectContaining({ role: AgentMessageRole.User })]);
     });
+  });
+
+  it('keeps a people-search assistant flow open after approval and resume', async () => {
+    const harness = setup();
+    const personId = newUuid();
+    const assetId = newUuid();
+    harness.accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([personId]));
+    harness.accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    harness.searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }], hasNextPage: false });
+    harness.configureRunnerMessage(async function* ({ body }) {
+      const result = await harness.toolService.searchAssets(harness.auth, body.gallerySessionId, {
+        filters: { personIds: [personId] },
+        limit: 25,
+      });
+      if (result.status !== 'approval-required') {
+        throw new Error('Expected searchAssets to request approval');
+      }
+
+      yield {
+        type: 'tool-approval-needed',
+        sessionId: body.gallerySessionId,
+        runnerSessionId: 'runner-session-1',
+        toolCallId: result.toolCall.id,
+      };
+    });
+
+    const session = await harness.sessionService.create(harness.auth, {
+      providerCredentialId: '00000000-0000-4000-8000-000000000201',
+      model: 'gpt-5.1',
+      permissionPreset: AgentPermissionPreset.VisualOrganizer,
+      approvalMode: AgentApprovalMode.Strict,
+      initialContext: { entrypoint: 'assistant-page' },
+    });
+
+    const userMessage = await harness.messageService.appendUserMessage(harness.auth, session.id, {
+      content: { blocks: [{ type: 'text', text: 'Find photos of Alex.' }] },
+    });
+
+    expect(userMessage.role).toBe(AgentMessageRole.User);
+    await waitFor(async () => {
+      const pendingCalls = await harness.toolService.getToolCalls(harness.auth, session.id);
+      expect(pendingCalls).toEqual([
+        expect.objectContaining({
+          toolName: AgentToolName.SearchAssets,
+          status: AgentToolCallStatus.PendingApproval,
+          requestSummary: 'Search metadata assets (limit 25)',
+        }),
+      ]);
+    });
+
+    const [pendingToolCall] = await harness.toolService.getToolCalls(harness.auth, session.id);
+    await harness.toolService.approveToolCall(harness.auth, session.id, pendingToolCall.id, {
+      decision: AgentToolApprovalDecision.Approved,
+    });
+
+    await waitFor(() => {
+      expect(harness.runnerRepository.streamResume).toHaveBeenCalledTimes(1);
+      expect(harness.runnerResumeBodies).toEqual([
+        expect.objectContaining({
+          gallerySessionId: session.id,
+          toolCallId: pendingToolCall.id,
+          approvalDecision: AgentToolApprovalDecision.Approved,
+          toolResult: expect.objectContaining({ status: 'success' }),
+        }),
+      ]);
+    });
+
+    await waitFor(async () => {
+      const messages = await harness.messageService.getMessages(harness.auth, session.id);
+      const toolCalls = await harness.toolService.getToolCalls(harness.auth, session.id);
+      const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
+      expect(messages).toEqual([
+        expect.objectContaining({
+          role: AgentMessageRole.User,
+          content: { blocks: [{ type: 'text', text: 'Find photos of Alex.' }] },
+        }),
+        expect.objectContaining({
+          role: AgentMessageRole.Assistant,
+          providerMessageId: 'provider-message-1',
+        }),
+      ]);
+      expect(toolCalls).toEqual([
+        expect.objectContaining({
+          id: pendingToolCall.id,
+          toolName: AgentToolName.SearchAssets,
+          status: AgentToolCallStatus.Completed,
+          approvalDecision: AgentToolApprovalDecision.Approved,
+          responseSummary: 'Returned metadata for 1 asset',
+          assetCount: 1,
+        }),
+      ]);
+      expect(reloadedSession?.status).toBe(AgentSessionStatus.Running);
+    });
+
+    expect(harness.websocketEvents.map(({ event }) => event.type)).toEqual([
+      'tool-approval-needed',
+      'assistant-message-delta',
+      'assistant-message-created',
+    ]);
   });
 });
