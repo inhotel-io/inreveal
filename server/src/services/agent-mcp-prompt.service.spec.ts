@@ -35,7 +35,7 @@ describe(AgentMcpPromptService.name, () => {
     const prompt = sut.generatePromptCheatSheet();
 
     expect(prompt).toContain(
-      'Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known.',
+      'Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types.',
     );
     expect(prompt).toContain('Only page 1 and order desc are executable');
     expect(prompt).toContain('Text search: smart/ocr/description/filename require query');
@@ -59,6 +59,16 @@ describe(AgentMcpPromptService.name, () => {
         }),
       ]),
     );
+  });
+
+  it('teaches people organization as resolve, search, then propose plan', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toContain('Resolve names before searchAssets');
+    expect(prompt).toContain('people');
+    expect(prompt).toContain('spacePersonIds');
+    expect(prompt).toContain('Use returned personIds or spaceId plus spacePersonIds');
+    expect(prompt).toContain('propose');
   });
 
   it('uses Pi-visible tool names and does not use bare tool-call names as instructions', () => {
