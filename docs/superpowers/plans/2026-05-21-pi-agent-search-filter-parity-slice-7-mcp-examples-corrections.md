@@ -124,8 +124,9 @@ it('defines Slice 7 natural-language search examples that parse and map to suppo
     people: ['Alex'],
     spaces: ['Family'],
   });
-  expect(AgentReadToolRequestSchemas[AgentToolName.ResolveAssetSearchFilters].safeParse(alexFamilySpace?.arguments).success)
-    .toBe(true);
+  expect(
+    AgentReadToolRequestSchemas[AgentToolName.ResolveAssetSearchFilters].safeParse(alexFamilySpace?.arguments).success,
+  ).toBe(true);
 });
 ```
 
@@ -321,8 +322,9 @@ it('returns targeted corrections for every Slice 7 search mistake', () => {
 
     expect(correction?.mistakeId, label).toBe(mistakeId);
     expect(correction?.hint, label).toContain(hint);
-    expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(correction?.exampleArguments).success)
-      .toBe(true);
+    expect(
+      AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(correction?.exampleArguments).success,
+    ).toBe(true);
   }
 });
 ```
