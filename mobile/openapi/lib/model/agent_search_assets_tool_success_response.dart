@@ -13,48 +13,98 @@ part of openapi.api;
 class AgentSearchAssetsToolSuccessResponse {
   /// Returns a new [AgentSearchAssetsToolSuccessResponse] instance.
   AgentSearchAssetsToolSuccessResponse({
+    this.approximateTotal,
     this.assets = const [],
+    required this.hasMore,
     required this.nextPage,
+    required this.returnedCount,
     required this.status,
     required this.toolCall,
+    this.totalCount,
   });
+
+  /// Minimum value: 0
+  /// Maximum value: 9007199254740991
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  int? approximateTotal;
 
   List<AgentAssetMetadata> assets;
 
+  bool hasMore;
+
   String? nextPage;
+
+  /// Minimum value: 0
+  /// Maximum value: 9007199254740991
+  int returnedCount;
 
   AgentSearchAssetsToolSuccessResponseStatusEnum status;
 
   AgentToolCallResponseDto toolCall;
 
+  /// Minimum value: 0
+  /// Maximum value: 9007199254740991
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  int? totalCount;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchAssetsToolSuccessResponse &&
+    other.approximateTotal == approximateTotal &&
     _deepEquality.equals(other.assets, assets) &&
+    other.hasMore == hasMore &&
     other.nextPage == nextPage &&
+    other.returnedCount == returnedCount &&
     other.status == status &&
-    other.toolCall == toolCall;
+    other.toolCall == toolCall &&
+    other.totalCount == totalCount;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
+    (approximateTotal == null ? 0 : approximateTotal!.hashCode) +
     (assets.hashCode) +
+    (hasMore.hashCode) +
     (nextPage == null ? 0 : nextPage!.hashCode) +
+    (returnedCount.hashCode) +
     (status.hashCode) +
-    (toolCall.hashCode);
+    (toolCall.hashCode) +
+    (totalCount == null ? 0 : totalCount!.hashCode);
 
   @override
-  String toString() => 'AgentSearchAssetsToolSuccessResponse[assets=$assets, nextPage=$nextPage, status=$status, toolCall=$toolCall]';
+  String toString() => 'AgentSearchAssetsToolSuccessResponse[approximateTotal=$approximateTotal, assets=$assets, hasMore=$hasMore, nextPage=$nextPage, returnedCount=$returnedCount, status=$status, toolCall=$toolCall, totalCount=$totalCount]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+    if (this.approximateTotal != null) {
+      json[r'approximateTotal'] = this.approximateTotal;
+    } else {
+    //  json[r'approximateTotal'] = null;
+    }
       json[r'assets'] = this.assets;
+      json[r'hasMore'] = this.hasMore;
     if (this.nextPage != null) {
       json[r'nextPage'] = this.nextPage;
     } else {
     //  json[r'nextPage'] = null;
     }
+      json[r'returnedCount'] = this.returnedCount;
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
+    if (this.totalCount != null) {
+      json[r'totalCount'] = this.totalCount;
+    } else {
+    //  json[r'totalCount'] = null;
+    }
     return json;
   }
 
@@ -67,10 +117,14 @@ class AgentSearchAssetsToolSuccessResponse {
       final json = value.cast<String, dynamic>();
 
       return AgentSearchAssetsToolSuccessResponse(
+        approximateTotal: mapValueOfType<int>(json, r'approximateTotal'),
         assets: AgentAssetMetadata.listFromJson(json[r'assets']),
+        hasMore: mapValueOfType<bool>(json, r'hasMore')!,
         nextPage: mapValueOfType<String>(json, r'nextPage'),
+        returnedCount: mapValueOfType<int>(json, r'returnedCount')!,
         status: AgentSearchAssetsToolSuccessResponseStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
+        totalCount: mapValueOfType<int>(json, r'totalCount'),
       );
     }
     return null;
@@ -119,7 +173,9 @@ class AgentSearchAssetsToolSuccessResponse {
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
     'assets',
+    'hasMore',
     'nextPage',
+    'returnedCount',
     'status',
     'toolCall',
   };
