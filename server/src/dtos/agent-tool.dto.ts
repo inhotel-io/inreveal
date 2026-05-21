@@ -13,6 +13,8 @@ import z from 'zod';
 const MAX_ASSET_IDS_PER_TOOL_CALL = 10_000;
 const MAX_TOOL_LIMIT = 10_000;
 const MAX_USER_LOOKUP_LIMIT = 20;
+const MAX_RESOLVE_FILTER_NAMES_PER_KIND = 20;
+const MAX_RESOLVE_FILTER_NAME_LENGTH = 120;
 const DEFAULT_SEARCH_MODE = 'metadata';
 const DEFAULT_SEARCH_ORDER = 'desc';
 const DEFAULT_SEARCH_PAGE = 1;
@@ -27,6 +29,10 @@ const AgentSearchAssetsModeSchema = z
   .enum(['metadata', 'smart', 'description', 'ocr', 'filename'])
   .meta({ id: 'AgentSearchAssetsMode' });
 const AgentSearchAssetsOrderSchema = z.enum(['asc', 'desc', 'relevance']).meta({ id: 'AgentSearchAssetsOrder' });
+const resolverNameList = z
+  .array(z.string().trim().min(1).max(MAX_RESOLVE_FILTER_NAME_LENGTH))
+  .min(1)
+  .max(MAX_RESOLVE_FILTER_NAMES_PER_KIND);
 
 const assetIdRequest = (schemaId: string, missingMessage: string) =>
   z
@@ -74,50 +80,66 @@ const AgentReadAssetOriginalsToolRequestSchema = assetIdRequest(
   'Provide assetIds for a new tool request or toolCallId for an approved request',
 );
 
-const AgentSearchAssetsFiltersSchema = z
-  .strictObject({
-    takenAfter: isoDatetimeToDate.optional(),
-    takenBefore: isoDatetimeToDate.optional(),
-    createdAfter: isoDatetimeToDate.optional(),
-    createdBefore: isoDatetimeToDate.optional(),
-    updatedAfter: isoDatetimeToDate.optional(),
-    updatedBefore: isoDatetimeToDate.optional(),
-    city: z.string().trim().nullable().optional(),
-    state: z.string().trim().nullable().optional(),
-    country: z.string().trim().nullable().optional(),
-    make: z.string().trim().nullable().optional(),
-    model: z.string().trim().nullable().optional(),
-    lensModel: z.string().trim().nullable().optional(),
-    isFavorite: z.boolean().optional(),
-    isNotInAlbum: z.boolean().optional(),
-    type: AssetTypeSchema.optional(),
-    rating: z.number().int().min(1).max(5).nullable().optional(),
-    tagIds: z.array(uuid).optional(),
-    albumIds: z.array(uuid).optional(),
-    personIds: z.array(uuid).optional(),
-    spaceId: uuid.optional(),
-    spacePersonIds: z.array(uuid).optional(),
-    withSharedSpaces: z.boolean().optional(),
-    visibility: AssetVisibilitySchema.optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.spacePersonIds?.length && !value.spaceId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['spacePersonIds'],
-        message: 'spacePersonIds requires spaceId',
-      });
-    }
+const AgentSearchAssetsFilterFields = {
+  takenAfter: isoDatetimeToDate.optional(),
+  takenBefore: isoDatetimeToDate.optional(),
+  createdAfter: isoDatetimeToDate.optional(),
+  createdBefore: isoDatetimeToDate.optional(),
+  updatedAfter: isoDatetimeToDate.optional(),
+  updatedBefore: isoDatetimeToDate.optional(),
+  city: z.string().trim().nullable().optional(),
+  state: z.string().trim().nullable().optional(),
+  country: z.string().trim().nullable().optional(),
+  make: z.string().trim().nullable().optional(),
+  model: z.string().trim().nullable().optional(),
+  lensModel: z.string().trim().nullable().optional(),
+  isFavorite: z.boolean().optional(),
+  isNotInAlbum: z.boolean().optional(),
+  type: AssetTypeSchema.optional(),
+  rating: z.number().int().min(1).max(5).nullable().optional(),
+  tagIds: z.array(uuid).optional(),
+  albumIds: z.array(uuid).optional(),
+  personIds: z.array(uuid).optional(),
+  spaceId: uuid.optional(),
+  spacePersonIds: z.array(uuid).optional(),
+  withSharedSpaces: z.boolean().optional(),
+  visibility: AssetVisibilitySchema.optional(),
+};
 
-    if (value.spaceId && value.withSharedSpaces) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['withSharedSpaces'],
-        message: 'Cannot use both spaceId and withSharedSpaces',
-      });
-    }
-  })
+const validateSearchAssetsFilterCrossFields = (
+  value: Pick<
+    z.output<z.ZodObject<typeof AgentSearchAssetsFilterFields>>,
+    'spaceId' | 'spacePersonIds' | 'withSharedSpaces'
+  >,
+  ctx: z.RefinementCtx,
+) => {
+  if (value.spacePersonIds?.length && !value.spaceId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['spacePersonIds'],
+      message: 'spacePersonIds requires spaceId',
+    });
+  }
+
+  if (value.spaceId && value.withSharedSpaces) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['withSharedSpaces'],
+      message: 'Cannot use both spaceId and withSharedSpaces',
+    });
+  }
+};
+
+const AgentSearchAssetsFiltersSchema = z
+  .strictObject(AgentSearchAssetsFilterFields)
+  .superRefine(validateSearchAssetsFilterCrossFields)
   .meta({ id: 'AgentSearchAssetsFilters' });
+
+const AgentPartialSearchAssetsFiltersSchema = z
+  .strictObject(AgentSearchAssetsFilterFields)
+  .partial()
+  .superRefine(validateSearchAssetsFilterCrossFields)
+  .meta({ id: 'AgentPartialSearchAssetsFilters' });
 
 type AgentSearchAssetsToolRequestOutput = {
   mode?: z.output<typeof AgentSearchAssetsModeSchema>;
@@ -188,6 +210,65 @@ const AgentSearchAssetsToolRequestSchema = z
     return value.query === undefined ? request : { ...request, query: value.query };
   })
   .meta({ id: 'AgentSearchAssetsToolRequestDto' });
+
+const AgentResolveAssetSearchFiltersScopeSchema = z
+  .strictObject({
+    spaceId: uuid.optional(),
+    withSharedSpaces: z.boolean().optional(),
+    takenAfter: isoDatetimeToDate.optional(),
+    takenBefore: isoDatetimeToDate.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.spaceId && value.withSharedSpaces) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['withSharedSpaces'],
+        message: 'Cannot use both scope.spaceId and scope.withSharedSpaces',
+      });
+    }
+  })
+  .meta({ id: 'AgentResolveAssetSearchFiltersScope' });
+
+const AgentResolveAssetSearchFiltersToolRequestSchema = z
+  .strictObject({
+    people: resolverNameList.optional(),
+    tags: resolverNameList.optional(),
+    albums: resolverNameList.optional(),
+    spaces: resolverNameList.optional(),
+    cameraMakes: resolverNameList.optional(),
+    cameraModels: resolverNameList.optional(),
+    lensModels: resolverNameList.optional(),
+    scope: AgentResolveAssetSearchFiltersScopeSchema.optional(),
+    toolCallId: uuid.optional(),
+  })
+  .superRefine((value, ctx) => {
+    const resolverNameFields = [
+      value.people,
+      value.tags,
+      value.albums,
+      value.spaces,
+      value.cameraMakes,
+      value.cameraModels,
+      value.lensModels,
+    ];
+    const hasResolverNameField = resolverNameFields.some((field) => field !== undefined);
+    const hasResolverField = hasResolverNameField || value.scope !== undefined;
+
+    if (value.toolCallId && hasResolverField) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either resolver fields or toolCallId, not both',
+      });
+    }
+
+    if (!value.toolCallId && !hasResolverNameField) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide at least one resolver field',
+      });
+    }
+  })
+  .meta({ id: 'AgentResolveAssetSearchFiltersToolRequestDto' });
 
 const AgentListAlbumsToolRequestSchema = z
   .strictObject({
@@ -264,6 +345,7 @@ const AgentSearchUsersToolRequestSchema = z
 
 export const AgentReadToolRequestSchemas = {
   [AgentToolName.SearchAssets]: AgentSearchAssetsToolRequestSchema,
+  [AgentToolName.ResolveAssetSearchFilters]: AgentResolveAssetSearchFiltersToolRequestSchema,
   [AgentToolName.ReadAssetMetadata]: AgentReadAssetMetadataToolRequestSchema,
   [AgentToolName.ReadAssetPreviews]: AgentReadAssetPreviewsToolRequestSchema,
   [AgentToolName.ReadAssetOriginals]: AgentReadAssetOriginalsToolRequestSchema,
@@ -474,6 +556,43 @@ const AgentSearchAssetsToolResponseSchema = z
   ])
   .meta({ id: 'AgentSearchAssetsToolResponseDto' });
 
+export const AgentResolvedAssetSearchFilterChoiceSchema = z
+  .object({
+    id: uuid.optional(),
+    value: z.string(),
+    label: z.string(),
+    searchFilter: AgentPartialSearchAssetsFiltersSchema.optional(),
+  })
+  .meta({ id: 'AgentResolvedAssetSearchFilterChoice' });
+
+export const AgentResolvedAssetSearchFilterResultSchema = z
+  .object({
+    kind: z.enum(['person', 'tag', 'album', 'space', 'cameraMake', 'cameraModel', 'lensModel']),
+    query: z.string(),
+    status: z.enum(['matched', 'ambiguous', 'not_found']),
+    value: z.string().optional(),
+    id: uuid.optional(),
+    searchFilter: AgentPartialSearchAssetsFiltersSchema.optional(),
+    choices: z.array(AgentResolvedAssetSearchFilterChoiceSchema),
+    message: z.string(),
+  })
+  .meta({ id: 'AgentResolvedAssetSearchFilterResult' });
+
+const AgentResolveAssetSearchFiltersToolResponseSchema = z
+  .discriminatedUnion('status', [
+    approvalRequiredResponse('AgentResolveAssetSearchFiltersToolApprovalRequiredResponse'),
+    deniedResponse('AgentResolveAssetSearchFiltersToolDeniedResponse'),
+    z
+      .object({
+        status: z.literal('success'),
+        toolCall: AgentToolCallResponseSchema,
+        resolvedFilters: AgentSearchAssetsFiltersSchema,
+        results: z.array(AgentResolvedAssetSearchFilterResultSchema),
+      })
+      .meta({ id: 'AgentResolveAssetSearchFiltersToolSuccessResponse' }),
+  ])
+  .meta({ id: 'AgentResolveAssetSearchFiltersToolResponseDto' });
+
 const AgentReadAssetPreviewsToolResponseSchema = z
   .discriminatedUnion('status', [
     approvalRequiredResponse('AgentReadAssetPreviewsToolApprovalRequiredResponse'),
@@ -587,6 +706,9 @@ const namedZodDto = <TSchema extends z.ZodType>(schemaName: string, schema: TSch
 
 export class AgentReadAssetMetadataToolRequestDto extends createZodDto(AgentReadAssetMetadataToolRequestSchema) {}
 export class AgentSearchAssetsToolRequestDto extends createZodDto(AgentSearchAssetsToolRequestSchema) {}
+export class AgentResolveAssetSearchFiltersToolRequestDto extends createZodDto(
+  AgentResolveAssetSearchFiltersToolRequestSchema,
+) {}
 export class AgentReadAssetPreviewsToolRequestDto extends createZodDto(AgentReadAssetPreviewsToolRequestSchema) {}
 export class AgentReadAssetOriginalsToolRequestDto extends createZodDto(AgentReadAssetOriginalsToolRequestSchema) {}
 export class AgentListAlbumsToolRequestDto extends createZodDto(AgentListAlbumsToolRequestSchema) {}
@@ -607,6 +729,13 @@ export const AgentSearchAssetsToolResponseDto = namedZodDto(
   AgentSearchAssetsToolResponseSchema,
 );
 export type AgentSearchAssetsToolResponseDto = z.output<typeof AgentSearchAssetsToolResponseSchema>;
+export const AgentResolveAssetSearchFiltersToolResponseDto = namedZodDto(
+  'AgentResolveAssetSearchFiltersToolResponseDto',
+  AgentResolveAssetSearchFiltersToolResponseSchema,
+);
+export type AgentResolveAssetSearchFiltersToolResponseDto = z.output<
+  typeof AgentResolveAssetSearchFiltersToolResponseSchema
+>;
 export const AgentReadAssetPreviewsToolResponseDto = namedZodDto(
   'AgentReadAssetPreviewsToolResponseDto',
   AgentReadAssetPreviewsToolResponseSchema,
