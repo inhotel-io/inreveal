@@ -62,6 +62,19 @@ describe(AgentMcpPromptService.name, () => {
     );
   });
 
+  it('teaches compact natural-language search patterns for Slice 7 prompts', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toContain('unalbumed');
+    expect(prompt).toContain('isNotInAlbum');
+    expect(prompt).toContain('rating 5');
+    expect(prompt).toContain('type VIDEO');
+    expect(prompt).toContain('OCR invoice');
+    expect(prompt).toContain('mode ocr');
+    expect(prompt).toContain('resolve names');
+    expect(prompt.length).toBeLessThanOrEqual(2850);
+  });
+
   it('teaches people organization as resolve, search, then propose plan', () => {
     const prompt = sut.generatePromptCheatSheet();
 
