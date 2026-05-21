@@ -65,11 +65,13 @@ type AcceptanceSearchCase = {
   request: Parameters<AgentToolService['searchAssets']>[2];
   expectedRequestSummary: string;
   expectedRequestMetadata: Record<string, unknown>;
+  expectedSearchPath: 'metadata' | 'smart';
 };
 
 const fixedAssetId = '00000000-0000-4000-8000-000000000501';
 const alexPersonId = '00000000-0000-4000-8000-000000000601';
 const familySpaceId = '00000000-0000-4000-8000-000000000401';
+const acceptanceReferenceDate = '2026-05-21';
 ```
 
 Add a local helper inside `describe('Pi agent runner flow harness', ...)` before the new test:
@@ -77,7 +79,13 @@ Add a local helper inside `describe('Pi agent runner flow harness', ...)` before
 ```ts
 const expectAcceptanceSearchFlow = async (testCase: AcceptanceSearchCase) => {
   const harness = setup();
-  harness.accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([fixedAssetId]));
+  const isSpaceScopedSearch = testCase.request.filters?.spaceId === familySpaceId;
+  harness.accessRepository.asset.checkOwnerAccess.mockResolvedValue(
+    isSpaceScopedSearch ? new Set() : new Set([fixedAssetId]),
+  );
+  harness.accessRepository.asset.checkSpaceAccess.mockResolvedValue(
+    isSpaceScopedSearch ? new Set([fixedAssetId]) : new Set(),
+  );
   harness.accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([alexPersonId]));
   harness.searchRepository.searchMetadata.mockResolvedValue({
     items: [{ id: fixedAssetId }] as never,
@@ -90,6 +98,7 @@ const expectAcceptanceSearchFlow = async (testCase: AcceptanceSearchCase) => {
   harness.assetRepository.getAgentMetadataByIds.mockResolvedValue([metadata(fixedAssetId)] as never);
 
   harness.configureRunnerMessage(async function* ({ body }) {
+    expect(body.content).toEqual({ blocks: [{ type: 'text', text: testCase.prompt }] });
     const result = await harness.toolService.searchAssets(harness.auth, body.gallerySessionId, testCase.request);
     if (result.status !== 'approval-required') {
       throw new Error(`Expected searchAssets approval for ${testCase.name}`);
@@ -108,7 +117,11 @@ const expectAcceptanceSearchFlow = async (testCase: AcceptanceSearchCase) => {
     model: 'gpt-5.1',
     permissionPreset: AgentPermissionPreset.VisualOrganizer,
     approvalMode: AgentApprovalMode.Strict,
-    initialContext: { entrypoint: 'assistant-page', acceptancePrompt: testCase.name },
+    initialContext: {
+      entrypoint: 'assistant-page',
+      acceptancePrompt: testCase.name,
+      acceptanceReferenceDate,
+    },
   });
 
   const userMessage = await harness.messageService.appendUserMessage(harness.auth, session.id, {
@@ -128,7 +141,8 @@ const expectAcceptanceSearchFlow = async (testCase: AcceptanceSearchCase) => {
   });
 
   const [pendingToolCall] = await harness.toolService.getToolCalls(harness.auth, session.id);
-  expect(pendingToolCall.redactedRequestMetadata).toEqual(testCase.expectedRequestMetadata);
+  expect(harness.toolCalls.toolCalls.find((toolCall) => toolCall.id === pendingToolCall.id)?.redactedRequestMetadata)
+    .toEqual(testCase.expectedRequestMetadata);
 
   await harness.toolService.approveToolCall(harness.auth, session.id, pendingToolCall.id, {
     decision: AgentToolApprovalDecision.Approved,
@@ -149,6 +163,22 @@ const expectAcceptanceSearchFlow = async (testCase: AcceptanceSearchCase) => {
       }),
     ]);
   });
+
+  if (testCase.expectedSearchPath === 'smart') {
+    expect(harness.searchRepository.searchSmart).toHaveBeenCalledWith(
+      { page: 1, size: 50 },
+      expect.objectContaining({
+        query: 'beach sunset',
+        embedding: '[1, 2, 3]',
+        maxDistance: 0.42,
+        spaceId: familySpaceId,
+      }),
+    );
+    expect(harness.searchRepository.searchMetadata).not.toHaveBeenCalled();
+  } else {
+    expect(harness.searchRepository.searchMetadata).toHaveBeenCalled();
+    expect(harness.searchRepository.searchSmart).not.toHaveBeenCalled();
+  }
 
   await waitFor(async () => {
     const messages = await harness.messageService.getMessages(harness.auth, session.id);
@@ -220,6 +250,7 @@ it.each<AcceptanceSearchCase>([
       page: 1,
       order: 'desc',
     },
+    expectedSearchPath: 'metadata',
   },
   {
     name: 'five-star Japan videos',
@@ -236,6 +267,7 @@ it.each<AcceptanceSearchCase>([
       page: 1,
       order: 'desc',
     },
+    expectedSearchPath: 'metadata',
   },
   {
     name: 'invoice OCR screenshots',
@@ -263,6 +295,7 @@ it.each<AcceptanceSearchCase>([
       order: 'desc',
       query: 'invoice',
     },
+    expectedSearchPath: 'metadata',
   },
   {
     name: 'family beach sunset smart search',
@@ -282,6 +315,7 @@ it.each<AcceptanceSearchCase>([
       page: 1,
       query: 'beach sunset',
     },
+    expectedSearchPath: 'smart',
   },
   {
     name: 'Sony camera May',
@@ -290,7 +324,7 @@ it.each<AcceptanceSearchCase>([
       filters: {
         make: 'Sony',
         takenAfter: '2026-05-01T00:00:00.000Z',
-        takenBefore: '2026-05-31T23:59:59.999Z',
+        takenBefore: '2026-05-21T23:59:59.999Z',
       },
       limit: 50,
     },
@@ -300,12 +334,13 @@ it.each<AcceptanceSearchCase>([
       filters: {
         make: 'Sony',
         takenAfter: '2026-05-01T00:00:00.000Z',
-        takenBefore: '2026-05-31T23:59:59.999Z',
+        takenBefore: '2026-05-21T23:59:59.999Z',
       },
       limit: 50,
       page: 1,
       order: 'desc',
     },
+    expectedSearchPath: 'metadata',
   },
 ])('supports Slice 8 acceptance prompt: $name', expectAcceptanceSearchFlow);
 ```
