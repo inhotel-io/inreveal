@@ -46,11 +46,7 @@ const nonEmpty = <T>(values: T[] | undefined): T[] | undefined => (values && val
 const omitUndefined = <T extends Record<string, unknown>>(value: T): T =>
   Object.fromEntries(Object.entries(value).filter(([, property]) => property !== undefined)) as T;
 
-const buildBaseSearch = ({
-  userId,
-  request,
-  scope,
-}: AgentMetadataSearchBuildInput): AgentMetadataSearchBuildResult => {
+const buildBaseSearch = ({ userId, request, scope }: AgentMetadataSearchBuildInput): AgentMetadataSearchBuildResult => {
   const filters = request.filters ?? {};
   const limit = request.limit ?? 10_000;
   const page = request.page ?? 1;
