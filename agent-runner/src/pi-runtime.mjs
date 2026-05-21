@@ -170,6 +170,208 @@ const findApprovalRequiredToolCallId = (value) => {
   return undefined;
 };
 
+const galleryToolResultPromptBudgetBytes = 16_000;
+const compactedGalleryToolTextBudgetBytes = 8_000;
+
+const safeJsonStringify = (value) => {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
+};
+
+const byteLength = (value) => Buffer.byteLength(value, 'utf8');
+
+const countArray = (value, key) => (Array.isArray(value?.[key]) ? value[key].length : 0);
+
+const sampleIds = (items) =>
+  Array.isArray(items)
+    ? items
+        .map((item) => (typeof item === 'string' ? item : item?.id))
+        .filter((id) => typeof id === 'string')
+        .slice(0, 10)
+    : [];
+
+const compactResultSize = (resultSize) => {
+  if (!resultSize || typeof resultSize !== 'object') {
+    return undefined;
+  }
+
+  return {
+    returnedItems:
+      Number.isInteger(resultSize.returnedItems) && resultSize.returnedItems >= 0 ? resultSize.returnedItems : 0,
+    hasMore: resultSize.hasMore === true,
+    nextPage: typeof resultSize.nextPage === 'string' ? resultSize.nextPage.slice(0, 80) : null,
+    estimatedBytes:
+      Number.isInteger(resultSize.estimatedBytes) && resultSize.estimatedBytes >= 0 ? resultSize.estimatedBytes : null,
+    truncated: resultSize.truncated === true,
+    omittedFields: Array.isArray(resultSize.omittedFields)
+      ? resultSize.omittedFields
+          .filter((field) => typeof field === 'string')
+          .map((field) => field.slice(0, 80))
+          .slice(0, 20)
+      : [],
+  };
+};
+
+const compactOperationIds = (toolResult) => {
+  if (Array.isArray(toolResult?.operationIds)) {
+    return toolResult.operationIds.filter((id) => typeof id === 'string');
+  }
+
+  const operations = Array.isArray(toolResult?.operations)
+    ? toolResult.operations
+    : Array.isArray(toolResult?.plan?.operations)
+      ? toolResult.plan.operations
+      : [];
+
+  return operations.map((operation) => operation?.id).filter((id) => typeof id === 'string');
+};
+
+const compactOperationCount = (toolResult, operationIds) => {
+  if (Number.isInteger(toolResult?.operationCount) && toolResult.operationCount >= 0) {
+    return toolResult.operationCount;
+  }
+
+  if (Number.isInteger(toolResult?.plan?.operationCount) && toolResult.plan.operationCount >= 0) {
+    return toolResult.plan.operationCount;
+  }
+
+  if (Array.isArray(toolResult?.operations)) {
+    return toolResult.operations.length;
+  }
+
+  if (Array.isArray(toolResult?.plan?.operations)) {
+    return toolResult.plan.operations.length;
+  }
+
+  return operationIds.length;
+};
+
+const isGalleryToolResult = (value) =>
+  value &&
+  typeof value === 'object' &&
+  typeof value.status === 'string' &&
+  (value.toolCall || value.resultSize || typeof value.summary === 'string');
+
+const compactToolSummary = (toolResult, resultSize, counts) => {
+  const toolName = typeof toolResult?.toolCall?.toolName === 'string' ? ` ${toolResult.toolCall.toolName}` : '';
+  const status = typeof toolResult?.status === 'string' ? toolResult.status : 'success';
+  const returnedItems =
+    resultSize?.returnedItems ??
+    counts.assets ??
+    counts.albums ??
+    counts.spaces ??
+    counts.users ??
+    counts.operationIds ??
+    0;
+  const itemText = returnedItems > 0 ? ` ${returnedItems} item${returnedItems === 1 ? '' : 's'}` : '';
+  return `Gallery${toolName} result (${status}) was compacted before continuing.${itemText}`;
+};
+
+export const compactGalleryToolResultForPrompt = (toolResult, { force = false } = {}) => {
+  const serialized = safeJsonStringify(toolResult);
+  if (!force && serialized && byteLength(serialized) <= galleryToolResultPromptBudgetBytes) {
+    return toolResult;
+  }
+
+  if (!toolResult || typeof toolResult !== 'object') {
+    return {
+      status: 'success',
+      compacted: true,
+      summary: 'Gallery returned a non-object tool result that was compacted before continuing.',
+      omittedDetailInstruction:
+        'Detailed rows were omitted. If more detail is needed, call the smallest Gallery MCP read tool for specific ids and fields.',
+    };
+  }
+
+  const resultSize = toolResult.resultSize ?? toolResult.toolCall?.resultSize;
+  const compactedResultSize = compactResultSize(resultSize);
+  const operationIds = compactOperationIds(toolResult);
+  const operationCount = compactOperationCount(toolResult, operationIds);
+  const counts = {
+    assets: countArray(toolResult, 'assets') || countArray(toolResult, 'assetIds'),
+    albums: countArray(toolResult, 'albums') || countArray(toolResult, 'albumIds'),
+    spaces: countArray(toolResult, 'spaces') || countArray(toolResult, 'spaceIds'),
+    users: countArray(toolResult, 'users') || countArray(toolResult, 'userIds'),
+    operationIds: operationCount,
+  };
+
+  const planId =
+    typeof toolResult.planId === 'string'
+      ? toolResult.planId
+      : typeof toolResult.plan?.id === 'string'
+        ? toolResult.plan.id
+        : undefined;
+
+  return {
+    status: toolResult.status,
+    summary: compactToolSummary(toolResult, compactedResultSize, counts),
+    compacted: true,
+    compactedReason: 'Large Gallery tool result exceeded runner prompt budget.',
+    toolCall: toolResult.toolCall
+      ? {
+          id: toolResult.toolCall.id,
+          toolName: toolResult.toolCall.toolName,
+          status: toolResult.toolCall.status,
+          resultSize: compactResultSize(toolResult.toolCall.resultSize),
+        }
+      : undefined,
+    resultSize: compactedResultSize,
+    counts,
+    ids: {
+      assetIdsSample: sampleIds(toolResult.assetIds ?? toolResult.assets),
+      albumIdsSample: sampleIds(toolResult.albumIds ?? toolResult.albums),
+      spaceIdsSample: sampleIds(toolResult.spaceIds ?? toolResult.spaces),
+      userIdsSample: sampleIds(toolResult.userIds ?? toolResult.users),
+      operationIdsSample: operationIds.slice(0, 10),
+    },
+    plan: planId ? { planId, operationCount } : undefined,
+    omittedDetailInstruction:
+      'Detailed rows were omitted. If more detail is needed, call the smallest Gallery MCP read tool for specific ids and fields.',
+  };
+};
+
+export const compactGalleryToolTranscript = (session) => {
+  const messages = Array.isArray(session?.messages) ? session.messages : [];
+  for (const message of messages) {
+    if (message?.role !== 'tool' || !Array.isArray(message.content)) {
+      continue;
+    }
+
+    for (const block of message.content) {
+      if (block?.type !== 'text' || typeof block.text !== 'string') {
+        continue;
+      }
+
+      const parsed = parseJsonObject(block.text);
+      if (!isGalleryToolResult(parsed)) {
+        continue;
+      }
+
+      const serialized = safeJsonStringify(parsed);
+      if (serialized && byteLength(serialized) <= galleryToolResultPromptBudgetBytes) {
+        continue;
+      }
+
+      const compacted = compactGalleryToolResultForPrompt(parsed, { force: true });
+      const compactedText = safeJsonStringify(compacted);
+      block.text =
+        compactedText && byteLength(compactedText) <= compactedGalleryToolTextBudgetBytes
+          ? compactedText
+          : JSON.stringify({
+              status: parsed.status,
+              summary: 'Gallery tool result was compacted before continuing.',
+              compacted: true,
+              toolCall: compacted.toolCall,
+              resultSize: compacted.resultSize,
+              omittedDetailInstruction: compacted.omittedDetailInstruction,
+            });
+    }
+  }
+};
+
 const newMessagesSince = (session, startLength) => {
   const messages = session.messages ?? [];
   return Array.isArray(messages) ? messages.slice(startLength) : [];
@@ -182,11 +384,13 @@ const approvalResumePrompt = ({ toolCallId, approvalDecision, toolResult }) => {
 
   if (approvalDecision === 'approved') {
     if (toolResult !== undefined) {
+      const compactedToolResult = compactGalleryToolResultForPrompt(toolResult);
       return [
         'This is an internal Gallery resume instruction, not a new user request.',
         `The previous approval-required response for Gallery tool call ${toolCallId} is obsolete.`,
         `The user approved Gallery tool call ${toolCallId}, and Gallery already executed it successfully.`,
-        `Use this approved tool result JSON as authoritative data to continue the user's original request: ${JSON.stringify(toolResult)}.`,
+        `Use this compact approved tool result summary as authoritative data to continue the user's original request: ${safeJsonStringify(compactedToolResult) ?? JSON.stringify(compactGalleryToolResultForPrompt(undefined, { force: true }))}.`,
+        'If the summary says fields were omitted and the original request needs them, call the smallest Gallery MCP read tool for specific ids and fields.',
         'Do not mention pending approval or ask for approval again for this same tool result.',
         'If the original request still needs album details after mcp_gallery_listAlbums, find the matching album id in the approved result and call mcp_gallery_readAlbum. If it needs asset metadata or search, call the next appropriate Gallery MCP read tool.',
       ].join(' ');
@@ -212,9 +416,22 @@ const sanitizedErrorMessage = (error, secret) => {
   return redactSecret(message || 'Provider request failed', secret);
 };
 
+const contextWindowErrorPattern =
+  /(context window|context length|maximum context|input exceeds|too many tokens|token limit)/i;
+const compactionErrorPattern = /(compaction|summarization).*(failed|refused|rejected)/i;
+
+const actionableRunnerErrorMessage = (message) => {
+  if (contextWindowErrorPattern.test(message) || compactionErrorPattern.test(message)) {
+    return 'The assistant hit the model context limit while processing Gallery data. Narrow the request or inspect fewer photos at a time.';
+  }
+
+  return message;
+};
+
 const sanitizedErrorMessageWithSecrets = (error, secrets) => {
   const message = error instanceof Error ? error.message : String(error);
-  return redactSecrets(message || 'Provider request failed', secrets);
+  const redacted = redactSecrets(message || 'Provider request failed', secrets);
+  return actionableRunnerErrorMessage(redacted);
 };
 
 const sanitizeSessionError = (error, entry) =>
@@ -389,7 +606,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             ? sdk.ModelRegistry.inMemory(authStorage)
             : sdk.ModelRegistry.create(authStorage);
           const settingsManager = sdk.SettingsManager.inMemory({
-            compaction: { enabled: false },
+            compaction: { enabled: true },
           });
           const extensionFactories = createOpenAiCompatibleProviderFactories({
             providerName,
@@ -508,7 +725,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
     async *sendMessage({ runnerSessionId, gallerySessionId, messageId: _messageId, content }) {
       const entry = sessions.get(runnerSessionId);
       if (!entry || entry.gallerySessionId !== gallerySessionId) {
-        throw new Error('Runner session not found');
+        throw new Error('Runner session not found; start a new assistant chat to reconnect.');
       }
       if (entry.inFlight) {
         throw new Error('Runner session already has an active message stream');
@@ -595,7 +812,10 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
 
       try {
         promptPromise = Promise.resolve()
-          .then(() => entry.session.prompt(textPromptFromContent(content)))
+          .then(() => {
+            compactGalleryToolTranscript(entry.session);
+            return entry.session.prompt(textPromptFromContent(content));
+          })
           .then(() => {
             if (aborted) {
               return;
@@ -699,7 +919,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
     async *resumeSession({ runnerSessionId, gallerySessionId, toolCallId, approvalDecision, toolResult }) {
       const entry = sessions.get(runnerSessionId);
       if (!entry || entry.gallerySessionId !== gallerySessionId) {
-        throw new Error('Runner session not found');
+        throw new Error('Runner session not found; start a new assistant chat to reconnect.');
       }
       if (entry.inFlight) {
         throw new Error('Runner session already has an active message stream');
@@ -788,6 +1008,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
       try {
         promptPromise = Promise.resolve()
           .then(() => {
+            compactGalleryToolTranscript(entry.session);
             if (resumePrompt) {
               return entry.session.prompt(resumePrompt);
             }
