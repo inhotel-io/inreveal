@@ -14,6 +14,7 @@ import {
   AgentToolCallStatus,
   AgentToolDataClass,
   AgentToolName,
+  AssetOrder,
   AssetType,
   AssetVisibility,
 } from 'src/enum';
@@ -1640,6 +1641,93 @@ describe(AgentToolService.name, () => {
     expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
   });
 
+  it('executes later metadata search pages and makes continuation visible', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 10_000, maxAssetsPerSession: 10_000 },
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: true,
+    });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue(assetIds.map((id) => makeMetadata(id)) as never);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { isFavorite: true },
+      limit: 2,
+      page: 2,
+      order: 'desc',
+    });
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Returned metadata for 2 assets; more results available on page 3',
+      }),
+      assets: [expect.objectContaining({ id: assetIds[0] }), expect.objectContaining({ id: assetIds[1] })],
+      returnedCount: 2,
+      hasMore: true,
+      nextPage: '3',
+    });
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      { page: 2, size: 2 },
+      expect.objectContaining({ isFavorite: true, orderDirection: AssetOrder.Desc, userIds: [auth.user.id] }),
+    );
+    expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        redactedRequestMetadata: {
+          mode: 'metadata',
+          filters: { isFavorite: true },
+          limit: 2,
+          page: 2,
+          order: 'desc',
+        },
+      }),
+      expect.any(Object),
+      AgentToolDataClass.Metadata,
+      expect.any(Number),
+    );
+  });
+
+  it('returns terminal search pages without continuation text', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: { isNotInAlbum: true },
+      limit: 50,
+      page: 3,
+      order: 'desc',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        returnedCount: 1,
+        hasMore: false,
+        nextPage: null,
+        toolCall: expect.objectContaining({ responseSummary: 'Returned metadata for 1 asset' }),
+      }),
+    );
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith({ page: 3, size: 50 }, expect.any(Object));
+  });
+
   it('uses contract defaults for empty service-level search requests', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({
@@ -1828,7 +1916,6 @@ describe(AgentToolService.name, () => {
       { mode: 'metadata', query: 'beach', filters: {}, limit: 5, page: 1, order: 'desc' },
       'query is only supported for smart, description, ocr, and filename search modes',
     ],
-    [{ mode: 'metadata', filters: {}, limit: 5, page: 2, order: 'desc' }, 'page search is not available yet'],
     [{ mode: 'metadata', filters: {}, limit: 5, page: 1, order: 'asc' }, 'asc order search is not available yet'],
     [
       { mode: 'metadata', filters: {}, limit: 5, page: 1, order: 'relevance' },
