@@ -562,15 +562,17 @@ export class AgentToolService {
       dataClass: AgentToolDataClass.Metadata,
       requestSummary: (request) =>
         `Search ${request.mode ?? 'metadata'} assets (limit ${this.getSearchLimit(request)})`,
-      requestMetadata: (request) =>
-        ({
-          mode: request.mode ?? 'metadata',
+      requestMetadata: (request) => {
+        const mode = request.mode ?? 'metadata';
+        return {
+          mode,
           filters: request.filters ?? {},
           limit: this.getSearchLimit(request),
           page: request.page ?? 1,
-          order: request.order ?? 'desc',
+          ...(mode === 'smart' && request.order === undefined ? {} : { order: request.order ?? 'desc' }),
           ...(request.query === undefined ? {} : { query: request.query }),
-        }) as AgentToolSearchAssetsRequestMetadata,
+        } as AgentToolSearchAssetsRequestMetadata;
+      },
       requestedAssetCount: (request) => this.getSearchLimit(request),
       requestedAlbumCount: () => 0,
       perToolLimit: (plan) => plan.limits.maxAssetsPerToolCall,
