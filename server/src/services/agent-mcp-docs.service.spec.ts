@@ -230,7 +230,10 @@ describe(AgentMcpDocsService.name, () => {
     for (const mistakeId of [
       'search-filters-outside-filters',
       'search-filter-name-in-tag-ids',
+      'search-filter-name-in-album-ids',
       'search-filter-name-in-person-ids',
+      'search-filter-name-in-space-id',
+      'search-filter-name-in-space-person-ids',
       'search-query-with-metadata-mode',
       'search-space-person-without-space',
       'search-combined-filters-and-tool-call-id',
