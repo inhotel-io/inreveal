@@ -109,6 +109,12 @@ const fixedAssetId = '00000000-0000-4000-8000-000000000501';
 const alexPersonId = '00000000-0000-4000-8000-000000000601';
 const familySpaceId = '00000000-0000-4000-8000-000000000401';
 const acceptanceReferenceDate = '2026-05-21';
+const berlinLastSummerStart = new Date('2025-06-01T00:00:00.000Z');
+const berlinLastSummerEnd = new Date('2025-08-31T23:59:59.999Z');
+const invoiceScreenshotsStart = new Date('2024-01-01T00:00:00.000Z');
+const invoiceScreenshotsEnd = new Date('2024-12-31T23:59:59.999Z');
+const sonyMayStart = new Date('2026-05-01T00:00:00.000Z');
+const sonyMayEnd = new Date('2026-05-21T23:59:59.999Z');
 
 class InMemoryAgentSessionRepository {
   sessions = new Map<string, AgentSession>();
@@ -564,8 +570,9 @@ describe('Pi agent runner flow harness', () => {
     });
 
     const [pendingToolCall] = await harness.toolService.getToolCalls(harness.auth, session.id);
-    expect(harness.toolCalls.toolCalls.find((toolCall) => toolCall.id === pendingToolCall.id)?.redactedRequestMetadata)
-      .toEqual(testCase.expectedRequestMetadata);
+    expect(
+      harness.toolCalls.toolCalls.find((toolCall) => toolCall.id === pendingToolCall.id)?.redactedRequestMetadata,
+    ).toEqual(testCase.expectedRequestMetadata);
 
     await harness.toolService.approveToolCall(harness.auth, session.id, pendingToolCall.id, {
       decision: AgentToolApprovalDecision.Approved,
@@ -877,7 +884,7 @@ describe('Pi agent runner flow harness', () => {
     ]);
   });
 
-  it.each<AcceptanceSearchCase>([
+  it.each([
     {
       name: 'alex berlin last summer unalbumed',
       prompt: 'Find photos of Alex in Berlin from last summer that are not in any album.',
@@ -886,8 +893,8 @@ describe('Pi agent runner flow harness', () => {
         filters: {
           personIds: [alexPersonId],
           city: 'Berlin',
-          takenAfter: '2025-06-01T00:00:00.000Z',
-          takenBefore: '2025-08-31T23:59:59.999Z',
+          takenAfter: berlinLastSummerStart,
+          takenBefore: berlinLastSummerEnd,
           isNotInAlbum: true,
         },
         limit: 50,
@@ -900,8 +907,8 @@ describe('Pi agent runner flow harness', () => {
         filters: {
           personIds: [alexPersonId],
           city: 'Berlin',
-          takenAfter: '2025-06-01T00:00:00.000Z',
-          takenBefore: '2025-08-31T23:59:59.999Z',
+          takenAfter: berlinLastSummerStart,
+          takenBefore: berlinLastSummerEnd,
           isNotInAlbum: true,
         },
         limit: 50,
@@ -934,8 +941,8 @@ describe('Pi agent runner flow harness', () => {
         mode: 'ocr',
         query: 'invoice',
         filters: {
-          takenAfter: '2024-01-01T00:00:00.000Z',
-          takenBefore: '2024-12-31T23:59:59.999Z',
+          takenAfter: invoiceScreenshotsStart,
+          takenBefore: invoiceScreenshotsEnd,
           type: AssetType.Image,
         },
         limit: 50,
@@ -944,8 +951,8 @@ describe('Pi agent runner flow harness', () => {
       expectedRequestMetadata: {
         mode: 'ocr',
         filters: {
-          takenAfter: '2024-01-01T00:00:00.000Z',
-          takenBefore: '2024-12-31T23:59:59.999Z',
+          takenAfter: invoiceScreenshotsStart,
+          takenBefore: invoiceScreenshotsEnd,
           type: AssetType.Image,
         },
         limit: 50,
@@ -981,8 +988,8 @@ describe('Pi agent runner flow harness', () => {
       request: {
         filters: {
           make: 'Sony',
-          takenAfter: '2026-05-01T00:00:00.000Z',
-          takenBefore: '2026-05-21T23:59:59.999Z',
+          takenAfter: sonyMayStart,
+          takenBefore: sonyMayEnd,
         },
         limit: 50,
       },
@@ -991,8 +998,8 @@ describe('Pi agent runner flow harness', () => {
         mode: 'metadata',
         filters: {
           make: 'Sony',
-          takenAfter: '2026-05-01T00:00:00.000Z',
-          takenBefore: '2026-05-21T23:59:59.999Z',
+          takenAfter: sonyMayStart,
+          takenBefore: sonyMayEnd,
         },
         limit: 50,
         page: 1,
@@ -1000,5 +1007,5 @@ describe('Pi agent runner flow harness', () => {
       },
       expectedSearchPath: 'metadata',
     },
-  ])('supports Slice 8 acceptance prompt: $name', expectAcceptanceSearchFlow);
+  ] satisfies AcceptanceSearchCase[])('supports Slice 8 acceptance prompt: $name', expectAcceptanceSearchFlow);
 });
