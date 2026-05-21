@@ -390,8 +390,8 @@ describe(AgentToolService.name, () => {
     const session = makeSession({ userId: auth.user.id });
     const pending = makeToolCall({
       sessionId: session.id,
-      requestSummary: 'Read metadata for 2 asset(s)',
-      redactedRequestMetadata: { assetIds },
+      requestSummary: 'Read basic metadata for 2 asset(s)',
+      redactedRequestMetadata: { assetIds, detail: 'basic' },
       assetCount: 2,
     });
 
@@ -411,7 +411,7 @@ describe(AgentToolService.name, () => {
         sessionId: session.id,
         status: AgentToolCallStatus.PendingApproval,
         approvalDecision: null,
-        requestSummary: 'Read metadata for 2 asset(s)',
+        requestSummary: 'Read basic metadata for 2 asset(s)',
         responseSummary: null,
         dataClass: AgentToolDataClass.Metadata,
         assetCount: 2,
@@ -426,9 +426,9 @@ describe(AgentToolService.name, () => {
         toolName: AgentToolName.ReadAssetMetadata,
         status: AgentToolCallStatus.PendingApproval,
         approvalDecision: null,
-        requestSummary: 'Read metadata for 2 asset(s)',
+        requestSummary: 'Read basic metadata for 2 asset(s)',
         responseSummary: null,
-        redactedRequestMetadata: { assetIds },
+        redactedRequestMetadata: { assetIds, detail: 'basic' },
         redactedResponseMetadata: null,
         dataClass: AgentToolDataClass.Metadata,
         assetCount: 2,
@@ -447,7 +447,7 @@ describe(AgentToolService.name, () => {
         sessionId: session.id,
         status: AgentToolCallStatus.Denied,
         approvalDecision: AgentToolApprovalDecision.Denied,
-        redactedRequestMetadata: { assetIds },
+        redactedRequestMetadata: { assetIds, detail: 'basic' },
         error: 'Session policy allows at most 1000 assets per session',
       }),
       AgentToolDataClass.Metadata,
@@ -475,12 +475,12 @@ describe(AgentToolService.name, () => {
       expect.objectContaining({
         sessionId: session.id,
         status: AgentToolCallStatus.PendingApproval,
-        redactedRequestMetadata: { assetIds },
+        redactedRequestMetadata: { assetIds, detail: 'basic' },
       }),
       expect.objectContaining({
         sessionId: session.id,
         status: AgentToolCallStatus.Denied,
-        redactedRequestMetadata: { assetIds },
+        redactedRequestMetadata: { assetIds, detail: 'basic' },
         error: 'Session policy allows at most 1000 assets per session',
       }),
       AgentToolDataClass.Metadata,
@@ -518,7 +518,7 @@ describe(AgentToolService.name, () => {
       expect.objectContaining({
         status: AgentToolCallStatus.Denied,
         approvalDecision: AgentToolApprovalDecision.Denied,
-        redactedRequestMetadata: { assetIds },
+        redactedRequestMetadata: { assetIds, detail: 'basic' },
         completedAt: expect.any(Date),
         error: 'Agent permission policy does not allow metadata reads',
       }),
@@ -584,12 +584,318 @@ describe(AgentToolService.name, () => {
 
     const result = await sut.readAssetMetadata(auth, session.id, { assetIds });
 
-    expect(result).toEqual({
+    expect(result).toEqual(
+      expect.objectContaining({
       status: 'success',
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       assets: [expect.objectContaining({ id: assetIds[0] })],
-    });
+      }),
+    );
     expect(assetRepository.getAgentMetadataByIds).toHaveBeenCalledWith(assetIds);
+  });
+
+  it('returns basic metadata by default without filename, tags, location, or camera fields', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail: 'basic' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        summary: 'Returned basic metadata for 1 asset',
+        detail: 'basic',
+        fields: ['type', 'dates'],
+        assets: [
+          expect.objectContaining({
+            id: assetId,
+            type: AssetType.Image,
+            localDateTime: now,
+            fileCreatedAt: now,
+            fileModifiedAt: now,
+            exifInfo: { dateTimeOriginal: now },
+          }),
+        ],
+        toolCall: expect.objectContaining({ responseSummary: 'Returned basic metadata for 1 asset' }),
+      }),
+    );
+    expect(result.status === 'success' ? result.assets[0] : undefined).not.toHaveProperty('originalFileName');
+    expect(result.status === 'success' ? result.assets[0] : undefined).not.toHaveProperty('tags');
+    expect(result.status === 'success' ? result.assets[0].exifInfo : undefined).not.toHaveProperty('city');
+    expect(result.status === 'success' ? result.assets[0].exifInfo : undefined).not.toHaveProperty('make');
+  });
+
+  it.each([
+    ['type', { type: AssetType.Image }, ['originalFileName']],
+    ['filename', { originalFileName: expect.any(String) }, ['tags']],
+    ['favorite', { isFavorite: false }, ['visibility']],
+    ['visibility', { visibility: AssetVisibility.Timeline }, ['isFavorite']],
+    ['tags', { tags: [expect.objectContaining({ value: 'travel' })] }, ['originalFileName']],
+    ['rating', { exifInfo: { rating: 5 } }, ['tags']],
+    ['location', { exifInfo: expect.objectContaining({ city: 'Berlin', latitude: 52.52 }) }, ['originalFileName']],
+    ['camera', { exifInfo: expect.objectContaining({ make: 'Nikon', model: 'Zf', lensModel: '40mm' }) }, ['tags']],
+  ] as const)('returns only requested metadata field group %s', async (field, expectedFields, omittedFields) => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], fields: [field] });
+
+    if (result.status !== 'success') {
+      throw new Error(`Expected success response, got ${result.status}`);
+    }
+
+    expect(result.detail).toBeUndefined();
+    expect(result.fields).toEqual([field]);
+    expect(result.assets[0]).toEqual(expect.objectContaining({ id: assetId, ...expectedFields }));
+    for (const omittedField of omittedFields) {
+      expect(result.assets[0]).not.toHaveProperty(omittedField);
+    }
+  });
+
+  it('merges overlapping exif field groups and preserves null metadata values', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      makeMetadata(assetId, {
+        exifInfo: {
+          dateTimeOriginal: null,
+          city: null,
+          state: null,
+          country: null,
+          make: null,
+          model: null,
+          lensModel: null,
+          latitude: null,
+          longitude: null,
+          rating: null,
+        },
+        tags: [],
+      }),
+    ] as never);
+
+    const result = await sut.readAssetMetadata(auth, session.id, {
+      assetIds: [assetId],
+      fields: ['dates', 'location', 'camera', 'rating', 'tags'],
+    });
+
+    if (result.status !== 'success') {
+      throw new Error(`Expected success response, got ${result.status}`);
+    }
+
+    expect(result.assets[0].exifInfo).toEqual({
+      dateTimeOriginal: null,
+      city: null,
+      state: null,
+      country: null,
+      latitude: null,
+      longitude: null,
+      make: null,
+      model: null,
+      lensModel: null,
+      rating: null,
+    });
+    expect(result.assets[0].tags).toEqual([]);
+  });
+
+  it.each([
+    ['basic', ['type', 'dates']],
+    ['descriptive', ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location']],
+    ['technical', ['type', 'dates', 'filename', 'camera', 'rating', 'visibility']],
+    ['allSafe', ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility']],
+  ] as const)('applies the %s metadata detail preset', async (detail, expectedFields) => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId, { leaked: 'ignore me' })] as never);
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail });
+
+    if (result.status !== 'success') {
+      throw new Error(`Expected success response, got ${result.status}`);
+    }
+
+    expect(result.detail).toBe(detail);
+    expect(result.fields).toEqual(expectedFields);
+    expect(result.summary).toBe(`Returned ${detail} metadata for 1 asset`);
+    expect(result.assets[0]).not.toHaveProperty('leaked');
+  });
+
+  it('returns every supported metadata field but no owner identity for allSafe detail', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const metadata = makeMetadata(assetId);
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([metadata] as never);
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail: 'allSafe' });
+
+    if (result.status !== 'success') {
+      throw new Error(`Expected success response, got ${result.status}`);
+    }
+
+    expect(result.assets[0]).toEqual({
+      id: assetId,
+      type: metadata.type,
+      originalFileName: metadata.originalFileName,
+      localDateTime: metadata.localDateTime,
+      fileCreatedAt: metadata.fileCreatedAt,
+      fileModifiedAt: metadata.fileModifiedAt,
+      isFavorite: metadata.isFavorite,
+      visibility: metadata.visibility,
+      exifInfo: metadata.exifInfo,
+      tags: metadata.tags,
+    });
+    expect(result.assets[0]).not.toHaveProperty('ownerId');
+  });
+
+  it('rejects large metadata reads before repository hydration when they exceed the per-tool limit', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1 } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds, detail: 'basic' });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Requested 2 assets, but this session allows 1 per metadata read. Request fewer asset IDs or split the metadata read into smaller batches.',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+  });
+
+  it('denies mixed accessible and inaccessible metadata assets before returning partial rows', async () => {
+    const auth = AuthFactory.create();
+    const accessibleAssetId = newUuid();
+    const inaccessibleAssetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([accessibleAssetId]));
+
+    const result = await sut.readAssetMetadata(auth, session.id, {
+      assetIds: [accessibleAssetId, inaccessibleAssetId],
+      fields: ['filename'],
+    });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'One or more assets are not accessible',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+  });
+
+  it('records failed compact metadata hydration instead of returning partial assets when rows are missing', async () => {
+    const auth = AuthFactory.create();
+    const firstAssetId = newUuid();
+    const secondAssetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([firstAssetId, secondAssetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(firstAssetId)] as never);
+
+    const result = await sut.readAssetMetadata(auth, session.id, {
+      assetIds: [firstAssetId, secondAssetId],
+      fields: ['filename'],
+    });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'One or more assets were not found during metadata read',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Failed }),
+    });
+    expect(result).not.toHaveProperty('assets');
+  });
+
+  it('allows shared-space metadata only when shared spaces are enabled', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], fields: ['filename'] });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        assets: [{ id: assetId, originalFileName: `${assetId}.jpg` }],
+      }),
+    );
+    expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
+  });
+
+  it('denies locked metadata unless permission plan and elevated auth both allow locked assets', async () => {
+    const assetId = newUuid();
+    const auth = AuthFactory.from().session({ hasElevatedPermission: false }).build();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: true } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail: 'basic' });
+
+    expect(result).toEqual(expect.objectContaining({ status: 'denied', reason: 'One or more assets are not accessible' }));
+    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([assetId]), false);
+  });
+
+  it('denies tag metadata reads before repository hydration when metadata reads are disabled', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ read: { metadata: false, previews: false, originals: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], fields: ['tags'] });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Agent permission policy does not allow metadata reads',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -776,7 +1082,8 @@ describe(AgentToolService.name, () => {
 
     const result = await sut.readAssetMetadata(auth, session.id, { assetIds });
 
-    expect(result).toEqual({
+    expect(result).toEqual(
+      expect.objectContaining({
       status: 'success',
       toolCall: expect.objectContaining({
         id: executing.id,
@@ -787,14 +1094,15 @@ describe(AgentToolService.name, () => {
         albumCount: 0,
       }),
       assets: [expect.objectContaining({ id: assetIds[0] })],
-    });
+      }),
+    );
     expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: session.id,
         toolName: AgentToolName.ReadAssetMetadata,
         status: AgentToolCallStatus.Executing,
         approvalDecision: AgentToolApprovalDecision.Approved,
-        redactedRequestMetadata: { assetIds },
+        redactedRequestMetadata: { assetIds, detail: 'basic' },
         dataClass: AgentToolDataClass.Metadata,
         assetCount: 1,
         albumCount: 0,
@@ -803,7 +1111,7 @@ describe(AgentToolService.name, () => {
         sessionId: session.id,
         status: AgentToolCallStatus.Denied,
         approvalDecision: AgentToolApprovalDecision.Denied,
-        redactedRequestMetadata: { assetIds },
+        redactedRequestMetadata: { assetIds, detail: 'basic' },
         error: 'Session policy allows at most 1000 assets per session',
       }),
       AgentToolDataClass.Metadata,
@@ -817,7 +1125,7 @@ describe(AgentToolService.name, () => {
       expect.objectContaining({
         status: AgentToolCallStatus.Completed,
         approvalDecision: AgentToolApprovalDecision.Approved,
-        responseSummary: 'Returned metadata for 1 asset',
+        responseSummary: 'Returned basic metadata for 1 asset',
         redactedResponseMetadata: { assetIds },
         assetCount: 1,
         albumCount: 0,
@@ -1134,7 +1442,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'denied',
-      reason: 'Requested asset count exceeds per-tool limit',
+      reason: 'Requested 2 assets, but this session allows 1 per metadata read. Request fewer asset IDs or split the metadata read into smaller batches.',
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
     });
     expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
@@ -1157,7 +1465,7 @@ describe(AgentToolService.name, () => {
         sessionId: session.id,
         status: AgentToolCallStatus.Denied,
         approvalDecision: AgentToolApprovalDecision.Denied,
-        redactedRequestMetadata: { assetIds },
+        redactedRequestMetadata: { assetIds, detail: 'basic' },
         error: 'Session policy allows at most 2 assets per session',
         completedAt,
       }),
@@ -1176,13 +1484,13 @@ describe(AgentToolService.name, () => {
         sessionId: session.id,
         status: AgentToolCallStatus.Executing,
         approvalDecision: AgentToolApprovalDecision.Approved,
-        redactedRequestMetadata: { assetIds },
+        redactedRequestMetadata: { assetIds, detail: 'basic' },
       }),
       expect.objectContaining({
         sessionId: session.id,
         status: AgentToolCallStatus.Denied,
         approvalDecision: AgentToolApprovalDecision.Denied,
-        redactedRequestMetadata: { assetIds },
+        redactedRequestMetadata: { assetIds, detail: 'basic' },
         error: 'Session policy allows at most 2 assets per session',
       }),
       AgentToolDataClass.Metadata,
@@ -4827,7 +5135,7 @@ describe(AgentToolService.name, () => {
       expect.objectContaining({
         status: AgentToolCallStatus.Completed,
         approvalDecision: AgentToolApprovalDecision.Approved,
-        responseSummary: 'Returned metadata for 1 asset',
+        responseSummary: 'Returned basic metadata for 1 asset',
         redactedResponseMetadata: { assetIds },
         assetCount: 1,
         albumCount: 0,
@@ -4838,15 +5146,61 @@ describe(AgentToolService.name, () => {
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
       status: AgentSessionStatus.Running,
     });
-    expect(result).toEqual({
+    expect(result).toEqual(
+      expect.objectContaining({
       status: 'success',
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       assets: [expect.objectContaining({ id: assetIds[0] })],
-    });
+      }),
+    );
     if (result.status !== 'success') {
       throw new Error(`Expected success response, got ${result.status}`);
     }
     expect(result.assets[0]).not.toHaveProperty('leaked');
+  });
+
+  it('defaults approved legacy metadata reads with only assetIds to basic detail', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({ userId: auth.user.id });
+    const approved = makeToolCall({
+      sessionId: session.id,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      redactedRequestMetadata: { assetIds },
+      assetCount: 1,
+    });
+    const executing = makeToolCall({ ...approved, status: AgentToolCallStatus.Executing });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(approved);
+    toolCallRepository.transition
+      .mockResolvedValueOnce(executing)
+      .mockResolvedValueOnce(makeToolCall({ ...approved, status: AgentToolCallStatus.Completed, completedAt }));
+    toolCallRepository.getCountedAssetCountBySession.mockResolvedValue(0);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetIds[0])] as never);
+
+    const result = await sut.readAssetMetadata(auth, session.id, { toolCallId: approved.id });
+
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      2,
+      session.id,
+      approved.id,
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        responseSummary: 'Returned basic metadata for 1 asset',
+        redactedResponseMetadata: { assetIds },
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        summary: 'Returned basic metadata for 1 asset',
+        detail: 'basic',
+        fields: ['type', 'dates'],
+      }),
+    );
   });
 
   it('prevents asset read when execution claim loses a race', async () => {

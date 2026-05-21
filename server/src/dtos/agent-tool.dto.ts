@@ -32,9 +32,22 @@ const AgentSearchAssetsModeSchema = z
   .meta({ id: 'AgentSearchAssetsMode' });
 const AgentSearchAssetsOrderSchema = z.enum(['asc', 'desc', 'relevance']).meta({ id: 'AgentSearchAssetsOrder' });
 const AgentSearchAssetsDetailSchema = z.enum(['ids', 'summary', 'metadata']).meta({ id: 'AgentSearchAssetsDetail' });
-const AgentSearchAssetsFieldSchema = z
-  .enum(['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility'])
-  .meta({ id: 'AgentSearchAssetsField' });
+const AgentAssetMetadataFieldValues = [
+  'type',
+  'dates',
+  'location',
+  'camera',
+  'tags',
+  'rating',
+  'filename',
+  'favorite',
+  'visibility',
+] as const;
+const AgentSearchAssetsFieldSchema = z.enum(AgentAssetMetadataFieldValues).meta({ id: 'AgentSearchAssetsField' });
+const AgentAssetMetadataDetailSchema = z
+  .enum(['basic', 'descriptive', 'technical', 'allSafe'])
+  .meta({ id: 'AgentAssetMetadataDetail' });
+const AgentAssetMetadataFieldSchema = z.enum(AgentAssetMetadataFieldValues).meta({ id: 'AgentAssetMetadataField' });
 const resolverNameList = z
   .array(z.string().trim().min(1).max(MAX_RESOLVE_FILTER_NAME_LENGTH))
   .min(1)
@@ -71,10 +84,66 @@ const assetIdRequest = (schemaId: string, missingMessage: string) =>
     })
     .meta({ id: schemaId });
 
-const AgentReadAssetMetadataToolRequestSchema = assetIdRequest(
-  'AgentReadAssetMetadataToolRequestDto',
-  'Provide assetIds for a new tool request or toolCallId for an approved request',
-);
+const AgentReadAssetMetadataToolRequestSchema = z
+  .strictObject({
+    assetIds: z.array(uuid).min(1).max(MAX_ASSET_IDS_PER_TOOL_CALL).optional(),
+    detail: AgentAssetMetadataDetailSchema.optional(),
+    fields: z.array(AgentAssetMetadataFieldSchema).min(1).max(20).optional(),
+    toolCallId: uuid.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.assetIds && value.toolCallId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either assetIds or toolCallId, not both',
+      });
+    }
+
+    if ((value.detail || value.fields) && value.toolCallId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either assetIds or toolCallId, not both',
+      });
+    }
+
+    if (!value.assetIds && !value.toolCallId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide assetIds for a new tool request or toolCallId for an approved request',
+      });
+    }
+
+    if (value.detail && value.fields) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Use either detail or fields, not both',
+      });
+    }
+
+    if (value.assetIds && new Set(value.assetIds).size !== value.assetIds.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['assetIds'],
+        message: 'assetIds must be unique',
+      });
+    }
+
+    if (value.fields && new Set(value.fields).size !== value.fields.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['fields'],
+        message: 'fields must be unique',
+      });
+    }
+  })
+  .transform((value) => {
+    if (value.toolCallId) {
+      return value;
+    }
+
+    return value.fields ? value : { ...value, detail: value.detail ?? 'basic' };
+  })
+  .meta({ id: 'AgentReadAssetMetadataToolRequestDto' });
 
 const AgentReadAssetPreviewsToolRequestSchema = assetIdRequest(
   'AgentReadAssetPreviewsToolRequestDto',
@@ -440,20 +509,25 @@ export const AgentAssetMetadataSchema = z
   })
   .meta({ id: 'AgentAssetMetadata' });
 
+const AgentAssetMetadataResultFields = {
+  id: uuid,
+  type: AssetTypeSchema.optional(),
+  originalFileName: z.string().optional(),
+  localDateTime: isoDatetimeToDate.optional(),
+  fileCreatedAt: isoDatetimeToDate.optional(),
+  fileModifiedAt: isoDatetimeToDate.optional(),
+  isFavorite: z.boolean().optional(),
+  visibility: AssetVisibilitySchema.optional(),
+  exifInfo: AgentAssetMetadataExifSchema.partial().nullable().optional(),
+  tags: z.array(AgentAssetMetadataTagSchema).optional(),
+};
+
+const AgentAssetMetadataResultSchema = z
+  .object(AgentAssetMetadataResultFields)
+  .meta({ id: 'AgentAssetMetadataResult' });
+
 const AgentSearchAssetResultSchema = z
-  .object({
-    id: uuid,
-    ownerId: uuid.optional(),
-    type: AssetTypeSchema.optional(),
-    originalFileName: z.string().optional(),
-    localDateTime: isoDatetimeToDate.optional(),
-    fileCreatedAt: isoDatetimeToDate.optional(),
-    fileModifiedAt: isoDatetimeToDate.optional(),
-    isFavorite: z.boolean().optional(),
-    visibility: AssetVisibilitySchema.optional(),
-    exifInfo: AgentAssetMetadataExifSchema.partial().nullable().optional(),
-    tags: z.array(AgentAssetMetadataTagSchema).optional(),
-  })
+  .object({ ...AgentAssetMetadataResultFields, ownerId: uuid.optional() })
   .meta({ id: 'AgentSearchAssetResult' });
 
 const AgentAssetMediaReferenceSchema = z
@@ -561,7 +635,10 @@ const AgentReadAssetMetadataToolSuccessResponseSchema = z
   .object({
     status: z.literal('success'),
     toolCall: AgentToolCallResponseSchema,
-    assets: z.array(AgentAssetMetadataSchema),
+    summary,
+    detail: AgentAssetMetadataDetailSchema.optional(),
+    fields: z.array(AgentAssetMetadataFieldSchema),
+    assets: z.array(AgentAssetMetadataResultSchema),
   })
   .meta({ id: 'AgentReadAssetMetadataToolSuccessResponse' });
 

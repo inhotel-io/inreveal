@@ -67,9 +67,10 @@ const propertyDescriptions = {
   limit: 'Maximum number of results to return. Defaults to 100 and accepts a positive integer up to 10000.',
   page: 'One-based result page. Use the returned nextPage value as page to continue the same search with the same mode, query, filters, order, and limit.',
   order: 'Result order. Only desc is currently executable.',
-  detail: 'Result detail level. ids returns compact asset ids, summary returns asset ids plus a compact sample, and metadata returns metadata rows.',
+  detail:
+    'Result detail level. For searchAssets, ids returns compact asset ids, summary returns asset ids plus a compact sample, and metadata returns metadata rows. For readAssetMetadata, use basic, descriptive, technical, or allSafe metadata presets.',
   fields:
-    'Optional metadata field groups for summary samples or metadata rows: type, dates, location, camera, tags, rating, filename, favorite, visibility.',
+    'Optional metadata field groups for summary samples, metadata rows, or readAssetMetadata custom reads: type, dates, location, camera, tags, rating, filename, favorite, visibility.',
   sampleSize: 'Maximum summary sample rows from 0 to 25. Use 0 to disable samples.',
   toolCallId: 'Use only for an approved retry after Gallery approves a pending read request.',
   summary: 'A human-readable plan summary describing what Gallery should review.',

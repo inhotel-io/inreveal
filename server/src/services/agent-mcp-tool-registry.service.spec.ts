@@ -192,10 +192,38 @@ describe(AgentMcpToolRegistryService.name, () => {
       assetIds: expect.objectContaining({
         description: expect.stringContaining('new asset read request'),
       }),
+      detail: expect.objectContaining({
+        description: expect.stringContaining('basic'),
+      }),
+      fields: expect.objectContaining({
+        description: expect.stringContaining('filename'),
+      }),
       toolCallId: expect.objectContaining({
         description: expect.stringContaining('approved retry'),
       }),
     });
+
+    const metadataFieldSchema = metadata ? getSchemaDefinition(metadata, 'AgentAssetMetadataField') : undefined;
+    const metadataDetailSchema = metadata ? getSchemaDefinition(metadata, 'AgentAssetMetadataDetail') : undefined;
+
+    expect(metadataDetailSchema).toEqual(
+      expect.objectContaining({ enum: ['basic', 'descriptive', 'technical', 'allSafe'] }),
+    );
+    expect(metadataFieldSchema).toEqual(
+      expect.objectContaining({
+        enum: expect.arrayContaining([
+          'type',
+          'dates',
+          'location',
+          'camera',
+          'tags',
+          'rating',
+          'filename',
+          'favorite',
+          'visibility',
+        ]),
+      }),
+    );
     expect(resolver?.properties).toMatchObject({
       people: expect.objectContaining({
         description: expect.stringContaining('personIds'),
