@@ -66,11 +66,12 @@ test.describe('Timeline grouping UI', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/photos');
 
-    await expect(page.getByTestId('timeline-mobile-grouping-control-shell')).toBeVisible();
-    await expect(page.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
+    const mobileGroupingControl = page.getByTestId('timeline-mobile-grouping-control-shell');
+    await expect(mobileGroupingControl).toBeVisible();
+    await expect(mobileGroupingControl.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
 
     await page.locator('[data-thumbnail-focus-container]').first().click();
 
-    await expect(page.getByTestId('timeline-mobile-grouping-control-shell')).not.toBeVisible();
+    await expect(mobileGroupingControl).not.toBeVisible();
   });
 });
