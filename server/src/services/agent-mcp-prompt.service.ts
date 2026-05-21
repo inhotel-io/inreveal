@@ -40,7 +40,7 @@ export class AgentMcpPromptService {
   generatePromptCheatSheet(): string {
     const examples = this.listPromptExamples();
     const contracts = this.contractService.listToolContracts();
-    const toolList = contracts.map((contract) => `- ${this.toPiToolName(contract.name)}`).join('\n');
+    const toolList = contracts.map((contract) => this.toPiToolName(contract.name)).join(', ');
     const normalRead = this.getPromptExample(examples, AgentToolName.SearchAssets, 'bounded-date-location-search');
     const retryRead = this.getPromptExample(examples, AgentToolName.ReadAssetMetadata, 'approved-retry');
     const listSpaces = this.getPromptExample(examples, AgentToolName.ListSpaces, 'list-visible-spaces');
@@ -54,7 +54,7 @@ export class AgentMcpPromptService {
     return this.sanitizePrompt(
       [
         'Gallery MCP tool-use cheat sheet',
-        `Pi-visible tools:\n${toolList}`,
+        `Pi-visible tools: ${toolList}`,
         `Read before planning: ${searchContract.usage}`,
         `For writes, call ${this.toPiToolName(planContract.name)}: ${planContract.usage}`,
         this.renderSafetyGuidance(contracts),
