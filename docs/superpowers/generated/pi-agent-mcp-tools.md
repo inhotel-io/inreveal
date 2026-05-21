@@ -99,6 +99,64 @@ Do not ask the user to approve in chat and do not create a new read request with
 
 ## Tools
 
+### Resolve asset search filters
+
+MCP tool name: `resolveAssetSearchFilters`
+
+Resolve visible album, tag, person, space, and camera names into searchAssets-compatible filters.
+
+Use before searchAssets when the user gives names for tags, albums, people, spaces, camera makes, camera models, or lenses. Call searchAssets only after this returns unambiguous resolvedFilters. Use only toolCallId when retrying a Gallery-approved resolver request.
+
+Argument modes:
+
+- `resolve-named-filters`: Use when the user gives album, tag, person, space, camera make, camera model, or lens names.
+  Required fields: none.
+  Forbidden fields: `toolCallId`.
+- `approved-retry`: Use only after Gallery resumes the assistant from an approved resolver request.
+  Required fields: `toolCallId`.
+  Forbidden fields: `people`, `tags`, `albums`, `spaces`, `cameraMakes`, `cameraModels`, `lensModels`, `scope`.
+
+#### resolve-named-filters
+
+Resolve album and tag names before searching.
+
+<!-- mcp-docs:tool-arguments tool="resolveAssetSearchFilters" example="resolve-named-filters" -->
+
+```json
+{
+  "tags": ["Travel"],
+  "albums": ["Berlin"]
+}
+```
+
+#### resolve-space-person-filters
+
+Resolve shared space and person names before searching shared-space assets.
+
+<!-- mcp-docs:tool-arguments tool="resolveAssetSearchFilters" example="resolve-space-person-filters" -->
+
+```json
+{
+  "people": ["Pierre"],
+  "spaces": ["Family"],
+  "scope": {
+    "withSharedSpaces": true
+  }
+}
+```
+
+#### approved-retry
+
+Retry an approved read request by id.
+
+<!-- mcp-docs:tool-arguments tool="resolveAssetSearchFilters" example="approved-retry" -->
+
+```json
+{
+  "toolCallId": "00000000-0000-4000-8000-000000000111"
+}
+```
+
 ### Search assets
 
 MCP tool name: `searchAssets`
@@ -195,6 +253,52 @@ Search assets in a known shared space for known space people.
   "filters": {
     "spaceId": "00000000-0000-4000-8000-000000000020",
     "spacePersonIds": ["00000000-0000-4000-8000-000000000021"]
+  },
+  "limit": 25
+}
+```
+
+#### person-filter-search
+
+Search assets for known people resolved by id.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="person-filter-search" -->
+
+```json
+{
+  "filters": {
+    "personIds": ["00000000-0000-4000-8000-000000000040"]
+  },
+  "limit": 25
+}
+```
+
+#### space-id-filter-search
+
+Search assets in a known shared space resolved by id.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="space-id-filter-search" -->
+
+```json
+{
+  "filters": {
+    "spaceId": "00000000-0000-4000-8000-000000000020"
+  },
+  "limit": 25
+}
+```
+
+#### resolved-id-filter-search
+
+Search with ids returned by resolveAssetSearchFilters.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="resolved-id-filter-search" -->
+
+```json
+{
+  "filters": {
+    "tagIds": ["00000000-0000-4000-8000-000000000030"],
+    "albumIds": ["00000000-0000-4000-8000-000000000010"]
   },
   "limit": 25
 }
@@ -1605,11 +1709,24 @@ Summarize plan risks and selected changes.
 
 ## Common Mistakes
 
+### Resolve asset search filters
+
+- `resolver-missing-fields`: Provide at least one name field such as tags, albums, people, spaces, cameraMakes, cameraModels, or lensModels.
+- `resolver-combined-fields-and-tool-call-id`: Use resolver fields for a new request or only toolCallId for an approved retry, not both.
+- `resolver-scope-conflict`: Use either scope.spaceId for one shared space or scope.withSharedSpaces for all visible shared spaces.
+- `tool-call-arguments-missing`: Put the resolver arguments object at params.arguments in the MCP tools/call request.
+- `tool-call-arguments-not-object`: The params.arguments value must be a JSON object, not an array, primitive, or null.
+
 ### Search assets
 
 - `search-filters-outside-filters`: Place supported metadata filters for date, location, favorite, rating, album, tag, camera, media, people, space, shared-space, and visibility inside the filters object.
 - `search-query-with-metadata-mode`: Omit query and use metadata filters for now. Text search modes are in the contract but are not available yet.
 - `search-space-person-without-space`: spacePersonIds requires filters.spaceId. Resolve or choose the space first, then call searchAssets with both fields under filters.
+- `search-filter-name-in-tag-ids`: Use resolveAssetSearchFilters for user-facing tag names, then call searchAssets with the returned tagIds under filters.
+- `search-filter-name-in-album-ids`: Use resolveAssetSearchFilters for user-facing album names, then call searchAssets with the returned albumIds under filters.
+- `search-filter-name-in-person-ids`: Use resolveAssetSearchFilters for user-facing person names, then call searchAssets with the returned personIds under filters.
+- `search-filter-name-in-space-id`: Use resolveAssetSearchFilters for user-facing space names, then call searchAssets with the returned spaceId under filters.
+- `search-filter-name-in-space-person-ids`: Use resolveAssetSearchFilters for user-facing shared-space person names, then call searchAssets with the returned spacePersonIds under filters.
 - `search-combined-filters-and-tool-call-id`: Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.
 - `search-limit-out-of-range`: Use a positive integer limit no greater than 10000.
 - `search-page-unavailable`: Only page 1 is executable in the current slice. Later pages are contract fields for a later slice.
