@@ -198,12 +198,15 @@ describe(AgentMcpDocsService.name, () => {
   it('documents current search execution bounds for expanded contract fields', () => {
     const markdown = sut.generateMarkdown();
 
-    expect(markdown).toContain('Only page 1 and order desc are executable');
+    expect(markdown).toContain('bounded result pages');
+    expect(markdown).toContain('when hasMore is true');
+    expect(markdown).toContain('metadata-next-page-search');
     expect(markdown).toContain(
       'people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types',
     );
-    expect(markdown).toContain('Text modes, later pages, and non-desc order');
-    expect(markdown).toContain('search-page-unavailable');
+    expect(markdown).not.toContain('Only page 1 and order desc are executable');
+    expect(markdown).not.toContain('Text modes, later pages, and non-desc order');
+    expect(markdown).toContain('search-page-continuation');
     expect(markdown).toContain('search-order-unavailable');
   });
 
