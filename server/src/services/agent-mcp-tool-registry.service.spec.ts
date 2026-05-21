@@ -166,8 +166,22 @@ describe(AgentMcpToolRegistryService.name, () => {
     }
   });
 
+  it('lists resolveAssetSearchFilters with object input schema examples', () => {
+    const tool = sut.listTools().find((candidate) => candidate.name === AgentToolName.ResolveAssetSearchFilters);
+
+    expect(tool).toMatchObject({
+      title: 'Resolve asset search filters',
+      annotations: expect.objectContaining({ readOnlyHint: true }),
+      inputSchema: expect.objectContaining({
+        type: 'object',
+        examples: expect.arrayContaining([{ tags: ['Travel'], albums: ['Berlin'] }]),
+      }),
+    });
+  });
+
   it('adds model-facing property descriptions for read tool argument fields', () => {
     const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+    const resolver = toolsByName.get(AgentToolName.ResolveAssetSearchFilters)?.inputSchema;
     const metadata = toolsByName.get(AgentToolName.ReadAssetMetadata)?.inputSchema;
     const search = toolsByName.get(AgentToolName.SearchAssets)?.inputSchema;
     const searchProperties = search?.properties as Record<string, { description?: string }> | undefined;
@@ -180,6 +194,32 @@ describe(AgentMcpToolRegistryService.name, () => {
       }),
       toolCallId: expect.objectContaining({
         description: expect.stringContaining('approved retry'),
+      }),
+    });
+    expect(resolver?.properties).toMatchObject({
+      people: expect.objectContaining({
+        description: expect.stringContaining('personIds'),
+      }),
+      tags: expect.objectContaining({
+        description: expect.stringContaining('tagIds'),
+      }),
+      albums: expect.objectContaining({
+        description: expect.stringContaining('albumIds'),
+      }),
+      spaces: expect.objectContaining({
+        description: expect.stringContaining('spaceId'),
+      }),
+      cameraMakes: expect.objectContaining({
+        description: expect.stringContaining('make'),
+      }),
+      cameraModels: expect.objectContaining({
+        description: expect.stringContaining('model'),
+      }),
+      lensModels: expect.objectContaining({
+        description: expect.stringContaining('lensModel'),
+      }),
+      scope: expect.objectContaining({
+        description: expect.stringContaining('search scope'),
       }),
     });
     expect(search?.properties).toMatchObject({
