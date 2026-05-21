@@ -33,6 +33,18 @@
     const trimmedReason = reason.trim();
     void onDeny(toolCall.id, reasonOpen && trimmedReason ? trimmedReason : undefined);
   };
+
+  const formatResultSizeBytes = (bytes: number | null | undefined) => {
+    if (bytes === null || bytes === undefined) {
+      return 'not estimated';
+    }
+
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+
+    return `${Math.round(bytes / 1024)} KB`;
+  };
 </script>
 
 <article
@@ -68,6 +80,20 @@
           <dt class="font-medium text-gray-500 dark:text-gray-400">Data</dt>
           <dd>{dataClass}</dd>
         </div>
+        {#if toolCall.resultSize}
+          <div>
+            <dt class="font-medium text-gray-500 dark:text-gray-400">Response size</dt>
+            <dd>{formatResultSizeBytes(toolCall.resultSize.estimatedBytes)}</dd>
+          </div>
+          <div>
+            <dt class="font-medium text-gray-500 dark:text-gray-400">Returned items</dt>
+            <dd>{toolCall.resultSize.returnedItems}</dd>
+          </div>
+          <div>
+            <dt class="font-medium text-gray-500 dark:text-gray-400">Truncated</dt>
+            <dd>{toolCall.resultSize.truncated ? 'yes' : 'no'}</dd>
+          </div>
+        {/if}
         <div>
           <dt class="font-medium text-gray-500 dark:text-gray-400">{$t('assistant_approval_data_access')}</dt>
           <dd>
