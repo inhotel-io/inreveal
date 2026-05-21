@@ -59,9 +59,9 @@ const propertyDescriptions = {
   cameraModels: 'Visible camera model names to resolve into the canonical searchAssets model value.',
   lensModels: 'Visible lens names to resolve into the canonical searchAssets lensModel value.',
   scope: 'Optional search scope for resolving names, such as a visible space or shared-space inclusion.',
-  mode: 'Search mode. Metadata mode is currently executable; text modes require query but are available in a later slice.',
+  mode: 'Search mode. Use metadata for structured filters, or smart, description, ocr, or filename with query.',
   query:
-    'Query text. For searchAssets, text modes require query but are not available until a later slice; for searchUsers use a name or email.',
+    'Query text. For searchAssets, use this with smart, description, ocr, or filename modes; for searchUsers use a name or email.',
   filters:
     'Currently executable filters include taken date, place, camera, favorite, rating, album, tag, media, people, space, visibility, and shared-space person fields.',
   limit: 'Maximum number of results to return. Use a positive integer up to 10000.',
