@@ -2060,6 +2060,18 @@ const slice7RuntimeFailureMatrixCases: AgentMcpFailureMatrixCase[] = [
     expectedContractMistakeId: 'search-filter-name-in-tag-ids',
   },
   {
+    id: 'search-album-name-in-id-filter',
+    category: 'search',
+    description: 'Model passes a user-facing album name where searchAssets requires albumIds.',
+    toolName: AgentToolName.SearchAssets,
+    request: toolCallRequest('search-album-name-in-id-filter', AgentToolName.SearchAssets, {
+      filters: { albumIds: ['Family'] },
+      limit: 25,
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'filters.albumIds.0' },
+    expectedContractMistakeId: 'search-filter-name-in-album-ids',
+  },
+  {
     id: 'search-person-name-in-id-filter',
     category: 'search',
     description: 'Model passes a user-facing person name where searchAssets requires personIds.',
@@ -2070,6 +2082,18 @@ const slice7RuntimeFailureMatrixCases: AgentMcpFailureMatrixCase[] = [
     }),
     expectedResult: { kind: 'tool-validation', expectedIssuePath: 'filters.personIds.0' },
     expectedContractMistakeId: 'search-filter-name-in-person-ids',
+  },
+  {
+    id: 'search-space-name-in-id-filter',
+    category: 'search',
+    description: 'Model passes a user-facing space name where searchAssets requires spaceId.',
+    toolName: AgentToolName.SearchAssets,
+    request: toolCallRequest('search-space-name-in-id-filter', AgentToolName.SearchAssets, {
+      filters: { spaceId: 'Family' },
+      limit: 25,
+    }),
+    expectedResult: { kind: 'tool-validation', expectedIssuePath: 'filters.spaceId' },
+    expectedContractMistakeId: 'search-filter-name-in-space-id',
   },
   {
     id: 'search-query-with-metadata-mode',

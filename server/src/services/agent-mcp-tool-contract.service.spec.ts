@@ -990,6 +990,7 @@ describe(AgentMcpToolContractService.name, () => {
         });
 
         expect(correction?.mistakeId, label).toBe(mistakeId);
+        expect(correction?.issuePath, label).toBe(issues[0].path);
         expect(correction?.hint, label).toContain(hint);
         expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(correction?.exampleArguments).success)
           .toBe(true);
@@ -1249,7 +1250,9 @@ describe(AgentMcpToolContractService.name, () => {
       'search-root-taken-after-filter',
       'search-root-favorite-rating-filters',
       'search-tag-name-in-id-filter',
+      'search-album-name-in-id-filter',
       'search-person-name-in-id-filter',
+      'search-space-name-in-id-filter',
       'search-query-with-metadata-mode',
       'search-space-person-without-space',
       'search-fields-with-tool-call-id',
