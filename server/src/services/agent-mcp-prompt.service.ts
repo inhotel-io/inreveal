@@ -19,6 +19,7 @@ export type AgentMcpPromptExample = {
 };
 
 const promptExampleSelections = [
+  { toolName: AgentToolName.ResolveAssetSearchFilters, exampleName: 'resolve-named-filters' },
   { toolName: AgentToolName.SearchAssets, exampleName: 'bounded-date-location-search' },
   { toolName: AgentToolName.ReadAssetMetadata, exampleName: 'approved-retry' },
   { toolName: AgentToolName.ListSpaces, exampleName: 'list-visible-spaces' },
@@ -41,6 +42,11 @@ export class AgentMcpPromptService {
     const examples = this.listPromptExamples();
     const contracts = this.contractService.listToolContracts();
     const toolList = contracts.map((contract) => this.toPiToolName(contract.name)).join(', ');
+    const resolveFilters = this.getPromptExample(
+      examples,
+      AgentToolName.ResolveAssetSearchFilters,
+      'resolve-named-filters',
+    );
     const normalRead = this.getPromptExample(examples, AgentToolName.SearchAssets, 'bounded-date-location-search');
     const retryRead = this.getPromptExample(examples, AgentToolName.ReadAssetMetadata, 'approved-retry');
     const listSpaces = this.getPromptExample(examples, AgentToolName.ListSpaces, 'list-visible-spaces');
@@ -54,18 +60,19 @@ export class AgentMcpPromptService {
     return this.sanitizePrompt(
       [
         'Gallery MCP tool-use cheat sheet',
-        `Pi-visible tools: ${toolList}`,
-        `Read before planning: ${searchContract.usage}`,
-        `For writes, call ${this.toPiToolName(planContract.name)}: ${planContract.usage}`,
+        `Tool: ${toolList}`,
+        `Read: ${searchContract.usage.replace('Put deterministic metadata search filters under filters. ', '')}`,
+        `Writes: call ${this.toPiToolName(planContract.name)} for reviewable operation plans.`,
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
+        `Resolve names before searchAssets: ${resolveFilters.piToolName} ${this.formatJson(resolveFilters.arguments)}`,
         `Read ${normalRead.piToolName}: ${this.formatJson(normalRead.arguments)}`,
         `Retry ${retryRead.piToolName}: ${this.formatJson(retryRead.arguments)}`,
-        `Space lookup: call ${listSpaces.piToolName}, choose an id, then ${readSpace.piToolName}:`,
+        `Space lookup: ${listSpaces.piToolName}, choose id, then ${readSpace.piToolName}:`,
         `${this.formatJson(listSpaces.arguments)} -> ${this.formatJson(readSpace.arguments)}`,
-        'Existing-space plans: use listSpaces/readSpace first. If ambiguous/no matching space, ask. If no matching assets/no photos or none to remove in space, explain without an empty plan. If assetIdsTruncated false, exclude already in space adds and only remove photos already in space; if true, narrow or ask.',
-        'Space detail updates: use listSpaces/readSpace first. For existing_space targetId only, plan space.updateDetails payload fields: spaceName, description, color. description "" clears it; omitted fields stay unchanged. If same name, same description, or same color already, answer without a no-op/no change plan. Never update thumbnails, pets, face recognition, linked libraries, or delete spaces.',
-        `Plan ${this.toPiToolName(AgentToolName.ProposeAlbumOperations)} examples: album.create new_album temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id>"]}; space.updateDetails payload {spaceName,description,color}.`,
+        'Existing-space plans: listSpaces/readSpace first. If ambiguous/no matching space, ask. If no matching assets/no photos or none to remove in space, explain. assetIdsTruncated false: exclude already in space adds and only remove already in space; true: narrow/ask.',
+        'Space details: listSpaces/readSpace first. For existing_space targetId only, plan space.updateDetails fields: spaceName, description, color. description "" clears it. If same name, same description, or same color already, answer without a no-op/no change plan. Never update thumbnails, pets, face recognition, linked libraries, or delete spaces.',
+        `Plan ${this.toPiToolName(AgentToolName.ProposeAlbumOperations)}: album.create temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id>"]}; space.updateDetails {spaceName,description,color}.`,
         this.renderValidationRecoveryGuidance(validationMistake),
       ].join('\n'),
     );
@@ -212,7 +219,7 @@ export class AgentMcpPromptService {
       throw new Error('Missing MCP prompt validation recovery mistake with example guidance');
     }
 
-    return `If validation returns exampleArguments, retry once when the correction is obvious. Mistake hint: "${mistake.hint}"`;
+    return `Validation: exampleArguments, retry once when correction is obvious. Hint: "${mistake.hint}"`;
   }
 
   private sanitizePrompt(prompt: string): string {
