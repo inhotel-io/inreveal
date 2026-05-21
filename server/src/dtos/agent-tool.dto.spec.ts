@@ -319,10 +319,43 @@ describe('Agent tool DTOs', () => {
             query: 'beach sunset',
             limit: 5,
             page: 1,
-            order: 'desc',
           }),
         );
+        if (mode === 'smart') {
+          expect(result.data).not.toHaveProperty('order');
+        } else {
+          expect(result.data.order).toBe('desc');
+        }
       }
+    });
+
+    it('does not default smart search order when omitted so relevance ranking is used', () => {
+      const result = AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse({
+        mode: 'smart',
+        query: 'beach sunset',
+        filters: { city: 'Berlin' },
+        limit: 25,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({
+        mode: 'smart',
+        query: 'beach sunset',
+        filters: { city: 'Berlin' },
+        limit: 25,
+        page: 1,
+      });
+    });
+
+    it('keeps metadata-like search order defaulted to desc', () => {
+      const result = AgentReadToolRequestSchemas[AgentToolName.SearchAssets].parse({
+        mode: 'ocr',
+        query: 'invoice',
+        filters: {},
+        limit: 10,
+      });
+
+      expect(result.order).toBe('desc');
     });
 
     it.each(['smart', 'description', 'ocr', 'filename'] as const)('rejects %s mode without a query', (mode) => {
