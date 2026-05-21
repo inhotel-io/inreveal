@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-describe('Pi agent capability matrix', () => {
-  const readMatrix = () =>
-    readFileSync(resolve(process.cwd(), '../docs/superpowers/specs/2026-05-19-pi-agent-capability-matrix.md'), 'utf8');
+const readMatrix = () =>
+  readFileSync(resolve(process.cwd(), '../docs/superpowers/specs/2026-05-19-pi-agent-capability-matrix.md'), 'utf8');
 
+describe('Pi agent capability matrix', () => {
   it('documents completed search filter parity and acceptance prompts', () => {
     const markdown = readMatrix();
 
