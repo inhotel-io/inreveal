@@ -219,6 +219,8 @@ part 'model/agent_runner_capabilities_dto.dart';
 part 'model/agent_runner_status_dto.dart';
 part 'model/agent_runner_status_reason.dart';
 part 'model/agent_search_assets_filters.dart';
+part 'model/agent_search_assets_mode.dart';
+part 'model/agent_search_assets_order.dart';
 part 'model/agent_search_assets_tool_approval_required_response.dart';
 part 'model/agent_search_assets_tool_denied_response.dart';
 part 'model/agent_search_assets_tool_request_dto.dart';

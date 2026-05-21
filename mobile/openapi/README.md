@@ -557,6 +557,8 @@ Class | Method | HTTP request | Description
  - [AgentRunnerStatusDto](doc//AgentRunnerStatusDto.md)
  - [AgentRunnerStatusReason](doc//AgentRunnerStatusReason.md)
  - [AgentSearchAssetsFilters](doc//AgentSearchAssetsFilters.md)
+ - [AgentSearchAssetsMode](doc//AgentSearchAssetsMode.md)
+ - [AgentSearchAssetsOrder](doc//AgentSearchAssetsOrder.md)
  - [AgentSearchAssetsToolApprovalRequiredResponse](doc//AgentSearchAssetsToolApprovalRequiredResponse.md)
  - [AgentSearchAssetsToolDeniedResponse](doc//AgentSearchAssetsToolDeniedResponse.md)
  - [AgentSearchAssetsToolRequestDto](doc//AgentSearchAssetsToolRequestDto.md)

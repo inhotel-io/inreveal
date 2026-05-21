@@ -468,6 +468,10 @@ class ApiClient {
           return AgentRunnerStatusReasonTypeTransformer().decode(value);
         case 'AgentSearchAssetsFilters':
           return AgentSearchAssetsFilters.fromJson(value);
+        case 'AgentSearchAssetsMode':
+          return AgentSearchAssetsModeTypeTransformer().decode(value);
+        case 'AgentSearchAssetsOrder':
+          return AgentSearchAssetsOrderTypeTransformer().decode(value);
         case 'AgentSearchAssetsToolApprovalRequiredResponse':
           return AgentSearchAssetsToolApprovalRequiredResponse.fromJson(value);
         case 'AgentSearchAssetsToolDeniedResponse':

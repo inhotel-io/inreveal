@@ -24,6 +24,7 @@ class AgentToolName {
   String toJson() => value;
 
   static const searchAssets = AgentToolName._(r'searchAssets');
+  static const resolveAssetSearchFilters = AgentToolName._(r'resolveAssetSearchFilters');
   static const readAssetMetadata = AgentToolName._(r'readAssetMetadata');
   static const readAssetPreviews = AgentToolName._(r'readAssetPreviews');
   static const readAssetOriginals = AgentToolName._(r'readAssetOriginals');
@@ -39,6 +40,7 @@ class AgentToolName {
   /// List of all possible values in this [enum][AgentToolName].
   static const values = <AgentToolName>[
     searchAssets,
+    resolveAssetSearchFilters,
     readAssetMetadata,
     readAssetPreviews,
     readAssetOriginals,
@@ -89,6 +91,7 @@ class AgentToolNameTypeTransformer {
     if (data != null) {
       switch (data) {
         case r'searchAssets': return AgentToolName.searchAssets;
+        case r'resolveAssetSearchFilters': return AgentToolName.resolveAssetSearchFilters;
         case r'readAssetMetadata': return AgentToolName.readAssetMetadata;
         case r'readAssetPreviews': return AgentToolName.readAssetPreviews;
         case r'readAssetOriginals': return AgentToolName.readAssetOriginals;
