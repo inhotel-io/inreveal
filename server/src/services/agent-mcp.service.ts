@@ -2,6 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { serverVersion } from 'src/constants';
 import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.dto';
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
+import type {
+  AgentListAlbumsToolRequestDto,
+  AgentListSpacesToolRequestDto,
+  AgentReadAlbumToolRequestDto,
+  AgentReadAssetMetadataToolRequestDto,
+  AgentReadAssetOriginalsToolRequestDto,
+  AgentReadAssetPreviewsToolRequestDto,
+  AgentReadSpaceToolRequestDto,
+  AgentResolveAssetSearchFiltersToolRequestDto,
+  AgentSearchAssetsToolRequestDto,
+  AgentSearchUsersToolRequestDto,
+} from 'src/dtos/agent-tool.dto';
 import type { AuthDto } from 'src/dtos/auth.dto';
 import { AgentToolName } from 'src/enum';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
@@ -209,34 +221,34 @@ export class AgentMcpService {
   ): Promise<unknown> {
     switch (toolName) {
       case AgentToolName.ResolveAssetSearchFilters: {
-        return this.toolService.resolveAssetSearchFilters(auth, sessionId, dto);
+        return this.toolService.resolveAssetSearchFilters(auth, sessionId, dto as AgentResolveAssetSearchFiltersToolRequestDto);
       }
       case AgentToolName.SearchAssets: {
-        return this.toolService.searchAssets(auth, sessionId, dto);
+        return this.toolService.searchAssets(auth, sessionId, dto as AgentSearchAssetsToolRequestDto);
       }
       case AgentToolName.ReadAssetMetadata: {
-        return this.toolService.readAssetMetadata(auth, sessionId, dto);
+        return this.toolService.readAssetMetadata(auth, sessionId, dto as AgentReadAssetMetadataToolRequestDto);
       }
       case AgentToolName.ReadAssetPreviews: {
-        return this.toolService.readAssetPreviews(auth, sessionId, dto);
+        return this.toolService.readAssetPreviews(auth, sessionId, dto as AgentReadAssetPreviewsToolRequestDto);
       }
       case AgentToolName.ReadAssetOriginals: {
-        return this.toolService.readAssetOriginals(auth, sessionId, dto);
+        return this.toolService.readAssetOriginals(auth, sessionId, dto as AgentReadAssetOriginalsToolRequestDto);
       }
       case AgentToolName.ListAlbums: {
-        return this.toolService.listAlbums(auth, sessionId, dto);
+        return this.toolService.listAlbums(auth, sessionId, dto as AgentListAlbumsToolRequestDto);
       }
       case AgentToolName.ReadAlbum: {
-        return this.toolService.readAlbum(auth, sessionId, dto);
+        return this.toolService.readAlbum(auth, sessionId, dto as AgentReadAlbumToolRequestDto);
       }
       case AgentToolName.ListSpaces: {
-        return this.toolService.listSpaces(auth, sessionId, dto);
+        return this.toolService.listSpaces(auth, sessionId, dto as AgentListSpacesToolRequestDto);
       }
       case AgentToolName.ReadSpace: {
-        return this.toolService.readSpace(auth, sessionId, dto);
+        return this.toolService.readSpace(auth, sessionId, dto as AgentReadSpaceToolRequestDto);
       }
       case AgentToolName.SearchUsers: {
-        return this.toolService.searchUsers(auth, sessionId, dto);
+        return this.toolService.searchUsers(auth, sessionId, dto as AgentSearchUsersToolRequestDto);
       }
     }
   }

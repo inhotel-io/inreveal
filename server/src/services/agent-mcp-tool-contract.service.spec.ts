@@ -154,6 +154,50 @@ describe(AgentMcpToolContractService.name, () => {
     );
   });
 
+  it('documents compact readAssetMetadata detail presets and field-selected reads', () => {
+    const contract = sut.getReadToolContract(AgentToolName.ReadAssetMetadata);
+
+    expect(contract?.usage).toContain('detail');
+    expect(contract?.usage).toContain('fields');
+    expect(contract?.usage).toContain('basic');
+    expect(contract?.usage).toContain('allSafe');
+    expect(contract?.argumentModes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'metadata-detail',
+          requiredFields: ['assetIds'],
+          forbiddenFields: expect.arrayContaining(['fields', 'toolCallId']),
+        }),
+        expect.objectContaining({
+          name: 'metadata-fields',
+          requiredFields: ['assetIds', 'fields'],
+          forbiddenFields: expect.arrayContaining(['detail', 'toolCallId']),
+        }),
+        expect.objectContaining({
+          name: 'approved-retry',
+          requiredFields: ['toolCallId'],
+          forbiddenFields: expect.arrayContaining(['assetIds', 'detail', 'fields']),
+        }),
+      ]),
+    );
+    expect(contract?.examples).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'read-basic-metadata',
+          arguments: { assetIds: ['00000000-0000-4000-8000-000000000001'], detail: 'basic' },
+        }),
+        expect.objectContaining({
+          name: 'read-selected-metadata-fields',
+          arguments: {
+            assetIds: ['00000000-0000-4000-8000-000000000001'],
+            fields: ['filename', 'rating', 'tags'],
+          },
+        }),
+      ]),
+    );
+    expect(JSON.stringify(contract)).not.toMatch(/private|rawPath|storageKey|checksum|original path|bearer|token/i);
+  });
+
   it('defines Slice 7 natural-language search examples that parse into supported MCP arguments', () => {
     const search = sut.getReadToolContract(AgentToolName.SearchAssets);
     const examplesByName = new Map(search?.examples.map((example) => [example.name, example]));
@@ -284,7 +328,7 @@ describe(AgentMcpToolContractService.name, () => {
 
     expect(search?.argumentModes.find((mode) => mode.name === 'approved-retry')).toMatchObject({
       requiredFields: ['toolCallId'],
-      forbiddenFields: ['mode', 'query', 'filters', 'limit', 'page', 'order'],
+      forbiddenFields: ['mode', 'query', 'filters', 'limit', 'page', 'order', 'detail', 'fields', 'sampleSize'],
     });
   });
 
