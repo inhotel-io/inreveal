@@ -986,7 +986,7 @@ describe(AgentMcpToolContractService.name, () => {
       for (const { label, issues, mistakeId, hint } of cases) {
         const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
           requestShape: 'tool-arguments',
-          issues,
+          issues: [...issues],
         });
 
         expect(correction?.mistakeId, label).toBe(mistakeId);
