@@ -905,6 +905,45 @@ describe(AgentRunnerService.name, () => {
     });
   });
 
+  it('emits actionable context-window runner errors without replacing the runner message', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Find every photo in my library.' }] };
+    const runnerMessage =
+      'The assistant hit the model context limit while processing Gallery data. Narrow the request or inspect fewer photos at a time.';
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'runner-error',
+          sessionId,
+          runnerSessionId,
+          message: runnerMessage,
+        },
+      ]),
+    );
+    sessionRepository.markInterruptedFromActive.mockResolvedValue({} as never);
+
+    await expect(sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content })).rejects.toThrow(
+      runnerMessage,
+    );
+
+    expect(websocketRepository.clientSend).toHaveBeenCalledWith('on_agent_session_event', userId, {
+      type: 'runner-error',
+      sessionId,
+      message: runnerMessage,
+      createdAt: '2026-05-14T10:00:00.000Z',
+    });
+  });
+
   it('marks the session interrupted and emits an error when the runner stream ends empty', async () => {
     const userId = '00000000-0000-4000-8000-000000000001';
     const sessionId = '00000000-0000-4000-8000-000000000100';
