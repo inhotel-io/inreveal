@@ -61,7 +61,7 @@ export class AgentMcpPromptService {
       [
         'Gallery MCP tool-use cheat sheet',
         `Tool: ${toolList}`,
-        `R: Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds; if hasMore, continue with nextPage.`,
+        `R: Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds; if hasMore, use nextPage as page.`,
         'Text search: smart/ocr/description/filename require query',
         `Write: call ${this.toPiToolName(planContract.name)} for reviewable plans.`,
         this.renderSafetyGuidance(contracts),

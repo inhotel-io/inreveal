@@ -224,10 +224,10 @@ describe(AgentMcpToolRegistryService.name, () => {
     });
     expect(search?.properties).toMatchObject({
       mode: expect.objectContaining({
-        description: expect.stringContaining('Metadata mode is currently executable'),
+        description: expect.stringContaining('smart, description, ocr, or filename with query'),
       }),
       query: expect.objectContaining({
-        description: expect.stringContaining('not available until a later slice'),
+        description: expect.stringContaining('use this with smart, description, ocr, or filename modes'),
       }),
       filters: expect.objectContaining({
         description: expect.stringContaining('Currently executable filters'),
@@ -247,10 +247,10 @@ describe(AgentMcpToolRegistryService.name, () => {
     });
     expect(search?.properties).toMatchObject({
       mode: expect.objectContaining({
-        description: expect.not.stringContaining('Use metadata for structured filters, or smart'),
+        description: expect.not.stringContaining('later slice'),
       }),
       query: expect.objectContaining({
-        description: expect.not.stringContaining('use this with smart, description, ocr, or filename modes'),
+        description: expect.not.stringContaining('not available until a later slice'),
       }),
       page: expect.objectContaining({
         description: expect.not.stringContaining('continuing a previous search'),
