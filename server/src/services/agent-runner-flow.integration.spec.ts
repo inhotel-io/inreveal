@@ -96,6 +96,18 @@ const metadata = (id: string): AgentAssetMetadata => ({
   tags: [],
 });
 
+type AcceptanceSearchCase = {
+  name: string;
+  prompt: string;
+  request: Parameters<AgentToolService['searchAssets']>[2];
+  expectedRequestSummary: string;
+  expectedRequestMetadata: Record<string, unknown>;
+};
+
+const fixedAssetId = '00000000-0000-4000-8000-000000000501';
+const alexPersonId = '00000000-0000-4000-8000-000000000601';
+const familySpaceId = '00000000-0000-4000-8000-000000000401';
+
 class InMemoryAgentSessionRepository {
   sessions = new Map<string, AgentSession>();
 
@@ -414,6 +426,11 @@ const setup = () => {
         },
       ]),
     ),
+    getMember: vi.fn((spaceId: string, userId: string) =>
+      Promise.resolve(
+        spaceId === currentSpace.id && userId === auth.user.id ? { spaceId, userId, role: 'owner' } : null,
+      ),
+    ),
     getAssetCount: vi.fn(() => Promise.resolve(0)),
     getRecentAssets: vi.fn(() => Promise.resolve([])),
   };
@@ -425,6 +442,15 @@ const setup = () => {
   };
   const searchRepository = {
     searchMetadata: vi.fn(() => Promise.resolve({ items: [] as Array<{ id: string }>, hasNextPage: false })),
+    searchSmart: vi.fn(() => Promise.resolve({ items: [] as Array<{ id: string }>, hasNextPage: false })),
+  };
+  const machineLearningRepository = { encodeText: vi.fn(() => Promise.resolve('[1, 2, 3]')) };
+  const systemMetadataRepository = {
+    get: vi.fn(() =>
+      Promise.resolve({
+        machineLearning: { clip: { enabled: true, modelName: 'ViT-Test', maxDistance: 0.42 } },
+      }),
+    ),
   };
   const toolService = new AgentToolService(
     accessRepository as unknown as AccessRepository,
@@ -432,8 +458,8 @@ const setup = () => {
     searchRepository as never,
     { error: vi.fn(), warn: vi.fn() } as unknown as LoggingRepository,
     { getEnv: vi.fn(() => ({ configFile: undefined })) } as unknown as ConfigRepository,
-    { encodeText: vi.fn(() => Promise.resolve('[1, 2, 3]')) } as unknown as MachineLearningRepository,
-    { get: vi.fn(() => Promise.resolve(null)) } as unknown as SystemMetadataRepository,
+    machineLearningRepository as unknown as MachineLearningRepository,
+    systemMetadataRepository as unknown as SystemMetadataRepository,
     albumRepository as unknown as AlbumRepository,
     sharedSpaceRepository as unknown as SharedSpaceRepository,
     sessions as unknown as AgentSessionRepository,
@@ -459,7 +485,9 @@ const setup = () => {
     },
     accessRepository,
     assetRepository,
+    machineLearningRepository,
     searchRepository,
+    systemMetadataRepository,
     setResumeMode: (mode: 'success' | 'error') => {
       resumeMode = mode;
     },
@@ -470,6 +498,116 @@ const setup = () => {
 };
 
 describe('Pi agent runner flow harness', () => {
+  const expectAcceptanceSearchFlow = async (testCase: AcceptanceSearchCase) => {
+    const harness = setup();
+    harness.accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([fixedAssetId]));
+    harness.accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([alexPersonId]));
+    harness.searchRepository.searchMetadata.mockResolvedValue({
+      items: [{ id: fixedAssetId }] as never,
+      hasNextPage: false,
+    });
+    harness.searchRepository.searchSmart.mockResolvedValue({
+      items: [{ id: fixedAssetId }] as never,
+      hasNextPage: false,
+    });
+    harness.assetRepository.getAgentMetadataByIds.mockResolvedValue([metadata(fixedAssetId)] as never);
+
+    harness.configureRunnerMessage(async function* ({ body }) {
+      const result = await harness.toolService.searchAssets(harness.auth, body.gallerySessionId, testCase.request);
+      if (result.status !== 'approval-required') {
+        throw new Error(`Expected searchAssets approval for ${testCase.name}`);
+      }
+
+      yield {
+        type: 'tool-approval-needed',
+        sessionId: body.gallerySessionId,
+        runnerSessionId: 'runner-session-1',
+        toolCallId: result.toolCall.id,
+      };
+    });
+
+    const session = await harness.sessionService.create(harness.auth, {
+      providerCredentialId: '00000000-0000-4000-8000-000000000201',
+      model: 'gpt-5.1',
+      permissionPreset: AgentPermissionPreset.VisualOrganizer,
+      approvalMode: AgentApprovalMode.Strict,
+      initialContext: { entrypoint: 'assistant-page', acceptancePrompt: testCase.name },
+    });
+
+    const userMessage = await harness.messageService.appendUserMessage(harness.auth, session.id, {
+      content: { blocks: [{ type: 'text', text: testCase.prompt }] },
+    });
+
+    expect(userMessage.role).toBe(AgentMessageRole.User);
+    await waitFor(async () => {
+      const [pendingToolCall] = await harness.toolService.getToolCalls(harness.auth, session.id);
+      expect(pendingToolCall).toEqual(
+        expect.objectContaining({
+          toolName: AgentToolName.SearchAssets,
+          status: AgentToolCallStatus.PendingApproval,
+          requestSummary: testCase.expectedRequestSummary,
+        }),
+      );
+    });
+
+    const [pendingToolCall] = await harness.toolService.getToolCalls(harness.auth, session.id);
+    expect(harness.toolCalls.toolCalls[0].redactedRequestMetadata).toEqual(testCase.expectedRequestMetadata);
+
+    await harness.toolService.approveToolCall(harness.auth, session.id, pendingToolCall.id, {
+      decision: AgentToolApprovalDecision.Approved,
+    });
+
+    await waitFor(() => {
+      expect(harness.runnerRepository.streamResume).toHaveBeenCalledTimes(1);
+      expect(harness.runnerResumeBodies).toEqual([
+        expect.objectContaining({
+          gallerySessionId: session.id,
+          toolCallId: pendingToolCall.id,
+          approvalDecision: AgentToolApprovalDecision.Approved,
+          toolResult: expect.objectContaining({
+            status: 'success',
+            returnedCount: 1,
+            hasMore: false,
+          }),
+        }),
+      ]);
+    });
+
+    await waitFor(async () => {
+      const messages = await harness.messageService.getMessages(harness.auth, session.id);
+      const toolCalls = await harness.toolService.getToolCalls(harness.auth, session.id);
+      const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
+
+      expect(messages).toEqual([
+        expect.objectContaining({
+          role: AgentMessageRole.User,
+          content: { blocks: [{ type: 'text', text: testCase.prompt }] },
+        }),
+        expect.objectContaining({
+          role: AgentMessageRole.Assistant,
+          providerMessageId: 'provider-message-1',
+        }),
+      ]);
+      expect(toolCalls).toEqual([
+        expect.objectContaining({
+          id: pendingToolCall.id,
+          toolName: AgentToolName.SearchAssets,
+          status: AgentToolCallStatus.Completed,
+          approvalDecision: AgentToolApprovalDecision.Approved,
+          responseSummary: 'Returned metadata for 1 asset',
+          assetCount: 1,
+        }),
+      ]);
+      expect(reloadedSession?.status).toBe(AgentSessionStatus.Running);
+    });
+
+    expect(harness.websocketEvents.map(({ event }) => event.type)).toEqual([
+      'tool-approval-needed',
+      'assistant-message-delta',
+      'assistant-message-created',
+    ]);
+  };
+
   it('persists and resumes the approval flow from reloadable state', async () => {
     const harness = setup();
     const session = await harness.sessionService.create(harness.auth, {
@@ -708,4 +846,124 @@ describe('Pi agent runner flow harness', () => {
       'assistant-message-created',
     ]);
   });
+
+  it.each<AcceptanceSearchCase>([
+    {
+      name: 'alex berlin last summer unalbumed',
+      prompt: 'Find photos of Alex in Berlin from last summer that are not in any album.',
+      request: {
+        mode: 'metadata',
+        filters: {
+          personIds: [alexPersonId],
+          city: 'Berlin',
+          takenAfter: '2025-06-01T00:00:00.000Z',
+          takenBefore: '2025-08-31T23:59:59.999Z',
+          isNotInAlbum: true,
+        },
+        limit: 50,
+        page: 1,
+        order: 'desc',
+      },
+      expectedRequestSummary: 'Search metadata assets (limit 50)',
+      expectedRequestMetadata: {
+        mode: 'metadata',
+        filters: {
+          personIds: [alexPersonId],
+          city: 'Berlin',
+          takenAfter: '2025-06-01T00:00:00.000Z',
+          takenBefore: '2025-08-31T23:59:59.999Z',
+          isNotInAlbum: true,
+        },
+        limit: 50,
+        page: 1,
+        order: 'desc',
+      },
+    },
+    {
+      name: 'five-star Japan videos',
+      prompt: 'Create an album from 5-star videos from Japan.',
+      request: {
+        filters: { rating: 5, type: AssetType.Video, country: 'Japan' },
+        limit: 50,
+      },
+      expectedRequestSummary: 'Search metadata assets (limit 50)',
+      expectedRequestMetadata: {
+        mode: 'metadata',
+        filters: { rating: 5, type: AssetType.Video, country: 'Japan' },
+        limit: 50,
+        page: 1,
+        order: 'desc',
+      },
+    },
+    {
+      name: 'invoice OCR screenshots',
+      prompt: 'Find screenshots from 2024 that mention invoices.',
+      request: {
+        mode: 'ocr',
+        query: 'invoice',
+        filters: {
+          takenAfter: '2024-01-01T00:00:00.000Z',
+          takenBefore: '2024-12-31T23:59:59.999Z',
+          type: AssetType.Image,
+        },
+        limit: 50,
+      },
+      expectedRequestSummary: 'Search ocr assets (limit 50)',
+      expectedRequestMetadata: {
+        mode: 'ocr',
+        filters: {
+          takenAfter: '2024-01-01T00:00:00.000Z',
+          takenBefore: '2024-12-31T23:59:59.999Z',
+          type: AssetType.Image,
+        },
+        limit: 50,
+        page: 1,
+        order: 'desc',
+        query: 'invoice',
+      },
+    },
+    {
+      name: 'family beach sunset smart search',
+      prompt: 'Add beach sunset photos from the Family space to a new album.',
+      request: {
+        mode: 'smart',
+        query: 'beach sunset',
+        filters: { spaceId: familySpaceId },
+        limit: 50,
+        page: 1,
+      },
+      expectedRequestSummary: 'Search smart assets (limit 50)',
+      expectedRequestMetadata: {
+        mode: 'smart',
+        filters: { spaceId: familySpaceId },
+        limit: 50,
+        page: 1,
+        query: 'beach sunset',
+      },
+    },
+    {
+      name: 'Sony camera May',
+      prompt: 'Find photos taken with my Sony camera in May.',
+      request: {
+        filters: {
+          make: 'Sony',
+          takenAfter: '2026-05-01T00:00:00.000Z',
+          takenBefore: '2026-05-31T23:59:59.999Z',
+        },
+        limit: 50,
+      },
+      expectedRequestSummary: 'Search metadata assets (limit 50)',
+      expectedRequestMetadata: {
+        mode: 'metadata',
+        filters: {
+          make: 'Sony',
+          takenAfter: '2026-05-01T00:00:00.000Z',
+          takenBefore: '2026-05-31T23:59:59.999Z',
+        },
+        limit: 50,
+        page: 1,
+        order: 'desc',
+      },
+    },
+  ])('supports Slice 8 acceptance prompt: $name', expectAcceptanceSearchFlow);
 });
