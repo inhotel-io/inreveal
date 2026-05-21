@@ -20,6 +20,7 @@ import type {
 import type { z } from 'zod';
 
 const MCP_PROTOCOL_VERSION = '2025-11-25';
+const MCP_TOOL_TEXT_MAX_CHARS = 500;
 
 type AgentMcpRequest = {
   jsonrpc: '2.0';
@@ -242,9 +243,67 @@ export class AgentMcpService {
 
   private toolResult(structuredContent: unknown): AgentMcpToolCallResult {
     return {
-      content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
+      content: [{ type: 'text', text: this.toolResultText(structuredContent) }],
       structuredContent,
     };
+  }
+
+  private toolResultText(structuredContent: unknown): string {
+    const content = this.recordValue(structuredContent);
+    const summary = this.nonEmptyString(content?.summary);
+    if (summary) {
+      return this.compactToolText(summary);
+    }
+
+    if (content?.status === 'approval-required') {
+      const requestSummary = this.nonEmptyString(this.recordValue(content.toolCall)?.requestSummary);
+      return this.compactToolText(requestSummary ? `Approval required: ${requestSummary}` : 'Approval required.');
+    }
+
+    if (content?.status === 'denied') {
+      const reason = this.nonEmptyString(content.reason);
+      return this.compactToolText(reason ? `Tool call denied: ${reason}` : 'Tool call denied.');
+    }
+
+    if (content?.status === 'error') {
+      const error = this.nonEmptyString(content.error) ?? 'Tool error';
+      const firstIssue = this.firstValidationIssueText(content);
+      return this.compactToolText(firstIssue ? `${error}: ${firstIssue}` : error);
+    }
+
+    return 'Tool result returned.';
+  }
+
+  private firstValidationIssueText(content: Record<string, unknown>): string | undefined {
+    const issues = content.issues;
+    if (!Array.isArray(issues)) {
+      return;
+    }
+
+    const firstIssue = this.recordValue(issues[0]);
+    if (!firstIssue) {
+      return;
+    }
+
+    const path = this.nonEmptyString(firstIssue.path);
+    const message = this.nonEmptyString(firstIssue.message);
+    return [path, message].filter((value): value is string => Boolean(value)).join(': ') || undefined;
+  }
+
+  private recordValue(value: unknown): Record<string, unknown> | undefined {
+    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  }
+
+  private nonEmptyString(value: unknown): string | undefined {
+    return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+  }
+
+  private compactToolText(text: string): string {
+    if (text.length <= MCP_TOOL_TEXT_MAX_CHARS) {
+      return text;
+    }
+
+    return `${text.slice(0, MCP_TOOL_TEXT_MAX_CHARS - 3)}...`;
   }
 
   private validateToolArguments(
