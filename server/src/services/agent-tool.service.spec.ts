@@ -834,10 +834,10 @@ describe(AgentToolService.name, () => {
       call: async (auth: ReturnType<typeof AuthFactory.create>, sessionId: string, _assetId: string) =>
         sut.searchAssets(auth, sessionId, { filters: {}, limit: 1 }),
       arrange: (assetId: string) => {
-        assetRepository.searchAgentMetadata.mockResolvedValue({ assets: [makeMetadata(assetId)], nextPage: null });
+        searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
         accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
       },
-      resultKey: 'assets',
+      resultKey: 'assetIds',
       dataClass: AgentToolDataClass.Metadata,
       assetCount: 1,
       albumCount: 0,
@@ -1563,7 +1563,9 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual({
       status: 'success',
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
-      assets: [expect.objectContaining({ id: sharedAssetId })],
+      summary: 'Returned 1 asset id',
+      detail: 'ids',
+      assetIds: [sharedAssetId],
       returnedCount: 1,
       hasMore: false,
       nextPage: null,
@@ -1598,14 +1600,16 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual({
       status: 'success',
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
-      assets: [expect.objectContaining({ id: assetId })],
+      summary: 'Returned 1 asset id; more results available on page 2',
+      detail: 'ids',
+      assetIds: [assetId],
       returnedCount: 1,
       hasMore: true,
       nextPage: '2',
     });
     expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
       expect.objectContaining({
-        requestSummary: 'Search metadata assets (limit 1)',
+        requestSummary: 'Search metadata assets (limit 1, ids)',
         redactedRequestMetadata: expect.not.objectContaining({
           query: expect.anything(),
         }),
@@ -1622,6 +1626,8 @@ describe(AgentToolService.name, () => {
           limit: 1,
           page: 1,
           order: 'desc',
+          detail: 'ids',
+          fields: [],
         },
       }),
       expect.any(Object),
@@ -1672,9 +1678,11 @@ describe(AgentToolService.name, () => {
       status: 'success',
       toolCall: expect.objectContaining({
         status: AgentToolCallStatus.Completed,
-        responseSummary: 'Returned metadata for 2 assets; more results available on page 3',
+        responseSummary: 'Returned 2 asset ids; more results available on page 3',
       }),
-      assets: [expect.objectContaining({ id: assetIds[0] }), expect.objectContaining({ id: assetIds[1] })],
+      summary: 'Returned 2 asset ids; more results available on page 3',
+      detail: 'ids',
+      assetIds,
       returnedCount: 2,
       hasMore: true,
       nextPage: '3',
@@ -1691,6 +1699,8 @@ describe(AgentToolService.name, () => {
           limit: 2,
           page: 2,
           order: 'desc',
+          detail: 'ids',
+          fields: [],
         },
       }),
       expect.any(Object),
@@ -1722,7 +1732,7 @@ describe(AgentToolService.name, () => {
         returnedCount: 1,
         hasMore: false,
         nextPage: null,
-        toolCall: expect.objectContaining({ responseSummary: 'Returned metadata for 1 asset' }),
+        toolCall: expect.objectContaining({ responseSummary: 'Returned 1 asset id' }),
       }),
     );
     expect(searchRepository.searchMetadata).toHaveBeenCalledWith({ page: 3, size: 50 }, expect.any(Object));
@@ -1745,29 +1755,262 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual({
       status: 'success',
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
-      assets: [],
+      summary: 'Returned 0 asset ids',
+      detail: 'ids',
+      assetIds: [],
       returnedCount: 0,
       hasMore: false,
       nextPage: null,
     });
     expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
       expect.objectContaining({
-        requestSummary: 'Search metadata assets (limit 10000)',
+        requestSummary: 'Search metadata assets (limit 100, ids)',
         redactedRequestMetadata: {
           mode: 'metadata',
           filters: {},
-          limit: 10_000,
+          limit: 100,
           page: 1,
           order: 'desc',
+          detail: 'ids',
+          fields: [],
         },
-        assetCount: 10_000,
+        assetCount: 100,
       }),
       expect.any(Object),
       AgentToolDataClass.Metadata,
       expect.any(Number),
     );
-    expect(searchRepository.searchMetadata).toHaveBeenCalledWith({ page: 1, size: 10_000 }, expect.any(Object));
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith({ page: 1, size: 100 }, expect.any(Object));
     expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
+  });
+
+  it('returns compact asset ids by default without metadata hydration', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: true,
+    });
+
+    const result = await sut.searchAssets(auth, session.id, {});
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({ responseSummary: 'Returned 2 asset ids; more results available on page 2' }),
+      summary: 'Returned 2 asset ids; more results available on page 2',
+      detail: 'ids',
+      assetIds,
+      returnedCount: 2,
+      hasMore: true,
+      nextPage: '2',
+    });
+    expect(result).not.toHaveProperty('assets');
+    expect(result).not.toHaveProperty('sample');
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith({ page: 1, size: 100 }, expect.any(Object));
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+  });
+
+  it('returns field-selected summary samples and caps sampleSize to returned ids', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: false,
+    });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue(assetIds.map((id) => makeMetadata(id)) as never);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: {},
+      limit: 2,
+      detail: 'summary',
+      fields: ['dates', 'location'],
+      sampleSize: 5,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        summary: 'Returned 2 asset ids with 2 samples',
+        detail: 'summary',
+        assetIds,
+        returnedCount: 2,
+        toolCall: expect.objectContaining({ responseSummary: 'Returned 2 asset ids with 2 samples' }),
+        sample: [
+          expect.objectContaining({
+            id: assetIds[0],
+            localDateTime: now,
+            exifInfo: expect.objectContaining({ city: 'Berlin', state: 'Berlin', country: 'Germany' }),
+          }),
+          expect.objectContaining({ id: assetIds[1] }),
+        ],
+      }),
+    );
+    expect(result.status === 'success' ? result.sample?.[0] : undefined).not.toHaveProperty('originalFileName');
+    expect(result.status === 'success' ? result.sample?.[0].exifInfo : undefined).not.toHaveProperty('make');
+    expect(assetRepository.getAgentMetadataByIds).toHaveBeenCalledWith(assetIds);
+  });
+
+  it('omits summary samples when sampleSize is zero', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: false,
+    });
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: {},
+      limit: 2,
+      detail: 'summary',
+      sampleSize: 0,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        summary: 'Returned 2 asset ids',
+        detail: 'summary',
+        assetIds,
+        returnedCount: 2,
+        toolCall: expect.objectContaining({ responseSummary: 'Returned 2 asset ids' }),
+      }),
+    );
+    expect(result).not.toHaveProperty('sample');
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+  });
+
+  it('keeps summary samples id-only when no fields are requested', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: false,
+    });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue(assetIds.map((id) => makeMetadata(id)) as never);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: {},
+      limit: 1,
+      detail: 'summary',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        summary: 'Returned 1 asset id with 1 sample',
+        detail: 'summary',
+        assetIds,
+        sample: [{ id: assetIds[0] }],
+      }),
+    );
+    expect(result.status === 'success' ? result.sample?.[0] : undefined).not.toHaveProperty('originalFileName');
+    expect(result.status === 'success' ? result.sample?.[0] : undefined).not.toHaveProperty('exifInfo');
+  });
+
+  it('returns full metadata rows only when metadata detail is requested without fields', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const metadata = makeMetadata(assetId);
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([metadata] as never);
+
+    const result = await sut.searchAssets(auth, session.id, { filters: {}, limit: 1, detail: 'metadata' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        summary: 'Returned metadata for 1 asset',
+        detail: 'metadata',
+        assetIds: [assetId],
+        toolCall: expect.objectContaining({ responseSummary: 'Returned metadata for 1 asset' }),
+        assets: [metadata],
+      }),
+    );
+  });
+
+  it('returns field-selected metadata rows and omits unrequested fields', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: {},
+      limit: 1,
+      detail: 'metadata',
+      fields: ['filename', 'favorite'],
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        detail: 'metadata',
+        assets: [{ id: assetId, originalFileName: `${assetId}.jpg`, isFavorite: false }],
+      }),
+    );
+    expect(result.status === 'success' ? result.assets?.[0] : undefined).not.toHaveProperty('exifInfo');
+    expect(result.status === 'success' ? result.assets?.[0] : undefined).not.toHaveProperty('tags');
+  });
+
+  it('denies inaccessible compact search results before hydration or sampling', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
+
+    const result = await sut.searchAssets(auth, session.id, { detail: 'summary', fields: ['location'] });
+
+    expect(result).toEqual(expect.objectContaining({ status: 'denied', reason: 'One or more assets are not accessible' }));
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+  });
+
+  it('denies field-selected metadata searches when metadata reads are disabled', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ read: { metadata: false, previews: false, originals: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: {},
+      detail: 'metadata',
+      fields: ['filename'],
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({ status: 'denied', reason: 'Agent permission policy does not allow metadata reads' }),
+    );
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
   });
 
   it('keeps broad all-assets requests bounded and exposes hasMore guidance', async () => {
@@ -1797,7 +2040,7 @@ describe(AgentToolService.name, () => {
         hasMore: true,
         nextPage: '2',
         toolCall: expect.objectContaining({
-          responseSummary: 'Returned metadata for 3 assets; more results available on page 2',
+          responseSummary: 'Returned 3 asset ids; more results available on page 2',
         }),
       }),
     );
@@ -1945,7 +2188,7 @@ describe(AgentToolService.name, () => {
         hasMore: true,
         nextPage: '3',
         toolCall: expect.objectContaining({
-          responseSummary: 'Returned metadata for 1 asset; more results available on page 3',
+          responseSummary: 'Returned 1 asset id; more results available on page 3',
         }),
       }),
     );
@@ -2269,6 +2512,7 @@ describe(AgentToolService.name, () => {
       limit: 2,
       page: 1,
       order: 'desc',
+      detail: 'metadata',
     });
 
     expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
@@ -2310,7 +2554,7 @@ describe(AgentToolService.name, () => {
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([firstAssetId, secondAssetId]));
     assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(firstAssetId)] as never);
 
-    const result = await sut.searchAssets(auth, session.id, { mode: 'metadata', filters: {}, limit: 2 });
+    const result = await sut.searchAssets(auth, session.id, { mode: 'metadata', filters: {}, limit: 2, detail: 'metadata' });
 
     expect(result).toEqual({
       status: 'denied',
@@ -2471,7 +2715,8 @@ describe(AgentToolService.name, () => {
         status: 'success',
         returnedCount: 0,
         hasMore: false,
-        assets: [],
+        detail: 'ids',
+        assetIds: [],
       }),
     );
   });
