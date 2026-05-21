@@ -129,6 +129,19 @@ Resolve album and tag names before searching.
 }
 ```
 
+#### resolve-alex-family-space-filters
+
+Resolve a user-facing person name inside a shared space before searching.
+
+<!-- mcp-docs:tool-arguments tool="resolveAssetSearchFilters" example="resolve-alex-family-space-filters" -->
+
+```json
+{
+  "people": ["Alex"],
+  "spaces": ["Family"]
+}
+```
+
 #### resolve-space-person-filters
 
 Resolve shared space and person names before searching shared-space assets.
@@ -160,7 +173,7 @@ MCP tool name: `searchAssets`
 
 Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and bounded result pages.
 
-Put deterministic metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose operation plans with the returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Search responses are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.
+Put metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose plans with returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Results are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.
 
 Argument modes:
 
@@ -244,6 +257,63 @@ Continue a previous metadata search using the returned nextPage value.
   "limit": 50,
   "page": 2,
   "order": "desc"
+}
+```
+
+#### unalbumed-berlin-may-search
+
+Find unalbumed Berlin photos from May.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="unalbumed-berlin-may-search" -->
+
+```json
+{
+  "mode": "metadata",
+  "filters": {
+    "takenAfter": "2026-05-01T00:00:00.000Z",
+    "takenBefore": "2026-05-31T23:59:59.999Z",
+    "city": "Berlin",
+    "country": "Germany",
+    "isNotInAlbum": true
+  },
+  "limit": 50,
+  "page": 1,
+  "order": "desc"
+}
+```
+
+#### five-star-video-search
+
+Find five-star videos.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="five-star-video-search" -->
+
+```json
+{
+  "filters": {
+    "rating": 5,
+    "type": "VIDEO"
+  },
+  "limit": 50
+}
+```
+
+#### ocr-invoice-screenshot-search
+
+Start invoice screenshot discovery using supported OCR text, image type, and date filters.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="ocr-invoice-screenshot-search" -->
+
+```json
+{
+  "mode": "ocr",
+  "query": "invoice",
+  "filters": {
+    "takenAfter": "2024-01-01T00:00:00.000Z",
+    "takenBefore": "2024-12-31T23:59:59.999Z",
+    "type": "IMAGE"
+  },
+  "limit": 50
 }
 ```
 
