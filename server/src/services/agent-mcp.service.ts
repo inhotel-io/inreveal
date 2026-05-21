@@ -31,6 +31,7 @@ type AgentMcpRequest = {
 @Injectable()
 export class AgentMcpService {
   private readonly readToolNames = new Set<AgentToolName>([
+    AgentToolName.ResolveAssetSearchFilters,
     AgentToolName.SearchAssets,
     AgentToolName.ReadAssetMetadata,
     AgentToolName.ReadAssetPreviews,
@@ -206,6 +207,9 @@ export class AgentMcpService {
     dto: z.output<(typeof AgentReadToolRequestSchemas)[keyof typeof AgentReadToolRequestSchemas]>,
   ): Promise<unknown> {
     switch (toolName) {
+      case AgentToolName.ResolveAssetSearchFilters: {
+        return this.toolService.resolveAssetSearchFilters(auth, sessionId, dto);
+      }
       case AgentToolName.SearchAssets: {
         return this.toolService.searchAssets(auth, sessionId, dto);
       }

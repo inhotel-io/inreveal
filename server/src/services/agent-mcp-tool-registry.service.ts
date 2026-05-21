@@ -55,7 +55,7 @@ const propertyDescriptions = {
   query:
     'Query text. For searchAssets, text modes require query but are not available until a later slice; for searchUsers use a name or email.',
   filters:
-    'Currently executable filters include taken date, place, camera, favorite, rating, album, tag, and media. People, space, and visibility fields are contract fields for a later slice.',
+    'Currently executable filters include taken date, place, camera, favorite, rating, album, tag, media, people, space, visibility, and shared-space person fields.',
   limit: 'Maximum number of results to return. Use a positive integer up to 10000.',
   page: 'One-based result page. Only page 1 is currently executable.',
   order: 'Result order. Only desc is currently executable.',
@@ -120,6 +120,13 @@ const getToolContract = (
 
 const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolContract>): AgentMcpToolDefinition[] =>
   [
+    defineTool({
+      name: AgentToolName.ResolveAssetSearchFilters,
+      title: 'Resolve asset search filters',
+      description: `Resolve user-facing names into searchAssets-compatible filter ids and values.${approvedRequestInstruction}`,
+      schema: AgentReadToolRequestSchemas[AgentToolName.ResolveAssetSearchFilters],
+      annotations: readToolAnnotations,
+    }),
     defineTool({
       name: AgentToolName.SearchAssets,
       title: 'Search assets',

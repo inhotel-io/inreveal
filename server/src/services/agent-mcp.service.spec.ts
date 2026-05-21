@@ -122,6 +122,7 @@ const expectNoMcpDownstreamServicesCalled = (
   toolService: AutoMocked<AgentToolService>,
   operationPlanService: AutoMocked<AgentOperationPlanService>,
 ) => {
+  expect(toolService.resolveAssetSearchFilters).not.toHaveBeenCalled();
   expect(toolService.searchAssets).not.toHaveBeenCalled();
   expect(toolService.readAssetMetadata).not.toHaveBeenCalled();
   expect(toolService.readAssetPreviews).not.toHaveBeenCalled();
@@ -399,6 +400,12 @@ describe(AgentMcpService.name, () => {
 
   it.each([
     {
+      toolName: AgentToolName.ResolveAssetSearchFilters,
+      args: { tags: ['Travel'], albums: ['Berlin'] },
+      serviceMethod: 'resolveAssetSearchFilters' as const,
+      serviceResult: { status: 'success', toolCall: null, resolvedFilters: {}, results: [] },
+    },
+    {
       toolName: AgentToolName.SearchAssets,
       args: { filters: { isFavorite: true }, limit: 5 },
       expectedArgs: { mode: 'metadata', filters: { isFavorite: true }, limit: 5, page: 1, order: 'desc' },
@@ -482,6 +489,27 @@ describe(AgentMcpService.name, () => {
       order: 'desc',
     });
     expectToolResult(response, `${AgentToolName.SearchAssets}-call`, serviceResult);
+  });
+
+  it('returns a resolver hint and searchAssets-compatible example when search filter names are sent as ids', async () => {
+    const response = (await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(AgentToolName.SearchAssets, { filters: { tagIds: ['Travel'] } }),
+    )) as AgentMcpSuccessResponse;
+
+    expectEnrichedToolValidationError(response, {
+      toolName: AgentToolName.SearchAssets,
+      path: 'filters.tagIds.0',
+      hintIncludes: 'Use resolveAssetSearchFilters',
+      exampleArguments: {
+        filters: {
+          tagIds: ['00000000-0000-4000-8000-000000000030'],
+          albumIds: ['00000000-0000-4000-8000-000000000010'],
+        },
+        limit: 25,
+      },
+    });
   });
 
   it('returns approval-required read responses as normal MCP tool results', async () => {
