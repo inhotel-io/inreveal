@@ -38,7 +38,8 @@ describe(AgentMcpPromptService.name, () => {
       'Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known.',
     );
     expect(prompt).toContain('Only page 1 and order desc are executable');
-    expect(prompt).toContain('Text modes, later pages, and non-desc order are not available yet');
+    expect(prompt).toContain('Text search: smart/ocr/description/filename require query');
+    expect(prompt).not.toContain('Text modes, later pages, and non-desc order are not available yet');
     expect(prompt).not.toContain('People, space, and visibility fields are contract fields but are not available yet.');
   });
 

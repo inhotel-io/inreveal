@@ -146,9 +146,9 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
   name: AgentToolName.SearchAssets,
   title: 'Search assets',
   description:
-    'Find assets using Gallery metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and a bounded result page.',
+    'Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and a bounded result page. Text modes, later pages, and non-desc order are split: text modes are executable; later pages and non-desc order are deferred.',
   usage:
-    'Put deterministic metadata search filters under filters. Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known. Only page 1 and order desc are executable. Text modes, later pages, and non-desc order are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
+    'Put deterministic metadata search filters under filters. Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known. Use mode smart, description, ocr, or filename with query for text search. Only page 1 and order desc are executable; later pages and non-desc order are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
   argumentModes: [
     {
       name: 'empty-search',
@@ -164,6 +164,13 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       forbiddenFields: ['toolCallId', 'query'],
       whenToUse:
         'Use when the user provides date, place, favorite, rating, album, tag, camera, media, people, space, or visibility filters.',
+    },
+    {
+      name: 'text-search',
+      description: 'Search visible assets using text query modes.',
+      requiredFields: ['mode', 'query'],
+      forbiddenFields: ['toolCallId'],
+      whenToUse: 'Use when the user asks for words found by smart, description, OCR, or filename search.',
     },
     searchApprovedRetryMode,
   ],
@@ -255,6 +262,46 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
         limit: 25,
       },
     },
+    {
+      name: 'smart-text-search',
+      description: 'Search semantically across visible assets.',
+      arguments: {
+        mode: 'smart',
+        query: 'beach sunset',
+        filters: { withSharedSpaces: true },
+        limit: 25,
+      },
+    },
+    {
+      name: 'ocr-text-search',
+      description: 'Search OCR text within visible assets.',
+      arguments: {
+        mode: 'ocr',
+        query: 'invoice',
+        filters: { takenAfter: '2024-01-01T00:00:00.000Z' },
+        limit: 25,
+      },
+    },
+    {
+      name: 'description-text-search',
+      description: 'Search visible asset descriptions.',
+      arguments: {
+        mode: 'description',
+        query: 'birthday',
+        filters: {},
+        limit: 25,
+      },
+    },
+    {
+      name: 'filename-text-search',
+      description: 'Search visible asset filenames.',
+      arguments: {
+        mode: 'filename',
+        query: 'IMG_2026',
+        filters: {},
+        limit: 25,
+      },
+    },
     approvedRetryExample,
   ],
   commonMistakes: [
@@ -294,8 +341,8 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
     {
       id: 'search-query-with-metadata-mode',
       match: { issuePath: 'query', messageIncludes: 'query is only supported' },
-      hint: 'Omit query and use metadata filters for now. Text search modes are in the contract but are not available yet.',
-      exampleName: 'metadata-page-search',
+      hint: 'Use mode smart, description, ocr, or filename with query for text search, or omit query for metadata-only search.',
+      exampleName: 'smart-text-search',
     },
     {
       id: 'search-space-person-without-space',
