@@ -146,9 +146,9 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
   name: AgentToolName.SearchAssets,
   title: 'Search assets',
   description:
-    'Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and a bounded result page. Text modes, later pages, and non-desc order are split: text modes are executable; later pages and non-desc order are deferred.',
+    'Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and bounded result pages.',
   usage:
-    'Put deterministic metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose operation plans with the returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Only page 1 and order desc are executable; later pages and non-desc order are not available yet.',
+    'Put deterministic metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose operation plans with the returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Search responses are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit with nextPage to continue.',
   argumentModes: [
     {
       name: 'empty-search',
@@ -206,6 +206,22 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
         },
         limit: 50,
         page: 1,
+        order: 'desc',
+      },
+    },
+    {
+      name: 'metadata-next-page-search',
+      description: 'Continue a previous metadata search using the returned nextPage value.',
+      arguments: {
+        mode: 'metadata',
+        filters: {
+          takenAfter: '2026-05-01T00:00:00.000Z',
+          takenBefore: '2026-05-18T23:59:59.999Z',
+          city: 'Berlin',
+          country: 'Germany',
+        },
+        limit: 50,
+        page: 2,
         order: 'desc',
       },
     },
@@ -393,10 +409,11 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       exampleName: 'favorite-rating-search',
     },
     {
-      id: 'search-page-unavailable',
+      id: 'search-page-continuation',
       match: { issuePath: 'page' },
-      hint: 'Only page 1 is executable in the current slice. Later pages are contract fields for a later slice.',
-      exampleName: 'metadata-page-search',
+      hint:
+        'Use the returned nextPage value as page, and keep the same mode, query, filters, order, and limit from the previous bounded search.',
+      exampleName: 'metadata-next-page-search',
     },
     {
       id: 'search-order-unavailable',
