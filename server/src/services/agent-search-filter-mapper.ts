@@ -1,6 +1,10 @@
 import { type AgentSearchAssetsToolRequestDto } from 'src/dtos/agent-tool.dto';
 import { AssetOrder } from 'src/enum';
-import { type AssetSearchOptions, type SearchPaginationOptions } from 'src/repositories/search.repository';
+import {
+  type AssetSearchOptions,
+  type SearchPaginationOptions,
+  type SmartSearchOptions,
+} from 'src/repositories/search.repository';
 
 type AgentSearchExecutionScope = {
   owned: boolean;
@@ -15,17 +19,34 @@ export type AgentMetadataSearchBuildInput = {
   scope: AgentSearchExecutionScope;
 };
 
+export type AgentSearchBuildInput = AgentMetadataSearchBuildInput & {
+  smartEmbedding?: string;
+  smartMaxDistance?: number;
+};
+
 export type AgentMetadataSearchBuildResult = {
   pagination: SearchPaginationOptions;
   options: AssetSearchOptions;
 };
+
+export type AgentSearchBuildResult =
+  | {
+      kind: 'metadata';
+      pagination: SearchPaginationOptions;
+      options: AssetSearchOptions;
+    }
+  | {
+      kind: 'smart';
+      pagination: SearchPaginationOptions;
+      options: SmartSearchOptions & { query: string };
+    };
 
 const nonEmpty = <T>(values: T[] | undefined): T[] | undefined => (values && values.length > 0 ? values : undefined);
 
 const omitUndefined = <T extends Record<string, unknown>>(value: T): T =>
   Object.fromEntries(Object.entries(value).filter(([, property]) => property !== undefined)) as T;
 
-export const buildAgentMetadataSearch = ({
+const buildBaseSearch = ({
   userId,
   request,
   scope,
@@ -69,7 +90,7 @@ export const buildAgentMetadataSearch = ({
 
   const options = omitUndefined({
     ...mappedFilters,
-    orderDirection: AssetOrder.Desc,
+    orderDirection: request.order === 'asc' ? AssetOrder.Asc : AssetOrder.Desc,
     userIds: filters.spaceId ? undefined : scope.owned ? [userId] : wantsBroadSharedScope ? [] : [userId],
     timelineSpaceIds: hasTimelineSpaces ? timelineSpaceIds : undefined,
     forceEmptyResult: !scope.owned && wantsBroadSharedScope && !hasTimelineSpaces ? true : undefined,
@@ -78,5 +99,55 @@ export const buildAgentMetadataSearch = ({
   return {
     pagination: { page, size: limit },
     options,
+  };
+};
+
+export const buildAgentMetadataSearch = (input: AgentMetadataSearchBuildInput): AgentMetadataSearchBuildResult =>
+  buildBaseSearch(input);
+
+export const buildAgentSearch = (input: AgentSearchBuildInput): AgentSearchBuildResult => {
+  const mode = input.request.mode ?? 'metadata';
+  const baseSearch = buildBaseSearch(input);
+
+  if (mode === 'smart') {
+    const structuredFilters = omitUndefined({
+      ...baseSearch.options,
+      description: undefined,
+      ocr: undefined,
+      originalFileName: undefined,
+      orderDirection: undefined,
+    });
+    const smartOrderDirection =
+      input.request.order === 'asc' || input.request.order === 'desc' ? input.request.order : undefined;
+
+    return {
+      kind: 'smart',
+      pagination: baseSearch.pagination,
+      options: omitUndefined({
+        ...structuredFilters,
+        query: input.request.query,
+        embedding: input.smartEmbedding,
+        maxDistance: input.smartMaxDistance,
+        orderDirection: smartOrderDirection,
+      }) as SmartSearchOptions & { query: string },
+    };
+  }
+
+  const textSearchOptions =
+    mode === 'description'
+      ? { description: input.request.query }
+      : mode === 'ocr'
+        ? { ocr: input.request.query }
+        : mode === 'filename'
+          ? { originalFileName: input.request.query }
+          : {};
+
+  return {
+    kind: 'metadata',
+    pagination: baseSearch.pagination,
+    options: omitUndefined({
+      ...baseSearch.options,
+      ...textSearchOptions,
+    }) as AssetSearchOptions,
   };
 };
