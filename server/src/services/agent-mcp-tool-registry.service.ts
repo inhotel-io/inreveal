@@ -66,7 +66,7 @@ const propertyDescriptions = {
     'Currently executable filters include taken date, place, camera, favorite, rating, album, tag, media, people, space, visibility, and shared-space person fields.',
   limit: 'Maximum number of results to return. Use a positive integer up to 10000.',
   page:
-    'One-based result page. Use returned nextPage to continue the same search with the same mode, query, filters, order, and limit.',
+    'One-based result page. Use the returned nextPage value as page to continue the same search with the same mode, query, filters, order, and limit.',
   order: 'Result order. Only desc is currently executable.',
   toolCallId: 'Use only for an approved retry after Gallery approves a pending read request.',
   summary: 'A human-readable plan summary describing what Gallery should review.',
