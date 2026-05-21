@@ -23,6 +23,7 @@ const exampleAlbumId = '00000000-0000-4000-8000-000000000010';
 const exampleSpaceId = '00000000-0000-4000-8000-000000000020';
 const exampleSpacePersonId = '00000000-0000-4000-8000-000000000021';
 const exampleTagId = '00000000-0000-4000-8000-000000000030';
+const examplePersonId = '00000000-0000-4000-8000-000000000040';
 const exampleToolCallId = '00000000-0000-4000-8000-000000000111';
 const examplePlanId = '00000000-0000-4000-8000-000000000222';
 
@@ -223,6 +224,37 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
         limit: 25,
       },
     },
+    {
+      name: 'person-filter-search',
+      description: 'Search assets for known people resolved by id.',
+      arguments: {
+        filters: {
+          personIds: [examplePersonId],
+        },
+        limit: 25,
+      },
+    },
+    {
+      name: 'space-id-filter-search',
+      description: 'Search assets in a known shared space resolved by id.',
+      arguments: {
+        filters: {
+          spaceId: exampleSpaceId,
+        },
+        limit: 25,
+      },
+    },
+    {
+      name: 'resolved-id-filter-search',
+      description: 'Search with ids returned by resolveAssetSearchFilters.',
+      arguments: {
+        filters: {
+          tagIds: [exampleTagId],
+          albumIds: [exampleAlbumId],
+        },
+        limit: 25,
+      },
+    },
     approvedRetryExample,
   ],
   commonMistakes: [
@@ -272,6 +304,41 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       exampleName: 'space-filter-search',
     },
     {
+      id: 'search-filter-name-in-tag-ids',
+      match: { issuePath: 'filters.tagIds.0' },
+      hint:
+        'Use resolveAssetSearchFilters for user-facing tag names, then call searchAssets with the returned tagIds under filters.',
+      exampleName: 'resolved-id-filter-search',
+    },
+    {
+      id: 'search-filter-name-in-album-ids',
+      match: { issuePath: 'filters.albumIds.0' },
+      hint:
+        'Use resolveAssetSearchFilters for user-facing album names, then call searchAssets with the returned albumIds under filters.',
+      exampleName: 'resolved-id-filter-search',
+    },
+    {
+      id: 'search-filter-name-in-person-ids',
+      match: { issuePath: 'filters.personIds.0' },
+      hint:
+        'Use resolveAssetSearchFilters for user-facing person names, then call searchAssets with the returned personIds under filters.',
+      exampleName: 'person-filter-search',
+    },
+    {
+      id: 'search-filter-name-in-space-id',
+      match: { issuePath: 'filters.spaceId' },
+      hint:
+        'Use resolveAssetSearchFilters for user-facing space names, then call searchAssets with the returned spaceId under filters.',
+      exampleName: 'space-id-filter-search',
+    },
+    {
+      id: 'search-filter-name-in-space-person-ids',
+      match: { issuePath: 'filters.spacePersonIds.0' },
+      hint:
+        'Use resolveAssetSearchFilters for user-facing shared-space person names, then call searchAssets with the returned spacePersonIds under filters.',
+      exampleName: 'space-filter-search',
+    },
+    {
       id: 'search-combined-filters-and-tool-call-id',
       match: { messageIncludes: 'Provide either search fields or toolCallId, not both' },
       hint: 'Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.',
@@ -306,6 +373,80 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       match: { issuePath: 'arguments', requestShape: 'json-rpc' },
       hint: 'The params.arguments value must be a JSON object, not an array, primitive, or null.',
       exampleName: 'empty-search',
+    },
+  ],
+  approvalRetry,
+  safety,
+};
+
+const resolverApprovedRetryMode: AgentMcpArgumentMode = {
+  name: 'approved-retry',
+  description: 'Retry a filter resolver request that Gallery already approved.',
+  requiredFields: ['toolCallId'],
+  forbiddenFields: ['people', 'tags', 'albums', 'spaces', 'cameraMakes', 'cameraModels', 'lensModels', 'scope'],
+  whenToUse: 'Use only after Gallery resumes the assistant from an approved resolver request.',
+};
+
+const resolveAssetSearchFiltersContract: AgentMcpToolContract<AgentToolName.ResolveAssetSearchFilters> = {
+  name: AgentToolName.ResolveAssetSearchFilters,
+  title: 'Resolve asset search filters',
+  description: 'Resolve visible album, tag, person, space, and camera names into searchAssets-compatible filters.',
+  usage:
+    'Use before searchAssets when the user gives names for tags, albums, people, spaces, camera makes, camera models, or lenses. Call searchAssets only after this returns unambiguous resolvedFilters. Use only toolCallId when retrying a Gallery-approved resolver request.',
+  argumentModes: [
+    {
+      name: 'resolve-named-filters',
+      description: 'Resolve visible names into canonical search filter ids and values.',
+      requiredFields: [],
+      forbiddenFields: ['toolCallId'],
+      whenToUse: 'Use when the user gives album, tag, person, space, camera make, camera model, or lens names.',
+    },
+    resolverApprovedRetryMode,
+  ],
+  examples: [
+    {
+      name: 'resolve-named-filters',
+      description: 'Resolve album and tag names before searching.',
+      arguments: { tags: ['Travel'], albums: ['Berlin'] },
+    },
+    {
+      name: 'resolve-space-person-filters',
+      description: 'Resolve shared space and person names before searching shared-space assets.',
+      arguments: { people: ['Pierre'], spaces: ['Family'], scope: { withSharedSpaces: true } },
+    },
+    approvedRetryExample,
+  ],
+  commonMistakes: [
+    {
+      id: 'resolver-missing-fields',
+      match: { messageIncludes: 'Provide at least one resolver field' },
+      hint:
+        'Provide at least one name field such as tags, albums, people, spaces, cameraMakes, cameraModels, or lensModels.',
+      exampleName: 'resolve-named-filters',
+    },
+    {
+      id: 'resolver-combined-fields-and-tool-call-id',
+      match: { messageIncludes: 'Provide either resolver fields or toolCallId, not both' },
+      hint: 'Use resolver fields for a new request or only toolCallId for an approved retry, not both.',
+      exampleName: 'approved-retry',
+    },
+    {
+      id: 'resolver-scope-conflict',
+      match: { issuePath: 'scope.withSharedSpaces', messageIncludes: 'Cannot use both scope.spaceId' },
+      hint: 'Use either scope.spaceId for one shared space or scope.withSharedSpaces for all visible shared spaces.',
+      exampleName: 'resolve-space-person-filters',
+    },
+    {
+      id: 'tool-call-arguments-missing',
+      match: { missingField: 'arguments', requestShape: 'json-rpc' },
+      hint: 'Put the resolver arguments object at params.arguments in the MCP tools/call request.',
+      exampleName: 'resolve-named-filters',
+    },
+    {
+      id: 'tool-call-arguments-not-object',
+      match: { issuePath: 'arguments', requestShape: 'json-rpc' },
+      hint: 'The params.arguments value must be a JSON object, not an array, primitive, or null.',
+      exampleName: 'resolve-named-filters',
     },
   ],
   approvalRetry,
@@ -584,6 +725,7 @@ const searchUsersContract: AgentMcpToolContract<AgentToolName.SearchUsers> = {
 };
 
 const readToolContracts: AgentMcpReadToolContract[] = [
+  resolveAssetSearchFiltersContract,
   searchAssetsContract,
   defineAssetReadContract(
     AgentToolName.ReadAssetMetadata,
