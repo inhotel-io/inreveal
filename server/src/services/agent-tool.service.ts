@@ -56,6 +56,9 @@ import {
   AgentAlbumSummary,
   AgentAssetMediaReference,
   AgentAssetMetadata,
+  AgentAssetMetadataDetail,
+  AgentAssetMetadataField,
+  AgentAssetMetadataResult,
   AgentSearchAssetResult,
   AgentSearchAssetsDetail,
   AgentSearchAssetsField,
@@ -70,6 +73,7 @@ import {
   AgentSpaceSummary,
   AgentToolListAlbumsRequestMetadata,
   AgentToolListSpacesRequestMetadata,
+  AgentToolReadAssetMetadataRequestMetadata,
   AgentToolReadAssetIdsRequestMetadata,
   AgentToolReadSpaceRequestMetadata,
   AgentToolResolveAssetSearchFiltersRequestMetadata,
@@ -96,6 +100,7 @@ type AgentReadToolDescriptor<TRequest, TResult extends Record<string, unknown>> 
   requestedAssetCount: (request: TRequest) => number;
   requestedAlbumCount: (request: TRequest) => number;
   perToolLimit: (plan: AgentPermissionPlanSnapshot) => number;
+  perToolLimitDenialReason?: (request: TRequest, limit: number) => string;
   perSessionLimit: (plan: AgentPermissionPlanSnapshot) => number;
   validateAccess: (auth: AuthDto, session: AgentSession, request: TRequest) => Promise<string | null>;
   execute: (auth: AuthDto, session: AgentSession, request: TRequest, toolCallId: string) => Promise<TResult>;
@@ -652,7 +657,7 @@ export class AgentToolService {
           const sampleSize = request.sampleSize ?? 10;
           const sampleAssetIds = assetIds.slice(0, sampleSize);
           const sampleAssets = await this.getOrderedAgentMetadata(sampleAssetIds);
-          const sample = sampleAssets.map((asset) => this.mapSearchAssetResult(asset, fields));
+          const sample = sampleAssets.map((asset) => this.mapSelectedAssetMetadata(asset, fields));
           const summary = this.getSearchAssetsResponseSummary({ ...pageResult, sampleCount: sample.length });
           return {
             ...pageResult,
@@ -666,7 +671,7 @@ export class AgentToolService {
         return {
           ...pageResult,
           summary,
-          assets: fields.length === 0 ? assets : assets.map((asset) => this.mapSearchAssetResult(asset, fields)),
+          assets: fields.length === 0 ? assets : assets.map((asset) => this.mapSelectedAssetMetadata(asset, fields)),
         };
       },
       responseSummary: (result) => result.summary,
@@ -1130,20 +1135,34 @@ export class AgentToolService {
 
   private readAssetMetadataDescriptor(): AgentReadToolDescriptor<
     AgentReadAssetMetadataToolRequestDto,
-    { assets: AgentAssetMetadata[] }
+    {
+      summary: string;
+      detail?: AgentAssetMetadataDetail;
+      fields: AgentAssetMetadataField[];
+      assets: AgentAssetMetadataResult[];
+    }
   > {
     return {
       toolName: AgentToolName.ReadAssetMetadata,
       dataClass: AgentToolDataClass.Metadata,
-      requestSummary: (request) => `Read metadata for ${(request.assetIds ?? []).length} asset(s)`,
-      requestMetadata: (request) => ({ assetIds: request.assetIds ?? [] }),
+      requestSummary: (request) =>
+        `Read ${this.getReadAssetMetadataSelectionLabel(request)} metadata for ${(request.assetIds ?? []).length} asset(s)`,
+      requestMetadata: (request) =>
+        ({
+          assetIds: request.assetIds ?? [],
+          ...(request.fields ? { fields: request.fields } : { detail: request.detail ?? 'basic' }),
+        }) as AgentToolReadAssetMetadataRequestMetadata,
       requestedAssetCount: (request) => (request.assetIds ?? []).length,
       requestedAlbumCount: () => 0,
       perToolLimit: (plan) => plan.limits.maxAssetsPerToolCall,
+      perToolLimitDenialReason: (request, limit) =>
+        `Requested ${(request.assetIds ?? []).length} assets, but this session allows ${limit} per metadata read. Request fewer asset IDs or split the metadata read into smaller batches.`,
       perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
       validateAccess: (auth, session, request) => this.validateAssetAccess(auth, session, request.assetIds ?? []),
       execute: async (_auth, _session, request) => {
         const assetIds = request.assetIds ?? [];
+        const detail = request.fields ? undefined : (request.detail ?? 'basic');
+        const fields = request.fields ?? this.getReadAssetMetadataPresetFields(detail);
         const unorderedAssets = await this.assetRepository.getAgentMetadataByIds(assetIds);
         const assetsById = new Map(
           unorderedAssets.map((asset) => [asset.id, this.mapAssetMetadata(asset as AgentAssetMetadata)]),
@@ -1160,9 +1179,16 @@ export class AgentToolService {
           );
         }
 
-        return { assets };
+        const detailOrCustom = detail ?? 'custom';
+        const noun = assets.length === 1 ? 'asset' : 'assets';
+        return {
+          summary: `Returned ${detailOrCustom} metadata for ${assets.length} ${noun}`,
+          ...(detail ? { detail } : {}),
+          fields,
+          assets: assets.map((asset) => this.mapSelectedAssetMetadata(asset, fields)),
+        };
       },
-      responseSummary: (result) => this.getReturnedMetadataSummary(result.assets.length),
+      responseSummary: (result) => result.summary,
       responseMetadata: (result) => ({ assetIds: result.assets.map((asset) => asset.id) }),
       resultAssetCount: (result) => result.assets.length,
       resultAlbumCount: () => 0,
@@ -1593,8 +1619,10 @@ export class AgentToolService {
       return policyDenial;
     }
 
-    if (descriptor.requestedAssetCount(request) > descriptor.perToolLimit(plan)) {
-      return 'Requested asset count exceeds per-tool limit';
+    const requestedAssetCount = descriptor.requestedAssetCount(request);
+    const perToolLimit = descriptor.perToolLimit(plan);
+    if (requestedAssetCount > perToolLimit) {
+      return descriptor.perToolLimitDenialReason?.(request, perToolLimit) ?? 'Requested asset count exceeds per-tool limit';
     }
 
     if (options?.validateSessionLimit ?? true) {
@@ -2243,9 +2271,27 @@ export class AgentToolService {
     };
   }
 
-  private mapSearchAssetResult(asset: AgentAssetMetadata, fields: AgentSearchAssetsField[]): AgentSearchAssetResult {
-    const result: AgentSearchAssetResult = { id: asset.id };
-    const exifInfo: NonNullable<AgentSearchAssetResult['exifInfo']> = {};
+  private getReadAssetMetadataSelectionLabel(request: AgentReadAssetMetadataToolRequestDto): string {
+    return request.fields ? 'custom' : (request.detail ?? 'basic');
+  }
+
+  private getReadAssetMetadataPresetFields(detail: AgentAssetMetadataDetail = 'basic'): AgentAssetMetadataField[] {
+    switch (detail) {
+      case 'basic':
+        return ['type', 'dates'];
+      case 'descriptive':
+        return ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location'];
+      case 'technical':
+        return ['type', 'dates', 'filename', 'camera', 'rating', 'visibility'];
+      case 'allSafe':
+        return ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility'];
+    }
+  }
+
+  private mapSelectedAssetMetadata(asset: AgentAssetMetadata, fields: AgentAssetMetadataField[]): AgentAssetMetadataResult {
+    const result: AgentAssetMetadataResult = { id: asset.id };
+    const exifInfo: NonNullable<AgentAssetMetadataResult['exifInfo']> = {};
+    let requestedExifInfo = false;
 
     for (const field of fields) {
       switch (field) {
@@ -2256,11 +2302,13 @@ export class AgentToolService {
           result.localDateTime = asset.localDateTime;
           result.fileCreatedAt = asset.fileCreatedAt;
           result.fileModifiedAt = asset.fileModifiedAt;
+          requestedExifInfo = true;
           if (asset.exifInfo) {
             exifInfo.dateTimeOriginal = asset.exifInfo.dateTimeOriginal;
           }
           break;
         case 'location':
+          requestedExifInfo = true;
           if (asset.exifInfo) {
             exifInfo.city = asset.exifInfo.city;
             exifInfo.state = asset.exifInfo.state;
@@ -2270,6 +2318,7 @@ export class AgentToolService {
           }
           break;
         case 'camera':
+          requestedExifInfo = true;
           if (asset.exifInfo) {
             exifInfo.make = asset.exifInfo.make;
             exifInfo.model = asset.exifInfo.model;
@@ -2280,6 +2329,7 @@ export class AgentToolService {
           result.tags = asset.tags.map((tag) => ({ id: tag.id, value: tag.value, color: tag.color }));
           break;
         case 'rating':
+          requestedExifInfo = true;
           if (asset.exifInfo) {
             exifInfo.rating = asset.exifInfo.rating;
           }
@@ -2296,8 +2346,8 @@ export class AgentToolService {
       }
     }
 
-    if (Object.keys(exifInfo).length > 0) {
-      result.exifInfo = exifInfo;
+    if (requestedExifInfo) {
+      result.exifInfo = asset.exifInfo ? exifInfo : null;
     }
 
     return result;
