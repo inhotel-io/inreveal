@@ -870,6 +870,14 @@ export type AgentProposeAlbumOperationsDto = {
     })[];
     summary: string;
 };
+export type AgentToolResultSize = {
+    estimatedBytes: number | null;
+    hasMore: boolean;
+    nextPage: string | null;
+    omittedFields: string[];
+    returnedItems: number;
+    truncated: boolean;
+};
 export type AgentToolCallResponseDto = {
     albumCount: number;
     approvalDecision: (AgentToolApprovalDecision) | null;
@@ -880,6 +888,7 @@ export type AgentToolCallResponseDto = {
     id: string;
     requestSummary: string;
     responseSummary: string | null;
+    resultSize?: AgentToolResultSize;
     sessionId: string;
     startedAt: string;
     status: AgentToolCallStatus;
@@ -1159,6 +1168,7 @@ export type AgentAlbumSummary = {
 };
 export type AgentListAlbumsToolSuccessResponse = {
     albums: AgentAlbumSummary[];
+    resultSize: AgentToolResultSize;
     status: Status4;
     toolCall: AgentToolCallResponseDto;
 };
@@ -1188,6 +1198,7 @@ export type AgentSpaceSummary = {
     thumbnailAssetId: string | null;
 };
 export type AgentListSpacesToolSuccessResponse = {
+    resultSize: AgentToolResultSize;
     spaces: AgentSpaceSummary[];
     status: Status7;
     toolCall: AgentToolCallResponseDto;
@@ -1219,12 +1230,15 @@ export type AgentAlbumDetail = {
 };
 export type AgentReadAlbumToolSuccessResponse = {
     album: AgentAlbumDetail;
+    resultSize: AgentToolResultSize;
     status: Status10;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentReadAlbumToolResponseDto = AgentReadAlbumToolApprovalRequiredResponse | AgentReadAlbumToolDeniedResponse | AgentReadAlbumToolSuccessResponse;
 export type AgentReadAssetMetadataToolRequestDto = {
     assetIds?: string[];
+    detail?: AgentAssetMetadataDetail;
+    fields?: AgentAssetMetadataField[];
     toolCallId?: string;
 };
 export type AgentReadAssetMetadataToolApprovalRequiredResponse = {
@@ -1236,39 +1250,41 @@ export type AgentReadAssetMetadataToolDeniedResponse = {
     status: Status12;
     toolCall: AgentToolCallResponseDto;
 };
-export type AgentAssetMetadataExif = {
-    city: string | null;
-    country: string | null;
-    dateTimeOriginal: string | null;
-    latitude: number | null;
-    lensModel: string | null;
-    longitude: number | null;
-    make: string | null;
-    model: string | null;
-    rating: number | null;
-    state: string | null;
-};
 export type AgentAssetMetadataTag = {
     color: string | null;
     id: string;
     value: string;
 };
-export type AgentAssetMetadata = {
-    exifInfo: (AgentAssetMetadataExif) | null;
-    fileCreatedAt: string;
-    fileModifiedAt: string;
+export type AgentAssetMetadataResult = {
+    exifInfo?: {
+        city?: string | null;
+        country?: string | null;
+        dateTimeOriginal?: string | null;
+        latitude?: number | null;
+        lensModel?: string | null;
+        longitude?: number | null;
+        make?: string | null;
+        model?: string | null;
+        rating?: number | null;
+        state?: string | null;
+    } | null;
+    fileCreatedAt?: string;
+    fileModifiedAt?: string;
     id: string;
-    isFavorite: boolean;
-    localDateTime: string;
-    originalFileName: string;
-    ownerId: string;
-    tags: AgentAssetMetadataTag[];
-    "type": AssetTypeEnum;
-    visibility: AssetVisibility;
+    isFavorite?: boolean;
+    localDateTime?: string;
+    originalFileName?: string;
+    tags?: AgentAssetMetadataTag[];
+    "type"?: AssetTypeEnum;
+    visibility?: AssetVisibility;
 };
 export type AgentReadAssetMetadataToolSuccessResponse = {
-    assets: AgentAssetMetadata[];
+    assets: AgentAssetMetadataResult[];
+    detail?: AgentAssetMetadataDetail;
+    fields: AgentAssetMetadataField[];
+    resultSize: AgentToolResultSize;
     status: Status13;
+    summary: string;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentReadAssetMetadataToolResponseDto = AgentReadAssetMetadataToolApprovalRequiredResponse | AgentReadAssetMetadataToolDeniedResponse | AgentReadAssetMetadataToolSuccessResponse;
@@ -1295,6 +1311,7 @@ export type AgentAssetMediaReference = {
 };
 export type AgentReadAssetOriginalsToolSuccessResponse = {
     originals: AgentAssetMediaReference[];
+    resultSize: AgentToolResultSize;
     status: Status16;
     toolCall: AgentToolCallResponseDto;
 };
@@ -1314,6 +1331,7 @@ export type AgentReadAssetPreviewsToolDeniedResponse = {
 };
 export type AgentReadAssetPreviewsToolSuccessResponse = {
     previews: AgentAssetMediaReference[];
+    resultSize: AgentToolResultSize;
     status: Status19;
     toolCall: AgentToolCallResponseDto;
 };
@@ -1356,6 +1374,7 @@ export type AgentSpaceDetail = {
     thumbnailAssetId: string | null;
 };
 export type AgentReadSpaceToolSuccessResponse = {
+    resultSize: AgentToolResultSize;
     space: AgentSpaceDetail;
     status: Status22;
     toolCall: AgentToolCallResponseDto;
@@ -1387,12 +1406,15 @@ export type AgentSearchAssetsFilters = {
     withSharedSpaces?: boolean;
 };
 export type AgentSearchAssetsToolRequestDto = {
+    detail?: AgentSearchAssetsDetail;
+    fields?: AgentSearchAssetsField[];
     filters?: AgentSearchAssetsFilters;
     limit?: number;
     mode?: AgentSearchAssetsMode;
     order?: AgentSearchAssetsOrder;
     page?: number;
     query?: string;
+    sampleSize?: number;
     toolCallId?: string;
 };
 export type AgentSearchAssetsToolApprovalRequiredResponse = {
@@ -1404,13 +1426,42 @@ export type AgentSearchAssetsToolDeniedResponse = {
     status: Status24;
     toolCall: AgentToolCallResponseDto;
 };
+export type AgentSearchAssetResult = {
+    exifInfo?: {
+        city?: string | null;
+        country?: string | null;
+        dateTimeOriginal?: string | null;
+        latitude?: number | null;
+        lensModel?: string | null;
+        longitude?: number | null;
+        make?: string | null;
+        model?: string | null;
+        rating?: number | null;
+        state?: string | null;
+    } | null;
+    fileCreatedAt?: string;
+    fileModifiedAt?: string;
+    id: string;
+    isFavorite?: boolean;
+    localDateTime?: string;
+    originalFileName?: string;
+    ownerId?: string;
+    tags?: AgentAssetMetadataTag[];
+    "type"?: AssetTypeEnum;
+    visibility?: AssetVisibility;
+};
 export type AgentSearchAssetsToolSuccessResponse = {
     approximateTotal?: number;
-    assets: AgentAssetMetadata[];
+    assetIds: string[];
+    assets?: AgentSearchAssetResult[];
+    detail: AgentSearchAssetsDetail;
     hasMore: boolean;
     nextPage: string | null;
+    resultSize: AgentToolResultSize;
     returnedCount: number;
+    sample?: AgentSearchAssetResult[];
     status: Status25;
+    summary: string;
     toolCall: AgentToolCallResponseDto;
     totalCount?: number;
 };
@@ -1438,6 +1489,7 @@ export type AgentUserLookupResult = {
     userId: string;
 };
 export type AgentSearchUsersToolSuccessResponse = {
+    resultSize: AgentToolResultSize;
     status: Status28;
     toolCall: AgentToolCallResponseDto;
     users: AgentUserLookupResult[];
@@ -10240,6 +10292,23 @@ export enum Status9 {
 export enum Status10 {
     Success = "success"
 }
+export enum AgentAssetMetadataDetail {
+    Basic = "basic",
+    Descriptive = "descriptive",
+    Technical = "technical",
+    AllSafe = "allSafe"
+}
+export enum AgentAssetMetadataField {
+    Type = "type",
+    Dates = "dates",
+    Location = "location",
+    Camera = "camera",
+    Tags = "tags",
+    Rating = "rating",
+    Filename = "filename",
+    Favorite = "favorite",
+    Visibility = "visibility"
+}
 export enum Status11 {
     ApprovalRequired = "approval-required"
 }
@@ -10281,6 +10350,22 @@ export enum Status21 {
 }
 export enum Status22 {
     Success = "success"
+}
+export enum AgentSearchAssetsDetail {
+    Ids = "ids",
+    Summary = "summary",
+    Metadata = "metadata"
+}
+export enum AgentSearchAssetsField {
+    Type = "type",
+    Dates = "dates",
+    Location = "location",
+    Camera = "camera",
+    Tags = "tags",
+    Rating = "rating",
+    Filename = "filename",
+    Favorite = "favorite",
+    Visibility = "visibility"
 }
 export enum AgentSearchAssetsMode {
     Metadata = "metadata",

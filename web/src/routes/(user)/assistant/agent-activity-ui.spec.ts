@@ -793,6 +793,87 @@ describe('agent activity UI helpers', () => {
     expect(rows.find((row) => row.id === 'tool-call-ids')?.value).not.toContain('metadata-9');
   });
 
+  it('adds response-size telemetry to technical rows', () => {
+    const rows = buildAgentActivityTechnicalRows({
+      id: 'item-1',
+      sessionId,
+      kind: 'search',
+      status: 'completed',
+      title: 'Searching photos',
+      startedAt: '2026-05-18T10:00:05.000Z',
+      technical: {
+        toolName: AgentToolName.SearchAssets,
+        toolCallIds: ['tool-call-1'],
+        resultSize: {
+          returnedItems: 12,
+          hasMore: true,
+          nextPage: '2',
+          estimatedBytes: 42_000,
+          truncated: true,
+          omittedFields: ['assets', 'sample'],
+        },
+      },
+    });
+
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'result-size',
+          labelKey: 'assistant_activity_technical_result_size',
+          value: '41 KB',
+        }),
+        expect.objectContaining({
+          id: 'result-items',
+          labelKey: 'assistant_activity_technical_result_items',
+          value: '12',
+        }),
+        expect.objectContaining({
+          id: 'result-truncated',
+          labelKey: 'assistant_activity_technical_truncated',
+          value: 'yes',
+        }),
+        expect.objectContaining({
+          id: 'result-omitted-fields',
+          labelKey: 'assistant_activity_technical_omitted_fields',
+          value: 'assets, sample',
+        }),
+        expect.objectContaining({
+          id: 'result-next-page',
+          labelKey: 'assistant_activity_technical_next_page',
+          value: '2',
+        }),
+      ]),
+    );
+  });
+
+  it('shows unavailable result-size estimates without crashing', () => {
+    const rows = buildAgentActivityTechnicalRows({
+      id: 'item-1',
+      sessionId,
+      kind: 'metadata',
+      status: 'blocked',
+      title: 'Waiting for approval',
+      startedAt: '2026-05-18T10:00:05.000Z',
+      technical: {
+        resultSize: {
+          returnedItems: 0,
+          hasMore: false,
+          nextPage: null,
+          estimatedBytes: null,
+          truncated: false,
+          omittedFields: [],
+        },
+      },
+    });
+
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'result-size', value: 'not estimated' }),
+        expect.objectContaining({ id: 'result-items', value: '0' }),
+      ]),
+    );
+  });
+
   it('ignores arbitrary unknown technical object properties and unsupported empty rows', () => {
     const rows = buildAgentActivityTechnicalRows({
       id: 'activity-empty',

@@ -475,6 +475,17 @@ const AgentAssetMetadataTagSchema = z
   })
   .meta({ id: 'AgentAssetMetadataTag' });
 
+const AgentToolResultSizeSchema = z
+  .object({
+    returnedItems: z.number().int().min(0),
+    hasMore: z.boolean(),
+    nextPage: z.string().nullable(),
+    estimatedBytes: z.number().int().min(0).nullable(),
+    truncated: z.boolean(),
+    omittedFields: z.array(z.string().trim().min(1)).max(50),
+  })
+  .meta({ id: 'AgentToolResultSize' });
+
 const AgentToolCallResponseSchema = z
   .object({
     id: uuid,
@@ -490,6 +501,7 @@ const AgentToolCallResponseSchema = z
     startedAt: isoDatetimeToDate,
     completedAt: isoDatetimeToDate.nullable(),
     error: z.string().nullable(),
+    resultSize: AgentToolResultSizeSchema.optional(),
   })
   .meta({ id: 'AgentToolCallResponseDto' });
 
@@ -638,6 +650,7 @@ const AgentReadAssetMetadataToolSuccessResponseSchema = z
     summary,
     detail: AgentAssetMetadataDetailSchema.optional(),
     fields: z.array(AgentAssetMetadataFieldSchema),
+    resultSize: AgentToolResultSizeSchema,
     assets: z.array(AgentAssetMetadataResultSchema),
   })
   .meta({ id: 'AgentReadAssetMetadataToolSuccessResponse' });
@@ -666,6 +679,7 @@ const AgentSearchAssetsToolResponseSchema = z
         returnedCount: z.number().int().min(0),
         hasMore: z.boolean(),
         nextPage: z.string().nullable(),
+        resultSize: AgentToolResultSizeSchema,
         totalCount: z.number().int().min(0).optional(),
         approximateTotal: z.number().int().min(0).optional(),
       })
@@ -704,6 +718,7 @@ const AgentResolveAssetSearchFiltersToolResponseSchema = z
         status: z.literal('success'),
         toolCall: AgentToolCallResponseSchema,
         resolvedFilters: AgentSearchAssetsFiltersSchema,
+        resultSize: AgentToolResultSizeSchema,
         results: z.array(AgentResolvedAssetSearchFilterResultSchema),
       })
       .meta({ id: 'AgentResolveAssetSearchFiltersToolSuccessResponse' }),
@@ -718,6 +733,7 @@ const AgentReadAssetPreviewsToolResponseSchema = z
       .object({
         status: z.literal('success'),
         toolCall: AgentToolCallResponseSchema,
+        resultSize: AgentToolResultSizeSchema,
         previews: z.array(AgentAssetMediaReferenceSchema),
       })
       .meta({ id: 'AgentReadAssetPreviewsToolSuccessResponse' }),
@@ -732,6 +748,7 @@ const AgentReadAssetOriginalsToolResponseSchema = z
       .object({
         status: z.literal('success'),
         toolCall: AgentToolCallResponseSchema,
+        resultSize: AgentToolResultSizeSchema,
         originals: z.array(AgentAssetMediaReferenceSchema),
       })
       .meta({ id: 'AgentReadAssetOriginalsToolSuccessResponse' }),
@@ -746,6 +763,7 @@ const AgentListAlbumsToolResponseSchema = z
       .object({
         status: z.literal('success'),
         toolCall: AgentToolCallResponseSchema,
+        resultSize: AgentToolResultSizeSchema,
         albums: z.array(AgentAlbumSummarySchema),
       })
       .meta({ id: 'AgentListAlbumsToolSuccessResponse' }),
@@ -760,6 +778,7 @@ const AgentReadAlbumToolResponseSchema = z
       .object({
         status: z.literal('success'),
         toolCall: AgentToolCallResponseSchema,
+        resultSize: AgentToolResultSizeSchema,
         album: AgentAlbumDetailSchema,
       })
       .meta({ id: 'AgentReadAlbumToolSuccessResponse' }),
@@ -774,6 +793,7 @@ const AgentListSpacesToolResponseSchema = z
       .object({
         status: z.literal('success'),
         toolCall: AgentToolCallResponseSchema,
+        resultSize: AgentToolResultSizeSchema,
         spaces: z.array(AgentSpaceSummarySchema),
       })
       .meta({ id: 'AgentListSpacesToolSuccessResponse' }),
@@ -788,6 +808,7 @@ const AgentReadSpaceToolResponseSchema = z
       .object({
         status: z.literal('success'),
         toolCall: AgentToolCallResponseSchema,
+        resultSize: AgentToolResultSizeSchema,
         space: AgentSpaceDetailSchema,
       })
       .meta({ id: 'AgentReadSpaceToolSuccessResponse' }),
@@ -802,6 +823,7 @@ const AgentSearchUsersToolResponseSchema = z
       .object({
         status: z.literal('success'),
         toolCall: AgentToolCallResponseSchema,
+        resultSize: AgentToolResultSizeSchema,
         users: z.array(AgentUserLookupResultSchema),
       })
       .meta({ id: 'AgentSearchUsersToolSuccessResponse' }),

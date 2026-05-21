@@ -59,12 +59,11 @@ import {
   AgentAssetMetadataDetail,
   AgentAssetMetadataField,
   AgentAssetMetadataResult,
-  AgentSearchAssetResult,
-  AgentSearchAssetsDetail,
-  AgentSearchAssetsField,
   AgentResolvedAssetSearchFilterChoice,
   AgentResolvedAssetSearchFilterKind,
   AgentResolvedAssetSearchFilterResult,
+  AgentSearchAssetResult,
+  AgentSearchAssetsDetail,
   AgentSearchAssetsFilters,
   AgentSearchAssetsMode,
   AgentSearchAssetsOrder,
@@ -73,11 +72,12 @@ import {
   AgentSpaceSummary,
   AgentToolListAlbumsRequestMetadata,
   AgentToolListSpacesRequestMetadata,
-  AgentToolReadAssetMetadataRequestMetadata,
   AgentToolReadAssetIdsRequestMetadata,
+  AgentToolReadAssetMetadataRequestMetadata,
   AgentToolReadSpaceRequestMetadata,
   AgentToolResolveAssetSearchFiltersRequestMetadata,
   AgentToolResponseMetadata,
+  AgentToolResultSize,
   AgentToolSearchAssetsRequestMetadata,
   AgentToolSearchUsersRequestMetadata,
   AgentUserLookupResult,
@@ -88,7 +88,7 @@ import { isSmartSearchEnabled } from 'src/utils/misc';
 type AgentReadToolResponse<TResult extends Record<string, unknown>> =
   | { status: 'approval-required'; toolCall: AgentToolCallResponseDto }
   | { status: 'denied'; reason: string; toolCall: AgentToolCallResponseDto }
-  | ({ status: 'success'; toolCall: AgentToolCallResponseDto } & TResult);
+  | ({ status: 'success'; toolCall: AgentToolCallResponseDto; resultSize: AgentToolResultSize } & TResult);
 
 type ToolCallCreate = Parameters<AgentToolCallRepository['create']>[0];
 
@@ -108,6 +108,8 @@ type AgentReadToolDescriptor<TRequest, TResult extends Record<string, unknown>> 
   responseMetadata: (result: TResult) => AgentToolCall['redactedResponseMetadata'];
   resultAssetCount: (result: TResult) => number;
   resultAlbumCount: (result: TResult) => number;
+  resultSize: (result: TResult) => Pick<AgentToolResultSize, 'returnedItems' | 'hasMore' | 'nextPage'>;
+  truncateForBudget?: (result: TResult, budgetBytes: number) => { result: TResult; omittedFields: string[] };
   failedReason: string;
 };
 
@@ -256,7 +258,7 @@ export class AgentToolService {
             status: AgentToolCallStatus.Approved,
             approvalDecision: AgentToolApprovalDecision.Approved,
             responseSummary: 'Tool call approved by user',
-            redactedResponseMetadata: null,
+            redactedResponseMetadata: toolCall.redactedResponseMetadata,
             completedAt: null,
             error: null,
           }
@@ -264,7 +266,7 @@ export class AgentToolService {
             status: AgentToolCallStatus.Denied,
             approvalDecision: AgentToolApprovalDecision.Denied,
             responseSummary: null,
-            redactedResponseMetadata: null,
+            redactedResponseMetadata: toolCall.redactedResponseMetadata,
             completedAt: new Date(),
             error: dto.reason ?? 'Denied by user',
           };
@@ -498,7 +500,7 @@ export class AgentToolService {
         status: AgentToolCallStatus.Denied,
         approvalDecision: AgentToolApprovalDecision.Denied,
         responseSummary: null,
-        redactedResponseMetadata: null,
+        redactedResponseMetadata: this.withResultSizeMetadata(null, this.emptyResultSize()),
         completedAt: new Date(),
         error: denialReason,
       });
@@ -516,12 +518,15 @@ export class AgentToolService {
     descriptor: AgentReadToolDescriptor<TRequest, TResult>,
   ): Promise<AgentReadToolResponse<TResult>> {
     try {
-      const result = await descriptor.execute(auth, session, request, toolCallId);
+      const rawResult = await descriptor.execute(auth, session, request, toolCallId);
+      const result = this.withResultSize(rawResult, descriptor, (candidateResult, resultSize) =>
+        this.buildReadToolCallEstimate(session.id, toolCallId, request, descriptor, candidateResult, resultSize),
+      );
       const completed = await this.transitionExecuting(auth, session, toolCallId, {
         status: AgentToolCallStatus.Completed,
         approvalDecision: AgentToolApprovalDecision.Approved,
         responseSummary: descriptor.responseSummary(result),
-        redactedResponseMetadata: descriptor.responseMetadata(result),
+        redactedResponseMetadata: this.withResultSizeMetadata(descriptor.responseMetadata(result), result.resultSize),
         assetCount: descriptor.resultAssetCount(result),
         albumCount: descriptor.resultAlbumCount(result),
         completedAt: new Date(),
@@ -535,7 +540,7 @@ export class AgentToolService {
           status: AgentToolCallStatus.Denied,
           approvalDecision: AgentToolApprovalDecision.Denied,
           responseSummary: null,
-          redactedResponseMetadata: null,
+          redactedResponseMetadata: this.withResultSizeMetadata(null, this.emptyResultSize()),
           completedAt: new Date(),
           error: error.message,
         });
@@ -678,6 +683,12 @@ export class AgentToolService {
       responseMetadata: (result) => ({ assetIds: result.assetIds }),
       resultAssetCount: (result) => result.assetIds.length,
       resultAlbumCount: () => 0,
+      resultSize: (result) => ({
+        returnedItems: result.assetIds.length,
+        hasMore: result.hasMore,
+        nextPage: result.nextPage,
+      }),
+      truncateForBudget: (result, budgetBytes) => this.truncateSearchAssetsResult(result, budgetBytes),
       failedReason: 'Asset search failed',
     };
   }
@@ -743,6 +754,11 @@ export class AgentToolService {
       }),
       resultAssetCount: () => 0,
       resultAlbumCount: () => 0,
+      resultSize: (result) => ({
+        returnedItems: result.results.length,
+        hasMore: false,
+        nextPage: null,
+      }),
       failedReason: 'Search filter resolution failed',
     };
   }
@@ -1179,10 +1195,8 @@ export class AgentToolService {
           );
         }
 
-        const detailOrCustom = detail ?? 'custom';
-        const noun = assets.length === 1 ? 'asset' : 'assets';
         return {
-          summary: `Returned ${detailOrCustom} metadata for ${assets.length} ${noun}`,
+          summary: this.getReadAssetMetadataResponseSummary(detail ?? 'custom', assets.length),
           ...(detail ? { detail } : {}),
           fields,
           assets: assets.map((asset) => this.mapSelectedAssetMetadata(asset, fields)),
@@ -1192,6 +1206,12 @@ export class AgentToolService {
       responseMetadata: (result) => ({ assetIds: result.assets.map((asset) => asset.id) }),
       resultAssetCount: (result) => result.assets.length,
       resultAlbumCount: () => 0,
+      resultSize: (result) => ({
+        returnedItems: result.assets.length,
+        hasMore: false,
+        nextPage: null,
+      }),
+      truncateForBudget: (result, budgetBytes) => this.truncateAssetMetadataResult(result, budgetBytes),
       failedReason: 'Metadata read failed',
     };
   }
@@ -1268,6 +1288,11 @@ export class AgentToolService {
       }),
       resultAssetCount: (result) => this.getMediaReferences(result, options.resultKey).length,
       resultAlbumCount: () => 0,
+      resultSize: (result) => ({
+        returnedItems: this.getMediaReferences(result, options.resultKey).length,
+        hasMore: false,
+        nextPage: null,
+      }),
       failedReason: options.failedReason,
     };
   }
@@ -1301,6 +1326,11 @@ export class AgentToolService {
       responseMetadata: (result) => ({ albumIds: result.albums.map((album) => album.id) }),
       resultAssetCount: () => 0,
       resultAlbumCount: (result) => result.albums.length,
+      resultSize: (result) => ({
+        returnedItems: result.albums.length,
+        hasMore: false,
+        nextPage: null,
+      }),
       failedReason: 'Album list failed',
     };
   }
@@ -1363,6 +1393,11 @@ export class AgentToolService {
       responseMetadata: (result) => ({ albumIds: [result.album.id], assetIds: result.album.assetIds }),
       resultAssetCount: (result) => result.album.assetCount,
       resultAlbumCount: () => 1,
+      resultSize: () => ({
+        returnedItems: 1,
+        hasMore: false,
+        nextPage: null,
+      }),
       failedReason: 'Album read failed',
     };
   }
@@ -1400,6 +1435,11 @@ export class AgentToolService {
       responseMetadata: (result) => ({ spaceIds: result.spaces.map((space) => space.id) }),
       resultAssetCount: () => 0,
       resultAlbumCount: () => 0,
+      resultSize: (result) => ({
+        returnedItems: result.spaces.length,
+        hasMore: false,
+        nextPage: null,
+      }),
       failedReason: 'Space list failed',
     };
   }
@@ -1484,6 +1524,11 @@ export class AgentToolService {
       responseMetadata: (result) => ({ spaceIds: [result.space.id], assetIds: result.space.assetIds }),
       resultAssetCount: (result) => result.space.assetIds.length,
       resultAlbumCount: () => 0,
+      resultSize: () => ({
+        returnedItems: 1,
+        hasMore: false,
+        nextPage: null,
+      }),
       failedReason: 'Space read failed',
     };
   }
@@ -1529,6 +1574,11 @@ export class AgentToolService {
       responseMetadata: (result) => ({ userIds: result.users.map((user) => user.userId) }),
       resultAssetCount: () => 0,
       resultAlbumCount: () => 0,
+      resultSize: (result) => ({
+        returnedItems: result.users.length,
+        hasMore: false,
+        nextPage: null,
+      }),
       failedReason: 'User search failed',
     };
   }
@@ -1546,7 +1596,7 @@ export class AgentToolService {
       status: AgentToolCallStatus.Denied,
       approvalDecision: AgentToolApprovalDecision.Denied,
       responseSummary: null,
-      redactedResponseMetadata: null,
+      redactedResponseMetadata: this.withResultSizeMetadata(null, this.emptyResultSize()),
       completedAt: new Date(),
       error: reason,
     };
@@ -1622,7 +1672,9 @@ export class AgentToolService {
     const requestedAssetCount = descriptor.requestedAssetCount(request);
     const perToolLimit = descriptor.perToolLimit(plan);
     if (requestedAssetCount > perToolLimit) {
-      return descriptor.perToolLimitDenialReason?.(request, perToolLimit) ?? 'Requested asset count exceeds per-tool limit';
+      return (
+        descriptor.perToolLimitDenialReason?.(request, perToolLimit) ?? 'Requested asset count exceeds per-tool limit'
+      );
     }
 
     if (options?.validateSessionLimit ?? true) {
@@ -1673,7 +1725,7 @@ export class AgentToolService {
       status: AgentToolCallStatus.PendingApproval,
       approvalDecision: null,
       responseSummary: null,
-      redactedResponseMetadata: null,
+      redactedResponseMetadata: this.withResultSizeMetadata(null, this.emptyResultSize()),
       completedAt: null,
       error: null,
     };
@@ -1683,7 +1735,7 @@ export class AgentToolService {
       status: AgentToolCallStatus.Denied,
       approvalDecision: AgentToolApprovalDecision.Denied,
       responseSummary: null,
-      redactedResponseMetadata: null,
+      redactedResponseMetadata: this.withResultSizeMetadata(null, this.emptyResultSize()),
       completedAt: new Date(),
       error: reason,
     };
@@ -2101,7 +2153,7 @@ export class AgentToolService {
       status: AgentToolCallStatus.Denied,
       approvalDecision: AgentToolApprovalDecision.Denied,
       responseSummary: null,
-      redactedResponseMetadata: null,
+      redactedResponseMetadata: this.withResultSizeMetadata(null, this.emptyResultSize()),
       completedAt: new Date(),
       error: reason,
     });
@@ -2205,6 +2257,259 @@ export class AgentToolService {
     return `Returned metadata for ${assetCount} ${assetCount === 1 ? 'asset' : 'assets'}`;
   }
 
+  private getReadAssetMetadataResponseSummary(
+    selection: AgentAssetMetadataDetail | 'custom',
+    assetCount: number,
+    truncated = false,
+  ): string {
+    const summary = `Returned ${selection} metadata for ${assetCount} ${assetCount === 1 ? 'asset' : 'assets'}`;
+    return truncated ? this.appendTruncatedResponseSummary(summary) : summary;
+  }
+
+  private appendTruncatedResponseSummary(summary: string): string {
+    return `${summary}; response was truncated by budget`;
+  }
+
+  private getReadToolResponseBudgetBytes(): number {
+    return 64_000;
+  }
+
+  private emptyResultSize(): AgentToolResultSize {
+    return {
+      returnedItems: 0,
+      hasMore: false,
+      nextPage: null,
+      estimatedBytes: null,
+      truncated: false,
+      omittedFields: [],
+    };
+  }
+
+  private estimateJsonBytes(value: unknown): number | null {
+    try {
+      return Buffer.byteLength(JSON.stringify(value), 'utf8');
+    } catch {
+      return null;
+    }
+  }
+
+  private withResultSize<TRequest, TResult extends Record<string, unknown>>(
+    result: TResult,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+    toolCallEstimate: (result: TResult, resultSize: AgentToolResultSize) => AgentToolCallResponseDto,
+  ): TResult & { resultSize: AgentToolResultSize } {
+    const budgetBytes = this.getReadToolResponseBudgetBytes();
+    let nextResult = result;
+    let omittedFields: string[] = [];
+    const initialBytes = this.estimateJsonBytes(nextResult);
+
+    if (descriptor.truncateForBudget && initialBytes !== null && initialBytes > budgetBytes) {
+      const truncated = descriptor.truncateForBudget(nextResult, budgetBytes);
+      nextResult = truncated.result;
+      omittedFields = truncated.omittedFields;
+    }
+
+    let resultSize = this.estimateReadToolSuccessResultSize(descriptor, nextResult, omittedFields, toolCallEstimate);
+    let finalBytes = resultSize.estimatedBytes;
+
+    while (descriptor.truncateForBudget && finalBytes !== null && finalBytes > budgetBytes) {
+      const before = this.estimateJsonBytes(nextResult);
+      const truncated = descriptor.truncateForBudget(nextResult, budgetBytes);
+      const after = this.estimateJsonBytes(truncated.result);
+
+      nextResult = truncated.result;
+      omittedFields = [...new Set([...omittedFields, ...truncated.omittedFields])];
+      resultSize = this.estimateReadToolSuccessResultSize(descriptor, nextResult, omittedFields, toolCallEstimate);
+      finalBytes = resultSize.estimatedBytes;
+
+      if (before === after) {
+        break;
+      }
+    }
+
+    return {
+      ...nextResult,
+      resultSize,
+    };
+  }
+
+  private estimateReadToolSuccessResultSize<TRequest, TResult extends Record<string, unknown>>(
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+    result: TResult,
+    omittedFields: string[],
+    toolCallEstimate: (result: TResult, resultSize: AgentToolResultSize) => AgentToolCallResponseDto,
+  ): AgentToolResultSize {
+    let resultSize = this.buildResultSize(descriptor, result, omittedFields, null);
+
+    // The payload contains resultSize twice: top-level and inside toolCall. Re-measure until the numeric
+    // estimatedBytes value is part of the measured shape.
+    for (let i = 0; i < 8; i++) {
+      const estimatedBytes = this.estimateJsonBytes(
+        this.buildReadToolSuccessEstimatePayload(result, resultSize, toolCallEstimate),
+      );
+      if (estimatedBytes === null || estimatedBytes === resultSize.estimatedBytes) {
+        return resultSize;
+      }
+
+      resultSize = this.buildResultSize(descriptor, result, omittedFields, estimatedBytes);
+    }
+
+    return resultSize;
+  }
+
+  private buildResultSize<TRequest, TResult extends Record<string, unknown>>(
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+    result: TResult,
+    omittedFields: string[],
+    estimatedBytes: number | null,
+  ): AgentToolResultSize {
+    const base = descriptor.resultSize(result);
+    const truncated = omittedFields.length > 0;
+
+    return {
+      returnedItems: base.returnedItems,
+      hasMore: base.hasMore || truncated,
+      nextPage: base.nextPage,
+      estimatedBytes,
+      truncated,
+      omittedFields,
+    };
+  }
+
+  private buildReadToolSuccessEstimatePayload<TResult extends Record<string, unknown>>(
+    result: TResult,
+    resultSize: AgentToolResultSize,
+    toolCallEstimate: (result: TResult, resultSize: AgentToolResultSize) => AgentToolCallResponseDto,
+  ) {
+    return {
+      status: 'success' as const,
+      toolCall: toolCallEstimate(result, resultSize),
+      ...result,
+      resultSize,
+    };
+  }
+
+  private buildReadToolCallEstimate<TRequest, TResult extends Record<string, unknown>>(
+    sessionId: string,
+    toolCallId: string,
+    request: TRequest,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+    result: TResult,
+    resultSize: AgentToolResultSize,
+  ): AgentToolCallResponseDto {
+    return {
+      id: toolCallId,
+      sessionId,
+      toolName: descriptor.toolName,
+      status: AgentToolCallStatus.Completed,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      requestSummary: descriptor.requestSummary(request),
+      responseSummary: descriptor.responseSummary(result),
+      dataClass: descriptor.dataClass,
+      assetCount: descriptor.resultAssetCount(result),
+      albumCount: descriptor.resultAlbumCount(result),
+      startedAt: new Date(0),
+      completedAt: new Date(0),
+      error: null,
+      resultSize,
+    };
+  }
+
+  private withResultSizeMetadata(
+    metadata: AgentToolResponseMetadata | null,
+    resultSize: AgentToolResultSize,
+  ): AgentToolResponseMetadata {
+    return metadata ? { ...metadata, resultSize } : { resultSize };
+  }
+
+  private truncateSearchAssetsResult<
+    TResult extends {
+      summary: string;
+      detail: AgentSearchAssetsDetail;
+      assetIds: string[];
+      sample?: AgentSearchAssetResult[];
+      assets?: AgentSearchAssetResult[];
+      returnedCount: number;
+      hasMore: boolean;
+      nextPage: string | null;
+    },
+  >(result: TResult, budgetBytes: number): { result: TResult; omittedFields: string[] } {
+    const omittedFields = new Set<string>();
+    let nextResult = { ...result };
+
+    const trimOne = () => {
+      if (nextResult.assets && nextResult.assets.length > 0) {
+        nextResult = {
+          ...nextResult,
+          assetIds: nextResult.assetIds.slice(0, -1),
+          assets: nextResult.assets.slice(0, -1),
+        };
+        omittedFields.add('assets');
+      } else if (nextResult.sample && nextResult.sample.length > 0) {
+        nextResult = { ...nextResult, sample: nextResult.sample.slice(0, -1) };
+        omittedFields.add('sample');
+      } else if (nextResult.assetIds.length > 0) {
+        nextResult = { ...nextResult, assetIds: nextResult.assetIds.slice(0, -1) };
+        omittedFields.add('assetIds');
+      } else {
+        return false;
+      }
+
+      nextResult.returnedCount = nextResult.assetIds.length;
+      return true;
+    };
+
+    do {
+      if (!trimOne()) {
+        break;
+      }
+    } while ((this.estimateJsonBytes(nextResult) ?? 0) > budgetBytes);
+
+    const summary = this.getSearchAssetsResponseSummary({
+      ...nextResult,
+      sampleCount: nextResult.sample?.length,
+      metadataCount: nextResult.assets?.length,
+    });
+
+    return {
+      result: {
+        ...nextResult,
+        summary: omittedFields.size > 0 ? this.appendTruncatedResponseSummary(summary) : summary,
+      },
+      omittedFields: [...omittedFields],
+    };
+  }
+
+  private truncateAssetMetadataResult<
+    TResult extends {
+      summary: string;
+      detail?: AgentAssetMetadataDetail;
+      assets: AgentAssetMetadataResult[];
+    },
+  >(result: TResult, budgetBytes: number): { result: TResult; omittedFields: string[] } {
+    let nextResult = { ...result, assets: result.assets };
+
+    while ((this.estimateJsonBytes(nextResult) ?? 0) > budgetBytes && nextResult.assets.length > 0) {
+      nextResult = { ...nextResult, assets: nextResult.assets.slice(0, -1) };
+    }
+
+    if ((this.estimateJsonBytes(nextResult) ?? 0) > budgetBytes) {
+      nextResult = { ...nextResult, assets: [] };
+    }
+
+    return {
+      result: {
+        ...nextResult,
+        summary: this.getReadAssetMetadataResponseSummary(
+          nextResult.detail ?? 'custom',
+          nextResult.assets.length,
+          true,
+        ),
+      },
+      omittedFields: ['assets'],
+    };
+  }
+
   private getSessionLimitReason(maxAssetsPerSession: number): string {
     return `Session policy allows at most ${maxAssetsPerSession} assets per session`;
   }
@@ -2254,6 +2559,13 @@ export class AgentToolService {
   }
 
   private mapToolCall(toolCall: AgentToolCall): AgentToolCallResponseDto {
+    const resultSize =
+      toolCall.redactedResponseMetadata &&
+      'resultSize' in toolCall.redactedResponseMetadata &&
+      toolCall.redactedResponseMetadata.resultSize
+        ? toolCall.redactedResponseMetadata.resultSize
+        : undefined;
+
     return {
       id: toolCall.id,
       sessionId: toolCall.sessionId,
@@ -2268,6 +2580,7 @@ export class AgentToolService {
       startedAt: toolCall.startedAt,
       completedAt: toolCall.completedAt,
       error: toolCall.error,
+      ...(resultSize ? { resultSize } : {}),
     };
   }
 
@@ -2277,28 +2590,36 @@ export class AgentToolService {
 
   private getReadAssetMetadataPresetFields(detail: AgentAssetMetadataDetail = 'basic'): AgentAssetMetadataField[] {
     switch (detail) {
-      case 'basic':
+      case 'basic': {
         return ['type', 'dates'];
-      case 'descriptive':
+      }
+      case 'descriptive': {
         return ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location'];
-      case 'technical':
+      }
+      case 'technical': {
         return ['type', 'dates', 'filename', 'camera', 'rating', 'visibility'];
-      case 'allSafe':
+      }
+      case 'allSafe': {
         return ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility'];
+      }
     }
   }
 
-  private mapSelectedAssetMetadata(asset: AgentAssetMetadata, fields: AgentAssetMetadataField[]): AgentAssetMetadataResult {
+  private mapSelectedAssetMetadata(
+    asset: AgentAssetMetadata,
+    fields: AgentAssetMetadataField[],
+  ): AgentAssetMetadataResult {
     const result: AgentAssetMetadataResult = { id: asset.id };
     const exifInfo: NonNullable<AgentAssetMetadataResult['exifInfo']> = {};
     let requestedExifInfo = false;
 
     for (const field of fields) {
       switch (field) {
-        case 'type':
+        case 'type': {
           result.type = asset.type;
           break;
-        case 'dates':
+        }
+        case 'dates': {
           result.localDateTime = asset.localDateTime;
           result.fileCreatedAt = asset.fileCreatedAt;
           result.fileModifiedAt = asset.fileModifiedAt;
@@ -2307,7 +2628,8 @@ export class AgentToolService {
             exifInfo.dateTimeOriginal = asset.exifInfo.dateTimeOriginal;
           }
           break;
-        case 'location':
+        }
+        case 'location': {
           requestedExifInfo = true;
           if (asset.exifInfo) {
             exifInfo.city = asset.exifInfo.city;
@@ -2317,7 +2639,8 @@ export class AgentToolService {
             exifInfo.longitude = asset.exifInfo.longitude;
           }
           break;
-        case 'camera':
+        }
+        case 'camera': {
           requestedExifInfo = true;
           if (asset.exifInfo) {
             exifInfo.make = asset.exifInfo.make;
@@ -2325,24 +2648,30 @@ export class AgentToolService {
             exifInfo.lensModel = asset.exifInfo.lensModel;
           }
           break;
-        case 'tags':
+        }
+        case 'tags': {
           result.tags = asset.tags.map((tag) => ({ id: tag.id, value: tag.value, color: tag.color }));
           break;
-        case 'rating':
+        }
+        case 'rating': {
           requestedExifInfo = true;
           if (asset.exifInfo) {
             exifInfo.rating = asset.exifInfo.rating;
           }
           break;
-        case 'filename':
+        }
+        case 'filename': {
           result.originalFileName = asset.originalFileName;
           break;
-        case 'favorite':
+        }
+        case 'favorite': {
           result.isFavorite = asset.isFavorite;
           break;
-        case 'visibility':
+        }
+        case 'visibility': {
           result.visibility = asset.visibility;
           break;
+        }
       }
     }
 

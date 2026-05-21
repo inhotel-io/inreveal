@@ -59,6 +59,12 @@ vi.mock('svelte-i18n', () => {
     assistant_activity_status_running: 'Running',
     assistant_activity_status_skipped: 'Skipped',
     assistant_activity_summary_title: 'Activity summary',
+    assistant_activity_technical_hide: 'Hide technical details',
+    assistant_activity_technical_omitted_fields: 'Omitted fields',
+    assistant_activity_technical_result_items: 'Returned items',
+    assistant_activity_technical_result_size: 'Response size',
+    assistant_activity_technical_show: 'Technical details',
+    assistant_activity_technical_truncated: 'Truncated',
     assistant_activity_title: 'Pi is working',
     assistant_agent_tool_data_class_metadata: 'Metadata',
     assistant_agent_tool_name_listAlbums: 'List albums',
@@ -177,6 +183,7 @@ const makeToolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentT
   startedAt: overrides.startedAt ?? '2026-05-16T11:56:50.000Z',
   completedAt: overrides.completedAt ?? '2026-05-16T11:56:55.000Z',
   error: overrides.error ?? null,
+  resultSize: overrides.resultSize,
 });
 
 const makeOperation = (overrides: Partial<AgentOperationResponseDto> = {}): AgentOperationResponseDto => ({
@@ -324,6 +331,44 @@ describe(AgentSessionChatPanel.name, () => {
     expect(activity).toHaveTextContent('1 items');
     expect(activity).not.toHaveTextContent('List albums');
     expect(activity).not.toHaveTextContent('Returned 1 album(s)');
+  });
+
+  it('renders response-size rows in expanded inline tool-call details', async () => {
+    render(AgentSessionChatPanel, {
+      props: {
+        session,
+        seedMessages: [
+          {
+            ...makeMessage('message-user', AgentMessageRole.User, 'Find my Portugal photos'),
+            createdAt: '2026-05-16T11:55:00.000Z',
+          },
+        ],
+        toolCalls: [
+          makeToolCall({
+            id: 'search-tool',
+            toolName: AgentToolName.SearchAssets,
+            assetCount: 4,
+            albumCount: 0,
+            resultSize: {
+              returnedItems: 4,
+              hasMore: true,
+              nextPage: '2',
+              estimatedBytes: 4096,
+              truncated: true,
+              omittedFields: ['assets'],
+            },
+          }),
+        ],
+        activityVisibilityMode: 'expanded',
+      },
+    });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Technical details' }));
+
+    expect(screen.getByText('Response size')).toBeInTheDocument();
+    expect(screen.getByText('4 KB')).toBeInTheDocument();
+    expect(screen.getByText('Truncated')).toBeInTheDocument();
+    expect(screen.getByText('yes')).toBeInTheDocument();
   });
 
   it('renders one activity block after the triggering user message before the assistant response', async () => {
