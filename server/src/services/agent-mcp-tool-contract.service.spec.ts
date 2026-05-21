@@ -929,6 +929,73 @@ describe(AgentMcpToolContractService.name, () => {
       }
     });
 
+    it('returns targeted corrections for every Slice 7 search mistake', () => {
+      const cases = [
+        {
+          label: 'root filters',
+          issues: [{ path: '', message: 'Unrecognized keys: "isFavorite", "rating", "type"' }],
+          mistakeId: 'search-filters-outside-filters',
+          hint: 'inside the filters object',
+        },
+        {
+          label: 'tag name in id field',
+          issues: [{ path: 'filters.tagIds.0', message: 'Invalid UUID' }],
+          mistakeId: 'search-filter-name-in-tag-ids',
+          hint: 'Use resolveAssetSearchFilters',
+        },
+        {
+          label: 'album name in id field',
+          issues: [{ path: 'filters.albumIds.0', message: 'Invalid UUID' }],
+          mistakeId: 'search-filter-name-in-album-ids',
+          hint: 'Use resolveAssetSearchFilters',
+        },
+        {
+          label: 'person name in id field',
+          issues: [{ path: 'filters.personIds.0', message: 'Invalid UUID' }],
+          mistakeId: 'search-filter-name-in-person-ids',
+          hint: 'Use resolveAssetSearchFilters',
+        },
+        {
+          label: 'space name in id field',
+          issues: [{ path: 'filters.spaceId', message: 'Invalid UUID' }],
+          mistakeId: 'search-filter-name-in-space-id',
+          hint: 'Use resolveAssetSearchFilters',
+        },
+        {
+          label: 'metadata query',
+          issues: [
+            { path: 'query', message: 'query is only supported for smart, description, ocr, and filename search modes' },
+          ],
+          mistakeId: 'search-query-with-metadata-mode',
+          hint: 'Use mode smart, description, ocr, or filename with query',
+        },
+        {
+          label: 'space person without space',
+          issues: [{ path: 'filters.spacePersonIds', message: 'spacePersonIds requires spaceId' }],
+          mistakeId: 'search-space-person-without-space',
+          hint: 'spacePersonIds requires filters.spaceId',
+        },
+        {
+          label: 'toolCallId with new search fields',
+          issues: [{ path: '', message: 'Provide either search fields or toolCallId, not both' }],
+          mistakeId: 'search-combined-filters-and-tool-call-id',
+          hint: 'only toolCallId for an approved retry',
+        },
+      ] as const;
+
+      for (const { label, issues, mistakeId, hint } of cases) {
+        const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+          requestShape: 'tool-arguments',
+          issues,
+        });
+
+        expect(correction?.mistakeId, label).toBe(mistakeId);
+        expect(correction?.hint, label).toContain(hint);
+        expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(correction?.exampleArguments).success)
+          .toBe(true);
+      }
+    });
+
     it('returns resolver corrections for missing fields and combined resolver fields with toolCallId', () => {
       const missing = sut.getReadToolValidationCorrection(AgentToolName.ResolveAssetSearchFilters, {
         requestShape: 'tool-arguments',
@@ -1181,6 +1248,11 @@ describe(AgentMcpToolContractService.name, () => {
       'planning-direct-add-assets-tool',
       'search-root-taken-after-filter',
       'search-root-favorite-rating-filters',
+      'search-tag-name-in-id-filter',
+      'search-person-name-in-id-filter',
+      'search-query-with-metadata-mode',
+      'search-space-person-without-space',
+      'search-fields-with-tool-call-id',
     ] as const;
 
     it('returns a combined runtime failure matrix with complete metadata', () => {
