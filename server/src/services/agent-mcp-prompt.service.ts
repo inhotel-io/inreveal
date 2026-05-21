@@ -61,17 +61,18 @@ export class AgentMcpPromptService {
       [
         'Gallery MCP tool-use cheat sheet',
         `Tool: ${toolList}`,
-        `Read: ${searchContract.usage.replace('Put deterministic metadata search filters under filters. ', '')}`,
-        `Writes: call ${this.toPiToolName(planContract.name)} for reviewable operation plans.`,
+        `R: ${searchContract.usage.replace('Put deterministic metadata search filters under filters. ', '')}`,
+        'Text search: smart/ocr/description/filename require query',
+        `Write: call ${this.toPiToolName(planContract.name)} for reviewable plans.`,
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
         `Resolve names before searchAssets: ${resolveFilters.piToolName} ${this.formatJson(resolveFilters.arguments)}`,
         `Read ${normalRead.piToolName}: ${this.formatJson(normalRead.arguments)}`,
         `Retry ${retryRead.piToolName}: ${this.formatJson(retryRead.arguments)}`,
-        `Space lookup: ${listSpaces.piToolName}, choose id, then ${readSpace.piToolName}:`,
+        `Space lookup: ${listSpaces.piToolName}, then ${readSpace.piToolName}:`,
         `${this.formatJson(listSpaces.arguments)} -> ${this.formatJson(readSpace.arguments)}`,
-        'Existing-space plans: listSpaces/readSpace first. If ambiguous/no matching space, ask. If no matching assets/no photos or none to remove in space, explain. assetIdsTruncated false: exclude already in space adds and only remove already in space; true: narrow/ask.',
-        'Space details: listSpaces/readSpace first. For existing_space targetId only, plan space.updateDetails fields: spaceName, description, color. description "" clears it. If same name, same description, or same color already, answer without a no-op/no change plan. Never update thumbnails, pets, face recognition, linked libraries, or delete spaces.',
+        'Existing-space plans: listSpaces/readSpace first. If ambiguous/no matching space, ask. If no matching assets/no photos or none to remove in space, explain. assetIdsTruncated false: exclude already in space adds and only remove already in space; true: narrow.',
+        'Space details: listSpaces/readSpace first. For existing_space targetId only, plan space.updateDetails fields: spaceName, description, color. description "" clears it. If same name, same description, or same color already, answer without a no-op/no change plan. Never update thumbnails, pets, faces, linked libraries, or delete spaces.',
         `Plan ${this.toPiToolName(AgentToolName.ProposeAlbumOperations)}: album.create temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id>"]}; space.updateDetails {spaceName,description,color}.`,
         this.renderValidationRecoveryGuidance(validationMistake),
       ].join('\n'),
@@ -219,7 +220,7 @@ export class AgentMcpPromptService {
       throw new Error('Missing MCP prompt validation recovery mistake with example guidance');
     }
 
-    return `Validation: exampleArguments, retry once when correction is obvious. Hint: "${mistake.hint}"`;
+    return `Validation: exampleArguments; retry once if correction is obvious. Hint: "${mistake.hint}"`;
   }
 
   private sanitizePrompt(prompt: string): string {
