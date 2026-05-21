@@ -22,8 +22,12 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { ConfigRepository } from 'src/repositories/config.repository';
+import { LoggingRepository } from 'src/repositories/logging.repository';
+import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
+import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import { UserService } from 'src/services/user.service';
@@ -37,6 +41,7 @@ import {
   AgentSpaceSummary,
   AgentUserLookupResult,
 } from 'src/types/agent-tool.types';
+import { clearConfigCache } from 'src/utils/config';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { newAccessRepositoryMock } from 'test/repositories/access.repository.mock';
 import { newAssetRepositoryMock } from 'test/repositories/asset.repository.mock';
@@ -271,6 +276,10 @@ describe(AgentToolService.name, () => {
   let accessRepository: ReturnType<typeof newAccessRepositoryMock>;
   let assetRepository: ReturnType<typeof newAssetRepositoryMock>;
   let searchRepository: ReturnType<typeof automock<SearchRepository>>;
+  let loggingRepository: ReturnType<typeof automock<LoggingRepository>>;
+  let configRepository: ReturnType<typeof automock<ConfigRepository>>;
+  let machineLearningRepository: ReturnType<typeof automock<MachineLearningRepository>>;
+  let systemMetadataRepository: ReturnType<typeof automock<SystemMetadataRepository>>;
   let albumRepository: ReturnType<typeof automock<AlbumRepository>>;
   let sharedSpaceRepository: ReturnType<typeof automock<SharedSpaceRepository>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
@@ -279,9 +288,14 @@ describe(AgentToolService.name, () => {
   let userService: { search: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
+    clearConfigCache();
     accessRepository = newAccessRepositoryMock();
     assetRepository = newAssetRepositoryMock();
     searchRepository = automock(SearchRepository, { args: [{} as never] });
+    loggingRepository = automock(LoggingRepository, { args: [undefined, undefined], strict: false });
+    configRepository = automock(ConfigRepository, { args: [] as never });
+    machineLearningRepository = automock(MachineLearningRepository, { args: [loggingRepository] });
+    systemMetadataRepository = automock(SystemMetadataRepository, { args: [{} as never] });
     albumRepository = automock(AlbumRepository, { args: [{} as never] });
     sharedSpaceRepository = automock(SharedSpaceRepository, { args: [{} as never] });
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
@@ -292,6 +306,10 @@ describe(AgentToolService.name, () => {
       accessRepository as unknown as AccessRepository,
       assetRepository as unknown as AssetRepository,
       searchRepository,
+      loggingRepository,
+      configRepository,
+      machineLearningRepository,
+      systemMetadataRepository,
       albumRepository,
       sharedSpaceRepository,
       sessionRepository,
@@ -349,6 +367,10 @@ describe(AgentToolService.name, () => {
     searchRepository.getCameraModels.mockResolvedValue([]);
     searchRepository.getCameraLensModels.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false });
+    searchRepository.searchSmart.mockResolvedValue({ items: [], hasNextPage: false });
+    configRepository.getEnv.mockReturnValue({ configFile: undefined } as never);
+    systemMetadataRepository.get.mockResolvedValue(null);
+    machineLearningRepository.encodeText.mockResolvedValue('[1, 2, 3]');
     sharedSpaceRepository.getAllByUserId.mockResolvedValue([]);
     sharedSpaceRepository.getById.mockImplementation(() => Promise.resolve(void 0));
     sharedSpaceRepository.getMember.mockImplementation(() => Promise.resolve(void 0));
@@ -1661,22 +1683,147 @@ describe(AgentToolService.name, () => {
   });
 
   it.each([
-    [
-      { mode: 'smart', query: 'beach', filters: {}, limit: 5, page: 1, order: 'desc' },
-      'smart search is not available yet',
-    ],
-    [
-      { mode: 'description', query: 'birthday', filters: {}, limit: 5, page: 1, order: 'desc' },
-      'description search is not available yet',
-    ],
-    [
-      { mode: 'ocr', query: 'invoice', filters: {}, limit: 5, page: 1, order: 'desc' },
-      'ocr search is not available yet',
-    ],
-    [
-      { mode: 'filename', query: 'IMG_2026', filters: {}, limit: 5, page: 1, order: 'desc' },
-      'filename search is not available yet',
-    ],
+    ['description', 'birthday', { description: 'birthday' }],
+    ['ocr', 'invoice', { ocr: 'invoice' }],
+    ['filename', 'IMG_2026', { originalFileName: 'IMG_2026' }],
+  ] satisfies Array<[AgentSearchAssetsToolRequestDto['mode'], string, Record<string, string>]>)(
+    'executes %s text search through its distinct metadata field',
+    async (mode, query, expectedTextOption) => {
+      const auth = AuthFactory.create();
+      const session = makeSession({
+        userId: auth.user.id,
+        approvalMode: AgentApprovalMode.PlanOnly,
+        permissionPlanSnapshot: makePlan(),
+      });
+
+      sessionRepository.getById.mockResolvedValue(session);
+
+      const result = await sut.searchAssets(auth, session.id, {
+        mode,
+        query,
+        filters: {},
+        limit: 5,
+        page: 1,
+        order: 'desc',
+      });
+
+      expect(result).toEqual(expect.objectContaining({ status: 'success', returnedCount: 0, hasMore: false }));
+      expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+        { page: 1, size: 5 },
+        expect.objectContaining(expectedTextOption),
+      );
+      expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.not.objectContaining({
+          ...(mode === 'description' ? {} : { description: expect.anything() }),
+          ...(mode === 'ocr' ? {} : { ocr: expect.anything() }),
+          ...(mode === 'filename' ? {} : { originalFileName: expect.anything() }),
+        }),
+      );
+      expect(searchRepository.searchSmart).not.toHaveBeenCalled();
+    },
+  );
+
+  it('returns an empty successful OCR search without hydrating metadata', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan(),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false });
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'ocr',
+      query: 'invoice',
+      filters: {},
+      limit: 5,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ status: 'success', returnedCount: 0, hasMore: false }));
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+  });
+
+  it('executes smart search with ML embedding and relevance ordering omitted', async () => {
+    const auth = AuthFactory.create();
+    const tagId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan(),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.tag.checkOwnerAccess.mockResolvedValue(new Set([tagId]));
+    systemMetadataRepository.get.mockResolvedValue({
+      machineLearning: { clip: { modelName: 'ViT-Test', maxDistance: 0.42 } },
+    } as never);
+    machineLearningRepository.encodeText.mockResolvedValue('[1, 2, 3]');
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'smart',
+      query: 'beach sunset',
+      filters: { tagIds: [tagId] },
+      limit: 5,
+      page: 1,
+    });
+
+    expect(result).toEqual(expect.objectContaining({ status: 'success' }));
+    expect(machineLearningRepository.encodeText).toHaveBeenCalledWith('beach sunset', {
+      modelName: 'ViT-Test',
+      language: undefined,
+    });
+    expect(searchRepository.searchSmart).toHaveBeenCalledWith(
+      { page: 1, size: 5 },
+      expect.objectContaining({
+        query: 'beach sunset',
+        embedding: '[1, 2, 3]',
+        maxDistance: 0.42,
+        tagIds: [tagId],
+        userIds: [auth.user.id],
+      }),
+    );
+    expect(searchRepository.searchSmart).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.not.objectContaining({ orderDirection: expect.anything() }),
+    );
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+  });
+
+  it('includes timeline space ids in shared-space smart search scope', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+    systemMetadataRepository.get.mockResolvedValue({
+      machineLearning: { clip: { modelName: 'ViT-Test', maxDistance: 0.42 } },
+    } as never);
+
+    await sut.searchAssets(auth, session.id, {
+      mode: 'smart',
+      query: 'beach sunset',
+      filters: { withSharedSpaces: true },
+      limit: 5,
+      page: 1,
+    });
+
+    expect(searchRepository.searchSmart).toHaveBeenCalledWith(
+      { page: 1, size: 5 },
+      expect.objectContaining({ userIds: [auth.user.id], timelineSpaceIds: [spaceId] }),
+    );
+  });
+
+  it.each([
     [
       { mode: 'metadata', query: 'beach', filters: {}, limit: 5, page: 1, order: 'desc' },
       'query is only supported for smart, description, ocr, and filename search modes',
@@ -1686,6 +1833,10 @@ describe(AgentToolService.name, () => {
     [
       { mode: 'metadata', filters: {}, limit: 5, page: 1, order: 'relevance' },
       'relevance order search is not available yet',
+    ],
+    [
+      { mode: 'smart', query: 'beach', filters: {}, limit: 5, page: 1, order: 'asc' },
+      'asc order search is not available yet',
     ],
   ] satisfies Array<[AgentSearchAssetsToolRequestDto, string]>)(
     'denies future search contract fields before repository execution: %#',

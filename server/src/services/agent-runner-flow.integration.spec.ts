@@ -18,7 +18,10 @@ import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.reposi
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { LoggingRepository } from 'src/repositories/logging.repository';
+import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
+import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentMessageService } from 'src/services/agent-message.service';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
@@ -398,6 +401,10 @@ const setup = () => {
     {} as AccessRepository,
     {} as AssetRepository,
     { searchMetadata: vi.fn(() => Promise.resolve({ items: [], hasNextPage: false })) } as never,
+    { error: vi.fn(), warn: vi.fn() } as unknown as LoggingRepository,
+    { getEnv: vi.fn(() => ({ configFile: undefined })) } as unknown as ConfigRepository,
+    { encodeText: vi.fn(() => Promise.resolve('[1, 2, 3]')) } as unknown as MachineLearningRepository,
+    { get: vi.fn(() => Promise.resolve(null)) } as unknown as SystemMetadataRepository,
     albumRepository as unknown as AlbumRepository,
     sharedSpaceRepository as unknown as SharedSpaceRepository,
     sessions as unknown as AgentSessionRepository,
