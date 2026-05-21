@@ -8,7 +8,10 @@ export type AgentToolProviderSnapshot = {
   model: string;
 };
 
-export type AgentToolReadAssetMetadataRequestMetadata = AgentToolReadAssetIdsRequestMetadata;
+export type AgentToolReadAssetMetadataRequestMetadata = AgentToolReadAssetIdsRequestMetadata & {
+  detail?: AgentAssetMetadataDetail;
+  fields?: AgentAssetMetadataField[];
+};
 
 export type AgentToolReadAssetMetadataResponseMetadata = AgentToolResponseIdsMetadata;
 
@@ -28,6 +31,10 @@ export type AgentSearchAssetsField =
   | 'filename'
   | 'favorite'
   | 'visibility';
+
+export type AgentAssetMetadataDetail = 'basic' | 'descriptive' | 'technical' | 'allSafe';
+
+export type AgentAssetMetadataField = AgentSearchAssetsField;
 
 export type AgentToolSearchAssetsRequestMetadata = {
   mode: AgentSearchAssetsMode;
@@ -220,6 +227,7 @@ export type AgentUserLookupResult = {
 export type AgentToolRequestMetadata =
   | AgentToolSearchAssetsRequestMetadata
   | AgentToolResolveAssetSearchFiltersRequestMetadata
+  | AgentToolReadAssetMetadataRequestMetadata
   | AgentToolReadAssetIdsRequestMetadata
   | AgentToolReadAlbumRequestMetadata
   | AgentToolListAlbumsRequestMetadata
@@ -265,3 +273,7 @@ export type AgentSearchAssetResult = Omit<Partial<AgentAssetMetadata>, 'exifInfo
   Pick<AgentAssetMetadata, 'id'> & {
     exifInfo?: AgentSearchAssetExif | null;
   };
+
+export type AgentAssetMetadataExifResult = AgentSearchAssetExif;
+
+export type AgentAssetMetadataResult = Omit<AgentSearchAssetResult, 'ownerId'>;

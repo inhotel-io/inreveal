@@ -430,6 +430,7 @@ describe(AgentMcpService.name, () => {
 
       expect(toolService.readAssetMetadata).toHaveBeenCalledWith(auth, sessionId, {
         assetIds: ['00000000-0000-4000-8000-000000000001'],
+        detail: 'basic',
       });
       expectToolResult(response, 'read-1', serviceResult);
     });
@@ -478,6 +479,7 @@ describe(AgentMcpService.name, () => {
     {
       toolName: AgentToolName.ReadAssetMetadata,
       args: { assetIds: [factory.uuid()] },
+      expectedArgs: { assetIds: [expect.any(String)], detail: 'basic' },
       serviceMethod: 'readAssetMetadata' as const,
       serviceResult: { status: 'success', toolCall: null, assets: [] },
     },
