@@ -964,7 +964,10 @@ describe(AgentMcpToolContractService.name, () => {
         {
           label: 'metadata query',
           issues: [
-            { path: 'query', message: 'query is only supported for smart, description, ocr, and filename search modes' },
+            {
+              path: 'query',
+              message: 'query is only supported for smart, description, ocr, and filename search modes',
+            },
           ],
           mistakeId: 'search-query-with-metadata-mode',
           hint: 'Use mode smart, description, ocr, or filename with query',
@@ -992,8 +995,9 @@ describe(AgentMcpToolContractService.name, () => {
         expect(correction?.mistakeId, label).toBe(mistakeId);
         expect(correction?.issuePath, label).toBe(issues[0].path);
         expect(correction?.hint, label).toContain(hint);
-        expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(correction?.exampleArguments).success)
-          .toBe(true);
+        expect(
+          AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(correction?.exampleArguments).success,
+        ).toBe(true);
       }
     });
 
