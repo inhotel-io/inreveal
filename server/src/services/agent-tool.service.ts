@@ -41,10 +41,14 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { ConfigRepository } from 'src/repositories/config.repository';
+import { LoggingRepository } from 'src/repositories/logging.repository';
+import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
+import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
-import { buildAgentMetadataSearch } from 'src/services/agent-search-filter-mapper';
+import { buildAgentSearch } from 'src/services/agent-search-filter-mapper';
 import { UserService } from 'src/services/user.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import {
@@ -71,6 +75,8 @@ import {
   AgentToolSearchUsersRequestMetadata,
   AgentUserLookupResult,
 } from 'src/types/agent-tool.types';
+import { getConfig } from 'src/utils/config';
+import { isSmartSearchEnabled } from 'src/utils/misc';
 
 type AgentReadToolResponse<TResult extends Record<string, unknown>> =
   | { status: 'approval-required'; toolCall: AgentToolCallResponseDto }
@@ -131,6 +137,10 @@ export class AgentToolService {
     private readonly accessRepository: AccessRepository,
     private readonly assetRepository: AssetRepository,
     private readonly searchRepository: SearchRepository,
+    private readonly logger: LoggingRepository,
+    private readonly configRepository: ConfigRepository,
+    private readonly machineLearningRepository: MachineLearningRepository,
+    private readonly systemMetadataRepository: SystemMetadataRepository,
     private readonly albumRepository: AlbumRepository,
     private readonly sharedSpaceRepository: SharedSpaceRepository,
     private readonly sessionRepository: AgentSessionRepository,
@@ -580,15 +590,28 @@ export class AgentToolService {
       validateAccess: (auth, session, request) => this.validateSearchRequest(auth, session, request),
       execute: async (auth, session, request) => {
         const timelineSpaceIds = await this.getSearchTimelineSpaceIds(auth, session, request.filters ?? {});
-        const search = buildAgentMetadataSearch({
+        const smartConfig = request.mode === 'smart' ? await this.getSmartSearchConfig() : undefined;
+        const smartEmbedding =
+          request.mode === 'smart'
+            ? await this.machineLearningRepository.encodeText(request.query!, {
+                modelName: smartConfig!.modelName,
+                language: undefined,
+              })
+            : undefined;
+        const search = buildAgentSearch({
           userId: auth.user.id,
           request,
           scope: {
             ...this.getRepositoryScope(auth, session.permissionPlanSnapshot),
             timelineSpaceIds,
           },
+          smartEmbedding,
+          smartMaxDistance: smartConfig?.maxDistance,
         });
-        const result = await this.searchRepository.searchMetadata(search.pagination, search.options);
+        const result =
+          search.kind === 'smart'
+            ? await this.searchRepository.searchSmart(search.pagination, search.options)
+            : await this.searchRepository.searchMetadata(search.pagination, search.options);
         const assetIds = result.items.map((asset) => asset.id);
         await this.assertReturnedAssetsAreAccessible(auth, session, assetIds);
         const assets = await this.getOrderedAgentMetadata(assetIds);
@@ -1579,13 +1602,43 @@ export class AgentToolService {
     return member ? null : 'Space is not accessible';
   }
 
-  private getUnsupportedSearchModeReason(mode: AgentSearchAssetsMode): string | null {
-    return mode === 'metadata' ? null : `${mode} search is not available yet`;
+  private async getSmartSearchConfig(): Promise<{ modelName: string; maxDistance: number }> {
+    const { machineLearning } = await getConfig(
+      {
+        configRepo: this.configRepository,
+        metadataRepo: this.systemMetadataRepository,
+        logger: this.logger,
+      },
+      { withCache: true },
+    );
+
+    if (!isSmartSearchEnabled(machineLearning)) {
+      throw new AgentToolDeniedError('Smart search is not enabled');
+    }
+
+    return {
+      modelName: machineLearning.clip.modelName,
+      maxDistance: machineLearning.clip.maxDistance,
+    };
   }
 
-  private getUnsupportedSearchPagingReason(page: number, order: AgentSearchAssetsOrder): string | null {
+  private getUnsupportedSearchModeReason(mode: AgentSearchAssetsMode): string | null {
+    return ['metadata', 'smart', 'description', 'ocr', 'filename'].includes(mode)
+      ? null
+      : `${mode} search is not available yet`;
+  }
+
+  private getUnsupportedSearchPagingReason(
+    page: number,
+    order: AgentSearchAssetsOrder,
+    mode: AgentSearchAssetsMode,
+  ): string | null {
     if (page !== 1) {
       return 'page search is not available yet';
+    }
+
+    if (mode === 'smart') {
+      return order === 'asc' ? 'asc order search is not available yet' : null;
     }
 
     if (order !== 'desc') {
@@ -1617,9 +1670,20 @@ export class AgentToolService {
       return modeReason;
     }
 
-    const pagingReason = this.getUnsupportedSearchPagingReason(page, order);
+    const pagingReason = this.getUnsupportedSearchPagingReason(page, order, mode);
     if (pagingReason) {
       return pagingReason;
+    }
+
+    if (mode === 'smart') {
+      try {
+        await this.getSmartSearchConfig();
+      } catch (error) {
+        if (error instanceof AgentToolDeniedError) {
+          return error.message;
+        }
+        throw error;
+      }
     }
 
     const filterReason = this.getUnsupportedSearchFilterReason(request.filters ?? {});
