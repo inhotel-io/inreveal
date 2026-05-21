@@ -87,11 +87,21 @@ export type AgentToolSearchUsersRequestMetadata = {
   limit: number;
 };
 
+export type AgentToolResultSize = {
+  returnedItems: number;
+  hasMore: boolean;
+  nextPage: string | null;
+  estimatedBytes: number | null;
+  truncated: boolean;
+  omittedFields: string[];
+};
+
 export type AgentToolResponseIdsMetadata = {
   assetIds?: string[];
   albumIds?: string[];
   spaceIds?: string[];
   userIds?: string[];
+  resultSize?: AgentToolResultSize;
 };
 
 export type AgentToolOperationPlanRequestMetadata = {

@@ -22,6 +22,11 @@ vi.mock('svelte-i18n', () => {
     assistant_activity_technical_hide: 'Hide technical details',
     assistant_activity_technical_request: 'Request summary',
     assistant_activity_technical_response: 'Response summary',
+    assistant_activity_technical_result_items: 'Returned items',
+    assistant_activity_technical_result_size: 'Response size',
+    assistant_activity_technical_truncated: 'Truncated',
+    assistant_activity_technical_omitted_fields: 'Omitted fields',
+    assistant_activity_technical_next_page: 'Next page',
     assistant_activity_technical_show: 'Technical details',
     assistant_activity_technical_started: 'Started at',
     assistant_activity_technical_tool: 'Tool name',
@@ -202,6 +207,37 @@ describe(AgentActivityBlock.name, () => {
     expect(screen.getByText('2026-05-18T10:00:00.000Z')).toBeInTheDocument();
     expect(screen.getByText('Completed at')).toBeInTheDocument();
     expect(screen.getByText('2026-05-18T10:00:02.000Z')).toBeInTheDocument();
+  });
+
+  it('renders result-size technical rows when expanded', async () => {
+    render(AgentActivityBlock, {
+      props: {
+        visibilityMode: 'expanded',
+        model: activityModel([
+          activityItem({
+            id: 'search-1',
+            title: 'Searching photos',
+            technical: {
+              resultSize: {
+                returnedItems: 4,
+                hasMore: false,
+                nextPage: null,
+                estimatedBytes: 2048,
+                truncated: true,
+                omittedFields: ['assets'],
+              },
+            },
+          }),
+        ]),
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Technical details' }));
+
+    expect(screen.getByText('Response size')).toBeInTheDocument();
+    expect(screen.getByText('2 KB')).toBeInTheDocument();
+    expect(screen.getByText('Omitted fields')).toBeInTheDocument();
+    expect(screen.getByText('assets')).toBeInTheDocument();
   });
 
   it('does not render an empty technical details disclosure for rows without safe details', () => {
