@@ -159,20 +159,33 @@ describe(AgentMcpToolContractService.name, () => {
     );
   });
 
-  it('does not advertise future text search modes or examples for searchAssets', () => {
+  it('advertises executable text search modes and examples for searchAssets', () => {
     const search = sut.getReadToolContract(AgentToolName.SearchAssets);
 
-    expect(search?.argumentModes.map((mode) => mode.name)).not.toContain('text-search');
-    expect(search?.examples.map((example) => example.name)).not.toContain('future-smart-search-contract');
-    expect(search?.examples).not.toEqual(
+    expect(search?.usage).toContain('Use mode smart, description, ocr, or filename with query for text search');
+    expect(search?.usage).not.toContain('Text modes, later pages, and non-desc order are not available yet');
+    expect(search?.argumentModes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          arguments: expect.objectContaining({
-            mode: expect.stringMatching(/^(smart|description|ocr|filename)$/),
-          }),
+          name: 'text-search',
+          requiredFields: ['mode', 'query'],
         }),
       ]),
     );
+    expect(search?.examples.map((example) => example.name)).toEqual(
+      expect.arrayContaining([
+        'smart-text-search',
+        'ocr-text-search',
+        'description-text-search',
+        'filename-text-search',
+      ]),
+    );
+
+    for (const example of search?.examples ?? []) {
+      const result = AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(example.arguments);
+
+      expect(result.success, `searchAssets example "${example.name}" should parse`).toBe(true);
+    }
   });
 
   it('defines a search-specific approved retry mode that forbids all new search fields', () => {
@@ -231,8 +244,21 @@ describe(AgentMcpToolContractService.name, () => {
     expect(search?.usage).toContain(
       'people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types',
     );
-    expect(search?.usage).toContain('Text modes, later pages, and non-desc order are not available yet');
+    expect(search?.usage).not.toContain('Text modes, later pages, and non-desc order are not available yet');
     expect(search?.usage).not.toContain('people, space, visibility, later pages');
+  });
+
+  it('returns text-search correction for query used with metadata mode', () => {
+    const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+      requestShape: 'tool-arguments',
+      issues: [{ path: 'query', message: 'query is only supported with smart, description, ocr, or filename mode' }],
+    });
+
+    expect(correction).toMatchObject({
+      mistakeId: 'search-query-with-metadata-mode',
+      hint: expect.stringContaining('Use mode smart, description, ocr, or filename with query'),
+    });
+    expect(correction?.hint).not.toContain('not available yet');
   });
 
   it('defines a space-filter-search example for scoped people filters', () => {
@@ -637,28 +663,22 @@ describe(AgentMcpToolContractService.name, () => {
       });
 
       expect(correction?.mistakeId).toBe('search-query-with-metadata-mode');
-      expect(correction?.hint).toContain('Omit query and use metadata filters for now');
-      expect(correction?.hint).toContain('Text search modes are in the contract but are not available yet');
-      expect(correction?.hint).not.toContain('Use mode smart, description, ocr, or filename');
+      expect(correction?.hint).toContain('Use mode smart, description, ocr, or filename with query');
+      expect(correction?.hint).not.toContain('not available yet');
       expect(correction?.exampleArguments).toEqual({
-        mode: 'metadata',
-        filters: {
-          takenAfter: '2026-05-01T00:00:00.000Z',
-          takenBefore: '2026-05-18T23:59:59.999Z',
-          city: 'Berlin',
-          country: 'Germany',
-        },
-        limit: 50,
-        page: 1,
-        order: 'desc',
+        mode: 'smart',
+        query: 'beach sunset',
+        filters: { withSharedSpaces: true },
+        limit: 25,
       });
     });
 
-    it('documents unavailable search continuation and ordering fields as later-slice behavior', () => {
+    it('documents unavailable search continuation and ordering fields without deferring text modes', () => {
       const contract = sut.listToolContracts().find((candidate) => candidate.name === AgentToolName.SearchAssets);
 
       expect(contract?.usage).toContain('Only page 1 and order desc are executable');
-      expect(contract?.usage).toContain('Text modes, later pages, and non-desc order are not available yet');
+      expect(contract?.usage).toContain('later pages and non-desc order are not available yet');
+      expect(contract?.usage).not.toContain('Text modes, later pages, and non-desc order are not available yet');
       expect(contract?.commonMistakes).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -798,10 +818,11 @@ describe(AgentMcpToolContractService.name, () => {
         issues: [{ path: 'filters.rating', message: 'Too big: expected number to be <=5' }],
       });
 
+      const expectedUsage =
+        'Put deterministic metadata search filters under filters. Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known. Use mode smart, description, ocr, or filename with query for text search. Only page 1 and order desc are executable; later pages and non-desc order are not available yet. Use only toolCallId when retrying a Gallery-approved search.';
       expect(correction).toEqual({
-        expected:
-          'Put deterministic metadata search filters under filters. Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known. Only page 1 and order desc are executable. Text modes, later pages, and non-desc order are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
-        hint: 'Put deterministic metadata search filters under filters. Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known. Only page 1 and order desc are executable. Text modes, later pages, and non-desc order are not available yet. Use only toolCallId when retrying a Gallery-approved search.',
+        expected: expectedUsage,
+        hint: expectedUsage,
         exampleArguments: {},
       });
     });

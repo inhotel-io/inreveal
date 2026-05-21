@@ -161,9 +161,9 @@ Retry an approved read request by id.
 
 MCP tool name: `searchAssets`
 
-Find assets using Gallery metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and a bounded result page.
+Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and a bounded result page. Text modes, later pages, and non-desc order are split: text modes are executable; later pages and non-desc order are deferred.
 
-Put deterministic metadata search filters under filters. Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known. Only page 1 and order desc are executable. Text modes, later pages, and non-desc order are not available yet. Use only toolCallId when retrying a Gallery-approved search.
+Put deterministic metadata search filters under filters. Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known. Use mode smart, description, ocr, or filename with query for text search. Only page 1 and order desc are executable; later pages and non-desc order are not available yet. Use only toolCallId when retrying a Gallery-approved search.
 
 Argument modes:
 
@@ -173,6 +173,9 @@ Argument modes:
 - `filtered-search`: Use when the user provides date, place, favorite, rating, album, tag, camera, media, people, space, or visibility filters.
   Required fields: `filters`.
   Forbidden fields: `toolCallId`, `query`.
+- `text-search`: Use when the user asks for words found by smart, description, OCR, or filename search.
+  Required fields: `mode`, `query`.
+  Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved search request.
   Required fields: `toolCallId`.
   Forbidden fields: `mode`, `query`, `filters`, `limit`, `page`, `order`.
@@ -300,6 +303,70 @@ Search with ids returned by resolveAssetSearchFilters.
     "tagIds": ["00000000-0000-4000-8000-000000000030"],
     "albumIds": ["00000000-0000-4000-8000-000000000010"]
   },
+  "limit": 25
+}
+```
+
+#### smart-text-search
+
+Search semantically across visible assets.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="smart-text-search" -->
+
+```json
+{
+  "mode": "smart",
+  "query": "beach sunset",
+  "filters": {
+    "withSharedSpaces": true
+  },
+  "limit": 25
+}
+```
+
+#### ocr-text-search
+
+Search OCR text within visible assets.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="ocr-text-search" -->
+
+```json
+{
+  "mode": "ocr",
+  "query": "invoice",
+  "filters": {
+    "takenAfter": "2024-01-01T00:00:00.000Z"
+  },
+  "limit": 25
+}
+```
+
+#### description-text-search
+
+Search visible asset descriptions.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="description-text-search" -->
+
+```json
+{
+  "mode": "description",
+  "query": "birthday",
+  "filters": {},
+  "limit": 25
+}
+```
+
+#### filename-text-search
+
+Search visible asset filenames.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="filename-text-search" -->
+
+```json
+{
+  "mode": "filename",
+  "query": "IMG_2026",
+  "filters": {},
   "limit": 25
 }
 ```
@@ -1720,7 +1787,7 @@ Summarize plan risks and selected changes.
 ### Search assets
 
 - `search-filters-outside-filters`: Place supported metadata filters for date, location, favorite, rating, album, tag, camera, media, people, space, shared-space, and visibility inside the filters object.
-- `search-query-with-metadata-mode`: Omit query and use metadata filters for now. Text search modes are in the contract but are not available yet.
+- `search-query-with-metadata-mode`: Use mode smart, description, ocr, or filename with query for text search, or omit query for metadata-only search.
 - `search-space-person-without-space`: spacePersonIds requires filters.spaceId. Resolve or choose the space first, then call searchAssets with both fields under filters.
 - `search-filter-name-in-tag-ids`: Use resolveAssetSearchFilters for user-facing tag names, then call searchAssets with the returned tagIds under filters.
 - `search-filter-name-in-album-ids`: Use resolveAssetSearchFilters for user-facing album names, then call searchAssets with the returned albumIds under filters.
