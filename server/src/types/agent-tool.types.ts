@@ -25,6 +25,24 @@ export type AgentToolSearchAssetsRequestMetadata = {
   order: AgentSearchAssetsOrder;
 };
 
+export type AgentResolveAssetSearchFiltersScope = {
+  spaceId?: string;
+  withSharedSpaces?: boolean;
+  takenAfter?: Date;
+  takenBefore?: Date;
+};
+
+export type AgentToolResolveAssetSearchFiltersRequestMetadata = {
+  people?: string[];
+  tags?: string[];
+  albums?: string[];
+  spaces?: string[];
+  cameraMakes?: string[];
+  cameraModels?: string[];
+  lensModels?: string[];
+  scope?: AgentResolveAssetSearchFiltersScope;
+};
+
 export type AgentToolReadAssetIdsRequestMetadata = {
   assetIds: string[];
 };
@@ -95,6 +113,35 @@ export type AgentSearchAssetsFilters = {
   visibility?: AssetVisibility;
 };
 
+export type AgentResolvedAssetSearchFilterKind =
+  | 'person'
+  | 'tag'
+  | 'album'
+  | 'space'
+  | 'cameraMake'
+  | 'cameraModel'
+  | 'lensModel';
+
+export type AgentResolvedAssetSearchFilterStatus = 'matched' | 'ambiguous' | 'not_found';
+
+export type AgentResolvedAssetSearchFilterChoice = {
+  id?: string;
+  value: string;
+  label: string;
+  searchFilter?: Partial<AgentSearchAssetsFilters>;
+};
+
+export type AgentResolvedAssetSearchFilterResult = {
+  kind: AgentResolvedAssetSearchFilterKind;
+  query: string;
+  status: AgentResolvedAssetSearchFilterStatus;
+  value?: string;
+  id?: string;
+  searchFilter?: Partial<AgentSearchAssetsFilters>;
+  choices: AgentResolvedAssetSearchFilterChoice[];
+  message: string;
+};
+
 export type AgentAssetMediaReference = {
   assetId: string;
   mediaUrl: string;
@@ -156,6 +203,7 @@ export type AgentUserLookupResult = {
 
 export type AgentToolRequestMetadata =
   | AgentToolSearchAssetsRequestMetadata
+  | AgentToolResolveAssetSearchFiltersRequestMetadata
   | AgentToolReadAssetIdsRequestMetadata
   | AgentToolReadAlbumRequestMetadata
   | AgentToolListAlbumsRequestMetadata
