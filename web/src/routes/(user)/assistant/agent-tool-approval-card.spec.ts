@@ -106,6 +106,7 @@ const toolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentToolC
   startedAt: overrides.startedAt ?? '2026-05-16T10:00:00.000Z',
   completedAt: overrides.completedAt ?? null,
   error: overrides.error ?? null,
+  resultSize: overrides.resultSize,
 });
 
 describe(AgentToolApprovalCard.name, () => {
@@ -140,6 +141,35 @@ describe(AgentToolApprovalCard.name, () => {
     });
 
     expect(screen.getByText('It may use no photos and no albums.')).toBeInTheDocument();
+  });
+
+  it('shows no-result telemetry in expanded approval details', async () => {
+    render(AgentToolApprovalCard, {
+      props: {
+        session,
+        toolCall: toolCall({
+          resultSize: {
+            returnedItems: 0,
+            hasMore: false,
+            nextPage: null,
+            estimatedBytes: null,
+            truncated: false,
+            omittedFields: [],
+          },
+        }),
+        onApprove: vi.fn(),
+        onDeny: vi.fn(),
+      },
+    });
+
+    expect(screen.queryByText('Response size')).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+    expect(screen.getByText('Response size')).toBeInTheDocument();
+    expect(screen.getByText('not estimated')).toBeInTheDocument();
+    expect(screen.getByText('Returned items')).toBeInTheDocument();
+    expect(screen.getByText('0')).toBeInTheDocument();
   });
 
   it('uses safe plain-language fallback copy for unknown future tools', async () => {

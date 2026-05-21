@@ -869,17 +869,79 @@ describe('Agent tool DTOs', () => {
         expect(result.data.completedAt).toBe('2026-05-14T12:01:00.000Z');
       }
     });
+
+    it('serializes optional result-size telemetry on tool calls', () => {
+      const result = AgentToolCallResponseDto.schema.safeEncode(
+        makeToolCall({
+          resultSize: {
+            returnedItems: 2,
+            hasMore: true,
+            nextPage: '2',
+            estimatedBytes: 1536,
+            truncated: true,
+            omittedFields: ['assets'],
+          },
+        }),
+      );
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.resultSize).toEqual({
+          returnedItems: 2,
+          hasMore: true,
+          nextPage: '2',
+          estimatedBytes: 1536,
+          truncated: true,
+          omittedFields: ['assets'],
+        });
+      }
+    });
+
+    it('accepts unavailable result-size estimates', () => {
+      const result = AgentToolCallResponseDto.schema.safeEncode(
+        makeToolCall({
+          resultSize: emptyResultSize(),
+        }),
+      );
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.resultSize?.estimatedBytes).toBeNull();
+      }
+    });
+
+    it('rejects invalid negative result-size values', () => {
+      const result = AgentToolCallResponseDto.schema.safeParse({
+        ...makeEncodedToolCall(),
+        resultSize: {
+          returnedItems: -1,
+          hasMore: false,
+          nextPage: null,
+          estimatedBytes: -5,
+          truncated: false,
+          omittedFields: [],
+        },
+      });
+
+      expectIssue(result, ['resultSize', 'returnedItems'], 'Too small');
+      expectIssue(result, ['resultSize', 'estimatedBytes'], 'Too small');
+    });
   });
 
   describe(AgentReadAssetMetadataToolResponseDto.name, () => {
     it('serializes approval-required responses with embedded tool calls only', () => {
       const result = AgentReadAssetMetadataToolResponseDto.schema.safeEncode({
         status: 'approval-required',
-        toolCall: makeToolCall({ status: AgentToolCallStatus.PendingApproval, completedAt: null }),
+        toolCall: makeToolCall({
+          status: AgentToolCallStatus.PendingApproval,
+          completedAt: null,
+          resultSize: emptyResultSize(),
+        }),
       });
 
       expect(result.success).toBe(true);
       if (result.success) {
+        expect(result.data.toolCall.resultSize).toEqual(emptyResultSize());
         expect(result.data).toHaveProperty('toolCall');
         expect(result.data).not.toHaveProperty('toolCallId');
         expect(result.data).not.toHaveProperty('requestSummary');
@@ -895,11 +957,13 @@ describe('Agent tool DTOs', () => {
           status: AgentToolCallStatus.Denied,
           approvalDecision: AgentToolApprovalDecision.Denied,
           error: 'User denied the request.',
+          resultSize: emptyResultSize(),
         }),
       });
 
       expect(result.success).toBe(true);
       if (result.success) {
+        expect(result.data.toolCall.resultSize).toEqual(emptyResultSize());
         expect(result.data).toHaveProperty('reason', 'User denied the request.');
         expect(result.data).toHaveProperty('toolCall');
         expect(result.data).not.toHaveProperty('toolCallId');
@@ -915,6 +979,7 @@ describe('Agent tool DTOs', () => {
         summary: 'Returned basic metadata for 1 asset',
         detail: 'basic' as const,
         fields: ['type', 'dates'],
+        resultSize: makeResultSize({ estimatedBytes: 768 }),
         assets: [
           {
             id: asset.id,
@@ -948,6 +1013,7 @@ describe('Agent tool DTOs', () => {
         summary: 'Returned allSafe metadata for 1 asset',
         detail: 'allSafe' as const,
         fields: ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility'],
+        resultSize: makeResultSize({ estimatedBytes: 768 }),
         assets: [asset],
       });
 
@@ -975,6 +1041,7 @@ describe('Agent tool DTOs', () => {
         returnedCount: 1,
         hasMore: false,
         nextPage: null,
+        resultSize: makeResultSize({ estimatedBytes: 512 }),
       };
 
       const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode(response);
@@ -1005,6 +1072,7 @@ describe('Agent tool DTOs', () => {
         returnedCount: 1,
         hasMore: false,
         nextPage: null,
+        resultSize: makeResultSize({ estimatedBytes: 512 }),
       };
 
       const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode(response);
@@ -1029,6 +1097,7 @@ describe('Agent tool DTOs', () => {
         nextPage: '2',
         totalCount: 12,
         approximateTotal: 15,
+        resultSize: makeResultSize({ hasMore: true, nextPage: '2', estimatedBytes: 768 }),
       };
       const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode(response);
 
@@ -1082,6 +1151,7 @@ describe('Agent tool DTOs', () => {
         returnedCount: 0,
         hasMore: false,
         nextPage: null,
+        resultSize: makeResultSize({ returnedItems: 0, estimatedBytes: 128 }),
       };
       const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode(response);
 
@@ -1111,6 +1181,37 @@ describe('Agent tool DTOs', () => {
       }
     });
 
+    it('encodes and parses truncated search responses with omitted fields', () => {
+      const assetId = factory.uuid();
+      const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode({
+        status: 'success',
+        toolCall: makeToolCall({ toolName: AgentToolName.SearchAssets }),
+        summary: 'Returned 1 asset id; response was truncated by budget',
+        detail: 'ids',
+        assetIds: [assetId],
+        returnedCount: 1,
+        hasMore: false,
+        nextPage: null,
+        resultSize: {
+          returnedItems: 1,
+          hasMore: true,
+          nextPage: null,
+          estimatedBytes: 64_000,
+          truncated: true,
+          omittedFields: ['assetIds'],
+        },
+      });
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success || encoded.data.status !== 'success') {
+        return;
+      }
+
+      expect(encoded.data.resultSize.truncated).toBe(true);
+      expect(encoded.data.resultSize.omittedFields).toEqual(['assetIds']);
+      expect(AgentSearchAssetsToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
+    });
+
     it('parses resolve filter success responses with resolved and choice search filters', () => {
       const tagId = factory.uuid();
       const albumId = factory.uuid();
@@ -1118,6 +1219,7 @@ describe('Agent tool DTOs', () => {
         status: 'success',
         toolCall: makeEncodedToolCall(),
         resolvedFilters: { tagIds: [tagId], albumIds: [albumId] },
+        resultSize: makeResultSize({ returnedItems: 2 }),
         results: [
           {
             kind: 'tag',
@@ -1164,6 +1266,7 @@ describe('Agent tool DTOs', () => {
         status: 'success',
         toolCall: makeEncodedToolCall(),
         resolvedFilters: {},
+        resultSize: makeResultSize(),
         results: [
           {
             kind: 'person',
@@ -1186,6 +1289,7 @@ describe('Agent tool DTOs', () => {
         status: 'success',
         toolCall: makeEncodedToolCall(),
         resolvedFilters: {},
+        resultSize: makeResultSize(),
         results: [
           {
             kind: 'space',
@@ -1215,6 +1319,7 @@ describe('Agent tool DTOs', () => {
       const encoded = AgentReadAssetPreviewsToolResponseDto.schema.safeEncode({
         status: 'success',
         toolCall: makeToolCall(),
+        resultSize: makeResultSize(),
         previews: [makeMediaReference()],
       });
 
@@ -1235,6 +1340,7 @@ describe('Agent tool DTOs', () => {
       const encoded = AgentReadAssetOriginalsToolResponseDto.schema.safeEncode({
         status: 'success',
         toolCall: makeToolCall(),
+        resultSize: makeResultSize(),
         originals: [makeMediaReference()],
       });
 
@@ -1255,6 +1361,7 @@ describe('Agent tool DTOs', () => {
       const response = {
         status: 'success' as const,
         toolCall: makeToolCall({ albumCount: 2 }),
+        resultSize: makeResultSize({ returnedItems: 2 }),
         albums: [
           makeAlbumSummary({ startDate: null, endDate: null }),
           makeAlbumSummary({ assetCount: 0, startDate: null, endDate: null }),
@@ -1283,6 +1390,7 @@ describe('Agent tool DTOs', () => {
       const encoded = AgentReadAlbumToolResponseDto.schema.safeEncode({
         status: 'success',
         toolCall: makeToolCall({ albumCount: 1, assetCount: assetIds.length }),
+        resultSize: makeResultSize(),
         album: { ...makeAlbumSummary({ assetCount: assetIds.length }), assetIds },
       });
 
@@ -1303,6 +1411,7 @@ describe('Agent tool DTOs', () => {
       const encoded = AgentListSpacesToolResponseDto.schema.safeEncode({
         status: 'success',
         toolCall: makeToolCall({ toolName: AgentToolName.ListSpaces, albumCount: 0, assetCount: 0 }),
+        resultSize: makeResultSize(),
         spaces: [makeSpaceSummary({ recentAssetIds: [factory.uuid()] })],
       });
 
@@ -1320,6 +1429,7 @@ describe('Agent tool DTOs', () => {
       const encoded = AgentReadSpaceToolResponseDto.schema.safeEncode({
         status: 'success',
         toolCall: makeToolCall({ toolName: AgentToolName.ReadSpace, albumCount: 0, assetCount: assetIds.length }),
+        resultSize: makeResultSize(),
         space: {
           ...makeSpaceSummary({ assetCount: assetIds.length }),
           assetIds,
@@ -1353,6 +1463,7 @@ describe('Agent tool DTOs', () => {
       const encoded = AgentSearchUsersToolResponseDto.schema.safeEncode({
         status: 'success',
         toolCall: makeToolCall({ toolName: AgentToolName.SearchUsers, assetCount: 0, albumCount: 0 }),
+        resultSize: makeResultSize(),
         users: [
           {
             userId: factory.uuid(),
@@ -1399,10 +1510,32 @@ const makeEncodedToolCall = () => ({
   completedAt: '2026-05-14T12:01:00.000Z',
 });
 
-const makeSuccessResponse = () => ({
-  status: 'success' as const,
-  toolCall: makeToolCall(),
-  assets: makeAssets(),
+const emptyResultSize = () => ({
+  returnedItems: 0,
+  hasMore: false,
+  nextPage: null,
+  estimatedBytes: null,
+  truncated: false,
+  omittedFields: [],
+});
+
+type TestResultSize = {
+  returnedItems: number;
+  hasMore: boolean;
+  nextPage: string | null;
+  estimatedBytes: number | null;
+  truncated: boolean;
+  omittedFields: string[];
+};
+
+const makeResultSize = (overrides: Partial<TestResultSize> = {}): TestResultSize => ({
+  returnedItems: 1,
+  hasMore: false,
+  nextPage: null,
+  estimatedBytes: 512,
+  truncated: false,
+  omittedFields: [],
+  ...overrides,
 });
 
 const makeAssets = () => [
