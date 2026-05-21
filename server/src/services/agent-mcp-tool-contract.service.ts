@@ -306,36 +306,31 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
     {
       id: 'search-filter-name-in-tag-ids',
       match: { issuePath: 'filters.tagIds.0' },
-      hint:
-        'Use resolveAssetSearchFilters for user-facing tag names, then call searchAssets with the returned tagIds under filters.',
+      hint: 'Use resolveAssetSearchFilters for user-facing tag names, then call searchAssets with the returned tagIds under filters.',
       exampleName: 'resolved-id-filter-search',
     },
     {
       id: 'search-filter-name-in-album-ids',
       match: { issuePath: 'filters.albumIds.0' },
-      hint:
-        'Use resolveAssetSearchFilters for user-facing album names, then call searchAssets with the returned albumIds under filters.',
+      hint: 'Use resolveAssetSearchFilters for user-facing album names, then call searchAssets with the returned albumIds under filters.',
       exampleName: 'resolved-id-filter-search',
     },
     {
       id: 'search-filter-name-in-person-ids',
       match: { issuePath: 'filters.personIds.0' },
-      hint:
-        'Use resolveAssetSearchFilters for user-facing person names, then call searchAssets with the returned personIds under filters.',
+      hint: 'Use resolveAssetSearchFilters for user-facing person names, then call searchAssets with the returned personIds under filters.',
       exampleName: 'person-filter-search',
     },
     {
       id: 'search-filter-name-in-space-id',
       match: { issuePath: 'filters.spaceId' },
-      hint:
-        'Use resolveAssetSearchFilters for user-facing space names, then call searchAssets with the returned spaceId under filters.',
+      hint: 'Use resolveAssetSearchFilters for user-facing space names, then call searchAssets with the returned spaceId under filters.',
       exampleName: 'space-id-filter-search',
     },
     {
       id: 'search-filter-name-in-space-person-ids',
       match: { issuePath: 'filters.spacePersonIds.0' },
-      hint:
-        'Use resolveAssetSearchFilters for user-facing shared-space person names, then call searchAssets with the returned spacePersonIds under filters.',
+      hint: 'Use resolveAssetSearchFilters for user-facing shared-space person names, then call searchAssets with the returned spacePersonIds under filters.',
       exampleName: 'space-filter-search',
     },
     {
@@ -420,8 +415,7 @@ const resolveAssetSearchFiltersContract: AgentMcpToolContract<AgentToolName.Reso
     {
       id: 'resolver-missing-fields',
       match: { messageIncludes: 'Provide at least one resolver field' },
-      hint:
-        'Provide at least one name field such as tags, albums, people, spaces, cameraMakes, cameraModels, or lensModels.',
+      hint: 'Provide at least one name field such as tags, albums, people, spaces, cameraMakes, cameraModels, or lensModels.',
       exampleName: 'resolve-named-filters',
     },
     {

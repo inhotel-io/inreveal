@@ -61,6 +61,7 @@ Request shape:
 ```
 
 Rules:
+
 - Names are trimmed, non-empty, capped at 20 values per kind and 120 characters per value.
 - `toolCallId` is mutually exclusive with all resolver fields.
 - `scope.spaceId` and `scope.withSharedSpaces` are mutually exclusive.
@@ -94,6 +95,7 @@ Success response shape:
 ## Task 1: DTO Schema And Type Foundation
 
 **Files:**
+
 - Modify `server/src/enum.ts`
 - Modify `server/src/dtos/agent-tool.dto.ts`
 - Modify `server/src/dtos/agent-tool.dto.spec.ts`
@@ -380,6 +382,7 @@ git commit -m "feat: add pi search filter resolver dto"
 ## Task 2: Agent Tool Resolver Execution
 
 **Files:**
+
 - Modify `server/src/services/agent-tool.service.ts`
 - Modify `server/src/services/agent-tool.service.spec.ts`
 
@@ -714,6 +717,7 @@ private async validateResolveAssetSearchFiltersRequest(
 ```
 
 Implement `resolveAssetSearchFilterRequest` to:
+
 - Load `timelineSpaceIds` with `sharedSpaceRepository.getSpaceIdsForTimeline(auth.user.id)` when `scope.withSharedSpaces` is true.
 - Call `searchRepository.getFilterSuggestions([auth.user.id], { ...scope, timelineSpaceIds })` once for people/tags/camera make candidates.
 - Call `searchRepository.getCameraModels([auth.user.id], { make: canonicalMake, ...scope })` for matched makes.
@@ -732,12 +736,14 @@ private resolveNamedCandidates<TCandidate extends { label: string; id?: string; 
 ```
 
 The helper should:
+
 - Compare exact matches with `candidate.label.toLocaleLowerCase() === query.trim().toLocaleLowerCase()`.
 - Return `matched` only for one exact match and include `searchFilter`.
 - Return `ambiguous` for more than one exact match and include all exact choices.
 - Return `not_found` with up to five visible suggestions where label includes query or query includes label, falling back to the first five candidates.
 
 Merge matched filters into `resolvedFilters`:
+
 - `personIds`, `tagIds`, `albumIds`: append unique IDs.
 - `spaceId`: set only if one space matched; if more than one requested space matches, leave only the first matched space out and return the later one as ambiguous with message `Only one spaceId can be used in searchAssets`.
 - `make`, `model`, `lensModel`: set canonical string value.
@@ -758,6 +764,7 @@ git commit -m "feat: resolve pi asset search filter names"
 ## Task 3: MCP Runtime Registration And Validation Corrections
 
 **Files:**
+
 - Modify `server/src/services/agent-mcp.service.ts`
 - Modify `server/src/types/agent-mcp-contract.types.ts`
 - Modify `server/src/services/agent-mcp-tool-contract.service.ts`
@@ -849,6 +856,7 @@ Expected: FAIL because the MCP service, contract type, and controller list do no
 In `server/src/types/agent-mcp-contract.types.ts`, add `AgentToolName.ResolveAssetSearchFilters` to `AgentMcpReadToolName`.
 
 In `server/src/services/agent-mcp.service.ts`:
+
 - Add to `readToolNames`.
 - Add dispatch:
 
@@ -859,6 +867,7 @@ case AgentToolName.ResolveAssetSearchFilters: {
 ```
 
 In `server/src/services/agent-mcp-tool-contract.service.ts`:
+
 - Add `examplePersonId`, or reuse existing IDs for examples.
 - Define `resolveAssetSearchFiltersContract` with examples:
 
@@ -866,7 +875,8 @@ In `server/src/services/agent-mcp-tool-contract.service.ts`:
 const resolveAssetSearchFiltersContract: AgentMcpToolContract<AgentToolName.ResolveAssetSearchFilters> = {
   name: AgentToolName.ResolveAssetSearchFilters,
   title: 'Resolve asset search filters',
-  description: 'Resolve visible people, tags, albums, spaces, and camera names into searchAssets filter IDs or canonical values.',
+  description:
+    'Resolve visible people, tags, albums, spaces, and camera names into searchAssets filter IDs or canonical values.',
   usage:
     'Use this before searchAssets when the user gives names instead of IDs. Do not guess IDs from names. If results are ambiguous or not_found, ask the user or narrow the request before searching.',
   argumentModes: [
@@ -875,7 +885,8 @@ const resolveAssetSearchFiltersContract: AgentMcpToolContract<AgentToolName.Reso
       description: 'Resolve visible names before a search.',
       requiredFields: [],
       forbiddenFields: ['toolCallId'],
-      whenToUse: 'Use when the user asks for assets by person, tag, album, space, camera make, camera model, or lens model names.',
+      whenToUse:
+        'Use when the user asks for assets by person, tag, album, space, camera make, camera model, or lens model names.',
     },
     approvedRetryMode,
   ],
@@ -980,6 +991,7 @@ git commit -m "feat: expose pi search filter resolver over mcp"
 ## Task 4: Tool Registry, Prompt Guidance, And Generated Docs
 
 **Files:**
+
 - Modify `server/src/services/agent-mcp-tool-registry.service.ts`
 - Modify `server/src/services/agent-mcp-prompt.service.ts`
 - Modify `server/src/services/agent-mcp-tool-registry.service.spec.ts`
@@ -1034,6 +1046,7 @@ Expected: FAIL because registry and prompt selections do not include the resolve
 - [ ] **Step 2: Implement registry and prompt updates**
 
 In `server/src/services/agent-mcp-tool-registry.service.ts`:
+
 - Add property descriptions:
 
 ```ts
@@ -1060,6 +1073,7 @@ defineTool({
 ```
 
 In `server/src/services/agent-mcp-prompt.service.ts`:
+
 - Add `ResolveAssetSearchFilters` to `promptExampleSelections`.
 - Render guidance before search guidance:
 
@@ -1097,6 +1111,7 @@ git commit -m "docs: teach pi to resolve search filter names"
 ## Task 5: Full Slice Verification
 
 **Files:**
+
 - All files touched by Tasks 1-4.
 
 - [ ] **Step 1: Run focused slice tests**
