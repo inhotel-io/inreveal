@@ -51,7 +51,6 @@ export class AgentMcpPromptService {
     const retryRead = this.getPromptExample(examples, AgentToolName.ReadAssetMetadata, 'approved-retry');
     const listSpaces = this.getPromptExample(examples, AgentToolName.ListSpaces, 'list-visible-spaces');
     const readSpace = this.getPromptExample(examples, AgentToolName.ReadSpace, 'read-space-details');
-    const searchContract = this.getContract(AgentToolName.SearchAssets);
     const metadataContract = this.getContract(AgentToolName.ReadAssetMetadata);
     const planContract = this.getContract(AgentToolName.ProposeAlbumOperations);
     const retryMode = metadataContract.argumentModes.find((mode) => mode.name === 'approved-retry');

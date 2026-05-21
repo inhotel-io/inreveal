@@ -723,9 +723,9 @@ describe(AgentMcpToolContractService.name, () => {
       const search = sut.getReadToolContract(AgentToolName.SearchAssets);
 
       expect(search?.description).toContain('bounded result pages');
-    expect(search?.usage).toContain(
-      'repeat the same mode, query, filters, order, and limit using the returned nextPage value as page',
-    );
+      expect(search?.usage).toContain(
+        'repeat the same mode, query, filters, order, and limit using the returned nextPage value as page',
+      );
       expect(search?.usage).not.toContain('Only page 1');
       expect(search?.usage).not.toContain('later pages and non-desc order are not available yet');
       expect(search?.examples.map((example) => example.name)).toContain('metadata-next-page-search');
