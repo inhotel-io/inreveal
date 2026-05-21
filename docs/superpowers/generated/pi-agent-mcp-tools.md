@@ -97,6 +97,16 @@ Read tools may return `status: "approval-required"` with a `toolCall.id`. Stop t
 If Gallery resumes the runner with an approved result, use that result. If Gallery resumes without the result, retry the same read tool with only `{ "toolCallId": "<id>" }`.
 Do not ask the user to approve in chat and do not create a new read request with the old fields.
 
+## Progressive Detail Workflow
+
+Use the smallest useful payload first. Resolve names before search. Search compact IDs first. Request fields only for selected IDs. Propose a plan only after the selected asset set is clear.
+
+- Broad search: use `searchAssets` with `detail: "ids"` and a bounded `limit` such as 25 or 50. If `hasMore` or `resultSize.truncated` is true, page with `nextPage` or ask a narrowing question.
+- Visual curation: search compact IDs first, then call preview reads only for shortlisted `assetIds` when visual inspection is needed.
+- Technical metadata: search IDs first, then call `readAssetMetadata` with exact `fields` such as `camera`, `dates`, and `filename` for selected IDs.
+- Large album: page compact search results and propose operations from returned asset IDs. Do not request full metadata for every candidate.
+- All photos: avoid loading the whole library. Ask for a narrower date, album, tag, person, space, rating, or media-type filter when the task does not require every asset.
+
 ## Tools
 
 ### Resolve asset search filters
@@ -173,7 +183,7 @@ MCP tool name: `searchAssets`
 
 Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and bounded result pages.
 
-Put metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose plans with returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Results are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.
+Put metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose plans with returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Default to compact asset ids with detail ids. Use detail summary with fields and sampleSize for a small representative sample. Use detail metadata only after a bounded compact search proves the subset is small. Do not use limit 1000 or request all metadata for broad searches; page with nextPage or ask one narrowing question when hasMore or resultSize.truncated is true. Results are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.
 
 Argument modes:
 
@@ -215,6 +225,77 @@ Search photos from a known place and date window.
     "country": "Germany"
   },
   "limit": 50
+}
+```
+
+#### compact-date-location-search
+
+Search compact asset ids for a known date and place.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="compact-date-location-search" -->
+
+```json
+{
+  "detail": "ids",
+  "filters": {
+    "takenAfter": "2026-05-01T00:00:00.000Z",
+    "takenBefore": "2026-05-18T23:59:59.999Z",
+    "city": "Berlin",
+    "country": "Germany"
+  },
+  "limit": 50
+}
+```
+
+#### summary-sample-search
+
+Request a small representative sample with only needed fields.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="summary-sample-search" -->
+
+```json
+{
+  "detail": "summary",
+  "fields": ["dates", "location"],
+  "sampleSize": 3,
+  "filters": {
+    "city": "Berlin",
+    "country": "Germany"
+  },
+  "limit": 50
+}
+```
+
+#### visual-curation-candidate-search
+
+Find visual curation candidates by compact ids before reading previews.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="visual-curation-candidate-search" -->
+
+```json
+{
+  "mode": "smart",
+  "query": "best beach sunset photos",
+  "detail": "ids",
+  "limit": 25
+}
+```
+
+#### large-album-page-search
+
+Page a broad album-building search without requesting full metadata.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="large-album-page-search" -->
+
+```json
+{
+  "detail": "ids",
+  "filters": {
+    "isNotInAlbum": true
+  },
+  "limit": 50,
+  "page": 1,
+  "order": "desc"
 }
 ```
 
@@ -477,7 +558,7 @@ MCP tool name: `readAssetMetadata`
 
 Read selected metadata for selected assets.
 
-Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.
+Search compact asset ids first, then call this tool for selected ids with the smallest useful detail preset or fields. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.
 
 Argument modes:
 
@@ -526,6 +607,19 @@ Read selected metadata field groups for selected assets.
 {
   "assetIds": ["00000000-0000-4000-8000-000000000001"],
   "fields": ["filename", "rating", "tags"]
+}
+```
+
+#### read-technical-fields-for-selected-assets
+
+Read exact camera, date, and filename fields for selected assets.
+
+<!-- mcp-docs:tool-arguments tool="readAssetMetadata" example="read-technical-fields-for-selected-assets" -->
+
+```json
+{
+  "assetIds": ["00000000-0000-4000-8000-000000000001"],
+  "fields": ["camera", "dates", "filename"]
 }
 ```
 
@@ -1913,6 +2007,10 @@ Summarize plan risks and selected changes.
 - `search-filter-name-in-space-person-ids`: Use resolveAssetSearchFilters for user-facing shared-space person names, then call searchAssets with the returned spacePersonIds under filters.
 - `search-combined-filters-and-tool-call-id`: Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.
 - `search-limit-out-of-range`: Use a positive integer limit no greater than 10000.
+- `search-large-limit`: Use a bounded limit such as 25 or 50. Do not use limit 1000; page with nextPage or ask a narrowing question for broad requests.
+- `search-broad-full-metadata`: Search compact ids first, then call readAssetMetadata with fields for selected assetIds. Do not request full metadata for broad searches.
+- `search-preview-before-shortlist`: For visual curation, search compact ids first, shortlist candidates, then read previews only for selected assetIds.
+- `search-truncated-needs-more-detail`: When resultSize.truncated is true, request fewer assets, page with nextPage, or ask one narrowing question before requesting more fields.
 - `search-page-continuation`: Use the returned nextPage value as page, and keep the same mode, query, filters, order, and limit from the previous bounded search.
 - `search-order-unavailable`: Only order desc is executable in the current slice. Non-desc order is a contract field for a later slice.
 - `tool-call-arguments-missing`: Put the search arguments object at params.arguments in the MCP tools/call request.
