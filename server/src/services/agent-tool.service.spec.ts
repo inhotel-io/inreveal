@@ -3429,7 +3429,15 @@ describe(AgentToolService.name, () => {
     });
     expect(searchRepository.getFilterSuggestions).toHaveBeenCalledWith(
       [auth.user.id],
-      expect.objectContaining({ withSharedSpaces: true, timelineSpaceIds: ['timeline-space'] }),
+      expect.objectContaining({ spaceId }),
+    );
+    expect(searchRepository.getFilterSuggestions).toHaveBeenCalledWith(
+      [auth.user.id],
+      expect.not.objectContaining({ withSharedSpaces: true }),
+    );
+    expect(searchRepository.getFilterSuggestions).toHaveBeenCalledWith(
+      [auth.user.id],
+      expect.not.objectContaining({ timelineSpaceIds: expect.anything() }),
     );
     expect(toolCallRepository.transition).toHaveBeenCalledWith(
       session.id,

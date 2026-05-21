@@ -747,20 +747,21 @@ export class AgentToolService {
     const resolverScope = { ...scope, ...(resolvedFilters.spaceId ? { spaceId: resolvedFilters.spaceId } : {}) };
     const canUseRepositoryCandidates = this.canUseResolverRepositoryCandidates(session, resolverScope);
     const shouldLoadTimelineSpaceIds =
-      scope.withSharedSpaces === true ||
-      (needsRepositoryCandidates &&
-        !canUseRepositoryCandidates &&
-        session.permissionPlanSnapshot.assetScope.sharedSpaces &&
-        !resolvedFilters.spaceId);
+      !resolvedFilters.spaceId &&
+      (scope.withSharedSpaces === true ||
+        (needsRepositoryCandidates &&
+          !canUseRepositoryCandidates &&
+          session.permissionPlanSnapshot.assetScope.sharedSpaces));
     const timelineSpaceRows = shouldLoadTimelineSpaceIds
       ? await this.sharedSpaceRepository.getSpaceIdsForTimeline(auth.user.id)
       : [];
     const timelineSpaceIds = timelineSpaceRows.map((row) => row.spaceId);
-    const repositoryScope = {
-      ...scope,
-      ...(resolvedFilters.spaceId ? { spaceId: resolvedFilters.spaceId } : {}),
-      ...(shouldLoadTimelineSpaceIds ? { timelineSpaceIds } : {}),
-    };
+    const repositoryScope = resolvedFilters.spaceId
+      ? { spaceId: resolvedFilters.spaceId }
+      : {
+          ...scope,
+          ...(shouldLoadTimelineSpaceIds ? { timelineSpaceIds } : {}),
+        };
     const needsSuggestions =
       (request.people?.length ?? 0) > 0 || (request.tags?.length ?? 0) > 0 || (request.cameraMakes?.length ?? 0) > 0;
     const suggestions =
