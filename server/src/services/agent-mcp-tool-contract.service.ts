@@ -104,6 +104,12 @@ const readSelectedMetadataFieldsExample: AgentMcpToolExample = {
   arguments: { assetIds: [exampleAssetId], fields: ['filename', 'rating', 'tags'] },
 };
 
+const readTechnicalFieldsForSelectedAssetsExample: AgentMcpToolExample = {
+  name: 'read-technical-fields-for-selected-assets',
+  description: 'Read exact camera, date, and filename fields for selected assets.',
+  arguments: { assetIds: [exampleAssetId], fields: ['camera', 'dates', 'filename'] },
+};
+
 const assetIdMistakes: AgentMcpCommonMistake[] = [
   {
     id: 'asset-read-missing-asset-ids-or-tool-call-id',
@@ -176,9 +182,15 @@ const readAssetMetadataContract: AgentMcpToolContract<AgentToolName.ReadAssetMet
   title: 'Read asset metadata',
   description: 'Read selected metadata for selected assets.',
   usage:
-    'Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.',
+    'Search compact asset ids first, then call this tool for selected ids with the smallest useful detail preset or fields. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.',
   argumentModes: [metadataDetailMode, metadataFieldsMode, approvedRetryMode],
-  examples: [assetIdsExample, readBasicMetadataExample, readSelectedMetadataFieldsExample, approvedRetryExample],
+  examples: [
+    assetIdsExample,
+    readBasicMetadataExample,
+    readSelectedMetadataFieldsExample,
+    readTechnicalFieldsForSelectedAssetsExample,
+    approvedRetryExample,
+  ],
   commonMistakes: assetIdMistakes,
   approvalRetry,
   safety,
@@ -190,7 +202,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
   description:
     'Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and bounded result pages.',
   usage:
-    'Put metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose plans with returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Results are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.',
+    'Put metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose plans with returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Default to compact asset ids with detail ids. Use detail summary with fields and sampleSize for a small representative sample. Use detail metadata only after a bounded compact search proves the subset is small. Do not use limit 1000 or request all metadata for broad searches; page with nextPage or ask one narrowing question when hasMore or resultSize.truncated is true. Results are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.',
   argumentModes: [
     {
       name: 'empty-search',
@@ -233,6 +245,52 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
           country: 'Germany',
         },
         limit: 50,
+      },
+    },
+    {
+      name: 'compact-date-location-search',
+      description: 'Search compact asset ids for a known date and place.',
+      arguments: {
+        detail: 'ids',
+        filters: {
+          takenAfter: '2026-05-01T00:00:00.000Z',
+          takenBefore: '2026-05-18T23:59:59.999Z',
+          city: 'Berlin',
+          country: 'Germany',
+        },
+        limit: 50,
+      },
+    },
+    {
+      name: 'summary-sample-search',
+      description: 'Request a small representative sample with only needed fields.',
+      arguments: {
+        detail: 'summary',
+        fields: ['dates', 'location'],
+        sampleSize: 3,
+        filters: { city: 'Berlin', country: 'Germany' },
+        limit: 50,
+      },
+    },
+    {
+      name: 'visual-curation-candidate-search',
+      description: 'Find visual curation candidates by compact ids before reading previews.',
+      arguments: {
+        mode: 'smart',
+        query: 'best beach sunset photos',
+        detail: 'ids',
+        limit: 25,
+      },
+    },
+    {
+      name: 'large-album-page-search',
+      description: 'Page a broad album-building search without requesting full metadata.',
+      arguments: {
+        detail: 'ids',
+        filters: { isNotInAlbum: true },
+        limit: 50,
+        page: 1,
+        order: 'desc',
       },
     },
     {
@@ -491,6 +549,30 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       match: { issuePath: 'limit' },
       hint: 'Use a positive integer limit no greater than 10000.',
       exampleName: 'favorite-rating-search',
+    },
+    {
+      id: 'search-large-limit',
+      match: { issuePath: 'limit', messageIncludes: 'limit 1000 ' },
+      hint: 'Use a bounded limit such as 25 or 50. Do not use limit 1000; page with nextPage or ask a narrowing question for broad requests.',
+      exampleName: 'large-album-page-search',
+    },
+    {
+      id: 'search-broad-full-metadata',
+      match: { messageIncludes: 'metadata detail is too broad' },
+      hint: 'Search compact ids first, then call readAssetMetadata with fields for selected assetIds. Do not request full metadata for broad searches.',
+      exampleName: 'compact-date-location-search',
+    },
+    {
+      id: 'search-preview-before-shortlist',
+      match: { messageIncludes: 'preview reads require selected asset ids' },
+      hint: 'For visual curation, search compact ids first, shortlist candidates, then read previews only for selected assetIds.',
+      exampleName: 'visual-curation-candidate-search',
+    },
+    {
+      id: 'search-truncated-needs-more-detail',
+      match: { messageIncludes: 'resultSize.truncated' },
+      hint: 'When resultSize.truncated is true, request fewer assets, page with nextPage, or ask one narrowing question before requesting more fields.',
+      exampleName: 'summary-sample-search',
     },
     {
       id: 'search-page-continuation',
