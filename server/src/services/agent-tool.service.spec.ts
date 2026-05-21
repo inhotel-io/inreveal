@@ -1,6 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 import { AgentSession, AgentToolCall } from 'src/database';
-import { AgentSearchAssetsToolRequestDto, AgentToolApprovalDto } from 'src/dtos/agent-tool.dto';
+import {
+  AgentResolveAssetSearchFiltersToolRequestDto,
+  AgentSearchAssetsToolRequestDto,
+  AgentToolApprovalDto,
+} from 'src/dtos/agent-tool.dto';
 import {
   AgentApprovalMode,
   AgentPermissionPreset,
@@ -333,6 +337,17 @@ describe(AgentToolService.name, () => {
     toolCallRepository.getCountedAssetCountBySessionAndDataClass.mockResolvedValue(0);
     albumRepository.getAgentAlbums.mockResolvedValue([]);
     albumRepository.getAgentAlbumById.mockResolvedValue(null);
+    searchRepository.getFilterSuggestions.mockResolvedValue({
+      countries: [],
+      cameraMakes: [],
+      tags: [],
+      people: [],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    });
+    searchRepository.getCameraModels.mockResolvedValue([]);
+    searchRepository.getCameraLensModels.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false });
     sharedSpaceRepository.getAllByUserId.mockResolvedValue([]);
     sharedSpaceRepository.getById.mockImplementation(() => Promise.resolve(void 0));
@@ -3103,6 +3118,409 @@ describe(AgentToolService.name, () => {
       AgentToolDataClass.Metadata,
       1,
     );
+  });
+
+  it('resolveAssetSearchFilters resolves exact visible names into canonical filters with shared timeline scope', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const tagId = newUuid();
+    const albumId = newUuid();
+    const spaceId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId: 'timeline-space' }]);
+    searchRepository.getFilterSuggestions.mockResolvedValue({
+      countries: [],
+      cameraMakes: ['FUJIFILM'],
+      tags: [{ id: tagId, value: 'Travel' }],
+      people: [{ id: personId, name: 'Pierre' }],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    });
+    searchRepository.getCameraModels.mockResolvedValue(['X100VI', 'X-T5']);
+    searchRepository.getCameraLensModels.mockResolvedValue(['23mm f/2']);
+    albumRepository.getAgentAlbums.mockResolvedValue([
+      makeAlbumSummary({ id: albumId, albumName: 'Berlin', ownerId: auth.user.id }),
+    ]);
+    sharedSpaceRepository.getAllByUserId.mockResolvedValue([makeSpaceRow({ id: spaceId, name: 'Family' })]);
+    toolCallRepository.transition.mockImplementation((_sessionId, _id, _expectedStatus, dto) =>
+      Promise.resolve(
+        makeToolCall({
+          ...(dto as Partial<AgentToolCall>),
+          id: _id,
+          sessionId: _sessionId,
+          toolName: AgentToolName.ResolveAssetSearchFilters,
+          dataClass: AgentToolDataClass.Metadata,
+        }),
+      ),
+    );
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, {
+      people: ['pierre'],
+      tags: ['travel'],
+      albums: ['berlin'],
+      spaces: ['family'],
+      cameraMakes: ['fujifilm'],
+      cameraModels: ['x100vi'],
+      lensModels: ['23mm f/2'],
+      scope: { withSharedSpaces: true },
+    });
+
+    expect(result).toEqual({
+      status: 'success',
+      toolCall: expect.objectContaining({
+        toolName: AgentToolName.ResolveAssetSearchFilters,
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Resolved 7 search filter(s)',
+        assetCount: 0,
+        albumCount: 0,
+      }),
+      resolvedFilters: {
+        personIds: [personId],
+        tagIds: [tagId],
+        albumIds: [albumId],
+        spaceId,
+        make: 'FUJIFILM',
+        model: 'X100VI',
+        lensModel: '23mm f/2',
+      },
+      results: expect.arrayContaining([
+        expect.objectContaining({ kind: 'person', status: 'matched', id: personId }),
+        expect.objectContaining({ kind: 'tag', status: 'matched', id: tagId }),
+        expect.objectContaining({ kind: 'album', status: 'matched', id: albumId }),
+        expect.objectContaining({ kind: 'space', status: 'matched', id: spaceId }),
+        expect.objectContaining({
+          kind: 'cameraMake',
+          status: 'matched',
+          value: 'FUJIFILM',
+          choices: expect.arrayContaining([
+            expect.objectContaining({ value: 'X100VI', searchFilter: { make: 'FUJIFILM', model: 'X100VI' } }),
+          ]),
+        }),
+        expect.objectContaining({ kind: 'cameraModel', status: 'matched', value: 'X100VI' }),
+        expect.objectContaining({ kind: 'lensModel', status: 'matched', value: '23mm f/2' }),
+      ]),
+    });
+    expect(searchRepository.getFilterSuggestions).toHaveBeenCalledWith(
+      [auth.user.id],
+      expect.objectContaining({ withSharedSpaces: true, timelineSpaceIds: ['timeline-space'] }),
+    );
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      session.id,
+      expect.any(String),
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        redactedResponseMetadata: { albumIds: [albumId], spaceIds: [spaceId] },
+      }),
+    );
+  });
+
+  it('resolveAssetSearchFilters creates pending approval with the resolver term count in the request summary', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, {
+      people: ['Pierre', 'Sam'],
+      tags: ['Travel'],
+      albums: ['Berlin'],
+      cameraMakes: ['FUJIFILM'],
+      scope: { takenAfter: now },
+    });
+
+    expect(result.status).toBe('approval-required');
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: AgentToolName.ResolveAssetSearchFilters,
+        requestSummary: 'Resolve asset search filters (5 term(s))',
+      }),
+    );
+  });
+
+  it('resolveAssetSearchFilters returns ambiguous choices for duplicate exact visible album names', async () => {
+    const auth = AuthFactory.create();
+    const firstId = newUuid();
+    const secondId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    albumRepository.getAgentAlbums.mockResolvedValue([
+      makeAlbumSummary({ id: firstId, albumName: 'Trip', ownerId: auth.user.id }),
+      makeAlbumSummary({ id: secondId, albumName: 'trip', ownerId: auth.user.id }),
+    ]);
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, { albums: ['TRIP'] });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.resolvedFilters.albumIds).toBeUndefined();
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          kind: 'album',
+          status: 'ambiguous',
+          choices: [
+            expect.objectContaining({ id: firstId, value: 'Trip' }),
+            expect.objectContaining({ id: secondId, value: 'trip' }),
+          ],
+        }),
+      ]);
+    }
+  });
+
+  it('resolveAssetSearchFilters returns visible suggestions for missing tags and albums without leaking hidden names', async () => {
+    const auth = AuthFactory.create();
+    const visibleTagId = newUuid();
+    const visibleAlbumId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.getFilterSuggestions.mockResolvedValue({
+      countries: [],
+      cameraMakes: [],
+      tags: [{ id: visibleTagId, value: 'Visible' }],
+      people: [],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    });
+    albumRepository.getAgentAlbums.mockResolvedValue([
+      makeAlbumSummary({ id: visibleAlbumId, albumName: 'Public', ownerId: auth.user.id }),
+    ]);
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, {
+      tags: ['Hidden'],
+      albums: ['Secret'],
+    });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.resolvedFilters).toEqual({});
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          kind: 'tag',
+          status: 'not_found',
+          choices: [expect.objectContaining({ id: visibleTagId, value: 'Visible' })],
+        }),
+        expect.objectContaining({
+          kind: 'album',
+          status: 'not_found',
+          choices: [expect.objectContaining({ id: visibleAlbumId, value: 'Public' })],
+        }),
+      ]);
+      expect(result.results.flatMap((item) => item.choices.map((choice) => choice.value))).not.toContain('Secret');
+    }
+  });
+
+  it('resolveAssetSearchFilters prefers related not_found suggestions beyond the first five visible candidates', async () => {
+    const auth = AuthFactory.create();
+    const relevantTagId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.getFilterSuggestions.mockResolvedValue({
+      countries: [],
+      cameraMakes: [],
+      tags: [
+        { id: newUuid(), value: 'Alpha' },
+        { id: newUuid(), value: 'Bravo' },
+        { id: newUuid(), value: 'Charlie' },
+        { id: newUuid(), value: 'Delta' },
+        { id: newUuid(), value: 'Echo' },
+        { id: relevantTagId, value: 'Berlin travel' },
+      ],
+      people: [],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    });
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, { tags: ['Berlin'] });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          kind: 'tag',
+          status: 'not_found',
+          choices: [expect.objectContaining({ id: relevantTagId, value: 'Berlin travel' })],
+        }),
+      ]);
+    }
+  });
+
+  it('resolveAssetSearchFilters does not leak owned tag suggestions for shared-only sessions', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId: newUuid() }]);
+    searchRepository.getFilterSuggestions.mockResolvedValue({
+      countries: [],
+      cameraMakes: [],
+      tags: [{ id: newUuid(), value: 'OwnedTag' }],
+      people: [],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    });
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, { tags: ['OwnedTag'] });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.resolvedFilters).toEqual({});
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          kind: 'tag',
+          query: 'OwnedTag',
+          status: 'not_found',
+          choices: [],
+        }),
+      ]);
+    }
+    expect(sharedSpaceRepository.getSpaceIdsForTimeline).toHaveBeenCalledWith(auth.user.id);
+    expect(searchRepository.getFilterSuggestions).not.toHaveBeenCalled();
+  });
+
+  it('resolveAssetSearchFilters does not leak owned camera model suggestions for shared-only sessions', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId: newUuid() }]);
+    searchRepository.getCameraModels.mockResolvedValue(['OwnedCam']);
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, { cameraModels: ['OwnedCam'] });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.resolvedFilters).toEqual({});
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          kind: 'cameraModel',
+          query: 'OwnedCam',
+          status: 'not_found',
+          choices: [],
+        }),
+      ]);
+    }
+    expect(sharedSpaceRepository.getSpaceIdsForTimeline).toHaveBeenCalledWith(auth.user.id);
+    expect(searchRepository.getCameraModels).not.toHaveBeenCalled();
+  });
+
+  it('resolveAssetSearchFilters denies shared-space scope when session cannot access shared spaces', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, {
+      spaces: ['Family'],
+      scope: { withSharedSpaces: true },
+    });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Shared spaces are not accessible for this session',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+    });
+    expect(searchRepository.getFilterSuggestions).not.toHaveBeenCalled();
+    expect(sharedSpaceRepository.getAllByUserId).not.toHaveBeenCalled();
+    expect(sharedSpaceRepository.getSpaceIdsForTimeline).not.toHaveBeenCalled();
+  });
+
+  it('resolveAssetSearchFilters approved retry uses stored redacted metadata', async () => {
+    const auth = AuthFactory.create();
+    const tagId = newUuid();
+    const session = makeSession({ userId: auth.user.id });
+    const approved = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.ResolveAssetSearchFilters,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      requestSummary: 'Resolve asset search filters',
+      redactedRequestMetadata: { tags: ['Travel'] } satisfies AgentResolveAssetSearchFiltersToolRequestDto,
+      assetCount: 0,
+      albumCount: 0,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(approved);
+    toolCallRepository.transition.mockResolvedValueOnce(
+      makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }),
+    );
+    searchRepository.getFilterSuggestions.mockResolvedValue({
+      countries: [],
+      cameraMakes: [],
+      tags: [{ id: tagId, value: 'Travel' }],
+      people: [],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    });
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, { toolCallId: approved.id });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.resolvedFilters).toEqual({ tagIds: [tagId] });
+    }
+    expect(searchRepository.getFilterSuggestions).toHaveBeenCalledWith([auth.user.id], expect.any(Object));
+  });
+
+  it('resolveAssetSearchFilters treats case-only duplicate tags and duplicate people as ambiguous', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.getFilterSuggestions.mockResolvedValue({
+      countries: [],
+      cameraMakes: [],
+      tags: [
+        { id: newUuid(), value: 'Travel' },
+        { id: newUuid(), value: 'travel' },
+      ],
+      people: [
+        { id: newUuid(), name: 'Sam' },
+        { id: newUuid(), name: 'sam' },
+      ],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    });
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, {
+      tags: ['TRAVEL'],
+      people: ['SAM'],
+    });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.resolvedFilters).toEqual({});
+      expect(result.results).toEqual([
+        expect.objectContaining({ kind: 'person', status: 'ambiguous', choices: expect.any(Array) }),
+        expect.objectContaining({ kind: 'tag', status: 'ambiguous', choices: expect.any(Array) }),
+      ]);
+    }
   });
 
   it('searchUsers returns visible users filtered by name or email without asset accounting', async () => {
