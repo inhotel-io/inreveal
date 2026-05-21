@@ -233,13 +233,22 @@ describe(AgentMcpToolRegistryService.name, () => {
         description: expect.stringContaining('Currently executable filters'),
       }),
       limit: expect.objectContaining({
-        description: expect.stringContaining('10000'),
+        description: expect.stringContaining('100'),
       }),
       page: expect.objectContaining({
         description: expect.stringContaining('Use the returned nextPage value as page'),
       }),
       order: expect.objectContaining({
         description: expect.stringContaining('Only desc is currently executable'),
+      }),
+      detail: expect.objectContaining({
+        description: expect.stringContaining('ids'),
+      }),
+      fields: expect.objectContaining({
+        description: expect.stringContaining('location'),
+      }),
+      sampleSize: expect.objectContaining({
+        description: expect.stringContaining('25'),
       }),
       toolCallId: expect.objectContaining({
         description: expect.stringContaining('approved retry'),
@@ -469,9 +478,14 @@ describe(AgentMcpToolRegistryService.name, () => {
           limit: expect.any(Object),
           page: expect.any(Object),
           order: expect.any(Object),
+          detail: expect.any(Object),
+          fields: expect.any(Object),
+          sampleSize: expect.any(Object),
         }),
       }),
     );
+    expect(JSON.stringify(searchTool?.inputSchema)).toContain('summary');
+    expect(JSON.stringify(searchTool?.inputSchema)).toContain('visibility');
     expect(searchFiltersSchema).toEqual(
       expect.objectContaining({
         properties: expect.objectContaining({

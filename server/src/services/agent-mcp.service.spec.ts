@@ -463,7 +463,15 @@ describe(AgentMcpService.name, () => {
     {
       toolName: AgentToolName.SearchAssets,
       args: { filters: { isFavorite: true }, limit: 5 },
-      expectedArgs: { mode: 'metadata', filters: { isFavorite: true }, limit: 5, page: 1, order: 'desc' },
+      expectedArgs: {
+        mode: 'metadata',
+        filters: { isFavorite: true },
+        limit: 5,
+        page: 1,
+        order: 'desc',
+        detail: 'ids',
+        fields: [],
+      },
       serviceMethod: 'searchAssets' as const,
       serviceResult: { status: 'success', toolCall: null, assets: [], nextPage: null },
     },
@@ -539,9 +547,11 @@ describe(AgentMcpService.name, () => {
     expect(toolService.searchAssets).toHaveBeenCalledWith(auth, sessionId, {
       mode: 'metadata',
       filters: {},
-      limit: 10_000,
+      limit: 100,
       page: 1,
       order: 'desc',
+      detail: 'ids',
+      fields: [],
     });
     expectToolResult(response, `${AgentToolName.SearchAssets}-call`, serviceResult);
   });
@@ -806,6 +816,8 @@ describe(AgentMcpService.name, () => {
       limit: 50,
       page: 1,
       order: 'desc',
+      detail: 'ids',
+      fields: [],
     });
     expect(operationPlanService.proposeAlbumOperations).toHaveBeenCalledWith(auth, sessionId, {
       summary: 'Add recent Berlin photos to Family space.',

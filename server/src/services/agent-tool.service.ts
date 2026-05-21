@@ -56,6 +56,9 @@ import {
   AgentAlbumSummary,
   AgentAssetMediaReference,
   AgentAssetMetadata,
+  AgentSearchAssetResult,
+  AgentSearchAssetsDetail,
+  AgentSearchAssetsField,
   AgentResolvedAssetSearchFilterChoice,
   AgentResolvedAssetSearchFilterKind,
   AgentResolvedAssetSearchFilterResult,
@@ -559,7 +562,11 @@ export class AgentToolService {
   private searchAssetsDescriptor(): AgentReadToolDescriptor<
     AgentSearchAssetsToolRequestDto,
     {
-      assets: AgentAssetMetadata[];
+      summary: string;
+      detail: AgentSearchAssetsDetail;
+      assetIds: string[];
+      sample?: AgentSearchAssetResult[];
+      assets?: AgentSearchAssetResult[];
       returnedCount: number;
       hasMore: boolean;
       nextPage: string | null;
@@ -571,7 +578,7 @@ export class AgentToolService {
       toolName: AgentToolName.SearchAssets,
       dataClass: AgentToolDataClass.Metadata,
       requestSummary: (request) =>
-        `Search ${request.mode ?? 'metadata'} assets (limit ${this.getSearchLimit(request)})`,
+        `Search ${request.mode ?? 'metadata'} assets (limit ${this.getSearchLimit(request)}, ${request.detail ?? 'ids'})`,
       requestMetadata: (request) => {
         const mode = request.mode ?? 'metadata';
         return {
@@ -579,6 +586,9 @@ export class AgentToolService {
           filters: request.filters ?? {},
           limit: this.getSearchLimit(request),
           page: request.page ?? 1,
+          detail: request.detail ?? 'ids',
+          fields: request.fields ?? [],
+          ...(request.sampleSize === undefined ? {} : { sampleSize: request.sampleSize }),
           ...(mode === 'smart' && request.order === undefined ? {} : { order: request.order ?? 'desc' }),
           ...(request.query === undefined ? {} : { query: request.query }),
         } as AgentToolSearchAssetsRequestMetadata;
@@ -589,18 +599,27 @@ export class AgentToolService {
       perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
       validateAccess: (auth, session, request) => this.validateSearchRequest(auth, session, request),
       execute: async (auth, session, request) => {
+        const normalizedRequest = {
+          ...request,
+          mode: request.mode ?? 'metadata',
+          filters: request.filters ?? {},
+          limit: this.getSearchLimit(request),
+          page: request.page ?? 1,
+          detail: request.detail ?? 'ids',
+          fields: request.fields ?? [],
+        };
         const timelineSpaceIds = await this.getSearchTimelineSpaceIds(auth, session, request.filters ?? {});
-        const smartConfig = request.mode === 'smart' ? await this.getSmartSearchConfig() : undefined;
+        const smartConfig = normalizedRequest.mode === 'smart' ? await this.getSmartSearchConfig() : undefined;
         const smartEmbedding =
-          request.mode === 'smart'
-            ? await this.machineLearningRepository.encodeText(request.query!, {
+          normalizedRequest.mode === 'smart'
+            ? await this.machineLearningRepository.encodeText(normalizedRequest.query!, {
                 modelName: smartConfig!.modelName,
                 language: undefined,
               })
             : undefined;
         const search = buildAgentSearch({
           userId: auth.user.id,
-          request,
+          request: normalizedRequest,
           scope: {
             ...this.getRepositoryScope(auth, session.permissionPlanSnapshot),
             timelineSpaceIds,
@@ -614,32 +633,70 @@ export class AgentToolService {
             : await this.searchRepository.searchMetadata(search.pagination, search.options);
         const assetIds = result.items.map((asset) => asset.id);
         await this.assertReturnedAssetsAreAccessible(auth, session, assetIds);
-        const assets = await this.getOrderedAgentMetadata(assetIds);
-        return {
-          assets,
-          returnedCount: assets.length,
+        const detail = normalizedRequest.detail;
+        const fields = normalizedRequest.fields;
+        const pageResult = {
+          detail,
+          assetIds,
+          returnedCount: assetIds.length,
           hasMore: result.hasNextPage,
-          nextPage: result.hasNextPage ? String((request.page ?? 1) + 1) : null,
+          nextPage: result.hasNextPage ? String(normalizedRequest.page + 1) : null,
+        };
+
+        if (detail === 'ids') {
+          const summary = this.getSearchAssetsResponseSummary(pageResult);
+          return { ...pageResult, summary };
+        }
+
+        if (detail === 'summary') {
+          const sampleSize = request.sampleSize ?? 10;
+          const sampleAssetIds = assetIds.slice(0, sampleSize);
+          const sampleAssets = await this.getOrderedAgentMetadata(sampleAssetIds);
+          const sample = sampleAssets.map((asset) => this.mapSearchAssetResult(asset, fields));
+          const summary = this.getSearchAssetsResponseSummary({ ...pageResult, sampleCount: sample.length });
+          return {
+            ...pageResult,
+            summary,
+            ...(sample.length === 0 ? {} : { sample }),
+          };
+        }
+
+        const assets = await this.getOrderedAgentMetadata(assetIds);
+        const summary = this.getSearchAssetsResponseSummary({ ...pageResult, metadataCount: assets.length });
+        return {
+          ...pageResult,
+          summary,
+          assets: fields.length === 0 ? assets : assets.map((asset) => this.mapSearchAssetResult(asset, fields)),
         };
       },
-      responseSummary: (result) => this.getSearchAssetsResponseSummary(result),
-      responseMetadata: (result) => ({ assetIds: result.assets.map((asset) => asset.id) }),
-      resultAssetCount: (result) => result.assets.length,
+      responseSummary: (result) => result.summary,
+      responseMetadata: (result) => ({ assetIds: result.assetIds }),
+      resultAssetCount: (result) => result.assetIds.length,
       resultAlbumCount: () => 0,
       failedReason: 'Asset search failed',
     };
   }
 
   private getSearchLimit(request: AgentSearchAssetsToolRequestDto): number {
-    return request.limit ?? 10_000;
+    return request.limit ?? 100;
   }
 
   private getSearchAssetsResponseSummary(result: {
-    assets: AgentAssetMetadata[];
+    detail: AgentSearchAssetsDetail;
+    assetIds: string[];
     hasMore: boolean;
     nextPage: string | null;
+    sampleCount?: number;
+    metadataCount?: number;
   }) {
-    const summary = this.getReturnedMetadataSummary(result.assets.length);
+    const summary =
+      result.detail === 'metadata'
+        ? this.getReturnedMetadataSummary(result.metadataCount ?? result.assetIds.length)
+        : result.detail === 'summary' && (result.sampleCount ?? 0) > 0
+          ? `Returned ${result.assetIds.length} asset ${result.assetIds.length === 1 ? 'id' : 'ids'} with ${
+              result.sampleCount ?? 0
+            } ${(result.sampleCount ?? 0) === 1 ? 'sample' : 'samples'}`
+          : `Returned ${result.assetIds.length} asset ${result.assetIds.length === 1 ? 'id' : 'ids'}`;
     return result.hasMore && result.nextPage
       ? `${summary}; more results available on page ${result.nextPage}`
       : summary;
@@ -2184,6 +2241,66 @@ export class AgentToolService {
       completedAt: toolCall.completedAt,
       error: toolCall.error,
     };
+  }
+
+  private mapSearchAssetResult(asset: AgentAssetMetadata, fields: AgentSearchAssetsField[]): AgentSearchAssetResult {
+    const result: AgentSearchAssetResult = { id: asset.id };
+    const exifInfo: NonNullable<AgentSearchAssetResult['exifInfo']> = {};
+
+    for (const field of fields) {
+      switch (field) {
+        case 'type':
+          result.type = asset.type;
+          break;
+        case 'dates':
+          result.localDateTime = asset.localDateTime;
+          result.fileCreatedAt = asset.fileCreatedAt;
+          result.fileModifiedAt = asset.fileModifiedAt;
+          if (asset.exifInfo) {
+            exifInfo.dateTimeOriginal = asset.exifInfo.dateTimeOriginal;
+          }
+          break;
+        case 'location':
+          if (asset.exifInfo) {
+            exifInfo.city = asset.exifInfo.city;
+            exifInfo.state = asset.exifInfo.state;
+            exifInfo.country = asset.exifInfo.country;
+            exifInfo.latitude = asset.exifInfo.latitude;
+            exifInfo.longitude = asset.exifInfo.longitude;
+          }
+          break;
+        case 'camera':
+          if (asset.exifInfo) {
+            exifInfo.make = asset.exifInfo.make;
+            exifInfo.model = asset.exifInfo.model;
+            exifInfo.lensModel = asset.exifInfo.lensModel;
+          }
+          break;
+        case 'tags':
+          result.tags = asset.tags.map((tag) => ({ id: tag.id, value: tag.value, color: tag.color }));
+          break;
+        case 'rating':
+          if (asset.exifInfo) {
+            exifInfo.rating = asset.exifInfo.rating;
+          }
+          break;
+        case 'filename':
+          result.originalFileName = asset.originalFileName;
+          break;
+        case 'favorite':
+          result.isFavorite = asset.isFavorite;
+          break;
+        case 'visibility':
+          result.visibility = asset.visibility;
+          break;
+      }
+    }
+
+    if (Object.keys(exifInfo).length > 0) {
+      result.exifInfo = exifInfo;
+    }
+
+    return result;
   }
 
   private mapAssetMetadata(asset: AgentAssetMetadata): AgentAssetMetadata {
