@@ -15,6 +15,10 @@ class AgentSearchAssetsToolRequestDto {
   AgentSearchAssetsToolRequestDto({
     this.filters,
     this.limit,
+    this.mode,
+    this.order,
+    this.page,
+    this.query,
     this.toolCallId,
   });
 
@@ -42,12 +46,50 @@ class AgentSearchAssetsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
+  AgentSearchAssetsMode? mode;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  AgentSearchAssetsOrder? order;
+
+  /// Minimum value: 1
+  /// Maximum value: 9007199254740991
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  int? page;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? query;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
   String? toolCallId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchAssetsToolRequestDto &&
     other.filters == filters &&
     other.limit == limit &&
+    other.mode == mode &&
+    other.order == order &&
+    other.page == page &&
+    other.query == query &&
     other.toolCallId == toolCallId;
 
   @override
@@ -55,10 +97,14 @@ class AgentSearchAssetsToolRequestDto {
     // ignore: unnecessary_parenthesis
     (filters == null ? 0 : filters!.hashCode) +
     (limit == null ? 0 : limit!.hashCode) +
+    (mode == null ? 0 : mode!.hashCode) +
+    (order == null ? 0 : order!.hashCode) +
+    (page == null ? 0 : page!.hashCode) +
+    (query == null ? 0 : query!.hashCode) +
     (toolCallId == null ? 0 : toolCallId!.hashCode);
 
   @override
-  String toString() => 'AgentSearchAssetsToolRequestDto[filters=$filters, limit=$limit, toolCallId=$toolCallId]';
+  String toString() => 'AgentSearchAssetsToolRequestDto[filters=$filters, limit=$limit, mode=$mode, order=$order, page=$page, query=$query, toolCallId=$toolCallId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -71,6 +117,26 @@ class AgentSearchAssetsToolRequestDto {
       json[r'limit'] = this.limit;
     } else {
     //  json[r'limit'] = null;
+    }
+    if (this.mode != null) {
+      json[r'mode'] = this.mode;
+    } else {
+    //  json[r'mode'] = null;
+    }
+    if (this.order != null) {
+      json[r'order'] = this.order;
+    } else {
+    //  json[r'order'] = null;
+    }
+    if (this.page != null) {
+      json[r'page'] = this.page;
+    } else {
+    //  json[r'page'] = null;
+    }
+    if (this.query != null) {
+      json[r'query'] = this.query;
+    } else {
+    //  json[r'query'] = null;
     }
     if (this.toolCallId != null) {
       json[r'toolCallId'] = this.toolCallId;
@@ -91,6 +157,10 @@ class AgentSearchAssetsToolRequestDto {
       return AgentSearchAssetsToolRequestDto(
         filters: AgentSearchAssetsFilters.fromJson(json[r'filters']),
         limit: mapValueOfType<int>(json, r'limit'),
+        mode: AgentSearchAssetsMode.fromJson(json[r'mode']),
+        order: AgentSearchAssetsOrder.fromJson(json[r'order']),
+        page: mapValueOfType<int>(json, r'page'),
+        query: mapValueOfType<String>(json, r'query'),
         toolCallId: mapValueOfType<String>(json, r'toolCallId'),
       );
     }
