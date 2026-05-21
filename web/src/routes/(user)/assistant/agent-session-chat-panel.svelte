@@ -310,6 +310,18 @@
     expandedToolCallIds = { ...expandedToolCallIds, [toolCallId]: !expandedToolCallIds[toolCallId] };
   };
 
+  const formatResultSizeBytes = (bytes: number | null | undefined) => {
+    if (bytes === null || bytes === undefined) {
+      return 'not estimated';
+    }
+
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+
+    return `${Math.round(bytes / 1024)} KB`;
+  };
+
   const parseAssistantInlineMarkdown = (text: string): AssistantMarkdownInlineSegment[] => {
     const segments: AssistantMarkdownInlineSegment[] = [];
     const inlinePattern =
@@ -966,6 +978,26 @@
                       <dt class="font-medium text-gray-500 dark:text-gray-400">Result</dt>
                       <dd class="break-words">{toolCall.responseSummary || toolCall.error}</dd>
                     </div>
+                  {/if}
+                  {#if toolCall.resultSize}
+                    <div>
+                      <dt class="font-medium text-gray-500 dark:text-gray-400">Response size</dt>
+                      <dd>{formatResultSizeBytes(toolCall.resultSize.estimatedBytes)}</dd>
+                    </div>
+                    <div>
+                      <dt class="font-medium text-gray-500 dark:text-gray-400">Returned items</dt>
+                      <dd>{toolCall.resultSize.returnedItems}</dd>
+                    </div>
+                    <div>
+                      <dt class="font-medium text-gray-500 dark:text-gray-400">Truncated</dt>
+                      <dd>{toolCall.resultSize.truncated ? 'yes' : 'no'}</dd>
+                    </div>
+                    {#if toolCall.resultSize.omittedFields.length > 0}
+                      <div>
+                        <dt class="font-medium text-gray-500 dark:text-gray-400">Omitted fields</dt>
+                        <dd>{toolCall.resultSize.omittedFields.join(', ')}</dd>
+                      </div>
+                    {/if}
                   {/if}
                   <div>
                     <dt class="font-medium text-gray-500 dark:text-gray-400">Data</dt>

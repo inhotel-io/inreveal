@@ -111,7 +111,7 @@ export class AgentToolCallRepository {
             status: AgentToolCallStatus.Denied,
             approvalDecision: AgentToolApprovalDecision.Denied,
             responseSummary: null,
-            redactedResponseMetadata: null,
+            redactedResponseMetadata: dto.redactedResponseMetadata ?? null,
             completedAt: new Date(),
             error: this.getSessionLimitReason(maxAssetsPerSession),
           })

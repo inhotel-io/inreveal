@@ -506,6 +506,107 @@ const setup = () => {
 };
 
 describe('Pi agent runner flow harness', () => {
+  it('returns truncated metadata results with omitted fields without leaking inaccessible assets', async () => {
+    const harness = setup();
+    const visibleAssetIds = [newUuid(), newUuid(), newUuid()];
+    const inaccessibleAssetId = newUuid();
+    const session = await harness.sessionService.create(harness.auth, {
+      providerCredentialId: '00000000-0000-4000-8000-000000000201',
+      model: 'gpt-5.1',
+      permissionPreset: AgentPermissionPreset.VisualOrganizer,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      initialContext: {},
+    });
+
+    harness.accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(visibleAssetIds));
+    harness.accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    harness.assetRepository.getAgentReadableIds.mockResolvedValue(new Set(visibleAssetIds));
+    harness.assetRepository.getAgentMetadataByIds.mockResolvedValue(visibleAssetIds.map((id) => metadata(id)) as never);
+    vi.spyOn(
+      harness.toolService as unknown as { getReadToolResponseBudgetBytes: () => number },
+      'getReadToolResponseBudgetBytes',
+    ).mockReturnValue(256);
+
+    const result = await harness.toolService.readAssetMetadata(harness.auth, session.id, {
+      assetIds: visibleAssetIds,
+      detail: 'allSafe',
+    });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+
+    expect(result.resultSize).toEqual(
+      expect.objectContaining({
+        truncated: true,
+        omittedFields: ['assets'],
+      }),
+    );
+    expect(JSON.stringify(result)).not.toContain(inaccessibleAssetId);
+
+    const denied = await harness.toolService.readAssetMetadata(harness.auth, session.id, {
+      assetIds: [visibleAssetIds[0], inaccessibleAssetId],
+      detail: 'basic',
+    });
+
+    expect(denied.status).toBe('denied');
+    expect(JSON.stringify(denied)).not.toContain(inaccessibleAssetId);
+  });
+
+  it('keeps stable paging order when multiple compact search pages accumulate size telemetry', async () => {
+    const harness = setup();
+    const pageOneIds = [newUuid(), newUuid()];
+    const pageTwoIds = [newUuid()];
+    const allAssetIds = [...pageOneIds, ...pageTwoIds];
+    const session = await harness.sessionService.create(harness.auth, {
+      providerCredentialId: '00000000-0000-4000-8000-000000000201',
+      model: 'gpt-5.1',
+      permissionPreset: AgentPermissionPreset.VisualOrganizer,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      initialContext: {},
+    });
+
+    harness.searchRepository.searchMetadata
+      .mockResolvedValueOnce({
+        items: pageOneIds.map((id) => ({ id })) as never,
+        hasNextPage: true,
+      })
+      .mockResolvedValueOnce({
+        items: pageTwoIds.map((id) => ({ id })) as never,
+        hasNextPage: false,
+      });
+    harness.accessRepository.asset.checkOwnerAccess.mockImplementation((_userId, assetIds: Set<string>) =>
+      Promise.resolve(new Set([...assetIds].filter((id) => allAssetIds.includes(id)))),
+    );
+    harness.accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    harness.assetRepository.getAgentReadableIds.mockResolvedValue(new Set(allAssetIds));
+
+    const first = await harness.toolService.searchAssets(harness.auth, session.id, {
+      filters: {},
+      limit: 2,
+      page: 1,
+      detail: 'ids',
+    });
+    const second = await harness.toolService.searchAssets(harness.auth, session.id, {
+      filters: {},
+      limit: 2,
+      page: 2,
+      detail: 'ids',
+    });
+
+    expect(first.status).toBe('success');
+    expect(second.status).toBe('success');
+    if (first.status !== 'success' || second.status !== 'success') {
+      return;
+    }
+
+    expect(first.assetIds).toEqual(pageOneIds);
+    expect(first.resultSize).toMatchObject({ returnedItems: 2, hasMore: true, nextPage: '2' });
+    expect(second.assetIds).toEqual(pageTwoIds);
+    expect(second.resultSize).toMatchObject({ returnedItems: 1, hasMore: false, nextPage: null });
+  });
+
   const expectAcceptanceSearchFlow = async (testCase: AcceptanceSearchCase) => {
     const harness = setup();
     const isSpaceScopedSearch = testCase.request.filters?.spaceId === familySpaceId;
@@ -724,9 +825,11 @@ describe('Pi agent runner flow harness', () => {
           assetCount: 0,
         }),
       ]);
-      expect(harness.toolCalls.toolCalls[0].redactedResponseMetadata).toEqual({
-        spaceIds: ['00000000-0000-4000-8000-000000000401'],
-      });
+      expect(harness.toolCalls.toolCalls[0].redactedResponseMetadata).toEqual(
+        expect.objectContaining({
+          spaceIds: ['00000000-0000-4000-8000-000000000401'],
+        }),
+      );
       expect(reloadedSession?.status).toBe(AgentSessionStatus.Running);
     });
 
