@@ -6,6 +6,7 @@ import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registr
 import z from 'zod';
 
 const expectedToolNames = [
+  AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
   AgentToolName.ReadAssetMetadata,
   AgentToolName.ReadAssetPreviews,
@@ -21,6 +22,7 @@ const expectedToolNames = [
 ] as const;
 
 const expectedReadToolNames = [
+  AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
   AgentToolName.ReadAssetMetadata,
   AgentToolName.ReadAssetPreviews,
@@ -168,6 +170,8 @@ describe(AgentMcpToolRegistryService.name, () => {
     const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
     const metadata = toolsByName.get(AgentToolName.ReadAssetMetadata)?.inputSchema;
     const search = toolsByName.get(AgentToolName.SearchAssets)?.inputSchema;
+    const searchProperties = search?.properties as Record<string, { description?: string }> | undefined;
+    const searchFiltersDescription = searchProperties?.filters?.description;
     const album = toolsByName.get(AgentToolName.ReadAlbum)?.inputSchema;
 
     expect(metadata?.properties).toMatchObject({
@@ -208,9 +212,6 @@ describe(AgentMcpToolRegistryService.name, () => {
       query: expect.objectContaining({
         description: expect.not.stringContaining('use this with smart, description, ocr, or filename modes'),
       }),
-      filters: expect.objectContaining({
-        description: expect.not.stringContaining('people, space'),
-      }),
       page: expect.objectContaining({
         description: expect.not.stringContaining('continuing a previous search'),
       }),
@@ -218,6 +219,9 @@ describe(AgentMcpToolRegistryService.name, () => {
         description: expect.not.stringContaining('Result order for the selected search mode'),
       }),
     });
+    expect(searchFiltersDescription).toContain('people, space, visibility');
+    expect(searchFiltersDescription).not.toContain('later slice');
+    expect(searchFiltersDescription).not.toContain('contract fields');
     expect(album?.properties).toMatchObject({
       albumId: expect.objectContaining({
         description: expect.stringContaining('album id returned by listAlbums'),

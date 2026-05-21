@@ -4,6 +4,7 @@ import { AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 
 const expectedReadToolNames = [
+  AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
   AgentToolName.ReadAssetMetadata,
   AgentToolName.ReadAssetPreviews,
@@ -135,7 +136,25 @@ describe(AgentMcpToolContractService.name, () => {
         'bounded-date-location-search',
         'favorite-rating-search',
         'space-filter-search',
+        'resolved-id-filter-search',
         'approved-retry',
+      ]),
+    );
+  });
+
+  it('instructs models to resolve named search filters before searchAssets', () => {
+    const resolver = sut.getReadToolContract(AgentToolName.ResolveAssetSearchFilters);
+
+    expect(resolver).toMatchObject({
+      title: 'Resolve asset search filters',
+      usage: expect.stringContaining('Use before searchAssets when the user gives names'),
+    });
+    expect(resolver?.examples).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'resolve-named-filters',
+          arguments: { tags: ['Travel'], albums: ['Berlin'] },
+        }),
       ]),
     );
   });
@@ -685,6 +704,91 @@ describe(AgentMcpToolContractService.name, () => {
         limit: 25,
       });
       expect(correction?.hint).not.toContain('Use global personIds');
+    });
+
+    it('returns searchAssets corrections for names passed to id filter fields', () => {
+      const cases = [
+        {
+          path: 'filters.tagIds.0',
+          mistakeId: 'search-filter-name-in-tag-ids',
+          exampleArguments: {
+            filters: {
+              tagIds: ['00000000-0000-4000-8000-000000000030'],
+              albumIds: ['00000000-0000-4000-8000-000000000010'],
+            },
+            limit: 25,
+          },
+        },
+        {
+          path: 'filters.personIds.0',
+          mistakeId: 'search-filter-name-in-person-ids',
+          exampleArguments: {
+            filters: {
+              personIds: ['00000000-0000-4000-8000-000000000040'],
+            },
+            limit: 25,
+          },
+        },
+        {
+          path: 'filters.spaceId',
+          mistakeId: 'search-filter-name-in-space-id',
+          exampleArguments: {
+            filters: {
+              spaceId: '00000000-0000-4000-8000-000000000020',
+            },
+            limit: 25,
+          },
+        },
+        {
+          path: 'filters.spacePersonIds.0',
+          mistakeId: 'search-filter-name-in-space-person-ids',
+          exampleArguments: {
+            filters: {
+              spaceId: '00000000-0000-4000-8000-000000000020',
+              spacePersonIds: ['00000000-0000-4000-8000-000000000021'],
+            },
+            limit: 25,
+          },
+        },
+      ] as const;
+
+      for (const { path, mistakeId, exampleArguments } of cases) {
+        const correction = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+          requestShape: 'tool-arguments',
+          issues: [{ path, message: 'Invalid UUID' }],
+        });
+
+        expect(correction).toMatchObject({
+          mistakeId,
+          issuePath: path,
+          hint: expect.stringContaining('Use resolveAssetSearchFilters'),
+          exampleArguments,
+        });
+        expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(correction?.exampleArguments).success)
+          .toBe(true);
+      }
+    });
+
+    it('returns resolver corrections for missing fields and combined resolver fields with toolCallId', () => {
+      const missing = sut.getReadToolValidationCorrection(AgentToolName.ResolveAssetSearchFilters, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: '', message: 'Provide at least one resolver field' }],
+      });
+      const mixed = sut.getReadToolValidationCorrection(AgentToolName.ResolveAssetSearchFilters, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: '', message: 'Provide either resolver fields or toolCallId, not both' }],
+      });
+
+      expect(missing).toMatchObject({
+        mistakeId: 'resolver-missing-fields',
+        hint: expect.stringContaining('Provide at least one name field'),
+        exampleArguments: { tags: ['Travel'], albums: ['Berlin'] },
+      });
+      expect(mixed).toMatchObject({
+        mistakeId: 'resolver-combined-fields-and-tool-call-id',
+        hint: expect.stringContaining('Use resolver fields for a new request or only toolCallId'),
+        exampleArguments: { toolCallId: '00000000-0000-4000-8000-000000000111' },
+      });
     });
 
     it('returns a read-tool fallback when no common mistake matches', () => {
