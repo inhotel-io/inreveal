@@ -52,6 +52,14 @@ import { automock } from 'test/utils';
 const now = new Date('2026-05-14T12:00:00.000Z');
 const completedAt = new Date('2026-05-14T12:01:00.000Z');
 const flushAsync = () => new Promise<void>((resolve) => setImmediate(resolve));
+const emptyResultSize = () => ({
+  returnedItems: 0,
+  hasMore: false,
+  nextPage: null,
+  estimatedBytes: null,
+  truncated: false,
+  omittedFields: [],
+});
 
 const permissionPlanSnapshot: AgentPermissionPlanSnapshot = {
   read: { metadata: true, previews: false, originals: false },
@@ -429,7 +437,7 @@ describe(AgentToolService.name, () => {
         requestSummary: 'Read basic metadata for 2 asset(s)',
         responseSummary: null,
         redactedRequestMetadata: { assetIds, detail: 'basic' },
-        redactedResponseMetadata: null,
+        redactedResponseMetadata: { resultSize: emptyResultSize() },
         dataClass: AgentToolDataClass.Metadata,
         assetCount: 2,
         albumCount: 0,
@@ -448,6 +456,7 @@ describe(AgentToolService.name, () => {
         status: AgentToolCallStatus.Denied,
         approvalDecision: AgentToolApprovalDecision.Denied,
         redactedRequestMetadata: { assetIds, detail: 'basic' },
+        redactedResponseMetadata: { resultSize: emptyResultSize() },
         error: 'Session policy allows at most 1000 assets per session',
       }),
       AgentToolDataClass.Metadata,
@@ -476,11 +485,13 @@ describe(AgentToolService.name, () => {
         sessionId: session.id,
         status: AgentToolCallStatus.PendingApproval,
         redactedRequestMetadata: { assetIds, detail: 'basic' },
+        redactedResponseMetadata: { resultSize: emptyResultSize() },
       }),
       expect.objectContaining({
         sessionId: session.id,
         status: AgentToolCallStatus.Denied,
         redactedRequestMetadata: { assetIds, detail: 'basic' },
+        redactedResponseMetadata: { resultSize: emptyResultSize() },
         error: 'Session policy allows at most 1000 assets per session',
       }),
       AgentToolDataClass.Metadata,
@@ -586,12 +597,182 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual(
       expect.objectContaining({
-      status: 'success',
-      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
-      assets: [expect.objectContaining({ id: assetIds[0] })],
+        status: 'success',
+        resultSize: expect.any(Object),
+        toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+        assets: [expect.objectContaining({ id: assetIds[0] })],
       }),
     );
     expect(assetRepository.getAgentMetadataByIds).toHaveBeenCalledWith(assetIds);
+  });
+
+  it('returns and persists result-size telemetry for metadata reads', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+    toolCallRepository.createWithSessionLimit.mockResolvedValue({
+      status: 'created',
+      toolCall: makeToolCall({ id: 'tool-call-1', sessionId: session.id, status: AgentToolCallStatus.Executing }),
+    });
+    toolCallRepository.transition.mockImplementation((_sessionId, _id, _expected, update) =>
+      Promise.resolve(
+        makeToolCall({
+          id: 'tool-call-1',
+          status: update.status,
+          approvalDecision: update.approvalDecision,
+          responseSummary: update.responseSummary,
+          redactedResponseMetadata: update.redactedResponseMetadata,
+          assetCount: update.assetCount ?? 1,
+          completedAt: update.completedAt instanceof Date ? update.completedAt : null,
+        }),
+      ),
+    );
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], fields: ['filename'] });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+
+    expect(result.resultSize).toMatchObject({
+      returnedItems: 1,
+      hasMore: false,
+      nextPage: null,
+      truncated: false,
+      omittedFields: [],
+    });
+    expect(result.resultSize.estimatedBytes).toBeGreaterThan(0);
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      session.id,
+      'tool-call-1',
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        redactedResponseMetadata: expect.objectContaining({
+          assetIds: [assetId],
+          resultSize: result.resultSize,
+        }),
+      }),
+    );
+  });
+
+  it('stores empty result-size telemetry for approval-required read calls', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.Strict });
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds });
+
+    expect(result.status).toBe('approval-required');
+    expect(result.toolCall.resultSize).toEqual(emptyResultSize());
+    expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        redactedResponseMetadata: { resultSize: emptyResultSize() },
+      }),
+      expect.any(Object),
+      AgentToolDataClass.Metadata,
+      expect.any(Number),
+    );
+  });
+
+  it('persists a null result-size estimate when response size cannot be measured', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+    vi.spyOn(
+      sut as unknown as { estimateJsonBytes: (value: unknown) => number | null },
+      'estimateJsonBytes',
+    ).mockReturnValue(null);
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail: 'basic' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+
+    expect(result.resultSize).toMatchObject({
+      returnedItems: 1,
+      estimatedBytes: null,
+      truncated: false,
+    });
+    expect(toolCallRepository.transition).toHaveBeenLastCalledWith(
+      session.id,
+      expect.any(String),
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        redactedResponseMetadata: expect.objectContaining({
+          resultSize: expect.objectContaining({
+            returnedItems: 1,
+            estimatedBytes: null,
+            truncated: false,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('estimates read-tool response size from the returned success envelope', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+    const estimateSpy = vi.spyOn(
+      sut as unknown as { estimateJsonBytes: (value: unknown) => number | null },
+      'estimateJsonBytes',
+    );
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail: 'basic' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+
+    expect(estimateSpy).toHaveBeenCalled();
+    expect(estimateSpy.mock.calls.at(-1)?.[0]).toMatchObject({
+      status: 'success',
+      toolCall: expect.objectContaining({
+        id: expect.any(String),
+        sessionId: session.id,
+        toolName: AgentToolName.ReadAssetMetadata,
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Returned basic metadata for 1 asset',
+        resultSize: expect.objectContaining({
+          returnedItems: 1,
+          estimatedBytes: expect.any(Number),
+          truncated: false,
+        }),
+      }),
+      resultSize: expect.objectContaining({
+        returnedItems: 1,
+        estimatedBytes: expect.any(Number),
+        truncated: false,
+      }),
+      summary: 'Returned basic metadata for 1 asset',
+      assets: [expect.objectContaining({ id: assetId })],
+    });
+    const finalEstimatePayload = estimateSpy.mock.calls.at(-1)?.[0] as {
+      resultSize: { estimatedBytes: number };
+      toolCall: { resultSize: { estimatedBytes: number } };
+    };
+    expect(finalEstimatePayload.toolCall.resultSize.estimatedBytes).toBe(
+      finalEstimatePayload.resultSize.estimatedBytes,
+    );
   });
 
   it('returns basic metadata by default without filename, tags, location, or camera fields', async () => {
@@ -608,6 +789,7 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
+        resultSize: expect.any(Object),
         summary: 'Returned basic metadata for 1 asset',
         detail: 'basic',
         fields: ['type', 'dates'],
@@ -628,6 +810,72 @@ describe(AgentToolService.name, () => {
     expect(result.status === 'success' ? result.assets[0] : undefined).not.toHaveProperty('tags');
     expect(result.status === 'success' ? result.assets[0].exifInfo : undefined).not.toHaveProperty('city');
     expect(result.status === 'success' ? result.assets[0].exifInfo : undefined).not.toHaveProperty('make');
+  });
+
+  it('omits metadata row payloads when nested selected fields still exceed the budget', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+    vi.spyOn(
+      sut as unknown as { getReadToolResponseBudgetBytes: () => number },
+      'getReadToolResponseBudgetBytes',
+    ).mockReturnValue(64);
+    vi.spyOn(sut as unknown as { estimateJsonBytes: (value: unknown) => number | null }, 'estimateJsonBytes')
+      .mockReturnValueOnce(1000)
+      .mockReturnValueOnce(900)
+      .mockReturnValueOnce(40);
+
+    const result = await sut.readAssetMetadata(auth, session.id, {
+      assetIds: [assetId],
+      detail: 'allSafe',
+    });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+
+    expect(result.assets).toEqual([]);
+    expect(result.summary).toBe('Returned allSafe metadata for 0 assets; response was truncated by budget');
+    expect(result.toolCall.responseSummary).toBe(
+      'Returned allSafe metadata for 0 assets; response was truncated by budget',
+    );
+    expect(result.resultSize).toMatchObject({
+      returnedItems: 0,
+      hasMore: true,
+      truncated: true,
+      omittedFields: ['assets'],
+    });
+  });
+
+  it('runs permission checks before truncating and never returns inaccessible search assets', async () => {
+    const auth = AuthFactory.create();
+    const visibleAssetId = newUuid();
+    const hiddenAssetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: [{ id: visibleAssetId }, { id: hiddenAssetId }] as never,
+      hasNextPage: false,
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([visibleAssetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([visibleAssetId]));
+
+    const result = await sut.searchAssets(auth, session.id, { filters: {}, limit: 2, detail: 'ids' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'denied',
+        reason: 'One or more assets are not accessible',
+      }),
+    );
+    if (result.status === 'success') {
+      expect(result.assetIds).not.toContain(hiddenAssetId);
+    }
   });
 
   it.each([
@@ -783,7 +1031,8 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'denied',
-      reason: 'Requested 2 assets, but this session allows 1 per metadata read. Request fewer asset IDs or split the metadata read into smaller batches.',
+      reason:
+        'Requested 2 assets, but this session allows 1 per metadata read. Request fewer asset IDs or split the metadata read into smaller batches.',
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
     });
     expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
@@ -852,6 +1101,7 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
+        resultSize: expect.any(Object),
         assets: [{ id: assetId, originalFileName: `${assetId}.jpg` }],
       }),
     );
@@ -872,7 +1122,9 @@ describe(AgentToolService.name, () => {
 
     const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail: 'basic' });
 
-    expect(result).toEqual(expect.objectContaining({ status: 'denied', reason: 'One or more assets are not accessible' }));
+    expect(result).toEqual(
+      expect.objectContaining({ status: 'denied', reason: 'One or more assets are not accessible' }),
+    );
     expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([assetId]), false);
   });
 
@@ -1035,6 +1287,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       originals: [expect.objectContaining({ assetId: assetIds[0] })],
     });
@@ -1070,7 +1323,7 @@ describe(AgentToolService.name, () => {
       ...executing,
       status: AgentToolCallStatus.Completed,
       responseSummary: 'Returned metadata for 1 asset',
-      redactedResponseMetadata: { assetIds },
+      redactedResponseMetadata: expect.objectContaining({ assetIds, resultSize: expect.any(Object) }),
       completedAt,
     });
 
@@ -1084,16 +1337,17 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual(
       expect.objectContaining({
-      status: 'success',
-      toolCall: expect.objectContaining({
-        id: executing.id,
-        status: AgentToolCallStatus.Completed,
-        approvalDecision: AgentToolApprovalDecision.Approved,
-        dataClass: AgentToolDataClass.Metadata,
-        assetCount: 1,
-        albumCount: 0,
-      }),
-      assets: [expect.objectContaining({ id: assetIds[0] })],
+        status: 'success',
+        resultSize: expect.any(Object),
+        toolCall: expect.objectContaining({
+          id: executing.id,
+          status: AgentToolCallStatus.Completed,
+          approvalDecision: AgentToolApprovalDecision.Approved,
+          dataClass: AgentToolDataClass.Metadata,
+          assetCount: 1,
+          albumCount: 0,
+        }),
+        assets: [expect.objectContaining({ id: assetIds[0] })],
       }),
     );
     expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
@@ -1126,7 +1380,7 @@ describe(AgentToolService.name, () => {
         status: AgentToolCallStatus.Completed,
         approvalDecision: AgentToolApprovalDecision.Approved,
         responseSummary: 'Returned basic metadata for 1 asset',
-        redactedResponseMetadata: { assetIds },
+        redactedResponseMetadata: expect.objectContaining({ assetIds, resultSize: expect.any(Object) }),
         assetCount: 1,
         albumCount: 0,
       }),
@@ -1442,7 +1696,8 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'denied',
-      reason: 'Requested 2 assets, but this session allows 1 per metadata read. Request fewer asset IDs or split the metadata read into smaller batches.',
+      reason:
+        'Requested 2 assets, but this session allows 1 per metadata read. Request fewer asset IDs or split the metadata read into smaller batches.',
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
     });
     expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
@@ -1870,6 +2125,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       summary: 'Returned 1 asset id',
       detail: 'ids',
@@ -1907,6 +2163,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       summary: 'Returned 1 asset id; more results available on page 2',
       detail: 'ids',
@@ -1948,7 +2205,7 @@ describe(AgentToolService.name, () => {
       AgentToolCallStatus.Executing,
       expect.objectContaining({
         status: AgentToolCallStatus.Completed,
-        redactedResponseMetadata: { assetIds: [assetId] },
+        redactedResponseMetadata: expect.objectContaining({ assetIds: [assetId], resultSize: expect.any(Object) }),
         assetCount: 1,
       }),
     );
@@ -1984,6 +2241,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({
         status: AgentToolCallStatus.Completed,
         responseSummary: 'Returned 2 asset ids; more results available on page 3',
@@ -2037,6 +2295,7 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
+        resultSize: expect.any(Object),
         returnedCount: 1,
         hasMore: false,
         nextPage: null,
@@ -2062,6 +2321,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       summary: 'Returned 0 asset ids',
       detail: 'ids',
@@ -2108,6 +2368,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ responseSummary: 'Returned 2 asset ids; more results available on page 2' }),
       summary: 'Returned 2 asset ids; more results available on page 2',
       detail: 'ids',
@@ -2120,6 +2381,79 @@ describe(AgentToolService.name, () => {
     expect(result).not.toHaveProperty('sample');
     expect(searchRepository.searchMetadata).toHaveBeenCalledWith({ page: 1, size: 100 }, expect.any(Object));
     expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+  });
+
+  it('does not truncate when the estimated result is exactly at the read-tool budget', async () => {
+    const auth = AuthFactory.create();
+    const firstAssetId = newUuid();
+    const secondAssetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: [firstAssetId, secondAssetId].map((id) => ({ id })) as never,
+      hasNextPage: false,
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([firstAssetId, secondAssetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([firstAssetId, secondAssetId]));
+    vi.spyOn(
+      sut as unknown as { getReadToolResponseBudgetBytes: () => number },
+      'getReadToolResponseBudgetBytes',
+    ).mockReturnValue(128);
+    vi.spyOn(
+      sut as unknown as { estimateJsonBytes: (value: unknown) => number | null },
+      'estimateJsonBytes',
+    ).mockReturnValue(128);
+
+    const result = await sut.searchAssets(auth, session.id, { filters: {}, limit: 2, detail: 'ids' });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.resultSize.truncated).toBe(false);
+      expect(result.assetIds).toEqual([firstAssetId, secondAssetId]);
+    }
+  });
+
+  it('truncates search asset IDs after paging while preserving returned order when one item exceeds the budget', async () => {
+    const auth = AuthFactory.create();
+    const firstAssetId = newUuid();
+    const secondAssetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: [firstAssetId, secondAssetId].map((id) => ({ id })) as never,
+      hasNextPage: false,
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([firstAssetId, secondAssetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([firstAssetId, secondAssetId]));
+    vi.spyOn(
+      sut as unknown as { getReadToolResponseBudgetBytes: () => number },
+      'getReadToolResponseBudgetBytes',
+    ).mockReturnValue(120);
+    vi.spyOn(sut as unknown as { estimateJsonBytes: (value: unknown) => number | null }, 'estimateJsonBytes')
+      .mockReturnValueOnce(121)
+      .mockReturnValue(100);
+
+    const result = await sut.searchAssets(auth, session.id, { filters: {}, limit: 2, page: 1, detail: 'ids' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+
+    expect(result.assetIds).toEqual([firstAssetId]);
+    expect(result.returnedCount).toBe(1);
+    expect(result.resultSize).toMatchObject({
+      returnedItems: 1,
+      truncated: true,
+      omittedFields: ['assetIds'],
+    });
+    expect(result.summary).toBe('Returned 1 asset id; response was truncated by budget');
+    expect(result.toolCall.responseSummary).toBe('Returned 1 asset id; response was truncated by budget');
+    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalledWith(
+      auth.user.id,
+      new Set([firstAssetId, secondAssetId]),
+      false,
+    );
   });
 
   it('returns field-selected summary samples and caps sampleSize to returned ids', async () => {
@@ -2146,6 +2480,7 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
+        resultSize: expect.any(Object),
         summary: 'Returned 2 asset ids with 2 samples',
         detail: 'summary',
         assetIds,
@@ -2188,6 +2523,7 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
+        resultSize: expect.any(Object),
         summary: 'Returned 2 asset ids',
         detail: 'summary',
         assetIds,
@@ -2221,6 +2557,7 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
+        resultSize: expect.any(Object),
         summary: 'Returned 1 asset id with 1 sample',
         detail: 'summary',
         assetIds,
@@ -2247,6 +2584,7 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
+        resultSize: expect.any(Object),
         summary: 'Returned metadata for 1 asset',
         detail: 'metadata',
         assetIds: [assetId],
@@ -2276,6 +2614,7 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
+        resultSize: expect.any(Object),
         detail: 'metadata',
         assets: [{ id: assetId, originalFileName: `${assetId}.jpg`, isFavorite: false }],
       }),
@@ -2295,7 +2634,9 @@ describe(AgentToolService.name, () => {
 
     const result = await sut.searchAssets(auth, session.id, { detail: 'summary', fields: ['location'] });
 
-    expect(result).toEqual(expect.objectContaining({ status: 'denied', reason: 'One or more assets are not accessible' }));
+    expect(result).toEqual(
+      expect.objectContaining({ status: 'denied', reason: 'One or more assets are not accessible' }),
+    );
     expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
   });
 
@@ -2492,6 +2833,7 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
+        resultSize: expect.any(Object),
         returnedCount: 1,
         hasMore: true,
         nextPage: '3',
@@ -2840,6 +3182,7 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
+        resultSize: expect.any(Object),
         returnedCount: 2,
         hasMore: true,
         nextPage: '2',
@@ -2862,7 +3205,12 @@ describe(AgentToolService.name, () => {
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([firstAssetId, secondAssetId]));
     assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(firstAssetId)] as never);
 
-    const result = await sut.searchAssets(auth, session.id, { mode: 'metadata', filters: {}, limit: 2, detail: 'metadata' });
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: {},
+      limit: 2,
+      detail: 'metadata',
+    });
 
     expect(result).toEqual({
       status: 'denied',
@@ -3021,6 +3369,7 @@ describe(AgentToolService.name, () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
+        resultSize: expect.any(Object),
         returnedCount: 0,
         hasMore: false,
         detail: 'ids',
@@ -3173,6 +3522,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       albums: [sharedAlbum],
     });
@@ -3195,6 +3545,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       albums: [ownedAlbum],
     });
@@ -3342,6 +3693,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       album,
     });
@@ -3453,6 +3805,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       previews: [returnedPreview],
     });
@@ -3462,7 +3815,7 @@ describe(AgentToolService.name, () => {
       AgentToolCallStatus.Executing,
       expect.objectContaining({
         assetCount: 1,
-        redactedResponseMetadata: { assetIds: [assetIds[0]] },
+        redactedResponseMetadata: expect.objectContaining({ assetIds: [assetIds[0]], resultSize: expect.any(Object) }),
       }),
     );
   });
@@ -3502,6 +3855,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       originals: [returnedOriginal],
     });
@@ -3511,7 +3865,7 @@ describe(AgentToolService.name, () => {
       AgentToolCallStatus.Executing,
       expect.objectContaining({
         assetCount: 1,
-        redactedResponseMetadata: { assetIds: [assetIds[1]] },
+        redactedResponseMetadata: expect.objectContaining({ assetIds: [assetIds[1]], resultSize: expect.any(Object) }),
       }),
     );
   });
@@ -3622,6 +3976,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       album,
     });
@@ -3686,6 +4041,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       album,
     });
@@ -3738,6 +4094,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({
         status: AgentToolCallStatus.Completed,
         responseSummary: 'Returned 2 space(s)',
@@ -3757,7 +4114,10 @@ describe(AgentToolService.name, () => {
       expect.any(String),
       AgentToolCallStatus.Executing,
       expect.objectContaining({
-        redactedResponseMetadata: { spaceIds: [first.id, second.id] },
+        redactedResponseMetadata: expect.objectContaining({
+          spaceIds: [first.id, second.id],
+          resultSize: expect.any(Object),
+        }),
         albumCount: 0,
         assetCount: 0,
       }),
@@ -3778,6 +4138,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ responseSummary: 'Returned 0 space(s)' }),
       spaces: [],
     });
@@ -3833,6 +4194,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({
         status: AgentToolCallStatus.Completed,
         responseSummary: 'Returned space with 2 asset id(s)',
@@ -3865,7 +4227,11 @@ describe(AgentToolService.name, () => {
       expect.any(String),
       AgentToolCallStatus.Executing,
       expect.objectContaining({
-        redactedResponseMetadata: { spaceIds: [space.id], assetIds },
+        redactedResponseMetadata: expect.objectContaining({
+          spaceIds: [space.id],
+          assetIds,
+          resultSize: expect.any(Object),
+        }),
         albumCount: 0,
         assetCount: 2,
       }),
@@ -3919,6 +4285,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({
         responseSummary: 'Returned space with 10000 of 10005 asset id(s)',
         assetCount: 10_000,
@@ -4116,6 +4483,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({
         toolName: AgentToolName.ResolveAssetSearchFilters,
         status: AgentToolCallStatus.Completed,
@@ -4166,7 +4534,11 @@ describe(AgentToolService.name, () => {
       expect.any(String),
       AgentToolCallStatus.Executing,
       expect.objectContaining({
-        redactedResponseMetadata: { albumIds: [albumId], spaceIds: [spaceId] },
+        redactedResponseMetadata: expect.objectContaining({
+          albumIds: [albumId],
+          spaceIds: [spaceId],
+          resultSize: expect.any(Object),
+        }),
       }),
     );
   });
@@ -4682,6 +5054,7 @@ describe(AgentToolService.name, () => {
 
     expect(result).toEqual({
       status: 'success',
+      resultSize: expect.any(Object),
       toolCall: expect.objectContaining({
         toolName: AgentToolName.SearchUsers,
         status: AgentToolCallStatus.Completed,
@@ -4712,7 +5085,7 @@ describe(AgentToolService.name, () => {
       expect.any(String),
       AgentToolCallStatus.Executing,
       expect.objectContaining({
-        redactedResponseMetadata: { userIds: [pierreId] },
+        redactedResponseMetadata: expect.objectContaining({ userIds: [pierreId], resultSize: expect.any(Object) }),
         assetCount: 0,
         albumCount: 0,
       }),
@@ -4823,6 +5196,41 @@ describe(AgentToolService.name, () => {
     });
   });
 
+  it('keeps empty result-size telemetry when a pending read call is denied by the user', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForToolApproval });
+    const pending = makeToolCall({
+      sessionId: session.id,
+      status: AgentToolCallStatus.PendingApproval,
+      redactedResponseMetadata: { resultSize: emptyResultSize() },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(pending);
+    toolCallRepository.transition.mockResolvedValue(
+      makeToolCall({
+        ...pending,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        redactedResponseMetadata: { resultSize: emptyResultSize() },
+      }),
+    );
+
+    const result = await sut.approveToolCall(auth, pending.sessionId, pending.id, {
+      decision: AgentToolApprovalDecision.Denied,
+      reason: 'Too broad',
+    });
+
+    expect(result.resultSize).toEqual(emptyResultSize());
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      pending.sessionId,
+      pending.id,
+      AgentToolCallStatus.PendingApproval,
+      expect.objectContaining({
+        redactedResponseMetadata: { resultSize: emptyResultSize() },
+      }),
+    );
+  });
+
   it('resumes a runner-backed session after a denied approval decision', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({
@@ -4921,6 +5329,7 @@ describe(AgentToolService.name, () => {
       approvalDecision: AgentToolApprovalDecision.Approved,
       toolResult: expect.objectContaining({
         status: 'success',
+        resultSize: expect.any(Object),
         albums: [album],
         toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       }),
@@ -5136,7 +5545,7 @@ describe(AgentToolService.name, () => {
         status: AgentToolCallStatus.Completed,
         approvalDecision: AgentToolApprovalDecision.Approved,
         responseSummary: 'Returned basic metadata for 1 asset',
-        redactedResponseMetadata: { assetIds },
+        redactedResponseMetadata: expect.objectContaining({ assetIds, resultSize: expect.any(Object) }),
         assetCount: 1,
         albumCount: 0,
         completedAt: expect.any(Date),
@@ -5148,9 +5557,10 @@ describe(AgentToolService.name, () => {
     });
     expect(result).toEqual(
       expect.objectContaining({
-      status: 'success',
-      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
-      assets: [expect.objectContaining({ id: assetIds[0] })],
+        status: 'success',
+        resultSize: expect.any(Object),
+        toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
+        assets: [expect.objectContaining({ id: assetIds[0] })],
       }),
     );
     if (result.status !== 'success') {
@@ -5190,12 +5600,13 @@ describe(AgentToolService.name, () => {
       AgentToolCallStatus.Executing,
       expect.objectContaining({
         responseSummary: 'Returned basic metadata for 1 asset',
-        redactedResponseMetadata: { assetIds },
+        redactedResponseMetadata: expect.objectContaining({ assetIds, resultSize: expect.any(Object) }),
       }),
     );
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
+        resultSize: expect.any(Object),
         summary: 'Returned basic metadata for 1 asset',
         detail: 'basic',
         fields: ['type', 'dates'],
@@ -5304,7 +5715,7 @@ describe(AgentToolService.name, () => {
         status: AgentToolCallStatus.Denied,
         approvalDecision: AgentToolApprovalDecision.Denied,
         responseSummary: null,
-        redactedResponseMetadata: null,
+        redactedResponseMetadata: { resultSize: emptyResultSize() },
         completedAt: expect.any(Date),
         error: 'One or more assets are not accessible',
       },
@@ -5466,7 +5877,7 @@ describe(AgentToolService.name, () => {
           status: AgentToolCallStatus.Denied,
           approvalDecision: AgentToolApprovalDecision.Denied,
           responseSummary: null,
-          redactedResponseMetadata: null,
+          redactedResponseMetadata: { resultSize: emptyResultSize() },
           completedAt: expect.any(Date),
           error: reason,
         },
