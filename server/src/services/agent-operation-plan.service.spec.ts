@@ -1505,6 +1505,99 @@ describe(AgentOperationPlanService.name, () => {
     expect(albumService.addAssets).toHaveBeenCalledWith(auth, albumId, { ids: [keptAssetId] });
   });
 
+  it('applies a large add-assets plan with sparse exclusions and records bulk partial failures', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = Array.from({ length: 10_000 }, () => newUuid());
+    const excludedAssetIds = [assetIds[17], assetIds[2500], assetIds[9999]];
+    const failedAssetId = assetIds[4000];
+    const selectedAssetIds = assetIds.filter((id) => !excludedAssetIds.includes(id));
+    const successfulAssetIds = selectedAssetIds.filter((id) => id !== failedAssetId);
+    const { session, albumId, operation, plan } = makeAddAssetsPlan(auth, assetIds);
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(selectedAssetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(selectedAssetIds));
+    albumService.addAssets.mockResolvedValue(
+      selectedAssetIds.map((id) =>
+        id === failedAssetId ? { id, success: false, error: BulkIdErrorReason.DUPLICATE } : { id, success: true },
+      ),
+    );
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {
+        [operation.id]: { itemKind: 'asset', mode: 'allExcept', itemIds: excludedAssetIds },
+      },
+      planRevision: plan.revision,
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(result.failedOperationIds).toEqual([operation.id]);
+    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalledWith(
+      auth.user.id,
+      new Set(selectedAssetIds),
+      false,
+    );
+    expect(albumService.addAssets).toHaveBeenCalledWith(auth, albumId, { ids: selectedAssetIds });
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        result: {
+          albumId,
+          assetIds: successfulAssetIds,
+          assetResults: selectedAssetIds.map((id) =>
+            id === failedAssetId ? { id, success: false, error: BulkIdErrorReason.DUPLICATE } : { id, success: true },
+          ),
+        },
+        error: 'Failed to add 1 asset(s)',
+      }),
+    ]);
+  });
+
+  it('fails safely without mutating when a large search page becomes stale before apply', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = Array.from({ length: 10_000 }, () => newUuid());
+    const staleAssetId = assetIds[7010];
+    const readableAssetIds = assetIds.filter((id) => id !== staleAssetId);
+    const { session, albumId, operation, plan } = makeAddAssetsPlan(auth, assetIds);
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(readableAssetIds));
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {
+        [operation.id]: { itemKind: 'asset', mode: 'allExcept', itemIds: [] },
+      },
+      planRevision: plan.revision,
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(result.failedOperationIds).toEqual([operation.id]);
+    expect(albumService.addAssets).not.toHaveBeenCalled();
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        error: 'One or more assets are not accessible',
+      }),
+    ]);
+  });
+
   it('skips an asset operation when sparse selection leaves no selected assets', async () => {
     const auth = AuthFactory.create();
     const assetId = newUuid();
