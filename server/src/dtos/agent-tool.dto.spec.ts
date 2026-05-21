@@ -13,6 +13,8 @@ import {
   AgentReadAssetPreviewsToolResponseDto,
   AgentReadSpaceToolRequestDto,
   AgentReadSpaceToolResponseDto,
+  AgentReadToolRequestSchemas,
+  AgentResolveAssetSearchFiltersToolResponseDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchAssetsToolResponseDto,
   AgentSearchUsersToolRequestDto,
@@ -382,6 +384,96 @@ describe('Agent tool DTOs', () => {
 
         expectIssue(result, [], 'Provide either search fields or toolCallId, not both');
       }
+    });
+  });
+
+  describe('AgentResolveAssetSearchFiltersToolRequestSchema', () => {
+    it('accepts people/tags/albums/spaces/cameraMakes/cameraModels/lensModels plus scope.withSharedSpaces and takenAfter', () => {
+      const result = AgentReadToolRequestSchemas[AgentToolName.ResolveAssetSearchFilters].safeParse({
+        people: ['Pierre'],
+        tags: ['Travel'],
+        albums: ['Berlin'],
+        spaces: ['Family'],
+        cameraMakes: ['FUJIFILM'],
+        cameraModels: ['X100V'],
+        lensModels: ['23mm'],
+        scope: { withSharedSpaces: true, takenAfter: '2026-05-01T00:00:00.000Z' },
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toMatchObject({
+          people: ['Pierre'],
+          tags: ['Travel'],
+          albums: ['Berlin'],
+          spaces: ['Family'],
+          cameraMakes: ['FUJIFILM'],
+          cameraModels: ['X100V'],
+          lensModels: ['23mm'],
+          scope: { withSharedSpaces: true },
+        });
+        expect(result.data.scope?.takenAfter).toEqual(new Date('2026-05-01T00:00:00.000Z'));
+      }
+    });
+
+    it('rejects toolCallId combined with resolver fields', () => {
+      const result = AgentReadToolRequestSchemas[AgentToolName.ResolveAssetSearchFilters].safeParse({
+        toolCallId: factory.uuid(),
+        tags: ['Travel'],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.message).toBe('Provide either resolver fields or toolCallId, not both');
+    });
+
+    it('rejects toolCallId combined with scope', () => {
+      const result = AgentReadToolRequestSchemas[AgentToolName.ResolveAssetSearchFilters].safeParse({
+        toolCallId: factory.uuid(),
+        scope: { withSharedSpaces: true },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.message).toBe('Provide either resolver fields or toolCallId, not both');
+    });
+
+    it('rejects empty request', () => {
+      const result = AgentReadToolRequestSchemas[AgentToolName.ResolveAssetSearchFilters].safeParse({});
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.message).toBe('Provide at least one resolver field');
+    });
+
+    it('rejects scope-only requests without resolver name fields', () => {
+      const result = AgentReadToolRequestSchemas[AgentToolName.ResolveAssetSearchFilters].safeParse({
+        scope: { withSharedSpaces: true },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.message).toBe('Provide at least one resolver field');
+    });
+
+    it('rejects scope.spaceId combined with scope.withSharedSpaces', () => {
+      const result = AgentReadToolRequestSchemas[AgentToolName.ResolveAssetSearchFilters].safeParse({
+        people: ['Pierre'],
+        scope: { spaceId: factory.uuid(), withSharedSpaces: true },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.path.join('.')).toBe('scope.withSharedSpaces');
+      expect(result.error?.issues[0]?.message).toBe('Cannot use both scope.spaceId and scope.withSharedSpaces');
+    });
+
+    it('rejects too many names and blank names with paths tags and albums.0', () => {
+      const tooMany = Array.from({ length: 21 }, (_, index) => `tag-${index}`);
+      const result = AgentReadToolRequestSchemas[AgentToolName.ResolveAssetSearchFilters].safeParse({
+        tags: tooMany,
+        albums: ['  '],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.map((issue) => issue.path.join('.'))).toEqual(
+        expect.arrayContaining(['tags', 'albums.0']),
+      );
     });
   });
 
@@ -762,6 +854,106 @@ describe('Agent tool DTOs', () => {
         expect(parsed.data.hasMore).toBe(false);
         expect(parsed.data.nextPage).toBeNull();
       }
+    });
+
+    it('parses resolve filter success responses with resolved and choice search filters', () => {
+      const tagId = factory.uuid();
+      const albumId = factory.uuid();
+      const result = AgentResolveAssetSearchFiltersToolResponseDto.schema.safeParse({
+        status: 'success',
+        toolCall: makeEncodedToolCall(),
+        resolvedFilters: { tagIds: [tagId], albumIds: [albumId] },
+        results: [
+          {
+            kind: 'tag',
+            query: 'Travel',
+            status: 'matched',
+            id: tagId,
+            value: 'Travel',
+            searchFilter: { tagIds: [tagId] },
+            choices: [
+              {
+                id: tagId,
+                value: 'Travel',
+                label: 'Travel',
+                searchFilter: { tagIds: [tagId], takenAfter: '2026-05-01T00:00:00.000Z' },
+              },
+            ],
+            message: 'Matched tag Travel.',
+          },
+          {
+            kind: 'album',
+            query: 'Berlin',
+            status: 'matched',
+            id: albumId,
+            value: 'Berlin',
+            searchFilter: { albumIds: [albumId] },
+            choices: [],
+            message: 'Matched album Berlin.',
+          },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success && result.data.status === 'success') {
+        expect(result.data.resolvedFilters.tagIds).toEqual([tagId]);
+        expect(result.data.results[0].searchFilter).toEqual({ tagIds: [tagId] });
+        expect(result.data.results[0].choices[0].searchFilter?.takenAfter).toEqual(
+          new Date('2026-05-01T00:00:00.000Z'),
+        );
+      }
+    });
+
+    it('rejects resolve filter result search filters with spacePersonIds but no spaceId', () => {
+      const result = AgentResolveAssetSearchFiltersToolResponseDto.schema.safeParse({
+        status: 'success',
+        toolCall: makeEncodedToolCall(),
+        resolvedFilters: {},
+        results: [
+          {
+            kind: 'person',
+            query: 'Pierre',
+            status: 'matched',
+            id: factory.uuid(),
+            value: 'Pierre',
+            searchFilter: { spacePersonIds: [factory.uuid()] },
+            choices: [],
+            message: 'Matched person Pierre.',
+          },
+        ],
+      });
+
+      expectIssue(result, ['results', 0, 'searchFilter', 'spacePersonIds'], 'spacePersonIds requires spaceId');
+    });
+
+    it('rejects resolve filter choice search filters with spaceId and withSharedSpaces', () => {
+      const result = AgentResolveAssetSearchFiltersToolResponseDto.schema.safeParse({
+        status: 'success',
+        toolCall: makeEncodedToolCall(),
+        resolvedFilters: {},
+        results: [
+          {
+            kind: 'space',
+            query: 'Family',
+            status: 'ambiguous',
+            choices: [
+              {
+                id: factory.uuid(),
+                value: 'Family',
+                label: 'Family',
+                searchFilter: { spaceId: factory.uuid(), withSharedSpaces: true },
+              },
+            ],
+            message: 'Multiple spaces matched Family.',
+          },
+        ],
+      });
+
+      expectIssue(
+        result,
+        ['results', 0, 'choices', 0, 'searchFilter', 'withSharedSpaces'],
+        'Cannot use both spaceId and withSharedSpaces',
+      );
     });
 
     it('encodes and parses preview media reference responses', () => {
