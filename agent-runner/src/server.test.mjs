@@ -859,6 +859,93 @@ describe('agent runner server', () => {
     });
   });
 
+  it('passes activity and deltas through the approval resume SSE stream for large approved results', async () => {
+    const runtime = createRuntime({
+      async *resumeSession(body) {
+        assert.equal(body.toolResult.assets.length, 300);
+        yield {
+          type: 'activity',
+          sessionId: body.gallerySessionId,
+          runnerSessionId: body.runnerSessionId,
+          kind: 'tool-call-completed',
+          status: 'running',
+          summary: 'Continuing after approved Gallery result',
+        };
+        yield {
+          type: 'assistant-message-delta',
+          sessionId: body.gallerySessionId,
+          runnerSessionId: body.runnerSessionId,
+          delta: 'Continuing',
+          sequence: 1,
+        };
+        yield {
+          type: 'assistant-message-completed',
+          sessionId: body.gallerySessionId,
+          runnerSessionId: body.runnerSessionId,
+          providerMessageId: null,
+          content: { blocks: [{ type: 'text', text: 'Continuing after approval.' }] },
+        };
+      },
+    });
+
+    await withServer(runtime, async (baseUrl) => {
+      await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+
+      const response = await fetch(`${baseUrl}/sessions/pi-00000000-0000-4000-8000-000000000100/continue`, {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gallerySessionId: '00000000-0000-4000-8000-000000000100',
+          toolCallId: '00000000-0000-4000-8000-000000000333',
+          approvalDecision: 'approved',
+          toolResult: {
+            status: 'success',
+            assets: Array.from({ length: 300 }, (_, index) => ({ id: `asset-${index}`, filename: `IMG-${index}.jpg` })),
+          },
+        }),
+      });
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await readSse(response), [
+        {
+          event: 'activity',
+          data: {
+            type: 'activity',
+            sessionId: '00000000-0000-4000-8000-000000000100',
+            runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+            kind: 'tool-call-completed',
+            status: 'running',
+            summary: 'Continuing after approved Gallery result',
+          },
+        },
+        {
+          event: 'assistant-message-delta',
+          data: {
+            type: 'assistant-message-delta',
+            sessionId: '00000000-0000-4000-8000-000000000100',
+            runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+            delta: 'Continuing',
+            sequence: 1,
+          },
+        },
+        {
+          event: 'assistant-message-completed',
+          data: {
+            type: 'assistant-message-completed',
+            sessionId: '00000000-0000-4000-8000-000000000100',
+            runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+            providerMessageId: null,
+            content: { blocks: [{ type: 'text', text: 'Continuing after approval.' }] },
+          },
+        },
+      ]);
+    });
+  });
+
   it('continues an existing runner session and streams resumed assistant events', async () => {
     const runtime = createRuntime();
 
