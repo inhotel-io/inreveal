@@ -137,9 +137,78 @@ describe(AgentMcpToolContractService.name, () => {
         'favorite-rating-search',
         'space-filter-search',
         'resolved-id-filter-search',
+        'unalbumed-berlin-may-search',
+        'five-star-video-search',
+        'ocr-invoice-screenshot-search',
         'approved-retry',
       ]),
     );
+
+    const resolver = sut.getReadToolContract(AgentToolName.ResolveAssetSearchFilters);
+    expect(resolver?.examples.map((example) => example.name)).toEqual(
+      expect.arrayContaining([
+        'resolve-named-filters',
+        'resolve-alex-family-space-filters',
+        'resolve-space-person-filters',
+      ]),
+    );
+  });
+
+  it('defines Slice 7 natural-language search examples that parse and map to supported filters', () => {
+    const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+    const examplesByName = new Map(search?.examples.map((example) => [example.name, example]));
+
+    const unalbumedBerlinMay = examplesByName.get('unalbumed-berlin-may-search');
+    const fiveStarVideos = examplesByName.get('five-star-video-search');
+    const ocrInvoiceScreenshots = examplesByName.get('ocr-invoice-screenshot-search');
+    const resolver = sut.getReadToolContract(AgentToolName.ResolveAssetSearchFilters);
+    const resolverExamplesByName = new Map(resolver?.examples.map((example) => [example.name, example]));
+    const alexFamilySpace = resolverExamplesByName.get('resolve-alex-family-space-filters');
+
+    expect(unalbumedBerlinMay?.arguments).toEqual({
+      mode: 'metadata',
+      filters: {
+        takenAfter: '2026-05-01T00:00:00.000Z',
+        takenBefore: '2026-05-31T23:59:59.999Z',
+        city: 'Berlin',
+        country: 'Germany',
+        isNotInAlbum: true,
+      },
+      limit: 50,
+      page: 1,
+      order: 'desc',
+    });
+    expect(fiveStarVideos?.arguments).toEqual({
+      filters: {
+        rating: 5,
+        type: 'VIDEO',
+      },
+      limit: 50,
+    });
+    expect(ocrInvoiceScreenshots?.arguments).toEqual({
+      mode: 'ocr',
+      query: 'invoice',
+      filters: {
+        takenAfter: '2024-01-01T00:00:00.000Z',
+        takenBefore: '2024-12-31T23:59:59.999Z',
+        type: 'IMAGE',
+      },
+      limit: 50,
+    });
+
+    for (const example of [unalbumedBerlinMay, fiveStarVideos, ocrInvoiceScreenshots]) {
+      expect(example, 'scenario example should exist').toBeDefined();
+      expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(example?.arguments).success).toBe(true);
+    }
+
+    expect(alexFamilySpace?.arguments).toEqual({
+      people: ['Alex'],
+      spaces: ['Family'],
+    });
+    expect(
+      AgentReadToolRequestSchemas[AgentToolName.ResolveAssetSearchFilters].safeParse(alexFamilySpace?.arguments)
+        .success,
+    ).toBe(true);
   });
 
   it('instructs models to resolve named search filters before searchAssets', () => {
