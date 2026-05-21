@@ -16,17 +16,26 @@ class AgentSearchAssetsFilters {
     this.albumIds = const [],
     this.city,
     this.country,
+    this.createdAfter,
+    this.createdBefore,
     this.isFavorite,
     this.isNotInAlbum,
     this.lensModel,
     this.make,
     this.model,
+    this.personIds = const [],
     this.rating,
+    this.spaceId,
+    this.spacePersonIds = const [],
     this.state,
     this.tagIds = const [],
     this.takenAfter,
     this.takenBefore,
     this.type,
+    this.updatedAfter,
+    this.updatedBefore,
+    this.visibility,
+    this.withSharedSpaces,
   });
 
   List<String> albumIds;
@@ -34,6 +43,22 @@ class AgentSearchAssetsFilters {
   String? city;
 
   String? country;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  DateTime? createdAfter;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  DateTime? createdBefore;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -57,9 +82,21 @@ class AgentSearchAssetsFilters {
 
   String? model;
 
+  List<String> personIds;
+
   /// Minimum value: 1
   /// Maximum value: 5
   int? rating;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? spaceId;
+
+  List<String> spacePersonIds;
 
   String? state;
 
@@ -89,22 +126,63 @@ class AgentSearchAssetsFilters {
   ///
   AssetTypeEnum? type;
 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  DateTime? updatedAfter;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  DateTime? updatedBefore;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  AssetVisibility? visibility;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? withSharedSpaces;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchAssetsFilters &&
     _deepEquality.equals(other.albumIds, albumIds) &&
     other.city == city &&
     other.country == country &&
+    other.createdAfter == createdAfter &&
+    other.createdBefore == createdBefore &&
     other.isFavorite == isFavorite &&
     other.isNotInAlbum == isNotInAlbum &&
     other.lensModel == lensModel &&
     other.make == make &&
     other.model == model &&
+    _deepEquality.equals(other.personIds, personIds) &&
     other.rating == rating &&
+    other.spaceId == spaceId &&
+    _deepEquality.equals(other.spacePersonIds, spacePersonIds) &&
     other.state == state &&
     _deepEquality.equals(other.tagIds, tagIds) &&
     other.takenAfter == takenAfter &&
     other.takenBefore == takenBefore &&
-    other.type == type;
+    other.type == type &&
+    other.updatedAfter == updatedAfter &&
+    other.updatedBefore == updatedBefore &&
+    other.visibility == visibility &&
+    other.withSharedSpaces == withSharedSpaces;
 
   @override
   int get hashCode =>
@@ -112,20 +190,29 @@ class AgentSearchAssetsFilters {
     (albumIds.hashCode) +
     (city == null ? 0 : city!.hashCode) +
     (country == null ? 0 : country!.hashCode) +
+    (createdAfter == null ? 0 : createdAfter!.hashCode) +
+    (createdBefore == null ? 0 : createdBefore!.hashCode) +
     (isFavorite == null ? 0 : isFavorite!.hashCode) +
     (isNotInAlbum == null ? 0 : isNotInAlbum!.hashCode) +
     (lensModel == null ? 0 : lensModel!.hashCode) +
     (make == null ? 0 : make!.hashCode) +
     (model == null ? 0 : model!.hashCode) +
+    (personIds.hashCode) +
     (rating == null ? 0 : rating!.hashCode) +
+    (spaceId == null ? 0 : spaceId!.hashCode) +
+    (spacePersonIds.hashCode) +
     (state == null ? 0 : state!.hashCode) +
     (tagIds.hashCode) +
     (takenAfter == null ? 0 : takenAfter!.hashCode) +
     (takenBefore == null ? 0 : takenBefore!.hashCode) +
-    (type == null ? 0 : type!.hashCode);
+    (type == null ? 0 : type!.hashCode) +
+    (updatedAfter == null ? 0 : updatedAfter!.hashCode) +
+    (updatedBefore == null ? 0 : updatedBefore!.hashCode) +
+    (visibility == null ? 0 : visibility!.hashCode) +
+    (withSharedSpaces == null ? 0 : withSharedSpaces!.hashCode);
 
   @override
-  String toString() => 'AgentSearchAssetsFilters[albumIds=$albumIds, city=$city, country=$country, isFavorite=$isFavorite, isNotInAlbum=$isNotInAlbum, lensModel=$lensModel, make=$make, model=$model, rating=$rating, state=$state, tagIds=$tagIds, takenAfter=$takenAfter, takenBefore=$takenBefore, type=$type]';
+  String toString() => 'AgentSearchAssetsFilters[albumIds=$albumIds, city=$city, country=$country, createdAfter=$createdAfter, createdBefore=$createdBefore, isFavorite=$isFavorite, isNotInAlbum=$isNotInAlbum, lensModel=$lensModel, make=$make, model=$model, personIds=$personIds, rating=$rating, spaceId=$spaceId, spacePersonIds=$spacePersonIds, state=$state, tagIds=$tagIds, takenAfter=$takenAfter, takenBefore=$takenBefore, type=$type, updatedAfter=$updatedAfter, updatedBefore=$updatedBefore, visibility=$visibility, withSharedSpaces=$withSharedSpaces]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -139,6 +226,20 @@ class AgentSearchAssetsFilters {
       json[r'country'] = this.country;
     } else {
     //  json[r'country'] = null;
+    }
+    if (this.createdAfter != null) {
+      json[r'createdAfter'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? this.createdAfter!.millisecondsSinceEpoch
+        : this.createdAfter!.toUtc().toIso8601String();
+    } else {
+    //  json[r'createdAfter'] = null;
+    }
+    if (this.createdBefore != null) {
+      json[r'createdBefore'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? this.createdBefore!.millisecondsSinceEpoch
+        : this.createdBefore!.toUtc().toIso8601String();
+    } else {
+    //  json[r'createdBefore'] = null;
     }
     if (this.isFavorite != null) {
       json[r'isFavorite'] = this.isFavorite;
@@ -165,11 +266,18 @@ class AgentSearchAssetsFilters {
     } else {
     //  json[r'model'] = null;
     }
+      json[r'personIds'] = this.personIds;
     if (this.rating != null) {
       json[r'rating'] = this.rating;
     } else {
     //  json[r'rating'] = null;
     }
+    if (this.spaceId != null) {
+      json[r'spaceId'] = this.spaceId;
+    } else {
+    //  json[r'spaceId'] = null;
+    }
+      json[r'spacePersonIds'] = this.spacePersonIds;
     if (this.state != null) {
       json[r'state'] = this.state;
     } else {
@@ -195,6 +303,30 @@ class AgentSearchAssetsFilters {
     } else {
     //  json[r'type'] = null;
     }
+    if (this.updatedAfter != null) {
+      json[r'updatedAfter'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? this.updatedAfter!.millisecondsSinceEpoch
+        : this.updatedAfter!.toUtc().toIso8601String();
+    } else {
+    //  json[r'updatedAfter'] = null;
+    }
+    if (this.updatedBefore != null) {
+      json[r'updatedBefore'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? this.updatedBefore!.millisecondsSinceEpoch
+        : this.updatedBefore!.toUtc().toIso8601String();
+    } else {
+    //  json[r'updatedBefore'] = null;
+    }
+    if (this.visibility != null) {
+      json[r'visibility'] = this.visibility;
+    } else {
+    //  json[r'visibility'] = null;
+    }
+    if (this.withSharedSpaces != null) {
+      json[r'withSharedSpaces'] = this.withSharedSpaces;
+    } else {
+    //  json[r'withSharedSpaces'] = null;
+    }
     return json;
   }
 
@@ -212,12 +344,21 @@ class AgentSearchAssetsFilters {
             : const [],
         city: mapValueOfType<String>(json, r'city'),
         country: mapValueOfType<String>(json, r'country'),
+        createdAfter: mapDateTime(json, r'createdAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
+        createdBefore: mapDateTime(json, r'createdBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
         isFavorite: mapValueOfType<bool>(json, r'isFavorite'),
         isNotInAlbum: mapValueOfType<bool>(json, r'isNotInAlbum'),
         lensModel: mapValueOfType<String>(json, r'lensModel'),
         make: mapValueOfType<String>(json, r'make'),
         model: mapValueOfType<String>(json, r'model'),
+        personIds: json[r'personIds'] is Iterable
+            ? (json[r'personIds'] as Iterable).cast<String>().toList(growable: false)
+            : const [],
         rating: mapValueOfType<int>(json, r'rating'),
+        spaceId: mapValueOfType<String>(json, r'spaceId'),
+        spacePersonIds: json[r'spacePersonIds'] is Iterable
+            ? (json[r'spacePersonIds'] as Iterable).cast<String>().toList(growable: false)
+            : const [],
         state: mapValueOfType<String>(json, r'state'),
         tagIds: json[r'tagIds'] is Iterable
             ? (json[r'tagIds'] as Iterable).cast<String>().toList(growable: false)
@@ -225,6 +366,10 @@ class AgentSearchAssetsFilters {
         takenAfter: mapDateTime(json, r'takenAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
         takenBefore: mapDateTime(json, r'takenBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
         type: AssetTypeEnum.fromJson(json[r'type']),
+        updatedAfter: mapDateTime(json, r'updatedAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
+        updatedBefore: mapDateTime(json, r'updatedBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
+        visibility: AssetVisibility.fromJson(json[r'visibility']),
+        withSharedSpaces: mapValueOfType<bool>(json, r'withSharedSpaces'),
       );
     }
     return null;
