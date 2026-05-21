@@ -1843,6 +1843,41 @@ describe(AgentOperationPlanService.name, () => {
         result: expect.objectContaining({ assetIds }),
       }),
     ]);
+    switch (type) {
+      case AgentOperationType.AlbumAddAssets: {
+        expect(albumService.addAssets).toHaveBeenCalledWith(auth, albumId, { ids: assetIds });
+        break;
+      }
+      case AgentOperationType.SpaceAddAssets: {
+        expect(sharedSpaceService.addAssets).toHaveBeenCalledWith(auth, spaceId, { assetIds });
+        break;
+      }
+      case AgentOperationType.AssetAddTag: {
+        expect(tagService.addAssets).toHaveBeenCalledWith(auth, tagId, { ids: assetIds });
+        break;
+      }
+      case AgentOperationType.AssetSetFavorite: {
+        expect(assetService.updateAll).toHaveBeenCalledWith(auth, { ids: assetIds, isFavorite: true });
+        break;
+      }
+      case AgentOperationType.AssetSetArchive: {
+        expect(assetService.updateAll).toHaveBeenCalledWith(auth, {
+          ids: assetIds,
+          visibility: AssetVisibility.Archive,
+        });
+        break;
+      }
+      case AgentOperationType.AssetRotate: {
+        expect(assetService.editAsset).toHaveBeenCalledTimes(assetIds.length);
+        for (const assetId of assetIds) {
+          expect(assetService.getAssetEdits).toHaveBeenCalledWith(auth, assetId);
+          expect(assetService.editAsset).toHaveBeenCalledWith(auth, assetId, {
+            edits: [{ action: AssetEditAction.Rotate, parameters: { angle: 90 } }],
+          });
+        }
+        break;
+      }
+    }
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
       status: AgentSessionStatus.Running,
       endedAt: null,
