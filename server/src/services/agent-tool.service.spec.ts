@@ -2238,6 +2238,75 @@ describe(AgentToolService.name, () => {
     );
   });
 
+  it('searchAssets sends multiple global people with tag and date filters to Gallery search', async () => {
+    const auth = AuthFactory.create();
+    const firstPersonId = newUuid();
+    const secondPersonId = newUuid();
+    const tagId = newUuid();
+    const takenAfter = new Date('2026-05-01T00:00:00.000Z');
+    const takenBefore = new Date('2026-05-31T23:59:59.999Z');
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([firstPersonId, secondPersonId]));
+    accessRepository.tag.checkOwnerAccess.mockResolvedValue(new Set([tagId]));
+
+    await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: {
+        personIds: [firstPersonId, secondPersonId],
+        tagIds: [tagId],
+        takenAfter,
+        takenBefore,
+      },
+      limit: 25,
+    });
+
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      { page: 1, size: 25 },
+      expect.objectContaining({
+        userIds: [auth.user.id],
+        personIds: [firstPersonId, secondPersonId],
+        tagIds: [tagId],
+        takenAfter,
+        takenBefore,
+      }),
+    );
+  });
+
+  it('searchAssets returns an empty success page when a resolved person has no matching assets', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([personId]));
+    searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false });
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { personIds: [personId] },
+      limit: 25,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        returnedCount: 0,
+        hasMore: false,
+        assets: [],
+      }),
+    );
+  });
+
   it('space person filters use explicit space scope without broad timeline IDs', async () => {
     const auth = AuthFactory.create();
     const spaceId = newUuid();
@@ -3333,10 +3402,10 @@ describe(AgentToolService.name, () => {
         albumCount: 0,
       }),
       resolvedFilters: {
-        personIds: [personId],
         tagIds: [tagId],
         albumIds: [albumId],
         spaceId,
+        spacePersonIds: [personId],
         make: 'FUJIFILM',
         model: 'X100VI',
         lensModel: '23mm f/2',
@@ -3370,6 +3439,189 @@ describe(AgentToolService.name, () => {
         redactedResponseMetadata: { albumIds: [albumId], spaceIds: [spaceId] },
       }),
     );
+  });
+
+  it('resolveAssetSearchFilters resolves people in a named shared space to spacePersonIds', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const spacePersonId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getAllByUserId.mockResolvedValue([makeSpaceRow({ id: spaceId, name: 'Family' })]);
+    searchRepository.getFilterSuggestions.mockResolvedValue({
+      countries: [],
+      cameraMakes: [],
+      tags: [],
+      people: [
+        {
+          id: spacePersonId,
+          name: 'Alex',
+          primaryProfile: { type: 'space-person', id: spacePersonId, spaceId },
+        },
+      ],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    });
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, {
+      people: ['Alex'],
+      spaces: ['Family'],
+    });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.resolvedFilters).toEqual({ spaceId, spacePersonIds: [spacePersonId] });
+      expect(result.results).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ kind: 'space', status: 'matched', id: spaceId }),
+          expect.objectContaining({
+            kind: 'person',
+            status: 'matched',
+            id: spacePersonId,
+            searchFilter: { spaceId, spacePersonIds: [spacePersonId] },
+          }),
+        ]),
+      );
+    }
+    expect(searchRepository.getFilterSuggestions).toHaveBeenCalledWith(
+      [auth.user.id],
+      expect.objectContaining({ spaceId }),
+    );
+  });
+
+  it('resolveAssetSearchFilters uses explicit shared-space scope for people before global personIds', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const spacePersonId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getMember.mockResolvedValue(makeSpaceMember({ spaceId, userId: auth.user.id }));
+    searchRepository.getFilterSuggestions.mockResolvedValue({
+      countries: [],
+      cameraMakes: [],
+      tags: [],
+      people: [
+        {
+          id: spacePersonId,
+          name: 'Alex',
+          primaryProfile: { type: 'space-person', id: spacePersonId, spaceId },
+        },
+      ],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    });
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, {
+      people: ['Alex'],
+      scope: { spaceId },
+    });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.resolvedFilters).toEqual({ spaceId, spacePersonIds: [spacePersonId] });
+    }
+    expect(searchRepository.getFilterSuggestions).toHaveBeenCalledWith(
+      [auth.user.id],
+      expect.objectContaining({ spaceId }),
+    );
+  });
+
+  it('resolveAssetSearchFilters returns choices for same-name global and shared people without a unique space', async () => {
+    const auth = AuthFactory.create();
+    const globalPersonId = newUuid();
+    const spaceId = newUuid();
+    const spacePersonId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+    searchRepository.getFilterSuggestions.mockResolvedValue({
+      countries: [],
+      cameraMakes: [],
+      tags: [],
+      people: [
+        {
+          id: globalPersonId,
+          name: 'Alex',
+          primaryProfile: { type: 'user-person', id: globalPersonId },
+        },
+        {
+          id: `space-person:${spacePersonId}`,
+          name: 'Alex',
+          primaryProfile: { type: 'space-person', id: spacePersonId, spaceId },
+        },
+      ],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    });
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, {
+      people: ['Alex'],
+      scope: { withSharedSpaces: true },
+    });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.resolvedFilters).toEqual({});
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          kind: 'person',
+          status: 'ambiguous',
+          choices: expect.arrayContaining([
+            expect.objectContaining({ searchFilter: { personIds: [globalPersonId] } }),
+            expect.objectContaining({ searchFilter: { spaceId, spacePersonIds: [spacePersonId] } }),
+          ]),
+        }),
+      ]);
+    }
+  });
+
+  it('resolveAssetSearchFilters does not leak hidden or inaccessible people as resolved filters', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.getFilterSuggestions.mockResolvedValue({
+      countries: [],
+      cameraMakes: [],
+      tags: [],
+      people: [],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    });
+
+    const result = await sut.resolveAssetSearchFilters(auth, session.id, { people: ['Hidden Person'] });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.resolvedFilters).toEqual({});
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          kind: 'person',
+          query: 'Hidden Person',
+          status: 'not_found',
+          choices: [],
+        }),
+      ]);
+    }
   });
 
   it('resolveAssetSearchFilters creates pending approval with the resolver term count in the request summary', async () => {

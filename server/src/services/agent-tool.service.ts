@@ -703,25 +703,62 @@ export class AgentToolService {
     const resolvedFilters: AgentSearchAssetsFilters = {};
     const results: AgentResolvedAssetSearchFilterResult[] = [];
     const scope = request.scope ?? {};
+    if (scope.spaceId) {
+      resolvedFilters.spaceId = scope.spaceId;
+    }
+
+    if (request.spaces?.length) {
+      const visibleSpaces = await this.sharedSpaceRepository.getAllByUserId(auth.user.id);
+      const spaces = visibleSpaces.map((space) => ({
+        id: space.id,
+        value: space.name,
+      }));
+      for (const query of request.spaces) {
+        const matched = this.matchVisibleCandidates(spaces, query, 'space', (candidate) => ({
+          spaceId: candidate.id,
+        }));
+        if (matched.status === 'matched') {
+          if (resolvedFilters.spaceId && resolvedFilters.spaceId !== matched.id) {
+            results.push({
+              ...matched,
+              status: 'ambiguous',
+              searchFilter: undefined,
+              choices: [
+                this.choiceForIdCandidate({ id: matched.id!, value: matched.value! }, 'space', { spaceId: matched.id }),
+              ],
+              message: 'Only one spaceId can be used in searchAssets',
+            });
+          } else {
+            resolvedFilters.spaceId = matched.id;
+            results.push(matched);
+          }
+        } else {
+          results.push(matched);
+        }
+      }
+    }
+
     const needsRepositoryCandidates =
       (request.people?.length ?? 0) > 0 ||
       (request.tags?.length ?? 0) > 0 ||
       (request.cameraMakes?.length ?? 0) > 0 ||
       (request.cameraModels?.length ?? 0) > 0 ||
       (request.lensModels?.length ?? 0) > 0;
-    const canUseRepositoryCandidates = this.canUseResolverRepositoryCandidates(session, scope);
+    const resolverScope = { ...scope, ...(resolvedFilters.spaceId ? { spaceId: resolvedFilters.spaceId } : {}) };
+    const canUseRepositoryCandidates = this.canUseResolverRepositoryCandidates(session, resolverScope);
     const shouldLoadTimelineSpaceIds =
       scope.withSharedSpaces === true ||
       (needsRepositoryCandidates &&
         !canUseRepositoryCandidates &&
         session.permissionPlanSnapshot.assetScope.sharedSpaces &&
-        !scope.spaceId);
+        !resolvedFilters.spaceId);
     const timelineSpaceRows = shouldLoadTimelineSpaceIds
       ? await this.sharedSpaceRepository.getSpaceIdsForTimeline(auth.user.id)
       : [];
     const timelineSpaceIds = timelineSpaceRows.map((row) => row.spaceId);
     const repositoryScope = {
       ...scope,
+      ...(resolvedFilters.spaceId ? { spaceId: resolvedFilters.spaceId } : {}),
       ...(shouldLoadTimelineSpaceIds ? { timelineSpaceIds } : {}),
     };
     const needsSuggestions =
@@ -732,14 +769,7 @@ export class AgentToolService {
         : null;
 
     if (request.people?.length) {
-      this.resolveIdFilters(
-        results,
-        resolvedFilters,
-        'person',
-        request.people,
-        suggestions?.people.map((person) => ({ id: person.id, value: person.name })) ?? [],
-        'personIds',
-      );
+      this.resolvePersonFilters(results, resolvedFilters, request.people, suggestions?.people ?? []);
     }
 
     if (request.tags?.length) {
@@ -764,37 +794,6 @@ export class AgentToolService {
         })
         .map((album) => ({ id: album.id, value: album.albumName }));
       this.resolveIdFilters(results, resolvedFilters, 'album', request.albums, albums, 'albumIds');
-    }
-
-    if (request.spaces?.length) {
-      const visibleSpaces = await this.sharedSpaceRepository.getAllByUserId(auth.user.id);
-      const spaces = visibleSpaces.map((space) => ({
-        id: space.id,
-        value: space.name,
-      }));
-      for (const query of request.spaces) {
-        const matched = this.matchVisibleCandidates(spaces, query, 'space', (candidate) => ({
-          spaceId: candidate.id,
-        }));
-        if (matched.status === 'matched') {
-          if (resolvedFilters.spaceId) {
-            results.push({
-              ...matched,
-              status: 'ambiguous',
-              searchFilter: undefined,
-              choices: [
-                this.choiceForIdCandidate({ id: matched.id!, value: matched.value! }, 'space', { spaceId: matched.id }),
-              ],
-              message: 'Only one spaceId can be used in searchAssets',
-            });
-          } else {
-            resolvedFilters.spaceId = matched.id;
-            results.push(matched);
-          }
-        } else {
-          results.push(matched);
-        }
-      }
     }
 
     if (request.cameraMakes?.length) {
@@ -874,6 +873,79 @@ export class AgentToolService {
     return session.permissionPlanSnapshot.assetScope.owned || !!scope?.spaceId;
   }
 
+  private resolvePersonFilters(
+    results: AgentResolvedAssetSearchFilterResult[],
+    resolvedFilters: AgentSearchAssetsFilters,
+    queries: string[],
+    people: Array<{
+      id: string;
+      name: string;
+      primaryProfile?: { type: 'user-person' | 'space-person'; id: string; spaceId?: string };
+    }>,
+  ) {
+    const candidates = people.map((person) => ({
+      id: person.primaryProfile?.id ?? person.id,
+      value: person.name,
+      searchFilter: this.getPersonSearchFilter(person, resolvedFilters.spaceId),
+    }));
+
+    for (const query of queries) {
+      const matched = this.matchVisibleCandidates(candidates, query, 'person', (candidate) => candidate.searchFilter);
+      if (matched.status === 'matched') {
+        this.mergeResolvedPersonFilter(resolvedFilters, matched.searchFilter);
+      }
+      results.push(matched);
+    }
+  }
+
+  private getPersonSearchFilter(
+    person: {
+      id: string;
+      primaryProfile?: { type: 'user-person' | 'space-person'; id: string; spaceId?: string };
+    },
+    resolvedSpaceId?: string,
+  ): Partial<AgentSearchAssetsFilters> {
+    const profile = person.primaryProfile;
+    if (resolvedSpaceId) {
+      if (!profile || (profile.type === 'space-person' && (!profile.spaceId || profile.spaceId === resolvedSpaceId))) {
+        return { spaceId: resolvedSpaceId, spacePersonIds: [profile?.id ?? person.id] };
+      }
+
+      return {};
+    }
+
+    if (!profile || profile.type === 'user-person') {
+      return { personIds: [profile?.id ?? person.id] };
+    }
+
+    if (profile.type === 'space-person' && profile.spaceId) {
+      return { spaceId: profile.spaceId, spacePersonIds: [profile.id] };
+    }
+
+    return {};
+  }
+
+  private mergeResolvedPersonFilter(
+    resolvedFilters: AgentSearchAssetsFilters,
+    searchFilter: Partial<AgentSearchAssetsFilters> | undefined,
+  ) {
+    if (!searchFilter) {
+      return;
+    }
+
+    if (searchFilter.spaceId && searchFilter.spacePersonIds?.length) {
+      resolvedFilters.spaceId = searchFilter.spaceId;
+      resolvedFilters.spacePersonIds = [
+        ...new Set([...(resolvedFilters.spacePersonIds ?? []), ...searchFilter.spacePersonIds]),
+      ];
+      return;
+    }
+
+    if (searchFilter.personIds?.length) {
+      resolvedFilters.personIds = [...new Set([...(resolvedFilters.personIds ?? []), ...searchFilter.personIds])];
+    }
+  }
+
   private resolveIdFilters(
     results: AgentResolvedAssetSearchFilterResult[],
     resolvedFilters: AgentSearchAssetsFilters,
@@ -919,9 +991,10 @@ export class AgentToolService {
         kind,
         query,
         status: 'ambiguous',
-        choices: exactMatches.map((candidate) =>
-          this.choiceForIdCandidate(candidate, kind, getSearchFilter(candidate)),
-        ),
+        choices: exactMatches.flatMap((candidate) => {
+          const searchFilter = getSearchFilter(candidate);
+          return this.hasSearchFilter(searchFilter) ? [this.choiceForIdCandidate(candidate, kind, searchFilter)] : [];
+        }),
         message: `Multiple visible ${kind} matches found`,
       };
     }
@@ -931,10 +1004,17 @@ export class AgentToolService {
       query,
       status: 'not_found',
       choices: this.getNotFoundSuggestionCandidates(candidates, query)
-        .slice(0, 5)
-        .map((candidate) => this.choiceForIdCandidate(candidate, kind, getSearchFilter(candidate))),
+        .flatMap((candidate) => {
+          const searchFilter = getSearchFilter(candidate);
+          return this.hasSearchFilter(searchFilter) ? [this.choiceForIdCandidate(candidate, kind, searchFilter)] : [];
+        })
+        .slice(0, 5),
       message: `No visible ${kind} match found`,
     };
+  }
+
+  private hasSearchFilter(searchFilter: Partial<AgentSearchAssetsFilters>): boolean {
+    return Object.keys(searchFilter).length > 0;
   }
 
   private getResolverTermCount(request: AgentResolveAssetSearchFiltersToolRequestDto): number {
