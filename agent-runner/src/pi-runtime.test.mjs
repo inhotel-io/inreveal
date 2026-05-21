@@ -4,7 +4,7 @@ import { readFile, rm, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { describe, it } from 'node:test';
 import { galleryMcpPromptCheatSheet } from './generated/gallery-mcp-prompt-cheat-sheet.mjs';
-import { createPiRuntime, mapProviderType, redactSecret } from './pi-runtime.mjs';
+import { compactGalleryToolTranscript, createPiRuntime, mapProviderType, redactSecret } from './pi-runtime.mjs';
 
 const permissionPlan = {
   read: { metadata: true, previews: false, originals: false },
@@ -580,6 +580,10 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].systemPrompt.includes('no direct write tools'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('has no Gallery read tools'), false);
     assert.deepEqual(calls.loaders[0].appendSystemPrompt, []);
+    assert.deepEqual(calls.loaders[0].settingsManager, {
+      kind: 'settings-manager',
+      settings: { compaction: { enabled: true } },
+    });
     assert.equal(calls.loaders[0].systemPromptOverride, undefined);
     assert.equal(calls.loaders[0].appendSystemPromptOverride, undefined);
   });
@@ -912,6 +916,91 @@ describe('pi runtime adapter', () => {
     ]);
   });
 
+  it('compacts large prior Gallery tool result messages before the next user prompt', async () => {
+    const { sdk, ai, calls, session } = createFakeDependencies();
+    const hugeAssets = Array.from({ length: 300 }, (_, index) => ({
+      id: `asset-${index}`,
+      filename: `IMG-${index}.jpg`,
+      exif: 'x'.repeat(300),
+    }));
+    session.messages.push({
+      role: 'tool',
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            status: 'success',
+            summary: 'Returned 300 rows including IMG-299.jpg from /photos/private/originals/IMG-299.jpg',
+            toolCall: {
+              id: '00000000-0000-4000-8000-000000000333',
+              toolName: 'mcp_gallery_readAssetMetadata',
+              status: 'completed',
+            },
+            assets: hugeAssets,
+            resultSize: {
+              returnedItems: 300,
+              hasMore: false,
+              nextPage: null,
+              estimatedBytes: 120000,
+              truncated: false,
+              omittedFields: [],
+            },
+          }),
+        },
+      ],
+    });
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    await collect(runtime.sendMessage(createMessageRequest()));
+
+    const compacted = JSON.parse(session.messages[0].content[0].text);
+    assert.equal(compacted.status, 'success');
+    assert.equal(compacted.compacted, true);
+    assert.equal(compacted.toolCall.id, '00000000-0000-4000-8000-000000000333');
+    assert.equal(compacted.counts.assets, 300);
+    assert.match(compacted.omittedDetailInstruction, /smallest Gallery MCP read tool/);
+    assert.equal(session.messages[0].content[0].text.includes('IMG-299.jpg'), false);
+    assert.equal(session.messages[0].content[0].text.includes('/photos/private/originals'), false);
+    assert.ok(session.messages[0].content[0].text.length < 8000);
+    assert.deepEqual(calls.prompts, ['Organize my photos.']);
+  });
+
+  it('preserves pending approval state when compacting a large approval-required tool result', () => {
+    const messages = [
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              status: 'approval-required',
+              summary: 'Approval required to read 300 previews',
+              toolCall: {
+                id: '00000000-0000-4000-8000-000000000333',
+                toolName: 'mcp_gallery_readAssetPreviews',
+                status: 'pending-approval',
+              },
+              previews: Array.from({ length: 300 }, (_, index) => ({
+                id: `asset-${index}`,
+                thumbhash: 'x'.repeat(300),
+              })),
+            }),
+          },
+        ],
+      },
+    ];
+
+    compactGalleryToolTranscript({ messages });
+
+    const compacted = JSON.parse(messages[0].content[0].text);
+    assert.equal(compacted.status, 'approval-required');
+    assert.equal(compacted.toolCall.id, '00000000-0000-4000-8000-000000000333');
+    assert.equal(compacted.toolCall.status, 'pending-approval');
+    assert.equal(compacted.compacted, true);
+    assert.equal(messages[0].content[0].text.includes('thumbhash'), false);
+  });
+
   it('pauses without assistant completion when a Gallery tool returns approval-required', async () => {
     const { sdk, ai, session } = createFakeDependencies();
     session.prompt = async () => {
@@ -1016,6 +1105,84 @@ describe('pi runtime adapter', () => {
     assert.equal(events.at(-1)?.type, 'assistant-message-completed');
   });
 
+  it('resumes approval with a compact approved result summary instead of replaying a large raw result', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    const largeResult = {
+      status: 'success',
+      summary: 'Created plan for 500 photos including IMG-499.jpg from /photos/private/originals/IMG-499.jpg',
+      toolCall: {
+        id: '00000000-0000-4000-8000-000000000333',
+        toolName: 'mcp_gallery_proposeAlbumOperations',
+        status: 'completed',
+      },
+      plan: {
+        id: '00000000-0000-4000-8000-000000000444',
+        operations: Array.from({ length: 500 }, (_, index) => ({
+          id: `operation-${index}`,
+          assetId: `asset-${index}`,
+          filename: `IMG-${index}.jpg`,
+          rationale: 'x'.repeat(300),
+        })),
+      },
+      resultSize: {
+        returnedItems: 500,
+        hasMore: false,
+        nextPage: null,
+        estimatedBytes: 220000,
+        truncated: false,
+        omittedFields: [],
+      },
+    };
+
+    const events = await collect(
+      runtime.resumeSession({
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        gallerySessionId: '00000000-0000-4000-8000-000000000100',
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+        approvalDecision: 'approved',
+        toolResult: largeResult,
+      }),
+    );
+
+    assert.equal(calls.continues, 0);
+    assert.equal(calls.prompts.length, 1);
+    assert.match(calls.prompts[0], /compact approved tool result summary/i);
+    assert.match(calls.prompts[0], /00000000-0000-4000-8000-000000000444/);
+    assert.match(calls.prompts[0], /operation-0/);
+    assert.match(calls.prompts[0], /"operationIds":500/);
+    assert.match(calls.prompts[0], /smallest Gallery MCP read tool/);
+    assert.equal(calls.prompts[0].includes('IMG-499.jpg'), false);
+    assert.equal(calls.prompts[0].includes('/photos/private/originals'), false);
+    assert.ok(calls.prompts[0].length < 10000);
+    assert.equal(events[0].type, 'assistant-message-delta');
+    assert.equal(events.at(-1).type, 'assistant-message-completed');
+  });
+
+  it('summarizes non-serializable approved results instead of failing approval resume', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+    const circularResult = { status: 'success', summary: 'Circular result' };
+    circularResult.self = circularResult;
+
+    await collect(
+      runtime.resumeSession({
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        gallerySessionId: '00000000-0000-4000-8000-000000000100',
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+        approvalDecision: 'approved',
+        toolResult: circularResult,
+      }),
+    );
+
+    assert.equal(calls.prompts.length, 1);
+    assert.match(calls.prompts[0], /compact approved tool result summary/i);
+    assert.equal(calls.prompts[0].includes('[Circular]'), false);
+  });
+
   it('throws a sanitized not-found error when resuming an unknown runner session', async () => {
     const { sdk, ai } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
@@ -1031,6 +1198,72 @@ describe('pi runtime adapter', () => {
           }),
         ),
       /Runner session not found/,
+    );
+  });
+
+  it('surfaces context-window provider errors as actionable runner errors', async () => {
+    const { sdk, ai, session } = createFakeDependencies();
+    session.prompt = async () => {
+      session.messages.push({
+        role: 'assistant',
+        content: [],
+        stopReason: 'error',
+        errorMessage:
+          'Your input exceeds the context window of this model. Please adjust your input and try again. sk-openai-secret',
+      });
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.deepEqual(events, [
+      {
+        type: 'runner-error',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        message:
+          'The assistant hit the model context limit while processing Gallery data. Narrow the request or inspect fewer photos at a time.',
+      },
+    ]);
+  });
+
+  it('keeps runner restart errors actionable while preserving the existing not-found phrase', async () => {
+    const { sdk, ai } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await assert.rejects(
+      () =>
+        collect(
+          runtime.resumeSession({
+            runnerSessionId: 'missing',
+            gallerySessionId: '00000000-0000-4000-8000-000000000100',
+            toolCallId: '00000000-0000-4000-8000-000000000333',
+            approvalDecision: 'approved',
+          }),
+        ),
+      /Runner session not found; start a new assistant chat to reconnect/,
+    );
+  });
+
+  it('surfaces provider compaction refusal as an actionable runner error', async () => {
+    const { sdk, ai, session } = createFakeDependencies();
+    session.prompt = async () => {
+      session.messages.push({
+        role: 'assistant',
+        content: [],
+        stopReason: 'error',
+        errorMessage: 'Provider refused the compaction request after summarization failed.',
+      });
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.equal(
+      events[0].message,
+      'The assistant hit the model context limit while processing Gallery data. Narrow the request or inspect fewer photos at a time.',
     );
   });
 
