@@ -188,7 +188,7 @@ Argument modes:
   Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved search request.
   Required fields: `toolCallId`.
-  Forbidden fields: `mode`, `query`, `filters`, `limit`, `page`, `order`.
+  Forbidden fields: `mode`, `query`, `filters`, `limit`, `page`, `order`, `detail`, `fields`, `sampleSize`.
 
 #### empty-search
 
@@ -475,18 +475,21 @@ Retry an approved read request by id.
 
 MCP tool name: `readAssetMetadata`
 
-Read timestamps, location labels, camera fields, ratings, favorites, visibility, and tags for selected assets.
+Read selected metadata for selected assets.
 
-Use assetIds for a new request. Use only toolCallId when retrying a Gallery-approved request.
+Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.
 
 Argument modes:
 
-- `asset-ids`: Use when the assistant already has concrete asset ids from search or album reads.
+- `metadata-detail`: Use when basic, descriptive, technical, or allSafe metadata coverage is enough.
   Required fields: `assetIds`.
-  Forbidden fields: `toolCallId`.
+  Forbidden fields: `fields`, `toolCallId`.
+- `metadata-fields`: Use when the task only needs specific field groups such as filename, rating, tags, location, camera, favorite, visibility, type, or dates.
+  Required fields: `assetIds`, `fields`.
+  Forbidden fields: `detail`, `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`, `detail`, `fields`.
 
 #### read-selected-assets
 
@@ -497,6 +500,32 @@ Read selected assets by id.
 ```json
 {
   "assetIds": ["00000000-0000-4000-8000-000000000001"]
+}
+```
+
+#### read-basic-metadata
+
+Read basic type and date metadata for selected assets.
+
+<!-- mcp-docs:tool-arguments tool="readAssetMetadata" example="read-basic-metadata" -->
+
+```json
+{
+  "assetIds": ["00000000-0000-4000-8000-000000000001"],
+  "detail": "basic"
+}
+```
+
+#### read-selected-metadata-fields
+
+Read selected metadata field groups for selected assets.
+
+<!-- mcp-docs:tool-arguments tool="readAssetMetadata" example="read-selected-metadata-fields" -->
+
+```json
+{
+  "assetIds": ["00000000-0000-4000-8000-000000000001"],
+  "fields": ["filename", "rating", "tags"]
 }
 ```
 
@@ -527,7 +556,7 @@ Argument modes:
   Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`, `detail`, `fields`.
 
 #### read-selected-assets
 
@@ -568,7 +597,7 @@ Argument modes:
   Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`, `detail`, `fields`.
 
 #### read-selected-assets
 
@@ -609,7 +638,7 @@ Argument modes:
   Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`, `detail`, `fields`.
 
 #### list-visible-albums
 
@@ -648,7 +677,7 @@ Argument modes:
   Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`, `detail`, `fields`.
 
 #### read-visible-album
 
@@ -689,7 +718,7 @@ Argument modes:
   Forbidden fields: `toolCallId`, `spaceId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`, `detail`, `fields`.
 
 #### list-visible-spaces
 
@@ -728,7 +757,7 @@ Argument modes:
   Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`, `detail`, `fields`.
 
 #### read-space-details
 
@@ -769,7 +798,7 @@ Argument modes:
   Forbidden fields: `toolCallId`.
 - `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
   Required fields: `toolCallId`.
-  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`, `detail`, `fields`.
 
 #### find-user-by-name
 

@@ -82,13 +82,33 @@ const expectIssue = (
 
 describe('Agent tool DTOs', () => {
   describe(AgentReadAssetMetadataToolRequestDto.name, () => {
-    it('accepts assetIds for a new tool request', () => {
+    it('accepts assetIds with the basic metadata detail default', () => {
       const assetId = factory.uuid();
       const result = parseRequest({ assetIds: [assetId] });
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data).toEqual({ assetIds: [assetId] });
+        expect(result.data).toEqual({ assetIds: [assetId], detail: 'basic' });
+      }
+    });
+
+    it('accepts explicit metadata detail presets', () => {
+      const assetId = factory.uuid();
+      const result = parseRequest({ assetIds: [assetId], detail: 'technical' });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({ assetIds: [assetId], detail: 'technical' });
+      }
+    });
+
+    it('accepts exact metadata fields for custom reads', () => {
+      const assetId = factory.uuid();
+      const result = parseRequest({ assetIds: [assetId], fields: ['filename', 'rating', 'tags'] });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({ assetIds: [assetId], fields: ['filename', 'rating', 'tags'] });
       }
     });
 
@@ -132,6 +152,40 @@ describe('Agent tool DTOs', () => {
       expectIssue(result, [], 'Provide either assetIds or toolCallId, not both');
     });
 
+    it('rejects metadata reads that combine detail and fields', () => {
+      const result = parseRequest({ assetIds: [factory.uuid()], detail: 'basic', fields: ['filename'] });
+
+      expectIssue(result, [], 'Use either detail or fields, not both');
+    });
+
+    it('rejects metadata fields when retrying an approved tool call', () => {
+      const result = parseRequest({ toolCallId: factory.uuid(), fields: ['filename'] });
+
+      expectIssue(result, [], 'Provide either assetIds or toolCallId, not both');
+    });
+
+    it('rejects metadata detail when retrying an approved tool call', () => {
+      const result = parseRequest({ toolCallId: factory.uuid(), detail: 'technical' });
+
+      expectIssue(result, [], 'Provide either assetIds or toolCallId, not both');
+    });
+
+    it('rejects unsupported metadata fields such as previews, originals, and people', () => {
+      for (const field of ['previews', 'originals', 'people']) {
+        const result = parseRequest({ assetIds: [factory.uuid()], fields: [field] } as never);
+
+        expectIssue(result, ['fields', 0], 'Invalid option');
+      }
+    });
+
+    it('rejects unknown top-level keys that try to request media or raw internals', () => {
+      for (const key of ['includePreviews', 'includeOriginals', 'rawPath', 'storageKey', 'checksum']) {
+        const result = parseRequest({ assetIds: [factory.uuid()], [key]: true } as never);
+
+        expectIssue(result, [], 'Unrecognized key');
+      }
+    });
+
     it('rejects invalid UUID asset ids', () => {
       const result = parseRequest({ assetIds: ['not-a-uuid'] });
 
@@ -143,6 +197,12 @@ describe('Agent tool DTOs', () => {
       const result = parseRequest({ assetIds: [assetId, assetId] });
 
       expectIssue(result, ['assetIds'], 'assetIds must be unique');
+    });
+
+    it('rejects duplicate metadata fields', () => {
+      const result = parseRequest({ assetIds: [factory.uuid()], fields: ['filename', 'filename'] });
+
+      expectIssue(result, ['fields'], 'fields must be unique');
     });
   });
 
@@ -847,28 +907,55 @@ describe('Agent tool DTOs', () => {
       }
     });
 
-    it('serializes success responses with ISO dates and metadata only', () => {
-      const result = AgentReadAssetMetadataToolResponseDto.schema.safeEncode(makeSuccessResponse());
+    it('serializes compact metadata success responses with selected fields only', () => {
+      const asset = makeAssets()[0];
+      const result = AgentReadAssetMetadataToolResponseDto.schema.safeEncode({
+        status: 'success' as const,
+        toolCall: makeToolCall(),
+        summary: 'Returned basic metadata for 1 asset',
+        detail: 'basic' as const,
+        fields: ['type', 'dates'],
+        assets: [
+          {
+            id: asset.id,
+            type: asset.type,
+            localDateTime: new Date('2026-05-14T12:00:00.000Z'),
+            fileCreatedAt: new Date('2026-05-14T12:00:00.000Z'),
+            fileModifiedAt: new Date('2026-05-14T12:00:00.000Z'),
+            exifInfo: { dateTimeOriginal: new Date('2026-05-14T12:00:00.000Z') },
+          },
+        ],
+      });
 
       expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.status).toBe('success');
-        if (result.data.status !== 'success') {
-          return;
-        }
-
+      if (result.success && result.data.status === 'success') {
         expect(result.data.toolCall.startedAt).toBe('2026-05-14T12:00:00.000Z');
+        expect(result.data.summary).toBe('Returned basic metadata for 1 asset');
+        expect(result.data.detail).toBe('basic');
+        expect(result.data.fields).toEqual(['type', 'dates']);
         expect(result.data).not.toHaveProperty('toolCallId');
-        expect(result.data.assets[0]).toEqual(
-          expect.objectContaining({
-            localDateTime: '2026-05-14T12:00:00.000Z',
-            fileCreatedAt: '2026-05-14T11:00:00.000Z',
-            fileModifiedAt: '2026-05-14T11:30:00.000Z',
-            exifInfo: expect.objectContaining({
-              dateTimeOriginal: '2026-05-14T10:00:00.000Z',
-            }),
-          }),
-        );
+        expect(result.data.assets[0].localDateTime).toBe('2026-05-14T12:00:00.000Z');
+        expect(result.data.assets[0]).not.toHaveProperty('originalFileName');
+        expect(result.data.assets[0]).not.toHaveProperty('tags');
+      }
+    });
+
+    it('serializes allSafe metadata rows with supported safe field groups only', () => {
+      const asset = makeAssets()[0];
+      const result = AgentReadAssetMetadataToolResponseDto.schema.safeEncode({
+        status: 'success' as const,
+        toolCall: makeToolCall(),
+        summary: 'Returned allSafe metadata for 1 asset',
+        detail: 'allSafe' as const,
+        fields: ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility'],
+        assets: [asset],
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success && result.data.status === 'success') {
+        expect(result.data.assets[0].originalFileName).toBe(asset.originalFileName);
+        expect(result.data.assets[0].tags).toEqual(asset.tags);
+        expect(result.data.assets[0]).not.toHaveProperty('ownerId');
         expect(result.data.assets[0]).not.toHaveProperty('originalPath');
         expect(result.data.assets[0]).not.toHaveProperty('previewPath');
         expect(result.data.assets[0]).not.toHaveProperty('thumbnailPath');

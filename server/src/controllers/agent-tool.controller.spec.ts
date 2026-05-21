@@ -130,7 +130,7 @@ describe(AgentToolController.name, () => {
         .send(metadataBody);
 
       expect(status).toBe(201);
-      expect(service.readAssetMetadata).toHaveBeenCalledWith(auth, sessionId, metadataBody);
+      expect(service.readAssetMetadata).toHaveBeenCalledWith(auth, sessionId, { ...metadataBody, detail: 'basic' });
       expect(result).toEqual({
         status: 'approval-required',
         toolCall: {
