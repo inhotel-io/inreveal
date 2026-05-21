@@ -198,6 +198,74 @@ describe(AgentMcpToolContractService.name, () => {
     expect(JSON.stringify(contract)).not.toMatch(/private|rawPath|storageKey|checksum|original path|bearer|token/i);
   });
 
+  it('documents progressive detail search examples that parse through the live DTO schema', () => {
+    const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+    const exampleByName = new Map(search?.examples.map((example) => [example.name, example]));
+
+    for (const name of [
+      'compact-date-location-search',
+      'summary-sample-search',
+      'visual-curation-candidate-search',
+      'large-album-page-search',
+    ]) {
+      const example = exampleByName.get(name);
+      expect(example, name).toBeDefined();
+      expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(example?.arguments).success).toBe(
+        true,
+      );
+    }
+
+    expect(exampleByName.get('compact-date-location-search')?.arguments).toMatchObject({
+      detail: 'ids',
+      limit: 50,
+    });
+    expect(exampleByName.get('summary-sample-search')?.arguments).toMatchObject({
+      detail: 'summary',
+      fields: ['dates', 'location'],
+      sampleSize: 3,
+    });
+    expect(JSON.stringify(exampleByName.get('large-album-page-search')?.arguments)).not.toContain('1000');
+  });
+
+  it('documents progressive metadata reads by exact field groups for selected ids', () => {
+    const metadata = sut.getReadToolContract(AgentToolName.ReadAssetMetadata);
+    const exactTechnical = metadata?.examples.find(
+      (example) => example.name === 'read-technical-fields-for-selected-assets',
+    );
+
+    expect(metadata?.usage).toContain('Search compact asset ids first');
+    expect(metadata?.usage).toContain('fields');
+    expect(exactTechnical?.arguments).toEqual({
+      assetIds: ['00000000-0000-4000-8000-000000000001'],
+      fields: ['camera', 'dates', 'filename'],
+    });
+    expect(AgentReadToolRequestSchemas[AgentToolName.ReadAssetMetadata].safeParse(exactTechnical?.arguments).success)
+      .toBe(true);
+  });
+
+  it('discourages broad full-metadata and large-limit search calls with actionable hints', () => {
+    const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+    const mistakeIds = search?.commonMistakes.map((mistake) => mistake.id);
+
+    expect(search?.usage).toContain('Default to compact asset ids');
+    expect(search?.usage).toContain('Do not use limit 1000');
+    expect(search?.usage).toContain('ask one narrowing question');
+    expect(mistakeIds).toEqual(
+      expect.arrayContaining([
+        'search-large-limit',
+        'search-broad-full-metadata',
+        'search-preview-before-shortlist',
+        'search-truncated-needs-more-detail',
+      ]),
+    );
+    expect(search?.commonMistakes.find((mistake) => mistake.id === 'search-large-limit')?.hint).toContain(
+      'Use a bounded limit such as 25 or 50',
+    );
+    expect(search?.commonMistakes.find((mistake) => mistake.id === 'search-broad-full-metadata')?.hint).toContain(
+      'Search compact ids first',
+    );
+  });
+
   it('defines Slice 7 natural-language search examples that parse into supported MCP arguments', () => {
     const search = sut.getReadToolContract(AgentToolName.SearchAssets);
     const examplesByName = new Map(search?.examples.map((example) => [example.name, example]));
@@ -832,6 +900,22 @@ describe(AgentMcpToolContractService.name, () => {
       });
     });
 
+    it('keeps invalid limit validation separate from broad limit policy guidance', () => {
+      const broadLimitPolicy = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: 'limit', message: 'limit 1000 is too broad for progressive Gallery MCP search' }],
+      });
+      const invalidLimit = sut.getReadToolValidationCorrection(AgentToolName.SearchAssets, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: 'limit', message: 'Too big: expected number to be <=10000' }],
+      });
+
+      expect(broadLimitPolicy?.mistakeId).toBe('search-large-limit');
+      expect(broadLimitPolicy?.hint).toContain('Do not use limit 1000');
+      expect(invalidLimit?.mistakeId).toBe('search-limit-out-of-range');
+      expect(invalidLimit?.hint).toBe('Use a positive integer limit no greater than 10000.');
+    });
+
     it('documents executable search page continuation', () => {
       const search = sut.getReadToolContract(AgentToolName.SearchAssets);
 
@@ -1073,8 +1157,7 @@ describe(AgentMcpToolContractService.name, () => {
         issues: [{ path: 'filters.rating', message: 'Too big: expected number to be <=5' }],
       });
 
-      const expectedUsage =
-        'Put metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose plans with returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Results are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.';
+      const expectedUsage = sut.getReadToolContract(AgentToolName.SearchAssets)?.usage;
       expect(correction).toEqual({
         expected: expectedUsage,
         hint: expectedUsage,

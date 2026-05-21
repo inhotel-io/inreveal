@@ -23,7 +23,7 @@ describe(AgentMcpPromptService.name, () => {
     const prompt = sut.generatePromptCheatSheet();
 
     expect(prompt).toContain('Gallery MCP tool-use cheat sheet');
-    expect(prompt.length).toBeLessThanOrEqual(2850);
+    expect(prompt.length).toBeLessThanOrEqual(3800);
     expect(prompt).toContain('mcp_gallery_searchAssets');
     expect(prompt).toContain('mcp_gallery_readAssetMetadata');
     expect(prompt).toContain('mcp_gallery_listSpaces');
@@ -75,7 +75,28 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('OCR invoice');
     expect(prompt).toContain('mode ocr');
     expect(prompt).toContain('resolve names');
-    expect(prompt.length).toBeLessThanOrEqual(2850);
+    expect(prompt.length).toBeLessThanOrEqual(3800);
+  });
+
+  it('teaches progressive detail before broad metadata reads', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toContain('Progressive: resolve names -> search detail ids');
+    expect(prompt).toContain('readAssetMetadata fields for selected ids');
+    expect(prompt).toContain('Do not use limit 1000');
+    expect(prompt).toContain('if truncated/hasMore, page or ask one narrowing question');
+    expect(prompt).toContain('"detail":"ids"');
+    expect(prompt).toContain('"fields":["dates","location"]');
+    expect(prompt.length).toBeLessThanOrEqual(3800);
+  });
+
+  it('includes compact visual and technical metadata guidance without direct writes', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toContain('Visual curation: search ids first, then previews for shortlisted assetIds only');
+    expect(prompt).toContain('Technical metadata: search ids first, then readAssetMetadata fields camera/dates/filename');
+    expect(prompt).not.toContain('"limit":1000');
+    expect(prompt).not.toContain('mcp_gallery_apply');
   });
 
   it('teaches people organization as resolve, search, then propose plan', () => {

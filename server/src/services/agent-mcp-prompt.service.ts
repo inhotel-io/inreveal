@@ -20,7 +20,10 @@ export type AgentMcpPromptExample = {
 
 const promptExampleSelections = [
   { toolName: AgentToolName.ResolveAssetSearchFilters, exampleName: 'resolve-named-filters' },
-  { toolName: AgentToolName.SearchAssets, exampleName: 'bounded-date-location-search' },
+  { toolName: AgentToolName.SearchAssets, exampleName: 'compact-date-location-search' },
+  { toolName: AgentToolName.SearchAssets, exampleName: 'summary-sample-search' },
+  { toolName: AgentToolName.SearchAssets, exampleName: 'visual-curation-candidate-search' },
+  { toolName: AgentToolName.ReadAssetMetadata, exampleName: 'read-technical-fields-for-selected-assets' },
   { toolName: AgentToolName.ReadAssetMetadata, exampleName: 'approved-retry' },
   { toolName: AgentToolName.ListSpaces, exampleName: 'list-visible-spaces' },
   { toolName: AgentToolName.ReadSpace, exampleName: 'read-space-details' },
@@ -47,7 +50,18 @@ export class AgentMcpPromptService {
       AgentToolName.ResolveAssetSearchFilters,
       'resolve-named-filters',
     );
-    const normalRead = this.getPromptExample(examples, AgentToolName.SearchAssets, 'bounded-date-location-search');
+    const compactSearch = this.getPromptExample(examples, AgentToolName.SearchAssets, 'compact-date-location-search');
+    const sampleSearch = this.getPromptExample(examples, AgentToolName.SearchAssets, 'summary-sample-search');
+    const visualSearch = this.getPromptExample(
+      examples,
+      AgentToolName.SearchAssets,
+      'visual-curation-candidate-search',
+    );
+    const technicalRead = this.getPromptExample(
+      examples,
+      AgentToolName.ReadAssetMetadata,
+      'read-technical-fields-for-selected-assets',
+    );
     const retryRead = this.getPromptExample(examples, AgentToolName.ReadAssetMetadata, 'approved-retry');
     const listSpaces = this.getPromptExample(examples, AgentToolName.ListSpaces, 'list-visible-spaces');
     const readSpace = this.getPromptExample(examples, AgentToolName.ReadSpace, 'read-space-details');
@@ -66,8 +80,14 @@ export class AgentMcpPromptService {
         `Write: call ${this.toPiToolName(planContract.name)} for reviewable plans.`,
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
+        'Progressive: resolve names -> search detail ids -> readAssetMetadata fields for selected ids -> plan. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.',
         `Resolve names before searchAssets: ${resolveFilters.piToolName} ${this.formatJson(resolveFilters.arguments)}`,
-        `Read ${normalRead.piToolName}: ${this.formatJson(normalRead.arguments)}`,
+        `Compact search: ${compactSearch.piToolName} ${this.formatJson(compactSearch.arguments)}`,
+        `Sample fields: ${sampleSearch.piToolName} ${this.formatJson(sampleSearch.arguments)}`,
+        'Visual curation: search ids first, then previews for shortlisted assetIds only.',
+        `Visual search: ${visualSearch.piToolName} ${this.formatJson(visualSearch.arguments)}`,
+        'Technical metadata: search ids first, then readAssetMetadata fields camera/dates/filename.',
+        `Technical read: ${technicalRead.piToolName} ${this.formatJson(technicalRead.arguments)}`,
         `Retry ${retryRead.piToolName}: ${this.formatJson(retryRead.arguments)}`,
         `Space lookup: ${listSpaces.piToolName}, then ${readSpace.piToolName}:`,
         `${this.formatJson(listSpaces.arguments)} -> ${this.formatJson(readSpace.arguments)}`,
