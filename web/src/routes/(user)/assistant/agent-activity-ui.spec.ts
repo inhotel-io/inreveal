@@ -247,6 +247,55 @@ describe('agent activity UI helpers', () => {
     expect(model.items.find((item) => item.kind === 'search')?.technical?.toolName).toBe(AgentToolName.SearchAssets);
   });
 
+  it('summarizes coalesced search activity with aggregate counts instead of stale page copy', () => {
+    const model = buildModel({
+      toolCalls: [
+        makeToolCall({
+          id: 'search-page-1',
+          toolName: AgentToolName.SearchAssets,
+          status: AgentToolCallStatus.Completed,
+          requestSummary: 'Search metadata assets with filters personIds=["person-1"]',
+          responseSummary: 'Returned metadata for 4 assets including asset-1',
+          assetCount: 4,
+          startedAt: '2026-05-18T10:00:01.000Z',
+          completedAt: '2026-05-18T10:00:03.000Z',
+        }),
+        makeToolCall({
+          id: 'search-page-2',
+          toolName: AgentToolName.SearchAssets,
+          status: AgentToolCallStatus.Completed,
+          requestSummary: 'Search metadata assets page 2 with filters personIds=["person-1"]',
+          responseSummary: 'Returned metadata for 3 assets including asset-5',
+          assetCount: 3,
+          startedAt: '2026-05-18T10:00:04.000Z',
+          completedAt: '2026-05-18T10:00:06.000Z',
+        }),
+      ],
+    });
+
+    expect(model.items).toHaveLength(1);
+    expect(model.items[0]).toMatchObject({
+      kind: 'search',
+      status: 'completed',
+      title: 'Searching photos',
+      summary: 'Returned metadata for 7 assets',
+      count: 7,
+    });
+
+    const userCopy = `${model.items[0].title} ${model.items[0].summary}`;
+    expect(userCopy).not.toContain('filters');
+    expect(userCopy).not.toContain('person-1');
+    expect(userCopy).not.toContain('asset-1');
+    expect(userCopy).not.toContain('asset-5');
+    expect(model.items[0].technical).toMatchObject({
+      toolName: AgentToolName.SearchAssets,
+      toolCallIds: ['search-page-1', 'search-page-2'],
+      assetCount: 7,
+      requestSummary: 'Search metadata assets with filters personIds=["person-1"]',
+      responseSummary: 'Returned metadata for 4 assets including asset-1',
+    });
+  });
+
   it.each([
     [AgentToolCallStatus.Approved, 'running'],
     [AgentToolCallStatus.Executing, 'running'],
