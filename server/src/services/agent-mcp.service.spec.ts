@@ -12,6 +12,8 @@ import type { AgentMcpErrorResponse, AgentMcpSuccessResponse, AgentMcpToolCallRe
 import { factory } from 'test/small.factory';
 import { automock, type AutoMocked } from 'test/utils';
 
+const MCP_TOOL_TEXT_MAX_CHARS = 500;
+
 const makeAlbumCreateOperation = () => ({
   type: AgentOperationType.AlbumCreate,
   summary: 'Create Portugal highlights.',
@@ -62,15 +64,65 @@ const expectToolResult = (
   response: AgentMcpSuccessResponse,
   requestId: AgentMcpSuccessResponse['id'],
   structuredContent: unknown,
+  expectedText = expectedToolResultText(structuredContent),
 ) => {
-  expect(response).toEqual({
+  expect(response).toMatchObject({
     jsonrpc: '2.0',
     id: requestId,
-    result: {
-      content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
-      structuredContent,
-    },
   });
+  const result = response.result as AgentMcpToolCallResult;
+  expect(result.structuredContent).toBe(structuredContent);
+  expect(result.content).toEqual([{ type: 'text', text: expectedText }]);
+  expect(result.content[0].text.length).toBeLessThanOrEqual(MCP_TOOL_TEXT_MAX_CHARS);
+  if (structuredContent && typeof structuredContent === 'object') {
+    expect(result.content[0].text).not.toBe(JSON.stringify(structuredContent));
+  }
+};
+
+const expectedToolResultText = (structuredContent: unknown): string => {
+  if (!structuredContent || typeof structuredContent !== 'object' || Array.isArray(structuredContent)) {
+    return 'Tool result returned.';
+  }
+
+  const content = structuredContent as Record<string, unknown>;
+  if (typeof content.summary === 'string' && content.summary.trim().length > 0) {
+    return content.summary;
+  }
+
+  if (content.status === 'approval-required') {
+    const toolCall = content.toolCall;
+    if (toolCall && typeof toolCall === 'object' && !Array.isArray(toolCall)) {
+      const requestSummary = (toolCall as Record<string, unknown>).requestSummary;
+      if (typeof requestSummary === 'string' && requestSummary.trim().length > 0) {
+        return `Approval required: ${requestSummary}`;
+      }
+    }
+
+    return 'Approval required.';
+  }
+
+  if (content.status === 'denied') {
+    return typeof content.reason === 'string' && content.reason.trim().length > 0
+      ? `Tool call denied: ${content.reason}`
+      : 'Tool call denied.';
+  }
+
+  if (content.status === 'error') {
+    const error = typeof content.error === 'string' && content.error.trim().length > 0 ? content.error : 'Tool error';
+    const issues = content.issues;
+    const firstIssue = Array.isArray(issues) ? issues[0] : undefined;
+    if (firstIssue && typeof firstIssue === 'object' && !Array.isArray(firstIssue)) {
+      const issue = firstIssue as Record<string, unknown>;
+      const path = typeof issue.path === 'string' ? issue.path : '';
+      const message = typeof issue.message === 'string' ? issue.message : '';
+      const suffix = [path, message].filter((value) => value.trim().length > 0).join(': ');
+      return suffix ? `${error}: ${suffix}` : error;
+    }
+
+    return error;
+  }
+
+  return 'Tool result returned.';
 };
 
 const expectEnrichedToolValidationError = (
@@ -115,7 +167,10 @@ const expectEnrichedToolValidationError = (
     expect(structuredContent.exampleArguments).toEqual(expected.exampleArguments);
   }
 
-  expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+  expect(result.content[0].type).toBe('text');
+  expect(result.content[0].text).toEqual(expect.stringContaining('Invalid tool arguments'));
+  expect(result.content[0].text.length).toBeLessThanOrEqual(MCP_TOOL_TEXT_MAX_CHARS);
+  expect(result.content[0].text).not.toBe(JSON.stringify(result.structuredContent));
 };
 
 const expectNoMcpDownstreamServicesCalled = (
@@ -491,6 +546,83 @@ describe(AgentMcpService.name, () => {
     expectToolResult(response, `${AgentToolName.SearchAssets}-call`, serviceResult);
   });
 
+  it('uses result summary as compact MCP text while preserving structured content', async () => {
+    const serviceResult = {
+      status: 'success',
+      toolCall: null,
+      summary: 'Returned 2 albums.',
+      albums: [
+        { id: factory.uuid(), name: 'Portugal' },
+        { id: factory.uuid(), name: 'Berlin' },
+      ],
+    };
+    toolService.listAlbums.mockResolvedValue(serviceResult as never);
+
+    const response = (await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(AgentToolName.ListAlbums, {}),
+    )) as AgentMcpSuccessResponse;
+
+    expectToolResult(response, `${AgentToolName.ListAlbums}-call`, serviceResult, 'Returned 2 albums.');
+  });
+
+  it('keeps MCP text compact for large nested structured results', async () => {
+    const serviceResult = {
+      status: 'success',
+      toolCall: null,
+      summary: 'Returned 250 compact asset IDs; more results available on page 2.',
+      assets: Array.from({ length: 250 }, (_, index) => ({
+        id: `asset-${index}`,
+        nested: { values: Array.from({ length: 10 }, (__, valueIndex) => `value-${index}-${valueIndex}`) },
+      })),
+      nextPage: 2,
+    };
+    toolService.searchAssets.mockResolvedValue(serviceResult as never);
+
+    const response = (await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(AgentToolName.SearchAssets, { filters: {}, limit: 250 }),
+    )) as AgentMcpSuccessResponse;
+    const result = response.result as AgentMcpToolCallResult;
+
+    expectToolResult(
+      response,
+      `${AgentToolName.SearchAssets}-call`,
+      serviceResult,
+      'Returned 250 compact asset IDs; more results available on page 2.',
+    );
+    expect(result.content[0].text).not.toContain('asset-249');
+    expect(result.content[0].text).not.toContain('"nested"');
+  });
+
+  it('uses compact fallback for results without summary', async () => {
+    const serviceResult = {
+      status: 'success',
+      toolCall: null,
+      albums: [
+        {
+          id: factory.uuid(),
+          name: 'Large album',
+          nested: Array.from({ length: 100 }, (_, index) => ({ assetId: `asset-${index}` })),
+        },
+      ],
+    };
+    toolService.listAlbums.mockResolvedValue(serviceResult as never);
+
+    const response = (await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(AgentToolName.ListAlbums, {}),
+    )) as AgentMcpSuccessResponse;
+    const result = response.result as AgentMcpToolCallResult;
+
+    expectToolResult(response, `${AgentToolName.ListAlbums}-call`, serviceResult, 'Tool result returned.');
+    expect(result.content[0].text).not.toContain('asset-99');
+    expect(result.content[0].text).not.toContain('nested');
+  });
+
   it('returns a resolver hint and searchAssets-compatible example when search filter names are sent as ids', async () => {
     const response = (await sut.handle(
       auth,
@@ -515,7 +647,7 @@ describe(AgentMcpService.name, () => {
   it('returns approval-required read responses as normal MCP tool results', async () => {
     const serviceResult = {
       status: 'approval-required',
-      toolCall: { id: factory.uuid(), status: 'pending-approval' },
+      toolCall: { id: factory.uuid(), status: 'pending-approval', requestSummary: 'Read previews for 1 asset.' },
     };
     toolService.readAssetPreviews.mockResolvedValue(serviceResult as never);
 
@@ -526,6 +658,9 @@ describe(AgentMcpService.name, () => {
     )) as AgentMcpSuccessResponse;
 
     expectToolResult(response, `${AgentToolName.ReadAssetPreviews}-call`, serviceResult);
+    expect((response.result as AgentMcpToolCallResult).content).toEqual([
+      { type: 'text', text: 'Approval required: Read previews for 1 asset.' },
+    ]);
     expect((response.result as AgentMcpToolCallResult).isError).toBeUndefined();
   });
 
@@ -1071,7 +1206,10 @@ describe(AgentMcpService.name, () => {
     expect(serialized).not.toMatch(
       /token|internalRoute|"file"|bearer|abc123|\/api\/agent\/internal|\/srv\/gallery|provider-key/i,
     );
-    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+    expect(result.content[0].type).toBe('text');
+    expect(result.content[0].text).toEqual(expect.stringContaining('Invalid tool arguments'));
+    expect(result.content[0].text.length).toBeLessThanOrEqual(MCP_TOOL_TEXT_MAX_CHARS);
+    expect(result.content[0].text).not.toBe(JSON.stringify(result.structuredContent));
   });
 
   describe('slice 1 small-model read failure matrix', () => {
@@ -1188,7 +1326,10 @@ describe(AgentMcpService.name, () => {
         expect(typeof structuredContent.expected, failureCase.id).toBe('string');
         expect(typeof structuredContent.hint, failureCase.id).toBe('string');
         expect(structuredContent.exampleArguments, failureCase.id).toEqual(expect.any(Object));
-        expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+        expect(result.content[0].type, failureCase.id).toBe('text');
+        expect(result.content[0].text, failureCase.id).toEqual(expect.stringContaining('Invalid tool arguments'));
+        expect(result.content[0].text.length, failureCase.id).toBeLessThanOrEqual(MCP_TOOL_TEXT_MAX_CHARS);
+        expect(result.content[0].text, failureCase.id).not.toBe(JSON.stringify(result.structuredContent));
       }
     });
 
@@ -1617,7 +1758,10 @@ describe(AgentMcpService.name, () => {
           operations: expect.any(Array),
         }),
       });
-      expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+      expect(result.content[0].type).toBe('text');
+      expect(result.content[0].text).toEqual(expect.stringContaining('Invalid tool arguments'));
+      expect(result.content[0].text.length).toBeLessThanOrEqual(MCP_TOOL_TEXT_MAX_CHARS);
+      expect(result.content[0].text).not.toBe(JSON.stringify(result.structuredContent));
     });
 
     it('returns a correction hint when a space asset operation uses an album target kind', async () => {
@@ -1688,7 +1832,10 @@ describe(AgentMcpService.name, () => {
       expect((structuredContent.hint as string).length).toBeLessThanOrEqual(500);
       expect(serialized.length).toBeLessThanOrEqual(5000);
       expect(serialized).not.toMatch(secretLeakPattern);
-      expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
+      expect(result.content[0].type).toBe('text');
+      expect(result.content[0].text).toEqual(expect.stringContaining('Invalid tool arguments'));
+      expect(result.content[0].text.length).toBeLessThanOrEqual(MCP_TOOL_TEXT_MAX_CHARS);
+      expect(result.content[0].text).not.toBe(JSON.stringify(result.structuredContent));
       expectNoMcpDownstreamServicesCalled(toolService, operationPlanService);
     });
 

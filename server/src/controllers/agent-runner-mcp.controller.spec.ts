@@ -322,7 +322,7 @@ describe(AgentRunnerMcpController.name, () => {
         jsonrpc: '2.0',
         id: 'call-1',
         result: {
-          content: [{ type: 'text', text: JSON.stringify(serviceResult) }],
+          content: [{ type: 'text', text: 'Tool result returned.' }],
           structuredContent: serviceResult,
         },
       });
@@ -376,7 +376,7 @@ describe(AgentRunnerMcpController.name, () => {
         jsonrpc: '2.0',
         id: 'planning-call-1',
         result: {
-          content: [{ type: 'text', text: JSON.stringify(serviceResult) }],
+          content: [{ type: 'text', text: 'Plan revision 1 is ready for review.' }],
           structuredContent: serviceResult,
         },
       });
