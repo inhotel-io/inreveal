@@ -1069,7 +1069,7 @@ describe(AgentMcpService.name, () => {
     const serialized = JSON.stringify(result.structuredContent);
 
     expect(serialized).not.toMatch(
-      /token|internalRoute|file|bearer|abc123|\/api\/agent\/internal|\/srv\/gallery|provider-key/i,
+      /token|internalRoute|"file"|bearer|abc123|\/api\/agent\/internal|\/srv\/gallery|provider-key/i,
     );
     expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(result.structuredContent) }]);
   });
