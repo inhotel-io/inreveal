@@ -10,6 +10,7 @@ import type { Translations } from 'svelte-i18n';
 
 const toolNameLabelKeys: Record<AgentToolName, Translations> = {
   [AgentToolName.SearchAssets]: 'assistant_agent_tool_name_searchAssets',
+  [AgentToolName.ResolveAssetSearchFilters]: 'assistant_agent_tool_name_resolveAssetSearchFilters',
   [AgentToolName.ReadAssetMetadata]: 'assistant_agent_tool_name_readAssetMetadata',
   [AgentToolName.ReadAssetPreviews]: 'assistant_agent_tool_name_readAssetPreviews',
   [AgentToolName.ReadAssetOriginals]: 'assistant_agent_tool_name_readAssetOriginals',
@@ -17,7 +18,7 @@ const toolNameLabelKeys: Record<AgentToolName, Translations> = {
   [AgentToolName.ReadAlbum]: 'assistant_agent_tool_name_readAlbum',
   [AgentToolName.ListSpaces]: 'assistant_agent_tool_name_listSpaces',
   [AgentToolName.ReadSpace]: 'assistant_agent_tool_name_readSpace',
-  [AgentToolName.SearchUsers]: 'assistant_agent_tool_name_searchUsers' as Translations,
+  [AgentToolName.SearchUsers]: 'assistant_agent_tool_name_searchUsers',
   [AgentToolName.ProposeAlbumOperations]: 'assistant_agent_tool_name_proposeAlbumOperations',
   [AgentToolName.ReviseProposedOperations]: 'assistant_agent_tool_name_reviseProposedOperations',
   [AgentToolName.SummarizePlan]: 'assistant_agent_tool_name_summarizePlan',
@@ -44,6 +45,7 @@ export const getAgentToolDataClassLabelKey = (dataClass: AgentToolDataClass) =>
 
 const pendingActionText: Partial<Record<AgentToolName, string>> = {
   [AgentToolName.SearchAssets]: 'Pi wants to search your photos.',
+  [AgentToolName.ResolveAssetSearchFilters]: 'Pi wants to match your search terms to gallery filters.',
   [AgentToolName.SearchUsers]: 'Pi wants to find visible Gallery users.',
   [AgentToolName.ReadAssetMetadata]: 'Pi wants to read photo details.',
   [AgentToolName.ReadAssetPreviews]: 'Pi wants to view photo previews.',
@@ -59,6 +61,7 @@ const pendingActionText: Partial<Record<AgentToolName, string>> = {
 
 const completedActionText: Partial<Record<AgentToolName, string>> = {
   [AgentToolName.SearchAssets]: 'Pi searched your photos.',
+  [AgentToolName.ResolveAssetSearchFilters]: 'Pi matched your search terms to gallery filters.',
   [AgentToolName.ReadAssetMetadata]: 'Pi read photo details.',
   [AgentToolName.ReadAssetPreviews]: 'Pi viewed photo previews.',
   [AgentToolName.ReadAssetOriginals]: 'Pi opened original files.',
