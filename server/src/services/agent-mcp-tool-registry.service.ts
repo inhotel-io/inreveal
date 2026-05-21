@@ -64,9 +64,13 @@ const propertyDescriptions = {
     'Query text. For searchAssets, use this with smart, description, ocr, or filename modes; for searchUsers use a name or email.',
   filters:
     'Currently executable filters include taken date, place, camera, favorite, rating, album, tag, media, people, space, visibility, and shared-space person fields.',
-  limit: 'Maximum number of results to return. Use a positive integer up to 10000.',
+  limit: 'Maximum number of results to return. Defaults to 100 and accepts a positive integer up to 10000.',
   page: 'One-based result page. Use the returned nextPage value as page to continue the same search with the same mode, query, filters, order, and limit.',
   order: 'Result order. Only desc is currently executable.',
+  detail: 'Result detail level. ids returns compact asset ids, summary returns asset ids plus a compact sample, and metadata returns metadata rows.',
+  fields:
+    'Optional metadata field groups for summary samples or metadata rows: type, dates, location, camera, tags, rating, filename, favorite, visibility.',
+  sampleSize: 'Maximum summary sample rows from 0 to 25. Use 0 to disable samples.',
   toolCallId: 'Use only for an approved retry after Gallery approves a pending read request.',
   summary: 'A human-readable plan summary describing what Gallery should review.',
   operations: 'The reviewable Gallery operations to propose or revise. Do not apply changes directly.',

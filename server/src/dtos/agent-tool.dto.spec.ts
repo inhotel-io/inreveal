@@ -147,6 +147,77 @@ describe('Agent tool DTOs', () => {
   });
 
   describe(AgentSearchAssetsToolRequestDto.name, () => {
+    it('defaults searchAssets to compact id detail and a bounded limit', () => {
+      const result = parseSearchAssetsRequest({});
+
+      expect(result.success).toBe(true);
+      if (!result.success) {
+        return;
+      }
+
+      expect(result.data).toEqual({
+        mode: 'metadata',
+        filters: {},
+        limit: 100,
+        page: 1,
+        order: 'desc',
+        detail: 'ids',
+        fields: [],
+      });
+    });
+
+    it('accepts compact search detail, field selection, and sample size', () => {
+      const result = parseSearchAssetsRequest({
+        filters: { city: 'Berlin' },
+        detail: 'summary',
+        fields: ['dates', 'location', 'favorite'],
+        sampleSize: 3,
+        limit: 25,
+      });
+
+      expect(result.success).toBe(true);
+      if (!result.success) {
+        return;
+      }
+
+      expect(result.data).toEqual(
+        expect.objectContaining({
+          detail: 'summary',
+          fields: ['dates', 'location', 'favorite'],
+          sampleSize: 3,
+          limit: 25,
+        }),
+      );
+    });
+
+    it('keeps metadata detail available when no fields are requested', () => {
+      const result = parseSearchAssetsRequest({ detail: 'metadata', filters: {}, limit: 5 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.detail).toBe('metadata');
+        expect(result.data.fields).toEqual([]);
+      }
+    });
+
+    it('rejects unknown search metadata fields', () => {
+      const result = parseSearchAssetsRequest({ detail: 'summary', fields: ['fullExif'] });
+
+      expectIssue(result, ['fields', 0], 'Invalid option');
+    });
+
+    it('rejects sample sizes above the compact-search cap', () => {
+      const result = parseSearchAssetsRequest({ detail: 'summary', sampleSize: 26 });
+
+      expectIssue(result, ['sampleSize'], 'Too big');
+    });
+
+    it('rejects detail and fields when retrying an approved search tool call', () => {
+      const result = parseSearchAssetsRequest({ toolCallId: factory.uuid(), detail: 'ids', fields: ['dates'] });
+
+      expectIssue(result, [], 'Provide either search fields or toolCallId, not both');
+    });
+
     it('accepts filters and limit for a new tool request', () => {
       const result = parseSearchAssetsRequest({
         filters: {
@@ -224,9 +295,11 @@ describe('Agent tool DTOs', () => {
       expect(result.data).toEqual(
         expect.objectContaining({
           mode: 'metadata',
-          limit: 10_000,
+          limit: 100,
           page: 1,
           order: 'desc',
+          detail: 'ids',
+          fields: [],
         }),
       );
       expect(result.data).not.toHaveProperty('query');
@@ -338,13 +411,17 @@ describe('Agent tool DTOs', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data).toEqual({
-        mode: 'smart',
-        query: 'beach sunset',
-        filters: { city: 'Berlin' },
-        limit: 25,
-        page: 1,
-      });
+      expect(result.data).toEqual(
+        expect.objectContaining({
+          mode: 'smart',
+          query: 'beach sunset',
+          filters: { city: 'Berlin' },
+          limit: 25,
+          page: 1,
+          detail: 'ids',
+          fields: [],
+        }),
+      );
     });
 
     it('keeps metadata-like search order defaulted to desc', () => {
@@ -800,10 +877,65 @@ describe('Agent tool DTOs', () => {
   });
 
   describe('expanded agent tool response DTOs', () => {
+    it('encodes and parses compact id search responses without metadata assets', () => {
+      const assetId = factory.uuid();
+      const response = {
+        status: 'success' as const,
+        toolCall: makeToolCall(),
+        summary: 'Returned 1 asset id.',
+        detail: 'ids' as const,
+        assetIds: [assetId],
+        returnedCount: 1,
+        hasMore: false,
+        nextPage: null,
+      };
+
+      const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode(response);
+
+      expect(encoded.success).toBe(true);
+      if (encoded.success && encoded.data.status === 'success') {
+        expect(encoded.data.assetIds).toEqual([assetId]);
+        expect(encoded.data).not.toHaveProperty('assets');
+        expect(encoded.data).not.toHaveProperty('sample');
+      }
+    });
+
+    it('encodes and parses field-selected search samples', () => {
+      const assetId = factory.uuid();
+      const response = {
+        status: 'success' as const,
+        toolCall: makeToolCall(),
+        summary: 'Returned 1 asset id with 1 sample.',
+        detail: 'summary' as const,
+        assetIds: [assetId],
+        sample: [
+          {
+            id: assetId,
+            localDateTime: new Date('2026-05-14T12:00:00.000Z'),
+            exifInfo: { city: 'Berlin', state: 'Berlin', country: 'Germany' },
+          },
+        ],
+        returnedCount: 1,
+        hasMore: false,
+        nextPage: null,
+      };
+
+      const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode(response);
+
+      expect(encoded.success).toBe(true);
+      if (encoded.success && encoded.data.status === 'success') {
+        expect(encoded.data.sample?.[0].localDateTime).toBe('2026-05-14T12:00:00.000Z');
+        expect(encoded.data.sample?.[0]).not.toHaveProperty('originalFileName');
+      }
+    });
+
     it('encodes and parses search responses with result metadata', () => {
       const response = {
         status: 'success' as const,
         toolCall: makeToolCall(),
+        summary: 'Returned metadata for 1 asset; more results available on page 2',
+        detail: 'metadata' as const,
+        assetIds: [makeAssets()[0].id],
         assets: makeAssets(),
         returnedCount: 1,
         hasMore: true,
@@ -822,7 +954,7 @@ describe('Agent tool DTOs', () => {
         return;
       }
 
-      expect(encoded.data.assets[0].localDateTime).toBe('2026-05-14T12:00:00.000Z');
+      expect(encoded.data.assets?.[0].localDateTime).toBe('2026-05-14T12:00:00.000Z');
       expect(encoded.data.returnedCount).toBe(1);
       expect(encoded.data.hasMore).toBe(true);
       expect(encoded.data.nextPage).toBe('2');
@@ -831,7 +963,7 @@ describe('Agent tool DTOs', () => {
       const parsed = AgentSearchAssetsToolResponseDto.schema.safeParse(encoded.data);
       expect(parsed.success).toBe(true);
       if (parsed.success && parsed.data.status === 'success') {
-        expect(parsed.data.assets[0].localDateTime).toEqual(new Date('2026-05-14T12:00:00.000Z'));
+        expect(parsed.data.assets?.[0].localDateTime).toEqual(new Date('2026-05-14T12:00:00.000Z'));
         expect(parsed.data.returnedCount).toBe(1);
         expect(parsed.data.hasMore).toBe(true);
         expect(parsed.data.nextPage).toBe('2');
@@ -856,6 +988,9 @@ describe('Agent tool DTOs', () => {
       const response = {
         status: 'success' as const,
         toolCall: makeToolCall(),
+        summary: 'Returned 0 asset ids.',
+        detail: 'ids' as const,
+        assetIds: [],
         assets: [],
         returnedCount: 0,
         hasMore: false,

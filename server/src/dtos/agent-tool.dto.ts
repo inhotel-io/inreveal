@@ -12,6 +12,8 @@ import z from 'zod';
 
 const MAX_ASSET_IDS_PER_TOOL_CALL = 10_000;
 const MAX_TOOL_LIMIT = 10_000;
+const DEFAULT_SEARCH_LIMIT = 100;
+const MAX_SEARCH_SAMPLE_SIZE = 25;
 const MAX_USER_LOOKUP_LIMIT = 20;
 const MAX_RESOLVE_FILTER_NAMES_PER_KIND = 20;
 const MAX_RESOLVE_FILTER_NAME_LENGTH = 120;
@@ -29,6 +31,10 @@ const AgentSearchAssetsModeSchema = z
   .enum(['metadata', 'smart', 'description', 'ocr', 'filename'])
   .meta({ id: 'AgentSearchAssetsMode' });
 const AgentSearchAssetsOrderSchema = z.enum(['asc', 'desc', 'relevance']).meta({ id: 'AgentSearchAssetsOrder' });
+const AgentSearchAssetsDetailSchema = z.enum(['ids', 'summary', 'metadata']).meta({ id: 'AgentSearchAssetsDetail' });
+const AgentSearchAssetsFieldSchema = z
+  .enum(['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility'])
+  .meta({ id: 'AgentSearchAssetsField' });
 const resolverNameList = z
   .array(z.string().trim().min(1).max(MAX_RESOLVE_FILTER_NAME_LENGTH))
   .min(1)
@@ -148,6 +154,9 @@ type AgentSearchAssetsToolRequestOutput = {
   limit?: number;
   page?: number;
   order?: z.output<typeof AgentSearchAssetsOrderSchema>;
+  detail?: z.output<typeof AgentSearchAssetsDetailSchema>;
+  fields?: z.output<typeof AgentSearchAssetsFieldSchema>[];
+  sampleSize?: number;
   toolCallId?: string;
 };
 
@@ -159,6 +168,9 @@ const AgentSearchAssetsToolRequestSchema = z
     limit: z.number().int().min(1).max(MAX_TOOL_LIMIT).optional(),
     page: z.number().int().min(1).optional(),
     order: AgentSearchAssetsOrderSchema.optional(),
+    detail: AgentSearchAssetsDetailSchema.optional(),
+    fields: z.array(AgentSearchAssetsFieldSchema).optional(),
+    sampleSize: z.number().int().min(0).max(MAX_SEARCH_SAMPLE_SIZE).optional(),
     toolCallId: uuid.optional(),
   })
   .superRefine((value, ctx) => {
@@ -169,7 +181,10 @@ const AgentSearchAssetsToolRequestSchema = z
       value.query !== undefined ||
       value.page !== undefined ||
       value.order !== undefined ||
-      value.mode !== undefined;
+      value.mode !== undefined ||
+      value.detail !== undefined ||
+      value.fields !== undefined ||
+      value.sampleSize !== undefined;
 
     if (value.toolCallId && hasNewSearchFields) {
       ctx.addIssue({
@@ -204,8 +219,11 @@ const AgentSearchAssetsToolRequestSchema = z
     const request = {
       mode,
       filters: value.filters ?? {},
-      limit: value.limit ?? MAX_TOOL_LIMIT,
+      limit: value.limit ?? DEFAULT_SEARCH_LIMIT,
       page: value.page ?? DEFAULT_SEARCH_PAGE,
+      detail: value.detail ?? 'ids',
+      fields: value.fields ?? [],
+      ...(value.sampleSize === undefined ? {} : { sampleSize: value.sampleSize }),
       ...(order === undefined ? {} : { order }),
     };
 
@@ -422,6 +440,22 @@ export const AgentAssetMetadataSchema = z
   })
   .meta({ id: 'AgentAssetMetadata' });
 
+const AgentSearchAssetResultSchema = z
+  .object({
+    id: uuid,
+    ownerId: uuid.optional(),
+    type: AssetTypeSchema.optional(),
+    originalFileName: z.string().optional(),
+    localDateTime: isoDatetimeToDate.optional(),
+    fileCreatedAt: isoDatetimeToDate.optional(),
+    fileModifiedAt: isoDatetimeToDate.optional(),
+    isFavorite: z.boolean().optional(),
+    visibility: AssetVisibilitySchema.optional(),
+    exifInfo: AgentAssetMetadataExifSchema.partial().nullable().optional(),
+    tags: z.array(AgentAssetMetadataTagSchema).optional(),
+  })
+  .meta({ id: 'AgentSearchAssetResult' });
+
 const AgentAssetMediaReferenceSchema = z
   .object({
     assetId: uuid,
@@ -547,7 +581,11 @@ const AgentSearchAssetsToolResponseSchema = z
       .object({
         status: z.literal('success'),
         toolCall: AgentToolCallResponseSchema,
-        assets: z.array(AgentAssetMetadataSchema),
+        summary,
+        detail: AgentSearchAssetsDetailSchema,
+        assetIds: z.array(uuid),
+        sample: z.array(AgentSearchAssetResultSchema).optional(),
+        assets: z.array(AgentSearchAssetResultSchema).optional(),
         returnedCount: z.number().int().min(0),
         hasMore: z.boolean(),
         nextPage: z.string().nullable(),
