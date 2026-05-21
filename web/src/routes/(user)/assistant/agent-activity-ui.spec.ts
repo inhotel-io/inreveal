@@ -212,6 +212,41 @@ describe('agent activity UI helpers', () => {
     expect(model.items[0].technical?.toolName).toBe(toolName);
   });
 
+  it('summarizes search acceptance activity without raw request payloads by default', () => {
+    const model = buildModel({
+      toolCalls: [
+        makeToolCall({
+          toolName: AgentToolName.SearchAssets,
+          status: AgentToolCallStatus.Completed,
+          requestSummary: 'Search ocr assets (limit 50)',
+          responseSummary: 'Returned metadata for 4 assets',
+          assetCount: 4,
+        }),
+      ],
+      appliedPlans: [
+        makePlan({
+          status: AgentOperationPlanStatus.Applied,
+          operations: [
+            makeOperation({
+              type: AgentOperationType.AssetSetArchive,
+              status: AgentOperationStatus.Applied,
+              assetIds: ['asset-1', 'asset-2', 'asset-3', 'asset-4'],
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const userCopy = model.items.map((item) => `${item.title} ${item.summary}`).join(' ');
+    expect(userCopy).toContain('Searching photos');
+    expect(userCopy).toContain('Returned metadata for 4 assets');
+    expect(userCopy).toContain('Applying changes');
+    expect(userCopy).not.toContain('filters');
+    expect(userCopy).not.toContain('asset-1');
+    expect(userCopy).not.toContain('spacePersonIds');
+    expect(model.items.find((item) => item.kind === 'search')?.technical?.toolName).toBe(AgentToolName.SearchAssets);
+  });
+
   it.each([
     [AgentToolCallStatus.Approved, 'running'],
     [AgentToolCallStatus.Executing, 'running'],
