@@ -301,6 +301,22 @@ describe('AgentPlanItemReview', () => {
     expect(screen.getByText('Showing 30 of 1,000 photos')).toBeInTheDocument();
   });
 
+  it('does not mount every thumbnail for a 10,000-photo plan review', () => {
+    render(AgentPlanItemReview, {
+      props: defaultProps({
+        item: item(Array.from({ length: 10_000 }, (_, index) => `asset-${index.toString().padStart(4, '0')}`)),
+        viewportHeight: 360,
+        itemSize: 96,
+        columnCount: 6,
+        overscanRows: 1,
+      }),
+    });
+
+    expect(screen.getByText('10,000 of 10,000 selected')).toBeInTheDocument();
+    expect(screen.getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(30);
+    expect(screen.queryByRole('checkbox', { name: 'Include photo 10000' })).not.toBeInTheDocument();
+  });
+
   it('updates one sparse selection without mounting off-window assets', async () => {
     const onToggleItem = vi.fn();
     const assetIds = Array.from({ length: 1000 }, (_, index) => `asset-${index.toString().padStart(4, '0')}`);
