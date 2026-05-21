@@ -141,8 +141,9 @@ const expectAcceptanceSearchFlow = async (testCase: AcceptanceSearchCase) => {
   });
 
   const [pendingToolCall] = await harness.toolService.getToolCalls(harness.auth, session.id);
-  expect(harness.toolCalls.toolCalls.find((toolCall) => toolCall.id === pendingToolCall.id)?.redactedRequestMetadata)
-    .toEqual(testCase.expectedRequestMetadata);
+  expect(
+    harness.toolCalls.toolCalls.find((toolCall) => toolCall.id === pendingToolCall.id)?.redactedRequestMetadata,
+  ).toEqual(testCase.expectedRequestMetadata);
 
   await harness.toolService.approveToolCall(harness.auth, session.id, pendingToolCall.id, {
     decision: AgentToolApprovalDecision.Approved,
