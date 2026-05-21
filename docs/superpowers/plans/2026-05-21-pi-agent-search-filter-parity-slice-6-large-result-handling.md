@@ -435,19 +435,11 @@ git commit -m "test: cover pi large search pagination"
 
 - [ ] **Step 1: Write failing MCP guidance tests**
 
-In `server/src/services/agent-mcp-tool-registry.service.spec.ts`, replace the page-property assertion:
+In `server/src/services/agent-mcp-tool-registry.service.spec.ts`, replace the stale page-property assertion with:
 
 ```ts
 page: expect.objectContaining({
-  description: expect.stringContaining('Only page 1 is currently executable'),
-}),
-```
-
-with:
-
-```ts
-page: expect.objectContaining({
-  description: expect.stringContaining('Use returned nextPage'),
+  description: expect.stringContaining('Use the returned nextPage value as page'),
 }),
 ```
 
@@ -458,7 +450,9 @@ it('documents executable search page continuation', () => {
   const search = sut.getReadToolContract(AgentToolName.SearchAssets);
 
   expect(search?.description).toContain('bounded result pages');
-  expect(search?.usage).toContain('repeat the same mode, query, filters, order, and limit with nextPage');
+  expect(search?.usage).toContain(
+    'repeat the same mode, query, filters, order, and limit using the returned nextPage value as page',
+  );
   expect(search?.usage).not.toContain('Only page 1');
   expect(search?.usage).not.toContain('later pages and non-desc order are not available yet');
   expect(search?.examples.map((example) => example.name)).toContain('metadata-next-page-search');
@@ -491,7 +485,7 @@ pnpm --dir server test src/services/agent-mcp-tool-registry.service.spec.ts src/
 
 Expected:
 
-- Registry test fails because the page description still says only page 1 is executable.
+- Registry test fails because the page description still says only the first page is executable.
 - Contract tests fail because usage still says later pages are unavailable and the new example/hint does not exist.
 
 - [ ] **Step 3: Update MCP registry and contract text**
@@ -499,7 +493,7 @@ Expected:
 In `server/src/services/agent-mcp-tool-registry.service.ts`, update `propertyDescriptions.page`:
 
 ```ts
-page: 'One-based result page. Use returned nextPage to continue the same search with the same mode, query, filters, order, and limit.',
+page: 'One-based result page. Use the returned nextPage value as page to continue the same search with the same mode, query, filters, order, and limit.',
 ```
 
 In `server/src/services/agent-mcp-tool-contract.service.ts`, update `searchAssetsContract.description`:
@@ -513,7 +507,7 @@ Update `searchAssetsContract.usage`:
 
 ```ts
 usage:
-  'Put deterministic metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose operation plans with the returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Search responses are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit with nextPage to continue.',
+  'Put deterministic metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose operation plans with the returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Search responses are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.',
 ```
 
 Add this example after `metadata-page-search`:
@@ -537,18 +531,7 @@ Add this example after `metadata-page-search`:
 },
 ```
 
-Replace the page-unavailable mistake:
-
-```ts
-{
-  id: 'search-page-unavailable',
-  match: { issuePath: 'page' },
-  hint: 'Only page 1 is executable in the current slice. Later pages are contract fields for a later slice.',
-  exampleName: 'metadata-page-search',
-},
-```
-
-with:
+Replace the old page-unavailable mistake with:
 
 ```ts
 {
