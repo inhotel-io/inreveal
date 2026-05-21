@@ -105,7 +105,7 @@ MCP tool name: `resolveAssetSearchFilters`
 
 Resolve visible album, tag, person, space, and camera names into searchAssets-compatible filters.
 
-Use before searchAssets when the user gives names for tags, albums, people, spaces, camera makes, camera models, or lenses. Call searchAssets only after this returns unambiguous resolvedFilters. Use only toolCallId when retrying a Gallery-approved resolver request.
+Use before searchAssets when the user gives names for tags, albums, people, spaces, camera makes, camera models, or lenses. For named people in a named shared space, resolve the space and person together so the result can return spaceId plus spacePersonIds. Call searchAssets only after this returns unambiguous resolvedFilters. Use only toolCallId when retrying a Gallery-approved resolver request.
 
 Argument modes:
 
@@ -138,10 +138,7 @@ Resolve shared space and person names before searching shared-space assets.
 ```json
 {
   "people": ["Pierre"],
-  "spaces": ["Family"],
-  "scope": {
-    "withSharedSpaces": true
-  }
+  "spaces": ["Family"]
 }
 ```
 
@@ -163,7 +160,7 @@ MCP tool name: `searchAssets`
 
 Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and a bounded result page. Text modes, later pages, and non-desc order are split: text modes are executable; later pages and non-desc order are deferred.
 
-Put deterministic metadata search filters under filters. Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known. Use mode smart, description, ocr, or filename with query for text search. Only page 1 and order desc are executable; later pages and non-desc order are not available yet. Use only toolCallId when retrying a Gallery-approved search.
+Put deterministic metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose operation plans with the returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Only page 1 and order desc are executable; later pages and non-desc order are not available yet.
 
 Argument modes:
 
