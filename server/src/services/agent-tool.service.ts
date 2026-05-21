@@ -15,6 +15,8 @@ import {
   AgentReadAssetPreviewsToolResponseDto,
   AgentReadSpaceToolRequestDto,
   AgentReadSpaceToolResponseDto,
+  AgentResolveAssetSearchFiltersToolRequestDto,
+  AgentResolveAssetSearchFiltersToolResponseDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchAssetsToolResponseDto,
   AgentSearchUsersToolRequestDto,
@@ -50,6 +52,9 @@ import {
   AgentAlbumSummary,
   AgentAssetMediaReference,
   AgentAssetMetadata,
+  AgentResolvedAssetSearchFilterChoice,
+  AgentResolvedAssetSearchFilterKind,
+  AgentResolvedAssetSearchFilterResult,
   AgentSearchAssetsFilters,
   AgentSearchAssetsMode,
   AgentSearchAssetsOrder,
@@ -60,6 +65,7 @@ import {
   AgentToolListSpacesRequestMetadata,
   AgentToolReadAssetIdsRequestMetadata,
   AgentToolReadSpaceRequestMetadata,
+  AgentToolResolveAssetSearchFiltersRequestMetadata,
   AgentToolResponseMetadata,
   AgentToolSearchAssetsRequestMetadata,
   AgentToolSearchUsersRequestMetadata,
@@ -139,6 +145,14 @@ export class AgentToolService {
     dto: AgentSearchAssetsToolRequestDto,
   ): Promise<AgentSearchAssetsToolResponseDto> {
     return this.runReadTool(auth, sessionId, dto, this.searchAssetsDescriptor());
+  }
+
+  async resolveAssetSearchFilters(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentResolveAssetSearchFiltersToolRequestDto,
+  ): Promise<AgentResolveAssetSearchFiltersToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.resolveAssetSearchFiltersDescriptor());
   }
 
   async readAssetMetadata(
@@ -298,6 +312,9 @@ export class AgentToolService {
     switch (toolCall.toolName) {
       case AgentToolName.SearchAssets: {
         return this.searchAssets(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.ResolveAssetSearchFilters: {
+        return this.resolveAssetSearchFilters(auth, session.id, { toolCallId: toolCall.id });
       }
       case AgentToolName.ReadAssetMetadata: {
         return this.readAssetMetadata(auth, session.id, { toolCallId: toolCall.id });
@@ -590,6 +607,351 @@ export class AgentToolService {
 
   private getSearchLimit(request: AgentSearchAssetsToolRequestDto): number {
     return request.limit ?? 10_000;
+  }
+
+  private resolveAssetSearchFiltersDescriptor(): AgentReadToolDescriptor<
+    AgentResolveAssetSearchFiltersToolRequestDto,
+    {
+      resolvedFilters: AgentSearchAssetsFilters;
+      results: AgentResolvedAssetSearchFilterResult[];
+    }
+  > {
+    return {
+      toolName: AgentToolName.ResolveAssetSearchFilters,
+      dataClass: AgentToolDataClass.Metadata,
+      requestSummary: (request) => `Resolve asset search filters (${this.getResolverTermCount(request)} term(s))`,
+      requestMetadata: (request) =>
+        ({
+          ...(request.people === undefined ? {} : { people: request.people }),
+          ...(request.tags === undefined ? {} : { tags: request.tags }),
+          ...(request.albums === undefined ? {} : { albums: request.albums }),
+          ...(request.spaces === undefined ? {} : { spaces: request.spaces }),
+          ...(request.cameraMakes === undefined ? {} : { cameraMakes: request.cameraMakes }),
+          ...(request.cameraModels === undefined ? {} : { cameraModels: request.cameraModels }),
+          ...(request.lensModels === undefined ? {} : { lensModels: request.lensModels }),
+          ...(request.scope === undefined ? {} : { scope: request.scope }),
+        }) as AgentToolResolveAssetSearchFiltersRequestMetadata,
+      requestedAssetCount: () => 0,
+      requestedAlbumCount: () => 0,
+      perToolLimit: () => Number.MAX_SAFE_INTEGER,
+      perSessionLimit: () => Number.MAX_SAFE_INTEGER,
+      validateAccess: (auth, session, request) => this.validateResolveAssetSearchFiltersAccess(auth, session, request),
+      execute: (auth, session, request) => this.executeResolveAssetSearchFilters(auth, session, request),
+      responseSummary: (result) =>
+        `Resolved ${result.results.filter((item) => item.status === 'matched').length} search filter(s)`,
+      responseMetadata: (result) => ({
+        ...(result.resolvedFilters.albumIds?.length ? { albumIds: result.resolvedFilters.albumIds } : {}),
+        ...(result.resolvedFilters.spaceId ? { spaceIds: [result.resolvedFilters.spaceId] } : {}),
+      }),
+      resultAssetCount: () => 0,
+      resultAlbumCount: () => 0,
+      failedReason: 'Search filter resolution failed',
+    };
+  }
+
+  private async validateResolveAssetSearchFiltersAccess(
+    auth: AuthDto,
+    session: AgentSession,
+    request: AgentResolveAssetSearchFiltersToolRequestDto,
+  ): Promise<string | null> {
+    const requiresSharedSpaces =
+      request.scope?.withSharedSpaces === true || request.scope?.spaceId || (request.spaces?.length ?? 0) > 0;
+    if (requiresSharedSpaces && !session.permissionPlanSnapshot.assetScope.sharedSpaces) {
+      return 'Shared spaces are not accessible for this session';
+    }
+
+    if (request.scope?.spaceId) {
+      return this.validateSharedSpaceAccess(auth, session, request.scope.spaceId);
+    }
+
+    return null;
+  }
+
+  private async executeResolveAssetSearchFilters(
+    auth: AuthDto,
+    session: AgentSession,
+    request: AgentResolveAssetSearchFiltersToolRequestDto,
+  ): Promise<{
+    resolvedFilters: AgentSearchAssetsFilters;
+    results: AgentResolvedAssetSearchFilterResult[];
+  }> {
+    const resolvedFilters: AgentSearchAssetsFilters = {};
+    const results: AgentResolvedAssetSearchFilterResult[] = [];
+    const scope = request.scope ?? {};
+    const needsRepositoryCandidates =
+      (request.people?.length ?? 0) > 0 ||
+      (request.tags?.length ?? 0) > 0 ||
+      (request.cameraMakes?.length ?? 0) > 0 ||
+      (request.cameraModels?.length ?? 0) > 0 ||
+      (request.lensModels?.length ?? 0) > 0;
+    const canUseRepositoryCandidates = this.canUseResolverRepositoryCandidates(session, scope);
+    const shouldLoadTimelineSpaceIds =
+      scope.withSharedSpaces === true ||
+      (needsRepositoryCandidates &&
+        !canUseRepositoryCandidates &&
+        session.permissionPlanSnapshot.assetScope.sharedSpaces &&
+        !scope.spaceId);
+    const timelineSpaceRows = shouldLoadTimelineSpaceIds
+      ? await this.sharedSpaceRepository.getSpaceIdsForTimeline(auth.user.id)
+      : [];
+    const timelineSpaceIds = timelineSpaceRows.map((row) => row.spaceId);
+    const repositoryScope = {
+      ...scope,
+      ...(shouldLoadTimelineSpaceIds ? { timelineSpaceIds } : {}),
+    };
+    const needsSuggestions =
+      (request.people?.length ?? 0) > 0 || (request.tags?.length ?? 0) > 0 || (request.cameraMakes?.length ?? 0) > 0;
+    const suggestions =
+      needsSuggestions && canUseRepositoryCandidates
+        ? await this.searchRepository.getFilterSuggestions([auth.user.id], repositoryScope)
+        : null;
+
+    if (request.people?.length) {
+      this.resolveIdFilters(
+        results,
+        resolvedFilters,
+        'person',
+        request.people,
+        suggestions?.people.map((person) => ({ id: person.id, value: person.name })) ?? [],
+        'personIds',
+      );
+    }
+
+    if (request.tags?.length) {
+      this.resolveIdFilters(
+        results,
+        resolvedFilters,
+        'tag',
+        request.tags,
+        suggestions?.tags.map((tag) => ({ id: tag.id, value: tag.value })) ?? [],
+        'tagIds',
+      );
+    }
+
+    if (request.albums?.length) {
+      const visibleAlbums = await this.albumRepository.getAgentAlbums(auth.user.id);
+      const albums = visibleAlbums
+        .filter((album) => {
+          const isOwned = album.ownerId === auth.user.id;
+          return isOwned
+            ? session.permissionPlanSnapshot.assetScope.owned
+            : session.permissionPlanSnapshot.assetScope.sharedSpaces;
+        })
+        .map((album) => ({ id: album.id, value: album.albumName }));
+      this.resolveIdFilters(results, resolvedFilters, 'album', request.albums, albums, 'albumIds');
+    }
+
+    if (request.spaces?.length) {
+      const visibleSpaces = await this.sharedSpaceRepository.getAllByUserId(auth.user.id);
+      const spaces = visibleSpaces.map((space) => ({
+        id: space.id,
+        value: space.name,
+      }));
+      for (const query of request.spaces) {
+        const matched = this.matchVisibleCandidates(spaces, query, 'space', (candidate) => ({
+          spaceId: candidate.id,
+        }));
+        if (matched.status === 'matched') {
+          if (resolvedFilters.spaceId) {
+            results.push({
+              ...matched,
+              status: 'ambiguous',
+              searchFilter: undefined,
+              choices: [
+                this.choiceForIdCandidate({ id: matched.id!, value: matched.value! }, 'space', { spaceId: matched.id }),
+              ],
+              message: 'Only one spaceId can be used in searchAssets',
+            });
+          } else {
+            resolvedFilters.spaceId = matched.id;
+            results.push(matched);
+          }
+        } else {
+          results.push(matched);
+        }
+      }
+    }
+
+    if (request.cameraMakes?.length) {
+      for (const query of request.cameraMakes) {
+        const matched = this.matchVisibleCandidates(
+          (suggestions?.cameraMakes ?? []).map((value) => ({ value })),
+          query,
+          'cameraMake',
+          (candidate) => ({ make: candidate.value }),
+        );
+        if (matched.status === 'matched') {
+          resolvedFilters.make = matched.value;
+          const models = await this.searchRepository.getCameraModels([auth.user.id], {
+            ...repositoryScope,
+            make: matched.value,
+          });
+          matched.choices = models.slice(0, 5).map((model) => ({
+            value: model,
+            label: model,
+            searchFilter: { make: matched.value, model },
+          }));
+        }
+        results.push(matched);
+      }
+    }
+
+    if (request.cameraModels?.length) {
+      const models = canUseRepositoryCandidates
+        ? await this.searchRepository.getCameraModels([auth.user.id], {
+            ...repositoryScope,
+            ...(resolvedFilters.make ? { make: resolvedFilters.make } : {}),
+          })
+        : [];
+      for (const query of request.cameraModels) {
+        const matched = this.matchVisibleCandidates(
+          models.map((value) => ({ value })),
+          query,
+          'cameraModel',
+          (candidate) => ({ model: candidate.value }),
+        );
+        if (matched.status === 'matched') {
+          resolvedFilters.model = matched.value;
+        }
+        results.push(matched);
+      }
+    }
+
+    if (request.lensModels?.length) {
+      const lensModels = canUseRepositoryCandidates
+        ? await this.searchRepository.getCameraLensModels([auth.user.id], {
+            ...repositoryScope,
+            ...(resolvedFilters.make ? { make: resolvedFilters.make } : {}),
+            ...(resolvedFilters.model ? { model: resolvedFilters.model } : {}),
+          })
+        : [];
+      for (const query of request.lensModels) {
+        const matched = this.matchVisibleCandidates(
+          lensModels.map((value) => ({ value })),
+          query,
+          'lensModel',
+          (candidate) => ({ lensModel: candidate.value }),
+        );
+        if (matched.status === 'matched') {
+          resolvedFilters.lensModel = matched.value;
+        }
+        results.push(matched);
+      }
+    }
+
+    return { resolvedFilters, results };
+  }
+
+  private canUseResolverRepositoryCandidates(
+    session: AgentSession,
+    scope: AgentResolveAssetSearchFiltersToolRequestDto['scope'],
+  ): boolean {
+    return session.permissionPlanSnapshot.assetScope.owned || !!scope?.spaceId;
+  }
+
+  private resolveIdFilters(
+    results: AgentResolvedAssetSearchFilterResult[],
+    resolvedFilters: AgentSearchAssetsFilters,
+    kind: Extract<AgentResolvedAssetSearchFilterKind, 'person' | 'tag' | 'album'>,
+    queries: string[],
+    candidates: Array<{ id: string; value: string }>,
+    filterKey: 'personIds' | 'tagIds' | 'albumIds',
+  ) {
+    for (const query of queries) {
+      const matched = this.matchVisibleCandidates(candidates, query, kind, (candidate) => ({
+        [filterKey]: [candidate.id],
+      }));
+      if (matched.status === 'matched' && matched.id) {
+        resolvedFilters[filterKey] = [...new Set([...(resolvedFilters[filterKey] ?? []), matched.id])];
+      }
+      results.push(matched);
+    }
+  }
+
+  private matchVisibleCandidates<T extends { id?: string; value: string }>(
+    candidates: T[],
+    query: string,
+    kind: AgentResolvedAssetSearchFilterKind,
+    getSearchFilter: (candidate: T) => Partial<AgentSearchAssetsFilters>,
+  ): AgentResolvedAssetSearchFilterResult {
+    const exactMatches = candidates.filter((candidate) => this.isExactMatch(candidate.value, query));
+    if (exactMatches.length === 1) {
+      const candidate = exactMatches[0];
+      return {
+        kind,
+        query,
+        status: 'matched',
+        id: candidate.id,
+        value: candidate.value,
+        searchFilter: getSearchFilter(candidate),
+        choices: [],
+        message: `Matched ${kind} "${query}"`,
+      };
+    }
+
+    if (exactMatches.length > 1) {
+      return {
+        kind,
+        query,
+        status: 'ambiguous',
+        choices: exactMatches.map((candidate) =>
+          this.choiceForIdCandidate(candidate, kind, getSearchFilter(candidate)),
+        ),
+        message: `Multiple visible ${kind} matches found`,
+      };
+    }
+
+    return {
+      kind,
+      query,
+      status: 'not_found',
+      choices: this.getNotFoundSuggestionCandidates(candidates, query)
+        .slice(0, 5)
+        .map((candidate) => this.choiceForIdCandidate(candidate, kind, getSearchFilter(candidate))),
+      message: `No visible ${kind} match found`,
+    };
+  }
+
+  private getResolverTermCount(request: AgentResolveAssetSearchFiltersToolRequestDto): number {
+    return [
+      request.people,
+      request.tags,
+      request.albums,
+      request.spaces,
+      request.cameraMakes,
+      request.cameraModels,
+      request.lensModels,
+    ].reduce((total, terms) => total + (terms?.length ?? 0), 0);
+  }
+
+  private getNotFoundSuggestionCandidates<T extends { value: string }>(candidates: T[], query: string): T[] {
+    const normalizedQuery = this.normalizeResolverTerm(query);
+    const related = candidates.filter((candidate) => {
+      const normalizedCandidate = this.normalizeResolverTerm(candidate.value);
+      return normalizedCandidate.includes(normalizedQuery) || normalizedQuery.includes(normalizedCandidate);
+    });
+    return related.length > 0 ? related : candidates;
+  }
+
+  private choiceForIdCandidate<T extends { id?: string; value: string }>(
+    candidate: T,
+    _kind: AgentResolvedAssetSearchFilterKind,
+    searchFilter: Partial<AgentSearchAssetsFilters>,
+  ): AgentResolvedAssetSearchFilterChoice {
+    return {
+      ...(candidate.id ? { id: candidate.id } : {}),
+      value: candidate.value,
+      label: candidate.value,
+      searchFilter,
+    };
+  }
+
+  private isExactMatch(candidate: string, query: string): boolean {
+    return this.normalizeResolverTerm(candidate) === this.normalizeResolverTerm(query);
+  }
+
+  private normalizeResolverTerm(term: string): string {
+    return term.trim().toLocaleLowerCase();
   }
 
   private readAssetMetadataDescriptor(): AgentReadToolDescriptor<
