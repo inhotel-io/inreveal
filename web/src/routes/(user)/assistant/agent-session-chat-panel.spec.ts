@@ -1347,6 +1347,75 @@ describe(AgentSessionChatPanel.name, () => {
     expect(input).toHaveValue('');
   });
 
+  it('shows search acceptance results, applied plan history, and a usable composer after continuation', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-before', AgentMessageRole.User, 'Find screenshots from 2024 that mention invoices.'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+      {
+        ...makeMessage('message-after', AgentMessageRole.Assistant, 'I found matching invoice screenshots.'),
+        createdAt: '2026-05-16T10:02:00.000Z',
+      },
+    ]);
+    const searchToolCall = makeToolCall({
+      toolName: AgentToolName.SearchAssets,
+      status: AgentToolCallStatus.Completed,
+      requestSummary: 'Search ocr assets (limit 50)',
+      responseSummary: 'Returned metadata for 4 assets',
+      assetCount: 4,
+      startedAt: '2026-05-16T10:00:30.000Z',
+      completedAt: '2026-05-16T10:01:00.000Z',
+    });
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(
+      makeMessage('message-created', AgentMessageRole.User, 'Now archive those.'),
+    );
+    setAppliedPlanHistory([
+      makeAppliedPlan({
+        summary: 'Archive invoice screenshots from 2024',
+        updatedAt: '2026-05-16T10:01:30.000Z',
+        operations: [
+          makeOperation({
+            id: 'operation-archive',
+            type: AgentOperationType.AssetSetArchive,
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds: ['asset-1', 'asset-2', 'asset-3', 'asset-4'],
+            payload: { archive: true },
+            status: AgentOperationStatus.Applied,
+          }),
+        ],
+      }),
+    ]);
+
+    render(AgentSessionChatPanel, {
+      props: { session: { ...session, status: AgentSessionStatus.Running }, toolCalls: [searchToolCall] },
+    });
+
+    expect(await screen.findByText('Find screenshots from 2024 that mention invoices.')).toBeInTheDocument();
+    expect(screen.getByText('I found matching invoice screenshots.')).toBeInTheDocument();
+    expect(screen.getAllByRole('article', { name: 'Activity summary' })).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ textContent: expect.stringContaining('Returned metadata for 4 assets') }),
+      ]),
+    );
+    expect(
+      screen.getByRole('article', { name: 'Applied plan: Archive invoice screenshots from 2024' }),
+    ).toHaveTextContent('Applied plan');
+
+    const input = screen.getByRole('textbox', { name: 'Message' });
+    expect(input).not.toBeDisabled();
+    await fireEvent.input(input, { target: { value: 'Now archive those.' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledTimes(1));
+    expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledWith({
+      id: session.id,
+      agentMessageCreateDto: {
+        content: { blocks: [{ type: AgentMessageTextBlockType.Text, text: 'Now archive those.' }] },
+      },
+    });
+  });
+
   it('refreshes applied plan history for plan-applied events without duplicating cards', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {

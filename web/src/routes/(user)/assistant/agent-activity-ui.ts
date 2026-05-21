@@ -339,7 +339,12 @@ export const buildAgentActivityTechnicalRows = (item: AgentActivityItem): AgentA
   return rows.filter((row): row is AgentActivityTechnicalRow => row !== null);
 };
 
-const getSummaryForStatus = (definition: ToolActivityDefinition, status: AgentActivityStatus) => {
+const getSummaryForStatus = (
+  definition: ToolActivityDefinition,
+  status: AgentActivityStatus,
+  toolName: AgentToolName,
+  responseSummary: string | null | undefined,
+) => {
   if (status === 'failed') {
     return 'Gallery step failed';
   }
@@ -352,7 +357,9 @@ const getSummaryForStatus = (definition: ToolActivityDefinition, status: AgentAc
     return 'Skipped this step';
   }
 
-  return definition.completedSummary;
+  return status === 'completed' && toolName === AgentToolName.SearchAssets
+    ? (optionalRedacted(responseSummary) ?? definition.completedSummary)
+    : definition.completedSummary;
 };
 
 const buildToolActivityCandidate = (toolCall: AgentToolCallResponseDto): ToolActivityCandidate => {
@@ -377,7 +384,7 @@ const buildToolActivityCandidate = (toolCall: AgentToolCallResponseDto): ToolAct
     kind: definition.kind,
     status,
     title: definition.title,
-    summary: getSummaryForStatus(definition, status),
+    summary: getSummaryForStatus(definition, status, toolName, toolCall.responseSummary),
     count,
     startedAt: normalizeStartedAt(toolCall.startedAt, toolCall.id),
     ...(isValidIsoDate(toolCall.completedAt) && terminalStatuses.has(status)
