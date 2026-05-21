@@ -210,6 +210,36 @@ describe(AgentMcpDocsService.name, () => {
     expect(markdown).toContain('search-order-unavailable');
   });
 
+  it('documents Slice 7 search scenario examples and correction hints', () => {
+    const markdown = sut.generateMarkdown();
+    const generatedPath = resolve(process.cwd(), '..', AGENT_MCP_GENERATED_DOC_RELATIVE_PATH);
+    const committed = readFileSync(generatedPath, 'utf8');
+
+    for (const exampleName of [
+      'unalbumed-berlin-may-search',
+      'five-star-video-search',
+      'ocr-invoice-screenshot-search',
+      'resolve-alex-family-space-filters',
+      'resolve-space-person-filters',
+      'create-album-and-add-assets',
+    ]) {
+      expect(markdown).toContain(exampleName);
+      expect(committed).toContain(exampleName);
+    }
+
+    for (const mistakeId of [
+      'search-filters-outside-filters',
+      'search-filter-name-in-tag-ids',
+      'search-filter-name-in-person-ids',
+      'search-query-with-metadata-mode',
+      'search-space-person-without-space',
+      'search-combined-filters-and-tool-call-id',
+    ]) {
+      expect(markdown).toContain(mistakeId);
+      expect(committed).toContain(mistakeId);
+    }
+  });
+
   it('does not leak real secrets, stack traces, filesystem paths, or direct mutation tools', () => {
     const markdown = sut.generateMarkdown();
 
