@@ -64,7 +64,10 @@ describe(AgentMcpPromptService.name, () => {
 
   it('teaches compact natural-language search patterns for Slice 7 prompts', () => {
     const prompt = sut.generatePromptCheatSheet();
+    const patternLine =
+      'Patterns: unalbumed=isNotInAlbum; 5-star videos=rating 5+type VIDEO; OCR invoice=mode ocr+query invoice; names=resolve names first.';
 
+    expect(prompt).toContain(patternLine);
     expect(prompt).toContain('unalbumed');
     expect(prompt).toContain('isNotInAlbum');
     expect(prompt).toContain('rating 5');
