@@ -32,19 +32,19 @@ describe('TimelineManager', () => {
   describe('init', () => {
     let timelineManager: TimelineManager;
     const bucketAssets: Record<string, TimelineAsset[]> = {
-      '2024-03-01T00:00:00.000Z': timelineAssetFactory.buildList(1).map((asset) =>
+      '2024-03-01': timelineAssetFactory.buildList(1).map((asset) =>
         deriveLocalDateTimeFromFileCreatedAt({
           ...asset,
           fileCreatedAt: fromISODateTimeUTCToObject('2024-03-01T00:00:00.000Z'),
         }),
       ),
-      '2024-02-01T00:00:00.000Z': timelineAssetFactory.buildList(100).map((asset) =>
+      '2024-02-01': timelineAssetFactory.buildList(100).map((asset) =>
         deriveLocalDateTimeFromFileCreatedAt({
           ...asset,
           fileCreatedAt: fromISODateTimeUTCToObject('2024-02-01T00:00:00.000Z'),
         }),
       ),
-      '2024-01-01T00:00:00.000Z': timelineAssetFactory.buildList(3).map((asset) =>
+      '2024-01-01': timelineAssetFactory.buildList(3).map((asset) =>
         deriveLocalDateTimeFromFileCreatedAt({
           ...asset,
           fileCreatedAt: fromISODateTimeUTCToObject('2024-01-01T00:00:00.000Z'),
@@ -106,13 +106,13 @@ describe('TimelineManager', () => {
   describe('loadTimelineMonth', () => {
     let timelineManager: TimelineManager;
     const bucketAssets: Record<string, TimelineAsset[]> = {
-      '2024-01-03T00:00:00.000Z': timelineAssetFactory.buildList(1).map((asset) =>
+      '2024-01-03': timelineAssetFactory.buildList(1).map((asset) =>
         deriveLocalDateTimeFromFileCreatedAt({
           ...asset,
           fileCreatedAt: fromISODateTimeUTCToObject('2024-03-01T00:00:00.000Z'),
         }),
       ),
-      '2024-01-01T00:00:00.000Z': timelineAssetFactory.buildList(3).map((asset) =>
+      '2024-01-01': timelineAssetFactory.buildList(3).map((asset) =>
         deriveLocalDateTimeFromFileCreatedAt({
           ...asset,
           fileCreatedAt: fromISODateTimeUTCToObject('2024-01-01T00:00:00.000Z'),
@@ -125,8 +125,8 @@ describe('TimelineManager', () => {
     beforeEach(async () => {
       timelineManager = new TimelineManager();
       sdkMock.getTimeBuckets.mockResolvedValue([
-        { count: 1, timeBucket: '2024-03-01T00:00:00.000Z' },
-        { count: 3, timeBucket: '2024-01-01T00:00:00.000Z' },
+        { count: 1, timeBucket: '2024-03-01' },
+        { count: 3, timeBucket: '2024-01-01' },
       ]);
       sdkMock.getTimeBucket.mockImplementation(async ({ timeBucket }, { signal } = {}) => {
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -578,19 +578,19 @@ describe('TimelineManager', () => {
   describe('getLaterAsset', () => {
     let timelineManager: TimelineManager;
     const bucketAssets: Record<string, TimelineAsset[]> = {
-      '2024-03-01T00:00:00.000Z': timelineAssetFactory.buildList(1).map((asset) =>
+      '2024-03-01': timelineAssetFactory.buildList(1).map((asset) =>
         deriveLocalDateTimeFromFileCreatedAt({
           ...asset,
           fileCreatedAt: fromISODateTimeUTCToObject('2024-03-01T00:00:00.000Z'),
         }),
       ),
-      '2024-02-01T00:00:00.000Z': timelineAssetFactory.buildList(6).map((asset) =>
+      '2024-02-01': timelineAssetFactory.buildList(6).map((asset) =>
         deriveLocalDateTimeFromFileCreatedAt({
           ...asset,
           fileCreatedAt: fromISODateTimeUTCToObject('2024-02-01T00:00:00.000Z'),
         }),
       ),
-      '2024-01-01T00:00:00.000Z': timelineAssetFactory.buildList(3).map((asset) =>
+      '2024-01-01': timelineAssetFactory.buildList(3).map((asset) =>
         deriveLocalDateTimeFromFileCreatedAt({
           ...asset,
           fileCreatedAt: fromISODateTimeUTCToObject('2024-01-01T00:00:00.000Z'),
@@ -604,9 +604,9 @@ describe('TimelineManager', () => {
     beforeEach(async () => {
       timelineManager = new TimelineManager();
       sdkMock.getTimeBuckets.mockResolvedValue([
-        { count: 1, timeBucket: '2024-03-01T00:00:00.000Z' },
-        { count: 6, timeBucket: '2024-02-01T00:00:00.000Z' },
-        { count: 3, timeBucket: '2024-01-01T00:00:00.000Z' },
+        { count: 1, timeBucket: '2024-03-01' },
+        { count: 6, timeBucket: '2024-02-01' },
+        { count: 3, timeBucket: '2024-01-01' },
       ]);
       sdkMock.getTimeBucket.mockImplementation(({ timeBucket }) => Promise.resolve(bucketAssetsResponse[timeBucket]));
       sdkMock.getAssetInfo.mockRejectedValue(new Error('Asset not found'));
@@ -726,20 +726,20 @@ describe('TimelineManager', () => {
   describe('getRandomAsset', () => {
     let timelineManager: TimelineManager;
     const bucketAssets: Record<string, TimelineAsset[]> = {
-      '2024-03-01T00:00:00.000Z': timelineAssetFactory.buildList(1).map((asset) =>
+      '2024-03-01': timelineAssetFactory.buildList(1).map((asset) =>
         deriveLocalDateTimeFromFileCreatedAt({
           ...asset,
           fileCreatedAt: fromISODateTimeUTCToObject('2024-03-01T00:00:00.000Z'),
         }),
       ),
-      '2024-02-01T00:00:00.000Z': timelineAssetFactory.buildList(10).map((asset, idx) =>
+      '2024-02-01': timelineAssetFactory.buildList(10).map((asset, idx) =>
         deriveLocalDateTimeFromFileCreatedAt({
           ...asset,
           // here we make sure that not all assets are on the first day of the month
           fileCreatedAt: fromISODateTimeUTCToObject(`2024-02-0${idx < 7 ? 1 : 2}T00:00:00.000Z`),
         }),
       ),
-      '2024-01-01T00:00:00.000Z': timelineAssetFactory.buildList(3).map((asset) =>
+      '2024-01-01': timelineAssetFactory.buildList(3).map((asset) =>
         deriveLocalDateTimeFromFileCreatedAt({
           ...asset,
           fileCreatedAt: fromISODateTimeUTCToObject('2024-01-01T00:00:00.000Z'),
@@ -820,7 +820,7 @@ describe('TimelineManager', () => {
   describe('space timeline with stacked photos', () => {
     let timelineManager: TimelineManager;
     const stackedAssets: Record<string, TimelineAsset[]> = {
-      '2024-02-01T00:00:00.000Z': [
+      '2024-02-01': [
         deriveLocalDateTimeFromFileCreatedAt(
           timelineAssetFactory.build({
             fileCreatedAt: fromISODateTimeUTCToObject('2024-02-10T12:00:00.000Z'),
@@ -841,7 +841,7 @@ describe('TimelineManager', () => {
 
     beforeEach(() => {
       timelineManager = new TimelineManager();
-      sdkMock.getTimeBuckets.mockResolvedValue([{ count: 2, timeBucket: '2024-02-01T00:00:00.000Z' }]);
+      sdkMock.getTimeBuckets.mockResolvedValue([{ count: 2, timeBucket: '2024-02-01' }]);
       sdkMock.getTimeBucket.mockImplementation(({ timeBucket }) => Promise.resolve(stackedAssetsResponse[timeBucket]));
     });
 
@@ -908,7 +908,7 @@ describe('TimelineManager', () => {
   describe('album picker timeline', () => {
     let timelineManager: TimelineManager;
     const pickerOnlyAssets: Record<string, TimelineAsset[]> = {
-      '2024-02-01T00:00:00.000Z': timelineAssetFactory.buildList(1).map((asset) =>
+      '2024-02-01': timelineAssetFactory.buildList(1).map((asset) =>
         deriveLocalDateTimeFromFileCreatedAt({
           ...asset,
           id: 'picker-asset',
@@ -917,7 +917,7 @@ describe('TimelineManager', () => {
       ),
     };
     const albumOnlyAssets: Record<string, TimelineAsset[]> = {
-      '2024-04-01T00:00:00.000Z': timelineAssetFactory.buildList(1).map((asset) =>
+      '2024-04-01': timelineAssetFactory.buildList(1).map((asset) =>
         deriveLocalDateTimeFromFileCreatedAt({
           ...asset,
           id: 'album-asset',
@@ -927,22 +927,18 @@ describe('TimelineManager', () => {
     };
     const emptyBucket = toResponseDto();
     const pickerOnlyResponses: Record<string, TimeBucketAssetResponseDto> = {
-      '2024-02-01T00:00:00.000Z': toResponseDto(...pickerOnlyAssets['2024-02-01T00:00:00.000Z']),
-      '2024-04-01T00:00:00.000Z': emptyBucket,
+      '2024-02-01': toResponseDto(...pickerOnlyAssets['2024-02-01']),
+      '2024-04-01': emptyBucket,
     };
     const albumOnlyResponses: Record<string, TimeBucketAssetResponseDto> = {
-      '2024-02-01T00:00:00.000Z': emptyBucket,
-      '2024-04-01T00:00:00.000Z': toResponseDto(...albumOnlyAssets['2024-04-01T00:00:00.000Z']),
+      '2024-02-01': emptyBucket,
+      '2024-04-01': toResponseDto(...albumOnlyAssets['2024-04-01']),
     };
 
     beforeEach(() => {
       timelineManager = new TimelineManager();
       sdkMock.getTimeBuckets.mockImplementation(({ albumId }) =>
-        Promise.resolve(
-          albumId
-            ? [{ count: 1, timeBucket: '2024-04-01T00:00:00.000Z' }]
-            : [{ count: 1, timeBucket: '2024-02-01T00:00:00.000Z' }],
-        ),
+        Promise.resolve(albumId ? [{ count: 1, timeBucket: '2024-04-01' }] : [{ count: 1, timeBucket: '2024-02-01' }]),
       );
       sdkMock.getTimeBucket.mockImplementation(({ albumId, timeBucket }) =>
         Promise.resolve(albumId ? albumOnlyResponses[timeBucket] : pickerOnlyResponses[timeBucket]),
@@ -981,7 +977,7 @@ describe('TimelineManager', () => {
           albumId: 'album-1',
           bucketSize: TimeBucketSize.Month,
           tagIds: ['tag-1'],
-          timeBucket: '2024-04-01T00:00:00.000Z',
+          timeBucket: '2024-04-01',
         }),
         expect.anything(),
       );
