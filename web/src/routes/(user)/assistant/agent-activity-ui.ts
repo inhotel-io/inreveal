@@ -430,8 +430,10 @@ const coalesceToolActivities = (candidates: ToolActivityCandidate[]): AgentActiv
     const allTerminal = sortedGroup.every((item) => terminalStatuses.has(item.status));
     const completedAt = allTerminal ? validCompletedDates.at(-1) : undefined;
     const summary =
-      sortedGroup.find((item) => item.status === status && item.summary)?.summary ??
-      sortedGroup.find((item) => item.summary)?.summary;
+      sortedGroup.length > 1 && first.kind === 'search' && status === 'completed' && assetCount > 0
+        ? `Returned metadata for ${assetCount} ${assetCount === 1 ? 'asset' : 'assets'}`
+        : (sortedGroup.find((item) => item.status === status && item.summary)?.summary ??
+          sortedGroup.find((item) => item.summary)?.summary);
 
     return {
       id:
