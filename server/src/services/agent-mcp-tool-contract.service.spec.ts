@@ -764,8 +764,9 @@ describe(AgentMcpToolContractService.name, () => {
           hint: expect.stringContaining('Use resolveAssetSearchFilters'),
           exampleArguments,
         });
-        expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(correction?.exampleArguments).success)
-          .toBe(true);
+        expect(
+          AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(correction?.exampleArguments).success,
+        ).toBe(true);
       }
     });
 
