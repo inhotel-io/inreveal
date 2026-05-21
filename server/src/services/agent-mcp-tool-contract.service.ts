@@ -226,6 +226,48 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       },
     },
     {
+      name: 'unalbumed-berlin-may-search',
+      description: 'Find unalbumed Berlin photos from May.',
+      arguments: {
+        mode: 'metadata',
+        filters: {
+          takenAfter: '2026-05-01T00:00:00.000Z',
+          takenBefore: '2026-05-31T23:59:59.999Z',
+          city: 'Berlin',
+          country: 'Germany',
+          isNotInAlbum: true,
+        },
+        limit: 50,
+        page: 1,
+        order: 'desc',
+      },
+    },
+    {
+      name: 'five-star-video-search',
+      description: 'Find five-star videos.',
+      arguments: {
+        filters: {
+          rating: 5,
+          type: 'VIDEO',
+        },
+        limit: 50,
+      },
+    },
+    {
+      name: 'ocr-invoice-screenshot-search',
+      description: 'Find image assets with OCR text mentioning invoices from 2024.',
+      arguments: {
+        mode: 'ocr',
+        query: 'invoice',
+        filters: {
+          takenAfter: '2024-01-01T00:00:00.000Z',
+          takenBefore: '2024-12-31T23:59:59.999Z',
+          type: 'IMAGE',
+        },
+        limit: 50,
+      },
+    },
+    {
       name: 'favorite-rating-search',
       description: 'Search favorite five-star assets.',
       arguments: {
@@ -466,6 +508,14 @@ const resolveAssetSearchFiltersContract: AgentMcpToolContract<AgentToolName.Reso
       name: 'resolve-named-filters',
       description: 'Resolve album and tag names before searching.',
       arguments: { tags: ['Travel'], albums: ['Berlin'] },
+    },
+    {
+      name: 'resolve-alex-family-space-filters',
+      description: 'Resolve a user-facing person name inside a shared space before searching.',
+      arguments: {
+        people: ['Alex'],
+        spaces: ['Family'],
+      },
     },
     {
       name: 'resolve-space-person-filters',
