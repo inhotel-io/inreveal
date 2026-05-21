@@ -411,8 +411,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
     {
       id: 'search-page-continuation',
       match: { issuePath: 'page' },
-      hint:
-        'Use the returned nextPage value as page, and keep the same mode, query, filters, order, and limit from the previous bounded search.',
+      hint: 'Use the returned nextPage value as page, and keep the same mode, query, filters, order, and limit from the previous bounded search.',
       exampleName: 'metadata-next-page-search',
     },
     {
