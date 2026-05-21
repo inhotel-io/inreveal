@@ -159,6 +159,28 @@ describe(AgentMcpToolContractService.name, () => {
     );
   });
 
+  it('documents resolver-first people organization flows for global and shared-space people', () => {
+    const contracts = sut.listToolContracts();
+    const resolver = contracts.find((contract) => contract.name === AgentToolName.ResolveAssetSearchFilters);
+    const search = contracts.find((contract) => contract.name === AgentToolName.SearchAssets);
+
+    expect(resolver?.usage).toContain(
+      'For named people in a named shared space, resolve the space and person together',
+    );
+    expect(resolver?.examples).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'resolve-space-person-filters',
+          arguments: { people: ['Pierre'], spaces: ['Family'] },
+        }),
+      ]),
+    );
+    expect(
+      resolver?.examples.find((example) => example.name === 'resolve-space-person-filters')?.arguments,
+    ).not.toHaveProperty('scope.withSharedSpaces');
+    expect(search?.usage).toContain('Use returned personIds or spaceId plus spacePersonIds');
+  });
+
   it('advertises executable text search modes and examples for searchAssets', () => {
     const search = sut.getReadToolContract(AgentToolName.SearchAssets);
 
@@ -242,7 +264,7 @@ describe(AgentMcpToolContractService.name, () => {
     }
 
     expect(search?.usage).toContain(
-      'people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types',
+      'Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types.',
     );
     expect(search?.usage).not.toContain('Text modes, later pages, and non-desc order are not available yet');
     expect(search?.usage).not.toContain('people, space, visibility, later pages');
@@ -271,6 +293,30 @@ describe(AgentMcpToolContractService.name, () => {
       },
       limit: 25,
     });
+  });
+
+  it('defines people organization examples that parse against live schemas', () => {
+    const contracts = sut.listToolContracts();
+    const resolver = contracts.find((contract) => contract.name === AgentToolName.ResolveAssetSearchFilters);
+    const search = contracts.find((contract) => contract.name === AgentToolName.SearchAssets);
+    const peopleOrganizationExamples = [
+      resolver?.examples.find((example) => example.name === 'resolve-space-person-filters'),
+      search?.examples.find((example) => example.name === 'person-filter-search'),
+      search?.examples.find((example) => example.name === 'space-filter-search'),
+    ];
+
+    for (const example of peopleOrganizationExamples) {
+      expect(example, 'people organization example should exist').toBeDefined();
+    }
+
+    expect(
+      AgentReadToolRequestSchemas[AgentToolName.ResolveAssetSearchFilters].safeParse(
+        peopleOrganizationExamples[0]?.arguments,
+      ).success,
+    ).toBe(true);
+    for (const example of peopleOrganizationExamples.slice(1)) {
+      expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(example?.arguments).success).toBe(true);
+    }
   });
 
   it('defines the required list and album read examples from the spec', () => {
@@ -819,7 +865,7 @@ describe(AgentMcpToolContractService.name, () => {
       });
 
       const expectedUsage =
-        'Put deterministic metadata search filters under filters. Use searchAssets with structured filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types when IDs are already known. Use mode smart, description, ocr, or filename with query for text search. Only page 1 and order desc are executable; later pages and non-desc order are not available yet. Use only toolCallId when retrying a Gallery-approved search.';
+        'Put deterministic metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose operation plans with the returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Only page 1 and order desc are executable; later pages and non-desc order are not available yet.';
       expect(correction).toEqual({
         expected: expectedUsage,
         hint: expectedUsage,
