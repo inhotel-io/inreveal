@@ -723,7 +723,9 @@ describe(AgentMcpToolContractService.name, () => {
       const search = sut.getReadToolContract(AgentToolName.SearchAssets);
 
       expect(search?.description).toContain('bounded result pages');
-      expect(search?.usage).toContain('repeat the same mode, query, filters, order, and limit with nextPage');
+    expect(search?.usage).toContain(
+      'repeat the same mode, query, filters, order, and limit using the returned nextPage value as page',
+    );
       expect(search?.usage).not.toContain('Only page 1');
       expect(search?.usage).not.toContain('later pages and non-desc order are not available yet');
       expect(search?.examples.map((example) => example.name)).toContain('metadata-next-page-search');
@@ -887,7 +889,7 @@ describe(AgentMcpToolContractService.name, () => {
       });
 
       const expectedUsage =
-        'Put deterministic metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose operation plans with the returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Search responses are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit with nextPage to continue.';
+        'Put deterministic metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose operation plans with the returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Search responses are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.';
       expect(correction).toEqual({
         expected: expectedUsage,
         hint: expectedUsage,
