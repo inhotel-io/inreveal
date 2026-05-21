@@ -199,12 +199,14 @@ const AgentSearchAssetsToolRequestSchema = z
       return value;
     }
 
+    const mode = value.mode ?? DEFAULT_SEARCH_MODE;
+    const order = value.order ?? (mode === 'smart' ? undefined : DEFAULT_SEARCH_ORDER);
     const request = {
-      mode: value.mode ?? DEFAULT_SEARCH_MODE,
+      mode,
       filters: value.filters ?? {},
       limit: value.limit ?? MAX_TOOL_LIMIT,
       page: value.page ?? DEFAULT_SEARCH_PAGE,
-      order: value.order ?? DEFAULT_SEARCH_ORDER,
+      ...(order === undefined ? {} : { order }),
     };
 
     return value.query === undefined ? request : { ...request, query: value.query };

@@ -1,5 +1,5 @@
 import { AssetOrder, AssetType, AssetVisibility } from 'src/enum';
-import { buildAgentMetadataSearch } from 'src/services/agent-search-filter-mapper';
+import { buildAgentMetadataSearch, buildAgentSearch } from 'src/services/agent-search-filter-mapper';
 import { newUuid } from 'test/small.factory';
 
 describe(buildAgentMetadataSearch.name, () => {
@@ -225,5 +225,108 @@ describe(buildAgentMetadataSearch.name, () => {
     expect(result.options).not.toHaveProperty('spacePersonIds');
     expect(result.options).not.toHaveProperty('tagIds');
     expect(result.options).not.toHaveProperty('albumIds');
+  });
+});
+
+describe(buildAgentSearch.name, () => {
+  const userId = newUuid();
+  const sharedSpaceId = newUuid();
+
+  it('maps description mode to Gallery description metadata search only', () => {
+    const result = buildAgentSearch({
+      userId,
+      request: {
+        mode: 'description',
+        query: 'summer trip',
+        filters: { takenAfter: new Date('2026-05-01T00:00:00.000Z') },
+        limit: 25,
+        page: 1,
+        order: 'desc',
+      },
+      scope: { owned: true, sharedSpaces: false, locked: false, timelineSpaceIds: [] },
+    });
+
+    expect(result.kind).toBe('metadata');
+    expect(result.options).toEqual(expect.objectContaining({ description: 'summer trip' }));
+    expect(result.options).not.toHaveProperty('ocr');
+    expect(result.options).not.toHaveProperty('originalFileName');
+  });
+
+  it('maps OCR mode to Gallery OCR search only', () => {
+    const result = buildAgentSearch({
+      userId,
+      request: { mode: 'ocr', query: 'invoice', filters: {}, limit: 10, page: 1, order: 'desc' },
+      scope: { owned: true, sharedSpaces: false, locked: false, timelineSpaceIds: [] },
+    });
+
+    expect(result.kind).toBe('metadata');
+    expect(result.options).toEqual(expect.objectContaining({ ocr: 'invoice' }));
+    expect(result.options).not.toHaveProperty('description');
+    expect(result.options).not.toHaveProperty('originalFileName');
+  });
+
+  it('maps filename mode to originalFileName metadata search only', () => {
+    const result = buildAgentSearch({
+      userId,
+      request: { mode: 'filename', query: 'IMG_2026', filters: {}, limit: 10, page: 1, order: 'desc' },
+      scope: { owned: true, sharedSpaces: false, locked: false, timelineSpaceIds: [] },
+    });
+
+    expect(result.kind).toBe('metadata');
+    expect(result.options).toEqual(expect.objectContaining({ originalFileName: 'IMG_2026' }));
+    expect(result.options).not.toHaveProperty('description');
+    expect(result.options).not.toHaveProperty('ocr');
+  });
+
+  it('maps smart mode to smart search options with relevance ordering omitted', () => {
+    const personId = newUuid();
+    const tagId = newUuid();
+
+    const result = buildAgentSearch({
+      userId,
+      request: {
+        mode: 'smart',
+        query: 'beach sunset',
+        filters: { city: 'Berlin', personIds: [personId], tagIds: [tagId] },
+        limit: 5,
+        page: 1,
+      },
+      scope: { owned: true, sharedSpaces: false, locked: false, timelineSpaceIds: [] },
+      smartEmbedding: '[1,2,3]',
+      smartMaxDistance: 0.75,
+    });
+
+    expect(result.kind).toBe('smart');
+    expect(result.options).toEqual(
+      expect.objectContaining({
+        query: 'beach sunset',
+        embedding: '[1,2,3]',
+        maxDistance: 0.75,
+        city: 'Berlin',
+        personIds: [personId],
+        tagIds: [tagId],
+        userIds: [userId],
+      }),
+    );
+    expect(result.options).not.toHaveProperty('orderDirection');
+  });
+
+  it('maps shared-space smart search to timeline space scope', () => {
+    const result = buildAgentSearch({
+      userId,
+      request: {
+        mode: 'smart',
+        query: 'beach sunset',
+        filters: { withSharedSpaces: true },
+        limit: 5,
+        page: 1,
+      },
+      scope: { owned: true, sharedSpaces: true, locked: false, timelineSpaceIds: [sharedSpaceId] },
+      smartEmbedding: '[1,2,3]',
+      smartMaxDistance: 0.75,
+    });
+
+    expect(result.kind).toBe('smart');
+    expect(result.options).toEqual(expect.objectContaining({ userIds: [userId], timelineSpaceIds: [sharedSpaceId] }));
   });
 });
