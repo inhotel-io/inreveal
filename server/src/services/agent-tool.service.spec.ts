@@ -1770,6 +1770,40 @@ describe(AgentToolService.name, () => {
     expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
   });
 
+  it('keeps broad all-assets requests bounded and exposes hasMore guidance', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = Array.from({ length: 3 }, () => newUuid());
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 10_000, maxAssetsPerSession: 10_000 },
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: true,
+    });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue(assetIds.map((id) => makeMetadata(id)) as never);
+
+    const result = await sut.searchAssets(auth, session.id, { filters: {}, limit: 3 });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        returnedCount: 3,
+        hasMore: true,
+        nextPage: '2',
+        toolCall: expect.objectContaining({
+          responseSummary: 'Returned metadata for 3 assets; more results available on page 2',
+        }),
+      }),
+    );
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith({ page: 1, size: 3 }, expect.any(Object));
+  });
+
   it.each([
     ['description', 'birthday', { description: 'birthday' }],
     ['ocr', 'invoice', { ocr: 'invoice' }],
@@ -1880,6 +1914,54 @@ describe(AgentToolService.name, () => {
       expect.not.objectContaining({ orderDirection: expect.anything() }),
     );
     expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+  });
+
+  it('executes later smart search pages while preserving relevance ordering', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    systemMetadataRepository.get.mockResolvedValue({
+      machineLearning: { clip: { modelName: 'ViT-Test', maxDistance: 0.42 } },
+    } as never);
+    machineLearningRepository.encodeText.mockResolvedValue('[1, 2, 3]');
+    searchRepository.searchSmart.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: true });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'smart',
+      query: 'beach sunset',
+      filters: { isFavorite: true },
+      limit: 25,
+      page: 2,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        returnedCount: 1,
+        hasMore: true,
+        nextPage: '3',
+        toolCall: expect.objectContaining({
+          responseSummary: 'Returned metadata for 1 asset; more results available on page 3',
+        }),
+      }),
+    );
+    expect(searchRepository.searchSmart).toHaveBeenCalledWith(
+      { page: 2, size: 25 },
+      expect.objectContaining({
+        query: 'beach sunset',
+        embedding: '[1, 2, 3]',
+        isFavorite: true,
+        userIds: [auth.user.id],
+      }),
+    );
+    expect(searchRepository.searchSmart).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.not.objectContaining({ orderDirection: expect.anything() }),
+    );
   });
 
   it('includes timeline space ids in shared-space smart search scope', async () => {
