@@ -210,6 +210,38 @@ describe(AgentMcpDocsService.name, () => {
     expect(markdown).toContain('search-order-unavailable');
   });
 
+  it('documents the progressive detail workflow and broad-search edge cases', () => {
+    const markdown = sut.generateMarkdown();
+
+    expect(markdown).toContain('## Progressive Detail Workflow');
+    expect(markdown).toContain('Resolve names before search');
+    expect(markdown).toContain('Search compact IDs first');
+    expect(markdown).toContain('Request fields only for selected IDs');
+    expect(markdown).toContain('Visual curation');
+    expect(markdown).toContain('Technical metadata');
+    expect(markdown).toContain('Large album');
+    expect(markdown).toContain('All photos');
+    expect(markdown).toContain('ask a narrowing question');
+    expect(markdown).toContain('resultSize.truncated');
+    expect(markdown).not.toContain('"limit": 1000');
+  });
+
+  it('documents progressive examples from the contract and keeps them parseable', () => {
+    const markdown = sut.generateMarkdown();
+    const documentedNames = sut.listDocumentedToolArgumentExamples().map((example) => example.exampleName);
+
+    for (const name of [
+      'compact-date-location-search',
+      'summary-sample-search',
+      'visual-curation-candidate-search',
+      'large-album-page-search',
+      'read-technical-fields-for-selected-assets',
+    ]) {
+      expect(markdown).toContain(name);
+      expect(documentedNames).toContain(name);
+    }
+  });
+
   it('documents Slice 7 search scenario examples and correction hints', () => {
     const markdown = sut.generateMarkdown();
     const generatedPath = resolve(process.cwd(), '..', AGENT_MCP_GENERATED_DOC_RELATIVE_PATH);
