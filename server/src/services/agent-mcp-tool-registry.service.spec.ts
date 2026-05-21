@@ -236,7 +236,7 @@ describe(AgentMcpToolRegistryService.name, () => {
         description: expect.stringContaining('10000'),
       }),
       page: expect.objectContaining({
-        description: expect.stringContaining('Use returned nextPage'),
+        description: expect.stringContaining('Use the returned nextPage value as page'),
       }),
       order: expect.objectContaining({
         description: expect.stringContaining('Only desc is currently executable'),
