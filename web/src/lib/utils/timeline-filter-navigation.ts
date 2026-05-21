@@ -1,5 +1,6 @@
 import type { FilterState } from '$lib/components/filter-panel/filter-panel';
 import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
+import { toISOYearMonthUTC } from '$lib/utils/timeline-util';
 
 export type ActivatableTimelineBucket = {
   grouping: TimelineGrouping;
@@ -76,7 +77,7 @@ export function getTimelineManagerTimeBuckets(source: TemporalBucketSource | und
 
   return (
     source.months?.map((month) => ({
-      timeBucket: `${month.yearMonth.year}-${String(month.yearMonth.month).padStart(2, '0')}-01T00:00:00.000Z`,
+      timeBucket: toISOYearMonthUTC(month.yearMonth),
       count: month.assetsCount,
     })) ?? []
   );

@@ -659,7 +659,7 @@ describe('TimelineManager grouping metadata', () => {
     expect(sdkMock.getTimeBucket).toHaveBeenCalledWith(
       expect.objectContaining({
         bucketSize: TimeBucketSize.Month,
-        timeBucket: '2024-01-01T00:00:00.000Z',
+        timeBucket: '2024-01-01',
       }),
       expect.anything(),
     );
@@ -685,7 +685,7 @@ describe('TimelineManager grouping metadata', () => {
       expect.objectContaining({
         albumId: 'album-1',
         bucketSize: TimeBucketSize.Month,
-        timeBucket: '2024-01-01T00:00:00.000Z',
+        timeBucket: '2024-01-01',
       }),
       expect.anything(),
     );
@@ -708,7 +708,7 @@ describe('TimelineManager grouping metadata', () => {
       expect.objectContaining({
         bucketSize: TimeBucketSize.Month,
         spaceId: 'space-1',
-        timeBucket: '2024-01-01T00:00:00.000Z',
+        timeBucket: '2024-01-01',
       }),
       expect.anything(),
     );
