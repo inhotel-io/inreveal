@@ -1750,6 +1750,110 @@ describe(AgentOperationPlanService.name, () => {
     });
   });
 
+  it.each([
+    AgentOperationType.AlbumAddAssets,
+    AgentOperationType.SpaceAddAssets,
+    AgentOperationType.AssetAddTag,
+    AgentOperationType.AssetSetFavorite,
+    AgentOperationType.AssetSetArchive,
+    AgentOperationType.AssetRotate,
+  ])('treats people-search asset ids as normal %s plan assets and keeps the session running', async (type) => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const assetIds = [newUuid(), newUuid()];
+    const albumId = newUuid();
+    const spaceId = newUuid();
+    const tagId = newUuid();
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type,
+      targetKind:
+        type === AgentOperationType.AlbumAddAssets
+          ? AgentOperationTargetKind.ExistingAlbum
+          : type === AgentOperationType.SpaceAddAssets
+            ? AgentOperationTargetKind.ExistingSpace
+            : type === AgentOperationType.AssetRotate
+              ? AgentOperationTargetKind.ImageEditBatch
+              : AgentOperationTargetKind.AssetBatch,
+      targetId:
+        type === AgentOperationType.AlbumAddAssets
+          ? albumId
+          : type === AgentOperationType.SpaceAddAssets
+            ? spaceId
+            : null,
+      temporaryTargetId: null,
+      assetIds,
+      payload:
+        type === AgentOperationType.AssetAddTag
+          ? { tagId }
+          : type === AgentOperationType.AssetSetFavorite
+            ? { favorite: true }
+            : type === AgentOperationType.AssetSetArchive
+              ? { archived: true }
+              : type === AgentOperationType.AssetRotate
+                ? { angle: 90 }
+                : {},
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([spaceId]));
+    accessRepository.tag.checkOwnerAccess.mockResolvedValue(new Set([tagId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    albumService.addAssets.mockResolvedValue(assetIds.map((id) => ({ id, success: true })));
+    sharedSpaceService.addAssets.mockResolvedValue(undefined as never);
+    tagService.addAssets.mockResolvedValue(assetIds.map((id) => ({ id, success: true })));
+    assetService.updateAll.mockResolvedValue(undefined as never);
+    assetRepository.getForEdit.mockResolvedValue({
+      type: AssetType.Image,
+      livePhotoVideoId: null,
+      originalPath: '/photos/image.jpg',
+      originalFileName: 'image.jpg',
+      duration: null,
+      exifImageWidth: 400,
+      exifImageHeight: 300,
+      orientation: null,
+      projectionType: null,
+    });
+    assetService.getAssetEdits.mockResolvedValue({ assetId: assetIds[0], edits: [] } as never);
+    assetService.editAsset.mockResolvedValue({ assetId: assetIds[0], edits: [] } as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(result.appliedOperationIds).toEqual([operation.id]);
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        status: AgentOperationStatus.Applied,
+        result: expect.objectContaining({ assetIds }),
+      }),
+    ]);
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.Running,
+      endedAt: null,
+    });
+    expect(sessionRepository.update).not.toHaveBeenCalledWith(
+      auth.user.id,
+      session.id,
+      expect.objectContaining({ status: AgentSessionStatus.Completed }),
+    );
+  });
+
   it('emits aggregate apply progress activity events without exposing operation or asset ids', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.WaitingForPlanReview });
