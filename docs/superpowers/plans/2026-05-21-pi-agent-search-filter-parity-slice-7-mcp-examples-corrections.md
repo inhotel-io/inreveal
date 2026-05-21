@@ -508,7 +508,7 @@ Expected:
 In `server/src/services/agent-mcp-prompt.service.ts`, add this line immediately after the `R:` search guidance line:
 
 ```ts
-'Search patterns: unalbumed -> isNotInAlbum; 5-star videos -> rating 5 + type VIDEO; OCR invoice -> mode ocr + query invoice; named people/spaces -> resolve names first.',
+'Patterns: unalbumed=isNotInAlbum; 5-star videos=rating 5+type VIDEO; OCR invoice=mode ocr+query invoice; names=resolve names first.',
 ```
 
 Check prompt size locally if needed:

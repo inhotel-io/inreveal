@@ -61,7 +61,7 @@ export class AgentMcpPromptService {
         'Gallery MCP tool-use cheat sheet',
         `Tool: ${toolList}`,
         `R: Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds; if hasMore, use nextPage as page.`,
-        'Search patterns: unalbumed -> isNotInAlbum; 5-star videos -> rating 5 + type VIDEO; OCR invoice -> mode ocr + query invoice; named people/spaces -> resolve names first.',
+        'Patterns: unalbumed=isNotInAlbum; 5-star videos=rating 5+type VIDEO; OCR invoice=mode ocr+query invoice; names=resolve names first.',
         'Text search: smart/ocr/description/filename require query',
         `Write: call ${this.toPiToolName(planContract.name)} for reviewable plans.`,
         this.renderSafetyGuidance(contracts),
