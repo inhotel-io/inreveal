@@ -423,7 +423,9 @@ const setup = () => {
     getAgentLockedIds: vi.fn(() => Promise.resolve(new Set())),
     getAgentMetadataByIds: vi.fn((assetIds: string[]) => Promise.resolve(assetIds.map((assetId) => metadata(assetId)))),
   };
-  const searchRepository = { searchMetadata: vi.fn(() => Promise.resolve({ items: [], hasNextPage: false })) };
+  const searchRepository = {
+    searchMetadata: vi.fn(() => Promise.resolve({ items: [] as Array<{ id: string }>, hasNextPage: false })),
+  };
   const toolService = new AgentToolService(
     accessRepository as unknown as AccessRepository,
     assetRepository as unknown as AssetRepository,
