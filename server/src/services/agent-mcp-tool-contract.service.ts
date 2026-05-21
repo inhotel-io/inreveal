@@ -255,7 +255,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
     },
     {
       name: 'ocr-invoice-screenshot-search',
-      description: 'Find image assets with OCR text mentioning invoices from 2024.',
+      description: 'Start invoice screenshot discovery using supported OCR text, image type, and date filters.',
       arguments: {
         mode: 'ocr',
         query: 'invoice',

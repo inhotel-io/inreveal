@@ -154,7 +154,7 @@ describe(AgentMcpToolContractService.name, () => {
     );
   });
 
-  it('defines Slice 7 natural-language search examples that parse and map to supported filters', () => {
+  it('defines Slice 7 natural-language search examples that parse into supported MCP arguments', () => {
     const search = sut.getReadToolContract(AgentToolName.SearchAssets);
     const examplesByName = new Map(search?.examples.map((example) => [example.name, example]));
 
