@@ -198,6 +198,7 @@
   );
   const busyFrames = ['-', '\\', '|', '/'];
   const busyFrame = $derived(busyFrames[busyFrameIndex]);
+  const prefersReducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
   const chatTimelineItems = $derived(
     buildChatTimelineItems(
       messages,
@@ -807,7 +808,7 @@
   });
 
   $effect(() => {
-    if (!showAssistantBusyIndicator) {
+    if (!showAssistantBusyIndicator || prefersReducedMotion()) {
       busyFrameIndex = 0;
       return;
     }
