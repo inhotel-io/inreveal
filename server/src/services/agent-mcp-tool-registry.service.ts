@@ -49,7 +49,8 @@ const approvedRequestInstruction =
 
 const propertyDescriptions = {
   assetIds: 'Asset ids for a new asset read request or planning operation. Use ids returned by Gallery tools.',
-  albumId: 'The album id returned by listAlbums for a new album read request.',
+  albumId: 'Existing album id returned by listAlbums/readAlbum.',
+  albumName: 'Album name to create or exact visible album name to resolve.',
   spaceId: 'The shared space id returned by listSpaces for a new space read request.',
   people: 'Visible person names to resolve into searchAssets personIds.',
   tags: 'Visible tag names to resolve into searchAssets tagIds.',
@@ -75,6 +76,9 @@ const propertyDescriptions = {
   toolCallId: 'Use only for an approved retry after Gallery approves a pending read request.',
   summary: 'A human-readable plan summary describing what Gallery should review.',
   operations: 'The reviewable Gallery operations to propose or revise. Do not apply changes directly.',
+  assetSource:
+    'Preferred source object for search-backed planning. Use kind search for declarative filters or previousSearch for a sourceRef returned by searchAssets.',
+  description: 'Optional album description.',
   planId: 'The id of an existing proposed plan returned by Gallery.',
   feedback: 'Optional user feedback explaining how to revise the existing plan.',
   focus: 'An optional summary focus, such as risks, selected changes, or skipped operations.',
@@ -202,6 +206,20 @@ const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolCont
       description: `Search Gallery users visible to the authenticated session user before proposing shared-space member changes.${approvedRequestInstruction}`,
       schema: AgentReadToolRequestSchemas[AgentToolName.SearchUsers],
       annotations: readToolAnnotations,
+    }),
+    defineTool({
+      name: AgentToolName.ProposeAlbumFromSearch,
+      title: 'Propose album from search',
+      description: 'Preferred album-from-search workflow that creates a reviewable plan.',
+      schema: AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumFromSearch],
+      annotations: planningToolAnnotations,
+    }),
+    defineTool({
+      name: AgentToolName.ProposeAddAssetsToAlbumFromSearch,
+      title: 'Propose add assets to album from search',
+      description: 'Preferred workflow for adding search matches to an existing album as a reviewable plan.',
+      schema: AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAddAssetsToAlbumFromSearch],
+      annotations: planningToolAnnotations,
     }),
     defineTool({
       name: AgentToolName.ProposeAlbumOperations,

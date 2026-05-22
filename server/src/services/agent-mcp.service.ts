@@ -60,6 +60,8 @@ export class AgentMcpService {
 
   private readonly planningToolNames = new Set<AgentToolName>([
     AgentToolName.ProposeAlbumOperations,
+    AgentToolName.ProposeAlbumFromSearch,
+    AgentToolName.ProposeAddAssetsToAlbumFromSearch,
     AgentToolName.ReviseProposedOperations,
     AgentToolName.SummarizePlan,
   ]);
@@ -202,6 +204,16 @@ export class AgentMcpService {
       case AgentToolName.ProposeAlbumOperations: {
         return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
           this.operationPlanService.proposeAlbumOperations(auth, sessionId, dto),
+        );
+      }
+      case AgentToolName.ProposeAlbumFromSearch: {
+        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
+          this.operationPlanService.proposeAlbumFromSearch(auth, sessionId, dto),
+        );
+      }
+      case AgentToolName.ProposeAddAssetsToAlbumFromSearch: {
+        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
+          this.operationPlanService.proposeAddAssetsToAlbumFromSearch(auth, sessionId, dto),
         );
       }
       case AgentToolName.ReviseProposedOperations: {

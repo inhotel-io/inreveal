@@ -16,6 +16,8 @@ const expectedToolNames = [
   AgentToolName.ListSpaces,
   AgentToolName.ReadSpace,
   AgentToolName.SearchUsers,
+  AgentToolName.ProposeAlbumFromSearch,
+  AgentToolName.ProposeAddAssetsToAlbumFromSearch,
   AgentToolName.ProposeAlbumOperations,
   AgentToolName.ReviseProposedOperations,
   AgentToolName.SummarizePlan,
@@ -35,6 +37,8 @@ const expectedReadToolNames = [
 ] as const;
 
 const expectedPlanningToolNames = [
+  AgentToolName.ProposeAlbumFromSearch,
+  AgentToolName.ProposeAddAssetsToAlbumFromSearch,
   AgentToolName.ProposeAlbumOperations,
   AgentToolName.ReviseProposedOperations,
   AgentToolName.SummarizePlan,
@@ -390,6 +394,33 @@ describe(AgentMcpToolRegistryService.name, () => {
     }
   });
 
+  it('lists the high-level album workflow tools with valid examples', () => {
+    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+
+    for (const toolName of [
+      AgentToolName.ProposeAlbumFromSearch,
+      AgentToolName.ProposeAddAssetsToAlbumFromSearch,
+    ] as const) {
+      const tool = toolsByName.get(toolName);
+      const contract = contractService.getPlanningToolContract(toolName);
+
+      expect(contract).toBeDefined();
+      if (!contract) {
+        throw new Error(`Missing planning contract for ${toolName}`);
+      }
+      expect(tool?.title).toBe(contract.title);
+      expect(tool?.description).toContain('preferred');
+      expect(tool?.description).toContain('review');
+      expect(tool?.inputSchema).toMatchObject({ type: 'object' });
+      expect(tool?.inputSchema.examples).toEqual(contract.examples.map((example) => example.arguments));
+
+      for (const exampleArguments of tool?.inputSchema.examples as Record<string, unknown>[]) {
+        const result = AgentOperationPlanToolRequestSchemas[toolName].safeParse(exampleArguments);
+        expect(result.success, `${toolName} example should parse`).toBe(true);
+      }
+    }
+  });
+
   it('adds model-facing property descriptions for planning tool argument fields', () => {
     const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
     const proposal = toolsByName.get(AgentToolName.ProposeAlbumOperations)?.inputSchema;
@@ -604,7 +635,7 @@ describe(AgentMcpToolRegistryService.name, () => {
     const serialized = JSON.stringify(sut.listTools());
 
     expect(serialized).not.toMatch(
-      /\/api|agent\/internal|bearer|token|provider key|stack trace|applyAlbumOperations|applyOperations|createAlbum|addAssetsToAlbum/i,
+      /\/api|agent\/internal|bearer|token|provider key|stack trace|applyAlbumOperations|applyOperations|createAlbum|addAssetsToAlbum(?!FromSearch)/i,
     );
   });
 
