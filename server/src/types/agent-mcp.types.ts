@@ -51,6 +51,15 @@ export type AgentMcpToolValidationErrorContent = {
   exampleArguments?: AgentMcpJsonObject;
 };
 
+export type AgentMcpRecoverableToolErrorContent = {
+  status: 'error';
+  error: string;
+  toolName: AgentToolName;
+  retryable: true;
+  hint: string;
+  recovery: AgentMcpJsonObject;
+};
+
 export type AgentMcpError = {
   code: number;
   message: string;

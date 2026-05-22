@@ -189,6 +189,113 @@ describe(AgentSelectionHandleRepository.name, () => {
     ).resolves.toBeUndefined();
   });
 
+  it('lists only valid same-session handles for recovery without asset ids', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { user, session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const other = await createSession(ctx, credentialRepository, sessionRepository);
+    const now = new Date('2026-05-22T08:00:00.000Z');
+
+    const older = await sut.create({
+      sessionId: session.id,
+      userId: user.id,
+      sourceToolCallId: null,
+      assetIds: [factory.uuid(), factory.uuid()],
+      expiresAt: new Date('2026-05-22T09:00:00.000Z'),
+    });
+    const newer = await sut.create({
+      sessionId: session.id,
+      userId: user.id,
+      sourceToolCallId: null,
+      assetIds: [factory.uuid(), factory.uuid(), factory.uuid()],
+      expiresAt: new Date('2026-05-22T10:00:00.000Z'),
+    });
+    await sut.create({
+      sessionId: session.id,
+      userId: user.id,
+      sourceToolCallId: null,
+      assetIds: [factory.uuid()],
+      expiresAt: new Date('2026-05-22T07:59:59.000Z'),
+    });
+    await sut.create({
+      sessionId: other.session.id,
+      userId: user.id,
+      sourceToolCallId: null,
+      assetIds: [factory.uuid()],
+      expiresAt: new Date('2026-05-22T10:00:00.000Z'),
+    });
+
+    const result = await sut.listValidForRecovery({ sessionId: session.id, userId: user.id, now, limit: 5 });
+
+    expect(result).toEqual([
+      expect.objectContaining({ id: newer.id, assetCount: 3, sourceToolCallId: newer.sourceToolCallId }),
+      expect.objectContaining({ id: older.id, assetCount: 2, sourceToolCallId: older.sourceToolCallId }),
+    ]);
+    expect(result.map((handle) => 'assetIds' in handle)).toEqual([false, false]);
+    expect(result.map((handle) => 'sampleAssetIds' in handle)).toEqual([false, false]);
+  });
+
+  it('uses id descending as a stable recovery order tie-breaker', async () => {
+    const { ctx, credentialRepository, database, sessionRepository, sut } = setup();
+    const { user, session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const createdAt = new Date('2026-05-22T08:00:00.000Z');
+    const first = await sut.create({
+      sessionId: session.id,
+      userId: user.id,
+      sourceToolCallId: null,
+      assetIds: [factory.uuid()],
+      expiresAt: new Date('2026-05-22T10:00:00.000Z'),
+    });
+    const second = await sut.create({
+      sessionId: session.id,
+      userId: user.id,
+      sourceToolCallId: null,
+      assetIds: [factory.uuid()],
+      expiresAt: new Date('2026-05-22T10:00:00.000Z'),
+    });
+    await database
+      .updateTable('agent_selection_handle')
+      .set({ createdAt })
+      .where('id', 'in', [first.id, second.id])
+      .execute();
+
+    const result = await sut.listValidForRecovery({
+      sessionId: session.id,
+      userId: user.id,
+      now: new Date('2026-05-22T09:00:00.000Z'),
+      limit: 5,
+    });
+    const expectedIds = [first.id, second.id].toSorted().toReversed();
+
+    expect(result.map((handle) => handle.id)).toEqual(expectedIds);
+  });
+
+  it('returns same-session expired handle metadata for recovery but not cross-session handles', async () => {
+    const { ctx, credentialRepository, sessionRepository, sut } = setup();
+    const { user, session } = await createSession(ctx, credentialRepository, sessionRepository);
+    const other = await createSession(ctx, credentialRepository, sessionRepository);
+    const expired = await sut.create({
+      sessionId: session.id,
+      userId: user.id,
+      sourceToolCallId: null,
+      assetIds: [factory.uuid(), factory.uuid()],
+      expiresAt: new Date('2026-05-22T07:00:00.000Z'),
+    });
+    const crossSession = await sut.create({
+      sessionId: other.session.id,
+      userId: user.id,
+      sourceToolCallId: null,
+      assetIds: [factory.uuid()],
+      expiresAt: new Date('2026-05-22T07:00:00.000Z'),
+    });
+
+    await expect(sut.getForRecovery({ id: expired.id, sessionId: session.id, userId: user.id })).resolves.toEqual(
+      expect.objectContaining({ id: expired.id, assetCount: 2, expiresAt: expired.expiresAt }),
+    );
+    await expect(
+      sut.getForRecovery({ id: crossSession.id, sessionId: session.id, userId: user.id }),
+    ).resolves.toBeUndefined();
+  });
+
   it('handles thousands of assets deterministically without expanding samples', async () => {
     const { ctx, credentialRepository, sessionRepository, sut } = setup();
     const { user, session } = await createSession(ctx, credentialRepository, sessionRepository);
