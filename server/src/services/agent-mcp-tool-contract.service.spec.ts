@@ -251,6 +251,53 @@ describe(AgentMcpToolContractService.name, () => {
     expect(JSON.stringify(planExample?.arguments)).not.toContain('"assetIds"');
   });
 
+  it('documents people OR resolver and search examples that keep resolved personIds together', () => {
+    const resolver = sut.getReadToolContract(AgentToolName.ResolveAssetSearchFilters);
+    const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+    const resolverExample = resolver?.examples.find((example) => example.name === 'resolve-pierre-aurelia-people');
+    const searchExample = search?.examples.find((example) => example.name === 'search-resolved-pierre-aurelia-people');
+
+    expect(resolverExample?.description).toMatch(/Pierre OR Aurelia/i);
+    expect(resolverExample?.arguments).toEqual({ people: ['Pierre', 'Aurelia'] });
+    expect(searchExample?.description).toMatch(/same personIds array/i);
+    expect(searchExample?.arguments).toEqual({
+      detail: 'ids',
+      createSelectionHandle: true,
+      filters: {
+        country: 'South Africa',
+        takenAfter: '2026-01-01T00:00:00.000Z',
+        takenBefore: '2026-01-31T23:59:59.999Z',
+        personIds: ['00000000-0000-4000-8000-000000000040', '00000000-0000-4000-8000-000000000041'],
+      },
+      limit: 50,
+    });
+    expect(
+      AgentReadToolRequestSchemas[AgentToolName.ResolveAssetSearchFilters].safeParse(resolverExample?.arguments)
+        .success,
+    ).toBe(true);
+    expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(searchExample?.arguments).success).toBe(
+      true,
+    );
+  });
+
+  it('documents shared-space resolver and search examples that keep spaceId with spacePersonIds', () => {
+    const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+    const searchExample = search?.examples.find((example) => example.name === 'search-resolved-family-space-people');
+
+    expect(searchExample?.description).toMatch(/spaceId.*spacePersonIds/is);
+    expect(searchExample?.arguments).toEqual({
+      detail: 'ids',
+      filters: {
+        spaceId: '00000000-0000-4000-8000-000000000020',
+        spacePersonIds: ['00000000-0000-4000-8000-000000000021'],
+      },
+      limit: 50,
+    });
+    expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(searchExample?.arguments).success).toBe(
+      true,
+    );
+  });
+
   it('documents progressive metadata reads by exact field groups for selected ids', () => {
     const metadata = sut.getReadToolContract(AgentToolName.ReadAssetMetadata);
     const exactTechnical = metadata?.examples.find(

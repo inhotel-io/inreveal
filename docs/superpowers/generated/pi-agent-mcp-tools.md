@@ -107,6 +107,13 @@ Use the smallest useful payload first. Resolve names before search. Search compa
 - Large album: page compact search results and propose operations from returned asset IDs. Do not request full metadata for every candidate.
 - All photos: avoid loading the whole library. Ask for a narrower date, album, tag, person, space, rating, or media-type filter when the task does not require every asset.
 
+### Resolver-to-search fidelity
+
+- After `resolveAssetSearchFilters`, copy `resolvedFilters` into `searchAssets.filters` exactly. Do not drop returned `personIds`, `spaceId`, `spacePersonIds`, `tagIds`, `albumIds`, or camera fields.
+- For people OR language such as `Pierre OR Aurelia`, resolve both names and search with one `personIds` array containing every resolved person id.
+- For shared-space people, send `spaceId` and `spacePersonIds` together. `spacePersonIds` without `spaceId` is invalid.
+- If a requested person, album, tag, space, camera make, camera model, or lens cannot be resolved unambiguously, ask a clarifying question instead of running a broad unfiltered search.
+
 ### Large selections
 
 - Search compactly first and use `createSelectionHandle: true` only for the current bounded page.
@@ -122,7 +129,7 @@ MCP tool name: `resolveAssetSearchFilters`
 
 Resolve visible album, tag, person, space, and camera names into searchAssets-compatible filters.
 
-Use before searchAssets when the user gives names for tags, albums, people, spaces, camera makes, camera models, or lenses. For named people in a named shared space, resolve the space and person together so the result can return spaceId plus spacePersonIds. Call searchAssets only after this returns unambiguous resolvedFilters. Use only toolCallId when retrying a Gallery-approved resolver request.
+Use before searchAssets when the user gives names for tags, albums, people, spaces, camera makes, camera models, or lenses. For named people in a named shared space, resolve the space and person together so the result can return spaceId plus spacePersonIds. Call searchAssets only after this returns unambiguous resolvedFilters. Use only toolCallId when retrying a Gallery-approved resolver request. If any requested people, albums, tags, spaces, or camera names cannot be resolved unambiguously, ask a clarifying question instead of running a broad search without the missing resolved filter.
 
 Argument modes:
 
@@ -172,6 +179,18 @@ Resolve shared space and person names before searching shared-space assets.
 }
 ```
 
+#### resolve-pierre-aurelia-people
+
+Resolve people from "Pierre OR Aurelia" before searching.
+
+<!-- mcp-docs:tool-arguments tool="resolveAssetSearchFilters" example="resolve-pierre-aurelia-people" -->
+
+```json
+{
+  "people": ["Pierre", "Aurelia"]
+}
+```
+
 #### approved-retry
 
 Retry an approved read request by id.
@@ -190,7 +209,7 @@ MCP tool name: `searchAssets`
 
 Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and bounded result pages.
 
-Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to compact asset ids. createSelectionHandle -> assetSelectionHandleId for large bounded pages. Do not use limit 1000; ask one narrowing question or repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.
+Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to compact asset ids. createSelectionHandle -> assetSelectionHandleId for large bounded pages. Do not use limit 1000; ask one narrowing question or repeat the same mode, query, filters, order, and limit using the returned nextPage value as page. When resolveAssetSearchFilters returns resolvedFilters, copy those fields into searchAssets.filters exactly. For people OR requests, use one personIds array with every resolved person id. For shared-space people, include both spaceId and spacePersonIds.
 
 Argument modes:
 
@@ -468,6 +487,46 @@ Search assets for known people resolved by id.
     "personIds": ["<personIds value from resolveAssetSearchFilters>"]
   },
   "limit": 25
+}
+```
+
+#### search-resolved-pierre-aurelia-people
+
+Search January 2026 South Africa photos after resolving "Pierre OR Aurelia"; keep both IDs in the same personIds array.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="search-resolved-pierre-aurelia-people" -->
+
+```json
+{
+  "detail": "ids",
+  "createSelectionHandle": true,
+  "filters": {
+    "country": "South Africa",
+    "takenAfter": "2026-01-01T00:00:00.000Z",
+    "takenBefore": "2026-01-31T23:59:59.999Z",
+    "personIds": [
+      "<personIds value from resolveAssetSearchFilters>",
+      "<another-personIds value from resolveAssetSearchFilters>"
+    ]
+  },
+  "limit": 50
+}
+```
+
+#### search-resolved-family-space-people
+
+Search after resolving a named person inside a shared space; spaceId must be sent with the resolved spacePersonIds.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="search-resolved-family-space-people" -->
+
+```json
+{
+  "detail": "ids",
+  "filters": {
+    "spaceId": "<space.id from listSpaces/readSpace>",
+    "spacePersonIds": ["<spacePersonIds value from resolveAssetSearchFilters>"]
+  },
+  "limit": 50
 }
 ```
 

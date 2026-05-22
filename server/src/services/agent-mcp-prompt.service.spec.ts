@@ -26,6 +26,7 @@ describe('agent MCP prompt placeholders', () => {
       '00000000-0000-4000-8000-000000000021': '<spacePersonIds value from resolveAssetSearchFilters>',
       '00000000-0000-4000-8000-000000000030': '<tagIds value from resolveAssetSearchFilters>',
       '00000000-0000-4000-8000-000000000040': '<personIds value from resolveAssetSearchFilters>',
+      '00000000-0000-4000-8000-000000000041': '<another-personIds value from resolveAssetSearchFilters>',
       '00000000-0000-4000-8000-000000000111': '<approved-toolCallId>',
       '00000000-0000-4000-8000-000000000222': '<plan.id from proposed plan>',
       '00000000-0000-4000-8000-000000000333': '<selectionHandle.id from searchAssets>',
@@ -87,6 +88,12 @@ describe(AgentMcpPromptService.name, () => {
 
     expect(prompt).toContain('Gallery MCP tool-use cheat sheet');
     expect(prompt.length).toBeLessThanOrEqual(3800);
+    expect(prompt).toContain('Tool: mcp_gallery_resolveAssetSearchFilters');
+    expect(prompt).toContain('R: Known ID filters');
+    expect(prompt).toContain('Write: call mcp_gallery_proposeAlbumOperations');
+    expect(prompt).not.toContain('Tmcp_gallery');
+    expect(prompt).not.toContain('RKnown');
+    expect(prompt).not.toContain('Wcall');
     expect(prompt).toContain('mcp_gallery_searchAssets');
     expect(prompt).toContain('mcp_gallery_readAssetMetadata');
     expect(prompt).toContain('mcp_gallery_listSpaces');
@@ -123,6 +130,33 @@ describe(AgentMcpPromptService.name, () => {
         }),
       ]),
     );
+  });
+
+  it('shows an end-to-end people OR resolver-to-search sequence in the runner prompt', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toContain('People OR');
+    expect(prompt).toContain('Pierre');
+    expect(prompt).toContain('Aurelia');
+    expect(prompt).toContain('copy resolvedFilters into searchAssets.filters');
+    expect(prompt).toContain(
+      '"personIds":["<personIds value from resolveAssetSearchFilters>","<another-personIds value from resolveAssetSearchFilters>"]',
+    );
+    expect(prompt).toContain('"country":"South Africa"');
+    expect(prompt).toContain('"takenAfter":"2026-01-01T00:00:00.000Z"');
+    expect(prompt).toContain('"takenBefore":"2026-01-31T23:59:59.999Z"');
+    expect(prompt).toContain('"limit":50');
+    expect(prompt).toContain('"createSelectionHandle":true');
+  });
+
+  it('shows shared-space person resolver-to-search guidance with spaceId and spacePersonIds together', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toContain('Shared-space people');
+    expect(prompt).toContain('"spaceId":"<space.id from listSpaces/readSpace>"');
+    expect(prompt).toContain('"spacePersonIds":["<spacePersonIds value from resolveAssetSearchFilters>"]');
+    expect(prompt).toMatch(/ask .*clarifying/i);
+    expect(prompt).not.toMatch(/run .*broad search .*missing/i);
   });
 
   it('teaches compact natural-language search patterns for Slice 7 prompts', () => {
@@ -291,6 +325,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('description');
     expect(prompt).toContain('color');
     expect(prompt).toMatch(/already|no-op|no change/i);
+    expect(prompt).toContain('Never update thumbnails, pets, faces, linked libraries, or delete spaces.');
     expect(prompt).not.toContain('mcp_gallery_updateSpace');
   });
 
