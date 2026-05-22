@@ -186,6 +186,20 @@ const makeToolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentT
   resultSize: overrides.resultSize,
 });
 
+const makeToolBurst = (count = 50) =>
+  Array.from({ length: count }, (_, index) =>
+    makeToolCall({
+      id: `burst-tool-${index}`,
+      toolName: index % 2 === 0 ? AgentToolName.SearchAssets : AgentToolName.ReadAssetMetadata,
+      requestSummary: index % 2 === 0 ? 'Search photos' : 'Read photo metadata',
+      responseSummary: index % 2 === 0 ? 'Found matching photos' : 'Read details for photos',
+      assetCount: index % 2 === 0 ? 2 : 1,
+      albumCount: 0,
+      startedAt: `2026-05-16T11:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`,
+      completedAt: `2026-05-16T11:${String(Math.floor((index + 1) / 60)).padStart(2, '0')}:${String((index + 1) % 60).padStart(2, '0')}.000Z`,
+    }),
+  );
+
 const makeOperation = (overrides: Partial<AgentOperationResponseDto> = {}): AgentOperationResponseDto => ({
   id: overrides.id ?? 'operation-1',
   planId: overrides.planId ?? 'plan-1',
@@ -766,7 +780,138 @@ describe(AgentSessionChatPanel.name, () => {
 
     const activity = await screen.findByRole('article', { name: 'Pi is working' });
     expect(within(activity).getByRole('button', { name: 'Hide activity' })).toHaveAttribute('aria-expanded', 'true');
-    expect(within(activity).getAllByText(/Done|Running|Pending|Failed|Needs attention|Skipped/)).toHaveLength(4);
+    expect(within(activity).getAllByText(/Done|Running|Pending|Failed|Needs attention|Skipped/)).toHaveLength(5);
+  });
+
+  it('compact mode keeps one activity block when polling returns many completed tools', async () => {
+    render(AgentSessionChatPanel, {
+      props: {
+        session,
+        activityVisibilityMode: 'compact',
+        seedMessages: [
+          {
+            ...makeMessage('message-user', AgentMessageRole.User, 'Find my South Africa photos'),
+            createdAt: '2026-05-16T10:59:00.000Z',
+          },
+        ],
+        toolCalls: makeToolBurst(50),
+      },
+    });
+
+    const activity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(screen.getAllByRole('article', { name: 'Pi is working' })).toHaveLength(1);
+    expect(activity.querySelectorAll('[data-activity-row]').length).toBeLessThanOrEqual(3);
+    expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Returned 1 album(s)')).not.toBeInTheDocument();
+  });
+
+  it('expanded mode renders verbose rows only after user opt-in', async () => {
+    const { rerender } = render(AgentSessionChatPanel, {
+      props: {
+        session,
+        activityVisibilityMode: 'compact',
+        seedMessages: [
+          {
+            ...makeMessage('message-user', AgentMessageRole.User, 'Find my South Africa photos'),
+            createdAt: '2026-05-16T10:59:00.000Z',
+          },
+        ],
+        toolCalls: makeToolBurst(50),
+      },
+    });
+
+    const compactActivity = await screen.findByRole('article', { name: 'Pi is working' });
+    const compactRowCount = compactActivity.querySelectorAll('[data-activity-row]').length;
+
+    await rerender({
+      session,
+      activityVisibilityMode: 'expanded',
+      seedMessages: [
+        {
+          ...makeMessage('message-user', AgentMessageRole.User, 'Find my South Africa photos'),
+          createdAt: '2026-05-16T10:59:00.000Z',
+        },
+      ],
+      toolCalls: makeToolBurst(50),
+    });
+
+    const expandedActivity = screen.getByRole('article', { name: 'Pi is working' });
+    const expandedRowCount = expandedActivity.querySelectorAll('[data-activity-row]').length;
+    expect(expandedRowCount).toBeGreaterThan(compactRowCount);
+    expect(expandedRowCount).toBeLessThanOrEqual(100);
+    expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
+  });
+
+  it('off mode hides passive activity while permission and plan surfaces stay visible', async () => {
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.WaitingForToolApproval },
+        activityVisibilityMode: 'off',
+        actionDock: createRawSnippet(() => ({
+          render: () => '<section aria-label="Approval request">Approve?</section>',
+        })),
+        seedMessages: [
+          {
+            ...makeMessage('message-user', AgentMessageRole.User, 'Check private photos'),
+            createdAt: '2026-05-16T10:00:00.000Z',
+          },
+        ],
+        toolCalls: [
+          makeToolCall({
+            id: 'approval-tool-off',
+            status: AgentToolCallStatus.PendingApproval,
+            toolName: AgentToolName.ReadAssetMetadata,
+            responseSummary: null,
+            completedAt: null,
+            startedAt: '2026-05-16T10:00:05.000Z',
+          }),
+        ],
+      },
+    });
+
+    expect(await screen.findByRole('region', { name: 'Approval request' })).toHaveTextContent('Approve?');
+    expect(screen.queryByRole('article', { name: 'Pi is working' })).not.toBeInTheDocument();
+  });
+
+  it('activity summarization updates the existing block without a transient raw-card state', async () => {
+    const seedMessages = [
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Find my South Africa photos'),
+        createdAt: '2026-05-16T10:59:00.000Z',
+      },
+    ];
+    const runningBurst = makeToolBurst(50).map((toolCall, index) =>
+      index === 49 ? { ...toolCall, status: AgentToolCallStatus.Executing, completedAt: null } : toolCall,
+    );
+    const view = render(AgentSessionChatPanel, {
+      props: {
+        session,
+        activityVisibilityMode: 'compact',
+        seedMessages,
+        toolCalls: runningBurst,
+      },
+    });
+
+    expect(await screen.findAllByRole('article', { name: 'Pi is working' })).toHaveLength(1);
+
+    sdkActivityMock.getAgentSessionActivityEvents.mockResolvedValue([
+      makeActivityEvent({
+        id: 'plan-composed',
+        kind: 'plan-composing',
+        status: 'completed',
+        createdAt: '2026-05-16T11:01:00.000Z',
+      }),
+    ]);
+    await view.rerender({
+      session: { ...session, updatedAt: '2026-05-16T11:01:01.000Z' },
+      activityVisibilityMode: 'compact',
+      seedMessages,
+      toolCalls: makeToolBurst(50),
+    });
+
+    expect(screen.getAllByRole('article', { name: 'Pi is working' })).toHaveLength(1);
+    expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Returned 1 album(s)')).not.toBeInTheDocument();
   });
 
   it('forwards current activity visibility changes to the session owner', async () => {

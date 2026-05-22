@@ -64,7 +64,9 @@ export type AgentActivityItem = {
 
 export type AgentActivityModel = {
   items: AgentActivityItem[];
+  verboseItems: AgentActivityItem[];
   activeItem: AgentActivityItem | null;
+  verboseActiveItem: AgentActivityItem | null;
   summary: string | null;
 };
 
@@ -474,8 +476,7 @@ const coalesceToolActivities = (candidates: ToolActivityCandidate[]): AgentActiv
           sortedGroup.find((item) => item.summary)?.summary);
 
     return {
-      id:
-        sortedGroup.length === 1 ? first.id : `tool-${first.kind}-${first.coalesceKey.replaceAll(/[^a-z0-9-]/gi, '-')}`,
+      id: sortedGroup.length === 1 ? first.id : `tool-${first.coalesceKey.replaceAll(/[^a-z0-9-]/gi, '-')}`,
       sessionId: first.sessionId,
       kind: first.kind,
       status,
@@ -787,36 +788,43 @@ const buildSummary = (items: AgentActivityItem[]) => {
 };
 
 export const buildAgentActivityModel = (input: BuildAgentActivityModelInput): AgentActivityModel => {
-  const toolItems = coalesceToolActivities(input.toolCalls.map((toolCall) => buildToolActivityCandidate(toolCall)));
+  const verboseToolItems = input.toolCalls.map((toolCall) => buildToolActivityCandidate(toolCall));
+  const toolItems = coalesceToolActivities(verboseToolItems);
   const items = [...toolItems];
+  const verboseItems: AgentActivityItem[] = [...verboseToolItems];
   const currentPlanItem = buildCurrentPlanItem(input.session, input.currentPlan);
   const applyItem = buildApplyItem(input.session, input.appliedPlans);
 
   if (currentPlanItem && !items.some((item) => item.kind === 'plan')) {
     items.push(currentPlanItem);
   }
+  if (currentPlanItem && !verboseItems.some((item) => item.kind === 'plan')) {
+    verboseItems.push(currentPlanItem);
+  }
 
   if (applyItem) {
     items.push(applyItem);
+    verboseItems.push(applyItem);
   }
 
-  items.push(
-    ...filterSecondaryEventItems(
-      dedupeActivityEvents(input.activityEvents ?? []).map((event) => buildEventActivityItem(event)),
-      items,
-    ),
-  );
+  const eventItems = dedupeActivityEvents(input.activityEvents ?? []).map((event) => buildEventActivityItem(event));
+  items.push(...filterSecondaryEventItems(eventItems, items));
+  verboseItems.push(...filterSecondaryEventItems(eventItems, verboseItems));
 
   const messageItem = buildMessageItem(input, items);
   if (messageItem) {
     items.push(messageItem);
+    verboseItems.push(messageItem);
   }
 
   const sortedItems = sortedBy(items, compareActivityItems);
+  const sortedVerboseItems = sortedBy(verboseItems, compareActivityItems);
 
   return {
     items: sortedItems,
+    verboseItems: sortedVerboseItems,
     activeItem: sortedItems.find((item) => activeStatuses.has(item.status)) ?? null,
+    verboseActiveItem: sortedVerboseItems.find((item) => activeStatuses.has(item.status)) ?? null,
     summary: buildSummary(sortedItems),
   };
 };
