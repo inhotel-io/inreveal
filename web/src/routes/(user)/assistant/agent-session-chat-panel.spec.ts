@@ -51,6 +51,8 @@ vi.mock('svelte-i18n', () => {
     assistant_streaming_response: 'Assistant is responding',
     assistant_activity_count: '{count} items',
     assistant_activity_hide: 'Hide activity',
+    assistant_activity_show_newer: 'Show newer activity',
+    assistant_activity_show_older: 'Show older activity',
     assistant_activity_show: 'Show activity',
     assistant_activity_status_blocked: 'Needs attention',
     assistant_activity_status_completed: 'Done',
@@ -59,13 +61,24 @@ vi.mock('svelte-i18n', () => {
     assistant_activity_status_running: 'Running',
     assistant_activity_status_skipped: 'Skipped',
     assistant_activity_summary_title: 'Activity summary',
+    assistant_activity_technical_albums: 'Albums',
+    assistant_activity_technical_assets: 'Assets',
+    assistant_activity_technical_completed: 'Completed at',
+    assistant_activity_technical_error: 'Error',
     assistant_activity_technical_hide: 'Hide technical details',
     assistant_activity_technical_omitted_fields: 'Omitted fields',
+    assistant_activity_technical_request: 'Request summary',
+    assistant_activity_technical_response: 'Response summary',
     assistant_activity_technical_result_items: 'Returned items',
     assistant_activity_technical_result_size: 'Response size',
     assistant_activity_technical_show: 'Technical details',
+    assistant_activity_technical_started: 'Started at',
+    assistant_activity_technical_tool: 'Tool name',
+    assistant_activity_technical_tool_call: 'Tool call ID',
+    assistant_activity_technical_tool_calls: 'Tool call IDs',
     assistant_activity_technical_truncated: 'Truncated',
     assistant_activity_title: 'Pi is working',
+    assistant_activity_window_summary: 'Showing {visible} of {total} actions',
     assistant_agent_tool_data_class_metadata: 'Metadata',
     assistant_agent_tool_name_listAlbums: 'List albums',
     assistant_operation_applied_plan: 'Applied plan',
@@ -85,16 +98,15 @@ vi.mock('svelte-i18n', () => {
   };
 
   return {
-    t: readable((key: string, options?: { values?: Record<string, string | number> }) =>
-      (messages[key] ?? key)
-        .replace('{summary}', String(options?.values?.summary ?? ''))
-        .replace('{count}', String(options?.values?.count ?? ''))
-        .replace('{selected}', String(options?.values?.selected ?? ''))
-        .replace('{total}', String(options?.values?.total ?? ''))
-        .replace('{applied}', String(options?.values?.applied ?? ''))
-        .replace('{skipped}', String(options?.values?.skipped ?? ''))
-        .replace('{failed}', String(options?.values?.failed ?? '')),
-    ),
+    t: readable((key: string, options?: { values?: Record<string, string | number> }) => {
+      let message = messages[key] ?? key;
+
+      for (const [name, value] of Object.entries(options?.values ?? {})) {
+        message = message.replaceAll(`{${name}}`, String(value));
+      }
+
+      return message;
+    }),
   };
 });
 
@@ -199,6 +211,32 @@ const makeToolBurst = (count = 50) =>
       completedAt: `2026-05-16T11:${String(Math.floor((index + 1) / 60)).padStart(2, '0')}:${String((index + 1) % 60).padStart(2, '0')}.000Z`,
     }),
   );
+
+const mockReducedMotion = (matches: boolean) => {
+  const originalMatchMedia = globalThis.matchMedia;
+  const matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: query === '(prefers-reduced-motion: reduce)' ? matches : false,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+
+  Object.defineProperty(globalThis, 'matchMedia', {
+    configurable: true,
+    value: matchMedia,
+  });
+
+  return () => {
+    Object.defineProperty(globalThis, 'matchMedia', {
+      configurable: true,
+      value: originalMatchMedia,
+    });
+  };
+};
 
 const makeOperation = (overrides: Partial<AgentOperationResponseDto> = {}): AgentOperationResponseDto => ({
   id: overrides.id ?? 'operation-1',
@@ -1259,6 +1297,58 @@ describe(AgentSessionChatPanel.name, () => {
     expect(screen.queryByRole('article', { name: 'Pi is working' })).not.toBeInTheDocument();
   });
 
+  it('keeps the fallback busy indicator static when reduced motion is preferred', async () => {
+    vi.useFakeTimers();
+    const restoreReducedMotion = mockReducedMotion(true);
+
+    try {
+      render(AgentSessionChatPanel, {
+        props: {
+          session,
+          assistantResponsePending: true,
+          activityVisibilityMode: 'off',
+        },
+      });
+
+      const status = await screen.findByRole('status');
+      expect(status).toHaveTextContent('pi is working... -');
+
+      vi.advanceTimersByTime(160);
+      await tick();
+
+      expect(status).toHaveTextContent('pi is working... -');
+    } finally {
+      restoreReducedMotion();
+      vi.useRealTimers();
+    }
+  });
+
+  it('animates the fallback busy indicator when reduced motion is not preferred', async () => {
+    vi.useFakeTimers();
+    const restoreReducedMotion = mockReducedMotion(false);
+
+    try {
+      render(AgentSessionChatPanel, {
+        props: {
+          session,
+          assistantResponsePending: true,
+          activityVisibilityMode: 'off',
+        },
+      });
+
+      const status = await screen.findByRole('status');
+      expect(status).toHaveTextContent('pi is working... -');
+
+      vi.advanceTimersByTime(160);
+      await tick();
+
+      expect(status).not.toHaveTextContent('pi is working... -');
+    } finally {
+      restoreReducedMotion();
+      vi.useRealTimers();
+    }
+  });
+
   it('renders denied and failed current-turn activity without request and error context', async () => {
     render(AgentSessionChatPanel, {
       props: {
@@ -1298,6 +1388,44 @@ describe(AgentSessionChatPanel.name, () => {
     expect(activity).not.toHaveTextContent('You denied access.');
     expect(activity).not.toHaveTextContent('List albums before organizing');
     expect(activity).not.toHaveTextContent('Album service timed out.');
+  });
+
+  it('renders expanded technical details with secrets redacted', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Inspect private metadata'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ]);
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.Completed },
+        activityVisibilityMode: 'expanded',
+        toolCalls: [
+          makeToolCall({
+            id: 'secret-tool',
+            toolName: AgentToolName.ReadAssetMetadata,
+            status: AgentToolCallStatus.Failed,
+            requestSummary: 'Read metadata with api_key=abc123 and Bearer bearer-secret',
+            responseSummary: null,
+            error: 'Provider failed with token=plain-token and sk-proj-provider-secret',
+            completedAt: '2026-05-16T10:00:06.000Z',
+          }),
+        ],
+      },
+    });
+
+    const activity = await screen.findByRole('article', { name: 'Activity summary' });
+    await fireEvent.click(within(activity).getByRole('button', { name: 'Technical details' }));
+
+    expect(activity).toHaveTextContent('Request summary');
+    expect(activity).toHaveTextContent('Read metadata with api_key=[redacted] and Bearer [redacted]');
+    expect(activity).toHaveTextContent('Provider failed with token=[redacted] and [redacted]');
+    expect(activity).not.toHaveTextContent('abc123');
+    expect(activity).not.toHaveTextContent('bearer-secret');
+    expect(activity).not.toHaveTextContent('plain-token');
+    expect(activity).not.toHaveTextContent('sk-proj-provider-secret');
   });
 
   it('renders assistant markdown headings and inline code as formatted content', async () => {

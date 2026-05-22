@@ -167,6 +167,99 @@ describe(AgentActivityBlock.name, () => {
     expect(screen.queryByText('readAssetMetadata')).not.toBeInTheDocument();
   });
 
+  it('connects expanded activity controls to live status and technical detail regions', async () => {
+    render(AgentActivityBlock, {
+      props: {
+        visibilityMode: 'expanded',
+        model: activityModel(
+          [
+            activityItem({
+              id: 'metadata',
+              title: 'Reading photo details',
+              status: 'running',
+              technical: {
+                toolName: 'readAssetMetadata',
+                toolCallIds: ['tool-call-1'],
+                requestSummary: 'Read selected metadata',
+              },
+            }),
+          ],
+          [
+            activityItem({
+              id: 'metadata',
+              title: 'Reading photo details',
+              status: 'running',
+              technical: {
+                toolName: 'readAssetMetadata',
+                toolCallIds: ['tool-call-1'],
+                requestSummary: 'Read selected metadata',
+              },
+            }),
+          ],
+        ),
+      },
+    });
+
+    const block = screen.getByRole('article', { name: 'Pi is working' });
+    const activityToggle = within(block).getByRole('button', { name: 'Hide activity' });
+    const rowsId = activityToggle.getAttribute('aria-controls');
+    expect(rowsId).toBeTruthy();
+    expect(document.getElementById(rowsId!)).toHaveAttribute('role', 'status');
+
+    const technicalToggle = within(block).getByRole('button', { name: 'Technical details' });
+    const technicalDetailsId = technicalToggle.getAttribute('aria-controls');
+    expect(technicalToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(technicalDetailsId).toBeTruthy();
+    expect(document.getElementById(technicalDetailsId!)).not.toBeInTheDocument();
+
+    await fireEvent.click(technicalToggle);
+
+    expect(within(block).getByRole('button', { name: 'Hide technical details' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(document.getElementById(technicalDetailsId!)).toBeInTheDocument();
+  });
+
+  it('does not steal focus when active expanded rows update in place', async () => {
+    const view = render(AgentActivityBlock, {
+      props: {
+        visibilityMode: 'expanded',
+        model: activityModel(
+          [activityItem({ id: 'metadata', title: 'Reading photo details', status: 'running' })],
+          [activityItem({ id: 'metadata', title: 'Reading photo details', status: 'running' })],
+        ),
+      },
+    });
+
+    const hideActivityButton = screen.getByRole('button', { name: 'Hide activity' });
+    hideActivityButton.focus();
+
+    await view.rerender({
+      visibilityMode: 'expanded',
+      model: activityModel(
+        [
+          activityItem({
+            id: 'metadata',
+            title: 'Reading photo details',
+            status: 'completed',
+            summary: 'Read details',
+          }),
+        ],
+        [
+          activityItem({
+            id: 'metadata',
+            title: 'Reading photo details',
+            status: 'completed',
+            summary: 'Read details',
+          }),
+        ],
+      ),
+    });
+
+    expect(screen.getByRole('button', { name: 'Hide activity' })).toHaveFocus();
+  });
+
   it('renders expanded moderate bursts as a full verbose activity stream', () => {
     const verboseItems = verboseActivityItems(50);
     const { container } = render(AgentActivityBlock, {
@@ -234,6 +327,28 @@ describe(AgentActivityBlock.name, () => {
 
     expect(container.querySelectorAll('[data-activity-row]')).toHaveLength(100);
     expect(screen.getByText('Verbose activity 400')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show newer activity' })).toBeInTheDocument();
+  });
+
+  it('keeps one-thousand-plus expanded streams bounded while exposing paging controls', async () => {
+    const verboseItems = verboseActivityItems(1001);
+    const { container } = render(AgentActivityBlock, {
+      props: {
+        visibilityMode: 'expanded',
+        model: activityModel([activityItem({ id: 'compact', title: 'Searching photos' })], verboseItems),
+      },
+    });
+
+    expect(container.querySelectorAll('[data-activity-row]')).toHaveLength(100);
+    expect(screen.getByText('Showing 100 of 1001 actions')).toBeInTheDocument();
+    expect(screen.getByText('Verbose activity 1000')).toBeInTheDocument();
+    expect(screen.queryByText('Verbose activity 0')).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show older activity' }));
+
+    expect(container.querySelectorAll('[data-activity-row]')).toHaveLength(100);
+    expect(screen.getByText('Verbose activity 801')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show older activity' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show newer activity' })).toBeInTheDocument();
   });
 
@@ -665,5 +780,34 @@ describe(AgentActivityBlock.name, () => {
     expect(block).toHaveTextContent('1234 items');
     expect(block).not.toHaveTextContent('secret raw technical detail');
     expect(screen.getByRole('button', { name: 'Show activity' })).toBeInTheDocument();
+  });
+
+  it('renders expanded long summaries without exposing hidden technical text', async () => {
+    const longText =
+      'Reading photo details for a very long generated album workflow that should wrap cleanly across narrow viewports';
+
+    render(AgentActivityBlock, {
+      props: {
+        visibilityMode: 'expanded',
+        model: activityModel([
+          activityItem({
+            id: 'long-expanded',
+            title: longText,
+            summary: `${longText} summary`,
+            technical: {
+              error: 'secret raw technical detail',
+            },
+          }),
+        ]),
+      },
+    });
+
+    const block = screen.getByRole('article', { name: 'Activity summary' });
+    expect(block).toHaveTextContent(longText);
+    expect(block).not.toHaveTextContent('secret raw technical detail');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Technical details' }));
+
+    expect(block).toHaveTextContent('secret raw technical detail');
   });
 });
