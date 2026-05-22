@@ -18,6 +18,8 @@ const expectedToolNames = [
   AgentToolName.SearchUsers,
   AgentToolName.ProposeAlbumFromSearch,
   AgentToolName.ProposeAddAssetsToAlbumFromSearch,
+  AgentToolName.ProposeSpaceFromSearch,
+  AgentToolName.ProposeAddAssetsToSpaceFromSearch,
   AgentToolName.ProposeAlbumOperations,
   AgentToolName.ReviseProposedOperations,
   AgentToolName.SummarizePlan,
@@ -39,6 +41,8 @@ const expectedReadToolNames = [
 const expectedPlanningToolNames = [
   AgentToolName.ProposeAlbumFromSearch,
   AgentToolName.ProposeAddAssetsToAlbumFromSearch,
+  AgentToolName.ProposeSpaceFromSearch,
+  AgentToolName.ProposeAddAssetsToSpaceFromSearch,
   AgentToolName.ProposeAlbumOperations,
   AgentToolName.ReviseProposedOperations,
   AgentToolName.SummarizePlan,
@@ -400,6 +404,33 @@ describe(AgentMcpToolRegistryService.name, () => {
     for (const toolName of [
       AgentToolName.ProposeAlbumFromSearch,
       AgentToolName.ProposeAddAssetsToAlbumFromSearch,
+    ] as const) {
+      const tool = toolsByName.get(toolName);
+      const contract = contractService.getPlanningToolContract(toolName);
+
+      expect(contract).toBeDefined();
+      if (!contract) {
+        throw new Error(`Missing planning contract for ${toolName}`);
+      }
+      expect(tool?.title).toBe(contract.title);
+      expect(tool?.description).toContain('preferred');
+      expect(tool?.description).toContain('review');
+      expect(tool?.inputSchema).toMatchObject({ type: 'object' });
+      expect(tool?.inputSchema.examples).toEqual(contract.examples.map((example) => example.arguments));
+
+      for (const exampleArguments of tool?.inputSchema.examples as Record<string, unknown>[]) {
+        const result = AgentOperationPlanToolRequestSchemas[toolName].safeParse(exampleArguments);
+        expect(result.success, `${toolName} example should parse`).toBe(true);
+      }
+    }
+  });
+
+  it('lists the high-level space workflow tools with valid examples', () => {
+    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+
+    for (const toolName of [
+      AgentToolName.ProposeSpaceFromSearch,
+      AgentToolName.ProposeAddAssetsToSpaceFromSearch,
     ] as const) {
       const tool = toolsByName.get(toolName);
       const contract = contractService.getPlanningToolContract(toolName);

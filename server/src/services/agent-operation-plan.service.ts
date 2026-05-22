@@ -7,8 +7,10 @@ import {
   AgentOperationPlanSummaryRequestDto,
   AgentOperationPlanToolResponseDto,
   AgentProposeAddAssetsToAlbumFromSearchToolRequestDto,
+  AgentProposeAddAssetsToSpaceFromSearchToolRequestDto,
   AgentProposeAlbumOperationsDto,
   AgentProposeAlbumFromSearchToolRequestDto,
+  AgentProposeSpaceFromSearchToolRequestDto,
   AgentReviseAlbumOperationsDto,
 } from 'src/dtos/agent-operation.dto';
 import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
@@ -299,6 +301,92 @@ export class AgentOperationPlanService {
     });
   }
 
+  async proposeSpaceFromSearch(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentProposeSpaceFromSearchToolRequestDto,
+  ): Promise<AgentOperationPlanToolResponseDto> {
+    const temporaryTargetId = 'tmp-space-from-search';
+    const summary = dto.summary ?? `Create space "${dto.spaceName}" from matching photos.`;
+    const payload: { spaceName: string; description?: string; color?: UserAvatarColor } = { spaceName: dto.spaceName };
+    if (dto.description !== undefined) {
+      payload.description = dto.description;
+    }
+    if (dto.color !== undefined) {
+      payload.color = dto.color;
+    }
+
+    return this.proposeOperations(auth, sessionId, AgentToolName.ProposeSpaceFromSearch, {
+      summary,
+      operations: [
+        {
+          type: AgentOperationType.SpaceCreate,
+          summary: `Create space "${dto.spaceName}"`,
+          targetKind: AgentOperationTargetKind.NewSpace,
+          temporaryTargetId,
+          payload,
+          riskLevel: AgentOperationRiskLevel.Low,
+          enabled: true,
+        },
+        {
+          type: AgentOperationType.SpaceAddAssets,
+          summary: `Add matching photos to "${dto.spaceName}"`,
+          targetKind: AgentOperationTargetKind.NewSpace,
+          temporaryTargetId,
+          assetSource: dto.assetSource,
+          payload: {},
+          riskLevel: AgentOperationRiskLevel.Medium,
+          enabled: true,
+        },
+      ],
+    });
+  }
+
+  async proposeAddAssetsToSpaceFromSearch(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentProposeAddAssetsToSpaceFromSearchToolRequestDto,
+  ): Promise<AgentOperationPlanToolResponseDto> {
+    const toolName = AgentToolName.ProposeAddAssetsToSpaceFromSearch;
+    const session = await this.getOwnedSession(auth, sessionId, { requireActive: true });
+    let spaceTarget: Awaited<ReturnType<typeof this.resolveWorkflowSpaceTarget>>;
+    try {
+      this.validateWriteScope(session, AgentOperationType.SpaceAddAssets);
+      this.validateSpaceNameResolutionScope(session, dto);
+      spaceTarget = await this.resolveWorkflowSpaceTarget(auth, dto);
+      await this.validateExistingSpaceRoleAccess(auth, spaceTarget.spaceId, SharedSpaceRole.Editor);
+    } catch (error) {
+      await this.tryCreatePlanningPreparationDeniedAudit(session, toolName, dto, error);
+      throw error;
+    }
+    const summary = dto.summary ?? `Add matching photos to "${spaceTarget.spaceName}".`;
+
+    return this.proposeOperationsForSession(auth, session, toolName, {
+      summary,
+      operations: [
+        {
+          type: AgentOperationType.SpaceAddAssets,
+          summary: `Add matching photos to "${spaceTarget.spaceName}"`,
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: spaceTarget.spaceId,
+          assetSource: dto.assetSource,
+          payload: {},
+          riskLevel: AgentOperationRiskLevel.Medium,
+          enabled: true,
+        },
+      ],
+    });
+  }
+
+  private validateSpaceNameResolutionScope(
+    session: AgentSession,
+    dto: AgentProposeAddAssetsToSpaceFromSearchToolRequestDto,
+  ) {
+    if (dto.spaceName && !session.permissionPlanSnapshot.assetScope.sharedSpaces) {
+      throw new BadRequestException('Shared spaces are not accessible for this session');
+    }
+  }
+
   private async proposeOperations(
     auth: AuthDto,
     sessionId: string,
@@ -404,6 +492,55 @@ export class AgentOperationPlanService {
           assetCount: album.assetCount,
         })),
         instruction: 'Retry proposeAddAssetsToAlbumFromSearch with albumId from the chosen album.',
+      },
+    });
+  }
+
+  private async resolveWorkflowSpaceTarget(auth: AuthDto, dto: AgentProposeAddAssetsToSpaceFromSearchToolRequestDto) {
+    if (dto.spaceId) {
+      return { spaceId: dto.spaceId, spaceName: dto.spaceName ?? 'selected space' };
+    }
+
+    const requestedName = dto.spaceName?.trim() ?? '';
+    const spaces = await this.sharedSpaceRepository.getAllByUserId(auth.user.id);
+    const matches = spaces.filter((space) => space.name.trim().toLowerCase() === requestedName.toLowerCase());
+
+    if (matches.length === 1) {
+      return { spaceId: matches[0].id, spaceName: matches[0].name };
+    }
+
+    if (matches.length === 0) {
+      throw new AgentMcpRecoverableToolError({
+        status: 'error',
+        error: `No visible space named "${requestedName}" was found.`,
+        toolName: AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+        retryable: true,
+        hint: 'Call listSpaces to choose an existing spaceId, or use proposeSpaceFromSearch to create a new space.',
+        recovery: {
+          kind: 'space_target_needs_clarification',
+          spaceName: requestedName,
+          choices: [],
+          instruction: 'Retry with spaceId, or create a new space from the same search source.',
+        },
+      });
+    }
+
+    throw new AgentMcpRecoverableToolError({
+      status: 'error',
+      error: `Multiple visible spaces named "${requestedName}" were found.`,
+      toolName: AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+      retryable: true,
+      hint: 'Ask the user which space to use, then retry with that spaceId.',
+      recovery: {
+        kind: 'space_target_needs_clarification',
+        spaceName: requestedName,
+        choices: matches.slice(0, 5).map((space) => ({
+          spaceId: space.id,
+          spaceName: space.name,
+          description: space.description,
+          createdById: space.createdById,
+        })),
+        instruction: 'Retry proposeAddAssetsToSpaceFromSearch with spaceId from the chosen space.',
       },
     });
   }
@@ -740,6 +877,14 @@ export class AgentOperationPlanService {
       AgentOperationType.SpaceRemoveMembers,
       AgentOperationType.SpaceUpdateMemberRole,
     ].includes(type);
+  }
+
+  private async validateExistingSpaceRoleAccess(auth: AuthDto, spaceId: string, role: SharedSpaceRole) {
+    const requestedSpaceIds = new Set([spaceId]);
+    const writableSpaceIds = await this.accessRepository.sharedSpace.checkRoleAccess(auth.user.id, requestedSpaceIds, role);
+    if (!writableSpaceIds.has(spaceId)) {
+      throw new BadRequestException('One or more target spaces are not accessible');
+    }
   }
 
   private async getWritableAlbumIds(auth: AuthDto, session: AgentSession, albumIds: Set<string>) {
