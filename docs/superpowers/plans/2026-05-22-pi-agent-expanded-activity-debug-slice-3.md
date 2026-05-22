@@ -45,12 +45,7 @@ Slice 3 requirements:
 Create `web/src/routes/(user)/assistant/agent-session-tool-call-state-ui.spec.ts`:
 
 ```ts
-import {
-  AgentToolCallStatus,
-  AgentToolDataClass,
-  AgentToolName,
-  type AgentToolCallResponseDto,
-} from '@immich/sdk';
+import { AgentToolCallStatus, AgentToolDataClass, AgentToolName, type AgentToolCallResponseDto } from '@immich/sdk';
 import {
   areAgentTimelineToolCallListsEquivalent,
   mergeAgentTimelineToolCalls,
@@ -297,7 +292,9 @@ export const areAgentTimelineToolCallListsEquivalent = (
   secondToolCalls: AgentToolCallResponseDto[],
 ) =>
   firstToolCalls.length === secondToolCalls.length &&
-  firstToolCalls.every((toolCall, index) => getToolCallStateKey(toolCall) === getToolCallStateKey(secondToolCalls[index]));
+  firstToolCalls.every(
+    (toolCall, index) => getToolCallStateKey(toolCall) === getToolCallStateKey(secondToolCalls[index]),
+  );
 ```
 
 - [x] **Step 4: Run helper tests and verify green**
@@ -475,11 +472,7 @@ In `web/src/routes/(user)/assistant/agent-session-action-dock.svelte`, update th
 
 ```ts
 import { areAgentTimelineToolCallListsEquivalent } from './agent-session-tool-call-state-ui';
-import {
-  buildToolApprovalPayload,
-  getPendingToolCalls,
-  getTimelineToolCalls,
-} from './agent-tool-approval-ui';
+import { buildToolApprovalPayload, getPendingToolCalls, getTimelineToolCalls } from './agent-tool-approval-ui';
 ```
 
 Delete the local `toolCallStateKey` and `areToolCallListsEquivalent` helpers. Then update `setToolCalls` to use the shared equivalence helper:
@@ -751,7 +744,9 @@ it('keeps preserved tool calls available when switching from compact to expanded
     toolCalls: [],
   });
 
-  expect(screen.getByRole('article', { name: 'Pi is working' }).querySelectorAll('[data-activity-row]')).toHaveLength(9);
+  expect(screen.getByRole('article', { name: 'Pi is working' }).querySelectorAll('[data-activity-row]')).toHaveLength(
+    9,
+  );
 });
 
 it('clears preserved tool calls when the selected session changes', async () => {

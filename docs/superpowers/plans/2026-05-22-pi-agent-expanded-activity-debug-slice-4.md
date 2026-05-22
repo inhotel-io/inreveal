@@ -396,7 +396,7 @@ Expected red result:
 Execution evidence:
 
 - 2026-05-22: Initial `640ms` assertion passed before implementation because it completed a full four-frame animation cycle. The test was corrected to advance one `160ms` frame.
-- 2026-05-22: With the reduced-motion guard temporarily removed, the corrected test failed as expected: received ``pi is working... \`` instead of `pi is working... -`.
+- 2026-05-22: With the reduced-motion guard temporarily removed, the corrected test failed as expected: received `pi is working... \` instead of `pi is working... -`.
 
 - [x] **Step 5: Implement reduced-motion guard**
 
