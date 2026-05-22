@@ -257,6 +257,20 @@ describe(AgentMcpDocsService.name, () => {
     expect(markdown).not.toContain('"limit": 1000');
   });
 
+  it('documents resolver-to-search fidelity for people OR and shared-space people', () => {
+    const markdown = sut.generateMarkdown();
+
+    expect(markdown).toContain('### Resolver-to-search fidelity');
+    expect(markdown).toContain('copy `resolvedFilters` into `searchAssets.filters` exactly');
+    expect(markdown).toContain('Pierre OR Aurelia');
+    expect(markdown).toContain('one `personIds` array');
+    expect(markdown).toContain('spaceId` and `spacePersonIds` together');
+    expect(markdown).toContain('ask a clarifying question');
+    expect(markdown).toContain('resolve-pierre-aurelia-people');
+    expect(markdown).toContain('search-resolved-pierre-aurelia-people');
+    expect(markdown).toContain('search-resolved-family-space-people');
+  });
+
   it('documents progressive examples from the contract and keeps them parseable', () => {
     const markdown = sut.generateMarkdown();
     const documentedNames = sut.listDocumentedToolArgumentExamples().map((example) => example.exampleName);

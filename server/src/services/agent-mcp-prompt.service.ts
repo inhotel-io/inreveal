@@ -21,7 +21,10 @@ export type AgentMcpPromptExample = {
 
 const promptExampleSelections = [
   { toolName: AgentToolName.ResolveAssetSearchFilters, exampleName: 'resolve-named-filters' },
+  { toolName: AgentToolName.ResolveAssetSearchFilters, exampleName: 'resolve-pierre-aurelia-people' },
   { toolName: AgentToolName.SearchAssets, exampleName: 'compact-date-location-search' },
+  { toolName: AgentToolName.SearchAssets, exampleName: 'search-resolved-pierre-aurelia-people' },
+  { toolName: AgentToolName.SearchAssets, exampleName: 'search-resolved-family-space-people' },
   { toolName: AgentToolName.SearchAssets, exampleName: 'summary-sample-search' },
   { toolName: AgentToolName.SearchAssets, exampleName: 'visual-curation-candidate-search' },
   { toolName: AgentToolName.ReadAssetMetadata, exampleName: 'read-technical-fields-for-selected-assets' },
@@ -45,25 +48,28 @@ export class AgentMcpPromptService {
   generatePromptCheatSheet(): string {
     const examples = this.listPromptExamples();
     const contracts = this.contractService.listToolContracts();
-    const toolList = contracts.map((contract) => this.toPiToolName(contract.name)).join(', ');
+    const toolList = contracts.map((contract) => this.toPiToolName(contract.name)).join(',');
     const resolveFilters = this.getPromptExample(
       examples,
       AgentToolName.ResolveAssetSearchFilters,
       'resolve-named-filters',
     );
-    const compactSearch = this.getPromptExample(examples, AgentToolName.SearchAssets, 'compact-date-location-search');
-    const sampleSearch = this.getPromptExample(examples, AgentToolName.SearchAssets, 'summary-sample-search');
-    const visualSearch = this.getPromptExample(
+    const peopleOrResolve = this.getPromptExample(
+      examples,
+      AgentToolName.ResolveAssetSearchFilters,
+      'resolve-pierre-aurelia-people',
+    );
+    const peopleOrSearch = this.getPromptExample(
       examples,
       AgentToolName.SearchAssets,
-      'visual-curation-candidate-search',
+      'search-resolved-pierre-aurelia-people',
     );
-    const technicalRead = this.getPromptExample(
+    const sharedSpacePeopleSearch = this.getPromptExample(
       examples,
-      AgentToolName.ReadAssetMetadata,
-      'read-technical-fields-for-selected-assets',
+      AgentToolName.SearchAssets,
+      'search-resolved-family-space-people',
     );
-    const retryRead = this.getPromptExample(examples, AgentToolName.ReadAssetMetadata, 'approved-retry');
+    const sampleSearch = this.getPromptExample(examples, AgentToolName.SearchAssets, 'summary-sample-search');
     const listSpaces = this.getPromptExample(examples, AgentToolName.ListSpaces, 'list-visible-spaces');
     const readSpace = this.getPromptExample(examples, AgentToolName.ReadSpace, 'read-space-details');
     const metadataContract = this.getContract(AgentToolName.ReadAssetMetadata);
@@ -82,20 +88,19 @@ export class AgentMcpPromptService {
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
         'Progressive: resolve names -> search detail ids -> readAssetMetadata fields for selected ids -> plan. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.',
-        'Large selections: searchAssets createSelectionHandle true for current bounded page; use <selectionHandle.id from searchAssets> as assetSelectionHandleId. Do not paste hundreds of assetIds.',
+        'Large selections: createSelectionHandle true; use <selectionHandle.id from searchAssets> as assetSelectionHandleId. Do not paste hundreds of assetIds.',
         `Resolve names before searchAssets: ${resolveFilters.piToolName} ${this.formatJson(resolveFilters.arguments)}`,
-        `Compact search: ${compactSearch.piToolName} ${this.formatJson(compactSearch.arguments)}`,
+        'Resolver fidelity: copy resolvedFilters into searchAssets.filters exactly; keep personIds/spaceId/spacePersonIds. If missing/ambiguous, ask one clarifying question.',
+        `People OR: resolve ${this.formatJson(peopleOrResolve.arguments)} -> search ${this.formatJson(peopleOrSearch.arguments)}`,
+        `Shared-space people: keep spaceId with spacePersonIds: search ${this.formatJson(sharedSpacePeopleSearch.arguments)}`,
         `Sample fields: ${sampleSearch.piToolName} ${this.formatJson(sampleSearch.arguments)}`,
         'Visual curation: search ids first, then previews for shortlisted assetIds only.',
-        `Visual search: ${visualSearch.piToolName} ${this.formatJson(visualSearch.arguments)}`,
         'Technical metadata: search ids first, then readAssetMetadata fields camera/dates/filename.',
-        `Technical read: ${technicalRead.piToolName} ${this.formatJson(technicalRead.arguments)}`,
-        `Retry ${retryRead.piToolName}: ${this.formatJson(retryRead.arguments)}`,
-        `Space lookup: ${listSpaces.piToolName}, then ${readSpace.piToolName}:`,
+        `Space lookup: ${listSpaces.piToolName}->${readSpace.piToolName}:`,
         `${this.formatJson(listSpaces.arguments)} -> ${this.formatJson(readSpace.arguments)}`,
-        'Existing-space plans: listSpaces/readSpace first. If ambiguous/no matching space, ask. If no matching assets/no photos or none to remove in space, explain. assetIdsTruncated false: exclude already in space adds and only remove already in space; true: narrow.',
-        'Space details: listSpaces/readSpace first. For existing_space targetId only, plan space.updateDetails fields: spaceName, description, color. description "" clears it. If same name, same description, or same color already, answer without a no-op/no change plan. Never update thumbnails, pets, faces, linked libraries, or delete spaces.',
-        `Plan ${this.toPiToolName(AgentToolName.ProposeAlbumOperations)}: album.create temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id>"]}; space.updateDetails {spaceName,description,color}.`,
+        'Existing-space plans: listSpaces/readSpace. Ambiguous/no matching space: ask. No matching assets/no photos/none to remove: explain. assetIdsTruncated false: exclude already in space adds; only remove already in space; true: narrow.',
+        'Space details: existing_space targetId; plan space.updateDetails fields spaceName, description, color. If same name/description/color, answer no-op/no change. Never update thumbnails, pets, faces, linked libraries, or delete spaces.',
+        `Plan ${this.toPiToolName(AgentToolName.ProposeAlbumOperations)}: album.create temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id-from-searchAssets>"]}.`,
         this.renderValidationRecoveryGuidance(validationMistake),
       ].join('\n'),
     );
@@ -217,10 +222,7 @@ export class AgentMcpPromptService {
       throw new Error(`Missing MCP prompt approval retry contract for ${contract.name}`);
     }
 
-    return [
-      `Approval retry: ${contract.approvalRetry.instruction}`,
-      `Retry uses only {"${contract.approvalRetry.field}":"<id>"}; do not combine ${contract.approvalRetry.field} with old request fields: ${retryMode.forbiddenFields.join(', ')}.`,
-    ].join(' ');
+    return `Approval retry: ${contract.approvalRetry.instruction} Retry uses only {"${contract.approvalRetry.field}":"<approved-toolCallId>"}; do not combine ${contract.approvalRetry.field} with old request fields: ${retryMode.forbiddenFields.join(', ')}.`;
   }
 
   private renderSafetyGuidance(contracts: AgentMcpToolContract[]): string {

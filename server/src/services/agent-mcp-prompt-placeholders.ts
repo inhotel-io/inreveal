@@ -6,6 +6,7 @@ export const agentMcpPromptPlaceholderMap = {
   '00000000-0000-4000-8000-000000000021': '<spacePersonIds value from resolveAssetSearchFilters>',
   '00000000-0000-4000-8000-000000000030': '<tagIds value from resolveAssetSearchFilters>',
   '00000000-0000-4000-8000-000000000040': '<personIds value from resolveAssetSearchFilters>',
+  '00000000-0000-4000-8000-000000000041': '<another-personIds value from resolveAssetSearchFilters>',
   '00000000-0000-4000-8000-000000000111': '<approved-toolCallId>',
   '00000000-0000-4000-8000-000000000222': '<plan.id from proposed plan>',
   '00000000-0000-4000-8000-000000000333': '<selectionHandle.id from searchAssets>',
