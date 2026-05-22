@@ -334,9 +334,7 @@ const visibleItems = $derived(isExpanded ? expandedItems : compactItems);
 with:
 
 ```ts
-const expandedWindowStartIndex = $derived(
-  getVerboseWindowStart(model.verboseItems, verboseLimit, expandedWindowStart),
-);
+const expandedWindowStartIndex = $derived(getVerboseWindowStart(model.verboseItems, verboseLimit, expandedWindowStart));
 const expandedItems = $derived(
   selectVerboseItems(model.verboseItems, model.verboseActiveItem, verboseLimit, expandedWindowStart),
 );
