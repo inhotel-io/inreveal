@@ -23,6 +23,19 @@ export type AgentSelectionHandleLookup = {
   now: Date;
 };
 
+export type AgentSelectionHandleRecoveryLookup = {
+  id: string;
+  sessionId: string;
+  userId: string;
+};
+
+export type AgentSelectionHandleRecoveryList = {
+  sessionId: string;
+  userId: string;
+  now: Date;
+  limit: number;
+};
+
 @Injectable()
 export class AgentSelectionHandleRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
@@ -56,6 +69,29 @@ export class AgentSelectionHandleRepository {
       .where('sessionId', '=', asUuid(dto.sessionId))
       .where('userId', '=', asUuid(dto.userId))
       .where('expiresAt', '>', dto.now)
+      .executeTakeFirst();
+  }
+
+  listValidForRecovery(dto: AgentSelectionHandleRecoveryList) {
+    return this.db
+      .selectFrom('agent_selection_handle')
+      .select(['id', 'assetCount', 'sourceToolCallId', 'createdAt', 'expiresAt'])
+      .where('sessionId', '=', asUuid(dto.sessionId))
+      .where('userId', '=', asUuid(dto.userId))
+      .where('expiresAt', '>', dto.now)
+      .orderBy('createdAt', 'desc')
+      .orderBy('id', 'desc')
+      .limit(dto.limit)
+      .execute();
+  }
+
+  getForRecovery(dto: AgentSelectionHandleRecoveryLookup) {
+    return this.db
+      .selectFrom('agent_selection_handle')
+      .select(['id', 'assetCount', 'sourceToolCallId', 'createdAt', 'expiresAt'])
+      .where('id', '=', asUuid(dto.id))
+      .where('sessionId', '=', asUuid(dto.sessionId))
+      .where('userId', '=', asUuid(dto.userId))
       .executeTakeFirst();
   }
 
