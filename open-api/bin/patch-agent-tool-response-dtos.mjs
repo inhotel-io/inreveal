@@ -15,7 +15,14 @@ const responseDtos = [
   {
     className: 'AgentReadAssetMetadataToolResponseDto',
     fileName: 'agent_read_asset_metadata_tool_response_dto.dart',
-    fields: [{ name: 'assets', type: 'List<AgentAssetMetadata>', defaultValue: 'const []', fromJson: "AgentAssetMetadata.listFromJson(json[r'assets'])" }],
+    fields: [
+      {
+        name: 'assets',
+        type: 'List<AgentAssetMetadataResult>',
+        defaultValue: 'const []',
+        fromJson: "AgentAssetMetadataResult.listFromJson(json[r'assets'])",
+      },
+    ],
   },
   {
     className: 'AgentReadAssetOriginalsToolResponseDto',
@@ -31,7 +38,12 @@ const responseDtos = [
     className: 'AgentSearchAssetsToolResponseDto',
     fileName: 'agent_search_assets_tool_response_dto.dart',
     fields: [
-      { name: 'assets', type: 'List<AgentAssetMetadata>', defaultValue: 'const []', fromJson: "AgentAssetMetadata.listFromJson(json[r'assets'])" },
+      {
+        name: 'assets',
+        type: 'List<AgentSearchAssetResult>',
+        defaultValue: 'const []',
+        fromJson: "AgentSearchAssetResult.listFromJson(json[r'assets'])",
+      },
       { name: 'nextPage', type: 'String?', fromJson: "mapValueOfType<String>(json, r'nextPage')" },
     ],
   },
