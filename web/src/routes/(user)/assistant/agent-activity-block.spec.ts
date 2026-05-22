@@ -55,9 +55,11 @@ const activityItem = (overrides: Partial<AgentActivityItem> = {}): AgentActivity
   technical: overrides.technical,
 });
 
-const activityModel = (items: AgentActivityItem[]): AgentActivityModel => ({
+const activityModel = (items: AgentActivityItem[], verboseItems = items): AgentActivityModel => ({
   items,
+  verboseItems,
   activeItem: items.find((item) => ['blocked', 'running', 'pending'].includes(item.status)) ?? null,
+  verboseActiveItem: verboseItems.find((item) => ['blocked', 'running', 'pending'].includes(item.status)) ?? null,
   summary: items
     .map((item) => item.summary ?? item.title)
     .slice(0, 3)
@@ -65,6 +67,103 @@ const activityModel = (items: AgentActivityItem[]): AgentActivityModel => ({
 });
 
 describe(AgentActivityBlock.name, () => {
+  it('uses compact coalesced rows until the user expands activity', () => {
+    const compactItems = [
+      activityItem({ id: 'search-compact', title: 'Searching photos', status: 'completed' }),
+      activityItem({ id: 'metadata-compact', title: 'Reading photo details', status: 'running' }),
+      activityItem({ id: 'album-compact', title: 'Searching albums', status: 'completed' }),
+    ];
+    const verboseItems = Array.from({ length: 60 }, (_, index) =>
+      activityItem({
+        id: `verbose-${index}`,
+        title: index % 2 === 0 ? 'Searching photos' : 'Reading photo details',
+        summary: `Verbose row ${index}`,
+        status: index === 59 ? 'running' : 'completed',
+        technical: { toolName: index % 2 === 0 ? 'searchAssets' : 'readAssetMetadata' },
+      }),
+    );
+
+    render(AgentActivityBlock, {
+      props: {
+        visibilityMode: 'compact',
+        model: activityModel(compactItems, verboseItems),
+      },
+    });
+
+    const block = screen.getByRole('article', { name: 'Pi is working' });
+    expect(block).toHaveTextContent('Searching photos');
+    expect(block).toHaveTextContent('Reading photo details');
+    expect(block).toHaveTextContent('Searching albums');
+    expect(block).not.toHaveTextContent('Verbose row 59');
+    expect(screen.queryByRole('button', { name: 'Technical details' })).not.toBeInTheDocument();
+  });
+
+  it('renders verbose rows only in expanded mode', async () => {
+    render(AgentActivityBlock, {
+      props: {
+        visibilityMode: 'expanded',
+        model: activityModel(
+          [activityItem({ id: 'compact-search', title: 'Searching photos', summary: 'Found matching photos' })],
+          [
+            activityItem({
+              id: 'verbose-search-1',
+              title: 'Searching photos',
+              summary: 'Found matching photos',
+              technical: {
+                toolName: 'searchAssets',
+                toolCallIds: ['tool-call-1'],
+                requestSummary: 'Search with token=[redacted]',
+              },
+            }),
+            activityItem({
+              id: 'verbose-metadata-1',
+              title: 'Reading photo details',
+              status: 'running',
+              summary: 'Reading photo details',
+              count: 12,
+              technical: { toolName: 'readAssetMetadata', toolCallIds: ['tool-call-2'] },
+            }),
+          ],
+        ),
+      },
+    });
+
+    const block = screen.getByRole('article', { name: 'Pi is working' });
+    expect(block).toHaveTextContent('Reading photo details');
+    expect(block).toHaveTextContent('Running');
+    expect(block).toHaveTextContent('12 items');
+    expect(block).not.toHaveTextContent('searchAssets');
+    expect(block).not.toHaveTextContent('tool-call-1');
+
+    const buttons = screen.getAllByRole('button', { name: 'Technical details' });
+    await fireEvent.click(buttons[0]);
+
+    expect(screen.getByText('searchAssets')).toBeInTheDocument();
+    expect(screen.getByText('tool-call-1')).toBeInTheDocument();
+    expect(screen.queryByText('readAssetMetadata')).not.toBeInTheDocument();
+  });
+
+  it('caps expanded verbose rows to a bounded DOM count', () => {
+    const verboseItems = Array.from({ length: 250 }, (_, index) =>
+      activityItem({
+        id: `verbose-${index}`,
+        title: `Verbose activity ${index}`,
+        status: index === 120 ? 'running' : 'completed',
+        startedAt: `2026-05-18T10:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`,
+      }),
+    );
+    const { container } = render(AgentActivityBlock, {
+      props: {
+        visibilityMode: 'expanded',
+        model: activityModel([activityItem({ id: 'compact', title: 'Searching photos' })], verboseItems),
+      },
+    });
+
+    expect(container.querySelectorAll('[data-activity-row]')).toHaveLength(100);
+    expect(screen.getByText('Verbose activity 120')).toBeInTheDocument();
+    expect(screen.queryByText('Verbose activity 0')).not.toBeInTheDocument();
+  });
+
   it('renders a compact active activity block with safe row labels', () => {
     render(AgentActivityBlock, {
       props: {
@@ -394,7 +493,7 @@ describe(AgentActivityBlock.name, () => {
   it('renders nothing for an empty model', () => {
     const { container } = render(AgentActivityBlock, {
       props: {
-        model: { items: [], activeItem: null, summary: null },
+        model: { items: [], verboseItems: [], activeItem: null, verboseActiveItem: null, summary: null },
       },
     });
 
