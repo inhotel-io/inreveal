@@ -49,6 +49,7 @@
     toolCalls?: AgentToolCallResponseDto[];
     seedMessages?: AgentMessageResponseDto[];
     assistantResponsePending?: boolean;
+    suppressPendingApprovalActivity?: boolean;
     composerDisabled?: boolean;
     composerDisabledReason?: string | null;
     composerPlaceholder?: string;
@@ -99,6 +100,7 @@
     toolCalls = [],
     seedMessages = [],
     assistantResponsePending = false,
+    suppressPendingApprovalActivity = false,
     composerDisabled = false,
     composerDisabledReason = null,
     composerPlaceholder,
@@ -177,11 +179,25 @@
       ? { ...session, status: AgentSessionStatus.Running }
       : session,
   );
+  const pendingApprovalToolCallIdsSuppressedForResume = $derived(
+    new Set(
+      suppressPendingApprovalActivity
+        ? timelineToolCalls
+            .filter((toolCall) => toolCall.status === AgentToolCallStatus.PendingApproval)
+            .map((toolCall) => toolCall.id)
+        : [],
+    ),
+  );
+  const activityToolCalls = $derived(
+    suppressPendingApprovalActivity
+      ? timelineToolCalls.filter((toolCall) => toolCall.status !== AgentToolCallStatus.PendingApproval)
+      : timelineToolCalls,
+  );
   const activityTurns = $derived(
     buildAgentSessionActivityTurns({
       session: activitySession,
       messages,
-      toolCalls: timelineToolCalls,
+      toolCalls: activityToolCalls,
       currentPlan,
       appliedPlans,
       activityEvents,
@@ -189,7 +205,9 @@
       isAssistantActive: isResponsePending,
     }),
   );
-  const coveredToolCallIds = $derived(getCoveredToolCallIdsForActivityTurns(activityTurns));
+  const coveredToolCallIds = $derived(
+    new Set([...getCoveredToolCallIdsForActivityTurns(activityTurns), ...pendingApprovalToolCallIdsSuppressedForResume]),
+  );
   const showAssistantBusyIndicator = $derived(
     isResponsePending &&
       streamingText.length === 0 &&

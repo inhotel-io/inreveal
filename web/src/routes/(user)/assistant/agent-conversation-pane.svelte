@@ -202,6 +202,7 @@
         toolCalls={recentToolCalls}
         {seedMessages}
         assistantResponsePending={assistantResponsePending || approvalResumePending}
+        suppressPendingApprovalActivity={approvalResumePending}
         composerDisabled={composerState.disabled}
         {composerDisabledReason}
         composerPlaceholder={$t(composerState.placeholderKey)}
