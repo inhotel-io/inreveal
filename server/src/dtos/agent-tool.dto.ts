@@ -1,4 +1,5 @@
 import { createZodDto, type ZodDto } from 'nestjs-zod';
+import { AgentSearchSourceRefSchema } from 'src/dtos/agent-asset-source.dto';
 import {
   AgentToolApprovalDecision,
   AgentToolCallStatus,
@@ -670,6 +671,7 @@ const AgentReadAssetMetadataToolResponseSchema = z
 const AgentSearchAssetsSelectionHandleSchema = z
   .object({
     id: uuid,
+    sourceRef: AgentSearchSourceRefSchema,
     assetCount: z.number().int().min(0),
     sampleAssetIds: z.array(uuid).max(MAX_SEARCH_SAMPLE_SIZE),
     sourceToolCallId: uuid.nullable(),
