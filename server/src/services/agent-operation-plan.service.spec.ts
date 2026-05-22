@@ -599,6 +599,213 @@ describe(AgentOperationPlanService.name, () => {
     );
   });
 
+  it('returns wrong-domain recovery and audit metadata when assetSelectionHandleId is a readable asset id', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const assetId = newUuid();
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue([]);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(void 0);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+
+    const thrown = await sut
+      .proposeAlbumOperations(auth, session.id, {
+        summary: 'Add selected photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSelectionHandleId: assetId,
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const error = thrown as AgentMcpRecoverableToolError;
+    expect(error.content).toMatchObject({
+      status: 'error',
+      error: 'That value is an asset ID, not a selection handle ID.',
+      toolName: AgentToolName.ProposeAlbumOperations,
+      retryable: true,
+      hint: 'Use a same-session selection handle returned by searchAssets with createSelectionHandle true, or use assetSource.search once available.',
+      recovery: {
+        kind: 'wrong_id_domain',
+        field: 'operations[].assetSelectionHandleId',
+        expectedDomain: 'selectionHandle',
+        receivedDomain: 'asset',
+        instruction:
+          'Use a same-session selection handle returned by searchAssets with createSelectionHandle true, or use assetSource.search once available.',
+      },
+    });
+    expect(JSON.stringify(error.content.recovery)).not.toContain(assetId);
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: 'That value is an asset ID, not a selection handle ID.',
+        redactedResponseMetadata: {
+          wrongIdDomainRecovery: {
+            kind: 'wrong_id_domain',
+            field: 'operations[].assetSelectionHandleId',
+            expectedDomain: 'selectionHandle',
+            receivedDomain: 'asset',
+            instruction:
+              'Use a same-session selection handle returned by searchAssets with createSelectionHandle true, or use assetSource.search once available.',
+          },
+        },
+      }),
+    );
+    expect(selectionHandleRepository.listValidForRecovery).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('returns wrong-domain recovery when assetSelectionHandleId is a readable person id', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const personId = newUuid();
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue([]);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(void 0);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([personId]));
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+
+    const thrown = await sut
+      .proposeAlbumOperations(auth, session.id, {
+        summary: 'Add selected photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSelectionHandleId: personId,
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const error = thrown as AgentMcpRecoverableToolError;
+    expect(error.content.recovery).toMatchObject({
+      kind: 'wrong_id_domain',
+      field: 'operations[].assetSelectionHandleId',
+      expectedDomain: 'selectionHandle',
+      receivedDomain: 'person',
+    });
+    expect(error.content.error).toBe('That value is a person ID, not a selection handle ID.');
+    expect(JSON.stringify(error.content.recovery)).not.toContain(personId);
+    expect(selectionHandleRepository.listValidForRecovery).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('keeps inaccessible UUID-shaped assetSelectionHandleId values on invalid-selection-handle recovery', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const inaccessibleAssetId = newUuid();
+    const leakMarkers = [
+      'wrong_id_domain',
+      'receivedDomain',
+      'expectedDomain',
+      'other-user-asset-name-leak',
+      'other-user-person-name-leak',
+      'other-user-owner-leak',
+      'originalFileName',
+      'exifInfo',
+      'localDateTime',
+      'birthDate',
+    ];
+    const availableHandle = {
+      id: newUuid(),
+      assetCount: 7,
+      sourceToolCallId: newUuid(),
+      createdAt: new Date('2026-05-22T07:00:00.000Z'),
+      expiresAt: new Date('2026-05-22T08:00:00.000Z'),
+    };
+    const expectedAvailableHandle = {
+      ...availableHandle,
+      createdAt: availableHandle.createdAt.toISOString(),
+      expiresAt: availableHandle.expiresAt.toISOString(),
+    };
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue([availableHandle]);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(void 0);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set());
+
+    const thrown = await sut
+      .proposeAlbumOperations(auth, session.id, {
+        summary: 'Add selected photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSelectionHandleId: inaccessibleAssetId,
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const error = thrown as AgentMcpRecoverableToolError;
+    expect(error.content.recovery).toEqual({
+      kind: 'invalid-selection-handle',
+      attemptedSelectionHandleId: inaccessibleAssetId,
+      looksLikeExamplePlaceholder: false,
+      availableSelectionHandles: [expectedAvailableHandle],
+      instruction: 'Retry proposeAlbumOperations with a valid same-session selection handle, or rerun searchAssets.',
+    });
+    const serializedContent = JSON.stringify(error.content);
+    const serializedRecovery = JSON.stringify(error.content.recovery);
+    for (const marker of leakMarkers) {
+      expect(serializedContent).not.toContain(marker);
+      expect(serializedRecovery).not.toContain(marker);
+    }
+    expect(serializedRecovery).not.toContain('assetIds');
+    expect(serializedRecovery).not.toContain('sampleAssetIds');
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        redactedResponseMetadata: {
+          selectionHandleRecovery: error.content.recovery,
+        },
+      }),
+    );
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
   it('lists multiple valid same-session handles without choosing one', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id });

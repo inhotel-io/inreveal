@@ -1,4 +1,5 @@
 import { AgentProviderType, AssetType, AssetVisibility } from 'src/enum';
+import { AgentIdDomain } from 'src/types/agent-asset-source.types';
 
 export type AgentToolProviderSnapshot = {
   providerCredentialId: string | null;
@@ -155,6 +156,14 @@ export type AgentSelectionHandleRecoveryMetadata = {
   instruction: string;
 };
 
+export type AgentWrongIdDomainRecoveryMetadata = {
+  kind: 'wrong_id_domain';
+  field: string;
+  expectedDomain: AgentIdDomain;
+  receivedDomain: AgentIdDomain;
+  instruction: string;
+};
+
 export type AgentToolOperationPlanResponseMetadata =
   | {
       planId: string | null;
@@ -162,6 +171,9 @@ export type AgentToolOperationPlanResponseMetadata =
     }
   | {
       selectionHandleRecovery: AgentSelectionHandleRecoveryMetadata;
+    }
+  | {
+      wrongIdDomainRecovery: AgentWrongIdDomainRecoveryMetadata;
     };
 
 export type AgentSearchAssetsFilters = {

@@ -1838,6 +1838,49 @@ describe(AgentMcpService.name, () => {
       expect(JSON.stringify(response)).not.toContain('Internal error');
     });
 
+    it('returns recoverable wrong-domain tool errors as MCP tool results', async () => {
+      const recoverableError = new AgentMcpRecoverableToolError({
+        status: 'error',
+        error: 'That value is a person ID, not an asset ID.',
+        toolName: AgentToolName.ReadAssetMetadata,
+        retryable: true,
+        hint: 'Use asset IDs returned by searchAssets, or use assetSource.search once available.',
+        recovery: {
+          kind: 'wrong_id_domain',
+          field: 'assetIds',
+          expectedDomain: 'asset',
+          receivedDomain: 'person',
+          instruction: 'Use asset IDs returned by searchAssets, or use assetSource.search once available.',
+        },
+      });
+      toolService.readAssetMetadata.mockRejectedValue(recoverableError);
+
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(AgentToolName.ReadAssetMetadata, {
+          assetIds: [factory.uuid()],
+        }),
+      )) as AgentMcpSuccessResponse;
+
+      expect(response).not.toHaveProperty('error');
+      const result = response.result as AgentMcpToolCallResult;
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        status: 'error',
+        retryable: true,
+        error: 'That value is a person ID, not an asset ID.',
+        recovery: {
+          kind: 'wrong_id_domain',
+          field: 'assetIds',
+          expectedDomain: 'asset',
+          receivedDomain: 'person',
+        },
+      });
+      expect(result.content[0].text).toContain(recoverableError.content.hint);
+      expect(JSON.stringify(response)).not.toContain('Internal error');
+    });
+
     it('keeps invalid UUID selection handles as ordinary schema validation errors', async () => {
       const response = (await sut.handle(
         auth,
