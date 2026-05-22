@@ -97,7 +97,9 @@ const makeToolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentT
   status: overrides.status ?? AgentToolCallStatus.Completed,
   approvalDecision: overrides.approvalDecision ?? null,
   requestSummary: overrides.requestSummary ?? 'Search photos',
-  responseSummary: overrides.responseSummary ?? 'Found matching photos',
+  responseSummary: Object.hasOwn(overrides, 'responseSummary')
+    ? (overrides.responseSummary ?? null)
+    : 'Found matching photos',
   dataClass: overrides.dataClass ?? AgentToolDataClass.Metadata,
   assetCount: overrides.assetCount ?? 0,
   albumCount: overrides.albumCount ?? 0,
@@ -310,28 +312,102 @@ describe('agent activity UI helpers', () => {
     expect(model.verboseItems).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: 'tool-search-search-0',
+          id: 'tool-search-0',
           title: 'Searching photos',
           status: 'completed',
           summary: 'Found matching photos',
           count: 12,
         }),
         expect.objectContaining({
-          id: 'tool-metadata-metadata-55',
+          id: 'tool-metadata-55',
           title: 'Reading photo details',
           status: 'running',
           summary: 'Reading photo details',
           count: 3,
         }),
-        expect.objectContaining({ id: 'tool-unknown-unknown-14', title: 'Working with Gallery' }),
+        expect.objectContaining({ id: 'tool-unknown-14', title: 'Working with Gallery' }),
       ]),
     );
-    expect(model.verboseItems.find((item) => item.id === 'tool-unknown-unknown-14')?.technical?.toolName).toBe(
+    expect(model.verboseItems.find((item) => item.id === 'tool-unknown-14')?.technical?.toolName).toBe(
       'futureMcpDebugTool',
     );
     expect(model.verboseItems.map((item) => `${item.title} ${item.summary ?? ''}`).join(' ')).not.toContain(
       'futureMcpDebugTool',
     );
+  });
+
+  it('keeps every repeated tool call as a separate expanded row while compact rows stay coalesced', () => {
+    const repeatedSearches = Array.from({ length: 50 }, (_, index) =>
+      makeToolCall({
+        id: `repeat-search-${index}`,
+        toolName: AgentToolName.SearchAssets,
+        assetCount: 1,
+        startedAt: `2026-05-18T10:00:${String(index).padStart(2, '0')}.000Z`,
+        completedAt: `2026-05-18T10:00:${String(index + 1).padStart(2, '0')}.000Z`,
+      }),
+    );
+
+    const model = buildModel({ toolCalls: repeatedSearches });
+
+    expect(model.verboseItems).toHaveLength(50);
+    expect(model.verboseItems.map((item) => item.id)).toEqual(
+      repeatedSearches.map((toolCall) => `tool-${toolCall.id}`),
+    );
+    expect(model.items).toHaveLength(1);
+    expect(model.items[0]).toMatchObject({
+      id: 'tool-search-search-assets',
+      kind: 'search',
+      status: 'completed',
+      count: 50,
+    });
+  });
+
+  it('does not let secondary activity events remove expanded tool-call rows', () => {
+    const model = buildModel({
+      toolCalls: [
+        makeToolCall({
+          id: 'plan-tool',
+          toolName: AgentToolName.ProposeAlbumOperations,
+          startedAt: '2026-05-18T10:00:02.000Z',
+          completedAt: '2026-05-18T10:00:04.000Z',
+        }),
+        makeToolCall({
+          id: 'search-after-plan',
+          toolName: AgentToolName.SearchAssets,
+          assetCount: 3,
+          responseSummary: null,
+          startedAt: '2026-05-18T10:00:05.000Z',
+          completedAt: '2026-05-18T10:00:07.000Z',
+        }),
+      ],
+      currentPlan: makePlan({
+        createdAt: '2026-05-18T10:00:08.000Z',
+        updatedAt: '2026-05-18T10:00:09.000Z',
+      }),
+      activityEvents: [
+        makeActivityEvent({
+          id: 'start',
+          kind: 'start-processing',
+          status: 'running',
+          createdAt: '2026-05-18T10:00:01.000Z',
+        }),
+        makeActivityEvent({
+          id: 'plan-composing',
+          kind: 'plan-composing',
+          status: 'completed',
+          createdAt: '2026-05-18T10:00:03.000Z',
+        }),
+      ],
+    });
+
+    expect(model.verboseItems.map((item) => item.id)).toEqual(
+      expect.arrayContaining(['tool-plan-tool', 'tool-search-after-plan']),
+    );
+    expect(model.verboseItems.filter((item) => item.id.startsWith('tool-'))).toHaveLength(2);
+    expect(model.verboseItems.find((item) => item.id === 'tool-search-after-plan')?.technical?.responseSummary).toBe(
+      undefined,
+    );
+    expect(model.items.filter((item) => item.kind === 'plan')).toHaveLength(1);
   });
 
   it('returns identical compact and verbose models for polling-first and websocket-first updates', () => {
@@ -512,6 +588,85 @@ describe('agent activity UI helpers', () => {
     expect(`${model.items[0].title} ${model.items[0].summary}`).not.toContain('readAssetMetadata');
     expect(model.items[0].technical?.toolName).toBe(AgentToolName.ReadAssetMetadata);
     expect(model.activeItem?.id).toBe(model.items[0].id);
+  });
+
+  it('keeps a tool call row id stable across permission and execution lifecycle changes', () => {
+    const lifecycleToolId = 'lifecycle-tool';
+    const baseToolCall = {
+      id: lifecycleToolId,
+      toolName: AgentToolName.ReadAssetMetadata,
+      requestSummary: 'Read 12 photo metadata records',
+      responseSummary: null,
+      assetCount: 12,
+      startedAt: '2026-05-18T10:00:05.000Z',
+    } satisfies Partial<AgentToolCallResponseDto>;
+
+    const pending = buildModel({
+      toolCalls: [
+        makeToolCall({
+          ...baseToolCall,
+          status: AgentToolCallStatus.PendingApproval,
+          completedAt: null,
+        }),
+      ],
+    });
+    const approved = buildModel({
+      toolCalls: [
+        makeToolCall({
+          ...baseToolCall,
+          status: AgentToolCallStatus.Approved,
+          completedAt: null,
+        }),
+      ],
+    });
+    const executing = buildModel({
+      toolCalls: [
+        makeToolCall({
+          ...baseToolCall,
+          status: AgentToolCallStatus.Executing,
+          completedAt: null,
+        }),
+      ],
+    });
+    const completed = buildModel({
+      toolCalls: [
+        makeToolCall({
+          ...baseToolCall,
+          status: AgentToolCallStatus.Completed,
+          responseSummary: 'Read details for photos',
+          completedAt: '2026-05-18T10:00:09.000Z',
+        }),
+      ],
+    });
+
+    expect(pending.verboseItems[0]).toMatchObject({
+      id: 'tool-lifecycle-tool',
+      kind: 'permission',
+      status: 'blocked',
+      title: 'Waiting for approval',
+    });
+    expect(approved.verboseItems[0]).toMatchObject({
+      id: 'tool-lifecycle-tool',
+      kind: 'metadata',
+      status: 'running',
+      title: 'Reading photo details',
+    });
+    expect(executing.verboseItems[0]).toMatchObject({
+      id: 'tool-lifecycle-tool',
+      kind: 'metadata',
+      status: 'running',
+    });
+    expect(completed.verboseItems[0]).toMatchObject({
+      id: 'tool-lifecycle-tool',
+      kind: 'metadata',
+      status: 'completed',
+    });
+    expect([pending, approved, executing, completed].map((model) => model.verboseItems[0].id)).toEqual([
+      'tool-lifecycle-tool',
+      'tool-lifecycle-tool',
+      'tool-lifecycle-tool',
+      'tool-lifecycle-tool',
+    ]);
   });
 
   it('coalesces repeated read calls with aggregate counts and running status precedence', () => {
@@ -769,7 +924,7 @@ describe('agent activity UI helpers', () => {
 
     expect(model.items.filter((item) => item.kind === 'plan')).toHaveLength(1);
     expect(model.items.find((item) => item.kind === 'plan')).toMatchObject({
-      id: 'tool-plan-plan-tool',
+      id: 'tool-plan-tool',
       status: 'completed',
       summary: 'Prepared a plan',
     });
@@ -800,9 +955,9 @@ describe('agent activity UI helpers', () => {
     });
 
     expect(model.items.map((item) => item.id)).toEqual([
-      'tool-search-search-same-time',
-      'tool-metadata-metadata-same-time',
-      'tool-unknown-z-unknown-time',
+      'tool-search-same-time',
+      'tool-metadata-same-time',
+      'tool-z-unknown-time',
     ]);
   });
 
