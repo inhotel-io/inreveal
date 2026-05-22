@@ -2,6 +2,7 @@ import { serverVersion } from 'src/constants';
 import type { AuthDto } from 'src/dtos/auth.dto';
 import { AgentOperationRiskLevel, AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
 import { AgentMcpDocsService } from 'src/services/agent-mcp-docs.service';
+import { AgentMcpRecoverableToolError } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import { AgentMcpService } from 'src/services/agent-mcp.service';
@@ -1776,6 +1777,92 @@ describe(AgentMcpService.name, () => {
       expect(result.content[0].text).toEqual(expect.stringContaining('Invalid tool arguments'));
       expect(result.content[0].text.length).toBeLessThanOrEqual(MCP_TOOL_TEXT_MAX_CHARS);
       expect(result.content[0].text).not.toBe(JSON.stringify(result.structuredContent));
+    });
+
+    it('returns recoverable invalid selection handle tool errors as MCP tool results', async () => {
+      const validHandleId = factory.uuid();
+      const recoverableError = new AgentMcpRecoverableToolError({
+        status: 'error',
+        error: 'Selection handle is expired or not available for this session',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        retryable: true,
+        hint: `Retry proposeAlbumOperations with the exact handle ${validHandleId} if that is the intended search selection.`,
+        recovery: {
+          kind: 'invalid-selection-handle',
+          attemptedSelectionHandleId: '00000000-0000-4000-8000-000000000333',
+          looksLikeExamplePlaceholder: true,
+          availableSelectionHandles: [
+            {
+              id: validHandleId,
+              assetCount: 42,
+              sourceToolCallId: null,
+              createdAt: '2026-05-22T07:00:00.000Z',
+              expiresAt: '2026-05-22T08:00:00.000Z',
+            },
+          ],
+          instruction: 'Retry proposeAlbumOperations with a valid same-session selection handle.',
+        },
+      });
+      operationPlanService.proposeAlbumOperations.mockRejectedValue(recoverableError);
+
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(AgentToolName.ProposeAlbumOperations, {
+          summary: 'Add photos.',
+          operations: [
+            {
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add selected photos.',
+              targetKind: AgentOperationTargetKind.ExistingAlbum,
+              targetId: factory.uuid(),
+              assetSelectionHandleId: '00000000-0000-4000-8000-000000000333',
+              payload: {},
+            },
+          ],
+        }),
+      )) as AgentMcpSuccessResponse;
+
+      expect(response).not.toHaveProperty('error');
+      const result = response.result as AgentMcpToolCallResult;
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        status: 'error',
+        retryable: true,
+        recovery: expect.objectContaining({
+          kind: 'invalid-selection-handle',
+          looksLikeExamplePlaceholder: true,
+        }),
+      });
+      expect(result.content[0].text).toContain(recoverableError.content.hint);
+      expect(JSON.stringify(response)).not.toContain('Internal error');
+    });
+
+    it('keeps invalid UUID selection handles as ordinary schema validation errors', async () => {
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(AgentToolName.ProposeAlbumOperations, {
+          summary: 'Add photos.',
+          operations: [
+            {
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add selected photos.',
+              targetKind: AgentOperationTargetKind.ExistingAlbum,
+              targetId: factory.uuid(),
+              assetSelectionHandleId: 'not-a-uuid',
+              payload: {},
+            },
+          ],
+        }),
+      )) as AgentMcpSuccessResponse;
+      const result = response.result as AgentMcpToolCallResult;
+      const structuredContent = result.structuredContent as Record<string, unknown>;
+
+      expect(result.isError).toBe(true);
+      expect(structuredContent.error).toBe('Invalid tool arguments');
+      expect(structuredContent).not.toHaveProperty('recovery');
+      expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
     });
 
     it('returns a correction hint when a space asset operation uses an album target kind', async () => {
