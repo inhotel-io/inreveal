@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { AgentToolName } from 'src/enum';
+import { AgentIdDomain } from 'src/types/agent-asset-source.types';
 import { AgentMcpJsonObject, AgentMcpRecoverableToolErrorContent } from 'src/types/agent-mcp.types';
 
 export class AgentMcpRecoverableToolError extends BadRequestException {
@@ -25,3 +26,45 @@ export const invalidSelectionHandleError = (input: {
     hint: input.hint,
     recovery: input.recovery,
   });
+
+const agentIdDomainLabel = (domain: AgentIdDomain) => {
+  switch (domain) {
+    case 'selectionHandle': {
+      return 'selection handle';
+    }
+    case 'sourceRef': {
+      return 'source reference';
+    }
+    default: {
+      return domain;
+    }
+  }
+};
+
+const articleFor = (label: string) => (/^[aeiou]/i.test(label) ? 'an' : 'a');
+
+export const wrongIdDomainError = (input: {
+  toolName: AgentToolName;
+  field: string;
+  expectedDomain: AgentIdDomain;
+  receivedDomain: AgentIdDomain;
+  instruction: string;
+}) => {
+  const receivedLabel = agentIdDomainLabel(input.receivedDomain);
+  const expectedLabel = agentIdDomainLabel(input.expectedDomain);
+
+  return new AgentMcpRecoverableToolError({
+    status: 'error',
+    error: `That value is ${articleFor(receivedLabel)} ${receivedLabel} ID, not ${articleFor(expectedLabel)} ${expectedLabel} ID.`,
+    toolName: input.toolName,
+    retryable: true,
+    hint: input.instruction,
+    recovery: {
+      kind: 'wrong_id_domain',
+      field: input.field,
+      expectedDomain: input.expectedDomain,
+      receivedDomain: input.receivedDomain,
+      instruction: input.instruction,
+    },
+  });
+};
