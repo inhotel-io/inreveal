@@ -365,6 +365,7 @@ describe('agent activity UI helpers', () => {
   });
 
   it.each([
+    [AgentToolName.ResolveAssetSearchFilters, 'search', 'Resolving filters', 'Matched search filters'],
     [AgentToolName.SearchAssets, 'search', 'Searching photos', 'Found matching photos'],
     [AgentToolName.ReadAssetMetadata, 'metadata', 'Reading photo details', 'Read details for photos'],
     [AgentToolName.ReadAssetPreviews, 'preview', 'Loading photo previews', 'Loaded photo previews'],
@@ -708,7 +709,38 @@ describe('agent activity UI helpers', () => {
     expect(model.items[1].technical?.requestSummary).toBe('[redacted unsafe prompt/reasoning text]');
     expect(model.items[3].technical?.requestSummary).toContain('[redacted]');
     expect(model.items[3].technical?.requestSummary).not.toContain('secret-token');
-    expect(model.activeItem?.id).toBe('event-start');
+    expect(model.activeItem?.id).toBe('event-recovery');
+  });
+
+  it('does not keep a stale start-processing event active after a plan is ready', () => {
+    const model = buildModel({
+      session: makeSession({
+        status: AgentSessionStatus.WaitingForPlanReview,
+        updatedAt: '2026-05-18T10:01:30.000Z',
+      }),
+      currentPlan: makePlan({
+        id: 'ready-plan',
+        createdAt: '2026-05-18T10:01:00.000Z',
+        updatedAt: '2026-05-18T10:01:10.000Z',
+      }),
+      activityEvents: [
+        makeActivityEvent({
+          id: 'start',
+          kind: 'start-processing',
+          status: 'running',
+          createdAt: '2026-05-18T10:00:00.000Z',
+        }),
+      ],
+    });
+
+    expect(model.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'event-start', kind: 'understanding', status: 'running' }),
+        expect.objectContaining({ id: 'plan-ready-plan-1', kind: 'plan', status: 'completed' }),
+      ]),
+    );
+    expect(model.activeItem).toBeNull();
+    expect(model.summary).toBe('Prepared a plan');
   });
 
   it('keeps tool-call and current-plan evidence primary over duplicate explicit events', () => {

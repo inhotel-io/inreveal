@@ -461,6 +461,45 @@ describe(AgentSessionChatPanel.name, () => {
     ]);
   });
 
+  it('does not flash raw fallback tool cards while the transcript is loading', async () => {
+    let resolveMessages: (messages: AgentMessageResponseDto[]) => void;
+    sdkMock.getAgentSessionMessages.mockReturnValue(
+      new Promise((resolve) => {
+        resolveMessages = resolve;
+      }),
+    );
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.Running },
+        activityVisibilityMode: 'compact',
+        toolCalls: [
+          makeToolCall({
+            id: 'early-tool',
+            startedAt: '2026-05-16T10:00:05.000Z',
+            completedAt: '2026-05-16T10:00:06.000Z',
+          }),
+        ],
+      },
+    });
+
+    expect(await screen.findByTestId('agent-session-chat-transcript')).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Returned 1 album(s)')).not.toBeInTheDocument();
+
+    resolveMessages!([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'List my albums'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ]);
+
+    const activity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(activity).toHaveTextContent('Searching albums');
+    expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Returned 1 album(s)')).not.toBeInTheDocument();
+  });
+
   it('loads persisted activity events into the triggering turn without raw details', async () => {
     sdkMock.getAgentSessionMessages.mockResolvedValue([
       {

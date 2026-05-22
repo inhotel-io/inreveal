@@ -364,6 +364,7 @@ describe(AgentToolService.name, () => {
         toolCall: makeToolCall({ ...(dto as Partial<AgentToolCall>), id: _id, sessionId: _sessionId }),
       }),
     );
+    toolCallRepository.getBySessionId.mockResolvedValue([]);
     toolCallRepository.getCountedAssetCountBySession.mockResolvedValue(0);
     toolCallRepository.getCountedAssetCountBySessionAndDataClass.mockResolvedValue(0);
     albumRepository.getAgentAlbums.mockResolvedValue([]);
@@ -2544,6 +2545,127 @@ describe(AgentToolService.name, () => {
       expect(JSON.stringify(result)).not.toContain(assetIds[59]);
     }
     vi.useRealTimers();
+  });
+
+  it('searchAssets rejects broad searches when the previous resolver returned people filters that were omitted', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const otherPersonId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1000, maxAssetsPerSession: 1000 },
+      }),
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getBySessionId.mockResolvedValue([
+      makeToolCall({
+        sessionId: session.id,
+        toolName: AgentToolName.ResolveAssetSearchFilters,
+        status: AgentToolCallStatus.Completed,
+        redactedRequestMetadata: { people: ['Pierre', 'Aurelia'] },
+        redactedResponseMetadata: {
+          personIds: [personId, otherPersonId],
+          resultSize: expect.any(Object),
+        },
+        completedAt,
+      }),
+    ]);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: {
+        country: 'South Africa',
+        takenAfter: new Date('2026-01-01T00:00:00.000Z'),
+        takenBefore: new Date('2026-01-31T23:59:59.999Z'),
+      },
+      detail: 'ids',
+      limit: 50,
+      createSelectionHandle: true,
+    });
+
+    expect(result.status).toBe('denied');
+    if (result.status !== 'denied') {
+      throw new Error('Expected searchAssets to reject omitted resolved people filters');
+    }
+    expect(result.reason).toContain('resolved people filters');
+    expect(result.reason).toContain('personIds');
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+  });
+
+  it('searchAssets accepts searches that copy the previous resolver people filters', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const otherPersonId = newUuid();
+    const assetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1000, maxAssetsPerSession: 1000 },
+      }),
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getBySessionId.mockResolvedValue([
+      makeToolCall({
+        sessionId: session.id,
+        toolName: AgentToolName.ResolveAssetSearchFilters,
+        status: AgentToolCallStatus.Completed,
+        redactedResponseMetadata: { personIds: [personId, otherPersonId] },
+        completedAt,
+      }),
+    ]);
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([personId, otherPersonId]));
+    searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: { personIds: [personId, otherPersonId] },
+      detail: 'ids',
+      limit: 50,
+    });
+
+    expect(result.status).toBe('success');
+    expect(searchRepository.searchMetadata).toHaveBeenCalled();
+  });
+
+  it('searchAssets does not apply an old resolver guard after a successful search', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1000, maxAssetsPerSession: 1000 },
+      }),
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getBySessionId.mockResolvedValue([
+      makeToolCall({
+        sessionId: session.id,
+        toolName: AgentToolName.SearchAssets,
+        status: AgentToolCallStatus.Completed,
+        completedAt,
+      }),
+      makeToolCall({
+        sessionId: session.id,
+        toolName: AgentToolName.ResolveAssetSearchFilters,
+        status: AgentToolCallStatus.Completed,
+        redactedResponseMetadata: { personIds: [personId] },
+        completedAt,
+      }),
+    ]);
+    searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false });
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: { country: 'South Africa' },
+      detail: 'ids',
+      limit: 50,
+    });
+
+    expect(result.status).toBe('success');
+    expect(searchRepository.searchMetadata).toHaveBeenCalled();
   });
 
   it('searchAssets creates handles from budget-truncated search output without truncating handle counts', async () => {
