@@ -6,10 +6,7 @@ import 'package:immich_mobile/domain/services/search.service.dart';
 import 'package:immich_mobile/models/search/search_filter.model.dart';
 import 'package:immich_mobile/providers/infrastructure/search.provider.dart';
 
-final searchPreFilterProvider =
-    NotifierProvider<SearchFilterProvider, SearchFilter?>(
-      SearchFilterProvider.new,
-    );
+final searchPreFilterProvider = NotifierProvider<SearchFilterProvider, SearchFilter?>(SearchFilterProvider.new);
 
 class SearchFilterProvider extends Notifier<SearchFilter?> {
   @override
@@ -31,17 +28,12 @@ class SearchState {
   final int? nextPage;
   final bool isLoading;
 
-  const SearchState({
-    this.assets = const [],
-    this.nextPage = 1,
-    this.isLoading = false,
-  });
+  const SearchState({this.assets = const [], this.nextPage = 1, this.isLoading = false});
 }
 
-final paginatedSearchProvider =
-    StateNotifierProvider<PaginatedSearchNotifier, SearchState>((ref) {
-      return PaginatedSearchNotifier(ref.watch(searchServiceProvider));
-    });
+final paginatedSearchProvider = StateNotifierProvider<PaginatedSearchNotifier, SearchState>((ref) {
+  return PaginatedSearchNotifier(ref.watch(searchServiceProvider));
+});
 
 class PaginatedSearchNotifier extends StateNotifier<SearchState> {
   final SearchService _searchService;
@@ -54,11 +46,7 @@ class PaginatedSearchNotifier extends StateNotifier<SearchState> {
   Future<void> search(SearchFilter filter) async {
     if (state.nextPage == null || state.isLoading) return;
 
-    state = SearchState(
-      assets: state.assets,
-      nextPage: state.nextPage,
-      isLoading: true,
-    );
+    state = SearchState(assets: state.assets, nextPage: state.nextPage, isLoading: true);
 
     final result = await _searchService.search(filter, state.nextPage!);
 
