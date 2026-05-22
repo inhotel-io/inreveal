@@ -1,5 +1,5 @@
 import { AgentProviderType, AssetType, AssetVisibility } from 'src/enum';
-import { AgentIdDomain } from 'src/types/agent-asset-source.types';
+import { AgentIdDomain, AgentSearchSourceRef } from 'src/types/agent-asset-source.types';
 
 export type AgentToolProviderSnapshot = {
   providerCredentialId: string | null;
@@ -52,6 +52,7 @@ export type AgentToolSearchAssetsRequestMetadata = {
 
 export type AgentSearchAssetsSelectionHandle = {
   id: string;
+  sourceRef: AgentSearchSourceRef;
   assetCount: number;
   sampleAssetIds: string[];
   sourceToolCallId: string | null;
@@ -115,6 +116,7 @@ export type AgentToolResponseIdsMetadata = {
   spacePersonIds?: string[];
   userIds?: string[];
   selectionHandleIds?: string[];
+  sourceRefs?: AgentSearchSourceRef[];
   selectionHandleAssetCount?: number;
   selectionHandleSampleAssetIds?: string[];
   resultSize?: AgentToolResultSize;

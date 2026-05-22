@@ -24,6 +24,7 @@ import {
   AgentToolApprovalDto,
   AgentToolCallResponseDto,
 } from 'src/dtos/agent-tool.dto';
+import { buildAgentSourceRef } from 'src/dtos/agent-asset-source.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
   AgentApprovalMode,
@@ -55,7 +56,7 @@ import {
 } from 'src/services/agent-mcp-recoverable-tool-error';
 import { buildAgentSearch } from 'src/services/agent-search-filter-mapper';
 import { UserService } from 'src/services/user.service';
-import { AgentIdDomain } from 'src/types/agent-asset-source.types';
+import { AgentIdDomain, AgentSearchSourceRef } from 'src/types/agent-asset-source.types';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import {
   AgentAlbumDetail,
@@ -698,6 +699,7 @@ export class AgentToolService {
             ? {
                 selectionHandle: {
                   id: selectionHandle.id,
+                  sourceRef: this.buildSearchSourceRef(selectionHandle.id),
                   assetCount: selectionHandle.assetCount,
                   sampleAssetIds: selectionHandle.sampleAssetIds,
                   sourceToolCallId: selectionHandle.sourceToolCallId,
@@ -739,6 +741,7 @@ export class AgentToolService {
         result.selectionHandle
           ? {
               selectionHandleIds: [result.selectionHandle.id],
+              sourceRefs: [result.selectionHandle.sourceRef],
               selectionHandleAssetCount: result.selectionHandle.assetCount,
               selectionHandleSampleAssetIds: result.selectionHandle.sampleAssetIds,
             }
@@ -762,6 +765,10 @@ export class AgentToolService {
   private getSelectionHandleExpiresAt(session: AgentSession) {
     const minutes = session.permissionPlanSnapshot.limits.expiresInMinutes ?? 60;
     return new Date(Date.now() + minutes * 60_000);
+  }
+
+  private buildSearchSourceRef(selectionHandleId: string): AgentSearchSourceRef {
+    return buildAgentSourceRef('search', selectionHandleId) as AgentSearchSourceRef;
   }
 
   private getSearchAssetsResponseSummary(result: {

@@ -1108,6 +1108,7 @@ describe('Agent tool DTOs', () => {
       const assetIds = Array.from({ length: 3 }, () => factory.uuid());
       const handleId = factory.uuid();
       const toolCallId = factory.uuid();
+      const sourceRef = `asset-source:search:${handleId}` as const;
       const response = {
         status: 'success' as const,
         toolCall: makeToolCall({ id: toolCallId, toolName: AgentToolName.SearchAssets }),
@@ -1120,6 +1121,7 @@ describe('Agent tool DTOs', () => {
         resultSize: makeResultSize({ returnedItems: 1 }),
         selectionHandle: {
           id: handleId,
+          sourceRef,
           assetCount: 3,
           sampleAssetIds: assetIds.slice(0, 2),
           sourceToolCallId: toolCallId,
@@ -1133,12 +1135,44 @@ describe('Agent tool DTOs', () => {
       if (encoded.success && encoded.data.status === 'success') {
         expect(encoded.data.selectionHandle).toMatchObject({
           id: handleId,
+          sourceRef,
           assetCount: 3,
           sampleAssetIds: assetIds.slice(0, 2),
           sourceToolCallId: toolCallId,
         });
+        expect(encoded.data.selectionHandle?.sourceRef).not.toBe(handleId);
+        expect(encoded.data.selectionHandle?.sourceRef).toMatch(/^asset-source:search:/);
         expect(encoded.data.assetIds).toEqual(assetIds.slice(0, 1));
       }
+    });
+
+    it('rejects bare UUID source refs in search selection handles', () => {
+      const assetIds = [factory.uuid()];
+      const handleId = factory.uuid();
+      const toolCallId = factory.uuid();
+
+      const result = AgentSearchAssetsToolResponseDto.schema.safeParse({
+        status: 'success',
+        toolCall: makeToolCall({ id: toolCallId, toolName: AgentToolName.SearchAssets }),
+        summary: 'Created a selection handle for 1 asset',
+        detail: 'ids',
+        assetIds,
+        returnedCount: 1,
+        hasMore: false,
+        nextPage: null,
+        resultSize: makeResultSize({ returnedItems: 1 }),
+        selectionHandle: {
+          id: handleId,
+          sourceRef: handleId,
+          assetCount: 1,
+          sampleAssetIds: assetIds,
+          sourceToolCallId: toolCallId,
+          expiresAt: '2026-05-21T12:30:00.000Z',
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expectIssue(result, ['selectionHandle', 'sourceRef'], 'sourceRef must use the asset-source:search:<token> format');
     });
 
     it('encodes and parses search responses with result metadata', () => {

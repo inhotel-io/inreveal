@@ -25,7 +25,7 @@ export const AgentSourceRefSchema = z
   })
   .meta({ id: 'AgentSourceRef' });
 
-const AgentSearchSourceRefSchema = z
+export const AgentSearchSourceRefSchema = z
   .string()
   .trim()
   .min(1)
