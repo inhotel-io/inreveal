@@ -4,6 +4,7 @@ import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.d
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
 import { AgentToolName } from 'src/enum';
 import { AGENT_MCP_GENERATED_DOC_RELATIVE_PATH, AgentMcpDocsService } from 'src/services/agent-mcp-docs.service';
+import { agentMcpPromptPlaceholderMap } from 'src/services/agent-mcp-prompt-placeholders';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 
 const forbiddenGeneratedDocPattern =
@@ -131,7 +132,7 @@ describe(AgentMcpDocsService.name, () => {
     }
   });
 
-  it('parses every marked tool-argument JSON block from the generated Markdown through the referenced DTO schema', () => {
+  it('parses every marked tool-argument JSON block from the generated Markdown as JSON', () => {
     const markdown = sut.generateMarkdown();
     const blocks = [
       ...markdown.matchAll(
@@ -142,15 +143,36 @@ describe(AgentMcpDocsService.name, () => {
     expect(blocks).toHaveLength(sut.listDocumentedToolArgumentExamples().length);
     for (const [, toolNameValue, exampleName, jsonText] of blocks) {
       expect(Object.values(AgentToolName)).toContain(toolNameValue as AgentToolName);
-      const toolName = toolNameValue as AgentToolName;
-      const schema =
-        toolName in AgentReadToolRequestSchemas
-          ? AgentReadToolRequestSchemas[toolName as keyof typeof AgentReadToolRequestSchemas]
-          : AgentOperationPlanToolRequestSchemas[toolName as keyof typeof AgentOperationPlanToolRequestSchemas];
-      const parsed = JSON.parse(jsonText);
-      const result = schema.safeParse(parsed);
+      expect(() => JSON.parse(jsonText), `${toolNameValue} ${exampleName}`).not.toThrow();
+    }
+  });
 
-      expect(result.success, `${toolName} ${exampleName}`).toBe(true);
+  it('renders model-facing docs examples and wrappers with semantic placeholders instead of fixture UUIDs', () => {
+    const markdown = sut.generateMarkdown();
+
+    for (const [fixtureId, placeholder] of Object.entries(agentMcpPromptPlaceholderMap)) {
+      expect(markdown).not.toContain(fixtureId);
+      expect(markdown).toContain(placeholder);
+    }
+  });
+
+  it('keeps pre-rendered documented examples schema-valid and unmodified', () => {
+    sut.generateMarkdown();
+
+    const examples = sut.listDocumentedToolArgumentExamples();
+    const serializedExamples = JSON.stringify(examples);
+
+    expect(serializedExamples).toContain('00000000-0000-4000-8000-000000000001');
+    expect(serializedExamples).toContain('00000000-0000-4000-8000-000000000020');
+    expect(serializedExamples).toContain('00000000-0000-4000-8000-000000000111');
+
+    for (const example of examples) {
+      const schema =
+        example.toolName in AgentReadToolRequestSchemas
+          ? AgentReadToolRequestSchemas[example.toolName as keyof typeof AgentReadToolRequestSchemas]
+          : AgentOperationPlanToolRequestSchemas[example.toolName as keyof typeof AgentOperationPlanToolRequestSchemas];
+
+      expect(schema.safeParse(example.arguments).success, `${example.toolName} ${example.exampleName}`).toBe(true);
     }
   });
 
