@@ -65,7 +65,82 @@ const makeSpaceCreateOperation = (temporaryTargetId = 'tmp-family-space') => ({
   payload: { spaceName: 'Family', description: 'Shared family photos.', color: 'blue' },
 });
 
+const parsePlan = (input: unknown) => AgentProposeAlbumOperationsDto.schema.safeParse(input);
+
 describe('Agent operation DTOs', () => {
+  describe('assetSelectionHandleId planning input', () => {
+    it('accepts assetSelectionHandleId instead of explicit assetIds for asset-bearing operations', () => {
+      const selectionHandleId = factory.uuid();
+      const result = parsePlan({
+        summary: 'Add handle-selected photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: factory.uuid(),
+            assetSelectionHandleId: selectionHandleId,
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+            payload: {},
+          },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.operations[0]).toMatchObject({ assetSelectionHandleId: selectionHandleId });
+        expect(result.data.operations[0]).not.toHaveProperty('assetIds');
+      }
+    });
+
+    it('rejects operations that provide both assetIds and assetSelectionHandleId', () => {
+      const result = parsePlan({
+        summary: 'Invalid mixed selection',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: factory.uuid(),
+            assetIds: [factory.uuid()],
+            assetSelectionHandleId: factory.uuid(),
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+            payload: {},
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.map((issue) => issue.message)).toContain(
+        'Provide either assetIds or assetSelectionHandleId, not both',
+      );
+    });
+
+    it('rejects asset-bearing operations that provide neither assetIds nor assetSelectionHandleId', () => {
+      const result = parsePlan({
+        summary: 'Invalid missing selection',
+        operations: [
+          {
+            type: AgentOperationType.SpaceAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: factory.uuid(),
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+            payload: {},
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.map((issue) => issue.message)).toContain(
+        'Provide assetIds or assetSelectionHandleId',
+      );
+    });
+  });
+
   it('accepts a create album operation proposal and defaults enabled/risk fields', () => {
     const result = AgentProposeAlbumOperationsDto.schema.safeParse({
       summary: 'Create a Portugal trip album.',
