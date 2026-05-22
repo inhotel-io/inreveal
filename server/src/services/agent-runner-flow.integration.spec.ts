@@ -501,11 +501,11 @@ class InMemoryAgentOperationPlanRepository {
 
       const revision = this.plans.filter((plan) => plan.sessionId === sessionId).length + 1;
       const createdAt = now();
-      const createOperationIdByTemporaryTargetId = new Map<string, string>();
+      const planId = newUuid();
       const operations = dto.operations.map((operation, position) => {
         const created = {
           id: newUuid(),
-          planId: '',
+          planId,
           type: operation.type,
           position,
           summary: operation.summary,
@@ -514,7 +514,7 @@ class InMemoryAgentOperationPlanRepository {
           temporaryTargetId: operation.temporaryTargetId ?? null,
           assetIds: operation.assetIds ?? [],
           payload: operation.payload ?? {},
-          dependencyIds: [] as string[],
+          dependencyIds: operation.dependencyIds ?? [],
           riskLevel: operation.riskLevel,
           enabled: operation.enabled,
           status: AgentOperationStatus.Proposed,
@@ -524,23 +524,8 @@ class InMemoryAgentOperationPlanRepository {
           updatedAt: createdAt,
           updateId: newUuid(),
         };
-        if (created.type === AgentOperationType.AlbumCreate && created.temporaryTargetId) {
-          createOperationIdByTemporaryTargetId.set(created.temporaryTargetId, created.id);
-        }
         return created;
       });
-      const planId = newUuid();
-      for (const operation of operations) {
-        operation.planId = planId;
-        if (
-          operation.type !== AgentOperationType.AlbumCreate &&
-          operation.targetKind === AgentOperationTargetKind.NewAlbum &&
-          operation.temporaryTargetId
-        ) {
-          const dependencyId = createOperationIdByTemporaryTargetId.get(operation.temporaryTargetId);
-          operation.dependencyIds = dependencyId ? [dependencyId] : [];
-        }
-      }
 
       const plan: AgentOperationPlanWithOperations = {
         id: planId,
@@ -1003,16 +988,24 @@ describe('Pi agent runner flow harness', () => {
     });
 
     await waitFor(async () => {
+      const messages = await harness.messageService.getMessages(harness.auth, session.id);
       const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: AgentMessageRole.Assistant,
+            providerMessageId: 'provider-message-plan',
+          }),
+        ]),
+      );
       expect(reloadedSession?.status).toBe(AgentSessionStatus.WaitingForPlanReview);
     });
 
     const searchOptions = harness.searchRepository.searchMetadata.mock.calls[0]?.[1];
     expect(harness.searchRepository.searchMetadata).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(searchOptions)).toContain(personAlphaId);
-    expect(JSON.stringify(searchOptions)).toContain(personBetaId);
     expect(searchOptions).toEqual(
       expect.objectContaining({
+        personIds: [personAlphaId, personBetaId],
         country: 'South Africa',
         takenAfter: new Date('2026-01-01T00:00:00.000Z'),
         takenBefore: new Date('2026-01-31T23:59:59.999Z'),
@@ -1474,16 +1467,22 @@ describe('Pi agent runner flow harness', () => {
       const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
       const activityHistory = harness.getActivityHistory(session.id);
 
-      expect(messages).toEqual([
-        expect.objectContaining({ role: AgentMessageRole.User }),
-        expect.objectContaining({
-          role: AgentMessageRole.Assistant,
-          providerMessageId: 'provider-message-failure',
-          content: {
-            blocks: [{ type: 'text', text: 'I could not create the plan because the selection expired.' }],
-          },
-        }),
-      ]);
+      expect(messages).toHaveLength(2);
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: AgentMessageRole.User,
+            content: { blocks: [{ type: 'text', text: 'Create the album plan.' }] },
+          }),
+          expect.objectContaining({
+            role: AgentMessageRole.Assistant,
+            providerMessageId: 'provider-message-failure',
+            content: {
+              blocks: [{ type: 'text', text: 'I could not create the plan because the selection expired.' }],
+            },
+          }),
+        ]),
+      );
       expect(reloadedSession?.status).toBe(AgentSessionStatus.Interrupted);
       expect(activityHistory).toEqual([
         expect.objectContaining({
