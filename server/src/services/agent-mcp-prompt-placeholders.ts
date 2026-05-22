@@ -10,6 +10,7 @@ export const agentMcpPromptPlaceholderMap = {
   '00000000-0000-4000-8000-000000000111': '<approved-toolCallId>',
   '00000000-0000-4000-8000-000000000222': '<plan.id from proposed plan>',
   '00000000-0000-4000-8000-000000000333': '<selectionHandle.id from searchAssets>',
+  'asset-source:search:00000000-0000-4000-8000-000000000333': '<sourceRef from searchAssets>',
 } as const;
 
 export const renderAgentMcpPromptPlaceholders = (value: unknown): unknown => {

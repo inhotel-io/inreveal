@@ -6,7 +6,9 @@ import {
   AgentOperationPlanResponseDto,
   AgentOperationPlanSummaryRequestDto,
   AgentOperationPlanToolResponseDto,
+  AgentProposeAddAssetsToAlbumFromSearchToolRequestDto,
   AgentProposeAlbumOperationsDto,
+  AgentProposeAlbumFromSearchToolRequestDto,
   AgentReviseAlbumOperationsDto,
 } from 'src/dtos/agent-operation.dto';
 import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
@@ -15,6 +17,7 @@ import { AssetEditAction, AssetEditActionItem } from 'src/dtos/editing.dto';
 import {
   AgentOperationApplyStatus,
   AgentOperationPlanStatus,
+  AgentOperationRiskLevel,
   AgentOperationStatus,
   AgentOperationTargetKind,
   AgentOperationType,
@@ -40,6 +43,7 @@ import {
 import { AgentSelectionHandleRepository } from 'src/repositories/agent-selection-handle.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
+import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
@@ -47,6 +51,7 @@ import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
 import { buildAgentSearch } from 'src/services/agent-search-filter-mapper';
 import {
+  AgentMcpRecoverableToolError,
   invalidSelectionHandleError,
   invalidSourceRefError,
   isAgentMcpRecoverableToolError,
@@ -193,6 +198,7 @@ export class AgentOperationPlanService {
     private readonly searchRepository: SearchRepository,
     private readonly sharedSpaceRepository: SharedSpaceRepository,
     private readonly assetSearchFilterResolverService: AgentAssetSearchFilterResolverService,
+    private readonly albumRepository: AlbumRepository,
     private readonly planRepository: AgentOperationPlanRepository,
     private readonly toolCallRepository: AgentToolCallRepository,
     private readonly websocketRepository: WebsocketRepository,
@@ -223,13 +229,97 @@ export class AgentOperationPlanService {
     sessionId: string,
     dto: AgentProposeAlbumOperationsDto,
   ): Promise<AgentOperationPlanToolResponseDto> {
-    const session = await this.getOwnedSession(auth, sessionId, { requireActive: true });
+    return this.proposeOperations(auth, sessionId, AgentToolName.ProposeAlbumOperations, dto);
+  }
 
+  async proposeAlbumFromSearch(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentProposeAlbumFromSearchToolRequestDto,
+  ): Promise<AgentOperationPlanToolResponseDto> {
+    const temporaryTargetId = 'tmp-album-from-search';
+    const summary = dto.summary ?? `Create album "${dto.albumName}" from matching photos.`;
+
+    return this.proposeOperations(auth, sessionId, AgentToolName.ProposeAlbumFromSearch, {
+      summary,
+      operations: [
+        {
+          type: AgentOperationType.AlbumCreate,
+          summary: `Create album "${dto.albumName}"`,
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId,
+          payload: { albumName: dto.albumName, description: dto.description ?? '' },
+          riskLevel: AgentOperationRiskLevel.Low,
+          enabled: true,
+        },
+        {
+          type: AgentOperationType.AlbumAddAssets,
+          summary: `Add matching photos to "${dto.albumName}"`,
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId,
+          assetSource: dto.assetSource,
+          payload: {},
+          riskLevel: AgentOperationRiskLevel.Medium,
+          enabled: true,
+        },
+      ],
+    });
+  }
+
+  async proposeAddAssetsToAlbumFromSearch(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentProposeAddAssetsToAlbumFromSearchToolRequestDto,
+  ): Promise<AgentOperationPlanToolResponseDto> {
+    const toolName = AgentToolName.ProposeAddAssetsToAlbumFromSearch;
+    const session = await this.getOwnedSession(auth, sessionId, { requireActive: true });
+    let albumTarget: Awaited<ReturnType<typeof this.resolveWorkflowAlbumTarget>>;
+    try {
+      albumTarget = await this.resolveWorkflowAlbumTarget(auth, session, dto);
+    } catch (error) {
+      await this.tryCreatePlanningPreparationDeniedAudit(session, toolName, dto, error);
+      throw error;
+    }
+    const summary = dto.summary ?? `Add matching photos to "${albumTarget.albumName}".`;
+
+    return this.proposeOperationsForSession(auth, session, toolName, {
+      summary,
+      operations: [
+        {
+          type: AgentOperationType.AlbumAddAssets,
+          summary: `Add matching photos to "${albumTarget.albumName}"`,
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumTarget.albumId,
+          assetSource: dto.assetSource,
+          payload: {},
+          riskLevel: AgentOperationRiskLevel.Medium,
+          enabled: true,
+        },
+      ],
+    });
+  }
+
+  private async proposeOperations(
+    auth: AuthDto,
+    sessionId: string,
+    toolName: AgentToolName,
+    dto: AgentProposeAlbumOperationsDto,
+  ): Promise<AgentOperationPlanToolResponseDto> {
+    const session = await this.getOwnedSession(auth, sessionId, { requireActive: true });
+    return this.proposeOperationsForSession(auth, session, toolName, dto);
+  }
+
+  private async proposeOperationsForSession(
+    auth: AuthDto,
+    session: AgentSession,
+    toolName: AgentToolName,
+    dto: AgentProposeAlbumOperationsDto,
+  ): Promise<AgentOperationPlanToolResponseDto> {
     let prepared: { operations: AgentAlbumOperationInput[]; selectionAudit: PlanningSelectionAudit };
     try {
-      prepared = await this.prepareOperations(auth, session, AgentToolName.ProposeAlbumOperations, dto.operations);
+      prepared = await this.prepareOperations(auth, session, toolName, dto.operations);
     } catch (error) {
-      await this.tryCreatePlanningPreparationDeniedAudit(session, AgentToolName.ProposeAlbumOperations, dto, error);
+      await this.tryCreatePlanningPreparationDeniedAudit(session, toolName, dto, error);
       throw error;
     }
 
@@ -238,7 +328,7 @@ export class AgentOperationPlanService {
     return this.runPlanningTool(
       auth,
       session,
-      AgentToolName.ProposeAlbumOperations,
+      toolName,
       { ...dto, operations, selectionHandles: selectionAudit },
       async () => {
         await this.validateNormalAccess(auth, session, operations);
@@ -258,6 +348,64 @@ export class AgentOperationPlanService {
         return { plan, summary: this.summarize(plan) };
       },
     );
+  }
+
+  private async resolveWorkflowAlbumTarget(
+    auth: AuthDto,
+    session: AgentSession,
+    dto: AgentProposeAddAssetsToAlbumFromSearchToolRequestDto,
+  ) {
+    if (dto.albumId) {
+      return { albumId: dto.albumId, albumName: dto.albumName ?? 'selected album' };
+    }
+
+    const requestedName = dto.albumName?.trim() ?? '';
+    const albums = await this.albumRepository.getAgentAlbums(auth.user.id);
+    const visibleAlbums = albums.filter((album) => {
+      const isOwned = album.ownerId === auth.user.id;
+      return isOwned
+        ? session.permissionPlanSnapshot.assetScope.owned
+        : session.permissionPlanSnapshot.assetScope.sharedSpaces;
+    });
+    const matches = visibleAlbums.filter((album) => album.albumName.trim().toLowerCase() === requestedName.toLowerCase());
+
+    if (matches.length === 1) {
+      return { albumId: matches[0].id, albumName: matches[0].albumName };
+    }
+
+    if (matches.length === 0) {
+      throw new AgentMcpRecoverableToolError({
+        status: 'error',
+        error: `No visible album named "${requestedName}" was found.`,
+        toolName: AgentToolName.ProposeAddAssetsToAlbumFromSearch,
+        retryable: true,
+        hint: 'Call listAlbums to choose an existing albumId, or use proposeAlbumFromSearch to create a new album.',
+        recovery: {
+          kind: 'album_target_needs_clarification',
+          albumName: requestedName,
+          choices: [],
+          instruction: 'Retry with albumId, or create a new album from the same search source.',
+        },
+      });
+    }
+
+    throw new AgentMcpRecoverableToolError({
+      status: 'error',
+      error: `Multiple visible albums named "${requestedName}" were found.`,
+      toolName: AgentToolName.ProposeAddAssetsToAlbumFromSearch,
+      retryable: true,
+      hint: 'Ask the user which album to use, then retry with that albumId.',
+      recovery: {
+        kind: 'album_target_needs_clarification',
+        albumName: requestedName,
+        choices: matches.slice(0, 5).map((album) => ({
+          albumId: album.id,
+          albumName: album.albumName,
+          assetCount: album.assetCount,
+        })),
+        instruction: 'Retry proposeAddAssetsToAlbumFromSearch with albumId from the chosen album.',
+      },
+    });
   }
 
   async reviseProposedOperations(
