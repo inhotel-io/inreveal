@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.dto';
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
 import { AgentToolName } from 'src/enum';
+import { renderAgentMcpPromptPlaceholders } from 'src/services/agent-mcp-prompt-placeholders';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import type {
   AgentMcpPlanningToolName,
@@ -81,7 +82,7 @@ export class AgentMcpPromptService {
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
         'Progressive: resolve names -> search detail ids -> readAssetMetadata fields for selected ids -> plan. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.',
-        'Large selections: searchAssets createSelectionHandle true for current bounded page, then plan with assetSelectionHandleId. Do not paste hundreds of assetIds.',
+        'Large selections: searchAssets createSelectionHandle true for current bounded page; use <selectionHandle.id from searchAssets> as assetSelectionHandleId. Do not paste hundreds of assetIds.',
         `Resolve names before searchAssets: ${resolveFilters.piToolName} ${this.formatJson(resolveFilters.arguments)}`,
         `Compact search: ${compactSearch.piToolName} ${this.formatJson(compactSearch.arguments)}`,
         `Sample fields: ${sampleSearch.piToolName} ${this.formatJson(sampleSearch.arguments)}`,
@@ -168,7 +169,7 @@ export class AgentMcpPromptService {
   }
 
   private formatJson(value: unknown): string {
-    return JSON.stringify(this.compactPromptValue(value));
+    return JSON.stringify(renderAgentMcpPromptPlaceholders(this.compactPromptValue(value)));
   }
 
   private compactPromptValue(value: unknown): unknown {
@@ -187,18 +188,17 @@ export class AgentMcpPromptService {
           return operation;
         }
 
-        const { type, targetKind, targetId, temporaryTargetId, assetIds, payload } = operation as Record<
-          string,
-          unknown
-        >;
+        const { type, targetKind, targetId, temporaryTargetId, assetIds, assetSelectionHandleId, payload } =
+          operation as Record<string, unknown>;
 
         return Object.fromEntries(
           Object.entries({
             type,
             targetKind,
-            targetId: targetId ? '<target-id>' : undefined,
+            targetId,
             temporaryTargetId,
-            assetIds: Array.isArray(assetIds) ? ['<asset-id>'] : undefined,
+            assetIds,
+            assetSelectionHandleId,
             payload:
               payload && typeof payload === 'object' && !Array.isArray(payload) && Object.keys(payload).length > 0
                 ? payload
