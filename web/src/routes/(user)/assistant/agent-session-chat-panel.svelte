@@ -30,6 +30,10 @@
     type AgentActivityEvent,
   } from './agent-session-activity-turns-ui';
   import {
+    areAgentTimelineToolCallListsEquivalent,
+    mergeAgentTimelineToolCalls,
+  } from './agent-session-tool-call-state-ui';
+  import {
     getAgentToolCallCompletedText,
     getAgentToolCallScopeText,
     getAgentToolDataClassLabelKey,
@@ -120,6 +124,8 @@
   let expandedToolCallIds = $state<Record<string, boolean>>({});
   let currentPlan = $state<AgentOperationPlanResponseDto | null>(null);
   let activityEvents = $state<AgentActivityEvent[]>([]);
+  let timelineToolCalls = $state<AgentToolCallResponseDto[]>([]);
+  let timelineToolCallSessionId = $state<string | null>(null);
   let lastPublishedTitle: string | null = null;
   let cleanupWebsocketListener: (() => void) | undefined;
   let appliedPlanLoadSequence = 0;
@@ -141,7 +147,7 @@
   const latestActivityNeedingAssistantAt = $derived(
     [
       ...messages.filter((message) => message.role === AgentMessageRole.User).map((message) => message.createdAt),
-      ...toolCalls
+      ...timelineToolCalls
         .filter((toolCall) => assistantContinuationToolStatuses.has(toolCall.status))
         .map((toolCall) => toolCall.completedAt ?? toolCall.startedAt),
     ]
@@ -175,7 +181,7 @@
     buildAgentSessionActivityTurns({
       session: activitySession,
       messages,
-      toolCalls,
+      toolCalls: timelineToolCalls,
       currentPlan,
       appliedPlans,
       activityEvents,
@@ -195,7 +201,7 @@
   const chatTimelineItems = $derived(
     buildChatTimelineItems(
       messages,
-      toolCalls,
+      timelineToolCalls,
       appliedPlans,
       activityTurns,
       coveredToolCallIds,
@@ -742,6 +748,20 @@
     void loadMessages();
     void loadAppliedPlans();
     void loadActivityEvents();
+  });
+
+  $effect(() => {
+    const nextToolCalls = mergeAgentTimelineToolCalls(
+      timelineToolCallSessionId === session.id ? timelineToolCalls : [],
+      toolCalls,
+      session.id,
+    );
+
+    timelineToolCallSessionId = session.id;
+
+    if (!areAgentTimelineToolCallListsEquivalent(timelineToolCalls, nextToolCalls)) {
+      timelineToolCalls = nextToolCalls;
+    }
   });
 
   $effect(() => {
