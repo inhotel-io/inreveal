@@ -30,6 +30,7 @@ describe('agent MCP prompt placeholders', () => {
       '00000000-0000-4000-8000-000000000111': '<approved-toolCallId>',
       '00000000-0000-4000-8000-000000000222': '<plan.id from proposed plan>',
       '00000000-0000-4000-8000-000000000333': '<selectionHandle.id from searchAssets>',
+      'asset-source:search:00000000-0000-4000-8000-000000000333': '<sourceRef from searchAssets>',
     });
   });
 
@@ -90,7 +91,9 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt.length).toBeLessThanOrEqual(3800);
     expect(prompt).toContain('Tool: mcp_gallery_resolveAssetSearchFilters');
     expect(prompt).toContain('R: Known ID filters');
-    expect(prompt).toContain('Write: call mcp_gallery_proposeAlbumOperations');
+    expect(prompt).toContain('Write: use album-from-search tools first');
+    expect(prompt).toContain('mcp_gallery_proposeAddAssetsToAlbumFromSearch');
+    expect(prompt).toContain('other plans use mcp_gallery_proposeAlbumOperations');
     expect(prompt).not.toContain('Tmcp_gallery');
     expect(prompt).not.toContain('RKnown');
     expect(prompt).not.toContain('Wcall');
@@ -223,8 +226,8 @@ describe(AgentMcpPromptService.name, () => {
       expect(prompt).toContain(`mcp_gallery_${contract.name}`);
     }
 
-    expect(prompt).toContain('call mcp_gallery_proposeAlbumOperations');
-    expect(prompt).not.toContain('call proposeAlbumOperations');
+    expect(prompt).toContain('mcp_gallery_proposeAlbumOperations');
+    expect(prompt).not.toContain('use proposeAlbumOperations');
   });
 
   it('includes approval retry guidance from contract-owned read tool modes', () => {
@@ -237,7 +240,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain(metadataContract?.approvalRetry?.instruction);
     expect(prompt).toContain('toolCallId');
     expect(prompt).toMatch(/retry uses only .*toolCallId/is);
-    expect(prompt).toMatch(/do not combine .*toolCallId .*old request fields/is);
+    expect(prompt).toMatch(/omit old request fields/is);
     expect(prompt).toContain(retryMode?.forbiddenFields.join(', '));
   });
 

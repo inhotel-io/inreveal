@@ -67,6 +67,8 @@ export type AgentMcpReadToolContract = AgentMcpToolContract<AgentMcpReadToolName
 
 export type AgentMcpPlanningToolName =
   | AgentToolName.ProposeAlbumOperations
+  | AgentToolName.ProposeAlbumFromSearch
+  | AgentToolName.ProposeAddAssetsToAlbumFromSearch
   | AgentToolName.ReviseProposedOperations
   | AgentToolName.SummarizePlan;
 

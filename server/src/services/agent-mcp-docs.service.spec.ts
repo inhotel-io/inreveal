@@ -8,7 +8,7 @@ import { agentMcpPromptPlaceholderMap } from 'src/services/agent-mcp-prompt-plac
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 
 const forbiddenGeneratedDocPattern =
-  /bearer\s+[a-z0-9._-]{10,}|provider[- ]?key|stack trace|\/(?:srv|home|tmp|var|etc|opt|mnt|Users)\/[^\s`)]*|\/api\/agent\/internal|applyAlbumOperations|applyOperations|createAlbum|addAssetsToAlbum/i;
+  /bearer\s+[a-z0-9._-]{10,}|provider[- ]?key|stack trace|\/(?:srv|home|tmp|var|etc|opt|mnt|Users)\/[^\s`)]*|\/api\/agent\/internal|applyAlbumOperations|applyOperations|createAlbum|addAssetsToAlbum(?!FromSearch)/i;
 const directMutationToolNamePattern = /(?:^|_)(?:apply|execute|mutate|write|delete|destroy|directWrite)(?:$|_)/i;
 
 describe(AgentMcpDocsService.name, () => {
@@ -43,6 +43,24 @@ describe(AgentMcpDocsService.name, () => {
         expect(markdown, `${contract.name} ${example.name}`).toContain(`#### ${example.name}`);
       }
     }
+  });
+
+  it('documents the high-level album workflow tools as preferred for album-from-search tasks', () => {
+    const markdown = sut.generateMarkdown();
+    const documentedNames = sut.listDocumentedToolArgumentExamples().map((example) => example.exampleName);
+
+    for (const name of [
+      'create-album-from-declarative-search',
+      'create-album-from-previous-search',
+      'add-search-results-to-album-by-id',
+      'add-search-results-to-album-by-name',
+    ]) {
+      expect(markdown).toContain(name);
+      expect(documentedNames).toContain(name);
+    }
+    expect(markdown).toContain('proposeAlbumFromSearch');
+    expect(markdown).toContain('proposeAddAssetsToAlbumFromSearch');
+    expect(markdown).toMatch(/preferred/i);
   });
 
   it('includes the space lookup tools and parseable documented examples', () => {

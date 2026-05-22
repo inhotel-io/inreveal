@@ -1566,6 +1566,84 @@ describe('Agent operation DTOs', () => {
       expect(result.success).toBe(true);
     });
 
+    it('accepts proposeAlbumFromSearch with a declarative search source', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumFromSearch].safeParse({
+        summary: 'Create South Africa album.',
+        albumName: 'South Africa with Pierre & Aurelia',
+        description: 'Photos from the January 2026 South Africa trip.',
+        assetSource: {
+          kind: 'search',
+          filters: {
+            country: 'South Africa',
+            takenAfter: '2026-01-01T00:00:00.000Z',
+            takenBefore: '2026-02-01T00:00:00.000Z',
+            people: { match: 'any', names: ['Pierre', 'Aurelia'] },
+          },
+          materialization: 'all-matches-with-limit',
+        },
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts proposeAddAssetsToAlbumFromSearch with exactly one existing album target', () => {
+      const byId = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAddAssetsToAlbumFromSearch].safeParse({
+        summary: 'Add January photos.',
+        albumId: factory.uuid(),
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      });
+      const byName = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAddAssetsToAlbumFromSearch].safeParse({
+        summary: 'Add January photos.',
+        albumName: 'South Africa',
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      });
+
+      expect(byId.success).toBe(true);
+      expect(byName.success).toBe(true);
+    });
+
+    it.each([
+      ['missing target', {}],
+      ['both targets', { albumId: factory.uuid(), albumName: 'South Africa' }],
+    ])('rejects proposeAddAssetsToAlbumFromSearch with %s', (_label, target) => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAddAssetsToAlbumFromSearch].safeParse({
+        summary: 'Add photos.',
+        ...target,
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues).toEqual([
+        expect.objectContaining({ message: 'Provide exactly one of albumId or albumName' }),
+      ]);
+    });
+
+    it('rejects workflow asset sources that require raw ids or handles', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumFromSearch].safeParse({
+        summary: 'Create album.',
+        albumName: 'Manual ids',
+        assetSource: { kind: 'explicitAssets', assetIds: [factory.uuid()] },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues).toEqual([expect.objectContaining({ path: ['assetSource', 'kind'] })]);
+    });
+
+    it('keeps album workflow text validation aligned with album.create planning constraints', () => {
+      const emptyName = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumFromSearch].safeParse({
+        albumName: '',
+        assetSource: { kind: 'search', filters: {} },
+      });
+      const longDescription = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumFromSearch].safeParse({
+        albumName: 'South Africa',
+        description: 'x'.repeat(1001),
+        assetSource: { kind: 'search', filters: {} },
+      });
+
+      expect(emptyName.success).toBe(false);
+      expect(longDescription.success).toBe(false);
+    });
+
     it('requires planId for reviseProposedOperations MCP calls and keeps the body fields', () => {
       const planId = factory.uuid();
       const valid = AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse({

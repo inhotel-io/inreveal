@@ -1004,6 +1004,120 @@ Retry an approved read request by id.
 }
 ```
 
+### Propose album from search
+
+MCP tool name: `proposeAlbumFromSearch`
+
+preferred tool for creating a new album from a declarative or previous search source.
+
+Use this before low-level proposeAlbumOperations when the user asks to create an album from matching photos. Gallery resolves names, materializes the source, and creates a reviewable plan; nothing is applied until the user approves.
+
+Argument modes:
+
+- `new-album-from-search`: Use for requests like create an album from photos matching date, place, people, tags, or a previous search.
+  Required fields: `albumName`, `assetSource`.
+  Forbidden fields: `operations`, `assetIds`, `assetSelectionHandleId`.
+
+#### create-album-from-declarative-search
+
+Create a new album directly from user-facing search filters.
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumFromSearch" example="create-album-from-declarative-search" -->
+
+```json
+{
+  "summary": "Create South Africa with Pierre & Aurelia album.",
+  "albumName": "South Africa with Pierre & Aurelia",
+  "description": "January 2026 South Africa photos featuring Pierre or Aurelia.",
+  "assetSource": {
+    "kind": "search",
+    "filters": {
+      "country": "South Africa",
+      "takenAfter": "2026-01-01T00:00:00.000Z",
+      "takenBefore": "2026-02-01T00:00:00.000Z",
+      "people": {
+        "match": "any",
+        "names": ["Pierre", "Aurelia"]
+      }
+    },
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
+
+#### create-album-from-previous-search
+
+Create a new album from a previous search source reference.
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumFromSearch" example="create-album-from-previous-search" -->
+
+```json
+{
+  "summary": "Create album from the previous search.",
+  "albumName": "Recent favorites",
+  "assetSource": {
+    "kind": "previousSearch",
+    "sourceRef": "<sourceRef from searchAssets>"
+  }
+}
+```
+
+### Propose add assets to album from search
+
+MCP tool name: `proposeAddAssetsToAlbumFromSearch`
+
+preferred tool for adding matching photos to an existing album from a declarative or previous search source.
+
+Use this before low-level proposeAlbumOperations when the user asks to add matching photos to an existing album. Provide albumId when known, or a uniquely visible albumName. Gallery creates a reviewable plan only.
+
+Argument modes:
+
+- `existing-album-from-search`: Use for requests like add my matching trip photos to this existing album.
+  Required fields: `assetSource`.
+  Forbidden fields: `operations`, `assetIds`, `assetSelectionHandleId`.
+
+#### add-search-results-to-album-by-id
+
+Add matching photos to an existing album id.
+
+<!-- mcp-docs:tool-arguments tool="proposeAddAssetsToAlbumFromSearch" example="add-search-results-to-album-by-id" -->
+
+```json
+{
+  "summary": "Add matching South Africa photos to the trip album.",
+  "albumId": "<album.id from listAlbums/readAlbum>",
+  "assetSource": {
+    "kind": "search",
+    "filters": {
+      "country": "South Africa"
+    },
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
+
+#### add-search-results-to-album-by-name
+
+Add matching photos to a uniquely named visible album.
+
+<!-- mcp-docs:tool-arguments tool="proposeAddAssetsToAlbumFromSearch" example="add-search-results-to-album-by-name" -->
+
+```json
+{
+  "summary": "Add unalbumed Berlin photos.",
+  "albumName": "Berlin",
+  "assetSource": {
+    "kind": "search",
+    "filters": {
+      "city": "Berlin",
+      "country": "Germany",
+      "isNotInAlbum": true
+    },
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
+
 ### Propose album operations
 
 MCP tool name: `proposeAlbumOperations`
@@ -2243,6 +2357,14 @@ Summarize plan risks and selected changes.
 - `search-users-limit-out-of-range`: Use a positive integer limit no greater than 20.
 - `tool-call-arguments-missing`: Put the user search arguments object at params.arguments in the MCP tools/call request.
 - `tool-call-arguments-not-object`: The params.arguments value must be a JSON object, not an array, primitive, or null.
+
+### Propose album from search
+
+- `album-workflow-raw-asset-ids`: Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.
+
+### Propose add assets to album from search
+
+- `album-workflow-missing-target`: Provide albumId from listAlbums/readAlbum, or provide one exact visible albumName.
 
 ### Propose album operations
 
