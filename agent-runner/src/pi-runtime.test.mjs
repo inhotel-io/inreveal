@@ -599,9 +599,12 @@ describe('pi runtime adapter', () => {
     await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
 
     assert.match(calls.loaders[0].systemPrompt, /retry with corrected arguments/i);
-    assert.match(calls.loaders[0].systemPrompt, /exact handle <selectionHandle\.id from searchAssets>/i);
+    assert.match(calls.loaders[0].systemPrompt, /with exact <selectionHandle\.id from searchAssets>/i);
     assert.match(calls.loaders[0].systemPrompt, /not an internal Gallery issue/i);
-    assert.match(calls.loaders[0].systemPrompt, /approval-required.*pauses/i);
+    assert.match(calls.loaders[0].systemPrompt, /approval-required.*pauses?/i);
+    assert.doesNotMatch(calls.loaders[0].systemPrompt, /denied .*recoverable/i);
+  });
+
   it('constructs the Pi resource loader with concrete runtime paths', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
