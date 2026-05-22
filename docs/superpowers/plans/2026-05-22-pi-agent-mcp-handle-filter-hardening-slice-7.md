@@ -177,14 +177,15 @@ Drive the sequence through the runner by configuring `runnerMessageHandler` to c
     riskLevel: AgentOperationRiskLevel.Medium,
     enabled: true,
   },
-]
+];
 ```
 
-   - assert MCP returns a successful JSON-RPC envelope with `result.isError === true`;
-   - assert `structuredContent.recovery.kind === 'invalid-selection-handle'`;
-   - assert `structuredContent.recovery.looksLikeExamplePlaceholder === true`;
-   - assert `structuredContent.recovery.availableSelectionHandles[0].id === realHandleId`;
-   - assert `harness.operationPlans.plans` is still empty immediately after this denied attempt.
+- assert MCP returns a successful JSON-RPC envelope with `result.isError === true`;
+- assert `structuredContent.recovery.kind === 'invalid-selection-handle'`;
+- assert `structuredContent.recovery.looksLikeExamplePlaceholder === true`;
+- assert `structuredContent.recovery.availableSelectionHandles[0].id === realHandleId`;
+- assert `harness.operationPlans.plans` is still empty immediately after this denied attempt.
+
 4. Retry `AgentToolName.ProposeAlbumOperations` with the same `summary`, same `temporaryTargetId`, same album payload, and the real handle ID.
    - assert `result.isError` is absent or false;
    - assert `structuredContent.plan.id` exists;
