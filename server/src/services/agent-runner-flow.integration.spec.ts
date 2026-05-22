@@ -781,6 +781,13 @@ const setup = () => {
     {} as never,
     sessions as unknown as AgentSessionRepository,
     selectionHandles as unknown as AgentSelectionHandleRepository,
+    searchRepository as never,
+    sharedSpaceRepository as unknown as SharedSpaceRepository,
+    new AgentAssetSearchFilterResolverService(
+      searchRepository as never,
+      albumRepository as unknown as AlbumRepository,
+      sharedSpaceRepository as unknown as SharedSpaceRepository,
+    ),
     operationPlans as unknown as AgentOperationPlanRepository,
     toolCalls as unknown as AgentToolCallRepository,
     websocketRepository as unknown as WebsocketRepository,

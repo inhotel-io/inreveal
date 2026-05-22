@@ -35,7 +35,10 @@ import { AgentSelectionHandleRepository } from 'src/repositories/agent-selection
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { SearchRepository } from 'src/repositories/search.repository';
+import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
+import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
 import { AgentMcpRecoverableToolError } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
@@ -238,6 +241,9 @@ describe(AgentOperationPlanService.name, () => {
   let planRepository: ReturnType<typeof automock<AgentOperationPlanRepository>>;
   let toolCallRepository: ReturnType<typeof automock<AgentToolCallRepository>>;
   let websocketRepository: ReturnType<typeof automock<WebsocketRepository>>;
+  let searchRepository: ReturnType<typeof automock<SearchRepository>>;
+  let sharedSpaceRepository: ReturnType<typeof automock<SharedSpaceRepository>>;
+  let assetSearchFilterResolverService: ReturnType<typeof automock<AgentAssetSearchFilterResolverService>>;
   let activityEventService: Pick<AgentSessionActivityEventService, 'createSystemEvent'>;
 
   beforeEach(() => {
@@ -252,6 +258,9 @@ describe(AgentOperationPlanService.name, () => {
     planRepository = automock(AgentOperationPlanRepository, { args: [{} as never] });
     toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
     websocketRepository = automock(WebsocketRepository, { args: [{} as never, { setContext: () => {} } as never] });
+    searchRepository = automock(SearchRepository, { args: [{} as never] });
+    sharedSpaceRepository = automock(SharedSpaceRepository, { args: [{} as never] });
+    assetSearchFilterResolverService = automock(AgentAssetSearchFilterResolverService, { args: [] as never });
     activityEventService = {
       createSystemEvent: vi.fn(() => Promise.resolve(null)),
     };
@@ -272,6 +281,9 @@ describe(AgentOperationPlanService.name, () => {
       albumService,
       sessionRepository,
       selectionHandleRepository,
+      searchRepository,
+      sharedSpaceRepository,
+      assetSearchFilterResolverService,
       planRepository,
       toolCallRepository,
       websocketRepository,
@@ -569,6 +581,657 @@ describe(AgentOperationPlanService.name, () => {
         }),
       }),
     );
+  });
+
+  it('materializes assetSource.search server-side before storing a plan', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const albumId = newUuid();
+    const pierreId = newUuid();
+    const aureliaId = newUuid();
+    const assetIds = [newUuid(), newUuid(), newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {
+        country: 'South Africa',
+        takenAfter: new Date('2026-01-01T00:00:00.000Z'),
+        takenBefore: new Date('2026-02-01T00:00:00.000Z'),
+        personIds: [pierreId, aureliaId],
+        personMatchAny: true,
+      },
+      results: [],
+    });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })),
+      hasNextPage: false,
+    } as never);
+    selectionHandleRepository.create.mockImplementation((dto) =>
+      Promise.resolve({
+        id: newUuid(),
+        sessionId: dto.sessionId,
+        userId: dto.userId,
+        sourceToolCallId: dto.sourceToolCallId,
+        assetIds: dto.assetIds,
+        assetCount: dto.assetIds.length,
+        sampleAssetIds: dto.assetIds.slice(0, 25),
+        expiresAt: dto.expiresAt,
+        createdAt: now,
+        updateId: newUuid(),
+      }),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.AlbumAddAssets,
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: albumId,
+            temporaryTargetId: null,
+            assetIds,
+            payload: {},
+          }),
+        ],
+      }),
+    );
+
+    await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Create South Africa people album',
+      operations: [
+        {
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add January South Africa photos with Pierre or Aurelia',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          assetSource: {
+            kind: 'search',
+            mode: 'metadata',
+            filters: {
+              country: 'South Africa',
+              takenAfter: '2026-01-01T00:00:00.000Z',
+              takenBefore: '2026-02-01T00:00:00.000Z',
+              people: { match: 'any', names: ['Pierre', 'Aurelia'] },
+            },
+            materialization: 'all-matches-with-limit',
+          },
+          payload: {},
+          riskLevel: AgentOperationRiskLevel.Medium,
+          enabled: true,
+        },
+      ],
+    });
+
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters.mock.calls[0]?.[0]).toBe(auth);
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters.mock.calls[0]?.[1]).toMatchObject({
+      id: session.id,
+    });
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters.mock.calls[0]?.[2]).toMatchObject({
+      country: 'South Africa',
+      people: { match: 'any', names: ['Pierre', 'Aurelia'] },
+    });
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      { page: 1, size: AgentOperationPlanService.maxAssetSelectionHandleAssets + 1 },
+      expect.objectContaining({
+        userIds: [auth.user.id],
+        country: 'South Africa',
+        personIds: [pierreId, aureliaId],
+        personMatchAny: true,
+      }),
+    );
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            assetIds,
+            assetSource: undefined,
+            assetSelectionHandleId: undefined,
+          }),
+        ],
+      }),
+    );
+    expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assetCount: assetIds.length,
+        redactedRequestMetadata: expect.objectContaining({
+          assetCount: assetIds.length,
+          assetIds: assetIds.slice(0, 25),
+          assetIdsSample: assetIds.slice(0, 25),
+          selectionHandles: [
+            expect.objectContaining({
+              assetCount: assetIds.length,
+              sampleAssetIds: assetIds.slice(0, 25),
+              sourceKind: 'search',
+              declarativeFilters: expect.objectContaining({
+                country: 'South Africa',
+                people: { match: 'any', names: ['Pierre', 'Aurelia'] },
+              }),
+              resolvedFilters: expect.objectContaining({
+                country: 'South Africa',
+                personIds: [pierreId, aureliaId],
+                personMatchAny: true,
+              }),
+            }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it('does not create a search-source audit handle when later access validation denies the plan', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const albumId = newUuid();
+    const assetIds = [newUuid(), newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })),
+      hasNextPage: false,
+    } as never);
+    selectionHandleRepository.create.mockImplementation((dto) =>
+      Promise.resolve({
+        id: newUuid(),
+        sessionId: dto.sessionId,
+        userId: dto.userId,
+        sourceToolCallId: dto.sourceToolCallId,
+        assetIds: dto.assetIds,
+        assetCount: dto.assetIds.length,
+        sampleAssetIds: dto.assetIds.slice(0, 25),
+        expiresAt: dto.expiresAt,
+        createdAt: now,
+        updateId: newUuid(),
+      }),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Denied source-backed plan',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add searched photos to inaccessible album',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: albumId,
+            assetSource: { kind: 'search', filters: {}, materialization: 'all-matches-with-limit' },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('One or more target albums are not accessible');
+
+    expect(searchRepository.searchMetadata).toHaveBeenCalled();
+    expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('does not create a plan when assetSource.search resolves to no assets', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false } as never);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Empty search',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add nothing',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'search', filters: { country: 'Nowhere' } },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Search source did not match any assets');
+
+    expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('does not create a plan when assetSource.search needs clarification', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'needs_clarification',
+      filters: {},
+      results: [],
+      message: 'Multiple visible person matches found',
+    });
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Ambiguous search',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add ambiguous photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'search', filters: { people: { match: 'any', names: ['Pierre'] } } },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Multiple visible person matches found');
+
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('does not create a plan when assetSource.search filter resolution is denied', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'denied',
+      filters: {},
+      results: [],
+      reason: 'Shared space is not available to this session',
+    });
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Denied search',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add denied photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'search', filters: { space: { name: 'Private' } } },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Shared space is not available to this session');
+
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('does not create a plan when assetSource.search is over the planning cap', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const assetIds = Array.from({ length: AgentOperationPlanService.maxAssetSelectionHandleAssets + 1 }, () => newUuid());
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })),
+      hasNextPage: false,
+    } as never);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Too broad search',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add too many photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'search', filters: {}, materialization: 'all-matches-with-limit' },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow(`Search matched more than ${AgentOperationPlanService.maxAssetSelectionHandleAssets} assets`);
+
+    expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('forces all-matches assetSource.search materialization to the first page', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const albumId = newUuid();
+    const assetIds = [newUuid(), newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })),
+      hasNextPage: false,
+    } as never);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.AlbumAddAssets,
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: albumId,
+            temporaryTargetId: null,
+            assetIds,
+            payload: {},
+          }),
+        ],
+      }),
+    );
+
+    await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'All matches source',
+      operations: [
+        {
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add all matches',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          assetSource: { kind: 'search', filters: {}, materialization: 'all-matches-with-limit', page: 2 },
+          payload: {},
+          riskLevel: AgentOperationRiskLevel.Medium,
+          enabled: true,
+        },
+      ],
+    });
+
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      { page: 1, size: AgentOperationPlanService.maxAssetSelectionHandleAssets + 1 },
+      expect.any(Object),
+    );
+  });
+
+  it('does not create a cover plan or handle when assetSource.search exceeds the cover cap', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const albumId = newUuid();
+    const assetIds = Array.from({ length: AgentOperationPlanService.maxCoverSelectionHandleAssets + 1 }, () => newUuid());
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })),
+      hasNextPage: false,
+    } as never);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Too many cover candidates',
+        operations: [
+          {
+            type: AgentOperationType.AlbumSetCover,
+            summary: 'Set cover from too many photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: albumId,
+            assetSource: { kind: 'search', filters: {}, materialization: 'all-matches-with-limit' },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow(`Search matched more than ${AgentOperationPlanService.maxCoverSelectionHandleAssets} assets`);
+
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      { page: 1, size: AgentOperationPlanService.maxCoverSelectionHandleAssets + 1 },
+      expect.any(Object),
+    );
+    expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('rejects smart assetSource.search mode with a clear planning error', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Smart source',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add smart matches',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'search', mode: 'smart', query: 'beach' },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('assetSource.search smart mode is not supported for operation planning yet');
+
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters).not.toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+  });
+
+  it('rejects text assetSource.search modes without a query before broad search', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Description source without query',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add description matches',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'search', mode: 'description', filters: { country: 'South Africa' } },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('assetSource.search description mode requires query');
+
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters).not.toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+  });
+
+  it('rejects metadata assetSource.search with a query before broad search', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Metadata query source',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add query matches',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'search', mode: 'metadata', query: 'beach' },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('query is only supported for smart, description, ocr, and filename search modes');
+
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters).not.toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported assetSource.search ordering before broad search', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Unsupported order source',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add ordered matches',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'search', filters: {}, order: 'relevance' },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('relevance order search is not available yet');
+
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters).not.toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+  });
+
+  it('rejects locked visibility search sources without elevated locked access before broad search', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Locked source',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add locked photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: {
+              kind: 'search',
+              filters: { visibility: AssetVisibility.Locked },
+              materialization: 'all-matches-with-limit',
+            },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Locked photos require elevated permission');
+
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters).not.toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+  });
+
+  it('allows bounded-page assetSource.search materialization even when more pages exist', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const albumId = newUuid();
+    const assetIds = [newUuid(), newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })),
+      hasNextPage: true,
+    } as never);
+    selectionHandleRepository.create.mockImplementation((dto) =>
+      Promise.resolve({
+        id: newUuid(),
+        sessionId: dto.sessionId,
+        userId: dto.userId,
+        sourceToolCallId: null,
+        assetIds: dto.assetIds,
+        assetCount: dto.assetIds.length,
+        sampleAssetIds: dto.assetIds.slice(0, 25),
+        expiresAt: dto.expiresAt,
+        createdAt: now,
+        updateId: newUuid(),
+      }),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.AlbumAddAssets,
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: albumId,
+            temporaryTargetId: null,
+            assetIds,
+            payload: {},
+          }),
+        ],
+      }),
+    );
+
+    await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Bounded source',
+      operations: [
+        {
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add first page',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          assetSource: { kind: 'search', materialization: 'bounded-page', limit: 2, page: 3 },
+          payload: {},
+          riskLevel: AgentOperationRiskLevel.Medium,
+          enabled: true,
+        },
+      ],
+    });
+
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith({ page: 3, size: 2 }, expect.any(Object));
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({ operations: [expect.objectContaining({ assetIds })] }),
+    );
+  });
+
+  it('applies a plan created from assetSource.search without reading the source handle again', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const { session, albumId, operation, plan } = makeAddAssetsPlan(auth, assetIds);
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession = vi.fn();
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue(plan);
+    planRepository.completeApply.mockImplementation((_planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan(plan, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    albumService.addAssets.mockResolvedValue(assetIds.map((id) => ({ id, success: true })) as never);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      planRevision: plan.revision,
+    });
+
+    expect(selectionHandleRepository.getValidForPlanning).not.toHaveBeenCalled();
+    expect(albumService.addAssets).toHaveBeenCalledWith(auth, albumId, { ids: assetIds });
   });
 
   it('rejects mixed source mechanisms before plan persistence', async () => {
