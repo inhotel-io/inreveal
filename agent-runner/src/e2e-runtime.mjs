@@ -80,6 +80,33 @@ const parseMcpToolResult = (result, name, gateway) => {
   }
 };
 
+const compactAssetIdsFromResult = (result) => {
+  const ids = [];
+  const addId = (id) => {
+    if (typeof id === 'string' && !ids.includes(id)) {
+      ids.push(id);
+    }
+  };
+
+  if (Array.isArray(result.assetIds)) {
+    for (const id of result.assetIds) {
+      addId(id);
+    }
+  }
+
+  for (const fieldName of ['assets', 'sample']) {
+    if (!Array.isArray(result[fieldName])) {
+      continue;
+    }
+
+    for (const asset of result[fieldName]) {
+      addId(asset?.id);
+    }
+  }
+
+  return ids;
+};
+
 const createE2eMcpClient = ({ gateway, fetch: fetchImplementation = fetch }) => {
   let nextId = 1;
 
@@ -132,12 +159,12 @@ const requireSearchAssets = async (client) => {
     throw new Error(`Asset search did not complete successfully: ${result.status}`);
   }
 
-  const assets = Array.isArray(result.assets) ? result.assets : [];
-  if (assets.length < 2) {
+  const assetIds = compactAssetIdsFromResult(result);
+  if (assetIds.length < 2) {
     throw new Error('The e2e runner needs at least two visible loose assets');
   }
 
-  return assets.slice(0, 2).map((asset) => asset.id);
+  return assetIds.slice(0, 2);
 };
 
 const proposePortugalTrip = async (client) => {
