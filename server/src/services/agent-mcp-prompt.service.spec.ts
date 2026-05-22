@@ -376,15 +376,16 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain(mistake?.hint);
   });
 
-  it('teaches Pi to retry recoverable validation and denied tool results before reporting internal failures', () => {
+  it('teaches Pi to retry recoverable validation tool errors before reporting internal failures', () => {
     const prompt = sut.generatePromptCheatSheet();
 
     expect(prompt).toContain('retry with corrected arguments');
-    expect(prompt).toContain('Retry mcp_gallery_proposeAlbumOperations with the exact handle');
+    expect(prompt).toContain('Retry mcp_gallery_proposeAlbumOperations with exact');
     expect(prompt).toContain('<selectionHandle.id from searchAssets>');
-    expect(prompt).toContain('Do not call this an internal Gallery issue on the first failure');
-    expect(prompt).toContain('If the corrected retry fails again, explain what is missing or blocked');
-    expect(prompt).toContain('approval-required still pauses');
+    expect(prompt).toContain('Not an internal Gallery issue on first failure');
+    expect(prompt).toContain('if corrected retry fails again, explain missing/blocked');
+    expect(prompt).toContain('approval-required pauses');
+    expect(prompt).not.toMatch(/denied .*recoverable/i);
     expect(prompt.length).toBeLessThanOrEqual(3800);
   });
 
