@@ -2061,7 +2061,7 @@ export class AgentToolService {
         resolvedFilters.spacePersonIds,
         filters.spacePersonIds,
       ),
-    ].filter((part): part is string => Boolean(part));
+    ].filter((part): part is string => part !== null);
 
     if (resolvedFilters.spaceIds?.[0] && filters.spaceId !== resolvedFilters.spaceIds[0]) {
       missingParts.push(`space filter (spaceId=${resolvedFilters.spaceIds[0]})`);
@@ -2113,7 +2113,7 @@ export class AgentToolService {
       return null;
     }
 
-    const searchIdSet = new Set(searchIds ?? []);
+    const searchIdSet = new Set(searchIds);
     const missingIds = resolvedIds.filter((id) => !searchIdSet.has(id));
 
     return missingIds.length > 0 ? `${label} filters (${key}=[${missingIds.join(',')}])` : null;
