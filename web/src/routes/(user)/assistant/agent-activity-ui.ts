@@ -423,7 +423,7 @@ const buildToolActivityCandidate = (toolCall: AgentToolCallResponseDto): ToolAct
     toolCall.assetCount > 0 ? toolCall.assetCount : toolCall.albumCount > 0 ? toolCall.albumCount : undefined;
 
   return {
-    id: `tool-${definition.kind}-${toolCall.id}`,
+    id: `tool-${toolCall.id}`,
     sessionId: toolCall.sessionId,
     kind: definition.kind,
     status,
