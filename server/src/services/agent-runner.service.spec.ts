@@ -1,14 +1,21 @@
-import { AgentMessage } from 'src/database';
+import { AgentMessage, AgentToolCall } from 'src/database';
 import {
   AgentApprovalMode,
   AgentMessageRole,
   AgentPermissionPreset,
   AgentProviderType,
+  AgentSessionActivityEventKind,
+  AgentSessionActivityEventStatus,
   AgentSessionStatus,
+  AgentToolApprovalDecision,
+  AgentToolCallStatus,
+  AgentToolDataClass,
+  AgentToolName,
 } from 'src/enum';
 import { AgentMessageRepository } from 'src/repositories/agent-message.repository';
 import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
+import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
@@ -66,6 +73,32 @@ const makeAssistantMessage = (overrides: Partial<AgentMessage> = {}): AgentMessa
   ...overrides,
 });
 
+const makeToolCall = (overrides: Partial<AgentToolCall> = {}): AgentToolCall => ({
+  id: '00000000-0000-4000-8000-000000000333',
+  sessionId: '00000000-0000-4000-8000-000000000100',
+  toolName: AgentToolName.ProposeAlbumOperations,
+  status: AgentToolCallStatus.Completed,
+  approvalDecision: AgentToolApprovalDecision.Approved,
+  requestSummary: 'Tool call',
+  responseSummary: null,
+  redactedRequestMetadata: {},
+  redactedResponseMetadata: null,
+  dataClass: AgentToolDataClass.Metadata,
+  assetCount: 0,
+  albumCount: 0,
+  providerSnapshot: {
+    providerCredentialId: '00000000-0000-4000-8000-000000000201',
+    providerType: AgentProviderType.OpenAI,
+    label: 'OpenAI personal',
+    baseUrl: null,
+    model: 'gpt-5.1',
+  },
+  startedAt: new Date('2026-05-14T10:00:00.000Z'),
+  completedAt: new Date('2026-05-14T10:00:01.000Z'),
+  error: null,
+  ...overrides,
+});
+
 const streamEvents = (events: AgentRunnerStreamEvent[]): AsyncGenerator<AgentRunnerStreamEvent> =>
   (async function* () {
     await Promise.resolve();
@@ -87,6 +120,7 @@ describe(AgentRunnerService.name, () => {
   let agentRunnerRepository: ReturnType<typeof automock<AgentRunnerRepository>>;
   let messageRepository: ReturnType<typeof automock<AgentMessageRepository>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
+  let toolCallRepository: ReturnType<typeof automock<AgentToolCallRepository>>;
   let websocketRepository: ReturnType<typeof automock<WebsocketRepository>>;
   let toolTokenService: ReturnType<typeof automock<AgentRunnerToolTokenService>>;
   let activityService: {
@@ -101,6 +135,8 @@ describe(AgentRunnerService.name, () => {
     agentRunnerRepository = automock(AgentRunnerRepository);
     messageRepository = automock(AgentMessageRepository, { args: [{} as never] });
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
+    toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
+    toolCallRepository.getBySessionId.mockResolvedValue([]);
     websocketRepository = automock(WebsocketRepository, {
       args: [{} as never, { setContext: vi.fn() } as never],
       strict: false,
@@ -117,6 +153,7 @@ describe(AgentRunnerService.name, () => {
       sessionRepository,
       websocketRepository,
       toolTokenService,
+      toolCallRepository,
       activityService,
     );
   });
@@ -439,6 +476,246 @@ describe(AgentRunnerService.name, () => {
     );
   });
 
+  it('marks a completed assistant turn interrupted when a same-turn planning tool was denied', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Create an album plan.' }] };
+    const assistantContent: AgentMessageContent = {
+      blocks: [{ type: 'text', text: 'I could not create the plan because the selection expired.' }],
+    };
+    const assistantMessage = makeAssistantMessage({ sessionId, content: assistantContent });
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    toolCallRepository.getBySessionId.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      makeToolCall({
+        sessionId,
+        toolName: AgentToolName.ProposeAlbumOperations,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: 'Selection handle is expired or not available for this session',
+      }),
+    ]);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: 'provider-message-failure',
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(assistantMessage);
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(messageRepository.create).toHaveBeenCalledWith({
+      sessionId,
+      role: AgentMessageRole.Assistant,
+      content: assistantContent,
+      providerMessageId: 'provider-message-failure',
+      toolCallId: null,
+    });
+    expect(websocketRepository.clientSend).toHaveBeenCalledWith(
+      'on_agent_session_event',
+      userId,
+      expect.objectContaining({ type: 'assistant-message-created' }),
+    );
+    expect(sessionRepository.markInterruptedFromActive).toHaveBeenCalledWith(userId, sessionId);
+    expect(activityService.createSystemEvent).toHaveBeenCalledWith(userId, sessionId, {
+      kind: AgentSessionActivityEventKind.StartProcessing,
+      status: AgentSessionActivityEventStatus.Failed,
+      summary: 'The assistant stopped after a Gallery tool error.',
+    });
+    expect(websocketRepository.clientSend).not.toHaveBeenCalledWith(
+      'on_agent_session_event',
+      userId,
+      expect.objectContaining({ type: 'runner-error' }),
+    );
+  });
+
+  it('ignores historical failed tool calls that existed before this runner turn', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Try again.' }] };
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Done.' }] };
+    const historicalFailure = makeToolCall({
+      sessionId,
+      status: AgentToolCallStatus.Denied,
+      approvalDecision: AgentToolApprovalDecision.Denied,
+      error: 'Selection handle is expired or not available for this session',
+    });
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    toolCallRepository.getBySessionId.mockResolvedValue([historicalFailure]);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: 'provider-message-1',
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(makeAssistantMessage({ sessionId, content: assistantContent }));
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(sessionRepository.markInterruptedFromActive).not.toHaveBeenCalled();
+    expect(activityService.createSystemEvent).not.toHaveBeenCalledWith(
+      userId,
+      sessionId,
+      expect.objectContaining({ status: AgentSessionActivityEventStatus.Failed }),
+    );
+  });
+
+  it('does not mark normal assistant completions failed when no same-turn tool failure exists', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Organize my photos.' }] };
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Done.' }] };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    toolCallRepository.getBySessionId
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([makeToolCall({ sessionId, status: AgentToolCallStatus.Completed })]);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: 'provider-message-1',
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(makeAssistantMessage({ sessionId, content: assistantContent }));
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(sessionRepository.markInterruptedFromActive).not.toHaveBeenCalled();
+    expect(activityService.createSystemEvent).not.toHaveBeenCalledWith(
+      userId,
+      sessionId,
+      expect.objectContaining({ status: AgentSessionActivityEventStatus.Failed }),
+    );
+  });
+
+  it('does not mark a completed turn failed when the pre-dispatch tool-call baseline cannot be read', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Organize my photos.' }] };
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Done.' }] };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    toolCallRepository.getBySessionId.mockRejectedValueOnce(new Error('repository unavailable'));
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: 'provider-message-1',
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(makeAssistantMessage({ sessionId, content: assistantContent }));
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(messageRepository.create).toHaveBeenCalled();
+    expect(sessionRepository.markInterruptedFromActive).not.toHaveBeenCalled();
+    expect(activityService.createSystemEvent).not.toHaveBeenCalledWith(
+      userId,
+      sessionId,
+      expect.objectContaining({ status: AgentSessionActivityEventStatus.Failed }),
+    );
+  });
+
+  it('does not mark a completed plan-review wait failed when a same-turn tool failure exists', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Create a plan.' }] };
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Please review this plan.' }] };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    toolCallRepository.getBySessionId.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      makeToolCall({
+        sessionId,
+        id: '00000000-0000-4000-8000-000000000334',
+        status: AgentToolCallStatus.Failed,
+        error: 'Plan tool failed',
+      }),
+    ]);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: 'provider-message-plan-review',
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(makeAssistantMessage({ sessionId, content: assistantContent }));
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.WaitingForPlanReview } as never);
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(messageRepository.create).toHaveBeenCalled();
+    expect(sessionRepository.markInterruptedFromActive).not.toHaveBeenCalled();
+    expect(activityService.createSystemEvent).not.toHaveBeenCalledWith(
+      userId,
+      sessionId,
+      expect.objectContaining({ status: AgentSessionActivityEventStatus.Failed }),
+    );
+  });
+
   it('creates runner activity events from matching runner stream activity frames', async () => {
     const sessionId = '00000000-0000-4000-8000-000000000100';
     const runnerSessionId = 'runner-session-1';
@@ -610,6 +887,11 @@ describe(AgentRunnerService.name, () => {
     );
     expect(messageRepository.create).not.toHaveBeenCalled();
     expect(sut.isSessionDispatchActive(sessionId)).toBe(false);
+    expect(activityService.createSystemEvent).not.toHaveBeenCalledWith(
+      userId,
+      sessionId,
+      expect.objectContaining({ status: AgentSessionActivityEventStatus.Failed }),
+    );
   });
 
   it('resumes a runner session after tool approval and streams the continued assistant message', async () => {
@@ -826,6 +1108,11 @@ describe(AgentRunnerService.name, () => {
       message: 'The assistant runner stopped while processing the message.',
       createdAt: '2026-05-14T10:00:00.000Z',
     });
+    expect(activityService.createSystemEvent).toHaveBeenCalledWith(userId, sessionId, {
+      kind: AgentSessionActivityEventKind.StartProcessing,
+      status: AgentSessionActivityEventStatus.Failed,
+      summary: 'The assistant stopped while processing the message.',
+    });
   });
 
   it('marks the session interrupted and emits an error when runner resume streaming fails', async () => {
@@ -860,6 +1147,11 @@ describe(AgentRunnerService.name, () => {
       sessionId,
       message: 'The assistant runner stopped while processing the message.',
       createdAt: '2026-05-14T10:00:00.000Z',
+    });
+    expect(activityService.createSystemEvent).toHaveBeenCalledWith(userId, sessionId, {
+      kind: AgentSessionActivityEventKind.RunnerRecovery,
+      status: AgentSessionActivityEventStatus.Failed,
+      summary: 'The assistant stopped while resuming after approval.',
     });
   });
 
@@ -903,6 +1195,11 @@ describe(AgentRunnerService.name, () => {
       message: 'Provider rejected the approval continuation',
       createdAt: '2026-05-14T10:00:00.000Z',
     });
+    expect(activityService.createSystemEvent).toHaveBeenCalledWith(userId, sessionId, {
+      kind: AgentSessionActivityEventKind.RunnerRecovery,
+      status: AgentSessionActivityEventStatus.Failed,
+      summary: 'The assistant stopped while resuming after approval.',
+    });
   });
 
   it('emits actionable context-window runner errors without replacing the runner message', async () => {
@@ -942,6 +1239,11 @@ describe(AgentRunnerService.name, () => {
       message: runnerMessage,
       createdAt: '2026-05-14T10:00:00.000Z',
     });
+    expect(activityService.createSystemEvent).toHaveBeenCalledWith(userId, sessionId, {
+      kind: AgentSessionActivityEventKind.StartProcessing,
+      status: AgentSessionActivityEventStatus.Failed,
+      summary: 'The assistant stopped while processing the message.',
+    });
   });
 
   it('marks the session interrupted and emits an error when the runner stream ends empty', async () => {
@@ -972,6 +1274,11 @@ describe(AgentRunnerService.name, () => {
       sessionId,
       message: 'The assistant runner stopped while processing the message.',
       createdAt: '2026-05-14T10:00:00.000Z',
+    });
+    expect(activityService.createSystemEvent).toHaveBeenCalledWith(userId, sessionId, {
+      kind: AgentSessionActivityEventKind.StartProcessing,
+      status: AgentSessionActivityEventStatus.Failed,
+      summary: 'The assistant stopped while processing the message.',
     });
   });
 
@@ -1325,6 +1632,8 @@ describe(AgentRunnerService.name, () => {
 
     expect(sut.isSessionDispatchActive(sessionId)).toBe(false);
     const first = sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(sut.isSessionDispatchActive(sessionId)).toBe(true);
     expect(agentRunnerRepository.streamMessage).toHaveBeenCalledTimes(1);
