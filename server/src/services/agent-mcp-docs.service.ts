@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.dto';
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
 import { AgentToolName } from 'src/enum';
+import { renderAgentMcpPromptPlaceholders } from 'src/services/agent-mcp-prompt-placeholders';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import type { AgentMcpToolContract, AgentMcpToolExample } from 'src/types/agent-mcp-contract.types';
 
@@ -30,7 +31,7 @@ const compactShortStringArrays = (value: string): string =>
 
 const json = (value: unknown): string => `${compactShortStringArrays(JSON.stringify(value, null, 2))}\n`;
 
-const markdownJson = (value: unknown): string => `\`\`\`json\n${json(value)}\`\`\``;
+const markdownJson = (value: unknown): string => `\`\`\`json\n${json(renderAgentMcpPromptPlaceholders(value))}\`\`\``;
 
 const sanitizeText = (value: string): string =>
   value

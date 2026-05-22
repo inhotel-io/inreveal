@@ -55,7 +55,7 @@ Call a read tool with params.arguments.
   "params": {
     "name": "readAssetMetadata",
     "arguments": {
-      "assetIds": ["00000000-0000-4000-8000-000000000001"]
+      "assetIds": ["<asset-id-from-searchAssets>"]
     }
   }
 }
@@ -180,7 +180,7 @@ Retry an approved read request by id.
 
 ```json
 {
-  "toolCallId": "00000000-0000-4000-8000-000000000111"
+  "toolCallId": "<approved-toolCallId>"
 }
 ```
 
@@ -449,8 +449,8 @@ Search assets in a known shared space for known space people.
 ```json
 {
   "filters": {
-    "spaceId": "00000000-0000-4000-8000-000000000020",
-    "spacePersonIds": ["00000000-0000-4000-8000-000000000021"]
+    "spaceId": "<space.id from listSpaces/readSpace>",
+    "spacePersonIds": ["<spacePersonIds value from resolveAssetSearchFilters>"]
   },
   "limit": 25
 }
@@ -465,7 +465,7 @@ Search assets for known people resolved by id.
 ```json
 {
   "filters": {
-    "personIds": ["00000000-0000-4000-8000-000000000040"]
+    "personIds": ["<personIds value from resolveAssetSearchFilters>"]
   },
   "limit": 25
 }
@@ -480,7 +480,7 @@ Search assets in a known shared space resolved by id.
 ```json
 {
   "filters": {
-    "spaceId": "00000000-0000-4000-8000-000000000020"
+    "spaceId": "<space.id from listSpaces/readSpace>"
   },
   "limit": 25
 }
@@ -495,8 +495,8 @@ Search with ids returned by resolveAssetSearchFilters.
 ```json
 {
   "filters": {
-    "tagIds": ["00000000-0000-4000-8000-000000000030"],
-    "albumIds": ["00000000-0000-4000-8000-000000000010"]
+    "tagIds": ["<tagIds value from resolveAssetSearchFilters>"],
+    "albumIds": ["<album.id from listAlbums/readAlbum>"]
   },
   "limit": 25
 }
@@ -574,7 +574,7 @@ Retry an approved read request by id.
 
 ```json
 {
-  "toolCallId": "00000000-0000-4000-8000-000000000111"
+  "toolCallId": "<approved-toolCallId>"
 }
 ```
 
@@ -606,7 +606,7 @@ Read selected assets by id.
 
 ```json
 {
-  "assetIds": ["00000000-0000-4000-8000-000000000001"]
+  "assetIds": ["<asset-id-from-searchAssets>"]
 }
 ```
 
@@ -618,7 +618,7 @@ Read basic type and date metadata for selected assets.
 
 ```json
 {
-  "assetIds": ["00000000-0000-4000-8000-000000000001"],
+  "assetIds": ["<asset-id-from-searchAssets>"],
   "detail": "basic"
 }
 ```
@@ -631,7 +631,7 @@ Read selected metadata field groups for selected assets.
 
 ```json
 {
-  "assetIds": ["00000000-0000-4000-8000-000000000001"],
+  "assetIds": ["<asset-id-from-searchAssets>"],
   "fields": ["filename", "rating", "tags"]
 }
 ```
@@ -644,7 +644,7 @@ Read exact camera, date, and filename fields for selected assets.
 
 ```json
 {
-  "assetIds": ["00000000-0000-4000-8000-000000000001"],
+  "assetIds": ["<asset-id-from-searchAssets>"],
   "fields": ["camera", "dates", "filename"]
 }
 ```
@@ -657,7 +657,7 @@ Retry an approved read request by id.
 
 ```json
 {
-  "toolCallId": "00000000-0000-4000-8000-000000000111"
+  "toolCallId": "<approved-toolCallId>"
 }
 ```
 
@@ -686,7 +686,7 @@ Read selected assets by id.
 
 ```json
 {
-  "assetIds": ["00000000-0000-4000-8000-000000000001"]
+  "assetIds": ["<asset-id-from-searchAssets>"]
 }
 ```
 
@@ -698,7 +698,7 @@ Retry an approved read request by id.
 
 ```json
 {
-  "toolCallId": "00000000-0000-4000-8000-000000000111"
+  "toolCallId": "<approved-toolCallId>"
 }
 ```
 
@@ -727,7 +727,7 @@ Read selected assets by id.
 
 ```json
 {
-  "assetIds": ["00000000-0000-4000-8000-000000000001"]
+  "assetIds": ["<asset-id-from-searchAssets>"]
 }
 ```
 
@@ -739,7 +739,7 @@ Retry an approved read request by id.
 
 ```json
 {
-  "toolCallId": "00000000-0000-4000-8000-000000000111"
+  "toolCallId": "<approved-toolCallId>"
 }
 ```
 
@@ -778,7 +778,7 @@ Retry an approved read request by id.
 
 ```json
 {
-  "toolCallId": "00000000-0000-4000-8000-000000000111"
+  "toolCallId": "<approved-toolCallId>"
 }
 ```
 
@@ -807,7 +807,7 @@ Read an album by id.
 
 ```json
 {
-  "albumId": "00000000-0000-4000-8000-000000000010"
+  "albumId": "<album.id from listAlbums/readAlbum>"
 }
 ```
 
@@ -819,7 +819,7 @@ Retry an approved read request by id.
 
 ```json
 {
-  "toolCallId": "00000000-0000-4000-8000-000000000111"
+  "toolCallId": "<approved-toolCallId>"
 }
 ```
 
@@ -858,7 +858,7 @@ Retry an approved read request by id.
 
 ```json
 {
-  "toolCallId": "00000000-0000-4000-8000-000000000111"
+  "toolCallId": "<approved-toolCallId>"
 }
 ```
 
@@ -887,7 +887,7 @@ Read a shared space by id.
 
 ```json
 {
-  "spaceId": "00000000-0000-4000-8000-000000000020"
+  "spaceId": "<space.id from listSpaces/readSpace>"
 }
 ```
 
@@ -899,7 +899,7 @@ Retry an approved read request by id.
 
 ```json
 {
-  "toolCallId": "00000000-0000-4000-8000-000000000111"
+  "toolCallId": "<approved-toolCallId>"
 }
 ```
 
@@ -941,7 +941,7 @@ Retry an approved read request by id.
 
 ```json
 {
-  "toolCallId": "00000000-0000-4000-8000-000000000111"
+  "toolCallId": "<approved-toolCallId>"
 }
 ```
 
@@ -1008,7 +1008,7 @@ Create a new album and add selected assets to it.
       "summary": "Add selected photos to today test.",
       "targetKind": "new_album",
       "temporaryTargetId": "tmp-today-test",
-      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
+      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"]
     }
   ]
 }
@@ -1041,7 +1041,7 @@ Create an album and add a large server-side selection without pasting asset IDs.
       "summary": "Add selected photos.",
       "targetKind": "new_album",
       "temporaryTargetId": "selection-album",
-      "assetSelectionHandleId": "00000000-0000-4000-8000-000000000333",
+      "assetSelectionHandleId": "<selectionHandle.id from searchAssets>",
       "payload": {},
       "riskLevel": "medium",
       "enabled": true
@@ -1064,8 +1064,8 @@ Add selected assets to an existing album.
       "type": "album.addAssets",
       "summary": "Add selected photos.",
       "targetKind": "existing_album",
-      "targetId": "00000000-0000-4000-8000-000000000010",
-      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
+      "targetId": "<album.id from listAlbums/readAlbum>",
+      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"]
     }
   ]
 }
@@ -1085,8 +1085,8 @@ Remove selected assets from an existing album.
       "type": "album.removeAssets",
       "summary": "Remove selected photos.",
       "targetKind": "existing_album",
-      "targetId": "00000000-0000-4000-8000-000000000010",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "targetId": "<album.id from listAlbums/readAlbum>",
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {}
     }
   ]
@@ -1107,7 +1107,7 @@ Rename or describe an existing album.
       "type": "album.updateDetails",
       "summary": "Rename album.",
       "targetKind": "existing_album",
-      "targetId": "00000000-0000-4000-8000-000000000010",
+      "targetId": "<album.id from listAlbums/readAlbum>",
       "payload": {
         "albumName": "Today highlights",
         "description": "Curated recent photos."
@@ -1131,8 +1131,8 @@ Set an existing album cover from a selected asset.
       "type": "album.setCover",
       "summary": "Set cover photo.",
       "targetKind": "existing_album",
-      "targetId": "00000000-0000-4000-8000-000000000010",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "targetId": "<album.id from listAlbums/readAlbum>",
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {}
     }
   ]
@@ -1190,7 +1190,7 @@ Create a new shared space and add selected assets.
       "summary": "Add selected photos to Family space.",
       "targetKind": "new_space",
       "temporaryTargetId": "tmp-family-space",
-      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
+      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"],
       "payload": {}
     }
   ]
@@ -1211,8 +1211,8 @@ Add selected assets to an existing shared space.
       "type": "space.addAssets",
       "summary": "Add selected photos to Family space.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
-      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
+      "targetId": "<space.id from listSpaces/readSpace>",
+      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"],
       "payload": {}
     }
   ]
@@ -1233,8 +1233,8 @@ Remove selected assets from an existing shared space.
       "type": "space.removeAssets",
       "summary": "Remove selected photos from Family space.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "targetId": "<space.id from listSpaces/readSpace>",
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {}
     }
   ]
@@ -1255,7 +1255,7 @@ Update an existing shared space.
       "type": "space.updateDetails",
       "summary": "Rename Family space.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
+      "targetId": "<space.id from listSpaces/readSpace>",
       "payload": {
         "spaceName": "Family 2026",
         "description": "Updated family highlights.",
@@ -1280,7 +1280,7 @@ Rename an existing shared space.
       "type": "space.updateDetails",
       "summary": "Rename Family space.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
+      "targetId": "<space.id from listSpaces/readSpace>",
       "payload": {
         "spaceName": "Family 2026"
       }
@@ -1303,7 +1303,7 @@ Update an existing shared space description.
       "type": "space.updateDetails",
       "summary": "Update Family space description.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
+      "targetId": "<space.id from listSpaces/readSpace>",
       "payload": {
         "description": "Photos for everyone."
       }
@@ -1326,7 +1326,7 @@ Clear an existing shared space description.
       "type": "space.updateDetails",
       "summary": "Clear Family space description.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
+      "targetId": "<space.id from listSpaces/readSpace>",
       "payload": {
         "description": ""
       }
@@ -1349,7 +1349,7 @@ Update an existing shared space color.
       "type": "space.updateDetails",
       "summary": "Update Family space color.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
+      "targetId": "<space.id from listSpaces/readSpace>",
       "payload": {
         "color": "blue"
       }
@@ -1372,7 +1372,7 @@ Rotate selected image assets.
       "type": "asset.rotate",
       "summary": "Rotate selected images clockwise.",
       "targetKind": "image_edit_batch",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {
         "angle": 90
       }
@@ -1395,7 +1395,7 @@ Mark selected assets as favorites.
       "type": "asset.setFavorite",
       "summary": "Favorite selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
+      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"],
       "payload": {
         "favorite": true
       }
@@ -1418,7 +1418,7 @@ Archive selected assets.
       "type": "asset.setArchive",
       "summary": "Archive selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {
         "archived": true
       }
@@ -1441,7 +1441,7 @@ Add a tag to selected assets.
       "type": "asset.addTag",
       "summary": "Add Travel tag.",
       "targetKind": "asset_batch",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {
         "tagName": "Travel"
       }
@@ -1464,9 +1464,9 @@ Remove a tag from selected assets.
       "type": "asset.removeTag",
       "summary": "Remove tag from selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {
-        "tagId": "00000000-0000-4000-8000-000000000030"
+        "tagId": "<tagIds value from resolveAssetSearchFilters>"
       }
     }
   ]
@@ -1498,7 +1498,7 @@ Revise a plan to create a new empty album for later review.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Create today test album.",
   "operations": [
@@ -1524,7 +1524,7 @@ Revise a plan to create a new album and add selected assets to it.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Create today test and add selected photos.",
   "operations": [
@@ -1543,7 +1543,7 @@ Revise a plan to create a new album and add selected assets to it.
       "summary": "Add selected photos to today test.",
       "targetKind": "new_album",
       "temporaryTargetId": "tmp-today-test",
-      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
+      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"]
     }
   ]
 }
@@ -1557,7 +1557,7 @@ Revise a plan to create an album and add a large server-side selection without p
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Create an album from the selected search result.",
   "operations": [
@@ -1578,7 +1578,7 @@ Revise a plan to create an album and add a large server-side selection without p
       "summary": "Add selected photos.",
       "targetKind": "new_album",
       "temporaryTargetId": "selection-album",
-      "assetSelectionHandleId": "00000000-0000-4000-8000-000000000333",
+      "assetSelectionHandleId": "<selectionHandle.id from searchAssets>",
       "payload": {},
       "riskLevel": "medium",
       "enabled": true
@@ -1595,7 +1595,7 @@ Revise a plan to add selected assets to an existing album.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Add selected photos to an existing album.",
   "operations": [
@@ -1603,8 +1603,8 @@ Revise a plan to add selected assets to an existing album.
       "type": "album.addAssets",
       "summary": "Add selected photos.",
       "targetKind": "existing_album",
-      "targetId": "00000000-0000-4000-8000-000000000010",
-      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
+      "targetId": "<album.id from listAlbums/readAlbum>",
+      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"]
     }
   ]
 }
@@ -1618,7 +1618,7 @@ Revise a plan to remove selected assets from an existing album.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Remove selected photos from an album.",
   "operations": [
@@ -1626,8 +1626,8 @@ Revise a plan to remove selected assets from an existing album.
       "type": "album.removeAssets",
       "summary": "Remove selected photos.",
       "targetKind": "existing_album",
-      "targetId": "00000000-0000-4000-8000-000000000010",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "targetId": "<album.id from listAlbums/readAlbum>",
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {}
     }
   ]
@@ -1642,7 +1642,7 @@ Revise a plan to rename or describe an existing album.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Update album details.",
   "operations": [
@@ -1650,7 +1650,7 @@ Revise a plan to rename or describe an existing album.
       "type": "album.updateDetails",
       "summary": "Rename album.",
       "targetKind": "existing_album",
-      "targetId": "00000000-0000-4000-8000-000000000010",
+      "targetId": "<album.id from listAlbums/readAlbum>",
       "payload": {
         "albumName": "Today highlights",
         "description": "Curated recent photos."
@@ -1668,7 +1668,7 @@ Revise a plan to set an existing album cover from a selected asset.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Set album cover.",
   "operations": [
@@ -1676,8 +1676,8 @@ Revise a plan to set an existing album cover from a selected asset.
       "type": "album.setCover",
       "summary": "Set cover photo.",
       "targetKind": "existing_album",
-      "targetId": "00000000-0000-4000-8000-000000000010",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "targetId": "<album.id from listAlbums/readAlbum>",
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {}
     }
   ]
@@ -1692,7 +1692,7 @@ Revise a plan to create a new shared space.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Create a family space.",
   "operations": [
@@ -1719,7 +1719,7 @@ Revise a plan to create a new shared space and add selected assets.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Create a family space and add selected photos.",
   "operations": [
@@ -1739,7 +1739,7 @@ Revise a plan to create a new shared space and add selected assets.
       "summary": "Add selected photos to Family space.",
       "targetKind": "new_space",
       "temporaryTargetId": "tmp-family-space",
-      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
+      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"],
       "payload": {}
     }
   ]
@@ -1754,7 +1754,7 @@ Revise a plan to add selected assets to an existing shared space.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Add selected photos to an existing space.",
   "operations": [
@@ -1762,8 +1762,8 @@ Revise a plan to add selected assets to an existing shared space.
       "type": "space.addAssets",
       "summary": "Add selected photos to Family space.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
-      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
+      "targetId": "<space.id from listSpaces/readSpace>",
+      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"],
       "payload": {}
     }
   ]
@@ -1778,7 +1778,7 @@ Revise a plan to remove selected assets from an existing shared space.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Remove selected photos from a space.",
   "operations": [
@@ -1786,8 +1786,8 @@ Revise a plan to remove selected assets from an existing shared space.
       "type": "space.removeAssets",
       "summary": "Remove selected photos from Family space.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "targetId": "<space.id from listSpaces/readSpace>",
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {}
     }
   ]
@@ -1802,7 +1802,7 @@ Revise a plan to update an existing shared space.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Update Family space details.",
   "operations": [
@@ -1810,7 +1810,7 @@ Revise a plan to update an existing shared space.
       "type": "space.updateDetails",
       "summary": "Rename Family space.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
+      "targetId": "<space.id from listSpaces/readSpace>",
       "payload": {
         "spaceName": "Family 2026",
         "description": "Updated family highlights.",
@@ -1829,7 +1829,7 @@ Revise a plan to rename an existing shared space.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Rename Family space.",
   "operations": [
@@ -1837,7 +1837,7 @@ Revise a plan to rename an existing shared space.
       "type": "space.updateDetails",
       "summary": "Rename Family space.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
+      "targetId": "<space.id from listSpaces/readSpace>",
       "payload": {
         "spaceName": "Family 2026"
       }
@@ -1854,7 +1854,7 @@ Revise a plan to update an existing shared space description.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Update Family space description.",
   "operations": [
@@ -1862,7 +1862,7 @@ Revise a plan to update an existing shared space description.
       "type": "space.updateDetails",
       "summary": "Update Family space description.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
+      "targetId": "<space.id from listSpaces/readSpace>",
       "payload": {
         "description": "Photos for everyone."
       }
@@ -1879,7 +1879,7 @@ Revise a plan to clear an existing shared space description.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Clear Family space description.",
   "operations": [
@@ -1887,7 +1887,7 @@ Revise a plan to clear an existing shared space description.
       "type": "space.updateDetails",
       "summary": "Clear Family space description.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
+      "targetId": "<space.id from listSpaces/readSpace>",
       "payload": {
         "description": ""
       }
@@ -1904,7 +1904,7 @@ Revise a plan to update an existing shared space color.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Update Family space color.",
   "operations": [
@@ -1912,7 +1912,7 @@ Revise a plan to update an existing shared space color.
       "type": "space.updateDetails",
       "summary": "Update Family space color.",
       "targetKind": "existing_space",
-      "targetId": "00000000-0000-4000-8000-000000000020",
+      "targetId": "<space.id from listSpaces/readSpace>",
       "payload": {
         "color": "blue"
       }
@@ -1929,7 +1929,7 @@ Revise a plan to rotate selected image assets.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Rotate selected images.",
   "operations": [
@@ -1937,7 +1937,7 @@ Revise a plan to rotate selected image assets.
       "type": "asset.rotate",
       "summary": "Rotate selected images clockwise.",
       "targetKind": "image_edit_batch",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {
         "angle": 90
       }
@@ -1954,7 +1954,7 @@ Revise a plan to mark selected assets as favorites.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Favorite selected photos.",
   "operations": [
@@ -1962,7 +1962,7 @@ Revise a plan to mark selected assets as favorites.
       "type": "asset.setFavorite",
       "summary": "Favorite selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
+      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"],
       "payload": {
         "favorite": true
       }
@@ -1979,7 +1979,7 @@ Revise a plan to archive selected assets.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Archive selected photos.",
   "operations": [
@@ -1987,7 +1987,7 @@ Revise a plan to archive selected assets.
       "type": "asset.setArchive",
       "summary": "Archive selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {
         "archived": true
       }
@@ -2004,7 +2004,7 @@ Revise a plan to add a tag to selected assets.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Tag selected photos.",
   "operations": [
@@ -2012,7 +2012,7 @@ Revise a plan to add a tag to selected assets.
       "type": "asset.addTag",
       "summary": "Add Travel tag.",
       "targetKind": "asset_batch",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {
         "tagName": "Travel"
       }
@@ -2029,7 +2029,7 @@ Revise a plan to remove a tag from selected assets.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "feedback": "Use this revised operation plan.",
   "summary": "Remove tag from selected photos.",
   "operations": [
@@ -2037,9 +2037,9 @@ Revise a plan to remove a tag from selected assets.
       "type": "asset.removeTag",
       "summary": "Remove tag from selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": ["00000000-0000-4000-8000-000000000001"],
+      "assetIds": ["<asset-id-from-searchAssets>"],
       "payload": {
-        "tagId": "00000000-0000-4000-8000-000000000030"
+        "tagId": "<tagIds value from resolveAssetSearchFilters>"
       }
     }
   ]
@@ -2068,7 +2068,7 @@ Summarize the whole plan.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222"
+  "planId": "<plan.id from proposed plan>"
 }
 ```
 
@@ -2080,7 +2080,7 @@ Summarize plan risks and selected changes.
 
 ```json
 {
-  "planId": "00000000-0000-4000-8000-000000000222",
+  "planId": "<plan.id from proposed plan>",
   "focus": "risks and selected changes"
 }
 ```
