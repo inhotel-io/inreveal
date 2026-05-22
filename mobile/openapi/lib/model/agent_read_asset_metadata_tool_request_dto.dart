@@ -14,10 +14,22 @@ class AgentReadAssetMetadataToolRequestDto {
   /// Returns a new [AgentReadAssetMetadataToolRequestDto] instance.
   AgentReadAssetMetadataToolRequestDto({
     this.assetIds = const [],
+    this.detail,
+    this.fields = const [],
     this.toolCallId,
   });
 
   List<String> assetIds;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  AgentAssetMetadataDetail? detail;
+
+  List<AgentAssetMetadataField> fields;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -30,20 +42,30 @@ class AgentReadAssetMetadataToolRequestDto {
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadAssetMetadataToolRequestDto &&
     _deepEquality.equals(other.assetIds, assetIds) &&
+    other.detail == detail &&
+    _deepEquality.equals(other.fields, fields) &&
     other.toolCallId == toolCallId;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (assetIds.hashCode) +
+    (detail == null ? 0 : detail!.hashCode) +
+    (fields.hashCode) +
     (toolCallId == null ? 0 : toolCallId!.hashCode);
 
   @override
-  String toString() => 'AgentReadAssetMetadataToolRequestDto[assetIds=$assetIds, toolCallId=$toolCallId]';
+  String toString() => 'AgentReadAssetMetadataToolRequestDto[assetIds=$assetIds, detail=$detail, fields=$fields, toolCallId=$toolCallId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'assetIds'] = this.assetIds;
+    if (this.detail != null) {
+      json[r'detail'] = this.detail;
+    } else {
+    //  json[r'detail'] = null;
+    }
+      json[r'fields'] = this.fields;
     if (this.toolCallId != null) {
       json[r'toolCallId'] = this.toolCallId;
     } else {
@@ -64,6 +86,8 @@ class AgentReadAssetMetadataToolRequestDto {
         assetIds: json[r'assetIds'] is Iterable
             ? (json[r'assetIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],
+        detail: AgentAssetMetadataDetail.fromJson(json[r'detail']),
+        fields: AgentAssetMetadataField.listFromJson(json[r'fields']),
         toolCallId: mapValueOfType<String>(json, r'toolCallId'),
       );
     }

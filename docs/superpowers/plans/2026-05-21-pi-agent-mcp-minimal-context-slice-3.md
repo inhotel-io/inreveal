@@ -102,6 +102,7 @@ Success response:
 ## Task 1: Write Failing DTO And Registry Tests
 
 **Files:**
+
 - Modify: `server/src/dtos/agent-tool.dto.spec.ts`
 - Modify: `server/src/services/agent-mcp-tool-registry.service.spec.ts`
 
@@ -110,75 +111,75 @@ Success response:
 Inside `describe(AgentReadAssetMetadataToolRequestDto.name, ...)`, update the existing default test and add new tests:
 
 ```ts
-    it('accepts assetIds with the basic metadata detail default', () => {
-      const assetId = factory.uuid();
-      const result = parseRequest({ assetIds: [assetId] });
+it('accepts assetIds with the basic metadata detail default', () => {
+  const assetId = factory.uuid();
+  const result = parseRequest({ assetIds: [assetId] });
 
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data).toEqual({ assetIds: [assetId], detail: 'basic' });
-      }
-    });
+  expect(result.success).toBe(true);
+  if (result.success) {
+    expect(result.data).toEqual({ assetIds: [assetId], detail: 'basic' });
+  }
+});
 
-    it('accepts explicit metadata detail presets', () => {
-      const assetId = factory.uuid();
-      const result = parseRequest({ assetIds: [assetId], detail: 'technical' });
+it('accepts explicit metadata detail presets', () => {
+  const assetId = factory.uuid();
+  const result = parseRequest({ assetIds: [assetId], detail: 'technical' });
 
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data).toEqual({ assetIds: [assetId], detail: 'technical' });
-      }
-    });
+  expect(result.success).toBe(true);
+  if (result.success) {
+    expect(result.data).toEqual({ assetIds: [assetId], detail: 'technical' });
+  }
+});
 
-    it('accepts exact metadata fields for custom reads', () => {
-      const assetId = factory.uuid();
-      const result = parseRequest({ assetIds: [assetId], fields: ['filename', 'rating', 'tags'] });
+it('accepts exact metadata fields for custom reads', () => {
+  const assetId = factory.uuid();
+  const result = parseRequest({ assetIds: [assetId], fields: ['filename', 'rating', 'tags'] });
 
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data).toEqual({ assetIds: [assetId], fields: ['filename', 'rating', 'tags'] });
-      }
-    });
+  expect(result.success).toBe(true);
+  if (result.success) {
+    expect(result.data).toEqual({ assetIds: [assetId], fields: ['filename', 'rating', 'tags'] });
+  }
+});
 
-    it('rejects metadata reads that combine detail and fields', () => {
-      const result = parseRequest({ assetIds: [factory.uuid()], detail: 'basic', fields: ['filename'] });
+it('rejects metadata reads that combine detail and fields', () => {
+  const result = parseRequest({ assetIds: [factory.uuid()], detail: 'basic', fields: ['filename'] });
 
-      expectIssue(result, [], 'Use either detail or fields, not both');
-    });
+  expectIssue(result, [], 'Use either detail or fields, not both');
+});
 
-    it('rejects metadata fields when retrying an approved tool call', () => {
-      const result = parseRequest({ toolCallId: factory.uuid(), fields: ['filename'] });
+it('rejects metadata fields when retrying an approved tool call', () => {
+  const result = parseRequest({ toolCallId: factory.uuid(), fields: ['filename'] });
 
-      expectIssue(result, [], 'Provide either assetIds or toolCallId, not both');
-    });
+  expectIssue(result, [], 'Provide either assetIds or toolCallId, not both');
+});
 
-    it('rejects metadata detail when retrying an approved tool call', () => {
-      const result = parseRequest({ toolCallId: factory.uuid(), detail: 'technical' });
+it('rejects metadata detail when retrying an approved tool call', () => {
+  const result = parseRequest({ toolCallId: factory.uuid(), detail: 'technical' });
 
-      expectIssue(result, [], 'Provide either assetIds or toolCallId, not both');
-    });
+  expectIssue(result, [], 'Provide either assetIds or toolCallId, not both');
+});
 
-    it('rejects unsupported metadata fields such as previews, originals, and people', () => {
-      for (const field of ['previews', 'originals', 'people']) {
-        const result = parseRequest({ assetIds: [factory.uuid()], fields: [field] });
+it('rejects unsupported metadata fields such as previews, originals, and people', () => {
+  for (const field of ['previews', 'originals', 'people']) {
+    const result = parseRequest({ assetIds: [factory.uuid()], fields: [field] });
 
-        expectIssue(result, ['fields', 0], 'Invalid option');
-      }
-    });
+    expectIssue(result, ['fields', 0], 'Invalid option');
+  }
+});
 
-    it('rejects unknown top-level keys that try to request media or raw internals', () => {
-      for (const key of ['includePreviews', 'includeOriginals', 'rawPath', 'storageKey', 'checksum']) {
-        const result = parseRequest({ assetIds: [factory.uuid()], [key]: true } as never);
+it('rejects unknown top-level keys that try to request media or raw internals', () => {
+  for (const key of ['includePreviews', 'includeOriginals', 'rawPath', 'storageKey', 'checksum']) {
+    const result = parseRequest({ assetIds: [factory.uuid()], [key]: true } as never);
 
-        expectIssue(result, [], 'Unrecognized key');
-      }
-    });
+    expectIssue(result, [], 'Unrecognized key');
+  }
+});
 
-    it('rejects duplicate metadata fields', () => {
-      const result = parseRequest({ assetIds: [factory.uuid()], fields: ['filename', 'filename'] });
+it('rejects duplicate metadata fields', () => {
+  const result = parseRequest({ assetIds: [factory.uuid()], fields: ['filename', 'filename'] });
 
-      expectIssue(result, ['fields'], 'fields must be unique');
-    });
+  expectIssue(result, ['fields'], 'fields must be unique');
+});
 ```
 
 Keep the existing tests for duplicate asset IDs, missing asset IDs, invalid UUIDs, and `10_000` asset ID cap.
@@ -188,59 +189,59 @@ Keep the existing tests for duplicate asset IDs, missing asset IDs, invalid UUID
 In `describe(AgentReadAssetMetadataToolResponseDto.name, ...)`, update `serializes success responses with ISO dates and metadata only` so it expects `summary`, `detail`, and `fields`, and verifies a compact basic response:
 
 ```ts
-    it('serializes compact metadata success responses with selected fields only', () => {
-      const asset = makeAssets()[0];
-      const result = AgentReadAssetMetadataToolResponseDto.schema.safeEncode({
-        status: 'success' as const,
-        toolCall: makeToolCall(),
-        summary: 'Returned basic metadata for 1 asset',
-        detail: 'basic' as const,
-        fields: ['type', 'dates'],
-        assets: [
-          {
-            id: asset.id,
-            type: asset.type,
-            localDateTime: new Date('2026-05-14T12:00:00.000Z'),
-            fileCreatedAt: new Date('2026-05-14T12:00:00.000Z'),
-            fileModifiedAt: new Date('2026-05-14T12:00:00.000Z'),
-            exifInfo: { dateTimeOriginal: new Date('2026-05-14T12:00:00.000Z') },
-          },
-        ],
-      });
+it('serializes compact metadata success responses with selected fields only', () => {
+  const asset = makeAssets()[0];
+  const result = AgentReadAssetMetadataToolResponseDto.schema.safeEncode({
+    status: 'success' as const,
+    toolCall: makeToolCall(),
+    summary: 'Returned basic metadata for 1 asset',
+    detail: 'basic' as const,
+    fields: ['type', 'dates'],
+    assets: [
+      {
+        id: asset.id,
+        type: asset.type,
+        localDateTime: new Date('2026-05-14T12:00:00.000Z'),
+        fileCreatedAt: new Date('2026-05-14T12:00:00.000Z'),
+        fileModifiedAt: new Date('2026-05-14T12:00:00.000Z'),
+        exifInfo: { dateTimeOriginal: new Date('2026-05-14T12:00:00.000Z') },
+      },
+    ],
+  });
 
-      expect(result.success).toBe(true);
-      if (result.success && result.data.status === 'success') {
-        expect(result.data.summary).toBe('Returned basic metadata for 1 asset');
-        expect(result.data.detail).toBe('basic');
-        expect(result.data.fields).toEqual(['type', 'dates']);
-        expect(result.data.assets[0].localDateTime).toBe('2026-05-14T12:00:00.000Z');
-        expect(result.data.assets[0]).not.toHaveProperty('originalFileName');
-        expect(result.data.assets[0]).not.toHaveProperty('tags');
-      }
-    });
+  expect(result.success).toBe(true);
+  if (result.success && result.data.status === 'success') {
+    expect(result.data.summary).toBe('Returned basic metadata for 1 asset');
+    expect(result.data.detail).toBe('basic');
+    expect(result.data.fields).toEqual(['type', 'dates']);
+    expect(result.data.assets[0].localDateTime).toBe('2026-05-14T12:00:00.000Z');
+    expect(result.data.assets[0]).not.toHaveProperty('originalFileName');
+    expect(result.data.assets[0]).not.toHaveProperty('tags');
+  }
+});
 ```
 
 Add an allSafe safe-field response test:
 
 ```ts
-    it('serializes allSafe metadata rows with supported safe field groups only', () => {
-      const asset = makeAssets()[0];
-      const result = AgentReadAssetMetadataToolResponseDto.schema.safeEncode({
-        status: 'success' as const,
-        toolCall: makeToolCall(),
-        summary: 'Returned allSafe metadata for 1 asset',
-        detail: 'allSafe' as const,
-        fields: ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility'],
-        assets: [asset],
-      });
+it('serializes allSafe metadata rows with supported safe field groups only', () => {
+  const asset = makeAssets()[0];
+  const result = AgentReadAssetMetadataToolResponseDto.schema.safeEncode({
+    status: 'success' as const,
+    toolCall: makeToolCall(),
+    summary: 'Returned allSafe metadata for 1 asset',
+    detail: 'allSafe' as const,
+    fields: ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility'],
+    assets: [asset],
+  });
 
-      expect(result.success).toBe(true);
-      if (result.success && result.data.status === 'success') {
-        expect(result.data.assets[0].originalFileName).toBe(asset.originalFileName);
-        expect(result.data.assets[0].tags).toEqual(asset.tags);
-        expect(result.data.assets[0]).not.toHaveProperty('ownerId');
-      }
-    });
+  expect(result.success).toBe(true);
+  if (result.success && result.data.status === 'success') {
+    expect(result.data.assets[0].originalFileName).toBe(asset.originalFileName);
+    expect(result.data.assets[0].tags).toEqual(asset.tags);
+    expect(result.data.assets[0]).not.toHaveProperty('ownerId');
+  }
+});
 ```
 
 - [ ] **Step 3: Add generated MCP schema assertions**
@@ -259,27 +260,27 @@ In `server/src/services/agent-mcp-tool-registry.service.spec.ts`, update `adds m
 Add field/preset schema assertions:
 
 ```ts
-    const metadataFieldSchema = metadata ? getSchemaDefinition(metadata, 'AgentAssetMetadataField') : undefined;
-    const metadataDetailSchema = metadata ? getSchemaDefinition(metadata, 'AgentAssetMetadataDetail') : undefined;
+const metadataFieldSchema = metadata ? getSchemaDefinition(metadata, 'AgentAssetMetadataField') : undefined;
+const metadataDetailSchema = metadata ? getSchemaDefinition(metadata, 'AgentAssetMetadataDetail') : undefined;
 
-    expect(metadataDetailSchema).toEqual(
-      expect.objectContaining({ enum: ['basic', 'descriptive', 'technical', 'allSafe'] }),
-    );
-    expect(metadataFieldSchema).toEqual(
-      expect.objectContaining({
-        enum: expect.arrayContaining([
-          'type',
-          'dates',
-          'location',
-          'camera',
-          'tags',
-          'rating',
-          'filename',
-          'favorite',
-          'visibility',
-        ]),
-      }),
-    );
+expect(metadataDetailSchema).toEqual(
+  expect.objectContaining({ enum: ['basic', 'descriptive', 'technical', 'allSafe'] }),
+);
+expect(metadataFieldSchema).toEqual(
+  expect.objectContaining({
+    enum: expect.arrayContaining([
+      'type',
+      'dates',
+      'location',
+      'camera',
+      'tags',
+      'rating',
+      'filename',
+      'favorite',
+      'visibility',
+    ]),
+  }),
+);
 ```
 
 - [ ] **Step 4: Add read metadata contract assertions**
@@ -287,44 +288,44 @@ Add field/preset schema assertions:
 In `server/src/services/agent-mcp-tool-contract.service.spec.ts`, add:
 
 ```ts
-  it('documents compact readAssetMetadata detail presets and field-selected reads', () => {
-    const contract = sut.getReadToolContract(AgentToolName.ReadAssetMetadata);
+it('documents compact readAssetMetadata detail presets and field-selected reads', () => {
+  const contract = sut.getReadToolContract(AgentToolName.ReadAssetMetadata);
 
-    expect(contract?.usage).toContain('detail');
-    expect(contract?.usage).toContain('fields');
-    expect(contract?.usage).toContain('basic');
-    expect(contract?.usage).toContain('allSafe');
-    expect(contract?.argumentModes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: 'metadata-detail',
-          requiredFields: ['assetIds'],
-          forbiddenFields: expect.arrayContaining(['fields', 'toolCallId']),
-        }),
-        expect.objectContaining({
-          name: 'metadata-fields',
-          requiredFields: ['assetIds', 'fields'],
-          forbiddenFields: expect.arrayContaining(['detail', 'toolCallId']),
-        }),
-      ]),
-    );
-    expect(contract?.examples).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: 'read-basic-metadata',
-          arguments: { assetIds: ['00000000-0000-4000-8000-000000000001'], detail: 'basic' },
-        }),
-        expect.objectContaining({
-          name: 'read-selected-metadata-fields',
-          arguments: {
-            assetIds: ['00000000-0000-4000-8000-000000000001'],
-            fields: ['filename', 'rating', 'tags'],
-          },
-        }),
-      ]),
-    );
-    expect(JSON.stringify(contract)).not.toMatch(/rawPath|storageKey|checksum|original path|bearer|token/i);
-  });
+  expect(contract?.usage).toContain('detail');
+  expect(contract?.usage).toContain('fields');
+  expect(contract?.usage).toContain('basic');
+  expect(contract?.usage).toContain('allSafe');
+  expect(contract?.argumentModes).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: 'metadata-detail',
+        requiredFields: ['assetIds'],
+        forbiddenFields: expect.arrayContaining(['fields', 'toolCallId']),
+      }),
+      expect.objectContaining({
+        name: 'metadata-fields',
+        requiredFields: ['assetIds', 'fields'],
+        forbiddenFields: expect.arrayContaining(['detail', 'toolCallId']),
+      }),
+    ]),
+  );
+  expect(contract?.examples).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: 'read-basic-metadata',
+        arguments: { assetIds: ['00000000-0000-4000-8000-000000000001'], detail: 'basic' },
+      }),
+      expect.objectContaining({
+        name: 'read-selected-metadata-fields',
+        arguments: {
+          assetIds: ['00000000-0000-4000-8000-000000000001'],
+          fields: ['filename', 'rating', 'tags'],
+        },
+      }),
+    ]),
+  );
+  expect(JSON.stringify(contract)).not.toMatch(/rawPath|storageKey|checksum|original path|bearer|token/i);
+});
 ```
 
 - [ ] **Step 5: Run DTO/registry/contract tests and verify red**
@@ -346,6 +347,7 @@ Expected red failures:
 ## Task 2: Implement DTO And Type Contract
 
 **Files:**
+
 - Modify: `server/src/types/agent-tool.types.ts`
 - Modify: `server/src/dtos/agent-tool.dto.ts`
 
@@ -515,6 +517,7 @@ Expected: DTO, registry, and contract tests pass. Service/MCP tests can still fa
 ## Task 3: Write Failing Service And MCP Tests
 
 **Files:**
+
 - Modify: `server/src/services/agent-tool.service.spec.ts`
 - Modify: `server/src/services/agent-mcp.service.spec.ts`
 
@@ -523,87 +526,87 @@ Expected: DTO, registry, and contract tests pass. Service/MCP tests can still fa
 Near the existing metadata read tests, add:
 
 ```ts
-  it('returns basic metadata by default without filename, tags, location, or camera fields', async () => {
-    const auth = AuthFactory.create();
-    const assetId = newUuid();
-    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+it('returns basic metadata by default without filename, tags, location, or camera fields', async () => {
+  const auth = AuthFactory.create();
+  const assetId = newUuid();
+  const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
 
-    sessionRepository.getById.mockResolvedValue(session);
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
-    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+  sessionRepository.getById.mockResolvedValue(session);
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+  assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
 
-    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail: 'basic' });
+  const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail: 'basic' });
 
-    expect(result).toEqual(
-      expect.objectContaining({
-        status: 'success',
-        summary: 'Returned basic metadata for 1 asset',
-        detail: 'basic',
-        fields: ['type', 'dates'],
-        assets: [
-          expect.objectContaining({
-            id: assetId,
-            type: AssetType.Image,
-            localDateTime: now,
-            fileCreatedAt: now,
-            fileModifiedAt: now,
-            exifInfo: { dateTimeOriginal: now },
-          }),
-        ],
-        toolCall: expect.objectContaining({ responseSummary: 'Returned basic metadata for 1 asset' }),
-      }),
-    );
-    expect(result.status === 'success' ? result.assets[0] : undefined).not.toHaveProperty('originalFileName');
-    expect(result.status === 'success' ? result.assets[0] : undefined).not.toHaveProperty('tags');
-  });
+  expect(result).toEqual(
+    expect.objectContaining({
+      status: 'success',
+      summary: 'Returned basic metadata for 1 asset',
+      detail: 'basic',
+      fields: ['type', 'dates'],
+      assets: [
+        expect.objectContaining({
+          id: assetId,
+          type: AssetType.Image,
+          localDateTime: now,
+          fileCreatedAt: now,
+          fileModifiedAt: now,
+          exifInfo: { dateTimeOriginal: now },
+        }),
+      ],
+      toolCall: expect.objectContaining({ responseSummary: 'Returned basic metadata for 1 asset' }),
+    }),
+  );
+  expect(result.status === 'success' ? result.assets[0] : undefined).not.toHaveProperty('originalFileName');
+  expect(result.status === 'success' ? result.assets[0] : undefined).not.toHaveProperty('tags');
+});
 ```
 
 Add the same default coverage for stored approval metadata from existing pending approvals that only contain `assetIds`:
 
 ```ts
-  it('defaults approved legacy metadata reads with only assetIds to basic detail', async () => {
-    const auth = AuthFactory.create();
-    const assetIds = [newUuid()];
-    const session = makeSession({ userId: auth.user.id });
-    const approved = makeToolCall({
-      sessionId: session.id,
-      status: AgentToolCallStatus.Approved,
-      approvalDecision: AgentToolApprovalDecision.Approved,
-      redactedRequestMetadata: { assetIds },
-      assetCount: 1,
-    });
-    const executing = makeToolCall({ ...approved, status: AgentToolCallStatus.Executing });
-
-    sessionRepository.getById.mockResolvedValue(session);
-    toolCallRepository.getByIdForSession.mockResolvedValue(approved);
-    toolCallRepository.transition
-      .mockResolvedValueOnce(executing)
-      .mockResolvedValueOnce(makeToolCall({ ...approved, status: AgentToolCallStatus.Completed, completedAt }));
-    toolCallRepository.getCountedAssetCountBySession.mockResolvedValue(0);
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
-    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetIds[0])] as never);
-
-    const result = await sut.readAssetMetadata(auth, session.id, { toolCallId: approved.id });
-
-    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
-      2,
-      session.id,
-      approved.id,
-      AgentToolCallStatus.Executing,
-      expect.objectContaining({
-        responseSummary: 'Returned basic metadata for 1 asset',
-        redactedResponseMetadata: { assetIds },
-      }),
-    );
-    expect(result).toEqual(
-      expect.objectContaining({
-        status: 'success',
-        summary: 'Returned basic metadata for 1 asset',
-        detail: 'basic',
-        fields: ['type', 'dates'],
-      }),
-    );
+it('defaults approved legacy metadata reads with only assetIds to basic detail', async () => {
+  const auth = AuthFactory.create();
+  const assetIds = [newUuid()];
+  const session = makeSession({ userId: auth.user.id });
+  const approved = makeToolCall({
+    sessionId: session.id,
+    status: AgentToolCallStatus.Approved,
+    approvalDecision: AgentToolApprovalDecision.Approved,
+    redactedRequestMetadata: { assetIds },
+    assetCount: 1,
   });
+  const executing = makeToolCall({ ...approved, status: AgentToolCallStatus.Executing });
+
+  sessionRepository.getById.mockResolvedValue(session);
+  toolCallRepository.getByIdForSession.mockResolvedValue(approved);
+  toolCallRepository.transition
+    .mockResolvedValueOnce(executing)
+    .mockResolvedValueOnce(makeToolCall({ ...approved, status: AgentToolCallStatus.Completed, completedAt }));
+  toolCallRepository.getCountedAssetCountBySession.mockResolvedValue(0);
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+  assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetIds[0])] as never);
+
+  const result = await sut.readAssetMetadata(auth, session.id, { toolCallId: approved.id });
+
+  expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+    2,
+    session.id,
+    approved.id,
+    AgentToolCallStatus.Executing,
+    expect.objectContaining({
+      responseSummary: 'Returned basic metadata for 1 asset',
+      redactedResponseMetadata: { assetIds },
+    }),
+  );
+  expect(result).toEqual(
+    expect.objectContaining({
+      status: 'success',
+      summary: 'Returned basic metadata for 1 asset',
+      detail: 'basic',
+      fields: ['type', 'dates'],
+    }),
+  );
+});
 ```
 
 - [ ] **Step 2: Add field group mapping tests**
@@ -611,90 +614,90 @@ Add the same default coverage for stored approval metadata from existing pending
 Add a table test:
 
 ```ts
-  it.each([
-    ['type', { type: AssetType.Image }, ['originalFileName']],
-    ['filename', { originalFileName: expect.any(String) }, ['tags']],
-    ['favorite', { isFavorite: false }, ['visibility']],
-    ['visibility', { visibility: AssetVisibility.Timeline }, ['isFavorite']],
-    ['tags', { tags: [expect.objectContaining({ value: 'travel' })] }, ['originalFileName']],
-    ['rating', { exifInfo: { rating: 5 } }, ['tags']],
-    ['location', { exifInfo: expect.objectContaining({ city: 'Berlin', latitude: 52.52 }) }, ['originalFileName']],
-    ['camera', { exifInfo: expect.objectContaining({ make: 'Nikon', model: 'Zf', lensModel: '40mm' }) }, ['tags']],
-  ] as const)('returns only requested metadata field group %s', async (field, expectedFields, omittedFields) => {
-    const auth = AuthFactory.create();
-    const assetId = newUuid();
-    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+it.each([
+  ['type', { type: AssetType.Image }, ['originalFileName']],
+  ['filename', { originalFileName: expect.any(String) }, ['tags']],
+  ['favorite', { isFavorite: false }, ['visibility']],
+  ['visibility', { visibility: AssetVisibility.Timeline }, ['isFavorite']],
+  ['tags', { tags: [expect.objectContaining({ value: 'travel' })] }, ['originalFileName']],
+  ['rating', { exifInfo: { rating: 5 } }, ['tags']],
+  ['location', { exifInfo: expect.objectContaining({ city: 'Berlin', latitude: 52.52 }) }, ['originalFileName']],
+  ['camera', { exifInfo: expect.objectContaining({ make: 'Nikon', model: 'Zf', lensModel: '40mm' }) }, ['tags']],
+] as const)('returns only requested metadata field group %s', async (field, expectedFields, omittedFields) => {
+  const auth = AuthFactory.create();
+  const assetId = newUuid();
+  const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
 
-    sessionRepository.getById.mockResolvedValue(session);
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
-    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+  sessionRepository.getById.mockResolvedValue(session);
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+  assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
 
-    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], fields: [field] });
+  const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], fields: [field] });
 
-    if (result.status !== 'success') {
-      throw new Error(`Expected success response, got ${result.status}`);
-    }
+  if (result.status !== 'success') {
+    throw new Error(`Expected success response, got ${result.status}`);
+  }
 
-    expect(result.detail).toBeUndefined();
-    expect(result.fields).toEqual([field]);
-    expect(result.assets[0]).toEqual(expect.objectContaining({ id: assetId, ...expectedFields }));
-    for (const omittedField of omittedFields) {
-      expect(result.assets[0]).not.toHaveProperty(omittedField);
-    }
-  });
+  expect(result.detail).toBeUndefined();
+  expect(result.fields).toEqual([field]);
+  expect(result.assets[0]).toEqual(expect.objectContaining({ id: assetId, ...expectedFields }));
+  for (const omittedField of omittedFields) {
+    expect(result.assets[0]).not.toHaveProperty(omittedField);
+  }
+});
 ```
 
 Add an overlap/null metadata test:
 
 ```ts
-  it('merges overlapping exif field groups and preserves null metadata values', async () => {
-    const auth = AuthFactory.create();
-    const assetId = newUuid();
-    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+it('merges overlapping exif field groups and preserves null metadata values', async () => {
+  const auth = AuthFactory.create();
+  const assetId = newUuid();
+  const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
 
-    sessionRepository.getById.mockResolvedValue(session);
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
-    assetRepository.getAgentMetadataByIds.mockResolvedValue([
-      makeMetadata(assetId, {
-        exifInfo: {
-          dateTimeOriginal: null,
-          city: null,
-          state: null,
-          country: null,
-          make: null,
-          model: null,
-          lensModel: null,
-          latitude: null,
-          longitude: null,
-          rating: null,
-        },
-        tags: [],
-      }),
-    ] as never);
+  sessionRepository.getById.mockResolvedValue(session);
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+  assetRepository.getAgentMetadataByIds.mockResolvedValue([
+    makeMetadata(assetId, {
+      exifInfo: {
+        dateTimeOriginal: null,
+        city: null,
+        state: null,
+        country: null,
+        make: null,
+        model: null,
+        lensModel: null,
+        latitude: null,
+        longitude: null,
+        rating: null,
+      },
+      tags: [],
+    }),
+  ] as never);
 
-    const result = await sut.readAssetMetadata(auth, session.id, {
-      assetIds: [assetId],
-      fields: ['dates', 'location', 'camera', 'rating', 'tags'],
-    });
-
-    if (result.status !== 'success') {
-      throw new Error(`Expected success response, got ${result.status}`);
-    }
-
-    expect(result.assets[0].exifInfo).toEqual({
-      dateTimeOriginal: null,
-      city: null,
-      state: null,
-      country: null,
-      latitude: null,
-      longitude: null,
-      make: null,
-      model: null,
-      lensModel: null,
-      rating: null,
-    });
-    expect(result.assets[0].tags).toEqual([]);
+  const result = await sut.readAssetMetadata(auth, session.id, {
+    assetIds: [assetId],
+    fields: ['dates', 'location', 'camera', 'rating', 'tags'],
   });
+
+  if (result.status !== 'success') {
+    throw new Error(`Expected success response, got ${result.status}`);
+  }
+
+  expect(result.assets[0].exifInfo).toEqual({
+    dateTimeOriginal: null,
+    city: null,
+    state: null,
+    country: null,
+    latitude: null,
+    longitude: null,
+    make: null,
+    model: null,
+    lensModel: null,
+    rating: null,
+  });
+  expect(result.assets[0].tags).toEqual([]);
+});
 ```
 
 - [ ] **Step 3: Add detail preset tests**
@@ -702,66 +705,66 @@ Add an overlap/null metadata test:
 Add:
 
 ```ts
-  it.each([
-    ['basic', ['type', 'dates']],
-    ['descriptive', ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location']],
-    ['technical', ['type', 'dates', 'filename', 'camera', 'rating', 'visibility']],
-    ['allSafe', ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility']],
-  ] as const)('applies the %s metadata detail preset', async (detail, expectedFields) => {
-    const auth = AuthFactory.create();
-    const assetId = newUuid();
-    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+it.each([
+  ['basic', ['type', 'dates']],
+  ['descriptive', ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location']],
+  ['technical', ['type', 'dates', 'filename', 'camera', 'rating', 'visibility']],
+  ['allSafe', ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility']],
+] as const)('applies the %s metadata detail preset', async (detail, expectedFields) => {
+  const auth = AuthFactory.create();
+  const assetId = newUuid();
+  const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
 
-    sessionRepository.getById.mockResolvedValue(session);
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
-    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId, { leaked: 'ignore me' })] as never);
+  sessionRepository.getById.mockResolvedValue(session);
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+  assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId, { leaked: 'ignore me' })] as never);
 
-    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail });
+  const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail });
 
-    if (result.status !== 'success') {
-      throw new Error(`Expected success response, got ${result.status}`);
-    }
+  if (result.status !== 'success') {
+    throw new Error(`Expected success response, got ${result.status}`);
+  }
 
-    expect(result.detail).toBe(detail);
-    expect(result.fields).toEqual(expectedFields);
-    expect(result.summary).toBe(`Returned ${detail} metadata for 1 asset`);
-    expect(result.assets[0]).not.toHaveProperty('leaked');
-  });
+  expect(result.detail).toBe(detail);
+  expect(result.fields).toEqual(expectedFields);
+  expect(result.summary).toBe(`Returned ${detail} metadata for 1 asset`);
+  expect(result.assets[0]).not.toHaveProperty('leaked');
+});
 ```
 
 For `allSafe`, also assert every supported field group is present and `ownerId` is absent:
 
 ```ts
-  it('returns every supported metadata field but no owner identity for allSafe detail', async () => {
-    const auth = AuthFactory.create();
-    const assetId = newUuid();
-    const metadata = makeMetadata(assetId);
-    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+it('returns every supported metadata field but no owner identity for allSafe detail', async () => {
+  const auth = AuthFactory.create();
+  const assetId = newUuid();
+  const metadata = makeMetadata(assetId);
+  const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
 
-    sessionRepository.getById.mockResolvedValue(session);
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
-    assetRepository.getAgentMetadataByIds.mockResolvedValue([metadata] as never);
+  sessionRepository.getById.mockResolvedValue(session);
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+  assetRepository.getAgentMetadataByIds.mockResolvedValue([metadata] as never);
 
-    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail: 'allSafe' });
+  const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail: 'allSafe' });
 
-    if (result.status !== 'success') {
-      throw new Error(`Expected success response, got ${result.status}`);
-    }
+  if (result.status !== 'success') {
+    throw new Error(`Expected success response, got ${result.status}`);
+  }
 
-    expect(result.assets[0]).toEqual({
-      id: assetId,
-      type: metadata.type,
-      originalFileName: metadata.originalFileName,
-      localDateTime: metadata.localDateTime,
-      fileCreatedAt: metadata.fileCreatedAt,
-      fileModifiedAt: metadata.fileModifiedAt,
-      isFavorite: metadata.isFavorite,
-      visibility: metadata.visibility,
-      exifInfo: metadata.exifInfo,
-      tags: metadata.tags,
-    });
-    expect(result.assets[0]).not.toHaveProperty('ownerId');
+  expect(result.assets[0]).toEqual({
+    id: assetId,
+    type: metadata.type,
+    originalFileName: metadata.originalFileName,
+    localDateTime: metadata.localDateTime,
+    fileCreatedAt: metadata.fileCreatedAt,
+    fileModifiedAt: metadata.fileModifiedAt,
+    isFavorite: metadata.isFavorite,
+    visibility: metadata.visibility,
+    exifInfo: metadata.exifInfo,
+    tags: metadata.tags,
   });
+  expect(result.assets[0]).not.toHaveProperty('ownerId');
+});
 ```
 
 - [ ] **Step 4: Add access, missing-row, and limit tests**
@@ -769,138 +772,143 @@ For `allSafe`, also assert every supported field group is present and `ownerId` 
 Add:
 
 ```ts
-  it('rejects large metadata reads before repository hydration when they exceed the per-tool limit', async () => {
-    const auth = AuthFactory.create();
-    const assetIds = [newUuid(), newUuid()];
-    const session = makeSession({
-      userId: auth.user.id,
-      approvalMode: AgentApprovalMode.PlanOnly,
-      permissionPlanSnapshot: makePlan({ limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1 } }),
-    });
-
-    sessionRepository.getById.mockResolvedValue(session);
-
-    const result = await sut.readAssetMetadata(auth, session.id, { assetIds, detail: 'basic' });
-
-    expect(result).toEqual({
-      status: 'denied',
-      reason: 'Requested 2 assets, but this session allows 1 per metadata read. Request fewer asset IDs or split the metadata read into smaller batches.',
-      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
-    });
-    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+it('rejects large metadata reads before repository hydration when they exceed the per-tool limit', async () => {
+  const auth = AuthFactory.create();
+  const assetIds = [newUuid(), newUuid()];
+  const session = makeSession({
+    userId: auth.user.id,
+    approvalMode: AgentApprovalMode.PlanOnly,
+    permissionPlanSnapshot: makePlan({ limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1 } }),
   });
 
-  it('denies mixed accessible and inaccessible metadata assets before returning partial rows', async () => {
-    const auth = AuthFactory.create();
-    const accessibleAssetId = newUuid();
-    const inaccessibleAssetId = newUuid();
-    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+  sessionRepository.getById.mockResolvedValue(session);
 
-    sessionRepository.getById.mockResolvedValue(session);
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([accessibleAssetId]));
+  const result = await sut.readAssetMetadata(auth, session.id, { assetIds, detail: 'basic' });
 
-    const result = await sut.readAssetMetadata(auth, session.id, {
-      assetIds: [accessibleAssetId, inaccessibleAssetId],
-      fields: ['filename'],
-    });
+  expect(result).toEqual({
+    status: 'denied',
+    reason:
+      'Requested 2 assets, but this session allows 1 per metadata read. Request fewer asset IDs or split the metadata read into smaller batches.',
+    toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+  });
+  expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+});
 
-    expect(result).toEqual({
-      status: 'denied',
-      reason: 'One or more assets are not accessible',
-      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
-    });
-    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+it('denies mixed accessible and inaccessible metadata assets before returning partial rows', async () => {
+  const auth = AuthFactory.create();
+  const accessibleAssetId = newUuid();
+  const inaccessibleAssetId = newUuid();
+  const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+  sessionRepository.getById.mockResolvedValue(session);
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([accessibleAssetId]));
+
+  const result = await sut.readAssetMetadata(auth, session.id, {
+    assetIds: [accessibleAssetId, inaccessibleAssetId],
+    fields: ['filename'],
   });
 
-  it('records failed compact metadata hydration instead of returning partial assets when rows are missing', async () => {
-    const auth = AuthFactory.create();
-    const firstAssetId = newUuid();
-    const secondAssetId = newUuid();
-    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
-
-    sessionRepository.getById.mockResolvedValue(session);
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([firstAssetId, secondAssetId]));
-    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(firstAssetId)] as never);
-
-    const result = await sut.readAssetMetadata(auth, session.id, {
-      assetIds: [firstAssetId, secondAssetId],
-      fields: ['filename'],
-    });
-
-    expect(result).toEqual({
-      status: 'denied',
-      reason: 'One or more assets were not found during metadata read',
-      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Failed }),
-    });
-    expect(result).not.toHaveProperty('assets');
+  expect(result).toEqual({
+    status: 'denied',
+    reason: 'One or more assets are not accessible',
+    toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
   });
+  expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+});
+
+it('records failed compact metadata hydration instead of returning partial assets when rows are missing', async () => {
+  const auth = AuthFactory.create();
+  const firstAssetId = newUuid();
+  const secondAssetId = newUuid();
+  const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+  sessionRepository.getById.mockResolvedValue(session);
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([firstAssetId, secondAssetId]));
+  assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(firstAssetId)] as never);
+
+  const result = await sut.readAssetMetadata(auth, session.id, {
+    assetIds: [firstAssetId, secondAssetId],
+    fields: ['filename'],
+  });
+
+  expect(result).toEqual({
+    status: 'denied',
+    reason: 'One or more assets were not found during metadata read',
+    toolCall: expect.objectContaining({ status: AgentToolCallStatus.Failed }),
+  });
+  expect(result).not.toHaveProperty('assets');
+});
 ```
 
 Add explicit permission boundary tests if existing tests do not already cover the exact branch:
 
 ```ts
-  it('allows shared-space metadata only when shared spaces are enabled', async () => {
-    const auth = AuthFactory.create();
-    const assetId = newUuid();
-    const session = makeSession({
-      userId: auth.user.id,
-      approvalMode: AgentApprovalMode.PlanOnly,
-      permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
-    });
-
-    sessionRepository.getById.mockResolvedValue(session);
-    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set([assetId]));
-    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
-
-    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], fields: ['filename'] });
-
-    expect(result).toEqual(expect.objectContaining({ status: 'success', assets: [{ id: assetId, originalFileName: `${assetId}.jpg` }] }));
-    expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
+it('allows shared-space metadata only when shared spaces are enabled', async () => {
+  const auth = AuthFactory.create();
+  const assetId = newUuid();
+  const session = makeSession({
+    userId: auth.user.id,
+    approvalMode: AgentApprovalMode.PlanOnly,
+    permissionPlanSnapshot: makePlan({ assetScope: { owned: false, sharedSpaces: true, locked: false } }),
   });
 
-  it('denies locked metadata unless permission plan and elevated auth both allow locked assets', async () => {
-    const assetId = newUuid();
-    const auth = AuthFactory.from().session({ hasElevatedPermission: false }).build();
-    const session = makeSession({
-      userId: auth.user.id,
-      approvalMode: AgentApprovalMode.PlanOnly,
-      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: true } }),
-    });
+  sessionRepository.getById.mockResolvedValue(session);
+  accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set([assetId]));
+  assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
 
-    sessionRepository.getById.mockResolvedValue(session);
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+  const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], fields: ['filename'] });
 
-    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail: 'basic' });
+  expect(result).toEqual(
+    expect.objectContaining({ status: 'success', assets: [{ id: assetId, originalFileName: `${assetId}.jpg` }] }),
+  );
+  expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
+});
 
-    expect(result).toEqual(expect.objectContaining({ status: 'denied', reason: 'One or more assets are not accessible' }));
-    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([assetId]), false);
+it('denies locked metadata unless permission plan and elevated auth both allow locked assets', async () => {
+  const assetId = newUuid();
+  const auth = AuthFactory.from().session({ hasElevatedPermission: false }).build();
+  const session = makeSession({
+    userId: auth.user.id,
+    approvalMode: AgentApprovalMode.PlanOnly,
+    permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: true } }),
   });
+
+  sessionRepository.getById.mockResolvedValue(session);
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+
+  const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail: 'basic' });
+
+  expect(result).toEqual(
+    expect.objectContaining({ status: 'denied', reason: 'One or more assets are not accessible' }),
+  );
+  expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([assetId]), false);
+});
 ```
 
 Add metadata policy coverage for a rich field request:
 
 ```ts
-  it('denies tag metadata reads before repository hydration when metadata reads are disabled', async () => {
-    const auth = AuthFactory.create();
-    const assetId = newUuid();
-    const session = makeSession({
-      userId: auth.user.id,
-      approvalMode: AgentApprovalMode.PlanOnly,
-      permissionPlanSnapshot: makePlan({ read: { metadata: false, previews: false, originals: false } }),
-    });
-
-    sessionRepository.getById.mockResolvedValue(session);
-
-    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], fields: ['tags'] });
-
-    expect(result).toEqual({
-      status: 'denied',
-      reason: 'Agent permission policy does not allow metadata reads',
-      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
-    });
-    expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
-    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+it('denies tag metadata reads before repository hydration when metadata reads are disabled', async () => {
+  const auth = AuthFactory.create();
+  const assetId = newUuid();
+  const session = makeSession({
+    userId: auth.user.id,
+    approvalMode: AgentApprovalMode.PlanOnly,
+    permissionPlanSnapshot: makePlan({ read: { metadata: false, previews: false, originals: false } }),
   });
+
+  sessionRepository.getById.mockResolvedValue(session);
+
+  const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], fields: ['tags'] });
+
+  expect(result).toEqual({
+    status: 'denied',
+    reason: 'Agent permission policy does not allow metadata reads',
+    toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
+  });
+  expect(accessRepository.asset.checkOwnerAccess).not.toHaveBeenCalled();
+  expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 5: Add MCP transformed request test updates**
@@ -908,10 +916,10 @@ Add metadata policy coverage for a rich field request:
 In `server/src/services/agent-mcp.service.spec.ts`, update read metadata expectations:
 
 ```ts
-      expect(toolService.readAssetMetadata).toHaveBeenCalledWith(auth, sessionId, {
-        assetIds: ['00000000-0000-4000-8000-000000000001'],
-        detail: 'basic',
-      });
+expect(toolService.readAssetMetadata).toHaveBeenCalledWith(auth, sessionId, {
+  assetIds: ['00000000-0000-4000-8000-000000000001'],
+  detail: 'basic',
+});
 ```
 
 In the generic read tool delegation table, add expectedArgs for `AgentToolName.ReadAssetMetadata`:
@@ -940,6 +948,7 @@ Expected red failures:
 ## Task 4: Implement Field-Selected Metadata Service
 
 **Files:**
+
 - Modify: `server/src/services/agent-tool.service.ts`
 - Modify: `server/src/services/agent-mcp-tool-contract.service.ts`
 
@@ -1005,7 +1014,8 @@ const metadataDetailMode: AgentMcpArgumentMode = {
   description: 'Read a compact named metadata preset for selected assets.',
   requiredFields: ['assetIds'],
   forbiddenFields: ['fields', 'toolCallId'],
-  whenToUse: 'Use basic by default, descriptive for user-facing curation, technical for camera/visibility checks, and allSafe only when every supported safe field group is necessary.',
+  whenToUse:
+    'Use basic by default, descriptive for user-facing curation, technical for camera/visibility checks, and allSafe only when every supported safe field group is necessary.',
 };
 
 const metadataFieldsMode: AgentMcpArgumentMode = {
@@ -1013,7 +1023,8 @@ const metadataFieldsMode: AgentMcpArgumentMode = {
   description: 'Read exact metadata field groups for selected assets.',
   requiredFields: ['assetIds', 'fields'],
   forbiddenFields: ['detail', 'toolCallId'],
-  whenToUse: 'Use after a compact search when the next reasoning step needs specific fields such as filename, rating, tags, location, or camera.',
+  whenToUse:
+    'Use after a compact search when the next reasoning step needs specific fields such as filename, rating, tags, location, or camera.',
 };
 ```
 
@@ -1069,7 +1080,7 @@ return { assets };
 with:
 
 ```ts
-const detail = request.fields ? undefined : request.detail ?? 'basic';
+const detail = request.fields ? undefined : (request.detail ?? 'basic');
 const fields = this.getReadMetadataFields(request);
 const selectedAssets = assets.map((asset) => this.mapSelectedAssetMetadata(asset, fields));
 const summary = this.getReadMetadataSummary(detail, selectedAssets.length);
@@ -1136,6 +1147,7 @@ Expected: all tests pass after updating old full-metadata expectations to assert
 ## Task 5: Final Verification And Commit
 
 **Files:**
+
 - Modified files from Tasks 1-4.
 
 - [ ] **Step 1: Run all related tests**

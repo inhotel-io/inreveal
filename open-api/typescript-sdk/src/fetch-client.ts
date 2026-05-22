@@ -690,7 +690,8 @@ export type AgentProposeAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload?: {};
@@ -700,7 +701,8 @@ export type AgentProposeAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload?: {};
@@ -721,7 +723,8 @@ export type AgentProposeAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload?: {};
@@ -743,7 +746,8 @@ export type AgentProposeAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload?: {};
@@ -753,7 +757,8 @@ export type AgentProposeAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload?: {};
@@ -812,7 +817,8 @@ export type AgentProposeAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload: {
@@ -824,7 +830,8 @@ export type AgentProposeAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload: {
@@ -836,7 +843,8 @@ export type AgentProposeAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload: {
@@ -848,7 +856,8 @@ export type AgentProposeAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload: {
@@ -861,7 +870,8 @@ export type AgentProposeAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload: {
@@ -957,7 +967,8 @@ export type AgentReviseAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload?: {};
@@ -967,7 +978,8 @@ export type AgentReviseAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload?: {};
@@ -988,7 +1000,8 @@ export type AgentReviseAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload?: {};
@@ -1010,7 +1023,8 @@ export type AgentReviseAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload?: {};
@@ -1020,7 +1034,8 @@ export type AgentReviseAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload?: {};
@@ -1079,7 +1094,8 @@ export type AgentReviseAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload: {
@@ -1091,7 +1107,8 @@ export type AgentReviseAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload: {
@@ -1103,7 +1120,8 @@ export type AgentReviseAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload: {
@@ -1115,7 +1133,8 @@ export type AgentReviseAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload: {
@@ -1128,7 +1147,8 @@ export type AgentReviseAlbumOperationsDto = {
         targetKind: AgentOperationTargetKind;
         targetId?: string;
         temporaryTargetId?: string;
-        assetIds: string[];
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload: {
@@ -1406,6 +1426,7 @@ export type AgentSearchAssetsFilters = {
     withSharedSpaces?: boolean;
 };
 export type AgentSearchAssetsToolRequestDto = {
+    createSelectionHandle?: boolean;
     detail?: AgentSearchAssetsDetail;
     fields?: AgentSearchAssetsField[];
     filters?: AgentSearchAssetsFilters;
@@ -1450,6 +1471,13 @@ export type AgentSearchAssetResult = {
     "type"?: AssetTypeEnum;
     visibility?: AssetVisibility;
 };
+export type AgentSearchAssetsSelectionHandle = {
+    assetCount: number;
+    expiresAt: string;
+    id: string;
+    sampleAssetIds: string[];
+    sourceToolCallId: string | null;
+};
 export type AgentSearchAssetsToolSuccessResponse = {
     approximateTotal?: number;
     assetIds: string[];
@@ -1460,6 +1488,7 @@ export type AgentSearchAssetsToolSuccessResponse = {
     resultSize: AgentToolResultSize;
     returnedCount: number;
     sample?: AgentSearchAssetResult[];
+    selectionHandle?: AgentSearchAssetsSelectionHandle;
     status: Status25;
     summary: string;
     toolCall: AgentToolCallResponseDto;

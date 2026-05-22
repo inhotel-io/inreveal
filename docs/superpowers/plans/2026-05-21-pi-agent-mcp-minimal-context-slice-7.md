@@ -87,11 +87,7 @@ Create `server/test/medium/specs/repositories/agent-selection-handle.repository.
 
 ```ts
 import { Kysely } from 'kysely';
-import {
-  AgentApprovalMode,
-  AgentPermissionPreset,
-  AgentProviderType,
-} from 'src/enum';
+import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType } from 'src/enum';
 import { AgentProviderCredentialRepository } from 'src/repositories/agent-provider-credential.repository';
 import { AgentSelectionHandleRepository } from 'src/repositories/agent-selection-handle.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
@@ -397,8 +393,12 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     )
   `.execute(db);
 
-  await sql`CREATE INDEX "agent_selection_handle_sessionId_userId_expiresAt_idx" ON "agent_selection_handle" ("sessionId", "userId", "expiresAt")`.execute(db);
-  await sql`CREATE INDEX "agent_selection_handle_sourceToolCallId_idx" ON "agent_selection_handle" ("sourceToolCallId")`.execute(db);
+  await sql`CREATE INDEX "agent_selection_handle_sessionId_userId_expiresAt_idx" ON "agent_selection_handle" ("sessionId", "userId", "expiresAt")`.execute(
+    db,
+  );
+  await sql`CREATE INDEX "agent_selection_handle_sourceToolCallId_idx" ON "agent_selection_handle" ("sourceToolCallId")`.execute(
+    db,
+  );
   await sql`CREATE INDEX "agent_selection_handle_updateId_idx" ON "agent_selection_handle" ("updateId")`.execute(db);
 }
 
@@ -654,9 +654,7 @@ describe('assetSelectionHandleId planning input', () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error?.issues.map((issue) => issue.message)).toContain(
-      'Provide assetIds or assetSelectionHandleId',
-    );
+    expect(result.error?.issues.map((issue) => issue.message)).toContain('Provide assetIds or assetSelectionHandleId');
   });
 });
 ```
@@ -849,7 +847,11 @@ it('searchAssets creates a selection handle and returns only compact sample ids 
   selectionHandleRepository.create.mockResolvedValue(handle);
   toolCallRepository.createWithSessionLimit.mockResolvedValue({
     status: 'created',
-    toolCall: makeToolCall({ id: handle.sourceToolCallId!, sessionId: session.id, toolName: AgentToolName.SearchAssets }),
+    toolCall: makeToolCall({
+      id: handle.sourceToolCallId!,
+      sessionId: session.id,
+      toolName: AgentToolName.SearchAssets,
+    }),
   });
   toolCallRepository.transitionWithSessionLimit.mockResolvedValue({
     status: 'transitioned',
@@ -1002,8 +1004,7 @@ const selectionHandle = request.createSelectionHandle
       expiresAt: this.getSelectionHandleExpiresAt(session),
     })
   : undefined;
-const compactAssetIds =
-  selectionHandle && assetIds.length > 0 ? assetIds.slice(0, request.sampleSize ?? 25) : assetIds;
+const compactAssetIds = selectionHandle && assetIds.length > 0 ? assetIds.slice(0, request.sampleSize ?? 25) : assetIds;
 const pageResult = {
   detail,
   assetIds: compactAssetIds,
@@ -1159,9 +1160,7 @@ it('materializes assetSelectionHandleId server-side before storing and reviewing
       redactedRequestMetadata: expect.objectContaining({
         assetCount: 150,
         assetIds: assetIds.slice(0, 25),
-        selectionHandles: [
-          { id: selectionHandleId, assetCount: 150, sampleAssetIds: assetIds.slice(0, 25) },
-        ],
+        selectionHandles: [{ id: selectionHandleId, assetCount: 150, sampleAssetIds: assetIds.slice(0, 25) }],
       }),
     }),
   );
@@ -1244,7 +1243,9 @@ it('keeps sparse item selection deterministic after applying a handle-derived pl
   planRepository.getByIdForSession.mockResolvedValue(plan);
   planRepository.getCurrentBySessionId.mockResolvedValue(plan);
   planRepository.claimCurrentForApply.mockResolvedValue(plan);
-  planRepository.completeApply.mockImplementation((_planId, updates) => Promise.resolve(applyUpdatesToPlan(plan, updates)));
+  planRepository.completeApply.mockImplementation((_planId, updates) =>
+    Promise.resolve(applyUpdatesToPlan(plan, updates)),
+  );
   accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
   accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
   assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
@@ -1314,7 +1315,7 @@ Use the same for `reviseProposedOperations`.
 ```ts
 const materializedAssetIds = operation.assetSelectionHandleId
   ? await this.resolveSelectionHandleAssetIds(auth, session, operation.assetSelectionHandleId, selectionAudit)
-  : operation.assetIds ?? [];
+  : (operation.assetIds ?? []);
 ```
 
 Push prepared operation with:
@@ -1427,11 +1428,16 @@ it('documents large selection handle search and plan examples that parse live DT
     detail: 'ids',
     sampleSize: 5,
   });
-  expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(searchExample?.arguments).success).toBe(true);
+  expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(searchExample?.arguments).success).toBe(
+    true,
+  );
 
   expect(plan?.usage).toContain('assetSelectionHandleId');
   expect(JSON.stringify(planExample?.arguments)).toContain('assetSelectionHandleId');
-  expect(AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse(planExample?.arguments).success).toBe(true);
+  expect(
+    AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse(planExample?.arguments)
+      .success,
+  ).toBe(true);
   expect(JSON.stringify(planExample?.arguments)).not.toContain('"assetIds"');
 });
 ```

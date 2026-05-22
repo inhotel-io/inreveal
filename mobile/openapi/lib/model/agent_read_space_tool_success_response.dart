@@ -13,10 +13,13 @@ part of openapi.api;
 class AgentReadSpaceToolSuccessResponse {
   /// Returns a new [AgentReadSpaceToolSuccessResponse] instance.
   AgentReadSpaceToolSuccessResponse({
+    required this.resultSize,
     required this.space,
     required this.status,
     required this.toolCall,
   });
+
+  AgentToolResultSize resultSize;
 
   AgentSpaceDetail space;
 
@@ -26,6 +29,7 @@ class AgentReadSpaceToolSuccessResponse {
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadSpaceToolSuccessResponse &&
+    other.resultSize == resultSize &&
     other.space == space &&
     other.status == status &&
     other.toolCall == toolCall;
@@ -33,15 +37,17 @@ class AgentReadSpaceToolSuccessResponse {
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
+    (resultSize.hashCode) +
     (space.hashCode) +
     (status.hashCode) +
     (toolCall.hashCode);
 
   @override
-  String toString() => 'AgentReadSpaceToolSuccessResponse[space=$space, status=$status, toolCall=$toolCall]';
+  String toString() => 'AgentReadSpaceToolSuccessResponse[resultSize=$resultSize, space=$space, status=$status, toolCall=$toolCall]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+      json[r'resultSize'] = this.resultSize;
       json[r'space'] = this.space;
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
@@ -57,6 +63,7 @@ class AgentReadSpaceToolSuccessResponse {
       final json = value.cast<String, dynamic>();
 
       return AgentReadSpaceToolSuccessResponse(
+        resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
         space: AgentSpaceDetail.fromJson(json[r'space'])!,
         status: AgentReadSpaceToolSuccessResponseStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
@@ -107,6 +114,7 @@ class AgentReadSpaceToolSuccessResponse {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
+    'resultSize',
     'space',
     'status',
     'toolCall',

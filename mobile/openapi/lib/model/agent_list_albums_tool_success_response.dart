@@ -14,11 +14,14 @@ class AgentListAlbumsToolSuccessResponse {
   /// Returns a new [AgentListAlbumsToolSuccessResponse] instance.
   AgentListAlbumsToolSuccessResponse({
     this.albums = const [],
+    required this.resultSize,
     required this.status,
     required this.toolCall,
   });
 
   List<AgentAlbumSummary> albums;
+
+  AgentToolResultSize resultSize;
 
   AgentListAlbumsToolSuccessResponseStatusEnum status;
 
@@ -27,6 +30,7 @@ class AgentListAlbumsToolSuccessResponse {
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentListAlbumsToolSuccessResponse &&
     _deepEquality.equals(other.albums, albums) &&
+    other.resultSize == resultSize &&
     other.status == status &&
     other.toolCall == toolCall;
 
@@ -34,15 +38,17 @@ class AgentListAlbumsToolSuccessResponse {
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (albums.hashCode) +
+    (resultSize.hashCode) +
     (status.hashCode) +
     (toolCall.hashCode);
 
   @override
-  String toString() => 'AgentListAlbumsToolSuccessResponse[albums=$albums, status=$status, toolCall=$toolCall]';
+  String toString() => 'AgentListAlbumsToolSuccessResponse[albums=$albums, resultSize=$resultSize, status=$status, toolCall=$toolCall]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'albums'] = this.albums;
+      json[r'resultSize'] = this.resultSize;
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
     return json;
@@ -58,6 +64,7 @@ class AgentListAlbumsToolSuccessResponse {
 
       return AgentListAlbumsToolSuccessResponse(
         albums: AgentAlbumSummary.listFromJson(json[r'albums']),
+        resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
         status: AgentListAlbumsToolSuccessResponseStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
       );
@@ -108,6 +115,7 @@ class AgentListAlbumsToolSuccessResponse {
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
     'albums',
+    'resultSize',
     'status',
     'toolCall',
   };

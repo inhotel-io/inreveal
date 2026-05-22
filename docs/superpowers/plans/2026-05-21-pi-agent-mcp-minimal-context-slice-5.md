@@ -119,10 +119,10 @@ The exact fields can be smaller when the original result has less information, b
 In `agent-runner/src/pi-runtime.test.mjs`, add this assertion to the existing `constructs the Pi resource loader with concrete runtime paths` test after `assert.deepEqual(calls.loaders[0].appendSystemPrompt, []);`:
 
 ```js
-    assert.deepEqual(calls.loaders[0].settingsManager, {
-      kind: 'settings-manager',
-      settings: { compaction: { enabled: true } },
-    });
+assert.deepEqual(calls.loaders[0].settingsManager, {
+  kind: 'settings-manager',
+  settings: { compaction: { enabled: true } },
+});
 ```
 
 - [ ] **Step 2: Run the test and verify it fails**
@@ -140,9 +140,9 @@ Expected: the test fails because `settings.compaction.enabled` is currently `fal
 In `agent-runner/src/pi-runtime.mjs`, change the settings manager creation:
 
 ```js
-          const settingsManager = sdk.SettingsManager.inMemory({
-            compaction: { enabled: true },
-          });
+const settingsManager = sdk.SettingsManager.inMemory({
+  compaction: { enabled: true },
+});
 ```
 
 - [ ] **Step 4: Run the focused runner test**
@@ -167,12 +167,7 @@ Expected: the settings test passes and existing runner runtime tests still pass.
 Update the import in `agent-runner/src/pi-runtime.test.mjs`:
 
 ```js
-import {
-  compactGalleryToolTranscript,
-  createPiRuntime,
-  mapProviderType,
-  redactSecret,
-} from './pi-runtime.mjs';
+import { compactGalleryToolTranscript, createPiRuntime, mapProviderType, redactSecret } from './pi-runtime.mjs';
 ```
 
 Add these tests near the existing message-streaming tests:
@@ -425,13 +420,13 @@ The implementation may factor helper code differently, but it must preserve the 
 In `sendMessage()`, immediately before `entry.session.prompt(textPromptFromContent(content))`, add:
 
 ```js
-            compactGalleryToolTranscript(entry.session);
+compactGalleryToolTranscript(entry.session);
 ```
 
 In `resumeSession()`, immediately before the `if (resumePrompt) { return entry.session.prompt(resumePrompt); }` branch, add:
 
 ```js
-            compactGalleryToolTranscript(entry.session);
+compactGalleryToolTranscript(entry.session);
 ```
 
 - [ ] **Step 5: Run the focused runner tests**
@@ -549,18 +544,18 @@ Expected: the large approval prompt contains raw operation filenames or the circ
 In `agent-runner/src/pi-runtime.mjs`, change the approved-result branch:
 
 ```js
-    if (toolResult !== undefined) {
-      const compactedToolResult = compactGalleryToolResultForPrompt(toolResult);
-      return [
-        'This is an internal Gallery resume instruction, not a new user request.',
-        `The previous approval-required response for Gallery tool call ${toolCallId} is obsolete.`,
-        `The user approved Gallery tool call ${toolCallId}, and Gallery already executed it successfully.`,
-        `Use this compact approved tool result summary as authoritative data to continue the user's original request: ${safeJsonStringify(compactedToolResult) ?? JSON.stringify(compactGalleryToolResultForPrompt(undefined, { force: true }))}.`,
-        'If the summary says fields were omitted and the original request needs them, call the smallest Gallery MCP read tool for specific ids and fields.',
-        'Do not mention pending approval or ask for approval again for this same tool result.',
-        'If the original request still needs album details after mcp_gallery_listAlbums, find the matching album id in the approved result and call mcp_gallery_readAlbum. If it needs asset metadata or search, call the next appropriate Gallery MCP read tool.',
-      ].join(' ');
-    }
+if (toolResult !== undefined) {
+  const compactedToolResult = compactGalleryToolResultForPrompt(toolResult);
+  return [
+    'This is an internal Gallery resume instruction, not a new user request.',
+    `The previous approval-required response for Gallery tool call ${toolCallId} is obsolete.`,
+    `The user approved Gallery tool call ${toolCallId}, and Gallery already executed it successfully.`,
+    `Use this compact approved tool result summary as authoritative data to continue the user's original request: ${safeJsonStringify(compactedToolResult) ?? JSON.stringify(compactGalleryToolResultForPrompt(undefined, { force: true }))}.`,
+    'If the summary says fields were omitted and the original request needs them, call the smallest Gallery MCP read tool for specific ids and fields.',
+    'Do not mention pending approval or ask for approval again for this same tool result.',
+    'If the original request still needs album details after mcp_gallery_listAlbums, find the matching album id in the approved result and call mcp_gallery_readAlbum. If it needs asset metadata or search, call the next appropriate Gallery MCP read tool.',
+  ].join(' ');
+}
 ```
 
 Keep the existing denied branch unchanged.
@@ -740,7 +735,7 @@ const sanitizedErrorMessageWithSecrets = (error, secrets) => {
 Change unknown-session errors in `sendMessage()` and `resumeSession()`:
 
 ```js
-        throw new Error('Runner session not found; start a new assistant chat to reconnect.');
+throw new Error('Runner session not found; start a new assistant chat to reconnect.');
 ```
 
 - [ ] **Step 4: Run focused tests**

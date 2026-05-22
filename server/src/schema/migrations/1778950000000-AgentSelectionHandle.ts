@@ -23,6 +23,8 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   await sql`CREATE INDEX "agent_selection_handle_sessionId_userId_expiresAt_idx" ON "agent_selection_handle" ("sessionId", "userId", "expiresAt")`.execute(
     db,
   );
+  await sql`CREATE INDEX "agent_selection_handle_sessionId_idx" ON "agent_selection_handle" ("sessionId")`.execute(db);
+  await sql`CREATE INDEX "agent_selection_handle_userId_idx" ON "agent_selection_handle" ("userId")`.execute(db);
   await sql`CREATE INDEX "agent_selection_handle_sourceToolCallId_idx" ON "agent_selection_handle" ("sourceToolCallId")`.execute(
     db,
   );
@@ -32,6 +34,8 @@ export async function up(db: Kysely<unknown>): Promise<void> {
 export async function down(db: Kysely<unknown>): Promise<void> {
   await sql`DROP INDEX "agent_selection_handle_updateId_idx"`.execute(db);
   await sql`DROP INDEX "agent_selection_handle_sourceToolCallId_idx"`.execute(db);
+  await sql`DROP INDEX "agent_selection_handle_userId_idx"`.execute(db);
+  await sql`DROP INDEX "agent_selection_handle_sessionId_idx"`.execute(db);
   await sql`DROP INDEX "agent_selection_handle_sessionId_userId_expiresAt_idx"`.execute(db);
   await sql`DROP TABLE "agent_selection_handle"`.execute(db);
 }

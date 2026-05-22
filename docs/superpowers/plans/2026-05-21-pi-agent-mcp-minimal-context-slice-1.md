@@ -51,6 +51,7 @@ New text rules:
 ## Task 1: Write The Failing MCP Text Contract Tests
 
 **Files:**
+
 - Modify: `server/src/services/agent-mcp.service.spec.ts`
 
 - [ ] **Step 1: Add a local max-text constant and update `expectToolResult`**
@@ -122,12 +123,12 @@ This immediately makes existing wrapper tests fail because the implementation st
 At the end of `expectEnrichedToolValidationError`, replace the exact JSON text assertion with:
 
 ```ts
-  const text = result.content[0]?.text;
+const text = result.content[0]?.text;
 
-  expect(result.content).toEqual([{ type: 'text', text: expect.any(String) }]);
-  expect(text).toEqual(expect.stringContaining('Invalid tool arguments'));
-  expect(text.length).toBeLessThanOrEqual(MCP_TOOL_TEXT_MAX_CHARS);
-  expect(text).not.toBe(JSON.stringify(result.structuredContent));
+expect(result.content).toEqual([{ type: 'text', text: expect.any(String) }]);
+expect(text).toEqual(expect.stringContaining('Invalid tool arguments'));
+expect(text.length).toBeLessThanOrEqual(MCP_TOOL_TEXT_MAX_CHARS);
+expect(text).not.toBe(JSON.stringify(result.structuredContent));
 ```
 
 - [ ] **Step 3: Add compact summary test**
@@ -135,26 +136,26 @@ At the end of `expectEnrichedToolValidationError`, replace the exact JSON text a
 Add this test near the existing `delegates ... and wraps the result` tests:
 
 ```ts
-  it('uses result summary as compact MCP text while preserving structured content', async () => {
-    const serviceResult = {
-      status: 'success',
-      toolCall: null,
-      summary: 'Returned 2 albums.',
-      albums: [
-        { id: factory.uuid(), name: 'Portugal' },
-        { id: factory.uuid(), name: 'Berlin' },
-      ],
-    };
-    toolService.listAlbums.mockResolvedValue(serviceResult as never);
+it('uses result summary as compact MCP text while preserving structured content', async () => {
+  const serviceResult = {
+    status: 'success',
+    toolCall: null,
+    summary: 'Returned 2 albums.',
+    albums: [
+      { id: factory.uuid(), name: 'Portugal' },
+      { id: factory.uuid(), name: 'Berlin' },
+    ],
+  };
+  toolService.listAlbums.mockResolvedValue(serviceResult as never);
 
-    const response = (await sut.handle(
-      auth,
-      sessionId,
-      makeToolCallRequest(AgentToolName.ListAlbums, {}),
-    )) as AgentMcpSuccessResponse;
+  const response = (await sut.handle(
+    auth,
+    sessionId,
+    makeToolCallRequest(AgentToolName.ListAlbums, {}),
+  )) as AgentMcpSuccessResponse;
 
-    expectToolResult(response, `${AgentToolName.ListAlbums}-call`, serviceResult, 'Returned 2 albums.');
-  });
+  expectToolResult(response, `${AgentToolName.ListAlbums}-call`, serviceResult, 'Returned 2 albums.');
+});
 ```
 
 - [ ] **Step 4: Add large nested result test**
@@ -162,40 +163,35 @@ Add this test near the existing `delegates ... and wraps the result` tests:
 Add this test near the compact summary test:
 
 ```ts
-  it('keeps MCP text compact for large nested structured results', async () => {
-    const serviceResult = {
-      status: 'success',
-      toolCall: null,
-      summary: 'Returned 250 compact asset IDs; more results available on page 2.',
-      data: {
-        assetIds: Array.from({ length: 250 }, (_, index) => `asset-${index}`),
-        nested: {
-          rows: Array.from({ length: 25 }, (_, index) => ({
-            id: `nested-${index}`,
-            metadata: 'x'.repeat(200),
-          })),
-        },
+it('keeps MCP text compact for large nested structured results', async () => {
+  const serviceResult = {
+    status: 'success',
+    toolCall: null,
+    summary: 'Returned 250 compact asset IDs; more results available on page 2.',
+    data: {
+      assetIds: Array.from({ length: 250 }, (_, index) => `asset-${index}`),
+      nested: {
+        rows: Array.from({ length: 25 }, (_, index) => ({
+          id: `nested-${index}`,
+          metadata: 'x'.repeat(200),
+        })),
       },
-    };
-    toolService.searchAssets.mockResolvedValue(serviceResult as never);
+    },
+  };
+  toolService.searchAssets.mockResolvedValue(serviceResult as never);
 
-    const response = (await sut.handle(
-      auth,
-      sessionId,
-      makeToolCallRequest(AgentToolName.SearchAssets, { limit: 250 }),
-    )) as AgentMcpSuccessResponse;
-    const result = response.result as AgentMcpToolCallResult;
-    const text = result.content[0].text;
+  const response = (await sut.handle(
+    auth,
+    sessionId,
+    makeToolCallRequest(AgentToolName.SearchAssets, { limit: 250 }),
+  )) as AgentMcpSuccessResponse;
+  const result = response.result as AgentMcpToolCallResult;
+  const text = result.content[0].text;
 
-    expectToolResult(
-      response,
-      `${AgentToolName.SearchAssets}-call`,
-      serviceResult,
-      'Returned 250 compact asset IDs',
-    );
-    expect(text).not.toContain('asset-249');
-    expect(text).not.toContain('"nested"');
-  });
+  expectToolResult(response, `${AgentToolName.SearchAssets}-call`, serviceResult, 'Returned 250 compact asset IDs');
+  expect(text).not.toContain('asset-249');
+  expect(text).not.toContain('"nested"');
+});
 ```
 
 - [ ] **Step 5: Add fallback test for results without summary**
@@ -203,26 +199,26 @@ Add this test near the compact summary test:
 Add this test near the compact summary test:
 
 ```ts
-  it('uses a compact fallback for results without a summary', async () => {
-    const serviceResult = {
-      status: 'success',
-      toolCall: null,
-      albums: [{ id: factory.uuid(), name: 'No summary album', assetIds: [factory.uuid()] }],
-      nested: { rows: [{ value: 'x'.repeat(1000) }] },
-    };
-    toolService.listAlbums.mockResolvedValue(serviceResult as never);
+it('uses a compact fallback for results without a summary', async () => {
+  const serviceResult = {
+    status: 'success',
+    toolCall: null,
+    albums: [{ id: factory.uuid(), name: 'No summary album', assetIds: [factory.uuid()] }],
+    nested: { rows: [{ value: 'x'.repeat(1000) }] },
+  };
+  toolService.listAlbums.mockResolvedValue(serviceResult as never);
 
-    const response = (await sut.handle(
-      auth,
-      sessionId,
-      makeToolCallRequest(AgentToolName.ListAlbums, {}),
-    )) as AgentMcpSuccessResponse;
-    const result = response.result as AgentMcpToolCallResult;
+  const response = (await sut.handle(
+    auth,
+    sessionId,
+    makeToolCallRequest(AgentToolName.ListAlbums, {}),
+  )) as AgentMcpSuccessResponse;
+  const result = response.result as AgentMcpToolCallResult;
 
-    expectToolResult(response, `${AgentToolName.ListAlbums}-call`, serviceResult, 'Tool result returned.');
-    expect(result.content[0].text).not.toContain('No summary album');
-    expect(result.content[0].text).not.toContain('"nested"');
-  });
+  expectToolResult(response, `${AgentToolName.ListAlbums}-call`, serviceResult, 'Tool result returned.');
+  expect(result.content[0].text).not.toContain('No summary album');
+  expect(result.content[0].text).not.toContain('"nested"');
+});
 ```
 
 - [ ] **Step 6: Strengthen approval-required text test**
@@ -230,25 +226,25 @@ Add this test near the compact summary test:
 In `returns approval-required read responses as normal MCP tool results`, change the `serviceResult` to include a request summary:
 
 ```ts
-    const serviceResult = {
-      status: 'approval-required',
-      toolCall: {
-        id: factory.uuid(),
-        status: 'pending-approval',
-        requestSummary: 'Read previews for 1 asset.',
-      },
-    };
+const serviceResult = {
+  status: 'approval-required',
+  toolCall: {
+    id: factory.uuid(),
+    status: 'pending-approval',
+    requestSummary: 'Read previews for 1 asset.',
+  },
+};
 ```
 
 Change its helper assertion to:
 
 ```ts
-    expectToolResult(
-      response,
-      `${AgentToolName.ReadAssetPreviews}-call`,
-      serviceResult,
-      'Approval required: Read previews for 1 asset.',
-    );
+expectToolResult(
+  response,
+  `${AgentToolName.ReadAssetPreviews}-call`,
+  serviceResult,
+  'Approval required: Read previews for 1 asset.',
+);
 ```
 
 - [ ] **Step 7: Replace remaining exact JSON text assertions**
@@ -289,6 +285,7 @@ If these tests pass before implementation, inspect whether production code was a
 ## Task 2: Implement Compact MCP Tool Text
 
 **Files:**
+
 - Modify: `server/src/services/agent-mcp.service.ts`
 
 - [ ] **Step 1: Add max constant near `MCP_PROTOCOL_VERSION`**
@@ -421,6 +418,7 @@ Expected: all tests in `src/services/agent-mcp.service.spec.ts` pass.
 ## Task 3: Update Any Controller Fixture Drift
 
 **Files:**
+
 - Inspect: `server/src/controllers/agent-runner-mcp.controller.spec.ts`
 - Modify only if needed.
 
@@ -456,6 +454,7 @@ Expected: all tests in the controller spec pass.
 ## Task 4: Final Validation And Commit
 
 **Files:**
+
 - Modified tests and service from previous tasks.
 
 - [ ] **Step 1: Run all related tests**
