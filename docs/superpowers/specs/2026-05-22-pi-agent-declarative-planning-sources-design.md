@@ -125,6 +125,13 @@ materialized server-side selection snapshot or the expanded asset IDs according
 to existing scale limits. The UI shows the resulting count, sample thumbnails,
 and technical details if expanded.
 
+The materialized plan asset set must survive ordinary source expiration.
+`sourceRef` and search-time handles may expire before they are used to create a
+plan. Once a plan is created, apply must use the plan's durable materialized
+snapshot, not a live re-query and not an expiring transient search result. If
+Gallery cannot promote or copy the source into a durable plan-scoped snapshot,
+plan creation must fail before showing a reviewable plan.
+
 ### Clarify Instead Of Guessing
 
 If `Pierre` maps to multiple people, or "South Africa in January" produces too
@@ -268,6 +275,17 @@ The operation-plan service resolves the source before persistence, stores the
 same durable operation model already used by review/apply, and adds source audit
 metadata for review/debug views.
 
+For asset-bearing operations, exactly one asset source mechanism is valid:
+
+- `assetSource`;
+- `assetIds`;
+- `assetSelectionHandleId`.
+
+The server must reject operations that provide more than one of these fields.
+There is no precedence rule. The server must also reject asset-bearing
+operations that provide none of them. Operations that do not operate on assets,
+such as pure create-album or create-space operations, must omit all three.
+
 ### Workflow Tools
 
 Add high-level workflow tools for smaller models. These tools create reviewable
@@ -362,6 +380,13 @@ type AgentAssetSourceSnapshot = {
 The first implementation should prefer extending selection-handle metadata
 before adding a new table. A new table is justified only if source references
 need different lifecycle, audit, or deduplication semantics.
+
+Transient search sources and durable plan snapshots have different lifecycles.
+If existing selection handles back both concepts, the implementation must mark
+or copy plan-backed handles so they remain usable until the plan reaches a
+terminal state such as applied, superseded, cancelled, or deleted. Expiration of
+the original `sourceRef` after plan creation must not change the plan contents
+or make apply re-run the search.
 
 ## Error Handling
 
@@ -459,6 +484,10 @@ Required regression scenarios:
 - Empty and over-broad searches do not create misleading plans.
 - Applying a source-backed plan uses the materialized asset snapshot, not a live
   re-query.
+- A plan created from a source remains applyable after the original search
+  `sourceRef` expires.
+- Asset-bearing operations with multiple source mechanisms, or with no source
+  mechanism, are rejected before plan persistence.
 - Compact activity does not flicker while expanded activity shows detailed tool
   work.
 
@@ -508,6 +537,8 @@ Tests and edge cases:
 - Declarative people/tag/album filters require non-empty names.
 - ID-domain helper classifies known fixture IDs by table lookup or metadata
   source, and returns `unknown` safely for missing IDs.
+- Shared source validation rejects asset-bearing operations with multiple source
+  mechanisms and asset-bearing operations with no source mechanism.
 
 ### Slice 2: Wrong-Domain ID Validation
 
@@ -553,6 +584,8 @@ Tests and edge cases:
 - Cross-session and cross-user source refs are denied.
 - Existing explicit `assetIds` and `assetSelectionHandleId` behavior remains
   unchanged.
+- Operations that provide `assetSource` plus `assetIds` or
+  `assetSelectionHandleId` are rejected instead of choosing a precedence order.
 - Plan review response includes source audit metadata and no full asset ID dump.
 
 ### Slice 5: Declarative Filter Resolver
@@ -588,6 +621,8 @@ Tests and edge cases:
   bounded-selection guidance.
 - Empty searches return a no-matches response and do not create a plan.
 - Search result materialization is stable between plan creation and apply.
+- Expiration of the original `sourceRef` after plan creation does not change the
+  reviewed asset set and does not make apply fail due to source expiration.
 - Plan audit records resolved filters, declarative filters, counts, and sample
   IDs.
 - Existing apply behavior works with handle-backed operations.
