@@ -78,6 +78,15 @@ describe(AgentMcpDocsService.name, () => {
     expect(markdown).toMatch(/listSpaces.*readSpace/is);
   });
 
+  it('documents large selection handles in the progressive detail workflow', () => {
+    const docs = sut.generateMarkdown();
+
+    expect(docs).toContain('Large selections');
+    expect(docs).toContain('createSelectionHandle');
+    expect(docs).toContain('assetSelectionHandleId');
+    expect(docs).toContain('current bounded page');
+  });
+
   it('documents existing-space detail updates, supported fields, and no-op guidance', () => {
     const markdown = sut.generateMarkdown();
 

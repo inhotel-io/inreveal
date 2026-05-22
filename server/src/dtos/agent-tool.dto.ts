@@ -226,6 +226,7 @@ type AgentSearchAssetsToolRequestOutput = {
   detail?: z.output<typeof AgentSearchAssetsDetailSchema>;
   fields?: z.output<typeof AgentSearchAssetsFieldSchema>[];
   sampleSize?: number;
+  createSelectionHandle?: boolean;
   toolCallId?: string;
 };
 
@@ -240,6 +241,7 @@ const AgentSearchAssetsToolRequestSchema = z
     detail: AgentSearchAssetsDetailSchema.optional(),
     fields: z.array(AgentSearchAssetsFieldSchema).optional(),
     sampleSize: z.number().int().min(0).max(MAX_SEARCH_SAMPLE_SIZE).optional(),
+    createSelectionHandle: z.boolean().optional(),
     toolCallId: uuid.optional(),
   })
   .superRefine((value, ctx) => {
@@ -253,7 +255,8 @@ const AgentSearchAssetsToolRequestSchema = z
       value.mode !== undefined ||
       value.detail !== undefined ||
       value.fields !== undefined ||
-      value.sampleSize !== undefined;
+      value.sampleSize !== undefined ||
+      value.createSelectionHandle !== undefined;
 
     if (value.toolCallId && hasNewSearchFields) {
       ctx.addIssue({
@@ -292,6 +295,7 @@ const AgentSearchAssetsToolRequestSchema = z
       page: value.page ?? DEFAULT_SEARCH_PAGE,
       detail: value.detail ?? 'ids',
       fields: value.fields ?? [],
+      ...(value.createSelectionHandle === undefined ? {} : { createSelectionHandle: value.createSelectionHandle }),
       ...(value.sampleSize === undefined ? {} : { sampleSize: value.sampleSize }),
       ...(order === undefined ? {} : { order }),
     };
@@ -663,6 +667,16 @@ const AgentReadAssetMetadataToolResponseSchema = z
   ])
   .meta({ id: 'AgentReadAssetMetadataToolResponseDto' });
 
+const AgentSearchAssetsSelectionHandleSchema = z
+  .object({
+    id: uuid,
+    assetCount: z.number().int().min(0),
+    sampleAssetIds: z.array(uuid).max(MAX_SEARCH_SAMPLE_SIZE),
+    sourceToolCallId: uuid.nullable(),
+    expiresAt: isoDatetimeToDate,
+  })
+  .meta({ id: 'AgentSearchAssetsSelectionHandle' });
+
 const AgentSearchAssetsToolResponseSchema = z
   .discriminatedUnion('status', [
     approvalRequiredResponse('AgentSearchAssetsToolApprovalRequiredResponse'),
@@ -680,6 +694,7 @@ const AgentSearchAssetsToolResponseSchema = z
         hasMore: z.boolean(),
         nextPage: z.string().nullable(),
         resultSize: AgentToolResultSizeSchema,
+        selectionHandle: AgentSearchAssetsSelectionHandleSchema.optional(),
         totalCount: z.number().int().min(0).optional(),
         approximateTotal: z.number().int().min(0).optional(),
       })

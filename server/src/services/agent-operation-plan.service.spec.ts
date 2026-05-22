@@ -30,6 +30,7 @@ import {
   AgentOperationPlanRepository,
   AgentOperationPlanWithOperations,
 } from 'src/repositories/agent-operation-plan.repository';
+import { AgentSelectionHandleRepository } from 'src/repositories/agent-selection-handle.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
@@ -231,6 +232,7 @@ describe(AgentOperationPlanService.name, () => {
   let assetService: ReturnType<typeof automock<AssetService>>;
   let tagService: ReturnType<typeof automock<TagService>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
+  let selectionHandleRepository: ReturnType<typeof automock<AgentSelectionHandleRepository>>;
   let planRepository: ReturnType<typeof automock<AgentOperationPlanRepository>>;
   let toolCallRepository: ReturnType<typeof automock<AgentToolCallRepository>>;
   let websocketRepository: ReturnType<typeof automock<WebsocketRepository>>;
@@ -244,6 +246,7 @@ describe(AgentOperationPlanService.name, () => {
     assetService = mockBaseService(AssetService);
     tagService = mockBaseService(TagService);
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
+    selectionHandleRepository = automock(AgentSelectionHandleRepository, { args: [{} as never] });
     planRepository = automock(AgentOperationPlanRepository, { args: [{} as never] });
     toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
     websocketRepository = automock(WebsocketRepository, { args: [{} as never, { setContext: () => {} } as never] });
@@ -252,6 +255,7 @@ describe(AgentOperationPlanService.name, () => {
     };
     sessionRepository.update.mockResolvedValue({} as never);
     websocketRepository.clientSend.mockImplementation(() => {});
+    toolCallRepository.create.mockImplementation((dto) => Promise.resolve(makeToolCall(dto as Partial<AgentToolCall>)));
     toolCallRepository.transition.mockImplementation((_sessionId, _id, _expectedStatus, dto) =>
       Promise.resolve(
         makeToolCall({
@@ -265,6 +269,7 @@ describe(AgentOperationPlanService.name, () => {
       assetRepository as unknown as AssetRepository,
       albumService,
       sessionRepository,
+      selectionHandleRepository,
       planRepository,
       toolCallRepository,
       websocketRepository,
@@ -386,6 +391,323 @@ describe(AgentOperationPlanService.name, () => {
       planId: plan.id,
       revision: plan.revision,
     });
+  });
+
+  it('materializes assetSelectionHandleId server-side before storing and reviewing a plan', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const selectionHandleId = newUuid();
+    const assetIds = Array.from({ length: 150 }, () => newUuid());
+    const albumId = newUuid();
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds.slice(0, 25),
+      expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    const createdPlan = makePlan({
+      sessionId: session.id,
+      operations: [
+        makeOperation({
+          type: AgentOperationType.AlbumAddAssets,
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          temporaryTargetId: null,
+          assetIds,
+          payload: {},
+        }),
+      ],
+    });
+    planRepository.createReplacementRevision.mockResolvedValue(createdPlan);
+
+    const result = await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Add selected photos',
+      operations: [
+        {
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add selected photos',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          assetSelectionHandleId: selectionHandleId,
+          payload: {},
+          riskLevel: AgentOperationRiskLevel.Medium,
+          enabled: true,
+        },
+      ],
+    });
+
+    expect(selectionHandleRepository.getValidForPlanning).toHaveBeenCalledWith({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      now: expect.any(Date),
+    });
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            assetIds,
+            assetSelectionHandleId: undefined,
+          }),
+        ],
+      }),
+    );
+    expect(result.plan?.operations[0].assetIds).toHaveLength(150);
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assetCount: 150,
+        redactedRequestMetadata: expect.objectContaining({
+          assetCount: 150,
+          assetIds: assetIds.slice(0, 25),
+          selectionHandles: [{ id: selectionHandleId, assetCount: 150, sampleAssetIds: assetIds.slice(0, 25) }],
+        }),
+      }),
+    );
+  });
+
+  it('rejects expired or cross-session selection handles before plan persistence', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const selectionHandleId = newUuid();
+    const executingToolCall = makeToolCall({
+      sessionId: session.id,
+      status: AgentToolCallStatus.Denied,
+      approvalDecision: AgentToolApprovalDecision.Denied,
+      error: 'Selection handle is expired or not available for this session',
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(undefined);
+    toolCallRepository.create.mockResolvedValue(executingToolCall);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Add expired handle photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSelectionHandleId: selectionHandleId,
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Selection handle is expired or not available for this session');
+
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: 'Selection handle is expired or not available for this session',
+        redactedRequestMetadata: expect.objectContaining({
+          operationCount: 1,
+          operationTypes: [AgentOperationType.AlbumAddAssets],
+          attemptedSelectionHandleIds: [selectionHandleId],
+        }),
+      }),
+    );
+  });
+
+  it('rejects empty selection handles before plan persistence', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const selectionHandleId = newUuid();
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds: [],
+      assetCount: 0,
+      sampleAssetIds: [],
+      expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    toolCallRepository.create.mockResolvedValue(
+      makeToolCall({
+        sessionId: session.id,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: 'Selection handle did not contain any assets',
+      }),
+    );
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Add empty handle photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSelectionHandleId: selectionHandleId,
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Selection handle did not contain any assets');
+
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: 'Selection handle did not contain any assets',
+        redactedRequestMetadata: expect.objectContaining({
+          attemptedSelectionHandleIds: [selectionHandleId],
+        }),
+      }),
+    );
+  });
+
+  it('rejects set-cover selection handles above the cover candidate limit', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const selectionHandleId = newUuid();
+    const assetIds = Array.from({ length: 501 }, () => newUuid());
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds.slice(0, 25),
+      expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    toolCallRepository.create.mockResolvedValue(
+      makeToolCall({
+        sessionId: session.id,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: 'Selection handle contains too many cover candidates',
+      }),
+    );
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Set cover from too many candidates',
+        operations: [
+          {
+            type: AgentOperationType.AlbumSetCover,
+            summary: 'Set cover',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSelectionHandleId: selectionHandleId,
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Low,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Selection handle contains too many cover candidates');
+
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: 'Selection handle contains too many cover candidates',
+        redactedRequestMetadata: expect.objectContaining({
+          attemptedSelectionHandleIds: [selectionHandleId],
+        }),
+      }),
+    );
+  });
+
+  it('re-checks handle assets against current permissions and deleted assets', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const allowedAssetId = newUuid();
+    const deletedOrDeniedAssetId = newUuid();
+    const albumId = newUuid();
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: newUuid(),
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds: [allowedAssetId, deletedOrDeniedAssetId],
+      assetCount: 2,
+      sampleAssetIds: [allowedAssetId, deletedOrDeniedAssetId],
+      expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([allowedAssetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([allowedAssetId]));
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Add stale handle photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: albumId,
+            assetSelectionHandleId: newUuid(),
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('One or more assets are not accessible');
+  });
+
+  it('keeps sparse item selection deterministic after applying a handle-derived plan', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid(), newUuid(), newUuid()];
+    const { session, albumId, operation, plan } = makeAddAssetsPlan(auth, assetIds);
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue(plan);
+    planRepository.completeApply.mockImplementation((_planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan(plan, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    albumService.addAssets.mockResolvedValue([
+      { id: assetIds[0], success: true },
+      { id: assetIds[2], success: true },
+    ] as never);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {
+        [operation.id]: { itemKind: 'asset', mode: 'only', itemIds: [assetIds[0], assetIds[2]] },
+      },
+      planRevision: plan.revision,
+    });
+
+    expect(albumService.addAssets).toHaveBeenCalledWith(auth, albumId, { ids: [assetIds[0], assetIds[2]] });
   });
 
   it('rejects a new-album target without a matching album.create and does not persist', async () => {

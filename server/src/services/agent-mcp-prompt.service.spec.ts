@@ -90,6 +90,14 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt.length).toBeLessThanOrEqual(3800);
   });
 
+  it('renders large-selection handle guidance without encouraging pasted asset ids', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toContain('createSelectionHandle');
+    expect(prompt).toContain('assetSelectionHandleId');
+    expect(prompt).toContain('Do not paste hundreds of assetIds');
+  });
+
   it('includes compact visual and technical metadata guidance without direct writes', () => {
     const prompt = sut.generatePromptCheatSheet();
 

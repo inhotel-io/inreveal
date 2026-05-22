@@ -101,11 +101,18 @@ Do not ask the user to approve in chat and do not create a new read request with
 
 Use the smallest useful payload first. Resolve names before search. Search compact IDs first. Request fields only for selected IDs. Propose a plan only after the selected asset set is clear.
 
-- Broad search: use `searchAssets` with `detail: "ids"` and a bounded `limit` such as 25 or 50. If `hasMore` or `resultSize.truncated` is true, page with `nextPage` or ask a narrowing question.
+- Broad search: use `searchAssets` with `detail: "ids"` and a bounded `limit` such as 25 or 50. If `hasMore` or `resultSize.truncated` is true, page with `nextPage` or ask a narrowing question; when hasMore is true, keep the same mode, query, filters, order, and limit.
 - Visual curation: search compact IDs first, then call preview reads only for shortlisted `assetIds` when visual inspection is needed.
 - Technical metadata: search IDs first, then call `readAssetMetadata` with exact `fields` such as `camera`, `dates`, and `filename` for selected IDs.
 - Large album: page compact search results and propose operations from returned asset IDs. Do not request full metadata for every candidate.
 - All photos: avoid loading the whole library. Ask for a narrower date, album, tag, person, space, rating, or media-type filter when the task does not require every asset.
+
+### Large selections
+
+- Search compactly first and use `createSelectionHandle: true` only for the current bounded page.
+- Use `selectionHandle.id` as `assetSelectionHandleId` in the plan instead of pasting hundreds of `assetIds`.
+- If `hasMore` is true, page or narrow before claiming the handle covers every matching photo.
+- Plan review still shows counts and samples; Gallery applies only after user approval.
 
 ## Tools
 
@@ -183,7 +190,7 @@ MCP tool name: `searchAssets`
 
 Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and bounded result pages.
 
-Put metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose plans with returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Default to compact asset ids with detail ids. Use detail summary with fields and sampleSize for a small representative sample. Use detail metadata only after a bounded compact search proves the subset is small. Do not use limit 1000 or request all metadata for broad searches; page with nextPage or ask one narrowing question when hasMore or resultSize.truncated is true. Results are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.
+Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to compact asset ids. createSelectionHandle -> assetSelectionHandleId for large bounded pages. Do not use limit 1000; ask one narrowing question or repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.
 
 Argument modes:
 
@@ -296,6 +303,25 @@ Page a broad album-building search without requesting full metadata.
   "limit": 50,
   "page": 1,
   "order": "desc"
+}
+```
+
+#### large-selection-handle-search
+
+Create a compact server-side selection handle for a bounded large result.
+
+<!-- mcp-docs:tool-arguments tool="searchAssets" example="large-selection-handle-search" -->
+
+```json
+{
+  "detail": "ids",
+  "createSelectionHandle": true,
+  "sampleSize": 5,
+  "filters": {
+    "isNotInAlbum": true
+  },
+  "limit": 500,
+  "page": 1
 }
 ```
 
@@ -925,7 +951,7 @@ MCP tool name: `proposeAlbumOperations`
 
 Create a reviewable Gallery operation plan for albums, spaces, and asset batches.
 
-Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review.
+Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from searchAssets createSelectionHandle instead of pasting every asset ID.
 
 Argument modes:
 
@@ -983,6 +1009,42 @@ Create a new album and add selected assets to it.
       "targetKind": "new_album",
       "temporaryTargetId": "tmp-today-test",
       "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
+    }
+  ]
+}
+```
+
+#### create-album-from-selection-handle
+
+Create an album and add a large server-side selection without pasting asset IDs.
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="create-album-from-selection-handle" -->
+
+```json
+{
+  "summary": "Create an album from the selected search result.",
+  "operations": [
+    {
+      "type": "album.create",
+      "summary": "Create album.",
+      "targetKind": "new_album",
+      "temporaryTargetId": "selection-album",
+      "payload": {
+        "albumName": "Selected photos",
+        "description": ""
+      },
+      "riskLevel": "low",
+      "enabled": true
+    },
+    {
+      "type": "album.addAssets",
+      "summary": "Add selected photos.",
+      "targetKind": "new_album",
+      "temporaryTargetId": "selection-album",
+      "assetSelectionHandleId": "00000000-0000-4000-8000-000000000333",
+      "payload": {},
+      "riskLevel": "medium",
+      "enabled": true
     }
   ]
 }
@@ -1482,6 +1544,44 @@ Revise a plan to create a new album and add selected assets to it.
       "targetKind": "new_album",
       "temporaryTargetId": "tmp-today-test",
       "assetIds": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
+    }
+  ]
+}
+```
+
+#### revise-create-album-from-selection-handle
+
+Revise a plan to create an album and add a large server-side selection without pasting asset IDs.
+
+<!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-create-album-from-selection-handle" -->
+
+```json
+{
+  "planId": "00000000-0000-4000-8000-000000000222",
+  "feedback": "Use this revised operation plan.",
+  "summary": "Create an album from the selected search result.",
+  "operations": [
+    {
+      "type": "album.create",
+      "summary": "Create album.",
+      "targetKind": "new_album",
+      "temporaryTargetId": "selection-album",
+      "payload": {
+        "albumName": "Selected photos",
+        "description": ""
+      },
+      "riskLevel": "low",
+      "enabled": true
+    },
+    {
+      "type": "album.addAssets",
+      "summary": "Add selected photos.",
+      "targetKind": "new_album",
+      "temporaryTargetId": "selection-album",
+      "assetSelectionHandleId": "00000000-0000-4000-8000-000000000333",
+      "payload": {},
+      "riskLevel": "medium",
+      "enabled": true
     }
   ]
 }
@@ -2103,6 +2203,7 @@ Summarize plan risks and selected changes.
 - `planning-wrong-asset-batch-target-kind`: Favorite, archive, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.
 - `planning-wrong-image-edit-target-kind`: Rotate operations must use targetKind image_edit_batch without targetId or temporaryTargetId.
 - `planning-duplicate-asset-ids`: Provide each asset id only once within a planning operation.
+- `planning-pasted-large-asset-ids`: For hundreds or thousands of assets, call searchAssets with createSelectionHandle and use assetSelectionHandleId in the plan.
 - `planning-invalid-rotate-angle`: Rotate payload angle must be exactly 90, 180, or 270.
 - `planning-invalid-tag-payload`: Asset add-tag payload must provide exactly one of tagId or tagName.
 
@@ -2125,6 +2226,7 @@ Summarize plan risks and selected changes.
 - `planning-wrong-asset-batch-target-kind`: Favorite, archive, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.
 - `planning-wrong-image-edit-target-kind`: Rotate operations must use targetKind image_edit_batch without targetId or temporaryTargetId.
 - `planning-duplicate-asset-ids`: Provide each asset id only once within a planning operation.
+- `planning-pasted-large-asset-ids`: For hundreds or thousands of assets, call searchAssets with createSelectionHandle and use assetSelectionHandleId in the plan.
 - `planning-invalid-rotate-angle`: Rotate payload angle must be exactly 90, 180, or 270.
 - `planning-invalid-tag-payload`: Asset add-tag payload must provide exactly one of tagId or tagName.
 
