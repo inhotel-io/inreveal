@@ -25,7 +25,7 @@ class AgentReadAssetMetadataToolResponseDto {
 
   String? reason;
 
-  List<AgentAssetMetadata> assets;
+  List<AgentAssetMetadataResult> assets;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadAssetMetadataToolResponseDto &&
@@ -68,7 +68,7 @@ class AgentReadAssetMetadataToolResponseDto {
         status: AgentReadAssetMetadataToolResponseDtoStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
         reason: mapValueOfType<String>(json, r'reason'),
-        assets: AgentAssetMetadata.listFromJson(json[r'assets']),
+        assets: AgentAssetMetadataResult.listFromJson(json[r'assets']),
       );
     }
     return null;
