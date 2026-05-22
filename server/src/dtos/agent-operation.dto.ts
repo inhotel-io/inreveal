@@ -1,5 +1,5 @@
 import { createZodDto } from 'nestjs-zod';
-import { AgentSearchSourceRefSchema } from 'src/dtos/agent-asset-source.dto';
+import { AgentAssetSourceInputSchema } from 'src/dtos/agent-asset-source.dto';
 import { AgentToolCallResponseDto } from 'src/dtos/agent-tool.dto';
 import {
   AgentOperationApplyStatus,
@@ -12,7 +12,8 @@ import {
   SharedSpaceRole,
   UserAvatarColorSchema,
 } from 'src/enum';
-import { AgentAssetSourceInput, validateAgentAssetSourceMechanismCount } from 'src/types/agent-asset-source.types';
+import { validateAgentAssetSourceMechanismCount } from 'src/types/agent-asset-source.types';
+import type { AgentAssetSourceInput } from 'src/types/agent-asset-source.types';
 import { isoDatetimeToDate } from 'src/validation';
 import z from 'zod';
 
@@ -50,21 +51,24 @@ const uniqueCoverAssetIds = z
     }
   });
 const assetSelectionHandleId = uuid;
-const agentAssetSourceInput = z
-  .strictObject({
-    kind: z.literal('previousSearch'),
-    sourceRef: AgentSearchSourceRefSchema,
-  })
-  .meta({ id: 'AgentOperationPlanningAssetSourceInput' }) as z.ZodType<
-  Extract<AgentAssetSourceInput, { kind: 'previousSearch' }>
+const agentOperationPlanningAssetSourceInput = AgentAssetSourceInputSchema.superRefine((value, ctx) => {
+  if (value.kind !== 'search' && value.kind !== 'previousSearch') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['kind'],
+      message: 'Invalid input: expected "search" or "previousSearch"',
+    });
+  }
+}).meta({ id: 'AgentOperationPlanningAssetSourceInput' }) as z.ZodType<
+  Extract<AgentAssetSourceInput, { kind: 'search' | 'previousSearch' }>
 >;
 const assetSelection = {
-  assetSource: agentAssetSourceInput.optional(),
+  assetSource: agentOperationPlanningAssetSourceInput.optional(),
   assetIds: uniqueAssetIds.optional(),
   assetSelectionHandleId: assetSelectionHandleId.optional(),
 };
 const coverAssetSelection = {
-  assetSource: agentAssetSourceInput.optional(),
+  assetSource: agentOperationPlanningAssetSourceInput.optional(),
   assetIds: uniqueCoverAssetIds.optional(),
   assetSelectionHandleId: assetSelectionHandleId.optional(),
 };
