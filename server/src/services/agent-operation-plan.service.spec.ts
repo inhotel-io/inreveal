@@ -487,7 +487,7 @@ describe(AgentOperationPlanService.name, () => {
       error: 'Selection handle is expired or not available for this session',
     });
     sessionRepository.getById.mockResolvedValue(session);
-    selectionHandleRepository.getValidForPlanning.mockResolvedValue(undefined);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
     toolCallRepository.create.mockResolvedValue(executingToolCall);
 
     await expect(

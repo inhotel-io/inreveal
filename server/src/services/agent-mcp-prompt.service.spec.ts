@@ -102,7 +102,9 @@ describe(AgentMcpPromptService.name, () => {
     const prompt = sut.generatePromptCheatSheet();
 
     expect(prompt).toContain('Visual curation: search ids first, then previews for shortlisted assetIds only');
-    expect(prompt).toContain('Technical metadata: search ids first, then readAssetMetadata fields camera/dates/filename');
+    expect(prompt).toContain(
+      'Technical metadata: search ids first, then readAssetMetadata fields camera/dates/filename',
+    );
     expect(prompt).not.toContain('"limit":1000');
     expect(prompt).not.toContain('mcp_gallery_apply');
   });

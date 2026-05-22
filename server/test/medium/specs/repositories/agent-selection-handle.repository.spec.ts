@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { DummyValue, GenerateSqlQueries, GENERATE_SQL_KEY } from 'src/decorators';
+import { DummyValue, GENERATE_SQL_KEY, GenerateSqlQueries } from 'src/decorators';
 import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType } from 'src/enum';
 import { AgentProviderCredentialRepository } from 'src/repositories/agent-provider-credential.repository';
 import { AgentSelectionHandleRepository } from 'src/repositories/agent-selection-handle.repository';
