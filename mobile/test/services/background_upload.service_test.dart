@@ -100,6 +100,45 @@ void main() {
       verify(() => mockUploadRepository.updateNotification(task, TaskStatus.enqueued)).called(1);
     });
 
+    test('posts notifications only for successful iOS enqueue results in a batch', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final task1 = UploadTask(
+        taskId: 'asset-1',
+        url: 'http://test-server.com/assets',
+        filename: 'asset-1.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final task2 = UploadTask(
+        taskId: 'asset-2',
+        url: 'http://test-server.com/assets',
+        filename: 'asset-2.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final task3 = UploadTask(
+        taskId: 'asset-3',
+        url: 'http://test-server.com/assets',
+        filename: 'asset-3.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final tasks = [task1, task2, task3];
+
+      when(() => mockUploadRepository.enqueueBackgroundAll(tasks)).thenAnswer((_) async => [true, false, true]);
+      when(() => mockUploadRepository.updateNotification(task1, TaskStatus.enqueued)).thenAnswer((_) async {});
+      when(() => mockUploadRepository.updateNotification(task3, TaskStatus.enqueued)).thenAnswer((_) async {});
+
+      final result = await sut.enqueueTasks(tasks);
+
+      expect(result, [true, false, true]);
+      verify(() => mockUploadRepository.updateNotification(task1, TaskStatus.enqueued)).called(1);
+      verifyNever(() => mockUploadRepository.updateNotification(task2, TaskStatus.enqueued));
+      verify(() => mockUploadRepository.updateNotification(task3, TaskStatus.enqueued)).called(1);
+    });
+
     test('does not post a notification for failed iOS enqueue', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
