@@ -52,8 +52,9 @@ Make Pi's MCP tool use robust when smaller models plan from search results:
   an unrecovered tool failure.
 - Keep compact activity stable during tool-heavy runs, with no transient flash of
   raw log cards before the UI collapses back to "Pi is working".
-- Provide an opt-in verbose activity mode where users can see the detailed
-  background tool timeline.
+- Provide an opt-in verbose activity view, implemented through the existing
+  `expanded` activity mode, where users can see the detailed background tool
+  timeline.
 - Use TDD for every slice with full test and edge-case coverage: write failing
   tests first, verify the expected red failure, implement the smallest fix, then
   verify green. A slice is not complete until every edge case listed for that
@@ -65,8 +66,8 @@ Make Pi's MCP tool use robust when smaller models plan from search results:
 - No automatic plan creation by substituting a guessed handle server-side.
 - No broad prompt rewrite unrelated to Gallery MCP tool use.
 - No changing the user's existing permission preset or approval mode semantics.
-- No broad UI redesign beyond accurate terminal state and explicit compact versus
-  verbose activity behavior.
+- No broad UI redesign beyond accurate terminal state and explicit compact
+  versus expanded/verbose activity behavior.
 
 ## Chosen Approach
 
@@ -82,9 +83,10 @@ The design therefore changes three layers together:
 - Tool validation responses identify copied-placeholder and invalid-handle
   mistakes, and include safe same-session recovery hints.
 - Runner flow records a clean terminal state when the model does not recover.
-- The activity UI treats "compact/thinking" and "verbose timeline" as distinct
-  modes. Compact mode stays stable and low-noise; verbose mode intentionally
-  exposes the tool-level work so users can inspect what Pi is doing.
+- The activity UI treats "compact/thinking" and "expanded verbose timeline" as
+  distinct modes. Compact mode stays stable and low-noise; the existing
+  `expanded` mode intentionally exposes the tool-level work so users can inspect
+  what Pi is doing.
 
 ## Design Details
 
@@ -217,16 +219,19 @@ detail is useful when a user wants to understand what Pi is doing, but it should
 not leak into compact mode as a short flicker before collapsing back to the
 summary.
 
-The UI should make the distinction explicit:
+The UI should make the distinction explicit without adding a second overlapping
+mode. The current activity visibility contract is `off | compact | expanded`;
+this design treats `expanded` as the verbose tool timeline.
 
 - Compact/thinking mode: render one stable activity block for the active turn,
   for example `Pi is working`, plus the current plain-language step. It must not
   briefly render raw tool cards while polling, websocket events, or activity
   summarization are merging.
-- Verbose activity mode: render a chronological timeline of meaningful activity
-  rows/cards for the current turn. Many cards are acceptable here because the
-  user intentionally opted in. The cards should use plain-language labels,
-  status, timing, compact counts, and safe summaries of what each tool did.
+- Expanded/verbose activity mode: render a chronological timeline of meaningful
+  activity rows/cards for the current turn. Many cards are acceptable here
+  because the user intentionally opted in. The cards should use plain-language
+  labels, status, timing, compact counts, and safe summaries of what each tool
+  did.
 - Off mode: hide passive activity while still showing required permission and
   plan-review cards.
 
@@ -296,12 +301,12 @@ has `interrupted` and `failed`.
 
 ### Activity View Model Stability
 
-No new database table is required for the compact/verbose distinction. The
-frontend should derive a stable turn-level activity view model from messages,
+No new database table is required for the `off | compact | expanded` distinction.
+The frontend should derive a stable turn-level activity view model from messages,
 tool calls, plans, and activity events before rendering. The view model should
-preserve stable keys for the active turn and for individual verbose rows, so
-polling and websocket updates merge into the existing UI instead of causing a
-raw-card flash.
+preserve stable keys for the active turn and for individual expanded/verbose
+rows, so polling and websocket updates merge into the existing UI instead of
+causing a raw-card flash.
 
 ## Test Strategy
 
@@ -318,6 +323,20 @@ Every implementation plan derived from this spec must name the automated tests
 for its slice before implementation starts. If an edge case is not testable at
 the unit/integration/component level, the plan must state why and add a concrete
 manual verification step.
+
+Minimum coverage expectations:
+
+- Unit tests for prompt/example rendering, resolver-to-search guidance,
+  invalid-handle classification, same-session handle hinting, runner retry
+  guidance, and activity view-model derivation.
+- Service/integration tests for planning validation, selection-handle recovery,
+  failed-turn cleanup, approval/plan wait states, and the deterministic
+  production regression flow.
+- Component tests for compact, expanded, and off activity rendering, including
+  burst updates and mode changes while Pi is running.
+- End-to-end or runner-flow regression coverage for the complete production
+  sequence: resolve people, search with resolved filters, reject an example
+  handle, retry with the real handle, and create a reviewable plan.
 
 ## Edge Cases
 
@@ -338,12 +357,12 @@ manual verification step.
 - Compact activity receives a burst of many tool calls and activity events.
 - Websocket and polling updates arrive in either order for the same active turn.
 - Activity summarization/compaction runs while the turn is still active.
-- The user switches between compact, verbose, and off activity while Pi is
-  running.
-- Verbose mode receives dozens or hundreds of rows without freezing or rendering
-  unsafe technical data by default.
-- Reload during a tool-heavy turn reconstructs the same compact or verbose mode
-  without a transient wrong state.
+- The user switches between compact, expanded/verbose, and off activity while Pi
+  is running.
+- Expanded/verbose mode receives dozens or hundreds of rows without freezing or
+  rendering unsafe technical data by default.
+- Reload during a tool-heavy turn reconstructs the same compact or
+  expanded/verbose mode without a transient wrong state.
 
 ## Vertical Slices
 
@@ -468,15 +487,15 @@ Edge cases:
 - Runner sends multiple activity events before failure.
 - Session is cancelled while cleanup is happening.
 
-### Slice 6: Activity Preview Stability And Verbose Timeline
+### Slice 6: Activity Preview Stability And Expanded Verbose Timeline
 
 Scope:
 
 - Make compact/thinking activity render one stable active-turn block during
   high-volume tool execution.
-- Make verbose activity intentionally render detailed, plain-language tool
-  timeline rows/cards.
-- Preserve the user's compact, verbose, or off activity choice while new tool
+- Make expanded/verbose activity intentionally render detailed, plain-language
+  tool timeline rows/cards.
+- Preserve the user's compact, expanded, or off activity choice while new tool
   calls, websocket events, polling results, and summaries arrive.
 - Keep large verbose timelines performant with caps, grouping, or virtualization
   consistent with the existing activity UI.
@@ -485,16 +504,16 @@ TDD coverage:
 
 - Pure view-model test where a burst of many tool calls and activity events
   produces one compact activity block with stable identity.
-- Pure view-model test where the same burst in verbose mode produces ordered
-  rows/cards with plain-language labels, status, counts, and stable keys.
+- Pure view-model test where the same burst in expanded mode produces ordered
+  verbose rows/cards with plain-language labels, status, counts, and stable keys.
 - Component test that compact mode never renders multiple raw tool cards between
   polling/websocket updates.
-- Component test that verbose mode renders many rows only after the user selects
-  verbose activity.
+- Component test that expanded mode renders many rows only after the user selects
+  expanded activity.
 - Test that off mode hides passive activity while permission cards and
   plan-review cards still render.
 - Test that polling-first and websocket-first update order produce the same
-  compact and verbose view models.
+  compact and expanded/verbose view models.
 - Test that activity summarization updates the existing active-turn block rather
   than replacing it with a transient raw-card state.
 - Performance-focused test or component assertion that a large verbose timeline
@@ -504,11 +523,11 @@ Edge cases:
 
 - Fifty or more tool calls complete in one polling response.
 - A running activity event arrives after completed tool-call rows.
-- The user toggles compact -> verbose -> off -> compact while Pi is running.
+- The user toggles compact -> expanded -> off -> compact while Pi is running.
 - Reload during a tool-heavy turn keeps the selected activity mode.
 - Technical details are available on demand but redacted and collapsed by
   default.
-- Unknown MCP tools render safe fallback labels in verbose mode.
+- Unknown MCP tools render safe fallback labels in expanded/verbose mode.
 
 ### Slice 7: End-To-End Regression
 
@@ -547,8 +566,9 @@ with photos that have Pierre OR Aurelia in them`.
    showing "Pi is working" and the chat remains usable.
 7. During a tool-heavy run, confirm compact activity stays as one stable
    "Pi is working" block with no flash of many boxes.
-8. Switch to verbose activity and confirm the detailed tool timeline is visible,
-   understandable, and does not expose raw technical payloads unless expanded.
+8. Switch to expanded activity and confirm the detailed tool timeline is visible,
+   understandable, and does not expose raw technical payloads unless the
+   row-level technical details are expanded.
 9. Switch activity off and confirm passive activity disappears while permission
    and plan-review cards still show.
 
