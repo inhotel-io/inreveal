@@ -1,5 +1,9 @@
 import { AgentProviderType, AssetType, AssetVisibility } from 'src/enum';
-import { AgentIdDomain, AgentSearchSourceRef } from 'src/types/agent-asset-source.types';
+import type {
+  AgentDeclarativeAssetFilters,
+  AgentIdDomain,
+  AgentSearchSourceRef,
+} from 'src/types/agent-asset-source.types';
 
 export type AgentToolProviderSnapshot = {
   providerCredentialId: string | null;
@@ -135,11 +139,13 @@ export type AgentToolOperationPlanRequestMetadata = {
   assetIdsSample?: string[];
   attemptedSelectionHandleIds?: string[];
   selectionHandles?: Array<{
-    id: string;
+    id?: string;
     assetCount: number;
     sampleAssetIds: string[];
-    sourceKind?: 'selectionHandle' | 'previousSearch';
+    sourceKind?: 'selectionHandle' | 'previousSearch' | 'search';
     sourceRef?: AgentSearchSourceRef;
+    declarativeFilters?: AgentDeclarativeAssetFilters;
+    resolvedFilters?: AgentSearchAssetsFilters;
   }>;
 };
 

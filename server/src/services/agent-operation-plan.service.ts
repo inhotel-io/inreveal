@@ -41,7 +41,11 @@ import { AgentSelectionHandleRepository } from 'src/repositories/agent-selection
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { SearchRepository } from 'src/repositories/search.repository';
+import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
+import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
+import { buildAgentSearch } from 'src/services/agent-search-filter-mapper';
 import {
   invalidSelectionHandleError,
   invalidSourceRefError,
@@ -54,17 +58,23 @@ import { AssetService } from 'src/services/asset.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { TagService } from 'src/services/tag.service';
 import {
-  AgentAssetSourceInput,
-  AgentIdDomain,
-  AgentSearchSourceRef,
   validateAgentAssetSourceMechanismCount,
   validateNoAgentAssetSourceMechanisms,
 } from 'src/types/agent-asset-source.types';
-import { AgentAlbumOperationInput, AgentOperationResult } from 'src/types/agent-operation.types';
-import {
+import type {
+  AgentAssetSourceInput,
+  AgentDeclarativeAssetFilters,
+  AgentIdDomain,
+  AgentSearchSourceRef,
+} from 'src/types/agent-asset-source.types';
+import type { AgentAlbumOperationInput, AgentOperationResult } from 'src/types/agent-operation.types';
+import type {
   AgentSourceRefRecoveryMetadata,
   AgentSelectionHandleRecoveryHint,
   AgentSelectionHandleRecoveryMetadata,
+  AgentSearchAssetsMode,
+  AgentSearchAssetsOrder,
+  AgentSearchAssetsFilters,
   AgentToolOperationPlanRequestMetadata,
   AgentToolOperationPlanResponseMetadata,
   AgentWrongIdDomainRecoveryMetadata,
@@ -94,11 +104,13 @@ type PlanningRequest = {
 };
 
 type PlanningSelectionAudit = Array<{
-  id: string;
+  id?: string;
   assetCount: number;
   sampleAssetIds: string[];
-  sourceKind?: 'selectionHandle' | 'previousSearch';
+  sourceKind?: 'selectionHandle' | 'previousSearch' | 'search';
   sourceRef?: AgentSearchSourceRef;
+  declarativeFilters?: AgentDeclarativeAssetFilters;
+  resolvedFilters?: AgentSearchAssetsFilters;
 }>;
 
 type SelectionHandleRecoveryRow = {
@@ -169,8 +181,8 @@ export class AgentOperationPlanService {
     AgentSessionStatus.Interrupted,
   ];
 
-  private static readonly maxAssetSelectionHandleAssets = 10_000;
-  private static readonly maxCoverSelectionHandleAssets = 500;
+  static readonly maxAssetSelectionHandleAssets = 10_000;
+  static readonly maxCoverSelectionHandleAssets = 500;
 
   constructor(
     private readonly accessRepository: AccessRepository,
@@ -178,6 +190,9 @@ export class AgentOperationPlanService {
     private readonly albumService: AlbumService,
     private readonly sessionRepository: AgentSessionRepository,
     private readonly selectionHandleRepository: AgentSelectionHandleRepository,
+    private readonly searchRepository: SearchRepository,
+    private readonly sharedSpaceRepository: SharedSpaceRepository,
+    private readonly assetSearchFilterResolverService: AgentAssetSearchFilterResolverService,
     private readonly planRepository: AgentOperationPlanRepository,
     private readonly toolCallRepository: AgentToolCallRepository,
     private readonly websocketRepository: WebsocketRepository,
@@ -844,7 +859,7 @@ export class AgentOperationPlanService {
     }
 
     if (operation.assetSource) {
-      return this.resolveAssetSourceAssetIds(auth, session, toolName, operation.assetSource, selectionAudit);
+      return this.resolveAssetSourceAssetIds(auth, session, toolName, operation.assetSource, operation.type, selectionAudit);
     }
 
     if (operation.assetSelectionHandleId) {
@@ -874,19 +889,205 @@ export class AgentOperationPlanService {
     session: AgentSession,
     toolName: AgentToolName,
     assetSource: AgentAssetSourceInput,
+    operationType: AgentOperationType,
     selectionAudit: PlanningSelectionAudit,
   ) {
-    if (assetSource.kind !== 'previousSearch') {
-      throw new BadRequestException('Only assetSource.previousSearch is supported for operation planning');
+    if (assetSource.kind === 'previousSearch') {
+      const selectionHandleId = await this.selectionHandleIdFromSearchSourceRef(
+        auth,
+        session,
+        toolName,
+        assetSource.sourceRef,
+      );
+
+      return this.resolveSelectionHandleAssetIds(auth, session, selectionHandleId, selectionAudit, {
+        toolName,
+        sourceKind: 'previousSearch',
+        sourceRef: assetSource.sourceRef,
+      });
     }
 
-    const selectionHandleId = await this.selectionHandleIdFromSearchSourceRef(auth, session, toolName, assetSource.sourceRef);
+    if (assetSource.kind === 'search') {
+      return this.resolveSearchAssetSourceAssetIds(auth, session, assetSource, operationType, selectionAudit);
+    }
 
-    return this.resolveSelectionHandleAssetIds(auth, session, selectionHandleId, selectionAudit, {
-      toolName,
-      sourceKind: 'previousSearch',
-      sourceRef: assetSource.sourceRef,
+    throw new BadRequestException('Only assetSource.search and assetSource.previousSearch are supported for operation planning');
+  }
+
+  private async resolveSearchAssetSourceAssetIds(
+    auth: AuthDto,
+    session: AgentSession,
+    assetSource: Extract<AgentAssetSourceInput, { kind: 'search' }>,
+    operationType: AgentOperationType,
+    selectionAudit: PlanningSelectionAudit,
+  ): Promise<string[]> {
+    const mode = assetSource.mode ?? 'metadata';
+    if (mode === 'smart') {
+      throw new BadRequestException('assetSource.search smart mode is not supported for operation planning yet');
+    }
+
+    const unsupportedRequestReason = this.getUnsupportedSearchSourceRequestReason(auth, session, assetSource, mode);
+    if (unsupportedRequestReason) {
+      throw new BadRequestException(unsupportedRequestReason);
+    }
+
+    if ((mode === 'description' || mode === 'ocr' || mode === 'filename') && !assetSource.query?.trim()) {
+      throw new BadRequestException(`assetSource.search ${mode} mode requires query`);
+    }
+
+    const declarativeFilters = assetSource.filters ?? {};
+    const resolution = await this.assetSearchFilterResolverService.resolveDeclarativeFilters(
+      auth,
+      session,
+      declarativeFilters,
+    );
+
+    if (resolution.status === 'denied') {
+      throw new BadRequestException(resolution.reason);
+    }
+
+    if (resolution.status === 'needs_clarification') {
+      throw new BadRequestException(resolution.message);
+    }
+
+    const cap = this.getSearchSourceMaterializationCap(operationType);
+    const request = this.buildSearchSourceRequest(assetSource, resolution.filters, cap);
+    const timelineSpaceIds = await this.getSearchTimelineSpaceIds(auth, session, resolution.filters);
+    const search = buildAgentSearch({
+      userId: auth.user.id,
+      request,
+      scope: {
+        ...this.getRepositoryScope(auth, session),
+        timelineSpaceIds,
+      },
     });
+
+    if (search.kind === 'smart') {
+      throw new BadRequestException('assetSource.search smart mode is not supported for operation planning yet');
+    }
+
+    const result = await this.searchRepository.searchMetadata(search.pagination, search.options);
+    const assetIds = result.items.map((asset) => asset.id);
+    const materialization = assetSource.materialization ?? 'all-matches-with-limit';
+    if (materialization === 'all-matches-with-limit' && (assetIds.length > cap || result.hasNextPage)) {
+      throw new BadRequestException(
+        `Search matched more than ${cap} assets. Narrow the search or use materialization "bounded-page" with a smaller limit.`,
+      );
+    }
+
+    if (assetIds.length === 0) {
+      throw new BadRequestException('Search source did not match any assets');
+    }
+
+    if (assetIds.length > cap) {
+      throw new BadRequestException(`Search matched more than ${cap} assets. Narrow the search or use a smaller bounded page.`);
+    }
+
+    selectionAudit.push({
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds.slice(0, 25),
+      sourceKind: 'search',
+      declarativeFilters,
+      resolvedFilters: resolution.filters,
+    });
+
+    return assetIds;
+  }
+
+  private buildSearchSourceRequest(
+    assetSource: Extract<AgentAssetSourceInput, { kind: 'search' }>,
+    filters: AgentSearchAssetsFilters,
+    cap: number,
+  ) {
+    const materialization = assetSource.materialization ?? 'all-matches-with-limit';
+    const limit = materialization === 'all-matches-with-limit' ? cap + 1 : (assetSource.limit ?? 100);
+
+    return {
+      mode: assetSource.mode ?? 'metadata',
+      query: assetSource.query,
+      filters,
+      limit,
+      page: materialization === 'all-matches-with-limit' ? 1 : (assetSource.page ?? 1),
+      order: assetSource.order ?? 'desc',
+      detail: 'ids' as const,
+      fields: [],
+    };
+  }
+
+  private getSearchSourceMaterializationCap(operationType: AgentOperationType) {
+    return operationType === AgentOperationType.AlbumSetCover
+      ? AgentOperationPlanService.maxCoverSelectionHandleAssets
+      : AgentOperationPlanService.maxAssetSelectionHandleAssets;
+  }
+
+  private getUnsupportedSearchSourceRequestReason(
+    auth: AuthDto,
+    session: AgentSession,
+    assetSource: Extract<AgentAssetSourceInput, { kind: 'search' }>,
+    mode: AgentSearchAssetsMode,
+  ): string | null {
+    if (mode === 'metadata' && assetSource.query !== undefined) {
+      return 'query is only supported for smart, description, ocr, and filename search modes';
+    }
+
+    const order = assetSource.order ?? 'desc';
+    const pagingReason = this.getUnsupportedSearchSourcePagingReason(order, mode);
+    if (pagingReason) {
+      return pagingReason;
+    }
+
+    const allowLockedAssets =
+      session.permissionPlanSnapshot.assetScope.locked && auth.session?.hasElevatedPermission === true;
+    if (assetSource.filters?.visibility === AssetVisibility.Locked && !allowLockedAssets) {
+      return 'Locked photos require elevated permission';
+    }
+
+    return null;
+  }
+
+  private getUnsupportedSearchSourcePagingReason(
+    order: AgentSearchAssetsOrder,
+    mode: AgentSearchAssetsMode,
+  ): string | null {
+    if (mode === 'smart') {
+      return order === 'asc' ? 'asc order search is not available yet' : null;
+    }
+
+    if (order !== 'desc') {
+      return `${order} order search is not available yet`;
+    }
+
+    return null;
+  }
+
+  private getRepositoryScope(auth: AuthDto, session: AgentSession) {
+    const plan = session.permissionPlanSnapshot;
+    return {
+      owned: plan.assetScope.owned,
+      sharedSpaces: plan.assetScope.sharedSpaces,
+      locked: plan.assetScope.locked && auth.session?.hasElevatedPermission === true,
+    };
+  }
+
+  private async getSearchTimelineSpaceIds(auth: AuthDto, session: AgentSession, filters: AgentSearchAssetsFilters) {
+    const plan = session.permissionPlanSnapshot;
+    const hasAlbumFilter = (filters.albumIds?.length ?? 0) > 0;
+    const shouldLoadTimelineSpaceIds =
+      !filters.spaceId &&
+      plan.assetScope.sharedSpaces &&
+      (filters.withSharedSpaces === true || !plan.assetScope.owned || hasAlbumFilter);
+
+    if (!shouldLoadTimelineSpaceIds) {
+      return [];
+    }
+
+    const spaceRows = await this.sharedSpaceRepository.getSpaceIdsForTimeline(auth.user.id);
+    return spaceRows.map((row) => row.spaceId);
+  }
+
+  private getSelectionHandleExpiresAt(session: AgentSession) {
+    const minutes = session.permissionPlanSnapshot.limits.expiresInMinutes ?? 60;
+    return new Date(Date.now() + minutes * 60_000);
   }
 
   private async selectionHandleIdFromSearchSourceRef(
