@@ -16,6 +16,7 @@ class AgentReadSpaceToolResponseDto {
     required this.status,
     required this.toolCall,
     required this.reason,
+    required this.resultSize,
     required this.space,
   });
 
@@ -25,6 +26,8 @@ class AgentReadSpaceToolResponseDto {
 
   String reason;
 
+  AgentToolResultSize resultSize;
+
   AgentSpaceDetail space;
 
   @override
@@ -32,6 +35,7 @@ class AgentReadSpaceToolResponseDto {
     other.status == status &&
     other.toolCall == toolCall &&
     other.reason == reason &&
+    other.resultSize == resultSize &&
     other.space == space;
 
   @override
@@ -40,16 +44,18 @@ class AgentReadSpaceToolResponseDto {
     (status.hashCode) +
     (toolCall.hashCode) +
     (reason.hashCode) +
+    (resultSize.hashCode) +
     (space.hashCode);
 
   @override
-  String toString() => 'AgentReadSpaceToolResponseDto[status=$status, toolCall=$toolCall, reason=$reason, space=$space]';
+  String toString() => 'AgentReadSpaceToolResponseDto[status=$status, toolCall=$toolCall, reason=$reason, resultSize=$resultSize, space=$space]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
       json[r'reason'] = this.reason;
+      json[r'resultSize'] = this.resultSize;
       json[r'space'] = this.space;
     return json;
   }
@@ -66,6 +72,7 @@ class AgentReadSpaceToolResponseDto {
         status: AgentReadSpaceToolResponseDtoStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
         reason: mapValueOfType<String>(json, r'reason')!,
+        resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
         space: AgentSpaceDetail.fromJson(json[r'space'])!,
       );
     }
@@ -117,6 +124,7 @@ class AgentReadSpaceToolResponseDto {
     'status',
     'toolCall',
     'reason',
+    'resultSize',
     'space',
   };
 }

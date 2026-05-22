@@ -13,10 +13,13 @@ part of openapi.api;
 class AgentSearchUsersToolSuccessResponse {
   /// Returns a new [AgentSearchUsersToolSuccessResponse] instance.
   AgentSearchUsersToolSuccessResponse({
+    required this.resultSize,
     required this.status,
     required this.toolCall,
     this.users = const [],
   });
+
+  AgentToolResultSize resultSize;
 
   AgentSearchUsersToolSuccessResponseStatusEnum status;
 
@@ -26,6 +29,7 @@ class AgentSearchUsersToolSuccessResponse {
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchUsersToolSuccessResponse &&
+    other.resultSize == resultSize &&
     other.status == status &&
     other.toolCall == toolCall &&
     _deepEquality.equals(other.users, users);
@@ -33,15 +37,17 @@ class AgentSearchUsersToolSuccessResponse {
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
+    (resultSize.hashCode) +
     (status.hashCode) +
     (toolCall.hashCode) +
     (users.hashCode);
 
   @override
-  String toString() => 'AgentSearchUsersToolSuccessResponse[status=$status, toolCall=$toolCall, users=$users]';
+  String toString() => 'AgentSearchUsersToolSuccessResponse[resultSize=$resultSize, status=$status, toolCall=$toolCall, users=$users]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+      json[r'resultSize'] = this.resultSize;
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
       json[r'users'] = this.users;
@@ -57,6 +63,7 @@ class AgentSearchUsersToolSuccessResponse {
       final json = value.cast<String, dynamic>();
 
       return AgentSearchUsersToolSuccessResponse(
+        resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
         status: AgentSearchUsersToolSuccessResponseStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
         users: AgentUserLookupResult.listFromJson(json[r'users']),
@@ -107,6 +114,7 @@ class AgentSearchUsersToolSuccessResponse {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
+    'resultSize',
     'status',
     'toolCall',
     'users',

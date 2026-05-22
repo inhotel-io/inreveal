@@ -14,11 +14,14 @@ class AgentReadAlbumToolSuccessResponse {
   /// Returns a new [AgentReadAlbumToolSuccessResponse] instance.
   AgentReadAlbumToolSuccessResponse({
     required this.album,
+    required this.resultSize,
     required this.status,
     required this.toolCall,
   });
 
   AgentAlbumDetail album;
+
+  AgentToolResultSize resultSize;
 
   AgentReadAlbumToolSuccessResponseStatusEnum status;
 
@@ -27,6 +30,7 @@ class AgentReadAlbumToolSuccessResponse {
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadAlbumToolSuccessResponse &&
     other.album == album &&
+    other.resultSize == resultSize &&
     other.status == status &&
     other.toolCall == toolCall;
 
@@ -34,15 +38,17 @@ class AgentReadAlbumToolSuccessResponse {
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (album.hashCode) +
+    (resultSize.hashCode) +
     (status.hashCode) +
     (toolCall.hashCode);
 
   @override
-  String toString() => 'AgentReadAlbumToolSuccessResponse[album=$album, status=$status, toolCall=$toolCall]';
+  String toString() => 'AgentReadAlbumToolSuccessResponse[album=$album, resultSize=$resultSize, status=$status, toolCall=$toolCall]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'album'] = this.album;
+      json[r'resultSize'] = this.resultSize;
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
     return json;
@@ -58,6 +64,7 @@ class AgentReadAlbumToolSuccessResponse {
 
       return AgentReadAlbumToolSuccessResponse(
         album: AgentAlbumDetail.fromJson(json[r'album'])!,
+        resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
         status: AgentReadAlbumToolSuccessResponseStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
       );
@@ -108,6 +115,7 @@ class AgentReadAlbumToolSuccessResponse {
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
     'album',
+    'resultSize',
     'status',
     'toolCall',
   };
