@@ -48,8 +48,8 @@ Make Pi's MCP tool use robust when smaller models plan from search results:
   handle.
 - Convert handle and placeholder mistakes into specific, recoverable MCP
   responses.
-- Persist a terminal failed activity/session state when a runner turn ends after
-  an unrecovered tool failure.
+- Persist a terminal failed activity state and non-running session status when a
+  runner turn ends after an unrecovered tool failure.
 - Keep compact activity stable during tool-heavy runs, with no transient flash of
   raw log cards before the UI collapses back to "Pi is working".
 - Provide an opt-in verbose activity view, implemented through the existing
@@ -112,9 +112,9 @@ instead of:
 }
 ```
 
-The same rule applies to example `assetIds`, `albumId`, `spaceId`, `toolCallId`,
-`operationIds`, and user/person IDs wherever the generated prompt is intended
-for model consumption.
+The same rule applies to example `assetIds`, `albumId`, `spaceId`, `tagId`,
+`personId`, `spacePersonId`, `toolCallId`, `planId`, `operationIds`, and user
+IDs wherever generated prompt/docs text is intended for model consumption.
 
 Implementation should keep the existing contract validation value path, then add
 a prompt/doc rendering layer that maps known fixture IDs to semantic placeholder
@@ -167,7 +167,12 @@ that says:
 The response should remain safe:
 
 - only same-session handles are listed;
-- expired handles are omitted unless the error is specifically "expired";
+- expired handles are not suggested as usable. If the attempted handle belongs
+  to the same session but is expired, the error should say it expired and should
+  include compact `expiredSelectionHandle` metadata with `id`, `assetCount`,
+  `sourceToolCallId`, and `expiresAt` plus an instruction to rerun
+  `searchAssets`; if the attempted handle is not the expired same-session
+  handle, expired handles stay omitted;
 - no asset IDs are exposed through this recovery hint beyond what the original
   search result already returned;
 - no server-side auto-substitution is performed.
@@ -201,16 +206,18 @@ no pending approval/plan state remains, Gallery should stop showing active
 work. The session should not remain indefinitely `running` with only a
 `start-processing/running` activity event.
 
-Expected state after an unrecovered failure response:
+Expected state after an unrecovered recoverable failure response:
 
-- `agent_session.status` becomes `interrupted` or `failed`.
+- `agent_session.status` becomes `interrupted`, so the same chat remains
+  appendable.
 - A terminal `agent_session_activity_event` is recorded with `status: failed`.
-- Activity polling and websocket updates stop showing "Pi is working".
+- Activity polling and websocket updates stop showing "Pi is working" and expose
+  the latest turn activity as failed.
 - The user can still send another message to continue the same chat.
 
-Use `interrupted` if the failure is recoverable by another user turn and the
-session can accept messages. Use `failed` only for unrecoverable infrastructure
-or runner errors that should not be retried as normal chat.
+Use `agent_session.status = failed` only for unrecoverable infrastructure or
+runner errors that should not be retried as normal chat. In both cases, the
+activity state shown for the failed turn is terminal `failed`, not running.
 
 ### 6. Activity Preview Modes And Verbose Tool Logs
 
@@ -265,12 +272,25 @@ type AgentMcpPromptPlaceholderMap = Record<string, string>;
 The helper maps known fixture values such as:
 
 - `00000000-0000-4000-8000-000000000001` to `<asset-id-from-searchAssets>`
+- `00000000-0000-4000-8000-000000000002` to `<another-asset-id-from-searchAssets>`
+- `00000000-0000-4000-8000-000000000010` to `<album.id from listAlbums/readAlbum>`
+- `00000000-0000-4000-8000-000000000020` to `<space.id from listSpaces/readSpace>`
+- `00000000-0000-4000-8000-000000000021` to
+  `<spacePersonIds value from resolveAssetSearchFilters>`
+- `00000000-0000-4000-8000-000000000030` to
+  `<tagIds value from resolveAssetSearchFilters>`
+- `00000000-0000-4000-8000-000000000040` to
+  `<personIds value from resolveAssetSearchFilters>`
 - `00000000-0000-4000-8000-000000000111` to `<approved-toolCallId>`
+- `00000000-0000-4000-8000-000000000222` to `<plan.id from proposed plan>`
 - `00000000-0000-4000-8000-000000000333` to
   `<selectionHandle.id from searchAssets>`
 
-The mapping should be applied only to generated prompt/docs rendering, not to
-the DTO schemas themselves.
+If additional schema-valid fixture IDs are added to
+`AgentMcpToolContractService`, Slice 1 should extend this map in the same change
+that introduces the fixture. The mapping should be applied only to generated
+prompt/docs rendering, not to the DTO schemas themselves or runtime tool
+responses.
 
 ### Selection Handle Recovery Metadata
 
@@ -378,9 +398,14 @@ Scope:
 TDD coverage:
 
 - Unit test that `AgentMcpPromptService.generatePromptCheatSheet()` does not
-  contain known fixture UUIDs for selection handles, asset IDs, or tool-call IDs.
+  contain known fixture UUIDs for selection handles, asset IDs, album IDs, space
+  IDs, tag IDs, person IDs, space-person IDs, plan IDs, or tool-call IDs.
+- Unit test that `AgentMcpDocsService.generateMarkdown()` does not contain known
+  fixture UUIDs in model-facing JSON examples or JSON-RPC wrappers.
 - Unit test that the prompt contains
   `<selectionHandle.id from searchAssets>`.
+- Unit test that prompt/docs placeholders contain the expected semantic
+  placeholders for each mapped fixture category.
 - Unit test that contract examples are still schema-valid before placeholder
   rendering.
 - Snapshot or focused generated-file test for the planning example.
@@ -389,6 +414,12 @@ Edge cases:
 
 - Same fixture ID appearing in nested operation arrays.
 - Placeholder rendering must not alter real IDs in runtime tool responses.
+- Placeholder rendering must not mutate `listPromptExamples()`,
+  `listDocumentedToolArgumentExamples()`, validation-correction
+  `exampleArguments`, or any DTO/schema contract example.
+- Generated docs marked JSON fences may contain placeholders and are no longer
+  parsed as DTO examples after rendering; schema parsing remains on the
+  pre-rendered contract/example objects.
 
 ### Slice 2: Resolve-Then-Search Guidance
 
@@ -434,6 +465,9 @@ Edge cases:
 
 - Multiple valid handles: list all compactly, do not choose one.
 - No valid handles: instruct the model to rerun `searchAssets`.
+- Attempted same-session expired handle: return expired-handle metadata and
+  instruct the model to rerun `searchAssets`, without suggesting the expired
+  handle as usable.
 - Attempted handle is invalid UUID: return ordinary schema validation, not
   recovery metadata.
 
@@ -478,7 +512,8 @@ TDD coverage:
 - Test that waiting-for-approval state is not marked failed.
 - Test that waiting-for-plan-review state is not marked failed.
 - Test that user can append another message after cleanup.
-- UI/service test that activity polling returns terminal failed state.
+- UI/service test that activity polling returns terminal failed activity for the
+  turn while the recoverable session itself is `interrupted` and appendable.
 
 Edge cases:
 
