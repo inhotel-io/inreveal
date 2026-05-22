@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
+import { AgentOperationTargetKind, AgentOperationType, AgentToolName, UserAvatarColor } from 'src/enum';
 import type {
   AgentMcpApprovalRetryContract,
   AgentMcpArgumentMode,
@@ -1692,6 +1692,129 @@ const proposeAddAssetsToAlbumFromSearchContract: AgentMcpPlanningToolContract = 
   safety,
 };
 
+const proposeSpaceFromSearchExamples: AgentMcpToolExample[] = [
+  {
+    name: 'create-space-from-declarative-search',
+    description: 'Create a new shared space directly from user-facing search filters.',
+    arguments: {
+      summary: 'Create family South Africa space.',
+      spaceName: 'Family South Africa',
+      description: 'Shared January 2026 South Africa photos.',
+      color: UserAvatarColor.Blue,
+      assetSource: {
+        kind: 'search',
+        filters: {
+          country: 'South Africa',
+          takenAfter: '2026-01-01T00:00:00.000Z',
+          takenBefore: '2026-02-01T00:00:00.000Z',
+        },
+        materialization: 'all-matches-with-limit',
+      },
+    },
+  },
+  {
+    name: 'create-space-from-previous-search',
+    description: 'Create a new shared space from a previous search source reference.',
+    arguments: {
+      summary: 'Create shared space from previous search.',
+      spaceName: 'Recent family favorites',
+      assetSource: {
+        kind: 'previousSearch',
+        sourceRef: 'asset-source:search:00000000-0000-4000-8000-000000000333',
+      },
+    },
+  },
+];
+
+const proposeAddAssetsToSpaceFromSearchExamples: AgentMcpToolExample[] = [
+  {
+    name: 'add-search-results-to-space-by-id',
+    description: 'Add matching photos to an existing shared space id.',
+    arguments: {
+      summary: 'Add matching South Africa photos to the family space.',
+      spaceId: exampleSpaceId,
+      assetSource: {
+        kind: 'search',
+        filters: { country: 'South Africa' },
+        materialization: 'all-matches-with-limit',
+      },
+    },
+  },
+  {
+    name: 'add-search-results-to-space-by-name',
+    description: 'Add matching photos to a uniquely named visible shared space.',
+    arguments: {
+      summary: 'Add unalbumed Berlin photos to Family.',
+      spaceName: 'Family',
+      assetSource: {
+        kind: 'search',
+        filters: {
+          city: 'Berlin',
+          country: 'Germany',
+          isNotInAlbum: true,
+        },
+        materialization: 'all-matches-with-limit',
+      },
+    },
+  },
+];
+
+const proposeSpaceFromSearchContract: AgentMcpPlanningToolContract = {
+  name: AgentToolName.ProposeSpaceFromSearch,
+  title: 'Propose space from search',
+  description: 'preferred tool for creating a new shared space from a declarative or previous search source.',
+  usage:
+    'Use this before low-level proposeAlbumOperations when the user asks to create a shared space from matching photos. Gallery resolves names, materializes the source, and creates a reviewable plan; nothing is applied until the user approves.',
+  argumentModes: [
+    {
+      name: 'new-space-from-search',
+      description: 'Create a new shared space and add matching search results.',
+      requiredFields: ['spaceName', 'assetSource'],
+      forbiddenFields: ['operations', 'assetIds', 'assetSelectionHandleId'],
+      whenToUse:
+        'Use for requests like create a shared space from photos matching date, place, people, tags, or a previous search.',
+    },
+  ],
+  examples: proposeSpaceFromSearchExamples,
+  commonMistakes: [
+    {
+      id: 'space-workflow-raw-asset-ids',
+      match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
+      hint: 'Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.',
+      exampleName: 'create-space-from-declarative-search',
+    },
+  ],
+  safety,
+};
+
+const proposeAddAssetsToSpaceFromSearchContract: AgentMcpPlanningToolContract = {
+  name: AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+  title: 'Propose add assets to space from search',
+  description:
+    'preferred tool for adding matching photos to an existing shared space from a declarative or previous search source.',
+  usage:
+    'Use this before low-level proposeAlbumOperations when the user asks to add matching photos to an existing shared space. Provide spaceId when known, or a uniquely visible spaceName. Gallery creates a reviewable plan only.',
+  argumentModes: [
+    {
+      name: 'existing-space-from-search',
+      description: 'Add matching search results to one existing shared space.',
+      requiredFields: ['assetSource'],
+      forbiddenFields: ['operations', 'assetIds', 'assetSelectionHandleId'],
+      whenToUse: 'Use for requests like add my matching trip photos to this existing shared space.',
+    },
+  ],
+  examples: proposeAddAssetsToSpaceFromSearchExamples,
+  commonMistakes: [
+    {
+      id: 'space-workflow-missing-target',
+      match: { messageIncludes: 'Provide exactly one of spaceId or spaceName' },
+      hint: 'Provide spaceId from listSpaces/readSpace, or provide one exact visible spaceName.',
+      exampleName: 'add-search-results-to-space-by-id',
+    },
+  ],
+  safety,
+};
+
 const proposeAlbumOperationsContract: AgentMcpPlanningToolContract = {
   name: AgentToolName.ProposeAlbumOperations,
   title: 'Propose album operations',
@@ -1767,6 +1890,8 @@ const summarizePlanContract: AgentMcpPlanningToolContract = {
 const planningToolContracts: AgentMcpPlanningToolContract[] = [
   proposeAlbumFromSearchContract,
   proposeAddAssetsToAlbumFromSearchContract,
+  proposeSpaceFromSearchContract,
+  proposeAddAssetsToSpaceFromSearchContract,
   proposeAlbumOperationsContract,
   reviseProposedOperationsContract,
   summarizePlanContract,

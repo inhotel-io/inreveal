@@ -1118,6 +1118,117 @@ Add matching photos to a uniquely named visible album.
 }
 ```
 
+### Propose space from search
+
+MCP tool name: `proposeSpaceFromSearch`
+
+preferred tool for creating a new shared space from a declarative or previous search source.
+
+Use this before low-level proposeAlbumOperations when the user asks to create a shared space from matching photos. Gallery resolves names, materializes the source, and creates a reviewable plan; nothing is applied until the user approves.
+
+Argument modes:
+
+- `new-space-from-search`: Use for requests like create a shared space from photos matching date, place, people, tags, or a previous search.
+  Required fields: `spaceName`, `assetSource`.
+  Forbidden fields: `operations`, `assetIds`, `assetSelectionHandleId`.
+
+#### create-space-from-declarative-search
+
+Create a new shared space directly from user-facing search filters.
+
+<!-- mcp-docs:tool-arguments tool="proposeSpaceFromSearch" example="create-space-from-declarative-search" -->
+
+```json
+{
+  "summary": "Create family South Africa space.",
+  "spaceName": "Family South Africa",
+  "description": "Shared January 2026 South Africa photos.",
+  "color": "blue",
+  "assetSource": {
+    "kind": "search",
+    "filters": {
+      "country": "South Africa",
+      "takenAfter": "2026-01-01T00:00:00.000Z",
+      "takenBefore": "2026-02-01T00:00:00.000Z"
+    },
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
+
+#### create-space-from-previous-search
+
+Create a new shared space from a previous search source reference.
+
+<!-- mcp-docs:tool-arguments tool="proposeSpaceFromSearch" example="create-space-from-previous-search" -->
+
+```json
+{
+  "summary": "Create shared space from previous search.",
+  "spaceName": "Recent family favorites",
+  "assetSource": {
+    "kind": "previousSearch",
+    "sourceRef": "<sourceRef from searchAssets>"
+  }
+}
+```
+
+### Propose add assets to space from search
+
+MCP tool name: `proposeAddAssetsToSpaceFromSearch`
+
+preferred tool for adding matching photos to an existing shared space from a declarative or previous search source.
+
+Use this before low-level proposeAlbumOperations when the user asks to add matching photos to an existing shared space. Provide spaceId when known, or a uniquely visible spaceName. Gallery creates a reviewable plan only.
+
+Argument modes:
+
+- `existing-space-from-search`: Use for requests like add my matching trip photos to this existing shared space.
+  Required fields: `assetSource`.
+  Forbidden fields: `operations`, `assetIds`, `assetSelectionHandleId`.
+
+#### add-search-results-to-space-by-id
+
+Add matching photos to an existing shared space id.
+
+<!-- mcp-docs:tool-arguments tool="proposeAddAssetsToSpaceFromSearch" example="add-search-results-to-space-by-id" -->
+
+```json
+{
+  "summary": "Add matching South Africa photos to the family space.",
+  "spaceId": "<space.id from listSpaces/readSpace>",
+  "assetSource": {
+    "kind": "search",
+    "filters": {
+      "country": "South Africa"
+    },
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
+
+#### add-search-results-to-space-by-name
+
+Add matching photos to a uniquely named visible shared space.
+
+<!-- mcp-docs:tool-arguments tool="proposeAddAssetsToSpaceFromSearch" example="add-search-results-to-space-by-name" -->
+
+```json
+{
+  "summary": "Add unalbumed Berlin photos to Family.",
+  "spaceName": "Family",
+  "assetSource": {
+    "kind": "search",
+    "filters": {
+      "city": "Berlin",
+      "country": "Germany",
+      "isNotInAlbum": true
+    },
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
+
 ### Propose album operations
 
 MCP tool name: `proposeAlbumOperations`
@@ -2365,6 +2476,14 @@ Summarize plan risks and selected changes.
 ### Propose add assets to album from search
 
 - `album-workflow-missing-target`: Provide albumId from listAlbums/readAlbum, or provide one exact visible albumName.
+
+### Propose space from search
+
+- `space-workflow-raw-asset-ids`: Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.
+
+### Propose add assets to space from search
+
+- `space-workflow-missing-target`: Provide spaceId from listSpaces/readSpace, or provide one exact visible spaceName.
 
 ### Propose album operations
 
