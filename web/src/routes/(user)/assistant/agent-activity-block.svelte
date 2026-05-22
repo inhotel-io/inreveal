@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { t, type Translations } from 'svelte-i18n';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import type { AgentActivityVisibilityMode } from './agent-activity-visibility-ui';
@@ -22,7 +23,9 @@
   let { model, compactLimit = 3, verboseLimit = 100, visibilityMode, onVisibilityModeChange }: Props = $props();
   const rowsId = $props.id();
   let uncontrolledVisibilityMode = $state<BlockVisibilityMode>('compact');
+  let expandedWindowStart = $state<number | null>(null);
   let expandedTechnicalRowIds = new SvelteSet<string>();
+  let articleElement = $state<HTMLElement | null>(null);
 
   const statusLabels: Record<AgentActivityStatus, Translations> = {
     blocked: 'assistant_activity_status_blocked',
@@ -39,8 +42,19 @@
   const isActive = $derived(currentActiveItem !== null);
   const heading = $derived($t(isActive ? 'assistant_activity_title' : 'assistant_activity_summary_title'));
   const compactItems = $derived(selectCompactItems(model.items, model.activeItem, compactLimit));
-  const expandedItems = $derived(selectVerboseItems(model.verboseItems, model.verboseActiveItem, verboseLimit));
+  const expandedWindowStartIndex = $derived(
+    getVerboseWindowStart(model.verboseItems, verboseLimit, expandedWindowStart),
+  );
+  const expandedItems = $derived(
+    selectVerboseItems(model.verboseItems, model.verboseActiveItem, verboseLimit, expandedWindowStart),
+  );
   const visibleItems = $derived(isExpanded ? expandedItems : compactItems);
+  const hasExpandedPaging = $derived(isExpanded && model.verboseItems.length > verboseLimit && verboseLimit > 0);
+  const canShowOlderActivity = $derived(hasExpandedPaging && expandedWindowStartIndex > 0);
+  const canShowNewerActivity = $derived(
+    hasExpandedPaging && expandedWindowStartIndex + verboseLimit < model.verboseItems.length,
+  );
+  const visibleExpandedCount = $derived(Math.min(expandedItems.length, model.verboseItems.length));
 
   const technicalRowsByItemId = $derived.by(() => {
     const rows = new SvelteMap<string, ReturnType<typeof buildAgentActivityTechnicalRows>>();
@@ -50,6 +64,12 @@
     }
 
     return rows;
+  });
+
+  $effect(() => {
+    if (!isExpanded) {
+      expandedWindowStart = null;
+    }
   });
 
   function selectCompactItems(
@@ -85,10 +105,40 @@
     return items.filter((item) => selectedIds.has(item.id));
   }
 
+  const clampNumber = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+  function getVerboseWindowStart(items: AgentActivityItem[], limit: number, requestedStart: number | null) {
+    if (limit <= 0 || items.length <= limit) {
+      return 0;
+    }
+
+    const maxStart = Math.max(0, items.length - limit);
+    return clampNumber(requestedStart ?? maxStart, 0, maxStart);
+  }
+
+  function includeActiveItemInWindow(
+    selected: AgentActivityItem[],
+    activeItem: AgentActivityItem | null,
+    limit: number,
+  ): AgentActivityItem[] {
+    if (!activeItem || selected.some((item) => item.id === activeItem.id) || limit <= 0) {
+      return selected;
+    }
+
+    const nextSelected = selected.slice(0, limit);
+    if (nextSelected.length >= limit) {
+      nextSelected.shift();
+    }
+    nextSelected.push(activeItem);
+
+    return nextSelected.sort((first, second) => first.startedAt.localeCompare(second.startedAt));
+  }
+
   function selectVerboseItems(
     items: AgentActivityItem[],
     activeItem: AgentActivityItem | null,
     limit: number,
+    requestedStart: number | null,
   ): AgentActivityItem[] {
     if (limit <= 0) {
       return [];
@@ -98,15 +148,10 @@
       return items;
     }
 
-    const selected = items.slice(-limit);
-    if (!activeItem || selected.some((item) => item.id === activeItem.id)) {
-      return selected;
-    }
+    const start = getVerboseWindowStart(items, limit, requestedStart);
+    const selected = items.slice(start, start + limit);
 
-    const withoutOldestInactive = selected.filter((item) => item.id !== activeItem.id).slice(1);
-    return [...withoutOldestInactive, activeItem].sort((first, second) =>
-      first.startedAt.localeCompare(second.startedAt),
-    );
+    return includeActiveItemInWindow(selected, activeItem, limit);
   }
 
   function toggleTechnicalRow(itemId: string) {
@@ -116,10 +161,29 @@
       expandedTechnicalRowIds.add(itemId);
     }
   }
+
+  async function focusPagingButton(buttonName: 'older' | 'newer') {
+    await tick();
+    articleElement?.querySelector<HTMLButtonElement>(`[data-activity-paging-button="${buttonName}"]`)?.focus();
+  }
+
+  function showOlderActivity() {
+    const nextWindowStart = Math.max(0, expandedWindowStartIndex - verboseLimit);
+    expandedWindowStart = nextWindowStart;
+    void focusPagingButton(nextWindowStart > 0 ? 'older' : 'newer');
+  }
+
+  function showNewerActivity() {
+    const maxStart = Math.max(0, model.verboseItems.length - verboseLimit);
+    const nextWindowStart = Math.min(maxStart, expandedWindowStartIndex + verboseLimit);
+    expandedWindowStart = nextWindowStart;
+    void focusPagingButton(nextWindowStart + verboseLimit < model.verboseItems.length ? 'newer' : 'older');
+  }
 </script>
 
 {#if model.items.length > 0 || model.verboseItems.length > 0}
   <article
+    bind:this={articleElement}
     data-chat-item
     class="mr-auto w-full max-w-[82%] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-slate-800 shadow-sm dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100"
     aria-label={heading}
@@ -150,6 +214,38 @@
         {$t(isExpanded ? 'assistant_activity_hide' : 'assistant_activity_show')}
       </button>
     </header>
+
+    {#if hasExpandedPaging}
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <span>
+          {$t('assistant_activity_window_summary', {
+            values: { visible: visibleExpandedCount, total: model.verboseItems.length },
+          })}
+        </span>
+        <div class="flex flex-wrap items-center gap-2">
+          {#if canShowOlderActivity}
+            <button
+              type="button"
+              class="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-immich-primary dark:border-neutral-800 dark:bg-neutral-900 dark:text-gray-200 dark:hover:bg-neutral-800"
+              data-activity-paging-button="older"
+              onclick={showOlderActivity}
+            >
+              {$t('assistant_activity_show_older')}
+            </button>
+          {/if}
+          {#if canShowNewerActivity}
+            <button
+              type="button"
+              class="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-immich-primary dark:border-neutral-800 dark:bg-neutral-900 dark:text-gray-200 dark:hover:bg-neutral-800"
+              data-activity-paging-button="newer"
+              onclick={showNewerActivity}
+            >
+              {$t('assistant_activity_show_newer')}
+            </button>
+          {/if}
+        </div>
+      </div>
+    {/if}
 
     <div
       id={rowsId}
