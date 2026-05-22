@@ -592,6 +592,16 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].appendSystemPromptOverride, undefined);
   });
 
+  it('passes recoverable Gallery MCP retry guidance to the Pi system prompt', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    assert.match(calls.loaders[0].systemPrompt, /retry with corrected arguments/i);
+    assert.match(calls.loaders[0].systemPrompt, /exact handle <selectionHandle\.id from searchAssets>/i);
+    assert.match(calls.loaders[0].systemPrompt, /not an internal Gallery issue/i);
+    assert.match(calls.loaders[0].systemPrompt, /approval-required.*pauses/i);
   it('constructs the Pi resource loader with concrete runtime paths', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
@@ -970,6 +980,55 @@ describe('pi runtime adapter', () => {
     assert.deepEqual(calls.prompts, ['Organize my photos.']);
   });
 
+  it('keeps invalid-handle correction context available before the next Pi prompt', async () => {
+    const { sdk, ai, calls, session } = createFakeDependencies();
+    const realHandleId = '11111111-1111-4111-8111-111111111111';
+    session.messages.push({
+      role: 'tool',
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            status: 'error',
+            error: 'Selection handle is expired or not available for this session',
+            toolName: 'proposeAlbumOperations',
+            retryable: true,
+            hint: `Retry proposeAlbumOperations with the exact handle ${realHandleId} if that is the intended search selection.`,
+            recovery: {
+              kind: 'invalid-selection-handle',
+              attemptedSelectionHandleId: '00000000-0000-4000-8000-000000000333',
+              looksLikeExamplePlaceholder: true,
+              availableSelectionHandles: [
+                {
+                  id: realHandleId,
+                  assetCount: 42,
+                  sourceToolCallId: null,
+                  createdAt: '2026-05-22T07:00:00.000Z',
+                  expiresAt: '2026-05-22T08:00:00.000Z',
+                },
+              ],
+              instruction: 'Retry proposeAlbumOperations with a valid same-session selection handle.',
+            },
+          }),
+        },
+      ],
+    });
+    const originalPrompt = session.prompt.bind(session);
+    session.prompt = async (text) => {
+      const correction = JSON.parse(session.messages[0].content[0].text);
+      assert.equal(correction.retryable, true);
+      assert.equal(correction.recovery.availableSelectionHandles[0].id, realHandleId);
+      assert.match(correction.hint, /Retry proposeAlbumOperations with the exact handle/);
+      return originalPrompt(text);
+    };
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    await collect(runtime.sendMessage(createMessageRequest()));
+
+    assert.equal(calls.prompts[0], 'Organize my photos.');
+  });
+
   it('preserves pending approval state when compacting a large approval-required tool result', () => {
     const messages = [
       {
@@ -1037,6 +1096,7 @@ describe('pi runtime adapter', () => {
         toolCallId: '00000000-0000-4000-8000-000000000333',
       },
     ]);
+    assert.equal(session.messages.filter((message) => message.role === 'assistant').length, 0);
   });
 
   it('resumes from a denied approval with safe denial context', async () => {
@@ -1426,6 +1486,7 @@ describe('pi runtime adapter', () => {
         message: 'provider rejected tool schema',
       },
     ]);
+    assert.doesNotMatch(events[0].message, /retry with corrected arguments/i);
   });
 
   it('redacts provider and MCP secrets from assistant error messages', async () => {
