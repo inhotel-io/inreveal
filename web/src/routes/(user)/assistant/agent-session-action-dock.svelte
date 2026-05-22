@@ -14,7 +14,8 @@
   import { t } from 'svelte-i18n';
   import AgentOperationPlanReviewPanel from './agent-operation-plan-review-panel.svelte';
   import AgentToolApprovalCard from './agent-tool-approval-card.svelte';
-  import { buildToolApprovalPayload, getPendingToolCalls, getRecentToolCalls } from './agent-tool-approval-ui';
+  import { areAgentTimelineToolCallListsEquivalent } from './agent-session-tool-call-state-ui';
+  import { buildToolApprovalPayload, getPendingToolCalls, getTimelineToolCalls } from './agent-tool-approval-ui';
 
   interface Props {
     session: AgentSessionResponseDto;
@@ -50,31 +51,13 @@
   );
   const canShowPlanReview = $derived((!loading || loadErrorMessage !== null) && pendingToolCalls.length === 0);
 
-  const toolCallStateKey = (toolCall: AgentToolCallResponseDto) =>
-    [
-      toolCall.id,
-      toolCall.status,
-      toolCall.startedAt,
-      toolCall.completedAt ?? '',
-      toolCall.responseSummary ?? '',
-      toolCall.error ?? '',
-      toolCall.approvalDecision ?? '',
-    ].join('|');
-
-  const areToolCallListsEquivalent = (
-    firstToolCalls: AgentToolCallResponseDto[],
-    secondToolCalls: AgentToolCallResponseDto[],
-  ) =>
-    firstToolCalls.length === secondToolCalls.length &&
-    firstToolCalls.every((toolCall, index) => toolCallStateKey(toolCall) === toolCallStateKey(secondToolCalls[index]));
-
   const publishToolCallState = (nextToolCalls: AgentToolCallResponseDto[]) => {
     onPendingApprovalCountChange?.(getPendingToolCalls(nextToolCalls).length);
-    onRecentToolCallsChange?.(getRecentToolCalls(nextToolCalls));
+    onRecentToolCallsChange?.(getTimelineToolCalls(nextToolCalls));
   };
 
   const setToolCalls = (nextToolCalls: AgentToolCallResponseDto[]) => {
-    if (areToolCallListsEquivalent(toolCalls, nextToolCalls)) {
+    if (areAgentTimelineToolCallListsEquivalent(toolCalls, nextToolCalls)) {
       return;
     }
 
