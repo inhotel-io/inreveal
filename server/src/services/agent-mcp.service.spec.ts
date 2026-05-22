@@ -1881,6 +1881,63 @@ describe(AgentMcpService.name, () => {
       expect(JSON.stringify(response)).not.toContain('Internal error');
     });
 
+    it('returns recoverable invalid source ref tool errors as MCP tool results', async () => {
+      const sourceRef = `asset-source:search:${factory.uuid()}`;
+      const recoverableError = new AgentMcpRecoverableToolError({
+        status: 'error',
+        error: 'Source ref is expired or not available for this session',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        retryable: true,
+        hint: 'The attempted source ref is expired. Rerun searchAssets with createSelectionHandle true, then retry proposeAlbumOperations with the returned selectionHandle.sourceRef.',
+        recovery: {
+          kind: 'invalid-source-ref',
+          attemptedSourceRef: sourceRef,
+          expectedSourceKind: 'search',
+          expiredSourceRef: sourceRef,
+          instruction:
+            'Rerun searchAssets with createSelectionHandle true, then retry proposeAlbumOperations with the returned selectionHandle.sourceRef.',
+        },
+      });
+      operationPlanService.proposeAlbumOperations.mockRejectedValue(recoverableError);
+
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(AgentToolName.ProposeAlbumOperations, {
+          summary: 'Add photos.',
+          operations: [
+            {
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add selected photos.',
+              targetKind: AgentOperationTargetKind.ExistingAlbum,
+              targetId: factory.uuid(),
+              assetSource: { kind: 'previousSearch', sourceRef },
+              payload: {},
+            },
+          ],
+        }),
+      )) as AgentMcpSuccessResponse;
+
+      expect(response).not.toHaveProperty('error');
+      const result = response.result as AgentMcpToolCallResult;
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        status: 'error',
+        retryable: true,
+        error: 'Source ref is expired or not available for this session',
+        recovery: {
+          kind: 'invalid-source-ref',
+          attemptedSourceRef: sourceRef,
+          expectedSourceKind: 'search',
+          expiredSourceRef: sourceRef,
+        },
+      });
+      expect(result.content[0].text).toContain(recoverableError.content.hint);
+      expect(JSON.stringify(response)).not.toContain('assetIds');
+      expect(JSON.stringify(response)).not.toContain('sampleAssetIds');
+      expect(JSON.stringify(response)).not.toContain('Internal error');
+    });
+
     it('keeps invalid UUID selection handles as ordinary schema validation errors', async () => {
       const response = (await sut.handle(
         auth,
