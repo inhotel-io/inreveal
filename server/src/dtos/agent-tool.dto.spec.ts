@@ -250,6 +250,26 @@ describe('Agent tool DTOs', () => {
       );
     });
 
+    it('accepts search selection handle creation with compact samples', () => {
+      const result = parseSearchAssetsRequest({
+        filters: {},
+        limit: 500,
+        detail: 'ids',
+        createSelectionHandle: true,
+        sampleSize: 5,
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toMatchObject({
+          limit: 500,
+          detail: 'ids',
+          createSelectionHandle: true,
+          sampleSize: 5,
+        });
+      }
+    });
+
     it('keeps metadata detail available when no fields are requested', () => {
       const result = parseSearchAssetsRequest({ detail: 'metadata', filters: {}, limit: 5 });
 
@@ -1081,6 +1101,43 @@ describe('Agent tool DTOs', () => {
       if (encoded.success && encoded.data.status === 'success') {
         expect(encoded.data.sample?.[0].localDateTime).toBe('2026-05-14T12:00:00.000Z');
         expect(encoded.data.sample?.[0]).not.toHaveProperty('originalFileName');
+      }
+    });
+
+    it('encodes search responses with compact selection handle summaries', () => {
+      const assetIds = Array.from({ length: 3 }, () => factory.uuid());
+      const handleId = factory.uuid();
+      const toolCallId = factory.uuid();
+      const response = {
+        status: 'success' as const,
+        toolCall: makeToolCall({ id: toolCallId, toolName: AgentToolName.SearchAssets }),
+        summary: 'Created a selection handle for 3 assets',
+        detail: 'ids' as const,
+        assetIds: assetIds.slice(0, 1),
+        returnedCount: 1,
+        hasMore: false,
+        nextPage: null,
+        resultSize: makeResultSize({ returnedItems: 1 }),
+        selectionHandle: {
+          id: handleId,
+          assetCount: 3,
+          sampleAssetIds: assetIds.slice(0, 2),
+          sourceToolCallId: toolCallId,
+          expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+        },
+      };
+
+      const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode(response);
+
+      expect(encoded.success).toBe(true);
+      if (encoded.success && encoded.data.status === 'success') {
+        expect(encoded.data.selectionHandle).toMatchObject({
+          id: handleId,
+          assetCount: 3,
+          sampleAssetIds: assetIds.slice(0, 2),
+          sourceToolCallId: toolCallId,
+        });
+        expect(encoded.data.assetIds).toEqual(assetIds.slice(0, 1));
       }
     });
 
