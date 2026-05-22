@@ -23701,6 +23701,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -23718,8 +23723,7 @@
                   "required": [
                     "type",
                     "summary",
-                    "targetKind",
-                    "assetIds"
+                    "targetKind"
                   ],
                   "additionalProperties": false
                 },
@@ -23758,6 +23762,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -23775,8 +23784,7 @@
                   "required": [
                     "type",
                     "summary",
-                    "targetKind",
-                    "assetIds"
+                    "targetKind"
                   ],
                   "additionalProperties": false
                 },
@@ -23866,6 +23874,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -23883,8 +23896,7 @@
                   "required": [
                     "type",
                     "summary",
-                    "targetKind",
-                    "assetIds"
+                    "targetKind"
                   ],
                   "additionalProperties": false
                 },
@@ -23984,6 +23996,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -24001,8 +24018,7 @@
                   "required": [
                     "type",
                     "summary",
-                    "targetKind",
-                    "assetIds"
+                    "targetKind"
                   ],
                   "additionalProperties": false
                 },
@@ -24044,6 +24060,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -24061,8 +24082,7 @@
                   "required": [
                     "type",
                     "summary",
-                    "targetKind",
-                    "assetIds"
+                    "targetKind"
                   ],
                   "additionalProperties": false
                 },
@@ -24355,6 +24375,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -24382,7 +24407,6 @@
                     "type",
                     "summary",
                     "targetKind",
-                    "assetIds",
                     "payload"
                   ],
                   "additionalProperties": false
@@ -24422,6 +24446,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -24447,7 +24476,6 @@
                     "type",
                     "summary",
                     "targetKind",
-                    "assetIds",
                     "payload"
                   ],
                   "additionalProperties": false
@@ -24487,6 +24515,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -24512,7 +24545,6 @@
                     "type",
                     "summary",
                     "targetKind",
-                    "assetIds",
                     "payload"
                   ],
                   "additionalProperties": false
@@ -24552,6 +24584,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -24581,7 +24618,6 @@
                     "type",
                     "summary",
                     "targetKind",
-                    "assetIds",
                     "payload"
                   ],
                   "additionalProperties": false
@@ -24621,6 +24657,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -24648,7 +24689,6 @@
                     "type",
                     "summary",
                     "targetKind",
-                    "assetIds",
                     "payload"
                   ],
                   "additionalProperties": false
@@ -25458,6 +25498,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -25475,8 +25520,7 @@
                   "required": [
                     "type",
                     "summary",
-                    "targetKind",
-                    "assetIds"
+                    "targetKind"
                   ],
                   "additionalProperties": false
                 },
@@ -25515,6 +25559,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -25532,8 +25581,7 @@
                   "required": [
                     "type",
                     "summary",
-                    "targetKind",
-                    "assetIds"
+                    "targetKind"
                   ],
                   "additionalProperties": false
                 },
@@ -25623,6 +25671,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -25640,8 +25693,7 @@
                   "required": [
                     "type",
                     "summary",
-                    "targetKind",
-                    "assetIds"
+                    "targetKind"
                   ],
                   "additionalProperties": false
                 },
@@ -25741,6 +25793,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -25758,8 +25815,7 @@
                   "required": [
                     "type",
                     "summary",
-                    "targetKind",
-                    "assetIds"
+                    "targetKind"
                   ],
                   "additionalProperties": false
                 },
@@ -25801,6 +25857,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -25818,8 +25879,7 @@
                   "required": [
                     "type",
                     "summary",
-                    "targetKind",
-                    "assetIds"
+                    "targetKind"
                   ],
                   "additionalProperties": false
                 },
@@ -26112,6 +26172,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -26139,7 +26204,6 @@
                     "type",
                     "summary",
                     "targetKind",
-                    "assetIds",
                     "payload"
                   ],
                   "additionalProperties": false
@@ -26179,6 +26243,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -26204,7 +26273,6 @@
                     "type",
                     "summary",
                     "targetKind",
-                    "assetIds",
                     "payload"
                   ],
                   "additionalProperties": false
@@ -26244,6 +26312,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -26269,7 +26342,6 @@
                     "type",
                     "summary",
                     "targetKind",
-                    "assetIds",
                     "payload"
                   ],
                   "additionalProperties": false
@@ -26309,6 +26381,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -26338,7 +26415,6 @@
                     "type",
                     "summary",
                     "targetKind",
-                    "assetIds",
                     "payload"
                   ],
                   "additionalProperties": false
@@ -26378,6 +26454,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                       }
                     },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
                     "riskLevel": {
                       "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
@@ -26405,7 +26486,6 @@
                     "type",
                     "summary",
                     "targetKind",
-                    "assetIds",
                     "payload"
                   ],
                   "additionalProperties": false
@@ -26792,6 +26872,49 @@
         ],
         "type": "string"
       },
+      "AgentSearchAssetsSelectionHandle": {
+        "properties": {
+          "assetCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "expiresAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "sampleAssetIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "maxItems": 25,
+            "type": "array"
+          },
+          "sourceToolCallId": {
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assetCount",
+          "expiresAt",
+          "id",
+          "sampleAssetIds",
+          "sourceToolCallId"
+        ],
+        "type": "object"
+      },
       "AgentSearchAssetsToolApprovalRequiredResponse": {
         "properties": {
           "status": {
@@ -26835,6 +26958,9 @@
       "AgentSearchAssetsToolRequestDto": {
         "additionalProperties": false,
         "properties": {
+          "createSelectionHandle": {
+            "type": "boolean"
+          },
           "detail": {
             "$ref": "#/components/schemas/AgentSearchAssetsDetail"
           },
@@ -26938,6 +27064,9 @@
               "$ref": "#/components/schemas/AgentSearchAssetResult"
             },
             "type": "array"
+          },
+          "selectionHandle": {
+            "$ref": "#/components/schemas/AgentSearchAssetsSelectionHandle"
           },
           "status": {
             "enum": [

@@ -16,6 +16,7 @@ class AgentSearchUsersToolResponseDto {
     required this.status,
     required this.toolCall,
     required this.reason,
+    required this.resultSize,
     this.users = const [],
   });
 
@@ -25,6 +26,8 @@ class AgentSearchUsersToolResponseDto {
 
   String reason;
 
+  AgentToolResultSize resultSize;
+
   List<AgentUserLookupResult> users;
 
   @override
@@ -32,6 +35,7 @@ class AgentSearchUsersToolResponseDto {
     other.status == status &&
     other.toolCall == toolCall &&
     other.reason == reason &&
+    other.resultSize == resultSize &&
     _deepEquality.equals(other.users, users);
 
   @override
@@ -40,16 +44,18 @@ class AgentSearchUsersToolResponseDto {
     (status.hashCode) +
     (toolCall.hashCode) +
     (reason.hashCode) +
+    (resultSize.hashCode) +
     (users.hashCode);
 
   @override
-  String toString() => 'AgentSearchUsersToolResponseDto[status=$status, toolCall=$toolCall, reason=$reason, users=$users]';
+  String toString() => 'AgentSearchUsersToolResponseDto[status=$status, toolCall=$toolCall, reason=$reason, resultSize=$resultSize, users=$users]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
       json[r'reason'] = this.reason;
+      json[r'resultSize'] = this.resultSize;
       json[r'users'] = this.users;
     return json;
   }
@@ -66,6 +72,7 @@ class AgentSearchUsersToolResponseDto {
         status: AgentSearchUsersToolResponseDtoStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
         reason: mapValueOfType<String>(json, r'reason')!,
+        resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
         users: AgentUserLookupResult.listFromJson(json[r'users']),
       );
     }
@@ -117,6 +124,7 @@ class AgentSearchUsersToolResponseDto {
     'status',
     'toolCall',
     'reason',
+    'resultSize',
     'users',
   };
 }

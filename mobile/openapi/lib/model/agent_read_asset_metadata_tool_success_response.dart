@@ -14,36 +14,70 @@ class AgentReadAssetMetadataToolSuccessResponse {
   /// Returns a new [AgentReadAssetMetadataToolSuccessResponse] instance.
   AgentReadAssetMetadataToolSuccessResponse({
     this.assets = const [],
+    this.detail,
+    this.fields = const [],
+    required this.resultSize,
     required this.status,
+    required this.summary,
     required this.toolCall,
   });
 
-  List<AgentAssetMetadata> assets;
+  List<AgentAssetMetadataResult> assets;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  AgentAssetMetadataDetail? detail;
+
+  List<AgentAssetMetadataField> fields;
+
+  AgentToolResultSize resultSize;
 
   AgentReadAssetMetadataToolSuccessResponseStatusEnum status;
+
+  String summary;
 
   AgentToolCallResponseDto toolCall;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadAssetMetadataToolSuccessResponse &&
     _deepEquality.equals(other.assets, assets) &&
+    other.detail == detail &&
+    _deepEquality.equals(other.fields, fields) &&
+    other.resultSize == resultSize &&
     other.status == status &&
+    other.summary == summary &&
     other.toolCall == toolCall;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (assets.hashCode) +
+    (detail == null ? 0 : detail!.hashCode) +
+    (fields.hashCode) +
+    (resultSize.hashCode) +
     (status.hashCode) +
+    (summary.hashCode) +
     (toolCall.hashCode);
 
   @override
-  String toString() => 'AgentReadAssetMetadataToolSuccessResponse[assets=$assets, status=$status, toolCall=$toolCall]';
+  String toString() => 'AgentReadAssetMetadataToolSuccessResponse[assets=$assets, detail=$detail, fields=$fields, resultSize=$resultSize, status=$status, summary=$summary, toolCall=$toolCall]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'assets'] = this.assets;
+    if (this.detail != null) {
+      json[r'detail'] = this.detail;
+    } else {
+    //  json[r'detail'] = null;
+    }
+      json[r'fields'] = this.fields;
+      json[r'resultSize'] = this.resultSize;
       json[r'status'] = this.status;
+      json[r'summary'] = this.summary;
       json[r'toolCall'] = this.toolCall;
     return json;
   }
@@ -57,8 +91,12 @@ class AgentReadAssetMetadataToolSuccessResponse {
       final json = value.cast<String, dynamic>();
 
       return AgentReadAssetMetadataToolSuccessResponse(
-        assets: AgentAssetMetadata.listFromJson(json[r'assets']),
+        assets: AgentAssetMetadataResult.listFromJson(json[r'assets']),
+        detail: AgentAssetMetadataDetail.fromJson(json[r'detail']),
+        fields: AgentAssetMetadataField.listFromJson(json[r'fields']),
+        resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
         status: AgentReadAssetMetadataToolSuccessResponseStatusEnum.fromJson(json[r'status'])!,
+        summary: mapValueOfType<String>(json, r'summary')!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
       );
     }
@@ -108,7 +146,10 @@ class AgentReadAssetMetadataToolSuccessResponse {
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
     'assets',
+    'fields',
+    'resultSize',
     'status',
+    'summary',
     'toolCall',
   };
 }
