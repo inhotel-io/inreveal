@@ -1,10 +1,17 @@
 import { BadRequestException, Inject, Injectable, Optional } from '@nestjs/common';
 import { AgentMessage } from 'src/database';
 import { AgentRunnerStatusDto } from 'src/dtos/agent-runner.dto';
-import { AgentMessageRole, AgentSessionStatus } from 'src/enum';
+import {
+  AgentMessageRole,
+  AgentSessionActivityEventKind,
+  AgentSessionActivityEventStatus,
+  AgentSessionStatus,
+  AgentToolCallStatus,
+} from 'src/enum';
 import { AgentMessageRepository } from 'src/repositories/agent-message.repository';
 import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
+import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
@@ -28,6 +35,11 @@ type AgentSessionActivityServiceLike = {
   normalizeRunnerEvent: (event: AgentRunnerActivityStreamEvent) => Record<string, unknown> | null | undefined;
 };
 
+type RunnerActivityContext = {
+  kind: AgentSessionActivityEventKind;
+  failureSummary: string;
+};
+
 @Injectable()
 export class AgentRunnerService {
   private static readonly completionActiveStatuses = [
@@ -46,6 +58,8 @@ export class AgentRunnerService {
     private readonly sessionRepository: AgentSessionRepository,
     private readonly websocketRepository: WebsocketRepository,
     private readonly toolTokenService: AgentRunnerToolTokenService,
+    @Optional()
+    private readonly toolCallRepository?: AgentToolCallRepository,
     @Optional()
     @Inject(AgentSessionActivityEventService)
     private readonly activityService?: Partial<AgentSessionActivityServiceLike>,
@@ -245,7 +259,16 @@ export class AgentRunnerService {
         throw new BadRequestException('Agent runner is not configured');
       }
 
-      this.createActivityEvent(userId, sessionId, { kind: 'start-processing', status: 'running' });
+      const activityContext = {
+        kind: AgentSessionActivityEventKind.StartProcessing,
+        failureSummary: 'The assistant stopped while processing the message.',
+      };
+      const baselineToolCallIds = await this.listToolCallIds(sessionId);
+
+      this.createActivityEvent(userId, sessionId, {
+        kind: AgentSessionActivityEventKind.StartProcessing,
+        status: AgentSessionActivityEventStatus.Running,
+      });
 
       await this.processRunnerStream({
         userId,
@@ -258,9 +281,14 @@ export class AgentRunnerService {
           body: { gallerySessionId: sessionId, messageId, content },
         }),
         emptyStreamMessage: 'Agent runner message stream ended before completion',
+        activityContext,
+        baselineToolCallIds,
       });
     } catch (error) {
-      await this.emitRunnerFailure(userId, sessionId, error);
+      await this.emitRunnerFailure(userId, sessionId, error, {
+        kind: AgentSessionActivityEventKind.StartProcessing,
+        failureSummary: 'The assistant stopped while processing the message.',
+      });
       throw error;
     }
   }
@@ -293,7 +321,16 @@ export class AgentRunnerService {
         ...(toolResult === undefined ? {} : { toolResult }),
       };
 
-      this.createActivityEvent(userId, sessionId, { kind: 'runner-recovery', status: 'running' });
+      const activityContext = {
+        kind: AgentSessionActivityEventKind.RunnerRecovery,
+        failureSummary: 'The assistant stopped while resuming after approval.',
+      };
+      const baselineToolCallIds = await this.listToolCallIds(sessionId);
+
+      this.createActivityEvent(userId, sessionId, {
+        kind: AgentSessionActivityEventKind.RunnerRecovery,
+        status: AgentSessionActivityEventStatus.Running,
+      });
 
       await this.processRunnerStream({
         userId,
@@ -306,9 +343,14 @@ export class AgentRunnerService {
           body,
         }),
         emptyStreamMessage: 'Agent runner resume stream ended before completion',
+        activityContext,
+        baselineToolCallIds,
       });
     } catch (error) {
-      await this.emitRunnerFailure(userId, sessionId, error);
+      await this.emitRunnerFailure(userId, sessionId, error, {
+        kind: AgentSessionActivityEventKind.RunnerRecovery,
+        failureSummary: 'The assistant stopped while resuming after approval.',
+      });
       throw error;
     }
   }
@@ -319,12 +361,16 @@ export class AgentRunnerService {
     runnerSessionId,
     stream,
     emptyStreamMessage,
+    activityContext,
+    baselineToolCallIds,
   }: {
     userId: string;
     sessionId: string;
     runnerSessionId: string;
     stream: AsyncGenerator<AgentRunnerStreamEvent>;
     emptyStreamMessage: string;
+    activityContext: RunnerActivityContext;
+    baselineToolCallIds: Set<string> | undefined;
   }) {
     let completedEvent: Extract<AgentRunnerStreamEvent, { type: 'assistant-message-completed' }> | undefined;
     let suppressAssistantOutput = false;
@@ -393,6 +439,7 @@ export class AgentRunnerService {
       message: this.mapMessage(message),
       createdAt: this.toIsoNow(),
     });
+    await this.cleanupSameTurnToolFailure(userId, sessionId, session.status, activityContext, baselineToolCallIds);
   }
 
   private async isWaitingForToolApproval(userId: string, sessionId: string) {
@@ -400,8 +447,18 @@ export class AgentRunnerService {
     return session?.status === AgentSessionStatus.WaitingForToolApproval;
   }
 
-  private async emitRunnerFailure(userId: string, sessionId: string, error: unknown) {
-    await this.sessionRepository.markInterruptedFromActive(userId, sessionId).catch(() => {});
+  private async emitRunnerFailure(
+    userId: string,
+    sessionId: string,
+    error: unknown,
+    activityContext: RunnerActivityContext,
+  ) {
+    try {
+      await this.sessionRepository.markInterruptedFromActive(userId, sessionId);
+    } catch {
+      // Runner failure reporting must continue even if session cleanup races another state transition.
+    }
+    this.createFailedActivityEvent(userId, sessionId, activityContext.kind, activityContext.failureSummary);
     this.websocketRepository.clientSend('on_agent_session_event', userId, {
       type: 'runner-error',
       sessionId,
@@ -411,6 +468,59 @@ export class AgentRunnerService {
           : 'The assistant runner stopped while processing the message.',
       createdAt: this.toIsoNow(),
     });
+  }
+
+  private async listToolCallIds(sessionId: string): Promise<Set<string> | undefined> {
+    if (!this.toolCallRepository) {
+      return undefined;
+    }
+
+    try {
+      const toolCalls = await this.toolCallRepository.getBySessionId(sessionId);
+      return new Set(toolCalls.map((toolCall) => toolCall.id));
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async cleanupSameTurnToolFailure(
+    userId: string,
+    sessionId: string,
+    sessionStatus: AgentSessionStatus,
+    activityContext: RunnerActivityContext,
+    baselineToolCallIds: Set<string> | undefined,
+  ) {
+    if (sessionStatus !== AgentSessionStatus.Running || !baselineToolCallIds || !this.toolCallRepository) {
+      return;
+    }
+
+    let toolCalls;
+    try {
+      toolCalls = await this.toolCallRepository.getBySessionId(sessionId);
+    } catch {
+      return;
+    }
+
+    const hasSameTurnFailure = toolCalls.some(
+      (toolCall) =>
+        !baselineToolCallIds.has(toolCall.id) &&
+        [AgentToolCallStatus.Denied, AgentToolCallStatus.Failed].includes(toolCall.status),
+    );
+    if (!hasSameTurnFailure) {
+      return;
+    }
+
+    try {
+      await this.sessionRepository.markInterruptedFromActive(userId, sessionId);
+    } catch {
+      // Activity cleanup is best-effort and must not hide the assistant response.
+    }
+    this.createFailedActivityEvent(
+      userId,
+      sessionId,
+      activityContext.kind,
+      'The assistant stopped after a Gallery tool error.',
+    );
   }
 
   private createRunnerActivityEvent(userId: string, sessionId: string, event: AgentRunnerActivityStreamEvent) {
@@ -437,6 +547,19 @@ export class AgentRunnerService {
     } catch {
       // Activity events are audit hints and must not block the assistant stream.
     }
+  }
+
+  private createFailedActivityEvent(
+    userId: string,
+    sessionId: string,
+    kind: AgentSessionActivityEventKind,
+    summary: string,
+  ) {
+    this.createActivityEvent(userId, sessionId, {
+      kind,
+      status: AgentSessionActivityEventStatus.Failed,
+      summary,
+    });
   }
 
   private mapMessage(message: AgentMessage) {
