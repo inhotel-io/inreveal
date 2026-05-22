@@ -45,22 +45,35 @@ import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import {
   invalidSelectionHandleError,
   isAgentMcpRecoverableToolError,
+  wrongIdDomainError,
 } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { TagService } from 'src/services/tag.service';
+import { AgentIdDomain } from 'src/types/agent-asset-source.types';
 import { AgentAlbumOperationInput, AgentOperationResult } from 'src/types/agent-operation.types';
 import {
   AgentSelectionHandleRecoveryHint,
   AgentSelectionHandleRecoveryMetadata,
   AgentToolOperationPlanRequestMetadata,
   AgentToolOperationPlanResponseMetadata,
+  AgentWrongIdDomainRecoveryMetadata,
 } from 'src/types/agent-tool.types';
 
 const selectionHandleRecoveryLimit = 5;
 const knownExampleSelectionHandleIds = new Set(['00000000-0000-4000-8000-000000000333']);
+const knownAgentIdDomains = new Set<AgentIdDomain>([
+  'asset',
+  'person',
+  'album',
+  'space',
+  'tag',
+  'selectionHandle',
+  'sourceRef',
+  'unknown',
+]);
 
 type PlanningRequest = {
   summary?: string;
@@ -628,6 +641,32 @@ export class AgentOperationPlanService {
     return readableIds;
   }
 
+  private async getReadablePersonIds(auth: AuthDto, session: AgentSession, personIds: string[]) {
+    const requestedIds = new Set(personIds);
+    const readableIds = new Set<string>();
+    const plan = session.permissionPlanSnapshot;
+
+    if (plan.assetScope.owned) {
+      const ownerIds = await this.accessRepository.person.checkOwnerAccess(auth.user.id, requestedIds);
+      for (const id of ownerIds) {
+        if (requestedIds.has(id)) {
+          readableIds.add(id);
+        }
+      }
+    }
+
+    if (plan.assetScope.sharedSpaces) {
+      const sharedIds = await this.accessRepository.person.checkSharedSpaceAccess(auth.user.id, requestedIds);
+      for (const id of sharedIds) {
+        if (requestedIds.has(id)) {
+          readableIds.add(id);
+        }
+      }
+    }
+
+    return readableIds;
+  }
+
   private async getWritableAssetIds(auth: AuthDto, session: AgentSession, assetIds: string[]) {
     const requestedIds = new Set(assetIds);
     const writableIds = new Set<string>();
@@ -817,6 +856,22 @@ export class AgentOperationPlanService {
   }
 
   private async createInvalidSelectionHandleError(auth: AuthDto, session: AgentSession, id: string) {
+    const [readableAssetIds, readablePersonIds] = await Promise.all([
+      this.getReadableAssetIds(auth, session, [id]),
+      this.getReadablePersonIds(auth, session, [id]),
+    ]);
+    const receivedDomain = readableAssetIds.has(id) ? 'asset' : readablePersonIds.has(id) ? 'person' : null;
+    if (receivedDomain) {
+      return wrongIdDomainError({
+        toolName: AgentToolName.ProposeAlbumOperations,
+        field: 'operations[].assetSelectionHandleId',
+        expectedDomain: 'selectionHandle',
+        receivedDomain,
+        instruction:
+          'Use a same-session selection handle returned by searchAssets with createSelectionHandle true, or use assetSource.search once available.',
+      });
+    }
+
     const now = new Date();
     const [availableSelectionHandles, attemptedHandle] = await Promise.all([
       this.selectionHandleRepository.listValidForRecovery({
@@ -2236,10 +2291,9 @@ export class AgentOperationPlanService {
         : AgentToolCallStatus.Failed;
     const approvalDecision =
       status === AgentToolCallStatus.Denied ? AgentToolApprovalDecision.Denied : AgentToolApprovalDecision.Approved;
-    const redactedResponseMetadata =
-      isAgentMcpRecoverableToolError(error) && this.isInvalidSelectionHandleRecoveryMetadata(error.content.recovery)
-        ? { selectionHandleRecovery: error.content.recovery }
-        : null;
+    const redactedResponseMetadata = isAgentMcpRecoverableToolError(error)
+      ? this.recoverablePlanningResponseMetadata(error.content.recovery)
+      : null;
 
     try {
       await this.createPlanningAudit(session, toolName, request, {
@@ -2258,6 +2312,47 @@ export class AgentOperationPlanService {
     recovery: Record<string, unknown>,
   ): recovery is AgentSelectionHandleRecoveryMetadata {
     return recovery.kind === 'invalid-selection-handle';
+  }
+
+  private sanitizeWrongIdDomainRecoveryMetadata(
+    recovery: Record<string, unknown>,
+  ): AgentWrongIdDomainRecoveryMetadata | null {
+    if (
+      recovery.kind !== 'wrong_id_domain' ||
+      typeof recovery.field !== 'string' ||
+      typeof recovery.instruction !== 'string' ||
+      !this.isKnownAgentIdDomain(recovery.expectedDomain) ||
+      !this.isKnownAgentIdDomain(recovery.receivedDomain)
+    ) {
+      return null;
+    }
+
+    return {
+      kind: 'wrong_id_domain',
+      field: recovery.field,
+      expectedDomain: recovery.expectedDomain,
+      receivedDomain: recovery.receivedDomain,
+      instruction: recovery.instruction,
+    };
+  }
+
+  private isKnownAgentIdDomain(value: unknown): value is AgentIdDomain {
+    return typeof value === 'string' && knownAgentIdDomains.has(value as AgentIdDomain);
+  }
+
+  private recoverablePlanningResponseMetadata(
+    recovery: Record<string, unknown>,
+  ): AgentToolOperationPlanResponseMetadata | null {
+    if (this.isInvalidSelectionHandleRecoveryMetadata(recovery)) {
+      return { selectionHandleRecovery: recovery };
+    }
+
+    const wrongIdDomainRecovery = this.sanitizeWrongIdDomainRecoveryMetadata(recovery);
+    if (wrongIdDomainRecovery) {
+      return { wrongIdDomainRecovery };
+    }
+
+    return null;
   }
 
   private redactRequestMetadata(
