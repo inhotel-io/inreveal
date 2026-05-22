@@ -49,27 +49,11 @@ export class AgentMcpPromptService {
     const examples = this.listPromptExamples();
     const contracts = this.contractService.listToolContracts();
     const toolList = contracts.map((contract) => this.toPiToolName(contract.name)).join(',');
-    const resolveFilters = this.getPromptExample(
-      examples,
-      AgentToolName.ResolveAssetSearchFilters,
-      'resolve-named-filters',
-    );
-    const peopleOrResolve = this.getPromptExample(
-      examples,
-      AgentToolName.ResolveAssetSearchFilters,
-      'resolve-pierre-aurelia-people',
-    );
     const peopleOrSearch = this.getPromptExample(
       examples,
       AgentToolName.SearchAssets,
       'search-resolved-pierre-aurelia-people',
     );
-    const sharedSpacePeopleSearch = this.getPromptExample(
-      examples,
-      AgentToolName.SearchAssets,
-      'search-resolved-family-space-people',
-    );
-    const sampleSearch = this.getPromptExample(examples, AgentToolName.SearchAssets, 'summary-sample-search');
     const listSpaces = this.getPromptExample(examples, AgentToolName.ListSpaces, 'list-visible-spaces');
     const readSpace = this.getPromptExample(examples, AgentToolName.ReadSpace, 'read-space-details');
     const metadataContract = this.getContract(AgentToolName.ReadAssetMetadata);
@@ -89,18 +73,18 @@ export class AgentMcpPromptService {
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
         'Progressive: resolve names -> search detail ids -> readAssetMetadata fields for selected ids -> plan. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.',
         'Large selections: createSelectionHandle true; use <selectionHandle.id from searchAssets> as assetSelectionHandleId. Do not paste hundreds of assetIds.',
-        `Resolve names before searchAssets: ${resolveFilters.piToolName} ${this.formatJson(resolveFilters.arguments)}`,
-        'Resolver fidelity: copy resolvedFilters into searchAssets.filters exactly; keep personIds/spaceId/spacePersonIds. If missing/ambiguous, ask one clarifying question.',
-        `People OR: resolve ${this.formatJson(peopleOrResolve.arguments)} -> search ${this.formatJson(peopleOrSearch.arguments)}`,
-        `Shared-space people: keep spaceId with spacePersonIds: search ${this.formatJson(sharedSpacePeopleSearch.arguments)}`,
-        `Sample fields: ${sampleSearch.piToolName} ${this.formatJson(sampleSearch.arguments)}`,
+        'Resolve names before searchAssets: {"tags":["Travel"]}',
+        'Resolver fidelity: copy resolvedFilters into searchAssets.filters; keep personIds/spaceId/spacePersonIds. Missing/unclear: ask clarifying question.',
+        `People OR Pierre/Aurelia: search ${this.formatJson(peopleOrSearch.arguments)}`,
+        `Shared-space people: keep spaceId with spacePersonIds: search {"filters":{"spaceId":"<space.id from listSpaces/readSpace>","spacePersonIds":["<spacePersonIds value from resolveAssetSearchFilters>"]}}`,
+        'Sample fields: {"detail":"summary","fields":["dates","location"]}',
         'Visual curation: search ids first, then previews for shortlisted assetIds only.',
         'Technical metadata: search ids first, then readAssetMetadata fields camera/dates/filename.',
-        `Space lookup: ${listSpaces.piToolName}->${readSpace.piToolName}:`,
+        'Space lookup: listSpaces->readSpace:',
         `${this.formatJson(listSpaces.arguments)} -> ${this.formatJson(readSpace.arguments)}`,
-        'Existing-space plans: listSpaces/readSpace. Ambiguous/no matching space: ask. No matching assets/no photos/none to remove: explain. assetIdsTruncated false: exclude already in space adds; only remove already in space; true: narrow.',
-        'Space details: existing_space targetId; plan space.updateDetails fields spaceName, description, color. If same name/description/color, answer no-op/no change. Never update thumbnails, pets, faces, linked libraries, or delete spaces.',
-        `Plan ${this.toPiToolName(AgentToolName.ProposeAlbumOperations)}: album.create temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id-from-searchAssets>"]}.`,
+        'Existing-space plans: Ambiguous/no matching space: ask. No matching assets/no photos/none to remove: explain. assetIdsTruncated false: exclude already in space adds; only remove already in space; true: narrow.',
+        'Space details: space.updateDetails fields spaceName, description, color. If same name/description/color, no-op/no change. Never update thumbnails, pets, faces, linked libraries, or delete spaces.',
+        'Plan: album.create temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id-from-searchAssets>"]}.',
         this.renderValidationRecoveryGuidance(validationMistake),
       ].join('\n'),
     );
@@ -243,7 +227,7 @@ export class AgentMcpPromptService {
       throw new Error('Missing MCP prompt validation recovery mistake with example guidance');
     }
 
-    return `Validation: exampleArguments; retry once if correction is obvious. Hint: "${mistake.hint}"`;
+    return `Validation/denied retryable+hint/exampleArguments/recovery: retry once if correction is obvious; retry with corrected arguments. Invalid handle: Retry mcp_gallery_proposeAlbumOperations with the exact handle <selectionHandle.id from searchAssets>. approval-required still pauses. Do not call this an internal Gallery issue on the first failure. If the corrected retry fails again, explain what is missing or blocked. Hint: "${mistake.hint}"`;
   }
 
   private sanitizePrompt(prompt: string): string {
