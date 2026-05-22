@@ -204,13 +204,13 @@ describe(AgentActivityBlock.name, () => {
     const activityToggle = within(block).getByRole('button', { name: 'Hide activity' });
     const rowsId = activityToggle.getAttribute('aria-controls');
     expect(rowsId).toBeTruthy();
-    expect(document.getElementById(rowsId!)).toHaveAttribute('role', 'status');
+    expect(document.querySelector(`#${rowsId}`)).toHaveAttribute('role', 'status');
 
     const technicalToggle = within(block).getByRole('button', { name: 'Technical details' });
     const technicalDetailsId = technicalToggle.getAttribute('aria-controls');
     expect(technicalToggle).toHaveAttribute('aria-expanded', 'false');
     expect(technicalDetailsId).toBeTruthy();
-    expect(document.getElementById(technicalDetailsId!)).not.toBeInTheDocument();
+    expect(document.querySelector(`#${technicalDetailsId}`)).not.toBeInTheDocument();
 
     await fireEvent.click(technicalToggle);
 
@@ -218,7 +218,7 @@ describe(AgentActivityBlock.name, () => {
       'aria-expanded',
       'true',
     );
-    expect(document.getElementById(technicalDetailsId!)).toBeInTheDocument();
+    expect(document.querySelector(`#${technicalDetailsId}`)).toBeInTheDocument();
   });
 
   it('does not steal focus when active expanded rows update in place', async () => {
