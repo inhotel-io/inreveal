@@ -49,8 +49,13 @@ import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
+import {
+  isAgentMcpRecoverableToolError,
+  wrongIdDomainError,
+} from 'src/services/agent-mcp-recoverable-tool-error';
 import { buildAgentSearch } from 'src/services/agent-search-filter-mapper';
 import { UserService } from 'src/services/user.service';
+import { AgentIdDomain } from 'src/types/agent-asset-source.types';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import {
   AgentAlbumDetail,
@@ -503,7 +508,22 @@ export class AgentToolService {
       });
       throw error;
     }
-    const denialReason = await this.validateReadRequest(auth, refreshedSession, request, descriptor, toolCall.id);
+    let denialReason: string | null;
+    try {
+      denialReason = await this.validateReadRequest(auth, refreshedSession, request, descriptor, toolCall.id);
+    } catch (error) {
+      if (isAgentMcpRecoverableToolError(error)) {
+        await this.transitionExecuting(auth, refreshedSession, toolCall.id, {
+          status: AgentToolCallStatus.Denied,
+          approvalDecision: AgentToolApprovalDecision.Denied,
+          responseSummary: null,
+          redactedResponseMetadata: this.withResultSizeMetadata(null, this.emptyResultSize()),
+          completedAt: new Date(),
+          error: error.content.error,
+        });
+      }
+      throw error;
+    }
     if (denialReason) {
       const denied = await this.transitionExecuting(auth, refreshedSession, toolCall.id, {
         status: AgentToolCallStatus.Denied,
@@ -1230,7 +1250,8 @@ export class AgentToolService {
       perToolLimitDenialReason: (request, limit) =>
         `Requested ${(request.assetIds ?? []).length} assets, but this session allows ${limit} per metadata read. Request fewer asset IDs or split the metadata read into smaller batches.`,
       perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
-      validateAccess: (auth, session, request) => this.validateAssetAccess(auth, session, request.assetIds ?? []),
+      validateAccess: (auth, session, request) =>
+        this.validateAssetAccess(auth, session, request.assetIds ?? [], AgentToolName.ReadAssetMetadata),
       execute: async (_auth, _session, request) => {
         const assetIds = request.assetIds ?? [];
         const detail = request.fields ? undefined : (request.detail ?? 'basic');
@@ -1333,7 +1354,8 @@ export class AgentToolService {
       requestedAlbumCount: () => 0,
       perToolLimit: options.perToolLimit,
       perSessionLimit: options.perSessionLimit,
-      validateAccess: (auth, session, request) => this.validateAssetAccess(auth, session, request.assetIds ?? []),
+      validateAccess: (auth, session, request) =>
+        this.validateAssetAccess(auth, session, request.assetIds ?? [], options.toolName),
       execute: async (_auth, _session, request) => {
         const refs = await options.execute(request.assetIds ?? []);
         return { [options.resultKey]: refs } as Result;
@@ -1859,9 +1881,30 @@ export class AgentToolService {
       : this.toolCallRepository.getCountedAssetCountBySessionAndDataClass(session.id, dataClass, excludedToolCallId);
   }
 
-  private async validateAssetAccess(auth: AuthDto, session: AgentSession, assetIds: string[]): Promise<string | null> {
+  private async validateAssetAccess(
+    auth: AuthDto,
+    session: AgentSession,
+    assetIds: string[],
+    toolName: AgentToolName,
+  ): Promise<string | null> {
     const readableIds = await this.getReadableAssetIds(auth, session.permissionPlanSnapshot, assetIds);
-    return readableIds.size === new Set(assetIds).size ? null : 'One or more assets are not accessible';
+    const requestedIds = new Set(assetIds);
+    if (readableIds.size === requestedIds.size) {
+      return null;
+    }
+
+    const wrongDomain = await this.getReadableWrongIdDomain(auth, session, [...requestedIds], ['person']);
+    if (wrongDomain === 'person') {
+      throw wrongIdDomainError({
+        toolName,
+        field: 'assetIds',
+        expectedDomain: 'asset',
+        receivedDomain: 'person',
+        instruction: 'Use asset IDs returned by searchAssets, or use assetSource.search once available.',
+      });
+    }
+
+    return 'One or more assets are not accessible';
   }
 
   private async validateAlbumAccess(auth: AuthDto, session: AgentSession, albumId: string): Promise<string | null> {
@@ -2031,6 +2074,16 @@ export class AgentToolService {
     if (personIds.size > 0) {
       const readablePersonIds = await this.getReadablePersonIds(auth, session.permissionPlanSnapshot, personIds);
       if (readablePersonIds.size !== personIds.size) {
+        const wrongDomain = await this.getReadableWrongIdDomain(auth, session, [...personIds], ['asset']);
+        if (wrongDomain === 'asset') {
+          throw wrongIdDomainError({
+            toolName: AgentToolName.SearchAssets,
+            field: 'filters.personIds',
+            expectedDomain: 'person',
+            receivedDomain: 'asset',
+            instruction: 'Use person IDs returned by resolveAssetSearchFilters, not asset IDs from searchAssets.',
+          });
+        }
         return 'One or more search filters are not accessible';
       }
     }
@@ -2128,9 +2181,49 @@ export class AgentToolService {
       return;
     }
 
-    const reason = await this.validateAssetAccess(auth, session, assetIds);
+    const reason = await this.validateAssetAccess(auth, session, assetIds, AgentToolName.SearchAssets);
     if (reason) {
       throw new AgentToolDeniedError(reason);
+    }
+  }
+
+  private async getReadableWrongIdDomain(
+    auth: AuthDto,
+    session: AgentSession,
+    ids: string[],
+    candidateDomains: AgentIdDomain[],
+  ): Promise<AgentIdDomain | null> {
+    if (ids.length === 0) {
+      return null;
+    }
+
+    const requestedIds = new Set(ids);
+    for (const domain of candidateDomains) {
+      const readableIds = await this.getReadableIdsForDomain(auth, session, domain, ids);
+      if (readableIds.size === requestedIds.size) {
+        return domain;
+      }
+    }
+
+    return null;
+  }
+
+  private getReadableIdsForDomain(
+    auth: AuthDto,
+    session: AgentSession,
+    domain: AgentIdDomain,
+    ids: string[],
+  ): Promise<Set<string>> {
+    switch (domain) {
+      case 'asset': {
+        return this.getReadableAssetIds(auth, session.permissionPlanSnapshot, ids);
+      }
+      case 'person': {
+        return this.getReadablePersonIds(auth, session.permissionPlanSnapshot, new Set(ids));
+      }
+      default: {
+        return Promise.resolve(new Set());
+      }
     }
   }
 

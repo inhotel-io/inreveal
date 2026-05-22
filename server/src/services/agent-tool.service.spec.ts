@@ -31,6 +31,7 @@ import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
+import { AgentMcpRecoverableToolError } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import { UserService } from 'src/services/user.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
@@ -1131,6 +1132,71 @@ describe(AgentToolService.name, () => {
       expect.objectContaining({ status: 'denied', reason: 'One or more assets are not accessible' }),
     );
     expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([assetId]), false);
+  });
+
+  it('readAssetMetadata returns a recoverable wrong-domain error when assetIds contains a readable person id', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([personId]));
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+
+    const thrown = await sut
+      .readAssetMetadata(auth, session.id, { assetIds: [personId], detail: 'basic' })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    expect((thrown as AgentMcpRecoverableToolError).content).toMatchObject({
+      status: 'error',
+      error: 'That value is a person ID, not an asset ID.',
+      toolName: AgentToolName.ReadAssetMetadata,
+      retryable: true,
+      hint: 'Use asset IDs returned by searchAssets, or use assetSource.search once available.',
+      recovery: {
+        kind: 'wrong_id_domain',
+        field: 'assetIds',
+        expectedDomain: 'asset',
+        receivedDomain: 'person',
+        instruction: 'Use asset IDs returned by searchAssets, or use assetSource.search once available.',
+      },
+    });
+    expect(JSON.stringify((thrown as AgentMcpRecoverableToolError).content.recovery)).not.toContain(personId);
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+  });
+
+  it('readAssetMetadata keeps unknown and cross-user assetIds on the generic inaccessible path', async () => {
+    const auth = AuthFactory.create();
+    const unknownOrCrossUserId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+
+    const result = await sut.readAssetMetadata(auth, session.id, {
+      assetIds: [unknownOrCrossUserId],
+      detail: 'basic',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({ status: 'denied', reason: 'One or more assets are not accessible' }),
+    );
+    expect(JSON.stringify(result)).not.toContain('wrong_id_domain');
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
   });
 
   it('denies tag metadata reads before repository hydration when metadata reads are disabled', async () => {
@@ -3845,6 +3911,85 @@ describe(AgentToolService.name, () => {
     expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
   });
 
+  it('searchAssets returns a recoverable wrong-domain error when personIds contains a readable asset id', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+
+    const thrown = await sut
+      .searchAssets(auth, session.id, {
+        mode: 'metadata',
+        filters: { personIds: [assetId] },
+        limit: 5,
+        page: 1,
+        order: 'desc',
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    expect((thrown as AgentMcpRecoverableToolError).content).toMatchObject({
+      status: 'error',
+      error: 'That value is an asset ID, not a person ID.',
+      toolName: AgentToolName.SearchAssets,
+      retryable: true,
+      hint: 'Use person IDs returned by resolveAssetSearchFilters, not asset IDs from searchAssets.',
+      recovery: {
+        kind: 'wrong_id_domain',
+        field: 'filters.personIds',
+        expectedDomain: 'person',
+        receivedDomain: 'asset',
+        instruction: 'Use person IDs returned by resolveAssetSearchFilters, not asset IDs from searchAssets.',
+      },
+    });
+    expect(JSON.stringify((thrown as AgentMcpRecoverableToolError).content.recovery)).not.toContain(assetId);
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+  });
+
+  it('searchAssets keeps unknown and cross-user personIds on the generic inaccessible filter path', async () => {
+    const auth = AuthFactory.create();
+    const unknownOrCrossUserPersonId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+
+    const result = await sut.searchAssets(auth, session.id, {
+      mode: 'metadata',
+      filters: { personIds: [unknownOrCrossUserPersonId] },
+      limit: 5,
+      page: 1,
+      order: 'desc',
+    });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'One or more search filters are not accessible',
+      toolCall: expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        error: 'One or more search filters are not accessible',
+      }),
+    });
+    expect(JSON.stringify(result)).not.toContain('wrong_id_domain');
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+  });
+
   it('listAlbums filters out owned albums when assetScope.owned is false', async () => {
     const auth = AuthFactory.create();
     const ownedAlbum = makeAlbumSummary({ ownerId: auth.user.id });
@@ -5952,6 +6097,62 @@ describe(AgentToolService.name, () => {
         fields: ['type', 'dates'],
       }),
     );
+  });
+
+  it('approved metadata read retry with wrong-domain stored person id denies and rethrows recoverable error', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: true, locked: false } }),
+    });
+    const approved = makeToolCall({
+      sessionId: session.id,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      redactedRequestMetadata: { assetIds: [personId], detail: 'basic' },
+      assetCount: 1,
+    });
+    const executing = makeToolCall({ ...approved, status: AgentToolCallStatus.Executing });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(approved);
+    toolCallRepository.transition
+      .mockResolvedValueOnce(executing)
+      .mockResolvedValueOnce(makeToolCall({ ...approved, status: AgentToolCallStatus.Denied }));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([personId]));
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+
+    const thrown = await sut.readAssetMetadata(auth, session.id, { toolCallId: approved.id }).catch((error) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    expect((thrown as AgentMcpRecoverableToolError).content).toMatchObject({
+      status: 'error',
+      error: 'That value is a person ID, not an asset ID.',
+      recovery: {
+        kind: 'wrong_id_domain',
+        field: 'assetIds',
+        expectedDomain: 'asset',
+        receivedDomain: 'person',
+      },
+    });
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      2,
+      session.id,
+      approved.id,
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        responseSummary: null,
+        redactedResponseMetadata: expect.objectContaining({ resultSize: emptyResultSize() }),
+        completedAt: expect.any(Date),
+        error: 'That value is a person ID, not an asset ID.',
+      }),
+    );
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
   });
 
   it('prevents asset read when execution claim loses a race', async () => {
