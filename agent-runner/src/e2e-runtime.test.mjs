@@ -163,6 +163,47 @@ describe('e2e runtime', () => {
     assert.match(events.at(-1).content.blocks[0].text, /I proposed a Portugal Trip album/);
   });
 
+  it('uses compact asset ids from search when metadata assets are omitted', async () => {
+    const { calls, fetchImplementation } = createFetch([
+      {
+        name: 'searchAssets',
+        handle: (_args, request) => ({
+          body: {
+            jsonrpc: '2.0',
+            id: request.id,
+            result: {
+              structuredContent: {
+                status: 'success',
+                assetIds: [
+                  '00000000-0000-4000-8000-000000000211',
+                  '00000000-0000-4000-8000-000000000212',
+                  '00000000-0000-4000-8000-000000000213',
+                ],
+                returnedCount: 3,
+                hasMore: false,
+              },
+            },
+          },
+        }),
+      },
+      successHandlers()[1],
+    ]);
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create a Portugal trip album.');
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].body.params.name, 'proposeAlbumOperations');
+    assert.deepEqual(calls[1].body.params.arguments.operations[1].assetIds, [
+      '00000000-0000-4000-8000-000000000211',
+      '00000000-0000-4000-8000-000000000212',
+    ]);
+    assert.deepEqual(calls[1].body.params.arguments.operations[2].assetIds, ['00000000-0000-4000-8000-000000000211']);
+    assert.equal(events.at(-1).type, 'assistant-message-completed');
+    assert.match(events.at(-1).content.blocks[0].text, /I proposed a Portugal Trip album/);
+  });
+
   it('reports a denied proposal without leaking the gateway token', async () => {
     const { calls, fetchImplementation } = createFetch([
       {

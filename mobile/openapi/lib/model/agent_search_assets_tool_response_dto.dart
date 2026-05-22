@@ -26,7 +26,7 @@ class AgentSearchAssetsToolResponseDto {
 
   String? reason;
 
-  List<AgentAssetMetadata> assets;
+  List<AgentSearchAssetResult> assets;
 
   String? nextPage;
 
@@ -76,7 +76,7 @@ class AgentSearchAssetsToolResponseDto {
         status: AgentSearchAssetsToolResponseDtoStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
         reason: mapValueOfType<String>(json, r'reason'),
-        assets: AgentAssetMetadata.listFromJson(json[r'assets']),
+        assets: AgentSearchAssetResult.listFromJson(json[r'assets']),
         nextPage: mapValueOfType<String>(json, r'nextPage'),
       );
     }
