@@ -74,22 +74,22 @@ export class AgentMcpPromptService {
         `R: Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds; if hasMore, use nextPage as page.`,
         'Patterns: unalbumed=isNotInAlbum; 5-star videos=rating 5+type VIDEO; OCR invoice=mode ocr+query invoice; names=resolve names first.',
         'Text search: smart/ocr/description/filename require query',
-        `Write: call ${this.toPiToolName(planContract.name)} for reviewable plans.`,
+        `Write: use album-from-search tools first; other plans use ${this.toPiToolName(planContract.name)}.`,
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
         'Progressive: resolve names -> search detail ids -> readAssetMetadata fields for selected ids -> plan. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.',
-        'Large selections: createSelectionHandle true; use <selectionHandle.id from searchAssets> as assetSelectionHandleId. Do not paste hundreds of assetIds.',
+        'Large: createSelectionHandle true -> assetSelectionHandleId. Do not paste hundreds of assetIds.',
         `Resolve names before searchAssets: ${resolveFilters.piToolName} {"tags":["Travel"]}`,
         'Resolver fidelity: copy resolvedFilters into searchAssets.filters. Missing/ambiguous: ask clarifying question.',
         `People OR: resolve Pierre/Aurelia -> search ${this.formatJson(peopleOrSearch.arguments)}`,
-        `Shared-space people: search {"filters":{"spaceId":"<space.id from listSpaces/readSpace>","spacePersonIds":["<spacePersonIds value from resolveAssetSearchFilters>"]}}`,
+        `Shared-space people: {"filters":{"spaceId":"<space.id from listSpaces/readSpace>","spacePersonIds":["<spacePersonIds value from resolveAssetSearchFilters>"]}}`,
         `Sample fields: ${sampleSearch.piToolName} {"fields":["dates","location"]}`,
         'Visual curation: search ids first, then previews for shortlisted assetIds only.',
         'Technical metadata: search ids first, then readAssetMetadata fields camera/dates/filename.',
         `Space lookup: ${listSpaces.piToolName}->${readSpace.piToolName}:`,
         `${this.formatJson(listSpaces.arguments)} -> ${this.formatJson(readSpace.arguments)}`,
-        'Existing-space plans: listSpaces/readSpace. Ambiguous/no matching space: ask. No assets/no photos/none to remove: explain. assetIdsTruncated false: exclude already in space adds; only remove already in space; true: narrow.',
-        'Space details: existing_space targetId; plan space.updateDetails fields spaceName, description, color. Same name/description/color: no-op. Never update thumbnails, pets, faces, linked libraries, or delete spaces.',
+        'Existing-space: listSpaces/readSpace. Ambiguous/no matching space: ask. No assets/no photos/none to remove: explain. assetIdsTruncated false: exclude already in space adds; only remove already in space; true: narrow/ask.',
+        'Space details: existing_space targetId; space.updateDetails fields spaceName, description, color. Same name/description/color: no-op. Never update thumbnails, pets, faces, linked libraries, or delete spaces.',
         `Plan ${this.toPiToolName(AgentToolName.ProposeAlbumOperations)}: album.create temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id-from-searchAssets>"]}.`,
         this.renderValidationRecoveryGuidance(validationMistake),
       ].join('\n'),
@@ -212,7 +212,7 @@ export class AgentMcpPromptService {
       throw new Error(`Missing MCP prompt approval retry contract for ${contract.name}`);
     }
 
-    return `Approval retry: ${contract.approvalRetry.instruction} Retry uses only {"${contract.approvalRetry.field}":"<approved-toolCallId>"}; do not combine ${contract.approvalRetry.field} with old request fields: ${retryMode.forbiddenFields.join(', ')}.`;
+    return `Approval retry: ${contract.approvalRetry.instruction} Retry uses only {"${contract.approvalRetry.field}":"<approved-toolCallId>"}; omit old request fields: ${retryMode.forbiddenFields.join(', ')}.`;
   }
 
   private renderSafetyGuidance(contracts: AgentMcpToolContract[]): string {
@@ -233,7 +233,7 @@ export class AgentMcpPromptService {
       throw new Error('Missing MCP prompt validation recovery mistake with example guidance');
     }
 
-    return `Validation: retry once if correction is obvious; exampleArguments/hint/recovery -> retry with corrected arguments. Retry mcp_gallery_proposeAlbumOperations with exact <selectionHandle.id from searchAssets>. approval-required pauses. Not an internal Gallery issue on first failure; if corrected retry fails again, explain missing/blocked. ${mistake.hint}`;
+    return `Validation: retry once if correction is obvious using exampleArguments/hint/recovery; retry with corrected arguments. Retry mcp_gallery_proposeAlbumOperations with exact <selectionHandle.id from searchAssets>. approval-required pauses. Not an internal Gallery issue on first failure; if corrected retry fails again, explain missing/blocked. ${mistake.hint}`;
   }
 
   private sanitizePrompt(prompt: string): string {
