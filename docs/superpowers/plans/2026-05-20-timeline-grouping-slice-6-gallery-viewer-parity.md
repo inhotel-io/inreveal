@@ -15,6 +15,7 @@
 Spec: `docs/superpowers/specs/2026-05-19-timeline-grouping-design.md`, Slice 6.
 
 Baseline assumptions:
+
 - Slices 1-5 are complete and already provide `TimelineGrouping`, `TimelineGroupingControl`, `TimelineRouteGroupingBar`, `TimelineBucketCard`, and `timeline-filter-navigation`.
 - Slice 6 is client-side grid parity for `GalleryViewer` surfaces. It does not add server bucket APIs for legacy Search or non-`GalleryViewer` smart-search grids.
 - Smart-search result grids that do not use `GalleryViewer` remain deferred by the amended Slice 6 spec unless the shared helper can be reused without changing pagination semantics.
@@ -22,6 +23,7 @@ Baseline assumptions:
 ## Scope
 
 In scope:
+
 - `web/src/lib/components/shared-components/gallery-viewer/gallery-viewer.svelte`
 - `web/src/lib/utils/gallery-viewer-grouping.ts`
 - `web/src/lib/utils/__tests__/gallery-viewer-grouping.spec.ts`
@@ -35,6 +37,7 @@ In scope:
 - Memory viewer gallery opt-in and spec: `web/src/routes/(user)/memory/[[photos=photos]]/[[assetId=id]]/memory-viewer.svelte`, `web/src/routes/(user)/memory/[[photos=photos]]/[[assetId=id]]/memory-viewer.spec.ts`
 
 Out of scope:
+
 - Replacing `SpaceSearchResults` smart-search grids.
 - Adding server bucket requests to Search, Folders, Memories, or shared-link views.
 - Persisting `GalleryViewer` grouping in URL/query params.
@@ -61,6 +64,7 @@ Out of scope:
 ### Task 1: GalleryViewer Grouping Helper
 
 **Files:**
+
 - Create: `web/src/lib/utils/__tests__/gallery-viewer-grouping.spec.ts`
 - Create: `web/src/lib/utils/gallery-viewer-grouping.ts`
 
@@ -318,6 +322,7 @@ git commit -m "feat(web): add gallery viewer grouping helpers"
 ### Task 2: GalleryViewer Grouping UI And Local Temporal Narrowing
 
 **Files:**
+
 - Create: `web/src/test-data/mocks/thumbnail-with-label.stub.svelte`
 - Create: `web/src/lib/components/shared-components/gallery-viewer/gallery-viewer.spec.ts`
 - Modify: `web/src/lib/components/shared-components/gallery-viewer/gallery-viewer.svelte`
@@ -601,20 +606,20 @@ Expected: FAIL because `GalleryViewer` has no `enableGrouping` prop, no grouping
 Modify `web/src/lib/components/shared-components/gallery-viewer/gallery-viewer.svelte`:
 
 ```ts
-  import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
-  import TimelineBucketCard from '$lib/components/timeline/TimelineBucketCard.svelte';
-  import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
-  import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
-  import {
-    buildGalleryViewerBuckets,
-    filterGalleryViewerAssetsByTemporalState,
-    type GalleryViewerTemporalState,
-  } from '$lib/utils/gallery-viewer-grouping';
-  import {
-    activateTimelineBucket,
-    clearTimelineTemporalFilter,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
+import TimelineBucketCard from '$lib/components/timeline/TimelineBucketCard.svelte';
+import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
+import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
+import {
+  buildGalleryViewerBuckets,
+  filterGalleryViewerAssetsByTemporalState,
+  type GalleryViewerTemporalState,
+} from '$lib/utils/gallery-viewer-grouping';
+import {
+  activateTimelineBucket,
+  clearTimelineTemporalFilter,
+  type ActivatableTimelineBucket,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 Extend props:
@@ -632,37 +637,37 @@ Destructure defaults:
 Add local state and derived values:
 
 ```ts
-  let galleryGrouping = $state<TimelineGrouping>('day');
-  let galleryTemporalFilters = $state<FilterState>(createFilterState());
-  let galleryTemporalState = $derived<GalleryViewerTemporalState>({
-    selectedYear: galleryTemporalFilters.selectedYear,
-    selectedMonth: galleryTemporalFilters.selectedMonth,
-  });
-  let visibleAssets = $derived(filterGalleryViewerAssetsByTemporalState(assets, galleryTemporalState));
-  let galleryBuckets = $derived(
-    galleryGrouping === 'day' ? [] : buildGalleryViewerBuckets(visibleAssets, galleryGrouping),
-  );
-  let showRepresentativeBuckets = $derived(enableGrouping && galleryGrouping !== 'day' && visibleAssets.length > 0);
-  let showGalleryGroupingControls = $derived(
-    enableGrouping && assets.length > 0 && !assetInteraction.selectionActive && !assetViewerManager.isViewing,
-  );
+let galleryGrouping = $state<TimelineGrouping>('day');
+let galleryTemporalFilters = $state<FilterState>(createFilterState());
+let galleryTemporalState = $derived<GalleryViewerTemporalState>({
+  selectedYear: galleryTemporalFilters.selectedYear,
+  selectedMonth: galleryTemporalFilters.selectedMonth,
+});
+let visibleAssets = $derived(filterGalleryViewerAssetsByTemporalState(assets, galleryTemporalState));
+let galleryBuckets = $derived(
+  galleryGrouping === 'day' ? [] : buildGalleryViewerBuckets(visibleAssets, galleryGrouping),
+);
+let showRepresentativeBuckets = $derived(enableGrouping && galleryGrouping !== 'day' && visibleAssets.length > 0);
+let showGalleryGroupingControls = $derived(
+  enableGrouping && assets.length > 0 && !assetInteraction.selectionActive && !assetViewerManager.isViewing,
+);
 ```
 
 Update calculations and selection helpers to use `visibleAssets` where the user is interacting with the rendered grid:
 
 ```ts
-  const navigationAssets = $derived(viewerAssets ?? visibleAssets);
-  const geometry = $derived(
-    getJustifiedLayoutFromAssets(visibleAssets, {
-      spacing: 2,
-      heightTolerance: 0.5,
-      rowHeight: Math.floor(viewport.width) < 850 ? 100 : 235,
-      rowWidth: Math.floor(viewport.width),
-    }),
-  );
-  const selectAllAssets = () => {
-    assetInteraction.selectAssets(visibleAssets.map((a) => toTimelineAsset(a)));
-  };
+const navigationAssets = $derived(viewerAssets ?? visibleAssets);
+const geometry = $derived(
+  getJustifiedLayoutFromAssets(visibleAssets, {
+    spacing: 2,
+    heightTolerance: 0.5,
+    rowHeight: Math.floor(viewport.width) < 850 ? 100 : 235,
+    rowWidth: Math.floor(viewport.width),
+  }),
+);
+const selectAllAssets = () => {
+  assetInteraction.selectAssets(visibleAssets.map((a) => toTimelineAsset(a)));
+};
 ```
 
 When selecting candidates, find indexes inside `visibleAssets` instead of `assets`.
@@ -670,39 +675,39 @@ When selecting candidates, find indexes inside `visibleAssets` instead of `asset
 Guard the existing `onIntersected` effect so representative bucket modes never ask the route to fetch more flat-grid assets:
 
 ```ts
-  $effect(() => {
-    if (enableGrouping && galleryGrouping !== 'day') {
-      return;
-    }
+$effect(() => {
+  if (enableGrouping && galleryGrouping !== 'day') {
+    return;
+  }
 
-    // existing intersection logic stays unchanged below this guard
-  });
+  // existing intersection logic stays unchanged below this guard
+});
 ```
 
 Add handlers:
 
 ```ts
-  const handleGalleryGroupingChange = (grouping: TimelineGrouping) => {
-    galleryGrouping = grouping;
-  };
+const handleGalleryGroupingChange = (grouping: TimelineGrouping) => {
+  galleryGrouping = grouping;
+};
 
-  const handleGalleryBucketActivate = (bucket: ActivatableTimelineBucket) => {
-    if (assetInteraction.selectionActive) {
-      return;
-    }
+const handleGalleryBucketActivate = (bucket: ActivatableTimelineBucket) => {
+  if (assetInteraction.selectionActive) {
+    return;
+  }
 
-    const result = activateTimelineBucket(galleryTemporalFilters, bucket);
-    if (!result) {
-      return;
-    }
+  const result = activateTimelineBucket(galleryTemporalFilters, bucket);
+  if (!result) {
+    return;
+  }
 
-    galleryTemporalFilters = result.filters;
-    galleryGrouping = result.grouping;
-  };
+  galleryTemporalFilters = result.filters;
+  galleryGrouping = result.grouping;
+};
 
-  const clearGalleryTemporalFilter = () => {
-    galleryTemporalFilters = clearTimelineTemporalFilter(galleryTemporalFilters);
-  };
+const clearGalleryTemporalFilter = () => {
+  galleryTemporalFilters = clearTimelineTemporalFilter(galleryTemporalFilters);
+};
 ```
 
 Render the grouping bar before the gallery body:
@@ -763,6 +768,7 @@ git commit -m "feat(web): add gallery viewer grouping controls"
 ### Task 3: Adopt GalleryViewer Grouping In Flat Grid Routes
 
 **Files:**
+
 - Create: `web/src/test-data/mocks/gallery-viewer-props.stub.svelte`
 - Modify: `web/src/routes/(user)/search/[[photos=photos]]/[[assetId=id]]/+page.svelte`
 - Modify: `web/src/routes/(user)/search/[[photos=photos]]/[[assetId=id]]/mock-gallery-viewer.test-wrapper.svelte`
@@ -1023,11 +1029,11 @@ describe('Folders page GalleryViewer grouping', () => {
     mockAssetMultiSelectManager.assets = [];
   });
 
-it('enables GalleryViewer grouping for folder asset grids', () => {
-  renderPage();
+  it('enables GalleryViewer grouping for folder asset grids', () => {
+    renderPage();
 
-  expect(screen.getByTestId('gallery-viewer')).toHaveAttribute('data-enable-grouping', 'true');
-});
+    expect(screen.getByTestId('gallery-viewer')).toHaveAttribute('data-enable-grouping', 'true');
+  });
 });
 ```
 
@@ -1145,13 +1151,10 @@ function renderViewer(sharedLinkOverrides: Partial<SharedLinkResponseDto>) {
     isOwned: false,
   };
 
-  return render(
-    TestWrapper as Component<{ component: typeof IndividualSharedViewer; componentProps: typeof props }>,
-    {
-      component: IndividualSharedViewer,
-      componentProps: props,
-    },
-  );
+  return render(TestWrapper as Component<{ component: typeof IndividualSharedViewer; componentProps: typeof props }>, {
+    component: IndividualSharedViewer,
+    componentProps: props,
+  });
 }
 
 describe('IndividualSharedViewer GalleryViewer grouping', () => {
@@ -1162,21 +1165,21 @@ describe('IndividualSharedViewer GalleryViewer grouping', () => {
     mockGetAssetInfo.mockResolvedValue(assetFactory.build({ id: 'single-asset' }));
   });
 
-it('enables GalleryViewer grouping for multi-asset shared views', () => {
-  renderViewer({
-    assets: [assetFactory.build({ id: 'shared-1' }), assetFactory.build({ id: 'shared-2' })],
-    allowDownload: true,
+  it('enables GalleryViewer grouping for multi-asset shared views', () => {
+    renderViewer({
+      assets: [assetFactory.build({ id: 'shared-1' }), assetFactory.build({ id: 'shared-2' })],
+      allowDownload: true,
+    });
+
+    expect(screen.getByTestId('gallery-viewer')).toHaveAttribute('data-enable-grouping', 'true');
   });
 
-  expect(screen.getByTestId('gallery-viewer')).toHaveAttribute('data-enable-grouping', 'true');
-});
+  it('keeps the existing single-asset shared-link viewer path out of GalleryViewer grouping', async () => {
+    renderViewer({ assets: [assetFactory.build({ id: 'single-asset' })], allowUpload: false });
 
-it('keeps the existing single-asset shared-link viewer path out of GalleryViewer grouping', async () => {
-  renderViewer({ assets: [assetFactory.build({ id: 'single-asset' })], allowUpload: false });
-
-  await waitFor(() => expect(mockGetAssetInfo).toHaveBeenCalledWith({ id: 'single-asset' }));
-  expect(screen.queryByTestId('gallery-viewer')).not.toBeInTheDocument();
-});
+    await waitFor(() => expect(mockGetAssetInfo).toHaveBeenCalledWith({ id: 'single-asset' }));
+    expect(screen.queryByTestId('gallery-viewer')).not.toBeInTheDocument();
+  });
 });
 ```
 
@@ -1410,11 +1413,11 @@ describe('MemoryViewer GalleryViewer grouping', () => {
     );
   });
 
-it('enables GalleryViewer grouping for the memory gallery strip', async () => {
-  renderViewer();
+  it('enables GalleryViewer grouping for the memory gallery strip', async () => {
+    renderViewer();
 
-  expect(await screen.findByTestId('gallery-viewer')).toHaveAttribute('data-enable-grouping', 'true');
-});
+    expect(await screen.findByTestId('gallery-viewer')).toHaveAttribute('data-enable-grouping', 'true');
+  });
 });
 ```
 
@@ -1508,6 +1511,7 @@ git commit -m "feat(web): enable grouping on gallery viewer routes"
 ### Task 4: Slice 6 Verification
 
 **Files:**
+
 - Verification fixes are limited to files from Tasks 1-3.
 
 - [ ] **Step 1: Run all Slice 6 focused tests**

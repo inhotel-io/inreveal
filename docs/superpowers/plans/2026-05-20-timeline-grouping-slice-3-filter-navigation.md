@@ -97,6 +97,7 @@ pnpm --filter immich-web run check:typescript
 ### Task 1: Add Shared Bucket Activation Helpers
 
 **Files:**
+
 - Create: `web/src/lib/utils/__tests__/timeline-filter-navigation.spec.ts`
 - Create: `web/src/lib/utils/timeline-filter-navigation.ts`
 - Modify: `web/src/lib/managers/timeline-manager/types.ts`
@@ -233,9 +234,7 @@ describe('timeline filter navigation helpers', () => {
       months: [{ yearMonth: { year: 2024, month: 2 }, assetsCount: 5 }],
     };
 
-    expect(getTimelineManagerTimeBuckets(manager)).toEqual([
-      { timeBucket: '2024-02-01T00:00:00.000Z', count: 5 },
-    ]);
+    expect(getTimelineManagerTimeBuckets(manager)).toEqual([{ timeBucket: '2024-02-01T00:00:00.000Z', count: 5 }]);
   });
 });
 ```
@@ -371,6 +370,7 @@ git commit -m "feat(web): add timeline temporal navigation helpers"
 ### Task 2: Add Temporal Scroll Anchor Helper
 
 **Files:**
+
 - Create: `web/src/lib/managers/timeline-manager/timeline-anchor.spec.ts`
 - Create: `web/src/lib/managers/timeline-manager/timeline-anchor.ts`
 
@@ -502,6 +502,7 @@ git commit -m "feat(web): add timeline temporal anchor scrolling"
 ### Task 3: Add Timeline Activation And Anchor Contract
 
 **Files:**
+
 - Modify: `web/src/lib/components/timeline/Timeline.svelte`
 - Modify: `web/src/routes/(user)/albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]/mock-timeline.test-wrapper.svelte`
 - Modify: `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/mock-timeline.test-wrapper.svelte`
@@ -554,14 +555,14 @@ Expected: FAIL. Photos may render `timeline-options` without `grouping`; Spaces 
 In `web/src/lib/components/timeline/Timeline.svelte`, add imports:
 
 ```ts
-  import { scrollTimelineToTemporalAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
-  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
-  import type {
-    TimelineAsset,
-    TimelineManagerOptions,
-    TimelineTemporalAnchor,
-    ViewportTopMonth,
-  } from '$lib/managers/timeline-manager/types';
+import { scrollTimelineToTemporalAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
+import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
+import type {
+  TimelineAsset,
+  TimelineManagerOptions,
+  TimelineTemporalAnchor,
+  ViewportTopMonth,
+} from '$lib/managers/timeline-manager/types';
 ```
 
 Replace the existing `TimelineAsset`, `TimelineManagerOptions`, and `ViewportTopMonth` import from `types` with the expanded import above.
@@ -585,23 +586,23 @@ Destructure the new props:
 Add this effect after the existing `timelineManager.scrollableElement = scrollableElement` effect:
 
 ```ts
-  $effect(() => {
-    if (!temporalAnchor || !timelineManager.isInitialized) {
-      return;
-    }
+$effect(() => {
+  if (!temporalAnchor || !timelineManager.isInitialized) {
+    return;
+  }
 
-    if (scrollTimelineToTemporalAnchor(timelineManager, temporalAnchor)) {
-      onTemporalAnchorResolved?.();
-    }
-  });
+  if (scrollTimelineToTemporalAnchor(timelineManager, temporalAnchor)) {
+    onTemporalAnchorResolved?.();
+  }
+});
 ```
 
 Add this temporary contract-use statement near the effect so TypeScript and lint know the activation prop is intentionally declared for the slice 4 representative renderer:
 
 ```ts
-  $effect(() => {
-    void onTimelineBucketActivate;
-  });
+$effect(() => {
+  void onTimelineBucketActivate;
+});
 ```
 
 - [ ] **Step 4: Extend test timeline wrappers**
@@ -609,7 +610,7 @@ Add this temporary contract-use statement near the effect so TypeScript and lint
 In `web/src/routes/(user)/albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]/mock-timeline.test-wrapper.svelte`, add this import:
 
 ```ts
-  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
+import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
 ```
 
 Then extend `Props`:
@@ -623,15 +624,15 @@ Then extend `Props`:
 Destructure:
 
 ```ts
-  let {
-    timelineManager = $bindable(),
-    options = {},
-    album,
-    children,
-    onTimelineBucketActivate,
-    temporalAnchor,
-    onTemporalAnchorResolved,
-  }: Props = $props();
+let {
+  timelineManager = $bindable(),
+  options = {},
+  album,
+  children,
+  onTimelineBucketActivate,
+  temporalAnchor,
+  onTemporalAnchorResolved,
+}: Props = $props();
 ```
 
 Add these elements after the existing `timeline-options` div:
@@ -660,7 +661,7 @@ Add these elements after the existing `timeline-options` div:
 In `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/mock-timeline.test-wrapper.svelte`, add this import:
 
 ```ts
-  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
+import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
 ```
 
 Then extend `Props`:
@@ -675,15 +676,15 @@ Then extend `Props`:
 Destructure:
 
 ```ts
-  let {
-    timelineManager = $bindable(),
-    children,
-    options = {},
-    onTimelineBucketActivate,
-    temporalAnchor,
-    onTemporalAnchorResolved,
-    ...rest
-  }: Props = $props();
+let {
+  timelineManager = $bindable(),
+  children,
+  options = {},
+  onTimelineBucketActivate,
+  temporalAnchor,
+  onTemporalAnchorResolved,
+  ...rest
+}: Props = $props();
 ```
 
 Add these elements inside the wrapper div:
@@ -728,6 +729,7 @@ Do not commit yet; Task 4 and Task 5 make these tests green.
 ### Task 4: Wire Photos Filter And Bucket Navigation State
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/photos/[[assetId=id]]/+page.svelte`
 - Modify: `web/src/routes/(user)/photos/[[assetId=id]]/photos-page.spec.ts`
 - Modify: `web/src/test-data/mocks/bindable-filter-panel.stub.svelte`
@@ -969,73 +971,73 @@ Replace the `case 'timeline'` branch with:
 In `web/src/routes/(user)/photos/[[assetId=id]]/+page.svelte`, add imports:
 
 ```ts
-  import {
-    activateTimelineBucket,
-    type ActivatableTimelineBucket,
-    getTimelineManagerTimeBuckets,
-  } from '$lib/utils/timeline-filter-navigation';
-  import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
+import {
+  activateTimelineBucket,
+  type ActivatableTimelineBucket,
+  getTimelineManagerTimeBuckets,
+} from '$lib/utils/timeline-filter-navigation';
+import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
 ```
 
 Add state near `filters`:
 
 ```ts
-  let timelineGrouping = $state<TimelineGrouping>('day');
-  let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+let timelineGrouping = $state<TimelineGrouping>('day');
+let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
 ```
 
 Replace the options derived value:
 
 ```ts
-  const options = $derived({
-    ...buildPhotosTimelineOptions(filters),
-    grouping: timelineGrouping,
-  });
+const options = $derived({
+  ...buildPhotosTimelineOptions(filters),
+  grouping: timelineGrouping,
+});
 ```
 
 Replace the `timelineBuckets` derived value:
 
 ```ts
-  const timelineBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
+const timelineBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
 ```
 
 Add these helpers near `syncFilterUrl`:
 
 ```ts
-  function handleFiltersChange(nextFilters: FilterState) {
+function handleFiltersChange(nextFilters: FilterState) {
+  temporalAnchor = undefined;
+  syncFilterUrl(nextFilters);
+}
+
+function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+  const result = activateTimelineBucket(filters, bucket);
+  if (!result) {
+    return;
+  }
+
+  filters = result.filters;
+  timelineGrouping = result.grouping;
+  temporalAnchor = result.anchor;
+  syncFilterUrl(result.filters);
+}
+
+function handleRemoveActiveFilter(type: string, id?: string) {
+  const nextFilters = handlePhotosRemoveFilter(filters, type, id);
+  if (type === 'timeline') {
     temporalAnchor = undefined;
+  }
+  filters = nextFilters;
+  syncFilterUrl(nextFilters);
+}
+
+function handleClearAllFilters() {
+  const nextFilters = clearFilters(filters);
+  temporalAnchor = undefined;
+  filters = nextFilters;
+  if (!committedQuery.trim()) {
     syncFilterUrl(nextFilters);
   }
-
-  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    const result = activateTimelineBucket(filters, bucket);
-    if (!result) {
-      return;
-    }
-
-    filters = result.filters;
-    timelineGrouping = result.grouping;
-    temporalAnchor = result.anchor;
-    syncFilterUrl(result.filters);
-  }
-
-  function handleRemoveActiveFilter(type: string, id?: string) {
-    const nextFilters = handlePhotosRemoveFilter(filters, type, id);
-    if (type === 'timeline') {
-      temporalAnchor = undefined;
-    }
-    filters = nextFilters;
-    syncFilterUrl(nextFilters);
-  }
-
-  function handleClearAllFilters() {
-    const nextFilters = clearFilters(filters);
-    temporalAnchor = undefined;
-    filters = nextFilters;
-    if (!committedQuery.trim()) {
-      syncFilterUrl(nextFilters);
-    }
-  }
+}
 ```
 
 Update `FilterPanel`:
@@ -1087,6 +1089,7 @@ git commit -m "feat(web): sync photos timeline buckets with temporal filters"
 ### Task 5: Wire Spaces Filter And Bucket Navigation State
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/+page.svelte`
 - Modify: `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/spaces-page.spec.ts`
 - Modify: `web/src/lib/utils/space-filter-options.ts`
@@ -1211,83 +1214,83 @@ Replace the `case 'timeline'` branch with:
 In `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/+page.svelte`, add imports:
 
 ```ts
-  import {
-    activateTimelineBucket,
-    type ActivatableTimelineBucket,
-    getTimelineManagerTimeBuckets,
-  } from '$lib/utils/timeline-filter-navigation';
-  import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
+import {
+  activateTimelineBucket,
+  type ActivatableTimelineBucket,
+  getTimelineManagerTimeBuckets,
+} from '$lib/utils/timeline-filter-navigation';
+import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
 ```
 
 Add state near `filters`:
 
 ```ts
-  let timelineGrouping = $state<TimelineGrouping>('day');
-  let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+let timelineGrouping = $state<TimelineGrouping>('day');
+let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
 ```
 
 Replace the `options` derived value:
 
 ```ts
-  const options = $derived.by(() => {
-    if (viewMode === 'select-assets') {
-      return { visibility: AssetVisibility.Timeline, timelineSpaceId: space.id };
-    }
-    return { ...buildSpaceTimelineOptions(space.id, filters), grouping: timelineGrouping };
-  });
+const options = $derived.by(() => {
+  if (viewMode === 'select-assets') {
+    return { visibility: AssetVisibility.Timeline, timelineSpaceId: space.id };
+  }
+  return { ...buildSpaceTimelineOptions(space.id, filters), grouping: timelineGrouping };
+});
 ```
 
 Replace the `timelineBuckets` derived value:
 
 ```ts
-  const timelineBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
+const timelineBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
 ```
 
 Replace `handleRemoveFilter` with:
 
 ```ts
-  function handleRemoveFilter(type: string, id?: string) {
-    const nextFilters = handleSpaceRemoveFilter(filters, type, id);
-    if (type === 'timeline') {
-      temporalAnchor = undefined;
-    }
-    filters = nextFilters;
-    syncFilterUrl(nextFilters);
+function handleRemoveFilter(type: string, id?: string) {
+  const nextFilters = handleSpaceRemoveFilter(filters, type, id);
+  if (type === 'timeline') {
+    temporalAnchor = undefined;
   }
+  filters = nextFilters;
+  syncFilterUrl(nextFilters);
+}
 ```
 
 Add these helpers near `handleRemoveFilter`:
 
 ```ts
-  function handleFiltersChange(nextFilters: FilterState) {
-    temporalAnchor = undefined;
+function handleFiltersChange(nextFilters: FilterState) {
+  temporalAnchor = undefined;
+  syncFilterUrl(nextFilters);
+}
+
+function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+  if (viewMode !== 'view') {
+    return;
+  }
+
+  const result = activateTimelineBucket(filters, bucket);
+  if (!result) {
+    return;
+  }
+
+  filters = result.filters;
+  timelineGrouping = result.grouping;
+  temporalAnchor = result.anchor;
+  syncFilterUrl(result.filters);
+}
+
+function handleClearAllFilters() {
+  const nextFilters = clearFilters(filters);
+  temporalAnchor = undefined;
+  filters = nextFilters;
+  if (!committedSearchQuery.trim()) {
     syncFilterUrl(nextFilters);
   }
-
-  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    if (viewMode !== 'view') {
-      return;
-    }
-
-    const result = activateTimelineBucket(filters, bucket);
-    if (!result) {
-      return;
-    }
-
-    filters = result.filters;
-    timelineGrouping = result.grouping;
-    temporalAnchor = result.anchor;
-    syncFilterUrl(result.filters);
-  }
-
-  function handleClearAllFilters() {
-    const nextFilters = clearFilters(filters);
-    temporalAnchor = undefined;
-    filters = nextFilters;
-    if (!committedSearchQuery.trim()) {
-      syncFilterUrl(nextFilters);
-    }
-  }
+}
 ```
 
 Update `FilterPanel`:
@@ -1343,6 +1346,7 @@ git commit -m "feat(web): sync space timeline buckets with temporal filters"
 ### Task 6: Cover URL And FilterPanel Edge Cases
 
 **Files:**
+
 - Modify: `web/src/lib/utils/__tests__/searchable-page-search.spec.ts`
 - Modify: `web/src/routes/(user)/photos/[[assetId=id]]/photos-page.spec.ts`
 - Modify: `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/spaces-page.spec.ts`
@@ -1471,19 +1475,19 @@ Expected: FAIL because the route transient-state tests expose that `handleFilter
 Replace `handleFiltersChange` in both Photos and Spaces with:
 
 ```ts
-  function handleFiltersChange(nextFilters: FilterState) {
-    const temporalChanged =
-      nextFilters.dateAfter !== filters.dateAfter ||
-      nextFilters.dateBefore !== filters.dateBefore ||
-      nextFilters.selectedYear !== filters.selectedYear ||
-      nextFilters.selectedMonth !== filters.selectedMonth;
+function handleFiltersChange(nextFilters: FilterState) {
+  const temporalChanged =
+    nextFilters.dateAfter !== filters.dateAfter ||
+    nextFilters.dateBefore !== filters.dateBefore ||
+    nextFilters.selectedYear !== filters.selectedYear ||
+    nextFilters.selectedMonth !== filters.selectedMonth;
 
-    if (temporalChanged) {
-      temporalAnchor = undefined;
-    }
-
-    syncFilterUrl(nextFilters);
+  if (temporalChanged) {
+    temporalAnchor = undefined;
   }
+
+  syncFilterUrl(nextFilters);
+}
 ```
 
 This keeps the temporal selection active when a person/tag/location/media filter changes after a year or month has been selected, matching the design's "filters and grouping are separate axes" rule.
@@ -1517,6 +1521,7 @@ git commit -m "test(web): cover transient timeline temporal navigation"
 ### Task 7: Final Verification And Coverage Review
 
 **Files:**
+
 - Verify changed files from Tasks 1-6.
 - Read: `docs/superpowers/specs/2026-05-19-timeline-grouping-design.md`
 - Read: `docs/superpowers/plans/2026-05-20-timeline-grouping-slice-2-web-model.md`

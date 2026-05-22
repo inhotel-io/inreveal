@@ -114,6 +114,7 @@ Do not add grouping production code before its red test is observed. Regression 
 ### Task 1: Shared Route Helper And Desktop Grouping Bar
 
 **Files:**
+
 - Create: `web/src/lib/utils/__tests__/timeline-route-options.spec.ts`
 - Create: `web/src/lib/utils/timeline-route-options.ts`
 - Create: `web/src/lib/components/timeline/TimelineRouteGroupingBar.spec.ts`
@@ -549,6 +550,7 @@ git commit -m "feat(web): add shared timeline route grouping helpers"
 ### Task 2: Adopt Grouping On Album Detail Timeline
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]/page.route.spec.ts`
 - Modify: `web/src/routes/(user)/albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]/+page.svelte`
 - Modify: `web/src/routes/(user)/albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]/mock-timeline.test-wrapper.svelte`
@@ -653,72 +655,72 @@ Expected: FAIL because album does not render grouping controls or pass bucket ac
 In `+page.svelte`, add imports:
 
 ```ts
-  import TimelineGroupingControl from '$lib/components/timeline/TimelineGroupingControl.svelte';
-  import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
-  import {
-    activateTimelineBucket,
-    clearTimelineTemporalFilter,
-    getTimelineManagerTimeBuckets,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+import TimelineGroupingControl from '$lib/components/timeline/TimelineGroupingControl.svelte';
+import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
+import {
+  activateTimelineBucket,
+  clearTimelineTemporalFilter,
+  getTimelineManagerTimeBuckets,
+  type ActivatableTimelineBucket,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 Add state near the existing filter state:
 
 ```ts
-  let timelineGrouping = $state<TimelineGrouping>('day');
-  let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+let timelineGrouping = $state<TimelineGrouping>('day');
+let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
 ```
 
 Replace `timeBuckets` with the grouping-aware source:
 
 ```ts
-  const timeBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
+const timeBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
 ```
 
 Add a derived browse-mode guard and update browse options only:
 
 ```ts
-  const isBrowseTimeline = $derived(viewMode === AlbumPageViewMode.VIEW);
+const isBrowseTimeline = $derived(viewMode === AlbumPageViewMode.VIEW);
 
-  const options = $derived.by(() => {
-    if (viewMode === AlbumPageViewMode.SELECT_ASSETS) {
-      return buildAlbumAssetPickerOptions(album.id, pickerFilters);
-    }
+const options = $derived.by(() => {
+  if (viewMode === AlbumPageViewMode.SELECT_ASSETS) {
+    return buildAlbumAssetPickerOptions(album.id, pickerFilters);
+  }
 
-    const baseOptions = buildAlbumTimelineOptions(
-      album.id,
-      album.order ?? authManager.preferences.albums.defaultAssetOrder,
-      albumFilters,
-    );
+  const baseOptions = buildAlbumTimelineOptions(
+    album.id,
+    album.order ?? authManager.preferences.albums.defaultAssetOrder,
+    albumFilters,
+  );
 
-    return isBrowseTimeline ? { ...baseOptions, grouping: timelineGrouping } : baseOptions;
-  });
+  return isBrowseTimeline ? { ...baseOptions, grouping: timelineGrouping } : baseOptions;
+});
 ```
 
 Add handlers:
 
 ```ts
-  function handleTimelineGroupingChange(grouping: TimelineGrouping) {
-    timelineGrouping = grouping;
-    temporalAnchor = undefined;
+function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+  timelineGrouping = grouping;
+  temporalAnchor = undefined;
+}
+
+function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+  const result = activateTimelineBucket(albumFilters, bucket);
+  if (!result) {
+    return;
   }
 
-  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    const result = activateTimelineBucket(albumFilters, bucket);
-    if (!result) {
-      return;
-    }
+  albumFilters = result.filters;
+  timelineGrouping = result.grouping;
+  temporalAnchor = result.anchor;
+}
 
-    albumFilters = result.filters;
-    timelineGrouping = result.grouping;
-    temporalAnchor = result.anchor;
-  }
-
-  function clearAlbumTemporalFilter() {
-    albumFilters = clearTimelineTemporalFilter(albumFilters);
-    temporalAnchor = undefined;
-  }
+function clearAlbumTemporalFilter() {
+  albumFilters = clearTimelineTemporalFilter(albumFilters);
+  temporalAnchor = undefined;
+}
 ```
 
 Render the desktop control above album active chips, only in browse mode:
@@ -778,6 +780,7 @@ git commit -m "feat(web): add album timeline grouping controls"
 ### Task 3: Adopt Grouping On People And Space Person Detail Timelines
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]/+page.svelte`
 - Modify: `web/src/routes/(user)/people/[personId]/[[photos=photos]]/[[assetId=id]]/person-detail-page.spec.ts`
 - Modify: `web/src/routes/(user)/spaces/[spaceId]/people/[personId]/[[photos=photos]]/[[assetId=id]]/+page.svelte`
@@ -888,68 +891,68 @@ Expected: FAIL because neither route renders desktop grouping controls or passes
 In both person route files, add imports:
 
 ```ts
-  import { createFilterState } from '$lib/components/filter-panel/filter-panel';
-  import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
-  import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
-  import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
-  import {
-    activateTimelineBucket,
-    clearTimelineTemporalFilter,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+import { createFilterState } from '$lib/components/filter-panel/filter-panel';
+import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
+import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
+import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
+import {
+  activateTimelineBucket,
+  clearTimelineTemporalFilter,
+  type ActivatableTimelineBucket,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 Add state:
 
 ```ts
-  let timelineGrouping = $state<TimelineGrouping>('day');
-  let timelineFilters = $state(createFilterState());
-  let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+let timelineGrouping = $state<TimelineGrouping>('day');
+let timelineFilters = $state(createFilterState());
+let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
 ```
 
 For personal people, update options:
 
 ```ts
-  const options = $derived(
-    buildTimelineRouteOptions({ personIds: [person.id], withStacked: true }, timelineFilters, timelineGrouping),
-  );
+const options = $derived(
+  buildTimelineRouteOptions({ personIds: [person.id], withStacked: true }, timelineFilters, timelineGrouping),
+);
 ```
 
 For space people, update options:
 
 ```ts
-  const options = $derived(
-    buildTimelineRouteOptions(
-      { spaceId: space.id, spacePersonIds: [person.id], withStacked: true },
-      timelineFilters,
-      timelineGrouping,
-    ),
-  );
+const options = $derived(
+  buildTimelineRouteOptions(
+    { spaceId: space.id, spacePersonIds: [person.id], withStacked: true },
+    timelineFilters,
+    timelineGrouping,
+  ),
+);
 ```
 
 Add handlers in both routes:
 
 ```ts
-  function handleTimelineGroupingChange(grouping: TimelineGrouping) {
-    timelineGrouping = grouping;
-    temporalAnchor = undefined;
+function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+  timelineGrouping = grouping;
+  temporalAnchor = undefined;
+}
+
+function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+  const result = activateTimelineBucket(timelineFilters, bucket);
+  if (!result) {
+    return;
   }
 
-  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    const result = activateTimelineBucket(timelineFilters, bucket);
-    if (!result) {
-      return;
-    }
+  timelineFilters = result.filters;
+  timelineGrouping = result.grouping;
+  temporalAnchor = result.anchor;
+}
 
-    timelineFilters = result.filters;
-    timelineGrouping = result.grouping;
-    temporalAnchor = result.anchor;
-  }
-
-  function clearTemporalFilter() {
-    timelineFilters = clearTimelineTemporalFilter(timelineFilters);
-    temporalAnchor = undefined;
-  }
+function clearTemporalFilter() {
+  timelineFilters = clearTimelineTemporalFilter(timelineFilters);
+  temporalAnchor = undefined;
+}
 ```
 
 Render the bar immediately above `Timeline`:
@@ -996,6 +999,7 @@ git commit -m "feat(web): add people timeline grouping controls"
 ### Task 4: Adopt Grouping On Tags And Simple Library Routes
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/tags/[[photos=photos]]/[[assetId=id]]/+page.svelte`
 - Modify: `web/src/routes/(user)/tags/[[photos=photos]]/[[assetId=id]]/tags-page.spec.ts`
 - Modify/Create:
@@ -1204,45 +1208,53 @@ Expected: FAIL because these routes do not render grouping controls or pass acti
 For tags and each simple route, add the same imports:
 
 ```ts
-  import { createFilterState, getActiveFilterCount } from '$lib/components/filter-panel/filter-panel';
-  import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
-  import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
-  import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
-  import {
-    activateTimelineBucket,
-    clearTimelineTemporalFilter,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+import { createFilterState, getActiveFilterCount } from '$lib/components/filter-panel/filter-panel';
+import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
+import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
+import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
+import {
+  activateTimelineBucket,
+  clearTimelineTemporalFilter,
+  type ActivatableTimelineBucket,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 Add route-local temporal state:
 
 ```ts
-  let timelineGrouping = $state<TimelineGrouping>('day');
-  let timelineFilters = $state(createFilterState());
-  let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
-  const isUnfilteredTimelineEmpty = $derived(
-    timelineManager?.isInitialized && timelineManager.assetCount === 0 && getActiveFilterCount(timelineFilters) === 0,
-  );
+let timelineGrouping = $state<TimelineGrouping>('day');
+let timelineFilters = $state(createFilterState());
+let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+const isUnfilteredTimelineEmpty = $derived(
+  timelineManager?.isInitialized && timelineManager.assetCount === 0 && getActiveFilterCount(timelineFilters) === 0,
+);
 ```
 
 Use the helper for options. Examples:
 
 ```ts
 // tags
-const options = $derived(buildTimelineRouteOptions({ deferInit: !tag, tagId: tag?.id }, timelineFilters, timelineGrouping));
+const options = $derived(
+  buildTimelineRouteOptions({ deferInit: !tag, tagId: tag?.id }, timelineFilters, timelineGrouping),
+);
 
 // favorites
-const options = $derived(buildTimelineRouteOptions({ isFavorite: true, withStacked: true }, timelineFilters, timelineGrouping));
+const options = $derived(
+  buildTimelineRouteOptions({ isFavorite: true, withStacked: true }, timelineFilters, timelineGrouping),
+);
 
 // archive
-const options = $derived(buildTimelineRouteOptions({ visibility: AssetVisibility.Archive }, timelineFilters, timelineGrouping));
+const options = $derived(
+  buildTimelineRouteOptions({ visibility: AssetVisibility.Archive }, timelineFilters, timelineGrouping),
+);
 
 // trash
 const options = $derived(buildTimelineRouteOptions({ isTrashed: true }, timelineFilters, timelineGrouping));
 
 // locked
-const options = $derived(buildTimelineRouteOptions({ visibility: AssetVisibility.Locked }, timelineFilters, timelineGrouping));
+const options = $derived(
+  buildTimelineRouteOptions({ visibility: AssetVisibility.Locked }, timelineFilters, timelineGrouping),
+);
 
 // partners
 const options = $derived(
@@ -1257,26 +1269,26 @@ const options = $derived(
 Add handlers:
 
 ```ts
-  function handleTimelineGroupingChange(grouping: TimelineGrouping) {
-    timelineGrouping = grouping;
-    temporalAnchor = undefined;
+function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+  timelineGrouping = grouping;
+  temporalAnchor = undefined;
+}
+
+function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+  const result = activateTimelineBucket(timelineFilters, bucket);
+  if (!result) {
+    return;
   }
 
-  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    const result = activateTimelineBucket(timelineFilters, bucket);
-    if (!result) {
-      return;
-    }
+  timelineFilters = result.filters;
+  timelineGrouping = result.grouping;
+  temporalAnchor = result.anchor;
+}
 
-    timelineFilters = result.filters;
-    timelineGrouping = result.grouping;
-    temporalAnchor = result.anchor;
-  }
-
-  function clearTemporalFilter() {
-    timelineFilters = clearTimelineTemporalFilter(timelineFilters);
-    temporalAnchor = undefined;
-  }
+function clearTemporalFilter() {
+  timelineFilters = clearTimelineTemporalFilter(timelineFilters);
+  temporalAnchor = undefined;
+}
 ```
 
 Render `TimelineRouteGroupingBar` above each `Timeline`, hidden in selection mode:
@@ -1330,6 +1342,7 @@ git commit -m "feat(web): add grouping to remaining library timelines"
 ### Task 5: Adopt Grouping In The Map Timeline Panel
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/+page.svelte`
 - Modify: `web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/MapTimelinePanel.svelte`
 - Modify: `web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/map-page.spec.ts`
@@ -1461,16 +1474,19 @@ vi.mock('$lib/services/asset.service', () => ({
 }));
 
 function renderPanel(filters = createFilterState()) {
-  return render(TestWrapper as Component<{ component: typeof MapTimelinePanel; componentProps: Record<string, unknown> }>, {
-    component: MapTimelinePanel,
-    componentProps: {
-      bbox: { west: 1, south: 2, east: 3, north: 4 },
-      selectedClusterIds: new Set(['asset-1', 'asset-2']),
-      assetCount: 2,
-      filters,
-      onClose: vi.fn(),
+  return render(
+    TestWrapper as Component<{ component: typeof MapTimelinePanel; componentProps: Record<string, unknown> }>,
+    {
+      component: MapTimelinePanel,
+      componentProps: {
+        bbox: { west: 1, south: 2, east: 3, north: 4 },
+        selectedClusterIds: new Set(['asset-1', 'asset-2']),
+        assetCount: 2,
+        filters,
+        onClose: vi.fn(),
+      },
     },
-  });
+  );
 }
 
 describe('MapTimelinePanel grouping', () => {
@@ -1509,12 +1525,8 @@ describe('MapTimelinePanel grouping', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent(
-        '"takenAfter":"2015-01-01T00:00:00.000Z"',
-      );
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent(
-        '"takenBefore":"2016-01-01T00:00:00.000Z"',
-      );
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenAfter":"2015-01-01T00:00:00.000Z"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenBefore":"2016-01-01T00:00:00.000Z"');
       expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
     });
@@ -1527,12 +1539,8 @@ describe('MapTimelinePanel grouping', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent(
-        '"takenAfter":"2015-08-01T00:00:00.000Z"',
-      );
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent(
-        '"takenBefore":"2015-09-01T00:00:00.000Z"',
-      );
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenAfter":"2015-08-01T00:00:00.000Z"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenBefore":"2015-09-01T00:00:00.000Z"');
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015, month: 8 }));
     });
   });
@@ -1733,18 +1741,25 @@ Also add a stable test id to the existing mobile filter toggle:
 In `MapTimelinePanel.svelte`, update props:
 
 ```ts
-  import { createFilterState } from '$lib/components/filter-panel/filter-panel';
-  import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
-  import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
-  import {
-    activateTimelineBucket,
-    clearTimelineTemporalFilter,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+import { createFilterState } from '$lib/components/filter-panel/filter-panel';
+import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
+import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
+import {
+  activateTimelineBucket,
+  clearTimelineTemporalFilter,
+  type ActivatableTimelineBucket,
+} from '$lib/utils/timeline-filter-navigation';
 
-  let { bbox, selectedClusterIds, assetCount, onClose, spaceId, filters = $bindable(createFilterState()) }: Props = $props();
-  let timelineGrouping = $state<TimelineGrouping>('day');
-  let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+let {
+  bbox,
+  selectedClusterIds,
+  assetCount,
+  onClose,
+  spaceId,
+  filters = $bindable(createFilterState()),
+}: Props = $props();
+let timelineGrouping = $state<TimelineGrouping>('day');
+let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
 ```
 
 Update `timelineOptions`:
@@ -1762,26 +1777,26 @@ Update `timelineOptions`:
 Add handlers:
 
 ```ts
-  function handleTimelineGroupingChange(grouping: TimelineGrouping) {
-    timelineGrouping = grouping;
-    temporalAnchor = undefined;
+function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+  timelineGrouping = grouping;
+  temporalAnchor = undefined;
+}
+
+function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+  const result = activateTimelineBucket(filters ?? createFilterState(), bucket);
+  if (!result) {
+    return;
   }
 
-  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    const result = activateTimelineBucket(filters ?? createFilterState(), bucket);
-    if (!result) {
-      return;
-    }
+  filters = result.filters;
+  timelineGrouping = result.grouping;
+  temporalAnchor = result.anchor;
+}
 
-    filters = result.filters;
-    timelineGrouping = result.grouping;
-    temporalAnchor = result.anchor;
-  }
-
-  function clearTemporalFilter() {
-    filters = clearTimelineTemporalFilter(filters ?? createFilterState());
-    temporalAnchor = undefined;
-  }
+function clearTemporalFilter() {
+  filters = clearTimelineTemporalFilter(filters ?? createFilterState());
+  temporalAnchor = undefined;
+}
 ```
 
 Render compact controls under the panel header and pass props to `Timeline`:
@@ -1834,6 +1849,7 @@ git commit -m "feat(web): add map timeline grouping controls"
 ### Task 6: Browser-Level Route Adoption Smoke Coverage
 
 **Files:**
+
 - Modify: `e2e/src/ui/specs/timeline/timeline-grouping.e2e-spec.ts`
 
 - [ ] **Step 1: Add failing browser smoke tests**
@@ -1841,15 +1857,15 @@ git commit -m "feat(web): add map timeline grouping controls"
 Reset mutable mock state in the existing `test.beforeEach` so the new route smoke tests are deterministic:
 
 ```ts
-  test.beforeEach(async ({ context }) => {
-    changes.albumAdditions = [];
-    changes.assetDeletions = [];
-    changes.assetArchivals = [];
-    changes.assetFavorites = [timelineRestData.album.assetIds[0]];
+test.beforeEach(async ({ context }) => {
+  changes.albumAdditions = [];
+  changes.assetDeletions = [];
+  changes.assetArchivals = [];
+  changes.assetFavorites = [timelineRestData.album.assetIds[0]];
 
-    await setupBaseMockApiRoutes(context, adminUserId);
-    await setupTimelineMockApiRoutes(context, timelineRestData, changes, testContext);
-  });
+  await setupBaseMockApiRoutes(context, adminUserId);
+  await setupTimelineMockApiRoutes(context, timelineRestData, changes, testContext);
+});
 ```
 
 Append to `timeline-grouping.e2e-spec.ts`:
@@ -1906,6 +1922,7 @@ git commit -m "test(e2e): cover timeline grouping route adoption"
 ### Task 7: Final Verification And Coverage Review
 
 **Files:**
+
 - Verify all files from Tasks 1-6.
 - Read: `docs/superpowers/specs/2026-05-19-timeline-grouping-design.md`
 - Read: `docs/superpowers/plans/2026-05-20-timeline-grouping-slice-4-ui-controls-cards.md`

@@ -85,9 +85,7 @@ it('passes bucketSize to the singular bucket service', async () => {
 - [ ] Add invalid query tests for both endpoints:
 
 ```ts
-const { status, body } = await request(ctx.getHttpServer())
-  .get('/timeline/buckets')
-  .query({ bucketSize: 'week' });
+const { status, body } = await request(ctx.getHttpServer()).get('/timeline/buckets').query({ bucketSize: 'week' });
 
 expect(status).toBe(400);
 expect(body).toEqual(errorDto.badRequest(expect.arrayContaining([expect.stringContaining('bucketSize')]) as any));
@@ -274,9 +272,7 @@ it('passes bucketSize through to the repository', async () => {
 
   await sut.getTimeBuckets(authStub.admin, { bucketSize: TimeBucketSize.Year });
 
-  expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith(
-    expect.objectContaining({ bucketSize: TimeBucketSize.Year }),
-  );
+  expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith(expect.objectContaining({ bucketSize: TimeBucketSize.Year }));
 });
 
 it('defaults bucketSize to month before calling the repository', async () => {
@@ -513,7 +509,14 @@ it('applies EXIF and rating filters before selecting bucket representatives', as
   const auth = factory.auth({ user });
 
   const matching = await createTimelineAsset(ctx, user.id, new Date('2024-04-02T12:00:00.000Z'));
-  await ctx.newExif({ assetId: matching.id, city: 'Berlin', country: 'Germany', make: 'Canon', model: 'R5', rating: 5 });
+  await ctx.newExif({
+    assetId: matching.id,
+    city: 'Berlin',
+    country: 'Germany',
+    make: 'Canon',
+    model: 'R5',
+    rating: 5,
+  });
 
   const decoy = await createTimelineAsset(ctx, user.id, new Date('2024-04-03T12:00:00.000Z'));
   await ctx.newExif({ assetId: decoy.id, city: 'Paris', country: 'France', make: 'Nikon', model: 'Z6', rating: 2 });

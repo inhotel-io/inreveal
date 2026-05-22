@@ -76,6 +76,7 @@ Do not use screenshots as the only verification for visual behavior. Component t
 ### Task 1: Add Grouping Control Component
 
 **Files:**
+
 - Create: `web/src/lib/components/timeline/TimelineGroupingControl.spec.ts`
 - Create: `web/src/lib/components/timeline/TimelineGroupingControl.svelte`
 
@@ -304,6 +305,7 @@ git commit -m "feat(web): add timeline grouping control"
 ### Task 2: Add Representative Bucket Card
 
 **Files:**
+
 - Create: `web/src/lib/components/timeline/TimelineBucketCard.spec.ts`
 - Create: `web/src/lib/components/timeline/TimelineBucketCard.svelte`
 
@@ -335,13 +337,17 @@ vi.mock('$lib/components/Thumbhash.svelte', async () => {
   return { default: MockComponent };
 });
 
-function yearBucket(overrides: Partial<ActivatableTimelineBucket & {
-  count: number;
-  timeBucket: string;
-  representativeAssetId: string | null;
-  representativeThumbhash: string | null;
-  representativeRatio: number | null;
-}> = {}) {
+function yearBucket(
+  overrides: Partial<
+    ActivatableTimelineBucket & {
+      count: number;
+      timeBucket: string;
+      representativeAssetId: string | null;
+      representativeThumbhash: string | null;
+      representativeRatio: number | null;
+    }
+  > = {},
+) {
   return {
     grouping: 'year' as const,
     timeBucket: '2015-01-01',
@@ -645,6 +651,7 @@ git commit -m "feat(web): add representative timeline bucket card"
 ### Task 3: Add Representative Bucket Renderer
 
 **Files:**
+
 - Create: `web/src/lib/components/timeline/TimelineRepresentativeBuckets.spec.ts`
 - Create: `web/src/lib/components/timeline/TimelineRepresentativeBuckets.svelte`
 
@@ -900,6 +907,7 @@ git commit -m "feat(web): render representative timeline buckets"
 ### Task 4: Integrate Representative Cards Into Timeline
 
 **Files:**
+
 - Create: `web/src/lib/components/timeline/Timeline.spec.ts`
 - Modify: `web/src/lib/components/timeline/Timeline.svelte`
 - Modify: `web/src/lib/components/timeline/TimelineRepresentativeBuckets.spec.ts`
@@ -1070,10 +1078,10 @@ Expected: FAIL because `Timeline.svelte` still renders only `timelineManager.mon
 In `web/src/lib/components/timeline/Timeline.svelte`, import:
 
 ```ts
-  import TimelineGroupingControl from '$lib/components/timeline/TimelineGroupingControl.svelte';
-  import TimelineRepresentativeBuckets from '$lib/components/timeline/TimelineRepresentativeBuckets.svelte';
-  import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
-  import { lang } from '$lib/stores/preferences.store';
+import TimelineGroupingControl from '$lib/components/timeline/TimelineGroupingControl.svelte';
+import TimelineRepresentativeBuckets from '$lib/components/timeline/TimelineRepresentativeBuckets.svelte';
+import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
+import { lang } from '$lib/stores/preferences.store';
 ```
 
 Extend `Props`:
@@ -1093,19 +1101,19 @@ Destructure:
 Replace the `isEmpty` derived value with:
 
 ```ts
-  const isEmpty = $derived(timelineManager.isInitialized && timelineManager.assetCount === 0);
+const isEmpty = $derived(timelineManager.isInitialized && timelineManager.assetCount === 0);
 ```
 
 Add:
 
 ```ts
-  const showMobileGroupingControl = $derived(
-    Boolean(onGroupingChange) &&
-      (maxMd || usingMobileDevice) &&
-      !isSelectionMode &&
-      !assetInteraction.selectionActive &&
-      !assetViewerManager.isViewing,
-  );
+const showMobileGroupingControl = $derived(
+  Boolean(onGroupingChange) &&
+    (maxMd || usingMobileDevice) &&
+    !isSelectionMode &&
+    !assetInteraction.selectionActive &&
+    !assetViewerManager.isViewing,
+);
 ```
 
 Replace the month-only render section inside `#virtual-timeline` by wrapping the existing month loop. Keep the current `Month` component props and thumbnail snippet body unchanged inside the `{:else}` branch; only add the non-day branch:
@@ -1240,6 +1248,7 @@ git commit -m "feat(web): integrate representative timeline cards"
 ### Task 5: Add Photos Desktop Control And Route Tests
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/photos/[[assetId=id]]/+page.svelte`
 - Modify: `web/src/routes/(user)/photos/[[assetId=id]]/photos-page.spec.ts`
 - Modify: `web/src/routes/(user)/albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]/mock-timeline.test-wrapper.svelte`
@@ -1363,16 +1372,16 @@ Add these buttons after the existing `resolve-timeline-anchor` button:
 In `web/src/routes/(user)/photos/[[assetId=id]]/+page.svelte`, import:
 
 ```ts
-  import TimelineGroupingControl from '$lib/components/timeline/TimelineGroupingControl.svelte';
+import TimelineGroupingControl from '$lib/components/timeline/TimelineGroupingControl.svelte';
 ```
 
 Add this helper near `handleTimelineBucketActivate`:
 
 ```ts
-  function handleTimelineGroupingChange(grouping: TimelineGrouping) {
-    timelineGrouping = grouping;
-    temporalAnchor = undefined;
-  }
+function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+  timelineGrouping = grouping;
+  temporalAnchor = undefined;
+}
 ```
 
 Render the desktop control above `ActiveFiltersBar` and only on browse timeline:
@@ -1420,6 +1429,7 @@ git commit -m "feat(web): add photos timeline grouping controls"
 ### Task 6: Add Spaces Desktop Control And Route Tests
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/+page.svelte`
 - Modify: `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/spaces-page.spec.ts`
 - Modify: `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/mock-timeline.test-wrapper.svelte`
@@ -1534,16 +1544,16 @@ Add after `resolve-timeline-anchor`:
 In `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/+page.svelte`, import:
 
 ```ts
-  import TimelineGroupingControl from '$lib/components/timeline/TimelineGroupingControl.svelte';
+import TimelineGroupingControl from '$lib/components/timeline/TimelineGroupingControl.svelte';
 ```
 
 Add this helper near `handleTimelineBucketActivate`:
 
 ```ts
-  function handleTimelineGroupingChange(grouping: TimelineGrouping) {
-    timelineGrouping = grouping;
-    temporalAnchor = undefined;
-  }
+function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+  timelineGrouping = grouping;
+  temporalAnchor = undefined;
+}
 ```
 
 Render the desktop control above active chips, only in browse mode:
@@ -1591,6 +1601,7 @@ git commit -m "feat(web): add space timeline grouping controls"
 ### Task 7: Add Browser-Level Photos Grouping Flow
 
 **Files:**
+
 - Modify: `e2e/src/ui/mock-network/timeline-network.ts`
 - Modify: `e2e/src/ui/generators/timeline/rest-response.ts`
 - Create or modify: `e2e/src/ui/generators/timeline/rest-response.spec.ts`
@@ -1619,13 +1630,29 @@ describe('timeline e2e rest response bucket grouping', () => {
         [
           '2015-08',
           [
-            { id: 'asset-1', thumbhash: 'thumb-1', ratio: 1.5, isTrashed: false, visibility: 'timeline', isFavorite: false },
+            {
+              id: 'asset-1',
+              thumbhash: 'thumb-1',
+              ratio: 1.5,
+              isTrashed: false,
+              visibility: 'timeline',
+              isFavorite: false,
+            },
             { id: 'asset-2', thumbhash: null, ratio: 0.8, isTrashed: false, visibility: 'timeline', isFavorite: false },
           ],
         ],
         [
           '2015-09',
-          [{ id: 'asset-3', thumbhash: 'thumb-3', ratio: 1, isTrashed: false, visibility: 'timeline', isFavorite: false }],
+          [
+            {
+              id: 'asset-3',
+              thumbhash: 'thumb-3',
+              ratio: 1,
+              isTrashed: false,
+              visibility: 'timeline',
+              isFavorite: false,
+            },
+          ],
         ],
       ]),
     } as never;
@@ -1644,8 +1671,14 @@ describe('timeline e2e rest response bucket grouping', () => {
   it('filters mock buckets by selected temporal range before aggregating by month', () => {
     const data = {
       buckets: new Map([
-        ['2015-08', [{ id: 'asset-1', thumbhash: null, ratio: 1, isTrashed: false, visibility: 'timeline', isFavorite: false }]],
-        ['2016-01', [{ id: 'asset-2', thumbhash: null, ratio: 1, isTrashed: false, visibility: 'timeline', isFavorite: false }]],
+        [
+          '2015-08',
+          [{ id: 'asset-1', thumbhash: null, ratio: 1, isTrashed: false, visibility: 'timeline', isFavorite: false }],
+        ],
+        [
+          '2016-01',
+          [{ id: 'asset-2', thumbhash: null, ratio: 1, isTrashed: false, visibility: 'timeline', isFavorite: false }],
+        ],
       ]),
     } as never;
 
@@ -1761,51 +1794,51 @@ function isInsideTemporalRange(dateKey: string, range: { takenAfter?: string; ta
 Replace `const summary: TimeBucketsResponseDto[] = [];` with a map and local helper:
 
 ```ts
-  const summaryByBucket = new Map<string, TimeBucketsResponseDto>();
+const summaryByBucket = new Map<string, TimeBucketsResponseDto>();
 
-  function addAssetsToSummary(bucketKey: string, filteredAssets: MockTimelineAsset[]) {
-    if (filteredAssets.length === 0 || !isInsideTemporalRange(bucketKey, temporalRange)) {
-      return;
-    }
-
-    const timeBucket = getBucketKey(bucketKey, bucketSize);
-    const existing = summaryByBucket.get(timeBucket);
-    const representative = existing?.representativeAssetId ? undefined : filteredAssets[0];
-
-    summaryByBucket.set(timeBucket, {
-      timeBucket,
-      count: (existing?.count ?? 0) + filteredAssets.length,
-      representativeAssetId: existing?.representativeAssetId ?? representative?.id ?? null,
-      representativeThumbhash: existing?.representativeThumbhash ?? representative?.thumbhash ?? null,
-      representativeRatio: existing?.representativeRatio ?? representative?.ratio ?? null,
-    });
+function addAssetsToSummary(bucketKey: string, filteredAssets: MockTimelineAsset[]) {
+  if (filteredAssets.length === 0 || !isInsideTemporalRange(bucketKey, temporalRange)) {
+    return;
   }
+
+  const timeBucket = getBucketKey(bucketKey, bucketSize);
+  const existing = summaryByBucket.get(timeBucket);
+  const representative = existing?.representativeAssetId ? undefined : filteredAssets[0];
+
+  summaryByBucket.set(timeBucket, {
+    timeBucket,
+    count: (existing?.count ?? 0) + filteredAssets.length,
+    representativeAssetId: existing?.representativeAssetId ?? representative?.id ?? null,
+    representativeThumbhash: existing?.representativeThumbhash ?? representative?.thumbhash ?? null,
+    representativeRatio: existing?.representativeRatio ?? representative?.ratio ?? null,
+  });
+}
 ```
 
 In the album branch, replace the existing `summary.push()` block that uses `albumAssetsInBucket.length` with:
 
 ```ts
-        addAssetsToSummary(bucketKey, albumAssetsInBucket);
+addAssetsToSummary(bucketKey, albumAssetsInBucket);
 ```
 
 In the non-album branch, replace the existing `summary.push()` block that uses `filteredAssets.length` with:
 
 ```ts
-        addAssetsToSummary(bucketKey, filteredAssets);
+addAssetsToSummary(bucketKey, filteredAssets);
 ```
 
 Then replace the final sort block with:
 
 ```ts
-  const summary = [...summaryByBucket.values()];
+const summary = [...summaryByBucket.values()];
 
-  summary.sort((a, b) => {
-    const dateA = DateTime.fromISO(a.timeBucket);
-    const dateB = DateTime.fromISO(b.timeBucket);
-    return dateB.diff(dateA).milliseconds;
-  });
+summary.sort((a, b) => {
+  const dateA = DateTime.fromISO(a.timeBucket);
+  const dateB = DateTime.fromISO(b.timeBucket);
+  return dateB.diff(dateA).milliseconds;
+});
 
-  return summary;
+return summary;
 ```
 
 - [x] **Step 4: Update e2e network route parsing**
@@ -1834,11 +1867,7 @@ Create `e2e/src/ui/specs/timeline/timeline-grouping.e2e-spec.ts`:
 ```ts
 import { faker } from '@faker-js/faker';
 import { expect, test } from '@playwright/test';
-import {
-  createDefaultTimelineConfig,
-  generateTimelineData,
-  TimelineData,
-} from 'src/ui/generators/timeline';
+import { createDefaultTimelineConfig, generateTimelineData, TimelineData } from 'src/ui/generators/timeline';
 import { setupBaseMockApiRoutes } from 'src/ui/mock-network/base-network';
 import { setupTimelineMockApiRoutes, TimelineTestContext } from 'src/ui/mock-network/timeline-network';
 import { utils } from 'src/utils';
@@ -1940,6 +1969,7 @@ git commit -m "test(e2e): cover timeline grouping card flow"
 ### Task 8: Final Verification And Coverage Review
 
 **Files:**
+
 - Verify changed files from Tasks 1-7.
 - Read: `docs/superpowers/specs/2026-05-19-timeline-grouping-design.md`
 - Read: `docs/superpowers/plans/2026-05-20-timeline-grouping-slice-3-filter-navigation.md`

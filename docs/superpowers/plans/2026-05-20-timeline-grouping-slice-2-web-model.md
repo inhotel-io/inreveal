@@ -67,6 +67,7 @@ pnpm --filter immich-web run check:typescript
 ### Task 1: Preserve Representative Metadata When Merging Album Buckets
 
 **Files:**
+
 - Create: `web/src/lib/managers/timeline-manager/timeline-grouping.svelte.spec.ts`
 - Modify: `web/src/lib/managers/timeline-manager/internal/album-picker-support.ts`
 
@@ -238,6 +239,7 @@ git commit -m "test(web): cover timeline bucket representative merge"
 ### Task 2: Add Generic Timeline Bucket Helpers
 
 **Files:**
+
 - Modify: `web/src/lib/managers/timeline-manager/timeline-grouping.svelte.spec.ts`
 - Create: `web/src/lib/managers/timeline-manager/timeline-bucket.svelte.ts`
 - Create: `web/src/lib/managers/timeline-manager/internal/request-options.ts`
@@ -263,169 +265,169 @@ import { toTimeBucketRequest, toTimeBucketsRequest } from './internal/request-op
 Append these tests inside the existing top-level `describe('timeline grouping bucket helpers', () => { ... })` block:
 
 ```ts
-  describe('grouping helpers', () => {
-    it.each([
-      ['year', TimeBucketSize.Year],
-      ['month', TimeBucketSize.Month],
-      ['day', TimeBucketSize.Day],
-    ] as const)('maps grouping %s to SDK bucket size %s', (grouping, bucketSize) => {
-      expect(getTimeBucketSizeForGrouping(grouping)).toBe(bucketSize);
-    });
+describe('grouping helpers', () => {
+  it.each([
+    ['year', TimeBucketSize.Year],
+    ['month', TimeBucketSize.Month],
+    ['day', TimeBucketSize.Day],
+  ] as const)('maps grouping %s to SDK bucket size %s', (grouping, bucketSize) => {
+    expect(getTimeBucketSizeForGrouping(grouping)).toBe(bucketSize);
+  });
 
-    it('strips manager-only fields from bucket metadata requests', () => {
-      const assetFilter = new Set(['asset-1']);
+  it('strips manager-only fields from bucket metadata requests', () => {
+    const assetFilter = new Set(['asset-1']);
 
-      expect(
-        toTimeBucketsRequest(
-          {
-            grouping: 'year',
-            timelineAlbumId: 'album-1',
-            timelineSpaceId: 'space-1',
-            deferInit: false,
-            assetFilter,
-            personIds: ['person-1'],
-            tagIds: ['tag-1'],
-            takenAfter: '2024-01-01T00:00:00.000Z',
-            takenBefore: '2025-01-01T00:00:00.000Z',
-          },
-          TimeBucketSize.Year,
-        ),
-      ).toEqual({
-        bucketSize: TimeBucketSize.Year,
-        personIds: ['person-1'],
-        tagIds: ['tag-1'],
-        takenAfter: '2024-01-01T00:00:00.000Z',
-        takenBefore: '2025-01-01T00:00:00.000Z',
-      });
-    });
-
-    it('strips manager-only fields from single bucket asset requests', () => {
-      expect(
-        toTimeBucketRequest(
-          {
-            grouping: 'day',
-            timelineAlbumId: 'album-1',
-            timelineSpaceId: 'space-1',
-            personId: 'person-1',
-          },
-          '2024-01-01T00:00:00.000Z',
-          TimeBucketSize.Month,
-        ),
-      ).toEqual({
-        bucketSize: TimeBucketSize.Month,
-        personId: 'person-1',
-        timeBucket: '2024-01-01T00:00:00.000Z',
-      });
-    });
-
-    it('builds a year representative bucket with stable metadata and fallback values', () => {
-      const manager = { topSectionHeight: 12 };
-      const bucket = new TimelineBucket(manager, 'year', {
-        timeBucket: '2015-01-01',
-        count: 438,
-        representativeAssetId: 'asset-2015',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      });
-
-      expect({
-        grouping: bucket.grouping,
-        timeBucket: bucket.timeBucket,
-        count: bucket.count,
-        representativeAssetId: bucket.representativeAssetId,
-        representativeThumbhash: bucket.representativeThumbhash,
-        representativeRatio: bucket.representativeRatio,
-        year: bucket.date.year,
-        month: bucket.date.month,
-        day: bucket.date.day,
-        height: bucket.height,
-        top: bucket.top,
-        isLoaded: bucket.isLoaded,
-      }).toEqual({
-        grouping: 'year',
-        timeBucket: '2015-01-01',
-        count: 438,
-        representativeAssetId: 'asset-2015',
-        representativeThumbhash: null,
-        representativeRatio: null,
-        year: 2015,
-        month: undefined,
-        day: undefined,
-        height: REPRESENTATIVE_TIMELINE_BUCKET_HEIGHT,
-        top: 12,
-        isLoaded: true,
-      });
-    });
-
-    it('builds a month representative bucket without UTC/local date drift', () => {
-      const manager = { topSectionHeight: 0 };
-      const bucket = new TimelineBucket(manager, 'month', {
-        timeBucket: '2011-08-01',
-        count: 12,
-        representativeAssetId: 'asset-august',
-        representativeThumbhash: 'thumbhash',
-        representativeRatio: 1.25,
-      });
-
-      expect(bucket.date).toEqual({ year: 2011, month: 8 });
-      expect(bucket.viewId).toBe('month:2011-08-01');
-    });
-
-    it('aggregates day buckets into month counts across year and leap-day boundaries', () => {
-      const months = aggregateDayBucketsByMonth([
-        { timeBucket: '2024-02-29', count: 2 },
-        { timeBucket: '2024-02-01', count: 3 },
-        { timeBucket: '2024-01-01', count: 5 },
-        { timeBucket: '2023-12-31', count: 7 },
-      ]);
-
-      expect(months.map(({ timeBucket, count }) => ({ timeBucket, count }))).toEqual([
-        { timeBucket: '2024-02-01', count: 5 },
-        { timeBucket: '2024-01-01', count: 5 },
-        { timeBucket: '2023-12-01', count: 7 },
-      ]);
-    });
-
-    it('preserves ascending order when aggregating day buckets into months', () => {
-      const months = aggregateDayBucketsByMonth(
-        [
-          { timeBucket: '2023-12-31', count: 7 },
-          { timeBucket: '2024-01-01', count: 5 },
-          { timeBucket: '2024-02-01', count: 3 },
-          { timeBucket: '2024-02-29', count: 2 },
-        ],
-        AssetOrder.Asc,
-      );
-
-      expect(months.map(({ timeBucket, count }) => ({ timeBucket, count }))).toEqual([
-        { timeBucket: '2023-12-01', count: 7 },
-        { timeBucket: '2024-01-01', count: 5 },
-        { timeBucket: '2024-02-01', count: 5 },
-      ]);
-    });
-
-    it('lays out thousands of representative buckets with stable cumulative top positions', () => {
-      const manager = { topSectionHeight: 20 };
-      const buckets = Array.from({ length: 1500 }, (_, index) => {
-        const year = 3024 - index;
-        return new TimelineBucket(manager, 'year', {
-          timeBucket: `${year}-01-01`,
-          count: 1,
-          representativeAssetId: `asset-${year}`,
-          representativeThumbhash: null,
-          representativeRatio: null,
-        });
-      });
-
-      layoutTimelineBuckets(buckets);
-
-      expect(buckets[0].top).toBe(20);
-      expect(buckets[1].top).toBe(20 + REPRESENTATIVE_TIMELINE_BUCKET_HEIGHT + REPRESENTATIVE_TIMELINE_BUCKET_GAP);
-      expect(buckets.at(-1)?.top).toBe(
-        20 + 1499 * (REPRESENTATIVE_TIMELINE_BUCKET_HEIGHT + REPRESENTATIVE_TIMELINE_BUCKET_GAP),
-      );
+    expect(
+      toTimeBucketsRequest(
+        {
+          grouping: 'year',
+          timelineAlbumId: 'album-1',
+          timelineSpaceId: 'space-1',
+          deferInit: false,
+          assetFilter,
+          personIds: ['person-1'],
+          tagIds: ['tag-1'],
+          takenAfter: '2024-01-01T00:00:00.000Z',
+          takenBefore: '2025-01-01T00:00:00.000Z',
+        },
+        TimeBucketSize.Year,
+      ),
+    ).toEqual({
+      bucketSize: TimeBucketSize.Year,
+      personIds: ['person-1'],
+      tagIds: ['tag-1'],
+      takenAfter: '2024-01-01T00:00:00.000Z',
+      takenBefore: '2025-01-01T00:00:00.000Z',
     });
   });
+
+  it('strips manager-only fields from single bucket asset requests', () => {
+    expect(
+      toTimeBucketRequest(
+        {
+          grouping: 'day',
+          timelineAlbumId: 'album-1',
+          timelineSpaceId: 'space-1',
+          personId: 'person-1',
+        },
+        '2024-01-01T00:00:00.000Z',
+        TimeBucketSize.Month,
+      ),
+    ).toEqual({
+      bucketSize: TimeBucketSize.Month,
+      personId: 'person-1',
+      timeBucket: '2024-01-01T00:00:00.000Z',
+    });
+  });
+
+  it('builds a year representative bucket with stable metadata and fallback values', () => {
+    const manager = { topSectionHeight: 12 };
+    const bucket = new TimelineBucket(manager, 'year', {
+      timeBucket: '2015-01-01',
+      count: 438,
+      representativeAssetId: 'asset-2015',
+      representativeThumbhash: null,
+      representativeRatio: null,
+    });
+
+    expect({
+      grouping: bucket.grouping,
+      timeBucket: bucket.timeBucket,
+      count: bucket.count,
+      representativeAssetId: bucket.representativeAssetId,
+      representativeThumbhash: bucket.representativeThumbhash,
+      representativeRatio: bucket.representativeRatio,
+      year: bucket.date.year,
+      month: bucket.date.month,
+      day: bucket.date.day,
+      height: bucket.height,
+      top: bucket.top,
+      isLoaded: bucket.isLoaded,
+    }).toEqual({
+      grouping: 'year',
+      timeBucket: '2015-01-01',
+      count: 438,
+      representativeAssetId: 'asset-2015',
+      representativeThumbhash: null,
+      representativeRatio: null,
+      year: 2015,
+      month: undefined,
+      day: undefined,
+      height: REPRESENTATIVE_TIMELINE_BUCKET_HEIGHT,
+      top: 12,
+      isLoaded: true,
+    });
+  });
+
+  it('builds a month representative bucket without UTC/local date drift', () => {
+    const manager = { topSectionHeight: 0 };
+    const bucket = new TimelineBucket(manager, 'month', {
+      timeBucket: '2011-08-01',
+      count: 12,
+      representativeAssetId: 'asset-august',
+      representativeThumbhash: 'thumbhash',
+      representativeRatio: 1.25,
+    });
+
+    expect(bucket.date).toEqual({ year: 2011, month: 8 });
+    expect(bucket.viewId).toBe('month:2011-08-01');
+  });
+
+  it('aggregates day buckets into month counts across year and leap-day boundaries', () => {
+    const months = aggregateDayBucketsByMonth([
+      { timeBucket: '2024-02-29', count: 2 },
+      { timeBucket: '2024-02-01', count: 3 },
+      { timeBucket: '2024-01-01', count: 5 },
+      { timeBucket: '2023-12-31', count: 7 },
+    ]);
+
+    expect(months.map(({ timeBucket, count }) => ({ timeBucket, count }))).toEqual([
+      { timeBucket: '2024-02-01', count: 5 },
+      { timeBucket: '2024-01-01', count: 5 },
+      { timeBucket: '2023-12-01', count: 7 },
+    ]);
+  });
+
+  it('preserves ascending order when aggregating day buckets into months', () => {
+    const months = aggregateDayBucketsByMonth(
+      [
+        { timeBucket: '2023-12-31', count: 7 },
+        { timeBucket: '2024-01-01', count: 5 },
+        { timeBucket: '2024-02-01', count: 3 },
+        { timeBucket: '2024-02-29', count: 2 },
+      ],
+      AssetOrder.Asc,
+    );
+
+    expect(months.map(({ timeBucket, count }) => ({ timeBucket, count }))).toEqual([
+      { timeBucket: '2023-12-01', count: 7 },
+      { timeBucket: '2024-01-01', count: 5 },
+      { timeBucket: '2024-02-01', count: 5 },
+    ]);
+  });
+
+  it('lays out thousands of representative buckets with stable cumulative top positions', () => {
+    const manager = { topSectionHeight: 20 };
+    const buckets = Array.from({ length: 1500 }, (_, index) => {
+      const year = 3024 - index;
+      return new TimelineBucket(manager, 'year', {
+        timeBucket: `${year}-01-01`,
+        count: 1,
+        representativeAssetId: `asset-${year}`,
+        representativeThumbhash: null,
+        representativeRatio: null,
+      });
+    });
+
+    layoutTimelineBuckets(buckets);
+
+    expect(buckets[0].top).toBe(20);
+    expect(buckets[1].top).toBe(20 + REPRESENTATIVE_TIMELINE_BUCKET_HEIGHT + REPRESENTATIVE_TIMELINE_BUCKET_GAP);
+    expect(buckets.at(-1)?.top).toBe(
+      20 + 1499 * (REPRESENTATIVE_TIMELINE_BUCKET_HEIGHT + REPRESENTATIVE_TIMELINE_BUCKET_GAP),
+    );
+  });
+});
 ```
 
 - [ ] **Step 2: Run the red helper tests**
@@ -476,11 +478,7 @@ Create `web/src/lib/managers/timeline-manager/internal/request-options.ts`:
 ```ts
 import type { TimeBucketSize } from '@immich/sdk';
 
-import type {
-  AssetApiGetTimeBucketRequest,
-  AssetApiGetTimeBucketsRequest,
-  TimelineManagerOptions,
-} from '../types';
+import type { AssetApiGetTimeBucketRequest, AssetApiGetTimeBucketsRequest, TimelineManagerOptions } from '../types';
 
 const MANAGER_ONLY_OPTION_KEYS = new Set<keyof TimelineManagerOptions>([
   'grouping',
@@ -643,7 +641,12 @@ function parseBucketDate(grouping: TimelineGrouping, timeBucket: string): Timeli
 In `web/src/lib/managers/timeline-manager/internal/album-picker-support.ts`, import `TimeBucketSize` and `toTimeBucketsRequest`:
 
 ```ts
-import { AssetOrder, type TimeBucketSize, type TimeBucketAssetResponseDto, type TimeBucketsResponseDto } from '@immich/sdk';
+import {
+  AssetOrder,
+  type TimeBucketSize,
+  type TimeBucketAssetResponseDto,
+  type TimeBucketsResponseDto,
+} from '@immich/sdk';
 
 import { toTimeBucketsRequest } from './request-options';
 ```
@@ -660,12 +663,7 @@ export function getTimelineAlbumQueryOptions(
   }
 
   const requestOptions = toTimeBucketsRequest(options, bucketSize);
-  const {
-    userId: _userId,
-    withPartners: _withPartners,
-    withSharedSpaces: _withSharedSpaces,
-    ...rest
-  } = requestOptions;
+  const { userId: _userId, withPartners: _withPartners, withSharedSpaces: _withSharedSpaces, ...rest } = requestOptions;
 
   return { ...rest, albumId: options.timelineAlbumId };
 }
@@ -694,6 +692,7 @@ Expected: TypeScript fails only if callers of `getTimelineAlbumQueryOptions()` s
 ### Task 3: Initialize TimelineManager From Grouping-Aware Bucket Metadata
 
 **Files:**
+
 - Modify: `web/src/lib/managers/timeline-manager/timeline-grouping.svelte.spec.ts`
 - Modify: `web/src/lib/managers/timeline-manager/timeline-manager.svelte.ts`
 
@@ -732,12 +731,14 @@ describe('TimelineManager grouping metadata', () => {
       expect.anything(),
     );
     expect(timelineManager.grouping).toBe('day');
-    expect(timelineManager.timelineBuckets.map((bucket) => [bucket.grouping, bucket.timeBucket, bucket.count])).toEqual([
-      ['day', '2024-02-29', 2],
-      ['day', '2024-02-01', 3],
-      ['day', '2024-01-01', 5],
-      ['day', '2023-12-31', 7],
-    ]);
+    expect(timelineManager.timelineBuckets.map((bucket) => [bucket.grouping, bucket.timeBucket, bucket.count])).toEqual(
+      [
+        ['day', '2024-02-29', 2],
+        ['day', '2024-02-01', 3],
+        ['day', '2024-01-01', 5],
+        ['day', '2023-12-31', 7],
+      ],
+    );
     expect(
       timelineManager.months.map((month) => ({
         year: month.yearMonth.year,
@@ -982,7 +983,13 @@ Expected: manager tests fail because `TimelineManager` does not expose `grouping
 In `web/src/lib/managers/timeline-manager/timeline-manager.svelte.ts`, update the SDK and helper imports:
 
 ```ts
-import { AssetOrder, getAssetInfo, getTimeBuckets, type AssetResponseDto, type TimeBucketsResponseDto } from '@immich/sdk';
+import {
+  AssetOrder,
+  getAssetInfo,
+  getTimeBuckets,
+  type AssetResponseDto,
+  type TimeBucketsResponseDto,
+} from '@immich/sdk';
 import {
   TimelineBucket,
   aggregateDayBucketsByMonth,
@@ -1021,17 +1028,17 @@ Replace `bodySectionHeight` with:
 Replace `assetCount` with:
 
 ```ts
-  assetCount = $derived.by(() => {
-    if (this.grouping !== 'day') {
-      return this.timelineBuckets.reduce((count, bucket) => count + bucket.count, 0);
-    }
+assetCount = $derived.by(() => {
+  if (this.grouping !== 'day') {
+    return this.timelineBuckets.reduce((count, bucket) => count + bucket.count, 0);
+  }
 
-    let count = 0;
-    for (const month of this.months) {
-      count += month.assetsCount;
-    }
-    return count;
-  });
+  let count = 0;
+  for (const month of this.months) {
+    count += month.assetsCount;
+  }
+  return count;
+});
 ```
 
 Replace `#initializeTimelineMonths()` with:
@@ -1132,9 +1139,9 @@ Update `updateViewportGeometry()` so representative modes only lay out generic b
 Update `updateViewportProximities()`, `#createScrubberMonths()`, `refreshLayout()`, and `loadTimelineMonth()` with explicit day-mode guards:
 
 ```ts
-    if (this.grouping !== 'day') {
-      return;
-    }
+if (this.grouping !== 'day') {
+  return;
+}
 ```
 
 For `#createScrubberMonths()`, use:
@@ -1181,6 +1188,7 @@ Expected: existing manager tests may fail only where they assert `getTimeBuckets
 ### Task 4: Cover Empty, Single, Large, Remount, And Stale Response Edge Cases
 
 **Files:**
+
 - Modify: `web/src/lib/managers/timeline-manager/timeline-grouping.svelte.spec.ts`
 - Modify: `web/src/lib/managers/timeline-manager/timeline-manager.svelte.ts`
 
@@ -1204,231 +1212,231 @@ function createDeferred<T>() {
 Append these tests inside `describe('TimelineManager grouping metadata', () => { ... })`:
 
 ```ts
-  it('includes gaps in representative bucket body height', async () => {
-    sdkMock.getTimeBuckets.mockResolvedValue([
-      {
-        timeBucket: '2015-01-01',
-        count: 438,
-        representativeAssetId: 'asset-2015',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-      {
-        timeBucket: '2007-01-01',
-        count: 12,
-        representativeAssetId: 'asset-2007',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
+it('includes gaps in representative bucket body height', async () => {
+  sdkMock.getTimeBuckets.mockResolvedValue([
+    {
+      timeBucket: '2015-01-01',
+      count: 438,
+      representativeAssetId: 'asset-2015',
+      representativeThumbhash: null,
+      representativeRatio: null,
+    },
+    {
+      timeBucket: '2007-01-01',
+      count: 12,
+      representativeAssetId: 'asset-2007',
+      representativeThumbhash: null,
+      representativeRatio: null,
+    },
+  ]);
 
-    const timelineManager = new TimelineManager();
-    await timelineManager.updateOptions({ grouping: 'year' });
+  const timelineManager = new TimelineManager();
+  await timelineManager.updateOptions({ grouping: 'year' });
 
-    expect(timelineManager.bodySectionHeight).toBe(
-      2 * REPRESENTATIVE_TIMELINE_BUCKET_HEIGHT + REPRESENTATIVE_TIMELINE_BUCKET_GAP,
-    );
+  expect(timelineManager.bodySectionHeight).toBe(
+    2 * REPRESENTATIVE_TIMELINE_BUCKET_HEIGHT + REPRESENTATIVE_TIMELINE_BUCKET_GAP,
+  );
+});
+
+it('shows an initialized empty model when grouped buckets have no matches', async () => {
+  sdkMock.getTimeBuckets.mockResolvedValue([]);
+
+  const timelineManager = new TimelineManager();
+  await timelineManager.updateOptions({ grouping: 'year', personIds: ['missing-person'] });
+
+  expect(timelineManager.isInitialized).toBe(true);
+  expect(timelineManager.timelineBuckets).toEqual([]);
+  expect(timelineManager.months).toEqual([]);
+  expect(timelineManager.assetCount).toBe(0);
+  expect(timelineManager.bodySectionHeight).toBe(0);
+});
+
+it('lays out a single representative bucket without adding a trailing gap', async () => {
+  sdkMock.getTimeBuckets.mockResolvedValue([
+    {
+      timeBucket: '2024-01-01',
+      count: 1,
+      representativeAssetId: 'single-asset',
+      representativeThumbhash: null,
+      representativeRatio: null,
+    },
+  ]);
+
+  const timelineManager = new TimelineManager();
+  await timelineManager.updateOptions({ grouping: 'year' });
+
+  expect(timelineManager.timelineBuckets).toHaveLength(1);
+  expect(timelineManager.timelineBuckets[0].top).toBe(timelineManager.topSectionHeight);
+  expect(timelineManager.bodySectionHeight).toBe(REPRESENTATIVE_TIMELINE_BUCKET_HEIGHT);
+});
+
+it('handles thousands of representative buckets without loading bucket assets', async () => {
+  sdkMock.getTimeBuckets.mockResolvedValue(
+    Array.from({ length: 1500 }, (_, index) => ({
+      timeBucket: `${String(3024 - index).padStart(4, '0')}-01-01`,
+      count: 1,
+      representativeAssetId: `asset-${index}`,
+      representativeThumbhash: null,
+      representativeRatio: null,
+    })),
+  );
+
+  const timelineManager = new TimelineManager();
+  await timelineManager.updateOptions({ grouping: 'year' });
+
+  expect(timelineManager.timelineBuckets).toHaveLength(1500);
+  expect(sdkMock.getTimeBucket).not.toHaveBeenCalled();
+  expect(timelineManager.bodySectionHeight).toBe(
+    1500 * REPRESENTATIVE_TIMELINE_BUCKET_HEIGHT + 1499 * REPRESENTATIVE_TIMELINE_BUCKET_GAP,
+  );
+});
+
+it('initializes grouping consistently across remounts', async () => {
+  sdkMock.getTimeBuckets.mockResolvedValue([
+    {
+      timeBucket: '2024-05-01',
+      count: 4,
+      representativeAssetId: 'asset-may',
+      representativeThumbhash: null,
+      representativeRatio: null,
+    },
+  ]);
+
+  const firstManager = new TimelineManager();
+  await firstManager.updateOptions({ grouping: 'month', personIds: ['person-1'] });
+  firstManager.destroy();
+
+  const secondManager = new TimelineManager();
+  await secondManager.updateOptions({ grouping: 'month', personIds: ['person-1'] });
+
+  expect(sdkMock.getTimeBuckets).toHaveBeenCalledTimes(2);
+  expect(secondManager.grouping).toBe('month');
+  expect(secondManager.timelineBuckets.map((bucket) => bucket.viewId)).toEqual(['month:2024-05-01']);
+});
+
+it('ignores stale bucket responses after rapid grouping changes', async () => {
+  const yearBuckets = createDeferred<TimeBucketsResponseDto[]>();
+  const monthBuckets = createDeferred<TimeBucketsResponseDto[]>();
+
+  sdkMock.getTimeBuckets.mockImplementation(({ bucketSize }) => {
+    if (bucketSize === TimeBucketSize.Year) {
+      return yearBuckets.promise;
+    }
+
+    if (bucketSize === TimeBucketSize.Month) {
+      return monthBuckets.promise;
+    }
+
+    return Promise.resolve([]);
   });
 
-  it('shows an initialized empty model when grouped buckets have no matches', async () => {
-    sdkMock.getTimeBuckets.mockResolvedValue([]);
+  const timelineManager = new TimelineManager();
+  const yearUpdate = timelineManager.updateOptions({ grouping: 'year' });
+  await tick();
 
-    const timelineManager = new TimelineManager();
-    await timelineManager.updateOptions({ grouping: 'year', personIds: ['missing-person'] });
+  const monthUpdate = timelineManager.updateOptions({ grouping: 'month' });
+  await tick();
 
-    expect(timelineManager.isInitialized).toBe(true);
-    expect(timelineManager.timelineBuckets).toEqual([]);
-    expect(timelineManager.months).toEqual([]);
-    expect(timelineManager.assetCount).toBe(0);
-    expect(timelineManager.bodySectionHeight).toBe(0);
+  monthBuckets.resolve([
+    {
+      timeBucket: '2024-05-01',
+      count: 2,
+      representativeAssetId: 'month-asset',
+      representativeThumbhash: null,
+      representativeRatio: null,
+    },
+  ]);
+  await monthUpdate;
+
+  yearBuckets.resolve([
+    {
+      timeBucket: '1999-01-01',
+      count: 99,
+      representativeAssetId: 'stale-year-asset',
+      representativeThumbhash: null,
+      representativeRatio: null,
+    },
+  ]);
+  await yearUpdate;
+
+  expect(timelineManager.grouping).toBe('month');
+  expect(timelineManager.timelineBuckets.map((bucket) => bucket.viewId)).toEqual(['month:2024-05-01']);
+  expect(timelineManager.assetCount).toBe(2);
+});
+
+it('ignores stale bucket responses after rapid filter changes', async () => {
+  const personOneBuckets = createDeferred<TimeBucketsResponseDto[]>();
+  const personTwoBuckets = createDeferred<TimeBucketsResponseDto[]>();
+
+  sdkMock.getTimeBuckets.mockImplementation(({ personIds }) => {
+    if (personIds?.[0] === 'person-1') {
+      return personOneBuckets.promise;
+    }
+
+    if (personIds?.[0] === 'person-2') {
+      return personTwoBuckets.promise;
+    }
+
+    return Promise.resolve([]);
   });
 
-  it('lays out a single representative bucket without adding a trailing gap', async () => {
-    sdkMock.getTimeBuckets.mockResolvedValue([
-      {
-        timeBucket: '2024-01-01',
-        count: 1,
-        representativeAssetId: 'single-asset',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
+  const timelineManager = new TimelineManager();
+  const personOneUpdate = timelineManager.updateOptions({ grouping: 'year', personIds: ['person-1'] });
+  await tick();
 
-    const timelineManager = new TimelineManager();
-    await timelineManager.updateOptions({ grouping: 'year' });
+  const personTwoUpdate = timelineManager.updateOptions({ grouping: 'year', personIds: ['person-2'] });
+  await tick();
 
-    expect(timelineManager.timelineBuckets).toHaveLength(1);
-    expect(timelineManager.timelineBuckets[0].top).toBe(timelineManager.topSectionHeight);
-    expect(timelineManager.bodySectionHeight).toBe(REPRESENTATIVE_TIMELINE_BUCKET_HEIGHT);
-  });
+  personTwoBuckets.resolve([
+    {
+      timeBucket: '2024-01-01',
+      count: 2,
+      representativeAssetId: 'person-2-asset',
+      representativeThumbhash: null,
+      representativeRatio: null,
+    },
+  ]);
+  await personTwoUpdate;
 
-  it('handles thousands of representative buckets without loading bucket assets', async () => {
-    sdkMock.getTimeBuckets.mockResolvedValue(
-      Array.from({ length: 1500 }, (_, index) => ({
-        timeBucket: `${String(3024 - index).padStart(4, '0')}-01-01`,
-        count: 1,
-        representativeAssetId: `asset-${index}`,
-        representativeThumbhash: null,
-        representativeRatio: null,
-      })),
-    );
+  personOneBuckets.resolve([
+    {
+      timeBucket: '1999-01-01',
+      count: 99,
+      representativeAssetId: 'stale-person-1-asset',
+      representativeThumbhash: null,
+      representativeRatio: null,
+    },
+  ]);
+  await personOneUpdate;
 
-    const timelineManager = new TimelineManager();
-    await timelineManager.updateOptions({ grouping: 'year' });
+  expect(timelineManager.timelineBuckets.map((bucket) => bucket.viewId)).toEqual(['year:2024-01-01']);
+  expect(timelineManager.assetCount).toBe(2);
+});
 
-    expect(timelineManager.timelineBuckets).toHaveLength(1500);
-    expect(sdkMock.getTimeBucket).not.toHaveBeenCalled();
-    expect(timelineManager.bodySectionHeight).toBe(
-      1500 * REPRESENTATIVE_TIMELINE_BUCKET_HEIGHT + 1499 * REPRESENTATIVE_TIMELINE_BUCKET_GAP,
-    );
-  });
+it('ignores bucket responses that resolve after the manager is destroyed', async () => {
+  const deferredBuckets = createDeferred<TimeBucketsResponseDto[]>();
+  sdkMock.getTimeBuckets.mockReturnValue(deferredBuckets.promise);
 
-  it('initializes grouping consistently across remounts', async () => {
-    sdkMock.getTimeBuckets.mockResolvedValue([
-      {
-        timeBucket: '2024-05-01',
-        count: 4,
-        representativeAssetId: 'asset-may',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
+  const timelineManager = new TimelineManager();
+  const update = timelineManager.updateOptions({ grouping: 'year' });
+  await tick();
 
-    const firstManager = new TimelineManager();
-    await firstManager.updateOptions({ grouping: 'month', personIds: ['person-1'] });
-    firstManager.destroy();
+  timelineManager.destroy();
+  deferredBuckets.resolve([
+    {
+      timeBucket: '2024-01-01',
+      count: 1,
+      representativeAssetId: 'late-asset',
+      representativeThumbhash: null,
+      representativeRatio: null,
+    },
+  ]);
+  await update;
 
-    const secondManager = new TimelineManager();
-    await secondManager.updateOptions({ grouping: 'month', personIds: ['person-1'] });
-
-    expect(sdkMock.getTimeBuckets).toHaveBeenCalledTimes(2);
-    expect(secondManager.grouping).toBe('month');
-    expect(secondManager.timelineBuckets.map((bucket) => bucket.viewId)).toEqual(['month:2024-05-01']);
-  });
-
-  it('ignores stale bucket responses after rapid grouping changes', async () => {
-    const yearBuckets = createDeferred<TimeBucketsResponseDto[]>();
-    const monthBuckets = createDeferred<TimeBucketsResponseDto[]>();
-
-    sdkMock.getTimeBuckets.mockImplementation(({ bucketSize }) => {
-      if (bucketSize === TimeBucketSize.Year) {
-        return yearBuckets.promise;
-      }
-
-      if (bucketSize === TimeBucketSize.Month) {
-        return monthBuckets.promise;
-      }
-
-      return Promise.resolve([]);
-    });
-
-    const timelineManager = new TimelineManager();
-    const yearUpdate = timelineManager.updateOptions({ grouping: 'year' });
-    await tick();
-
-    const monthUpdate = timelineManager.updateOptions({ grouping: 'month' });
-    await tick();
-
-    monthBuckets.resolve([
-      {
-        timeBucket: '2024-05-01',
-        count: 2,
-        representativeAssetId: 'month-asset',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
-    await monthUpdate;
-
-    yearBuckets.resolve([
-      {
-        timeBucket: '1999-01-01',
-        count: 99,
-        representativeAssetId: 'stale-year-asset',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
-    await yearUpdate;
-
-    expect(timelineManager.grouping).toBe('month');
-    expect(timelineManager.timelineBuckets.map((bucket) => bucket.viewId)).toEqual(['month:2024-05-01']);
-    expect(timelineManager.assetCount).toBe(2);
-  });
-
-  it('ignores stale bucket responses after rapid filter changes', async () => {
-    const personOneBuckets = createDeferred<TimeBucketsResponseDto[]>();
-    const personTwoBuckets = createDeferred<TimeBucketsResponseDto[]>();
-
-    sdkMock.getTimeBuckets.mockImplementation(({ personIds }) => {
-      if (personIds?.[0] === 'person-1') {
-        return personOneBuckets.promise;
-      }
-
-      if (personIds?.[0] === 'person-2') {
-        return personTwoBuckets.promise;
-      }
-
-      return Promise.resolve([]);
-    });
-
-    const timelineManager = new TimelineManager();
-    const personOneUpdate = timelineManager.updateOptions({ grouping: 'year', personIds: ['person-1'] });
-    await tick();
-
-    const personTwoUpdate = timelineManager.updateOptions({ grouping: 'year', personIds: ['person-2'] });
-    await tick();
-
-    personTwoBuckets.resolve([
-      {
-        timeBucket: '2024-01-01',
-        count: 2,
-        representativeAssetId: 'person-2-asset',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
-    await personTwoUpdate;
-
-    personOneBuckets.resolve([
-      {
-        timeBucket: '1999-01-01',
-        count: 99,
-        representativeAssetId: 'stale-person-1-asset',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
-    await personOneUpdate;
-
-    expect(timelineManager.timelineBuckets.map((bucket) => bucket.viewId)).toEqual(['year:2024-01-01']);
-    expect(timelineManager.assetCount).toBe(2);
-  });
-
-  it('ignores bucket responses that resolve after the manager is destroyed', async () => {
-    const deferredBuckets = createDeferred<TimeBucketsResponseDto[]>();
-    sdkMock.getTimeBuckets.mockReturnValue(deferredBuckets.promise);
-
-    const timelineManager = new TimelineManager();
-    const update = timelineManager.updateOptions({ grouping: 'year' });
-    await tick();
-
-    timelineManager.destroy();
-    deferredBuckets.resolve([
-      {
-        timeBucket: '2024-01-01',
-        count: 1,
-        representativeAssetId: 'late-asset',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
-    await update;
-
-    expect(timelineManager.isInitialized).toBe(false);
-    expect(timelineManager.timelineBuckets).toEqual([]);
-    expect(timelineManager.months).toEqual([]);
-  });
+  expect(timelineManager.isInitialized).toBe(false);
+  expect(timelineManager.timelineBuckets).toEqual([]);
+  expect(timelineManager.months).toEqual([]);
+});
 ```
 
 - [ ] **Step 2: Run the red edge-case tests**
@@ -1468,9 +1476,9 @@ Import the constants:
 Change the representative branch in `bodySectionHeight` to:
 
 ```ts
-    if (this.grouping !== 'day') {
-      return this.#representativeBucketsHeight();
-    }
+if (this.grouping !== 'day') {
+  return this.#representativeBucketsHeight();
+}
 ```
 
 Add a stale-result sequence field near `#options`:
@@ -1488,19 +1496,19 @@ Change `#initializeTimelineBuckets()` to accept the sequence:
 Add this stale guard after the awaited `Promise.all()` and before any state mutation:
 
 ```ts
-    if (signal.aborted || sequence !== this.#initializeSequence) {
-      return;
-    }
+if (signal.aborted || sequence !== this.#initializeSequence) {
+  return;
+}
 ```
 
 Change `#init(options)` so each initialization has its own sequence:
 
 ```ts
-    const sequence = ++this.#initializeSequence;
-    await this.initTask.execute(async (signal) => {
-      this.#options = options;
-      await this.#initializeTimelineBuckets(signal, sequence);
-    }, true);
+const sequence = ++this.#initializeSequence;
+await this.initTask.execute(async (signal) => {
+  this.#options = options;
+  await this.#initializeTimelineBuckets(signal, sequence);
+}, true);
 ```
 
 Update `destroy()` so it invalidates in-flight bucket responses:
@@ -1535,6 +1543,7 @@ Expected: empty, single-bucket, large-list, remount, stale-response, and destroy
 ### Task 5: Preserve Day-Mode Detailed Timeline Behavior
 
 **Files:**
+
 - Modify: `web/src/lib/managers/timeline-manager/timeline-grouping.svelte.spec.ts`
 - Modify: `web/src/lib/managers/timeline-manager/internal/load-support.svelte.ts`
 - Modify: `web/src/lib/managers/timeline-manager/timeline-manager.svelte.ts`
@@ -1545,12 +1554,7 @@ Expected: empty, single-bucket, large-list, remount, stale-response, and destroy
 Extend the existing SDK import in `web/src/lib/managers/timeline-manager/timeline-grouping.svelte.spec.ts`:
 
 ```ts
-import {
-  AssetOrder,
-  TimeBucketSize,
-  type TimeBucketAssetResponseDto,
-  type TimeBucketsResponseDto,
-} from '@immich/sdk';
+import { AssetOrder, TimeBucketSize, type TimeBucketAssetResponseDto, type TimeBucketsResponseDto } from '@immich/sdk';
 ```
 
 Append the remaining imports:
@@ -1576,136 +1580,136 @@ function buildTimelineAssetAt(id: string, isoDate: string) {
 Append these tests inside `describe('TimelineManager grouping metadata', () => { ... })`:
 
 ```ts
-  it('loads detailed day-mode assets by month with an explicit month bucket size', async () => {
-    const asset = buildTimelineAssetAt('asset-jan-1', '2024-01-01T12:00:00.000Z');
-    const bucketAssets: Record<string, TimeBucketAssetResponseDto> = {
-      '2024-01-01T00:00:00.000Z': toResponseDto(asset),
-    };
+it('loads detailed day-mode assets by month with an explicit month bucket size', async () => {
+  const asset = buildTimelineAssetAt('asset-jan-1', '2024-01-01T12:00:00.000Z');
+  const bucketAssets: Record<string, TimeBucketAssetResponseDto> = {
+    '2024-01-01T00:00:00.000Z': toResponseDto(asset),
+  };
 
-    sdkMock.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
-    sdkMock.getTimeBucket.mockImplementation(async ({ timeBucket }, { signal } = {}) => {
-      await Promise.resolve();
-      if (signal?.aborted) {
-        throw new AbortError();
-      }
-      return bucketAssets[timeBucket];
-    });
-
-    const timelineManager = new TimelineManager();
-    await timelineManager.updateOptions({ grouping: 'day' });
-    await timelineManager.loadTimelineMonth({ year: 2024, month: 1 });
-
-    expect(sdkMock.getTimeBucket).toHaveBeenCalledWith(
-      expect.objectContaining({
-        bucketSize: TimeBucketSize.Month,
-        timeBucket: '2024-01-01T00:00:00.000Z',
-      }),
-      expect.anything(),
-    );
-    expect(timelineManager.months[0].getAssets().map((loadedAsset) => loadedAsset.id)).toEqual(['asset-jan-1']);
-  });
-
-  it('restores detailed day-mode APIs after visiting year and month grouping', async () => {
-    const asset = buildTimelineAssetAt('asset-detail', '2024-01-02T12:00:00.000Z');
-
-    sdkMock.getTimeBuckets
-      .mockResolvedValueOnce([
-        {
-          timeBucket: '2024-01-01',
-          count: 1,
-          representativeAssetId: 'year-representative',
-          representativeThumbhash: null,
-          representativeRatio: null,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          timeBucket: '2024-01-01',
-          count: 1,
-          representativeAssetId: 'month-representative',
-          representativeThumbhash: null,
-          representativeRatio: null,
-        },
-      ])
-      .mockResolvedValueOnce([{ timeBucket: '2024-01-02', count: 1 }]);
-    sdkMock.getTimeBucket.mockResolvedValue(toResponseDto(asset));
-
-    const timelineManager = new TimelineManager();
-    await timelineManager.updateOptions({ grouping: 'year' });
-    await timelineManager.updateOptions({ grouping: 'month' });
-    await timelineManager.updateOptions({ grouping: 'day' });
-    await timelineManager.loadTimelineMonth({ year: 2024, month: 1 });
-
-    expect(timelineManager.grouping).toBe('day');
-    expect(timelineManager.months).toHaveLength(1);
-    expect(await timelineManager.getRandomAsset(0)).toMatchObject({ id: 'asset-detail' });
-    const loadedAssetIds: string[] = [];
-    for await (const loadedAsset of timelineManager.assetsIterator()) {
-      loadedAssetIds.push(loadedAsset.id);
+  sdkMock.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
+  sdkMock.getTimeBucket.mockImplementation(async ({ timeBucket }, { signal } = {}) => {
+    await Promise.resolve();
+    if (signal?.aborted) {
+      throw new AbortError();
     }
-    expect(loadedAssetIds).toEqual(['asset-detail']);
+    return bucketAssets[timeBucket];
   });
 
-  it('keeps day-mode range selection working after visiting year and month grouping', async () => {
-    const laterAsset = buildTimelineAssetAt('asset-later', '2024-01-02T12:00:00.000Z');
-    const earlierAsset = buildTimelineAssetAt('asset-earlier', '2024-01-01T12:00:00.000Z');
+  const timelineManager = new TimelineManager();
+  await timelineManager.updateOptions({ grouping: 'day' });
+  await timelineManager.loadTimelineMonth({ year: 2024, month: 1 });
 
-    sdkMock.getTimeBuckets
-      .mockResolvedValueOnce([
-        {
-          timeBucket: '2024-01-01',
-          count: 2,
-          representativeAssetId: 'year-representative',
-          representativeThumbhash: null,
-          representativeRatio: null,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          timeBucket: '2024-01-01',
-          count: 2,
-          representativeAssetId: 'month-representative',
-          representativeThumbhash: null,
-          representativeRatio: null,
-        },
-      ])
-      .mockResolvedValueOnce([
-        { timeBucket: '2024-01-02', count: 1 },
-        { timeBucket: '2024-01-01', count: 1 },
-      ]);
-    sdkMock.getTimeBucket.mockResolvedValue(toResponseDto(laterAsset, earlierAsset));
+  expect(sdkMock.getTimeBucket).toHaveBeenCalledWith(
+    expect.objectContaining({
+      bucketSize: TimeBucketSize.Month,
+      timeBucket: '2024-01-01T00:00:00.000Z',
+    }),
+    expect.anything(),
+  );
+  expect(timelineManager.months[0].getAssets().map((loadedAsset) => loadedAsset.id)).toEqual(['asset-jan-1']);
+});
 
-    const timelineManager = new TimelineManager();
-    await timelineManager.updateOptions({ grouping: 'year' });
-    await timelineManager.updateOptions({ grouping: 'month' });
-    await timelineManager.updateOptions({ grouping: 'day' });
-    await timelineManager.loadTimelineMonth({ year: 2024, month: 1 });
+it('restores detailed day-mode APIs after visiting year and month grouping', async () => {
+  const asset = buildTimelineAssetAt('asset-detail', '2024-01-02T12:00:00.000Z');
 
-    const selectedRange = await timelineManager.retrieveRange({ id: laterAsset.id }, { id: earlierAsset.id });
-
-    expect(selectedRange.map((asset) => asset.id)).toEqual([laterAsset.id, earlierAsset.id]);
-  });
-
-  it('does not let representative modes create detailed month segments through asset upserts', async () => {
-    sdkMock.getTimeBuckets.mockResolvedValue([
+  sdkMock.getTimeBuckets
+    .mockResolvedValueOnce([
       {
         timeBucket: '2024-01-01',
-        count: 3,
-        representativeAssetId: 'representative',
+        count: 1,
+        representativeAssetId: 'year-representative',
         representativeThumbhash: null,
         representativeRatio: null,
       },
+    ])
+    .mockResolvedValueOnce([
+      {
+        timeBucket: '2024-01-01',
+        count: 1,
+        representativeAssetId: 'month-representative',
+        representativeThumbhash: null,
+        representativeRatio: null,
+      },
+    ])
+    .mockResolvedValueOnce([{ timeBucket: '2024-01-02', count: 1 }]);
+  sdkMock.getTimeBucket.mockResolvedValue(toResponseDto(asset));
+
+  const timelineManager = new TimelineManager();
+  await timelineManager.updateOptions({ grouping: 'year' });
+  await timelineManager.updateOptions({ grouping: 'month' });
+  await timelineManager.updateOptions({ grouping: 'day' });
+  await timelineManager.loadTimelineMonth({ year: 2024, month: 1 });
+
+  expect(timelineManager.grouping).toBe('day');
+  expect(timelineManager.months).toHaveLength(1);
+  expect(await timelineManager.getRandomAsset(0)).toMatchObject({ id: 'asset-detail' });
+  const loadedAssetIds: string[] = [];
+  for await (const loadedAsset of timelineManager.assetsIterator()) {
+    loadedAssetIds.push(loadedAsset.id);
+  }
+  expect(loadedAssetIds).toEqual(['asset-detail']);
+});
+
+it('keeps day-mode range selection working after visiting year and month grouping', async () => {
+  const laterAsset = buildTimelineAssetAt('asset-later', '2024-01-02T12:00:00.000Z');
+  const earlierAsset = buildTimelineAssetAt('asset-earlier', '2024-01-01T12:00:00.000Z');
+
+  sdkMock.getTimeBuckets
+    .mockResolvedValueOnce([
+      {
+        timeBucket: '2024-01-01',
+        count: 2,
+        representativeAssetId: 'year-representative',
+        representativeThumbhash: null,
+        representativeRatio: null,
+      },
+    ])
+    .mockResolvedValueOnce([
+      {
+        timeBucket: '2024-01-01',
+        count: 2,
+        representativeAssetId: 'month-representative',
+        representativeThumbhash: null,
+        representativeRatio: null,
+      },
+    ])
+    .mockResolvedValueOnce([
+      { timeBucket: '2024-01-02', count: 1 },
+      { timeBucket: '2024-01-01', count: 1 },
     ]);
+  sdkMock.getTimeBucket.mockResolvedValue(toResponseDto(laterAsset, earlierAsset));
 
-    const timelineManager = new TimelineManager();
-    await timelineManager.updateOptions({ grouping: 'year' });
-    timelineManager.upsertAssets([buildTimelineAssetAt('new-asset', '2024-01-15T12:00:00.000Z')]);
+  const timelineManager = new TimelineManager();
+  await timelineManager.updateOptions({ grouping: 'year' });
+  await timelineManager.updateOptions({ grouping: 'month' });
+  await timelineManager.updateOptions({ grouping: 'day' });
+  await timelineManager.loadTimelineMonth({ year: 2024, month: 1 });
 
-    expect(timelineManager.grouping).toBe('year');
-    expect(timelineManager.timelineBuckets.map((bucket) => bucket.viewId)).toEqual(['year:2024-01-01']);
-    expect(timelineManager.months).toEqual([]);
-    expect(timelineManager.assetCount).toBe(3);
-  });
+  const selectedRange = await timelineManager.retrieveRange({ id: laterAsset.id }, { id: earlierAsset.id });
+
+  expect(selectedRange.map((asset) => asset.id)).toEqual([laterAsset.id, earlierAsset.id]);
+});
+
+it('does not let representative modes create detailed month segments through asset upserts', async () => {
+  sdkMock.getTimeBuckets.mockResolvedValue([
+    {
+      timeBucket: '2024-01-01',
+      count: 3,
+      representativeAssetId: 'representative',
+      representativeThumbhash: null,
+      representativeRatio: null,
+    },
+  ]);
+
+  const timelineManager = new TimelineManager();
+  await timelineManager.updateOptions({ grouping: 'year' });
+  timelineManager.upsertAssets([buildTimelineAssetAt('new-asset', '2024-01-15T12:00:00.000Z')]);
+
+  expect(timelineManager.grouping).toBe('year');
+  expect(timelineManager.timelineBuckets.map((bucket) => bucket.viewId)).toEqual(['year:2024-01-01']);
+  expect(timelineManager.months).toEqual([]);
+  expect(timelineManager.assetCount).toBe(3);
+});
 ```
 
 - [ ] **Step 2: Run the red compatibility tests**
@@ -1766,7 +1770,7 @@ Replace the timeline space `getTimeBucket()` request object with:
 Update the `getTimelineAlbumQueryOptions()` call in this file to pass `TimeBucketSize.Month`:
 
 ```ts
-  const albumQueryOptions = getTimelineAlbumQueryOptions(options, TimeBucketSize.Month);
+const albumQueryOptions = getTimelineAlbumQueryOptions(options, TimeBucketSize.Month);
 ```
 
 - [ ] **Step 4: Guard detailed mutation methods in representative modes**
@@ -1782,9 +1786,9 @@ In `web/src/lib/managers/timeline-manager/timeline-manager.svelte.ts`, add this 
 At the start of detailed-only methods, return early for non-day grouping:
 
 ```ts
-    if (!this.#isDetailedTimeline()) {
-      return;
-    }
+if (!this.#isDetailedTimeline()) {
+  return;
+}
 ```
 
 Apply that guard to:
@@ -1866,6 +1870,7 @@ Expected: new grouping tests pass and existing manager behavior remains green wi
 ### Task 6: Final Verification And Spec Coverage Review
 
 **Files:**
+
 - Read: `docs/superpowers/specs/2026-05-19-timeline-grouping-design.md`
 - Read: `docs/superpowers/plans/2026-05-19-timeline-grouping-slice-1-server-api.md`
 - Verify changed files from Tasks 1-5.
