@@ -471,6 +471,7 @@ const setup = () => {
     albumRepository as unknown as AlbumRepository,
     sharedSpaceRepository as unknown as SharedSpaceRepository,
     sessions as unknown as AgentSessionRepository,
+    { create: vi.fn() } as never,
     toolCalls as unknown as AgentToolCallRepository,
     runnerService,
     { search: vi.fn(() => Promise.resolve([])) } as never,

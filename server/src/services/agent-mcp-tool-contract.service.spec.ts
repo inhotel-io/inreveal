@@ -25,6 +25,7 @@ const expectedPlanningToolNames = [
 const expectedProposalExampleNames = [
   'create-empty-album',
   'create-album-and-add-assets',
+  'create-album-from-selection-handle',
   'add-assets-to-existing-album',
   'remove-assets-from-existing-album',
   'update-album-details',
@@ -225,6 +226,31 @@ describe(AgentMcpToolContractService.name, () => {
       sampleSize: 3,
     });
     expect(JSON.stringify(exampleByName.get('large-album-page-search')?.arguments)).not.toContain('1000');
+  });
+
+  it('documents large selection handle search and plan examples that parse live DTO schemas', () => {
+    const search = sut.getReadToolContract(AgentToolName.SearchAssets);
+    const plan = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations);
+    const searchExample = search?.examples.find((example) => example.name === 'large-selection-handle-search');
+    const planExample = plan?.examples.find((example) => example.name === 'create-album-from-selection-handle');
+
+    expect(search?.usage).toContain('createSelectionHandle');
+    expect(searchExample?.arguments).toMatchObject({
+      createSelectionHandle: true,
+      detail: 'ids',
+      sampleSize: 5,
+    });
+    expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(searchExample?.arguments).success).toBe(
+      true,
+    );
+
+    expect(plan?.usage).toContain('assetSelectionHandleId');
+    expect(JSON.stringify(planExample?.arguments)).toContain('assetSelectionHandleId');
+    expect(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse(planExample?.arguments)
+        .success,
+    ).toBe(true);
+    expect(JSON.stringify(planExample?.arguments)).not.toContain('"assetIds"');
   });
 
   it('documents progressive metadata reads by exact field groups for selected ids', () => {
@@ -1273,8 +1299,8 @@ describe(AgentMcpToolContractService.name, () => {
 
       expect(correction).toEqual({
         expected:
-          'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review.',
-        hint: 'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review.',
+          'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from searchAssets createSelectionHandle instead of pasting every asset ID.',
+        hint: 'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from searchAssets createSelectionHandle instead of pasting every asset ID.',
         exampleArguments: expect.objectContaining({
           summary: 'Create today test album.',
           operations: expect.any(Array),

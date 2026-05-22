@@ -202,7 +202,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
   description:
     'Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and bounded result pages.',
   usage:
-    'Put metadata search filters under filters. Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds, then propose plans with returned asset IDs. Use mode smart, description, ocr, or filename with query for text search. Default to compact asset ids with detail ids. Use detail summary with fields and sampleSize for a small representative sample. Use detail metadata only after a bounded compact search proves the subset is small. Do not use limit 1000 or request all metadata for broad searches; page with nextPage or ask one narrowing question when hasMore or resultSize.truncated is true. Results are bounded; when hasMore is true, repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.',
+    'Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to compact asset ids. createSelectionHandle -> assetSelectionHandleId for large bounded pages. Do not use limit 1000; ask one narrowing question or repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.',
   argumentModes: [
     {
       name: 'empty-search',
@@ -291,6 +291,18 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
         limit: 50,
         page: 1,
         order: 'desc',
+      },
+    },
+    {
+      name: 'large-selection-handle-search',
+      description: 'Create a compact server-side selection handle for a bounded large result.',
+      arguments: {
+        detail: 'ids',
+        createSelectionHandle: true,
+        sampleSize: 5,
+        filters: { isNotInAlbum: true },
+        limit: 500,
+        page: 1,
       },
     },
     {
@@ -977,7 +989,7 @@ const readToolContracts: AgentMcpReadToolContract[] = [
 ];
 
 const planningUsage =
-  'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review.';
+  'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from searchAssets createSelectionHandle instead of pasting every asset ID.';
 
 const planningMode: AgentMcpArgumentMode = {
   name: 'operation-plan',
@@ -1039,9 +1051,39 @@ const createAlbumAndAddAssetsExample: AgentMcpToolExample = {
   },
 };
 
+const createAlbumFromSelectionHandleExample: AgentMcpToolExample = {
+  name: 'create-album-from-selection-handle',
+  description: 'Create an album and add a large server-side selection without pasting asset IDs.',
+  arguments: {
+    summary: 'Create an album from the selected search result.',
+    operations: [
+      {
+        type: AgentOperationType.AlbumCreate,
+        summary: 'Create album.',
+        targetKind: AgentOperationTargetKind.NewAlbum,
+        temporaryTargetId: 'selection-album',
+        payload: { albumName: 'Selected photos', description: '' },
+        riskLevel: 'low',
+        enabled: true,
+      },
+      {
+        type: AgentOperationType.AlbumAddAssets,
+        summary: 'Add selected photos.',
+        targetKind: AgentOperationTargetKind.NewAlbum,
+        temporaryTargetId: 'selection-album',
+        assetSelectionHandleId: '00000000-0000-4000-8000-000000000333',
+        payload: {},
+        riskLevel: 'medium',
+        enabled: true,
+      },
+    ],
+  },
+};
+
 const planningProposalExamples: AgentMcpToolExample[] = [
   createEmptyAlbumExample,
   createAlbumAndAddAssetsExample,
+  createAlbumFromSelectionHandleExample,
   {
     name: 'add-assets-to-existing-album',
     description: 'Add selected assets to an existing album.',
@@ -1455,6 +1497,12 @@ const planningCommonMistakes: AgentMcpCommonMistake[] = [
     match: { messageIncludes: 'assetIds must be unique' },
     hint: 'Provide each asset id only once within a planning operation.',
     exampleName: 'favorite-assets',
+  },
+  {
+    id: 'planning-pasted-large-asset-ids',
+    match: { issuePath: 'operations.0.assetIds', messageIncludes: 'expected array to have <=' },
+    hint: 'For hundreds or thousands of assets, call searchAssets with createSelectionHandle and use assetSelectionHandleId in the plan.',
+    exampleName: 'create-album-from-selection-handle',
   },
   {
     id: 'planning-invalid-rotate-angle',

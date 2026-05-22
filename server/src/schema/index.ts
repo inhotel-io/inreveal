@@ -25,6 +25,7 @@ import { AgentMessageTable } from 'src/schema/tables/agent-message.table';
 import { AgentOperationPlanTable } from 'src/schema/tables/agent-operation-plan.table';
 import { AgentOperationTable } from 'src/schema/tables/agent-operation.table';
 import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
+import { AgentSelectionHandleTable } from 'src/schema/tables/agent-selection-handle.table';
 import { AgentSessionActivityEventTable } from 'src/schema/tables/agent-session-activity-event.table';
 import { AgentSessionTable } from 'src/schema/tables/agent-session.table';
 import { AgentToolCallTable } from 'src/schema/tables/agent-tool-call.table';
@@ -119,6 +120,7 @@ export class ImmichDatabase {
     AgentSessionActivityEventTable,
     AgentMessageTable,
     AgentToolCallTable,
+    AgentSelectionHandleTable,
     AgentOperationPlanTable,
     AgentOperationTable,
     ApiKeyTable,
@@ -240,6 +242,7 @@ export interface DB {
   agent_provider_credential: AgentProviderCredentialTable;
   agent_message: AgentMessageTable;
   agent_tool_call: AgentToolCallTable;
+  agent_selection_handle: AgentSelectionHandleTable;
   agent_session_activity_event: AgentSessionActivityEventTable;
   agent_session: AgentSessionTable;
   agent_operation_plan: AgentOperationPlanTable;

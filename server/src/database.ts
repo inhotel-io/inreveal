@@ -19,6 +19,7 @@ import { AgentMessageTable } from 'src/schema/tables/agent-message.table';
 import { AgentOperationPlanTable } from 'src/schema/tables/agent-operation-plan.table';
 import { AgentOperationTable } from 'src/schema/tables/agent-operation.table';
 import { AgentProviderCredentialTable } from 'src/schema/tables/agent-provider-credential.table';
+import { AgentSelectionHandleTable } from 'src/schema/tables/agent-selection-handle.table';
 import { AgentSessionActivityEventTable } from 'src/schema/tables/agent-session-activity-event.table';
 import { AgentSessionTable } from 'src/schema/tables/agent-session.table';
 import { AgentToolCallTable } from 'src/schema/tables/agent-tool-call.table';
@@ -97,6 +98,7 @@ export type AgentProviderCredential = Selectable<AgentProviderCredentialTable>;
 export type AgentMessage = Selectable<AgentMessageTable>;
 export type AgentSession = Selectable<AgentSessionTable>;
 export type AgentSessionActivityEvent = Selectable<AgentSessionActivityEventTable>;
+export type AgentSelectionHandle = Selectable<AgentSelectionHandleTable>;
 export type AgentToolCall = Selectable<AgentToolCallTable>;
 export type AgentOperationPlan = Selectable<AgentOperationPlanTable>;
 export type AgentOperation = Selectable<AgentOperationTable>;
@@ -588,6 +590,18 @@ export const columns = {
     'updateId',
   ],
   agentSessionActivityEvent: ['id', 'sessionId', 'kind', 'status', 'source', 'summary', 'counts', 'createdAt'],
+  agentSelectionHandle: [
+    'id',
+    'sessionId',
+    'userId',
+    'sourceToolCallId',
+    'assetIds',
+    'assetCount',
+    'sampleAssetIds',
+    'expiresAt',
+    'createdAt',
+    'updateId',
+  ],
   notification: ['id', 'createdAt', 'level', 'type', 'title', 'description', 'data', 'readAt'],
   syncAsset: [
     'asset.id',
