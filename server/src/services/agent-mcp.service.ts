@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { serverVersion } from 'src/constants';
 import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.dto';
-import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
 import type {
   AgentListAlbumsToolRequestDto,
   AgentListSpacesToolRequestDto,
@@ -14,6 +13,7 @@ import type {
   AgentSearchAssetsToolRequestDto,
   AgentSearchUsersToolRequestDto,
 } from 'src/dtos/agent-tool.dto';
+import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
 import type { AuthDto } from 'src/dtos/auth.dto';
 import { AgentToolName } from 'src/enum';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
@@ -221,7 +221,11 @@ export class AgentMcpService {
   ): Promise<unknown> {
     switch (toolName) {
       case AgentToolName.ResolveAssetSearchFilters: {
-        return this.toolService.resolveAssetSearchFilters(auth, sessionId, dto as AgentResolveAssetSearchFiltersToolRequestDto);
+        return this.toolService.resolveAssetSearchFilters(
+          auth,
+          sessionId,
+          dto as AgentResolveAssetSearchFiltersToolRequestDto,
+        );
       }
       case AgentToolName.SearchAssets: {
         return this.toolService.searchAssets(auth, sessionId, dto as AgentSearchAssetsToolRequestDto);
@@ -299,7 +303,7 @@ export class AgentMcpService {
 
     const path = this.nonEmptyString(firstIssue.path);
     const message = this.nonEmptyString(firstIssue.message);
-    return [path, message].filter((value): value is string => Boolean(value)).join(': ') || undefined;
+    return [path, message].filter((value): value is string => value !== undefined).join(': ') || undefined;
   }
 
   private recordValue(value: unknown): Record<string, unknown> | undefined {

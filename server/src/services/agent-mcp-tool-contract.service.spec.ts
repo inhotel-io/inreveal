@@ -211,9 +211,7 @@ describe(AgentMcpToolContractService.name, () => {
     ]) {
       const example = exampleByName.get(name);
       expect(example, name).toBeDefined();
-      expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(example?.arguments).success).toBe(
-        true,
-      );
+      expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(example?.arguments).success).toBe(true);
     }
 
     expect(exampleByName.get('compact-date-location-search')?.arguments).toMatchObject({
@@ -265,8 +263,9 @@ describe(AgentMcpToolContractService.name, () => {
       assetIds: ['00000000-0000-4000-8000-000000000001'],
       fields: ['camera', 'dates', 'filename'],
     });
-    expect(AgentReadToolRequestSchemas[AgentToolName.ReadAssetMetadata].safeParse(exactTechnical?.arguments).success)
-      .toBe(true);
+    expect(
+      AgentReadToolRequestSchemas[AgentToolName.ReadAssetMetadata].safeParse(exactTechnical?.arguments).success,
+    ).toBe(true);
   });
 
   it('discourages broad full-metadata and large-limit search calls with actionable hints', () => {
