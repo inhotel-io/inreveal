@@ -656,6 +656,600 @@ describe(AgentOperationPlanService.name, () => {
     );
   });
 
+  it('proposeSpaceFromSearch creates a reviewable create-space plus add-assets plan from a search source', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const assetIds = [newUuid(), newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: { country: 'South Africa' },
+      results: [],
+    });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })),
+      hasNextPage: false,
+    } as never);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.SpaceCreate,
+            targetKind: AgentOperationTargetKind.NewSpace,
+            temporaryTargetId: 'tmp-space-from-search',
+            payload: { spaceName: 'Family South Africa', description: 'January trip.', color: UserAvatarColor.Blue },
+          }),
+          makeOperation({
+            type: AgentOperationType.SpaceAddAssets,
+            targetKind: AgentOperationTargetKind.NewSpace,
+            temporaryTargetId: 'tmp-space-from-search',
+            assetIds,
+            payload: {},
+          }),
+        ],
+      }),
+    );
+
+    await sut.proposeSpaceFromSearch(auth, session.id, {
+      summary: 'Create family space.',
+      spaceName: 'Family South Africa',
+      description: 'January trip.',
+      color: UserAvatarColor.Blue,
+      assetSource: {
+        kind: 'search',
+        filters: { country: 'South Africa' },
+        materialization: 'all-matches-with-limit',
+      },
+    });
+
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        plan: expect.objectContaining({ summary: 'Create family space.' }),
+        operations: [
+          expect.objectContaining({
+            type: AgentOperationType.SpaceCreate,
+            targetKind: AgentOperationTargetKind.NewSpace,
+            temporaryTargetId: 'tmp-space-from-search',
+            payload: { spaceName: 'Family South Africa', description: 'January trip.', color: UserAvatarColor.Blue },
+          }),
+          expect.objectContaining({
+            type: AgentOperationType.SpaceAddAssets,
+            targetKind: AgentOperationTargetKind.NewSpace,
+            temporaryTargetId: 'tmp-space-from-search',
+            assetIds,
+            assetSource: undefined,
+            assetSelectionHandleId: undefined,
+          }),
+        ],
+      }),
+    );
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: AgentToolName.ProposeSpaceFromSearch }),
+    );
+    expect(sharedSpaceService.create).not.toHaveBeenCalled();
+    expect(sharedSpaceService.addAssets).not.toHaveBeenCalled();
+  });
+
+  it('proposeSpaceFromSearch materializes a previous search source without rerunning search', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const selectionHandleId = newUuid();
+    const sourceRef = `asset-source:search:${selectionHandleId}` as const;
+    const assetIds = [newUuid(), newUuid(), newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds.slice(0, 25),
+      expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.SpaceCreate,
+            targetKind: AgentOperationTargetKind.NewSpace,
+            temporaryTargetId: 'tmp-space-from-search',
+            payload: { spaceName: 'Family South Africa' },
+          }),
+          makeOperation({
+            type: AgentOperationType.SpaceAddAssets,
+            targetKind: AgentOperationTargetKind.NewSpace,
+            temporaryTargetId: 'tmp-space-from-search',
+            assetIds,
+            payload: {},
+          }),
+        ],
+      }),
+    );
+
+    await sut.proposeSpaceFromSearch(auth, session.id, {
+      spaceName: 'Family South Africa',
+      assetSource: { kind: 'previousSearch', sourceRef },
+    });
+
+    expect(selectionHandleRepository.getValidForPlanning).toHaveBeenCalledWith({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      now: expect.any(Date),
+    });
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters).not.toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({ type: AgentOperationType.SpaceCreate }),
+          expect.objectContaining({
+            type: AgentOperationType.SpaceAddAssets,
+            assetIds,
+            assetSource: undefined,
+            assetSelectionHandleId: undefined,
+          }),
+        ],
+      }),
+    );
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: AgentToolName.ProposeSpaceFromSearch,
+        assetCount: assetIds.length,
+        redactedRequestMetadata: expect.objectContaining({
+          selectionHandles: [
+            expect.objectContaining({
+              id: selectionHandleId,
+              sourceKind: 'previousSearch',
+              sourceRef,
+            }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it('proposeAddAssetsToSpaceFromSearch creates only an add-assets operation for a target space id', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const spaceId = newUuid();
+    const assetIds = [newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })),
+      hasNextPage: false,
+    } as never);
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([spaceId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(makePlan({ sessionId: session.id, operations: [] }));
+
+    await sut.proposeAddAssetsToSpaceFromSearch(auth, session.id, {
+      summary: 'Add matching photos.',
+      spaceId,
+      assetSource: { kind: 'search', filters: {}, materialization: 'all-matches-with-limit' },
+    });
+
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            type: AgentOperationType.SpaceAddAssets,
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: spaceId,
+            temporaryTargetId: undefined,
+            assetIds,
+          }),
+        ],
+      }),
+    );
+    expect(planRepository.createReplacementRevision.mock.calls[0]?.[1].operations).toHaveLength(1);
+    expect(accessRepository.sharedSpace.checkRoleAccess).toHaveBeenCalledWith(
+      auth.user.id,
+      new Set([spaceId]),
+      SharedSpaceRole.Editor,
+    );
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: AgentToolName.ProposeAddAssetsToSpaceFromSearch }),
+    );
+  });
+
+  it('proposeAddAssetsToSpaceFromSearch materializes a previous search source without rerunning search', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const spaceId = newUuid();
+    const selectionHandleId = newUuid();
+    const sourceRef = `asset-source:search:${selectionHandleId}` as const;
+    const assetIds = [newUuid(), newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([spaceId]));
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds.slice(0, 25),
+      expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.SpaceAddAssets,
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: spaceId,
+            temporaryTargetId: null,
+            assetIds,
+            payload: {},
+          }),
+        ],
+      }),
+    );
+
+    await sut.proposeAddAssetsToSpaceFromSearch(auth, session.id, {
+      spaceId,
+      assetSource: { kind: 'previousSearch', sourceRef },
+    });
+
+    expect(selectionHandleRepository.getValidForPlanning).toHaveBeenCalledWith({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      now: expect.any(Date),
+    });
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters).not.toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            type: AgentOperationType.SpaceAddAssets,
+            targetId: spaceId,
+            assetIds,
+            assetSource: undefined,
+            assetSelectionHandleId: undefined,
+          }),
+        ],
+      }),
+    );
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+        assetCount: assetIds.length,
+        redactedRequestMetadata: expect.objectContaining({
+          selectionHandles: [
+            expect.objectContaining({
+              id: selectionHandleId,
+              sourceKind: 'previousSearch',
+              sourceRef,
+            }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it('proposeAddAssetsToSpaceFromSearch resolves a unique visible space name before planning', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const spaceId = newUuid();
+    const assetIds = [newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getAllByUserId.mockResolvedValue([
+      { id: spaceId, name: 'Family South Africa', description: null, color: UserAvatarColor.Blue, createdById: auth.user.id },
+    ] as never);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({ items: assetIds.map((id) => ({ id })), hasNextPage: false } as never);
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([spaceId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(makePlan({ sessionId: session.id, operations: [] }));
+
+    await sut.proposeAddAssetsToSpaceFromSearch(auth, session.id, {
+      spaceName: ' family south africa ',
+      assetSource: { kind: 'search', filters: {} },
+    });
+
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [expect.objectContaining({ targetId: spaceId, temporaryTargetId: undefined })],
+      }),
+    );
+  });
+
+  it('proposeAddAssetsToSpaceFromSearch denies space-name lookup when shared spaces are not readable', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        assetScope: { ...expandedPermissionPlanSnapshot.assetScope, sharedSpaces: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAddAssetsToSpaceFromSearch(auth, session.id, {
+        spaceName: 'Family',
+        assetSource: { kind: 'search', filters: {} },
+      }),
+    ).rejects.toThrow('Shared spaces are not accessible for this session');
+
+    expect(sharedSpaceRepository.getAllByUserId).not.toHaveBeenCalled();
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters).not.toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: 'Shared spaces are not accessible for this session',
+      }),
+    );
+  });
+
+  it('proposeAddAssetsToSpaceFromSearch returns clarification choices for duplicate visible space names', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const firstSpaceId = newUuid();
+    const secondSpaceId = newUuid();
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getAllByUserId.mockResolvedValue([
+      { id: firstSpaceId, name: 'Family', description: 'Owned', color: UserAvatarColor.Blue, createdById: auth.user.id },
+      { id: secondSpaceId, name: 'family', description: 'Shared', color: UserAvatarColor.Green, createdById: newUuid() },
+    ] as never);
+
+    await expect(
+      sut.proposeAddAssetsToSpaceFromSearch(auth, session.id, {
+        spaceName: 'Family',
+        assetSource: { kind: 'search', filters: {} },
+      }),
+    ).rejects.toMatchObject({
+      content: expect.objectContaining({
+        status: 'error',
+        retryable: true,
+        recovery: expect.objectContaining({
+          kind: 'space_target_needs_clarification',
+          choices: expect.arrayContaining([
+            expect.objectContaining({ spaceId: firstSpaceId, spaceName: 'Family' }),
+            expect.objectContaining({ spaceId: secondSpaceId, spaceName: 'family' }),
+          ]),
+        }),
+      }),
+    });
+
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: expect.stringContaining('Multiple visible spaces named'),
+      }),
+    );
+  });
+
+  it('proposeAddAssetsToSpaceFromSearch returns recoverable guidance when a space name has no visible match', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    sessionRepository.getById.mockResolvedValue(session);
+    sharedSpaceRepository.getAllByUserId.mockResolvedValue([]);
+
+    await expect(
+      sut.proposeAddAssetsToSpaceFromSearch(auth, session.id, {
+        spaceName: 'Family',
+        assetSource: { kind: 'search', filters: {} },
+      }),
+    ).rejects.toMatchObject({
+      content: expect.objectContaining({
+        status: 'error',
+        retryable: true,
+        hint: expect.stringContaining('listSpaces'),
+        recovery: expect.objectContaining({
+          kind: 'space_target_needs_clarification',
+          spaceName: 'Family',
+          choices: [],
+        }),
+      }),
+    });
+
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: expect.stringContaining('No visible space named'),
+      }),
+    );
+  });
+
+  it.each([
+    ['createSpace', { createSpace: false }, 'Agent permission policy does not allow creating spaces'],
+    ['addAssetsToSpaces', { addAssetsToSpaces: false }, 'Agent permission policy does not allow adding assets to spaces'],
+  ])(
+    'proposeSpaceFromSearch enforces %s write scope through existing planning validation',
+    async (_field, writeScopeOverride, expectedError) => {
+      const auth = AuthFactory.create();
+      const session = makeSession({
+        userId: auth.user.id,
+        permissionPlanSnapshot: {
+          ...expandedPermissionPlanSnapshot,
+          writeScope: { ...expandedPermissionPlanSnapshot.writeScope, ...writeScopeOverride },
+        },
+      });
+      sessionRepository.getById.mockResolvedValue(session);
+
+      await expect(
+        sut.proposeSpaceFromSearch(auth, session.id, {
+          spaceName: 'Family',
+          assetSource: { kind: 'search', filters: {} },
+        }),
+      ).rejects.toThrow(expectedError);
+
+      expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+      expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    },
+  );
+
+  it('proposeAddAssetsToSpaceFromSearch enforces add-assets-to-space scope and editor access', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, addAssetsToSpaces: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAddAssetsToSpaceFromSearch(auth, session.id, {
+        spaceId,
+        assetSource: { kind: 'search', filters: {} },
+      }),
+    ).rejects.toThrow('Agent permission policy does not allow adding assets to spaces');
+
+    expect(accessRepository.sharedSpace.checkRoleAccess).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+
+    const allowedSession = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    sessionRepository.getById.mockResolvedValue(allowedSession);
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set());
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: newUuid() }], hasNextPage: false } as never);
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set());
+
+    await expect(
+      sut.proposeAddAssetsToSpaceFromSearch(auth, allowedSession.id, {
+        spaceId,
+        assetSource: { kind: 'search', filters: {} },
+      }),
+    ).rejects.toThrow('One or more target spaces are not accessible');
+
+    expect(accessRepository.sharedSpace.checkRoleAccess).toHaveBeenCalledWith(
+      auth.user.id,
+      new Set([spaceId]),
+      SharedSpaceRole.Editor,
+    );
+  });
+
+  it('proposeAddAssetsToSpaceFromSearch denies a space name before resolving visible spaces when write scope is disabled', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, addAssetsToSpaces: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAddAssetsToSpaceFromSearch(auth, session.id, {
+        spaceName: 'Family',
+        assetSource: { kind: 'search', filters: {} },
+      }),
+    ).rejects.toThrow('Agent permission policy does not allow adding assets to spaces');
+
+    expect(sharedSpaceRepository.getAllByUserId).not.toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: 'Agent permission policy does not allow adding assets to spaces',
+      }),
+    );
+  });
+
+  it('proposeAddAssetsToSpaceFromSearch denies inaccessible space ids before materializing a search source', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set());
+
+    await expect(
+      sut.proposeAddAssetsToSpaceFromSearch(auth, session.id, {
+        spaceId,
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      }),
+    ).rejects.toThrow('One or more target spaces are not accessible');
+
+    expect(accessRepository.sharedSpace.checkRoleAccess).toHaveBeenCalledWith(
+      auth.user.id,
+      new Set([spaceId]),
+      SharedSpaceRole.Editor,
+    );
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters).not.toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('proposeAddAssetsToSpaceFromSearch keeps existing membership semantics by preserving the full materialized asset set', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const spaceId = newUuid();
+    const existingAssetId = newUuid();
+    const newAssetId = newUuid();
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: [existingAssetId, newAssetId].map((id) => ({ id })),
+      hasNextPage: false,
+    } as never);
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([spaceId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([existingAssetId, newAssetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([existingAssetId, newAssetId]));
+    planRepository.createReplacementRevision.mockResolvedValue(makePlan({ sessionId: session.id, operations: [] }));
+
+    await sut.proposeAddAssetsToSpaceFromSearch(auth, session.id, {
+      spaceId,
+      assetSource: { kind: 'search', filters: {} },
+    });
+
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [expect.objectContaining({ assetIds: [existingAssetId, newAssetId] })],
+      }),
+    );
+  });
+
   it('materializes assetSelectionHandleId server-side before storing and reviewing a plan', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id });

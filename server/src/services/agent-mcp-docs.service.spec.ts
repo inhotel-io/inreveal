@@ -63,6 +63,24 @@ describe(AgentMcpDocsService.name, () => {
     expect(markdown).toMatch(/preferred/i);
   });
 
+  it('documents the high-level space workflow tools as preferred for space-from-search tasks', () => {
+    const markdown = sut.generateMarkdown();
+    const documentedNames = sut.listDocumentedToolArgumentExamples().map((example) => example.exampleName);
+
+    for (const name of [
+      'create-space-from-declarative-search',
+      'create-space-from-previous-search',
+      'add-search-results-to-space-by-id',
+      'add-search-results-to-space-by-name',
+    ]) {
+      expect(markdown).toContain(name);
+      expect(documentedNames).toContain(name);
+    }
+    expect(markdown).toContain('proposeSpaceFromSearch');
+    expect(markdown).toContain('proposeAddAssetsToSpaceFromSearch');
+    expect(markdown).toMatch(/preferred/i);
+  });
+
   it('includes the space lookup tools and parseable documented examples', () => {
     const markdown = sut.generateMarkdown();
     const examples = sut

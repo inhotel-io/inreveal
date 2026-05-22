@@ -18,6 +18,7 @@ import {
   AgentOperationType,
   AgentToolName,
   SharedSpaceRole,
+  UserAvatarColor,
 } from 'src/enum';
 import { factory } from 'test/small.factory';
 import z from 'zod';
@@ -1642,6 +1643,119 @@ describe('Agent operation DTOs', () => {
 
       expect(emptyName.success).toBe(false);
       expect(longDescription.success).toBe(false);
+    });
+
+    it('accepts proposeSpaceFromSearch with a declarative search source', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeSpaceFromSearch].safeParse({
+        summary: 'Create family trip space.',
+        spaceName: 'Family South Africa',
+        description: 'Shared January 2026 South Africa photos.',
+        color: UserAvatarColor.Blue,
+        assetSource: {
+          kind: 'search',
+          filters: {
+            country: 'South Africa',
+            takenAfter: '2026-01-01T00:00:00.000Z',
+            takenBefore: '2026-02-01T00:00:00.000Z',
+          },
+          materialization: 'all-matches-with-limit',
+        },
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts proposeSpaceFromSearch with a previous search source', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeSpaceFromSearch].safeParse({
+        spaceName: 'Previous search space',
+        assetSource: {
+          kind: 'previousSearch',
+          sourceRef: `asset-source:search:${factory.uuid()}`,
+        },
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts proposeAddAssetsToSpaceFromSearch with exactly one existing space target', () => {
+      const byId = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAddAssetsToSpaceFromSearch].safeParse({
+        summary: 'Add January photos.',
+        spaceId: factory.uuid(),
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      });
+      const byName = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAddAssetsToSpaceFromSearch].safeParse({
+        summary: 'Add January photos.',
+        spaceName: 'Family South Africa',
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      });
+
+      expect(byId.success).toBe(true);
+      expect(byName.success).toBe(true);
+    });
+
+    it('accepts proposeAddAssetsToSpaceFromSearch with a previous search source', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAddAssetsToSpaceFromSearch].safeParse({
+        spaceId: factory.uuid(),
+        assetSource: {
+          kind: 'previousSearch',
+          sourceRef: `asset-source:search:${factory.uuid()}`,
+        },
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it.each([
+      ['missing target', {}],
+      ['both targets', { spaceId: factory.uuid(), spaceName: 'Family South Africa' }],
+    ])('rejects proposeAddAssetsToSpaceFromSearch with %s', (_label, target) => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAddAssetsToSpaceFromSearch].safeParse({
+        summary: 'Add photos.',
+        ...target,
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues).toEqual([
+        expect.objectContaining({ message: 'Provide exactly one of spaceId or spaceName' }),
+      ]);
+    });
+
+    it('rejects space workflow asset sources that require raw ids or handles', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeSpaceFromSearch].safeParse({
+        summary: 'Create space.',
+        spaceName: 'Manual ids',
+        assetSource: { kind: 'explicitAssets', assetIds: [factory.uuid()] },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues).toEqual([expect.objectContaining({ path: ['assetSource', 'kind'] })]);
+    });
+
+    it('keeps space workflow text validation aligned with space.create planning constraints', () => {
+      const emptyName = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeSpaceFromSearch].safeParse({
+        spaceName: '',
+        assetSource: { kind: 'search', filters: {} },
+      });
+      const longName = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeSpaceFromSearch].safeParse({
+        spaceName: 'x'.repeat(101),
+        assetSource: { kind: 'search', filters: {} },
+      });
+      const longDescription = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeSpaceFromSearch].safeParse({
+        spaceName: 'Family',
+        description: 'x'.repeat(501),
+        assetSource: { kind: 'search', filters: {} },
+      });
+      const invalidColor = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeSpaceFromSearch].safeParse({
+        spaceName: 'Family',
+        color: 'teal',
+        assetSource: { kind: 'search', filters: {} },
+      });
+
+      expect(emptyName.success).toBe(false);
+      expect(longName.success).toBe(false);
+      expect(longDescription.success).toBe(false);
+      expect(invalidColor.success).toBe(false);
     });
 
     it('requires planId for reviseProposedOperations MCP calls and keeps the body fields', () => {
