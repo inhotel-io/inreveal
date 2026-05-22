@@ -953,6 +953,275 @@ describe(AgentSessionChatPanel.name, () => {
     expect(screen.queryByText('Returned 1 album(s)')).not.toBeInTheDocument();
   });
 
+  it('preserves expanded activity rows when a refresh temporarily omits tool calls', async () => {
+    const seedMessages = [
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Find my South Africa photos'),
+        createdAt: '2026-05-16T10:59:00.000Z',
+      },
+    ];
+    const initialToolCalls = makeToolBurst(8);
+    const view = render(AgentSessionChatPanel, {
+      props: {
+        session,
+        activityVisibilityMode: 'expanded',
+        seedMessages,
+        toolCalls: initialToolCalls,
+      },
+    });
+
+    const initialActivity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(initialActivity.querySelectorAll('[data-activity-row]')).toHaveLength(9);
+
+    await view.rerender({
+      session: { ...session, updatedAt: '2026-05-16T11:00:01.000Z' },
+      activityVisibilityMode: 'expanded',
+      seedMessages,
+      toolCalls: [],
+    });
+
+    const refreshedActivity = screen.getByRole('article', { name: 'Pi is working' });
+    expect(refreshedActivity.querySelectorAll('[data-activity-row]')).toHaveLength(9);
+    expect(screen.queryByRole('article', { name: /Pi searched your photos/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: /Pi read photo details/i })).not.toBeInTheDocument();
+  });
+
+  it('updates an expanded tool row when polling advances its status', async () => {
+    const seedMessages = [
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Find beach photos'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ];
+    const runningToolCall = makeToolCall({
+      id: 'stable-tool',
+      toolName: AgentToolName.SearchAssets,
+      status: AgentToolCallStatus.Executing,
+      responseSummary: null,
+      assetCount: 2,
+      albumCount: 0,
+      completedAt: null,
+      startedAt: '2026-05-16T10:00:05.000Z',
+    });
+    const completedToolCall = {
+      ...runningToolCall,
+      status: AgentToolCallStatus.Completed,
+      responseSummary: 'Found matching beach photos',
+      completedAt: '2026-05-16T10:00:10.000Z',
+    };
+    const view = render(AgentSessionChatPanel, {
+      props: { session, activityVisibilityMode: 'expanded', seedMessages, toolCalls: [runningToolCall] },
+    });
+
+    const runningActivity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(runningActivity).toHaveTextContent('Running');
+
+    await view.rerender({
+      session,
+      activityVisibilityMode: 'expanded',
+      seedMessages,
+      toolCalls: [completedToolCall],
+    });
+
+    const completedActivity = screen.getByRole('article', { name: 'Pi is working' });
+    expect(completedActivity.querySelectorAll('[data-activity-row]')).toHaveLength(2);
+    expect(completedActivity).toHaveTextContent('Done');
+    expect(completedActivity).toHaveTextContent('Found matching beach photos');
+  });
+
+  it('keeps expanded activity row order stable when an equivalent polling refresh arrives reordered', async () => {
+    const seedMessages = [
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Find beach photos'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ];
+    const toolCalls = Array.from({ length: 5 }, (_, index) =>
+      makeToolCall({
+        id: `stable-tool-${index}`,
+        toolName: AgentToolName.SearchAssets,
+        responseSummary: `Result ${index}`,
+        assetCount: index + 1,
+        albumCount: 0,
+        startedAt: `2026-05-16T10:00:0${index}.000Z`,
+        completedAt: `2026-05-16T10:00:1${index}.000Z`,
+      }),
+    );
+    const view = render(AgentSessionChatPanel, {
+      props: { session, activityVisibilityMode: 'expanded', seedMessages, toolCalls },
+    });
+
+    const initialActivity = await screen.findByRole('article', { name: 'Pi is working' });
+    const initialRows = Array.from(initialActivity.querySelectorAll('[data-activity-row]')).map((row) => row.textContent);
+
+    await view.rerender({
+      session,
+      activityVisibilityMode: 'expanded',
+      seedMessages,
+      toolCalls: [...toolCalls].reverse(),
+    });
+
+    const refreshedActivity = screen.getByRole('article', { name: 'Pi is working' });
+    expect(Array.from(refreshedActivity.querySelectorAll('[data-activity-row]')).map((row) => row.textContent)).toEqual(
+      initialRows,
+    );
+  });
+
+  it('does not regress a completed expanded tool row when an older polling response arrives later', async () => {
+    const seedMessages = [
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Find beach photos'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ];
+    const completedToolCall = makeToolCall({
+      id: 'stable-tool',
+      toolName: AgentToolName.SearchAssets,
+      status: AgentToolCallStatus.Completed,
+      responseSummary: 'Found matching beach photos',
+      assetCount: 2,
+      albumCount: 0,
+      completedAt: '2026-05-16T10:00:10.000Z',
+      startedAt: '2026-05-16T10:00:05.000Z',
+    });
+    const staleRunningToolCall = {
+      ...completedToolCall,
+      status: AgentToolCallStatus.Executing,
+      responseSummary: null,
+      completedAt: null,
+    };
+    const view = render(AgentSessionChatPanel, {
+      props: { session, activityVisibilityMode: 'expanded', seedMessages, toolCalls: [completedToolCall] },
+    });
+
+    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Done');
+
+    await view.rerender({
+      session,
+      activityVisibilityMode: 'expanded',
+      seedMessages,
+      toolCalls: [staleRunningToolCall],
+    });
+
+    const activity = screen.getByRole('article', { name: 'Pi is working' });
+    expect(activity).toHaveTextContent('Done');
+    expect(activity).toHaveTextContent('Found matching beach photos');
+  });
+
+  it('keeps current-turn activity after the assistant response arrives while tool calls are temporarily absent', async () => {
+    const userMessage = {
+      ...makeMessage('message-user', AgentMessageRole.User, 'List my albums'),
+      createdAt: '2026-05-16T10:00:00.000Z',
+    };
+    const assistantMessage = {
+      ...makeMessage('message-assistant', AgentMessageRole.Assistant, 'You have one album.'),
+      createdAt: '2026-05-16T10:00:20.000Z',
+    };
+    const view = render(AgentSessionChatPanel, {
+      props: {
+        session,
+        activityVisibilityMode: 'expanded',
+        seedMessages: [userMessage],
+        toolCalls: [
+          makeToolCall({
+            id: 'album-tool',
+            startedAt: '2026-05-16T10:00:05.000Z',
+            completedAt: '2026-05-16T10:00:06.000Z',
+          }),
+        ],
+      },
+    });
+
+    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Searching albums');
+
+    await view.rerender({
+      session: { ...session, status: AgentSessionStatus.Completed },
+      activityVisibilityMode: 'expanded',
+      seedMessages: [userMessage, assistantMessage],
+      toolCalls: [],
+    });
+
+    const transcript = screen.getByTestId('agent-session-chat-transcript');
+    expect(screen.getByRole('article', { name: 'Activity summary' })).toHaveTextContent('Searching albums');
+    expect(screen.queryByRole('article', { name: /Pi checked your albums/i })).not.toBeInTheDocument();
+    expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
+      expect.stringContaining('List my albums'),
+      expect.stringContaining('Searching albums'),
+      expect.stringContaining('You have one album.'),
+    ]);
+  });
+
+  it('keeps preserved tool calls available when switching from compact to expanded during refresh', async () => {
+    const seedMessages = [
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Find my South Africa photos'),
+        createdAt: '2026-05-16T10:59:00.000Z',
+      },
+    ];
+    const view = render(AgentSessionChatPanel, {
+      props: {
+        session,
+        activityVisibilityMode: 'compact',
+        seedMessages,
+        toolCalls: makeToolBurst(8),
+      },
+    });
+
+    const compactActivity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(compactActivity.querySelectorAll('[data-activity-row]').length).toBeLessThan(8);
+
+    await view.rerender({
+      session,
+      activityVisibilityMode: 'expanded',
+      seedMessages,
+      toolCalls: [],
+    });
+
+    expect(screen.getByRole('article', { name: 'Pi is working' }).querySelectorAll('[data-activity-row]')).toHaveLength(9);
+  });
+
+  it('clears preserved tool calls when the selected session changes', async () => {
+    const sessionTwo = { ...session, id: '00000000-0000-4000-8000-000000000200' };
+    const view = render(AgentSessionChatPanel, {
+      props: {
+        session,
+        activityVisibilityMode: 'expanded',
+        seedMessages: [
+          {
+            ...makeMessage('message-user', AgentMessageRole.User, 'Find photos'),
+            createdAt: '2026-05-16T10:00:00.000Z',
+          },
+        ],
+        toolCalls: [
+          makeToolCall({
+            id: 'old-session-tool',
+            toolName: AgentToolName.SearchAssets,
+            responseSummary: 'Old session result',
+            assetCount: 2,
+            albumCount: 0,
+            completedAt: '2026-05-16T10:00:10.000Z',
+          }),
+        ],
+      },
+    });
+
+    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Old session result');
+
+    await view.rerender({
+      session: sessionTwo,
+      activityVisibilityMode: 'expanded',
+      seedMessages: [
+        {
+          ...makeMessage('message-session-two', AgentMessageRole.User, 'Second session request', sessionTwo.id),
+          createdAt: '2026-05-16T10:01:00.000Z',
+        },
+      ],
+      toolCalls: [],
+    });
+
+    expect(screen.queryByText('Old session result')).not.toBeInTheDocument();
+  });
+
   it('forwards current activity visibility changes to the session owner', async () => {
     const onActivityVisibilityModeChange = vi.fn();
 
