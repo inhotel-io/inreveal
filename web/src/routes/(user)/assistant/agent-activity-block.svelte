@@ -14,11 +14,12 @@
   interface Props {
     model: AgentActivityModel;
     compactLimit?: number;
+    verboseLimit?: number;
     visibilityMode?: BlockVisibilityMode;
     onVisibilityModeChange?: (mode: BlockVisibilityMode) => void;
   }
 
-  let { model, compactLimit = 3, visibilityMode, onVisibilityModeChange }: Props = $props();
+  let { model, compactLimit = 3, verboseLimit = 100, visibilityMode, onVisibilityModeChange }: Props = $props();
   const rowsId = $props.id();
   let uncontrolledVisibilityMode = $state<BlockVisibilityMode>('compact');
   let expandedTechnicalRowIds = new SvelteSet<string>();
@@ -32,17 +33,19 @@
     skipped: 'assistant_activity_status_skipped',
   };
 
-  const isActive = $derived(model.activeItem !== null);
   const effectiveVisibilityMode = $derived(visibilityMode ?? uncontrolledVisibilityMode);
   const isExpanded = $derived(effectiveVisibilityMode === 'expanded');
+  const currentActiveItem = $derived(isExpanded ? model.verboseActiveItem : model.activeItem);
+  const isActive = $derived(currentActiveItem !== null);
   const heading = $derived($t(isActive ? 'assistant_activity_title' : 'assistant_activity_summary_title'));
   const compactItems = $derived(selectCompactItems(model.items, model.activeItem, compactLimit));
-  const visibleItems = $derived(isExpanded ? model.items : compactItems);
+  const expandedItems = $derived(selectVerboseItems(model.verboseItems, model.verboseActiveItem, verboseLimit));
+  const visibleItems = $derived(isExpanded ? expandedItems : compactItems);
 
   const technicalRowsByItemId = $derived.by(() => {
     const rows = new SvelteMap<string, ReturnType<typeof buildAgentActivityTechnicalRows>>();
 
-    for (const item of model.items) {
+    for (const item of [...model.items, ...model.verboseItems]) {
       rows.set(item.id, buildAgentActivityTechnicalRows(item));
     }
 
@@ -82,6 +85,30 @@
     return items.filter((item) => selectedIds.has(item.id));
   }
 
+  function selectVerboseItems(
+    items: AgentActivityItem[],
+    activeItem: AgentActivityItem | null,
+    limit: number,
+  ): AgentActivityItem[] {
+    if (limit <= 0) {
+      return [];
+    }
+
+    if (items.length <= limit) {
+      return items;
+    }
+
+    const selected = items.slice(-limit);
+    if (!activeItem || selected.some((item) => item.id === activeItem.id)) {
+      return selected;
+    }
+
+    const withoutOldestInactive = selected.filter((item) => item.id !== activeItem.id).slice(1);
+    return [...withoutOldestInactive, activeItem].sort((first, second) =>
+      first.startedAt.localeCompare(second.startedAt),
+    );
+  }
+
   function toggleTechnicalRow(itemId: string) {
     if (expandedTechnicalRowIds.has(itemId)) {
       expandedTechnicalRowIds.delete(itemId);
@@ -91,7 +118,7 @@
   }
 </script>
 
-{#if model.items.length > 0}
+{#if model.items.length > 0 || model.verboseItems.length > 0}
   <article
     data-chat-item
     class="mr-auto w-full max-w-[82%] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-slate-800 shadow-sm dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100"
@@ -135,6 +162,7 @@
         {@const technicalDetailsId = `${rowsId}-${item.id}-technical`}
         {@const technicalDetailsExpanded = expandedTechnicalRowIds.has(item.id)}
         <div
+          data-activity-row
           class="min-w-0 rounded-md border border-gray-100 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900"
         >
           <div class="flex flex-wrap items-center gap-2">

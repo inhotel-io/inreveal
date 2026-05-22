@@ -106,6 +106,61 @@ const makeToolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentT
   error: overrides.error ?? null,
 });
 
+const makeToolBurst = (count = 60) =>
+  Array.from({ length: count }, (_, index) => {
+    const startedAt = `2026-05-18T10:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`;
+    const completedAt = `2026-05-18T10:${String(Math.floor((index + 1) / 60)).padStart(2, '0')}:${String((index + 1) % 60).padStart(2, '0')}.000Z`;
+
+    if (index % 15 === 14) {
+      return makeToolCall({
+        id: `unknown-${index}`,
+        toolName: 'futureMcpDebugTool' as AgentToolName,
+        startedAt,
+        completedAt,
+      });
+    }
+
+    if (index % 15 === 13) {
+      return makeToolCall({
+        id: `space-${index}`,
+        toolName: AgentToolName.ReadSpace,
+        startedAt,
+        completedAt,
+      });
+    }
+
+    if (index % 15 === 12) {
+      return makeToolCall({
+        id: `album-${index}`,
+        toolName: AgentToolName.ListAlbums,
+        albumCount: 1,
+        startedAt,
+        completedAt,
+      });
+    }
+
+    if (index % 2 === 0) {
+      return makeToolCall({
+        id: `search-${index}`,
+        toolName: AgentToolName.SearchAssets,
+        assetCount: 12,
+        responseSummary: 'Found matching photos',
+        startedAt,
+        completedAt,
+      });
+    }
+
+    return makeToolCall({
+      id: `metadata-${index}`,
+      toolName: AgentToolName.ReadAssetMetadata,
+      status: index === 55 ? AgentToolCallStatus.Executing : AgentToolCallStatus.Completed,
+      assetCount: 3,
+      responseSummary: index === 55 ? null : 'Read details for photos',
+      startedAt,
+      completedAt: index === 55 ? null : completedAt,
+    });
+  });
+
 const makeOperation = (overrides: Partial<AgentOperationResponseDto> = {}): AgentOperationResponseDto => ({
   id: overrides.id ?? 'operation-1',
   planId: overrides.planId ?? 'plan-1',
@@ -184,6 +239,131 @@ const buildModel = (
   });
 
 describe('agent activity UI helpers', () => {
+  it('builds a stable compact model from a burst of tool calls and events', () => {
+    const toolCalls = makeToolBurst(60);
+    const activityEvents = [
+      makeActivityEvent({
+        id: 'start',
+        kind: 'start-processing',
+        status: 'running',
+        createdAt: '2026-05-18T09:59:59.000Z',
+      }),
+      makeActivityEvent({
+        id: 'plan',
+        kind: 'plan-composing',
+        status: 'completed',
+        createdAt: '2026-05-18T10:01:01.000Z',
+      }),
+    ];
+    const pollingFirst = buildModel({ toolCalls, activityEvents });
+    const websocketFirst = buildModel({
+      toolCalls: [...toolCalls].reverse(),
+      activityEvents: [...activityEvents].reverse(),
+    });
+
+    expect(pollingFirst.items.length).toBeLessThan(10);
+    expect(pollingFirst.items.map((item) => item.id)).toContain('tool-search-search-assets');
+    expect(
+      buildModel({
+        toolCalls: [...toolCalls, makeToolCall({ id: 'search-appended', startedAt: '2026-05-18T10:02:00.000Z' })],
+      }).items.map((item) => item.id),
+    ).toContain('tool-search-search-assets');
+    expect(pollingFirst.items.find((item) => item.kind === 'search')).toMatchObject({
+      title: 'Searching photos',
+      status: 'completed',
+      count: 288,
+    });
+    expect(pollingFirst.items.find((item) => item.kind === 'metadata')).toMatchObject({
+      status: 'running',
+      count: 72,
+    });
+    for (const item of pollingFirst.items) {
+      expect(`${item.title} ${item.summary ?? ''}`).not.toContain('searchAssets');
+      expect(`${item.title} ${item.summary ?? ''}`).not.toContain('readAssetMetadata');
+      expect(`${item.title} ${item.summary ?? ''}`).not.toContain('futureMcpDebugTool');
+    }
+    expect(pollingFirst.activeItem?.id).toBe(websocketFirst.activeItem?.id);
+  });
+
+  it('builds an expanded verbose timeline with ordered plain-language rows', () => {
+    const toolCalls = makeToolBurst(60);
+    const activityEvents = [
+      makeActivityEvent({
+        id: 'start',
+        kind: 'start-processing',
+        status: 'running',
+        createdAt: '2026-05-18T09:59:59.000Z',
+      }),
+      makeActivityEvent({
+        id: 'plan',
+        kind: 'plan-composing',
+        status: 'completed',
+        createdAt: '2026-05-18T10:01:01.000Z',
+      }),
+    ];
+    const model = buildModel({ toolCalls, activityEvents });
+
+    expect(model.verboseItems).toHaveLength(62);
+    expect(model.verboseItems.map((item) => item.startedAt)).toEqual(
+      [...model.verboseItems.map((item) => item.startedAt)].sort(),
+    );
+    expect(model.verboseItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'tool-search-search-0',
+          title: 'Searching photos',
+          status: 'completed',
+          summary: 'Found matching photos',
+          count: 12,
+        }),
+        expect.objectContaining({
+          id: 'tool-metadata-metadata-55',
+          title: 'Reading photo details',
+          status: 'running',
+          summary: 'Reading photo details',
+          count: 3,
+        }),
+        expect.objectContaining({ id: 'tool-unknown-unknown-14', title: 'Working with Gallery' }),
+      ]),
+    );
+    expect(model.verboseItems.find((item) => item.id === 'tool-unknown-unknown-14')?.technical?.toolName).toBe(
+      'futureMcpDebugTool',
+    );
+    expect(model.verboseItems.map((item) => `${item.title} ${item.summary ?? ''}`).join(' ')).not.toContain(
+      'futureMcpDebugTool',
+    );
+  });
+
+  it('returns identical compact and verbose models for polling-first and websocket-first updates', () => {
+    const toolCalls = makeToolBurst(60);
+    const activityEvents = [
+      makeActivityEvent({
+        id: 'start',
+        kind: 'start-processing',
+        status: 'running',
+        createdAt: '2026-05-18T09:59:59.000Z',
+      }),
+      makeActivityEvent({
+        id: 'plan',
+        kind: 'plan-composing',
+        status: 'completed',
+        createdAt: '2026-05-18T10:01:01.000Z',
+      }),
+    ];
+    const pollingFirst = buildModel({ toolCalls, activityEvents });
+    const websocketFirst = buildModel({
+      toolCalls: [...toolCalls].reverse(),
+      activityEvents: [...activityEvents].reverse(),
+    });
+
+    expect(pollingFirst.items.map(({ id, status, count }) => ({ id, status, count }))).toEqual(
+      websocketFirst.items.map(({ id, status, count }) => ({ id, status, count })),
+    );
+    expect(pollingFirst.verboseItems.map(({ id, status, count }) => ({ id, status, count }))).toEqual(
+      websocketFirst.verboseItems.map(({ id, status, count }) => ({ id, status, count })),
+    );
+  });
+
   it.each([
     [AgentToolName.SearchAssets, 'search', 'Searching photos', 'Found matching photos'],
     [AgentToolName.ReadAssetMetadata, 'metadata', 'Reading photo details', 'Read details for photos'],
