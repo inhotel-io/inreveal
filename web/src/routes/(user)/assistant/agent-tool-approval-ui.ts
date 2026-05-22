@@ -38,6 +38,15 @@ const handledStatuses = new Set<AgentToolCallStatus>([
   AgentToolCallStatus.Failed,
 ]);
 
+const timelineStatuses = new Set<AgentToolCallStatus>([
+  AgentToolCallStatus.PendingApproval,
+  AgentToolCallStatus.Approved,
+  AgentToolCallStatus.Executing,
+  AgentToolCallStatus.Completed,
+  AgentToolCallStatus.Failed,
+  AgentToolCallStatus.Denied,
+]);
+
 export const getAgentToolNameLabelKey = (toolName: AgentToolName) => toolNameLabelKeys[toolName] ?? toolName;
 
 export const getAgentToolDataClassLabelKey = (dataClass: AgentToolDataClass) =>
@@ -108,6 +117,11 @@ export const getRecentToolCalls = (toolCalls: AgentToolCallResponseDto[]) =>
       const secondTime = second.completedAt ?? second.startedAt;
       return secondTime.localeCompare(firstTime) || second.id.localeCompare(first.id);
     });
+
+export const getTimelineToolCalls = (toolCalls: AgentToolCallResponseDto[]) =>
+  toolCalls
+    .filter((toolCall) => timelineStatuses.has(toolCall.status))
+    .sort((first, second) => first.startedAt.localeCompare(second.startedAt) || first.id.localeCompare(second.id));
 
 export const buildToolApprovalPayload = (
   decision: AgentToolApprovalDecision,

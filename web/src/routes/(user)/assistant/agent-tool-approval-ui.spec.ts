@@ -13,6 +13,7 @@ import {
   getAgentToolNameLabelKey,
   getPendingToolCalls,
   getRecentToolCalls,
+  getTimelineToolCalls,
 } from './agent-tool-approval-ui';
 
 const toolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentToolCallResponseDto => ({
@@ -110,6 +111,26 @@ describe('agent tool approval UI helpers', () => {
       'completed-b',
       'completed-a',
       'approved',
+    ]);
+  });
+
+  it('groups all timeline-relevant calls for activity rendering', () => {
+    const calls = [
+      toolCall({ id: 'pending', status: AgentToolCallStatus.PendingApproval, startedAt: '2026-05-16T10:00:00.000Z' }),
+      toolCall({ id: 'approved', status: AgentToolCallStatus.Approved, startedAt: '2026-05-16T10:00:01.000Z' }),
+      toolCall({ id: 'executing', status: AgentToolCallStatus.Executing, startedAt: '2026-05-16T10:00:02.000Z' }),
+      toolCall({ id: 'completed', status: AgentToolCallStatus.Completed, startedAt: '2026-05-16T10:00:03.000Z' }),
+      toolCall({ id: 'failed', status: AgentToolCallStatus.Failed, startedAt: '2026-05-16T10:00:04.000Z' }),
+      toolCall({ id: 'denied', status: AgentToolCallStatus.Denied, startedAt: '2026-05-16T10:00:05.000Z' }),
+    ];
+
+    expect(getTimelineToolCalls(calls).map(({ id }) => id)).toEqual([
+      'pending',
+      'approved',
+      'executing',
+      'completed',
+      'failed',
+      'denied',
     ]);
   });
 

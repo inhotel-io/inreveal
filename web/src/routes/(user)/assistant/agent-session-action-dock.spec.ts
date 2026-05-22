@@ -166,6 +166,7 @@ const toolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentToolC
   startedAt: overrides.startedAt ?? '2026-05-16T10:00:00.000Z',
   completedAt: overrides.completedAt ?? null,
   error: overrides.error ?? null,
+  resultSize: overrides.resultSize,
 });
 
 describe(AgentSessionActionDock.name, () => {
@@ -545,6 +546,28 @@ describe(AgentSessionActionDock.name, () => {
     vi.useRealTimers();
   });
 
+  it('publishes executing tool calls to the chat timeline while polling', async () => {
+    const onRecentToolCallsChange = vi.fn();
+    sdkMock.getToolCalls.mockResolvedValue([
+      toolCall({
+        id: 'executing-tool',
+        status: AgentToolCallStatus.Executing,
+        responseSummary: null,
+        completedAt: null,
+      }),
+    ]);
+
+    render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+    });
+
+    await waitFor(() =>
+      expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({ id: 'executing-tool', status: AgentToolCallStatus.Executing }),
+      ]),
+    );
+  });
+
   it('does not republish recent tool calls when a polling refresh returns unchanged data', async () => {
     vi.useFakeTimers();
     const onRecentToolCallsChange = vi.fn();
@@ -567,6 +590,63 @@ describe(AgentSessionActionDock.name, () => {
     await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(2));
 
     expect(onRecentToolCallsChange).toHaveBeenCalledTimes(publishCountAfterInitialLoad);
+    vi.useRealTimers();
+  });
+
+  it('publishes richer same-status tool-call details after a polling refresh', async () => {
+    vi.useFakeTimers();
+    const onRecentToolCallsChange = vi.fn();
+    const initialCompletedToolCall = toolCall({
+      status: AgentToolCallStatus.Completed,
+      requestSummary: 'Search photos',
+      responseSummary: 'Found matching photos',
+      assetCount: 0,
+      completedAt: '2026-05-16T10:01:00.000Z',
+      resultSize: undefined,
+    });
+    const richerCompletedToolCall = toolCall({
+      status: AgentToolCallStatus.Completed,
+      requestSummary: 'Search favorites in May',
+      responseSummary: 'Found matching photos',
+      assetCount: 12,
+      completedAt: '2026-05-16T10:01:00.000Z',
+      resultSize: {
+        returnedItems: 12,
+        hasMore: false,
+        nextPage: null,
+        estimatedBytes: 8192,
+        truncated: false,
+        omittedFields: [],
+      },
+    });
+    sdkMock.getToolCalls.mockResolvedValueOnce([initialCompletedToolCall]).mockResolvedValueOnce([richerCompletedToolCall]);
+
+    render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+    });
+    await waitFor(() =>
+      expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({
+          id: 'tool-call-1',
+          requestSummary: 'Search photos',
+          assetCount: 0,
+          resultSize: undefined,
+        }),
+      ]),
+    );
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(2);
+    await Promise.resolve();
+
+    expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        id: 'tool-call-1',
+        requestSummary: 'Search favorites in May',
+        assetCount: 12,
+        resultSize: expect.objectContaining({ returnedItems: 12, estimatedBytes: 8192 }),
+      }),
+    ]);
     vi.useRealTimers();
   });
 
