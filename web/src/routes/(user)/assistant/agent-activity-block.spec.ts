@@ -7,6 +7,8 @@ vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_activity_count: '{count} items',
     assistant_activity_hide: 'Hide activity',
+    assistant_activity_show_newer: 'Show newer activity',
+    assistant_activity_show_older: 'Show older activity',
     assistant_activity_show: 'Show activity',
     assistant_activity_status_blocked: 'Needs attention',
     assistant_activity_status_completed: 'Done',
@@ -33,12 +35,19 @@ vi.mock('svelte-i18n', () => {
     assistant_activity_technical_tool_call: 'Tool call ID',
     assistant_activity_technical_tool_calls: 'Tool call IDs',
     assistant_activity_title: 'Pi is working',
+    assistant_activity_window_summary: 'Showing {visible} of {total} actions',
   };
 
   return {
-    t: readable((key: string, options?: { values?: Record<string, string | number> }) =>
-      (messages[key] ?? key).replace('{count}', String(options?.values?.count ?? '')),
-    ),
+    t: readable((key: string, options?: { values?: Record<string, string | number> }) => {
+      let message = messages[key] ?? key;
+
+      for (const [name, value] of Object.entries(options?.values ?? {})) {
+        message = message.replaceAll(`{${name}}`, String(value));
+      }
+
+      return message;
+    }),
   };
 });
 
@@ -65,6 +74,21 @@ const activityModel = (items: AgentActivityItem[], verboseItems = items): AgentA
     .slice(0, 3)
     .join(', '),
 });
+
+const verboseActivityItems = (count: number, runningIndex: number | null = null) =>
+  Array.from({ length: count }, (_, index) =>
+    activityItem({
+      id: `verbose-${index}`,
+      title: `Verbose activity ${index}`,
+      summary: `Verbose summary ${index}`,
+      status: index === runningIndex ? 'running' : 'completed',
+      startedAt: `2026-05-18T10:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`,
+      technical: {
+        toolName: index % 2 === 0 ? 'searchAssets' : 'readAssetMetadata',
+        toolCallIds: [`tool-call-${index}`],
+      },
+    }),
+  );
 
 describe(AgentActivityBlock.name, () => {
   it('uses compact coalesced rows until the user expands activity', () => {
@@ -143,15 +167,24 @@ describe(AgentActivityBlock.name, () => {
     expect(screen.queryByText('readAssetMetadata')).not.toBeInTheDocument();
   });
 
-  it('caps expanded verbose rows to a bounded DOM count', () => {
-    const verboseItems = Array.from({ length: 250 }, (_, index) =>
-      activityItem({
-        id: `verbose-${index}`,
-        title: `Verbose activity ${index}`,
-        status: index === 120 ? 'running' : 'completed',
-        startedAt: `2026-05-18T10:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`,
-      }),
-    );
+  it('renders expanded moderate bursts as a full verbose activity stream', () => {
+    const verboseItems = verboseActivityItems(50);
+    const { container } = render(AgentActivityBlock, {
+      props: {
+        visibilityMode: 'expanded',
+        model: activityModel([activityItem({ id: 'compact', title: 'Searching photos' })], verboseItems),
+      },
+    });
+
+    expect(container.querySelectorAll('[data-activity-row]')).toHaveLength(50);
+    expect(screen.getByText('Verbose activity 0')).toBeInTheDocument();
+    expect(screen.getByText('Verbose activity 49')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show older activity' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show newer activity' })).not.toBeInTheDocument();
+  });
+
+  it('pages expanded large verbose streams while keeping the active row visible', async () => {
+    const verboseItems = verboseActivityItems(250, 120);
     const { container } = render(AgentActivityBlock, {
       props: {
         visibilityMode: 'expanded',
@@ -160,8 +193,81 @@ describe(AgentActivityBlock.name, () => {
     });
 
     expect(container.querySelectorAll('[data-activity-row]')).toHaveLength(100);
+    expect(screen.getByText('Showing 100 of 250 actions')).toBeInTheDocument();
     expect(screen.getByText('Verbose activity 120')).toBeInTheDocument();
+    expect(screen.getByText('Verbose activity 249')).toBeInTheDocument();
     expect(screen.queryByText('Verbose activity 0')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show newer activity' })).not.toBeInTheDocument();
+
+    const showOlder = screen.getByRole('button', { name: 'Show older activity' });
+    await fireEvent.click(showOlder);
+
+    expect(screen.getByText('Verbose activity 50')).toBeInTheDocument();
+    expect(screen.getByText('Verbose activity 149')).toBeInTheDocument();
+    expect(screen.getByText('Verbose activity 120')).toBeInTheDocument();
+    expect(screen.queryByText('Verbose activity 249')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show older activity' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Show newer activity' })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show newer activity' }));
+
+    expect(screen.getByText('Verbose activity 249')).toBeInTheDocument();
+    expect(screen.queryByText('Verbose activity 50')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show older activity' })).toHaveFocus();
+  });
+
+  it('keeps all-terminal expanded streams bounded and inspectable', async () => {
+    const verboseItems = verboseActivityItems(501);
+    const { container } = render(AgentActivityBlock, {
+      props: {
+        visibilityMode: 'expanded',
+        model: activityModel([activityItem({ id: 'compact', title: 'Searching photos' })], verboseItems),
+      },
+    });
+
+    expect(container.querySelectorAll('[data-activity-row]')).toHaveLength(100);
+    expect(screen.getByText('Showing 100 of 501 actions')).toBeInTheDocument();
+    expect(screen.getByText('Verbose activity 500')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show older activity' })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show older activity' }));
+
+    expect(container.querySelectorAll('[data-activity-row]')).toHaveLength(100);
+    expect(screen.getByText('Verbose activity 400')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show newer activity' })).toBeInTheDocument();
+  });
+
+  it('moves focus to show newer activity when paging to the oldest window', async () => {
+    const verboseItems = verboseActivityItems(250);
+    render(AgentActivityBlock, {
+      props: {
+        visibilityMode: 'expanded',
+        model: activityModel([activityItem({ id: 'compact', title: 'Searching photos' })], verboseItems),
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show older activity' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Show older activity' }));
+
+    expect(screen.getByText('Verbose activity 0')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show older activity' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show newer activity' })).toHaveFocus();
+  });
+
+  it('keeps paging focus scoped to the activity block that was clicked', async () => {
+    const verboseItems = verboseActivityItems(250);
+    const model = activityModel([activityItem({ id: 'compact', title: 'Searching photos' })], verboseItems);
+
+    render(AgentActivityBlock, { props: { visibilityMode: 'expanded', model } });
+    render(AgentActivityBlock, { props: { visibilityMode: 'expanded', model } });
+
+    const [firstBlock, secondBlock] = screen.getAllByRole('article', { name: 'Activity summary' });
+    await fireEvent.click(within(firstBlock).getByRole('button', { name: 'Show older activity' }));
+    await fireEvent.click(within(secondBlock).getByRole('button', { name: 'Show older activity' }));
+    await fireEvent.click(within(secondBlock).getByRole('button', { name: 'Show newer activity' }));
+
+    expect(within(firstBlock).getByRole('button', { name: 'Show older activity' })).not.toHaveFocus();
+    expect(within(secondBlock).getByRole('button', { name: 'Show older activity' })).toHaveFocus();
   });
 
   it('renders a compact active activity block with safe row labels', () => {
@@ -306,6 +412,26 @@ describe(AgentActivityBlock.name, () => {
     expect(screen.getByText('2026-05-18T10:00:00.000Z')).toBeInTheDocument();
     expect(screen.getByText('Completed at')).toBeInTheDocument();
     expect(screen.getByText('2026-05-18T10:00:02.000Z')).toBeInTheDocument();
+  });
+
+  it('keeps technical details available for verbose rows after paging', async () => {
+    const verboseItems = verboseActivityItems(150);
+    render(AgentActivityBlock, {
+      props: {
+        visibilityMode: 'expanded',
+        model: activityModel([activityItem({ id: 'compact', title: 'Searching photos' })], verboseItems),
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show older activity' }));
+    const row = screen.getByText('Verbose activity 50').closest('[data-activity-row]');
+    expect(row).not.toBeNull();
+
+    await fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Technical details' }));
+
+    expect(within(row as HTMLElement).getByText('Tool name')).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText('searchAssets')).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText('tool-call-50')).toBeInTheDocument();
   });
 
   it('renders result-size technical rows when expanded', async () => {
