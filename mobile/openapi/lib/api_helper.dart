@@ -76,6 +76,12 @@ String parameterToString(dynamic value) {
   if (value is AgentAssetAddTagOperationType) {
     return AgentAssetAddTagOperationTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentAssetMetadataDetail) {
+    return AgentAssetMetadataDetailTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAssetMetadataField) {
+    return AgentAssetMetadataFieldTypeTransformer().encode(value).toString();
+  }
   if (value is AgentAssetRemoveTagOperationType) {
     return AgentAssetRemoveTagOperationTypeTypeTransformer().encode(value).toString();
   }
@@ -147,6 +153,12 @@ String parameterToString(dynamic value) {
   }
   if (value is AgentRunnerStatusReason) {
     return AgentRunnerStatusReasonTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentSearchAssetsDetail) {
+    return AgentSearchAssetsDetailTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentSearchAssetsField) {
+    return AgentSearchAssetsFieldTypeTransformer().encode(value).toString();
   }
   if (value is AgentSearchAssetsMode) {
     return AgentSearchAssetsModeTypeTransformer().encode(value).toString();
