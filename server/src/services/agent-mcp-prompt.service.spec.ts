@@ -6,9 +6,72 @@ import { pathToFileURL } from 'node:url';
 import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.dto';
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
 import { AgentToolName } from 'src/enum';
+import {
+  agentMcpPromptPlaceholderMap,
+  renderAgentMcpPromptPlaceholders,
+} from 'src/services/agent-mcp-prompt-placeholders';
 import { AgentMcpPromptService } from 'src/services/agent-mcp-prompt.service';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import type { AgentMcpPlanningToolName, AgentMcpReadToolName } from 'src/types/agent-mcp-contract.types';
+
+describe('agent MCP prompt placeholders', () => {
+  const fixtureIds = Object.keys(agentMcpPromptPlaceholderMap);
+
+  it('defines semantic placeholders for every schema-valid MCP fixture id', () => {
+    expect(agentMcpPromptPlaceholderMap).toEqual({
+      '00000000-0000-4000-8000-000000000001': '<asset-id-from-searchAssets>',
+      '00000000-0000-4000-8000-000000000002': '<another-asset-id-from-searchAssets>',
+      '00000000-0000-4000-8000-000000000010': '<album.id from listAlbums/readAlbum>',
+      '00000000-0000-4000-8000-000000000020': '<space.id from listSpaces/readSpace>',
+      '00000000-0000-4000-8000-000000000021': '<spacePersonIds value from resolveAssetSearchFilters>',
+      '00000000-0000-4000-8000-000000000030': '<tagIds value from resolveAssetSearchFilters>',
+      '00000000-0000-4000-8000-000000000040': '<personIds value from resolveAssetSearchFilters>',
+      '00000000-0000-4000-8000-000000000111': '<approved-toolCallId>',
+      '00000000-0000-4000-8000-000000000222': '<plan.id from proposed plan>',
+      '00000000-0000-4000-8000-000000000333': '<selectionHandle.id from searchAssets>',
+    });
+  });
+
+  it('replaces nested fixture ids without mutating the source value', () => {
+    const source = {
+      operationIds: ['00000000-0000-4000-8000-000000000333'],
+      operations: [
+        {
+          targetId: '00000000-0000-4000-8000-000000000010',
+          assetIds: ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'],
+          payload: {
+            tagId: '00000000-0000-4000-8000-000000000030',
+            untouched: 'not-a-fixture',
+          },
+        },
+      ],
+    };
+
+    const rendered = renderAgentMcpPromptPlaceholders(source);
+
+    expect(rendered).toEqual({
+      operationIds: ['<selectionHandle.id from searchAssets>'],
+      operations: [
+        {
+          targetId: '<album.id from listAlbums/readAlbum>',
+          assetIds: ['<asset-id-from-searchAssets>', '<another-asset-id-from-searchAssets>'],
+          payload: {
+            tagId: '<tagIds value from resolveAssetSearchFilters>',
+            untouched: 'not-a-fixture',
+          },
+        },
+      ],
+    });
+    expect(source.operations[0].targetId).toBe('00000000-0000-4000-8000-000000000010');
+  });
+
+  it('leaves runtime-looking non-fixture ids unchanged', () => {
+    const runtimeId = 'a4d2b718-2485-47aa-b45c-0d70f64cfd93';
+
+    expect(renderAgentMcpPromptPlaceholders({ assetIds: [runtimeId] })).toEqual({ assetIds: [runtimeId] });
+    expect(fixtureIds).not.toContain(runtimeId);
+  });
+});
 
 describe(AgentMcpPromptService.name, () => {
   let contractService: AgentMcpToolContractService;
@@ -276,6 +339,54 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('exampleArguments');
     expect(prompt).toMatch(/retry once .*correction is obvious/is);
     expect(prompt).toContain(mistake?.hint);
+  });
+
+  it('renders model-facing prompt examples with semantic placeholders instead of fixture UUIDs', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    for (const fixtureId of Object.keys(agentMcpPromptPlaceholderMap)) {
+      expect(prompt).not.toContain(fixtureId);
+    }
+
+    expect(prompt).toContain('<asset-id-from-searchAssets>');
+    expect(prompt).toContain('<space.id from listSpaces/readSpace>');
+    expect(prompt).toContain('<approved-toolCallId>');
+    expect(prompt).toContain('<selectionHandle.id from searchAssets>');
+  });
+
+  it('keeps structured prompt examples schema-valid and unmodified before rendering', () => {
+    sut.generatePromptCheatSheet();
+
+    const examples = sut.listPromptExamples();
+    const serializedExamples = JSON.stringify(examples);
+
+    expect(serializedExamples).toContain('00000000-0000-4000-8000-000000000001');
+    expect(serializedExamples).toContain('00000000-0000-4000-8000-000000000020');
+    expect(serializedExamples).toContain('00000000-0000-4000-8000-000000000111');
+
+    for (const example of examples) {
+      if (example.toolName in AgentReadToolRequestSchemas) {
+        AgentReadToolRequestSchemas[example.toolName as AgentMcpReadToolName].parse(example.arguments);
+        continue;
+      }
+
+      AgentOperationPlanToolRequestSchemas[example.toolName as AgentMcpPlanningToolName].parse(example.arguments);
+    }
+  });
+
+  it('keeps validation-correction example arguments schema-valid and unmodified after prompt rendering', () => {
+    sut.generatePromptCheatSheet();
+
+    const correction = contractService.getPlanningToolValidationCorrection(AgentToolName.ProposeAlbumOperations, {
+      requestShape: 'tool-arguments',
+      issues: [{ path: 'operations.0.assetIds', message: 'Too big: expected array to have <=10000 items' }],
+    });
+
+    const serializedCorrection = JSON.stringify(correction?.exampleArguments);
+
+    expect(serializedCorrection).toContain('00000000-0000-4000-8000-000000000333');
+    expect(serializedCorrection).not.toContain('<asset-id-from-searchAssets>');
+    AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].parse(correction?.exampleArguments);
   });
 
   it('derives write safety guidance from the contract safety flags', () => {
