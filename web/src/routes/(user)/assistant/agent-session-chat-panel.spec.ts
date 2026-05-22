@@ -601,6 +601,42 @@ describe(AgentSessionChatPanel.name, () => {
     expect(screen.queryByRole('article', { name: /Pi wants/i })).not.toBeInTheDocument();
   });
 
+  it('shows response activity instead of stale pending approval activity while approval resumes', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Check private photos'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ]);
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.WaitingForToolApproval },
+        actionDock: createRawSnippet(() => ({
+          render: () => '<section aria-label="Approval request">Approve?</section>',
+        })),
+        assistantResponsePending: true,
+        suppressPendingApprovalActivity: true,
+        toolCalls: [
+          makeToolCall({
+            id: 'approval-tool-resuming',
+            status: AgentToolCallStatus.PendingApproval,
+            toolName: AgentToolName.ReadAssetMetadata,
+            responseSummary: null,
+            completedAt: null,
+            startedAt: '2026-05-16T10:00:05.000Z',
+          }),
+        ],
+      },
+    });
+
+    const activity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(activity).toHaveTextContent('Writing response');
+    expect(activity).not.toHaveTextContent('Waiting for approval');
+    expect(screen.getByRole('region', { name: 'Approval request' })).toHaveTextContent('Approve?');
+    expect(screen.queryByRole('article', { name: /Pi checked/i })).not.toBeInTheDocument();
+  });
+
   it('keeps applied-plan reload activity while the applied plan card remains separate', async () => {
     sdkMock.getAgentSessionMessages.mockResolvedValue([
       {
