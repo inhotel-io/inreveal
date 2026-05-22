@@ -17,6 +17,8 @@ const expectedReadToolNames = [
 ] as const;
 
 const expectedPlanningToolNames = [
+  AgentToolName.ProposeAlbumFromSearch,
+  AgentToolName.ProposeAddAssetsToAlbumFromSearch,
   AgentToolName.ProposeAlbumOperations,
   AgentToolName.ReviseProposedOperations,
   AgentToolName.SummarizePlan,
@@ -64,7 +66,7 @@ const expectedPlanningOperationTypes = [
 ] as const;
 
 const forbiddenContractPattern =
-  /\/api|agent\/internal|bearer|token|secret|provider key|applyAlbumOperations|applyOperations|createAlbum|addAssetsToAlbum/i;
+  /\/api|agent\/internal|bearer|token|secret|provider key|applyAlbumOperations|applyOperations|createAlbum|addAssetsToAlbum(?!FromSearch)/i;
 
 describe(AgentMcpToolContractService.name, () => {
   let sut: AgentMcpToolContractService;
@@ -79,6 +81,32 @@ describe(AgentMcpToolContractService.name, () => {
 
   it('returns exactly the planning-tool contracts in stable order', () => {
     expect(sut.listPlanningToolContracts().map((contract) => contract.name)).toEqual(expectedPlanningToolNames);
+  });
+
+  it('defines preferred high-level album workflow contracts and examples', () => {
+    const create = sut.getPlanningToolContract(AgentToolName.ProposeAlbumFromSearch);
+    const add = sut.getPlanningToolContract(AgentToolName.ProposeAddAssetsToAlbumFromSearch);
+
+    expect(create?.description).toMatch(/preferred/i);
+    expect(add?.description).toMatch(/preferred/i);
+    expect(create?.examples.map((example) => example.name)).toEqual(
+      expect.arrayContaining(['create-album-from-declarative-search', 'create-album-from-previous-search']),
+    );
+    expect(add?.examples.map((example) => example.name)).toEqual(
+      expect.arrayContaining(['add-search-results-to-album-by-id', 'add-search-results-to-album-by-name']),
+    );
+
+    for (const contract of [create, add]) {
+      expect(contract?.safety).toEqual({
+        allowsDirectMutation: false,
+        exposesSecrets: false,
+        requiresGalleryApplyForWrites: true,
+      });
+      for (const example of contract?.examples ?? []) {
+        const result = AgentOperationPlanToolRequestSchemas[contract!.name].safeParse(example.arguments);
+        expect(result.success, `${contract!.name} ${example.name}`).toBe(true);
+      }
+    }
   });
 
   it('returns all tool contracts in stable MCP tool order', () => {
