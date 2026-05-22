@@ -27,6 +27,21 @@ export const invalidSelectionHandleError = (input: {
     recovery: input.recovery,
   });
 
+export const invalidSourceRefError = (input: {
+  toolName: AgentToolName;
+  error: string;
+  hint: string;
+  recovery: AgentMcpJsonObject;
+}) =>
+  new AgentMcpRecoverableToolError({
+    status: 'error',
+    error: input.error,
+    toolName: input.toolName,
+    retryable: true,
+    hint: input.hint,
+    recovery: input.recovery,
+  });
+
 const agentIdDomainLabel = (domain: AgentIdDomain) => {
   switch (domain) {
     case 'selectionHandle': {
