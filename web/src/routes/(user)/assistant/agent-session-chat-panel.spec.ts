@@ -1126,7 +1126,9 @@ describe(AgentSessionChatPanel.name, () => {
     });
 
     const initialActivity = await screen.findByRole('article', { name: 'Pi is working' });
-    const initialRows = Array.from(initialActivity.querySelectorAll('[data-activity-row]')).map((row) => row.textContent);
+    const initialRows = Array.from(initialActivity.querySelectorAll('[data-activity-row]')).map(
+      (row) => row.textContent,
+    );
 
     await view.rerender({
       session,
@@ -1251,7 +1253,9 @@ describe(AgentSessionChatPanel.name, () => {
       toolCalls: [],
     });
 
-    expect(screen.getByRole('article', { name: 'Pi is working' }).querySelectorAll('[data-activity-row]')).toHaveLength(9);
+    expect(screen.getByRole('article', { name: 'Pi is working' }).querySelectorAll('[data-activity-row]')).toHaveLength(
+      9,
+    );
   });
 
   it('clears preserved tool calls when the selected session changes', async () => {

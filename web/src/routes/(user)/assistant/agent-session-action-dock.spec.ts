@@ -619,7 +619,9 @@ describe(AgentSessionActionDock.name, () => {
         omittedFields: [],
       },
     });
-    sdkMock.getToolCalls.mockResolvedValueOnce([initialCompletedToolCall]).mockResolvedValueOnce([richerCompletedToolCall]);
+    sdkMock.getToolCalls
+      .mockResolvedValueOnce([initialCompletedToolCall])
+      .mockResolvedValueOnce([richerCompletedToolCall]);
 
     render(AgentSessionActionDock, {
       props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
