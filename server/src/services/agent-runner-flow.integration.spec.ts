@@ -1,13 +1,17 @@
 import { BadRequestException } from '@nestjs/common';
-import { AgentMessage, AgentSession, AgentToolCall } from 'src/database';
+import { AgentMessage, AgentSession, AgentSessionActivityEvent, AgentToolCall } from 'src/database';
 import {
   AgentApprovalMode,
   AgentMessageRole,
   AgentPermissionPreset,
   AgentProviderType,
+  AgentSessionActivityEventKind,
+  AgentSessionActivityEventSource,
+  AgentSessionActivityEventStatus,
   AgentSessionStatus,
   AgentToolApprovalDecision,
   AgentToolCallStatus,
+  AgentToolDataClass,
   AgentToolName,
   AssetType,
   AssetVisibility,
@@ -52,6 +56,17 @@ const waitFor = async (assertion: () => void | Promise<void>) => {
 
   throw lastError;
 };
+
+const nonActivityEventTypes = (events: Array<{ event: Record<string, unknown> }>) =>
+  events.map(({ event }) => event.type).filter((type) => type !== 'activity');
+
+const normalizeRunnerActivityEvent = (event: Record<string, unknown>) => ({
+  kind: event.kind,
+  status: event.status ?? AgentSessionActivityEventStatus.Running,
+  source: AgentSessionActivityEventSource.Runner,
+  summary: event.summary,
+  counts: event.counts,
+});
 
 const now = () => new Date();
 
@@ -292,6 +307,49 @@ class InMemoryAgentToolCallRepository {
   );
 }
 
+class InMemoryAgentSessionActivityEventService {
+  activityEvents: AgentSessionActivityEvent[] = [];
+
+  constructor(
+    private readonly sessions: InMemoryAgentSessionRepository,
+    private readonly websocketRepository: {
+      clientSend: (eventName: string, userId: string, event: Record<string, unknown>) => void;
+    },
+  ) {}
+
+  createSystemEvent = vi.fn(async (userId: string, sessionId: string, event: Record<string, unknown>) => {
+    const session = await this.sessions.getById(userId, sessionId);
+    if (!session) {
+      return null;
+    }
+
+    const activityEvent: AgentSessionActivityEvent = {
+      id: newUuid(),
+      sessionId,
+      kind: event.kind as AgentSessionActivityEventKind,
+      status: (event.status ?? AgentSessionActivityEventStatus.Running) as AgentSessionActivityEventStatus,
+      source: (event.source ?? AgentSessionActivityEventSource.Server) as AgentSessionActivityEventSource,
+      summary: (event.summary as string | null | undefined) ?? null,
+      counts: (event.counts as Record<string, number> | null | undefined) ?? null,
+      createdAt: now(),
+    };
+    this.activityEvents.push(activityEvent);
+    this.websocketRepository.clientSend('on_agent_session_event', userId, {
+      type: 'activity',
+      sessionId,
+      event: activityEvent,
+      createdAt: activityEvent.createdAt.toISOString(),
+    });
+    return activityEvent;
+  });
+
+  normalizeRunnerEvent = vi.fn(normalizeRunnerActivityEvent);
+
+  getActivityHistory(sessionId: string) {
+    return this.activityEvents.filter((event) => event.sessionId === sessionId);
+  }
+}
+
 const setup = () => {
   const auth = AuthFactory.create();
   const sessions = new InMemoryAgentSessionRepository();
@@ -376,6 +434,7 @@ const setup = () => {
     }),
   };
   const toolTokenService = { create: vi.fn(() => 'runner-tool-token') };
+  const activityService = new InMemoryAgentSessionActivityEventService(sessions, websocketRepository);
 
   const runnerService = new AgentRunnerService(
     configRepository as unknown as ConfigRepository,
@@ -384,6 +443,8 @@ const setup = () => {
     sessions as unknown as AgentSessionRepository,
     websocketRepository as unknown as WebsocketRepository,
     toolTokenService as unknown as AgentRunnerToolTokenService,
+    toolCalls as unknown as AgentToolCallRepository,
+    activityService as never,
   );
 
   const credential = {
@@ -502,6 +563,7 @@ const setup = () => {
     },
     toolCalls,
     toolService,
+    getActivityHistory: (sessionId: string) => activityService.getActivityHistory(sessionId),
     websocketEvents,
   };
 };
@@ -740,7 +802,7 @@ describe('Pi agent runner flow harness', () => {
       expect(reloadedSession?.status).toBe(AgentSessionStatus.Running);
     });
 
-    expect(harness.websocketEvents.map(({ event }) => event.type)).toEqual([
+    expect(nonActivityEventTypes(harness.websocketEvents)).toEqual([
       'tool-approval-needed',
       'assistant-message-delta',
       'assistant-message-created',
@@ -780,7 +842,7 @@ describe('Pi agent runner flow harness', () => {
       expect(reloadedSession?.status).toBe(AgentSessionStatus.WaitingForToolApproval);
     });
 
-    expect(harness.websocketEvents).toEqual([
+    expect(harness.websocketEvents.filter(({ event }) => event.type !== 'activity')).toEqual([
       expect.objectContaining({
         userId: harness.auth.user.id,
         event: expect.objectContaining({ type: 'tool-approval-needed', sessionId: session.id }),
@@ -834,7 +896,7 @@ describe('Pi agent runner flow harness', () => {
       expect(reloadedSession?.status).toBe(AgentSessionStatus.Running);
     });
 
-    expect(harness.websocketEvents.map(({ event }) => event.type)).toEqual([
+    expect(nonActivityEventTypes(harness.websocketEvents)).toEqual([
       'tool-approval-needed',
       'assistant-message-delta',
       'assistant-message-created',
@@ -887,6 +949,102 @@ describe('Pi agent runner flow harness', () => {
       expect(harness.websocketEvents.map(({ event }) => event.type)).toContain('runner-error');
       expect(messages).toEqual([expect.objectContaining({ role: AgentMessageRole.User })]);
     });
+  });
+
+  it('cleans up active work after an unrecovered planning tool failure assistant response', async () => {
+    const harness = setup();
+    harness.configureRunnerMessage(async function* ({ body }) {
+      await harness.toolCalls.create({
+        sessionId: body.gallerySessionId,
+        toolName: AgentToolName.ProposeAlbumOperations,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        requestSummary: 'Propose album plan',
+        responseSummary: null,
+        redactedRequestMetadata: {},
+        redactedResponseMetadata: null,
+        dataClass: AgentToolDataClass.Metadata,
+        providerSnapshot: {
+          providerCredentialId: '00000000-0000-4000-8000-000000000201',
+          providerType: AgentProviderType.OpenAI,
+          label: 'OpenAI personal',
+          baseUrl: null,
+          model: 'gpt-5.1',
+        },
+        error: 'Selection handle is expired or not available for this session',
+        completedAt: new Date(),
+      });
+      yield {
+        type: 'assistant-message-completed',
+        sessionId: body.gallerySessionId,
+        runnerSessionId: 'runner-session-1',
+        providerMessageId: 'provider-message-failure',
+        content: { blocks: [{ type: 'text', text: 'I could not create the plan because the selection expired.' }] },
+      };
+    });
+
+    const session = await harness.sessionService.create(harness.auth, {
+      providerCredentialId: '00000000-0000-4000-8000-000000000201',
+      model: 'gpt-5.1',
+      permissionPreset: AgentPermissionPreset.VisualOrganizer,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      initialContext: {},
+    });
+
+    await harness.messageService.appendUserMessage(harness.auth, session.id, {
+      content: { blocks: [{ type: 'text', text: 'Create the album plan.' }] },
+    });
+
+    await waitFor(async () => {
+      const messages = await harness.messageService.getMessages(harness.auth, session.id);
+      const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
+      const activityHistory = harness.getActivityHistory(session.id);
+
+      expect(messages).toEqual([
+        expect.objectContaining({ role: AgentMessageRole.User }),
+        expect.objectContaining({
+          role: AgentMessageRole.Assistant,
+          providerMessageId: 'provider-message-failure',
+          content: {
+            blocks: [{ type: 'text', text: 'I could not create the plan because the selection expired.' }],
+          },
+        }),
+      ]);
+      expect(reloadedSession?.status).toBe(AgentSessionStatus.Interrupted);
+      expect(activityHistory).toEqual([
+        expect.objectContaining({
+          kind: AgentSessionActivityEventKind.StartProcessing,
+          status: AgentSessionActivityEventStatus.Running,
+        }),
+        expect.objectContaining({
+          kind: AgentSessionActivityEventKind.StartProcessing,
+          status: AgentSessionActivityEventStatus.Failed,
+          summary: 'The assistant stopped after a Gallery tool error.',
+        }),
+      ]);
+    });
+
+    await harness.messageService.appendUserMessage(harness.auth, session.id, {
+      content: { blocks: [{ type: 'text', text: 'I refreshed the selection. Try again.' }] },
+    });
+
+    const messages = await harness.messageService.getMessages(harness.auth, session.id);
+    expect(messages).toHaveLength(3);
+    expect(harness.websocketEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: harness.auth.user.id,
+          event: expect.objectContaining({
+            type: 'activity',
+            event: expect.objectContaining({
+              kind: AgentSessionActivityEventKind.StartProcessing,
+              status: AgentSessionActivityEventStatus.Failed,
+            }),
+          }),
+        }),
+      ]),
+    );
+    expect(harness.websocketEvents.map(({ event }) => event.type)).not.toContain('runner-error');
   });
 
   it('keeps a people-search assistant flow open after approval and resume', async () => {
@@ -981,7 +1139,7 @@ describe('Pi agent runner flow harness', () => {
       expect(reloadedSession?.status).toBe(AgentSessionStatus.Running);
     });
 
-    expect(harness.websocketEvents.map(({ event }) => event.type)).toEqual([
+    expect(nonActivityEventTypes(harness.websocketEvents)).toEqual([
       'tool-approval-needed',
       'assistant-message-delta',
       'assistant-message-created',
