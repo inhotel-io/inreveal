@@ -28,6 +28,8 @@ const exampleSecondPersonId = '00000000-0000-4000-8000-000000000041';
 const exampleToolCallId = '00000000-0000-4000-8000-000000000111';
 const examplePlanId = '00000000-0000-4000-8000-000000000222';
 
+const validationCorrectionTextMaxLength = 500;
+
 const safety: AgentMcpToolSafetyContract = {
   allowsDirectMutation: false,
   exposesSecrets: false,
@@ -2554,9 +2556,10 @@ export class AgentMcpToolContractService {
       .toSorted((left, right) => mistakeSpecificity(right.mistake) - mistakeSpecificity(left.mistake))[0];
 
     if (!matchingCorrection) {
+      const expected = this.compactValidationCorrectionText(contract.usage);
       return {
-        expected: contract.usage,
-        hint: contract.usage,
+        expected,
+        hint: expected,
         exampleArguments: cloneArguments(contract.examples[0]?.arguments),
       };
     }
@@ -2569,9 +2572,17 @@ export class AgentMcpToolContractService {
     return {
       mistakeId: matchingMistake.id,
       issuePath: matchingIssue.path,
-      expected: contract.usage,
+      expected: this.compactValidationCorrectionText(contract.usage),
       hint: matchingMistake.hint,
       exampleArguments: cloneArguments(example?.arguments),
     };
+  }
+
+  private compactValidationCorrectionText(text: string) {
+    if (text.length <= validationCorrectionTextMaxLength) {
+      return text;
+    }
+
+    return `${text.slice(0, validationCorrectionTextMaxLength - 3)}...`;
   }
 }

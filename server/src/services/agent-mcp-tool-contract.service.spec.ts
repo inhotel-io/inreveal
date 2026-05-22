@@ -1231,10 +1231,17 @@ describe(AgentMcpToolContractService.name, () => {
 
       const expectedUsage = sut.getReadToolContract(AgentToolName.SearchAssets)?.usage;
       expect(correction).toEqual({
-        expected: expectedUsage,
-        hint: expectedUsage,
+        expected: expect.stringContaining(
+          'Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields',
+        ),
+        hint: expect.stringContaining(
+          'Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields',
+        ),
         exampleArguments: {},
       });
+      expect(correction?.expected.length).toBeLessThanOrEqual(500);
+      expect(correction?.hint.length).toBeLessThanOrEqual(500);
+      expect(expectedUsage?.startsWith(correction?.expected.replace(/\.\.\.$/, '') ?? '')).toBe(true);
     });
 
     it('returns defensive copies of example arguments', () => {
