@@ -34,7 +34,9 @@ Make Pi's MCP tool use robust when smaller models plan from search results:
 - prevent models from copying valid-looking example UUIDs into real tool calls;
 - make resolved filters hard to drop between resolver and search calls;
 - make invalid selection-handle errors actionable enough for the model to retry;
-- ensure failed runner/tool flows do not leave stale "Pi is working" state.
+- ensure failed runner/tool flows do not leave stale "Pi is working" state;
+- make Pi's background work understandable when the user opts into verbose
+  activity, while keeping compact activity low-noise.
 
 ## Goals
 
@@ -48,8 +50,14 @@ Make Pi's MCP tool use robust when smaller models plan from search results:
   responses.
 - Persist a terminal failed activity/session state when a runner turn ends after
   an unrecovered tool failure.
-- Use TDD for every slice: write failing tests first, verify the expected red
-  failure, implement the smallest fix, then verify green.
+- Keep compact activity stable during tool-heavy runs, with no transient flash of
+  raw log cards before the UI collapses back to "Pi is working".
+- Provide an opt-in verbose activity mode where users can see the detailed
+  background tool timeline.
+- Use TDD for every slice with full test and edge-case coverage: write failing
+  tests first, verify the expected red failure, implement the smallest fix, then
+  verify green. A slice is not complete until every edge case listed for that
+  slice is covered by automated tests or explicitly documented as manual-only.
 
 ## Non-Goals
 
@@ -57,7 +65,8 @@ Make Pi's MCP tool use robust when smaller models plan from search results:
 - No automatic plan creation by substituting a guessed handle server-side.
 - No broad prompt rewrite unrelated to Gallery MCP tool use.
 - No changing the user's existing permission preset or approval mode semantics.
-- No UI redesign beyond showing accurate terminal state for failed work.
+- No broad UI redesign beyond accurate terminal state and explicit compact versus
+  verbose activity behavior.
 
 ## Chosen Approach
 
@@ -73,6 +82,9 @@ The design therefore changes three layers together:
 - Tool validation responses identify copied-placeholder and invalid-handle
   mistakes, and include safe same-session recovery hints.
 - Runner flow records a clean terminal state when the model does not recover.
+- The activity UI treats "compact/thinking" and "verbose timeline" as distinct
+  modes. Compact mode stays stable and low-noise; verbose mode intentionally
+  exposes the tool-level work so users can inspect what Pi is doing.
 
 ## Design Details
 
@@ -198,6 +210,43 @@ Use `interrupted` if the failure is recoverable by another user turn and the
 session can accept messages. Use `failed` only for unrecoverable infrastructure
 or runner errors that should not be retried as normal chat.
 
+### 6. Activity Preview Modes And Verbose Tool Logs
+
+Tool-heavy assistant turns can produce many tool calls and activity events. That
+detail is useful when a user wants to understand what Pi is doing, but it should
+not leak into compact mode as a short flicker before collapsing back to the
+summary.
+
+The UI should make the distinction explicit:
+
+- Compact/thinking mode: render one stable activity block for the active turn,
+  for example `Pi is working`, plus the current plain-language step. It must not
+  briefly render raw tool cards while polling, websocket events, or activity
+  summarization are merging.
+- Verbose activity mode: render a chronological timeline of meaningful activity
+  rows/cards for the current turn. Many cards are acceptable here because the
+  user intentionally opted in. The cards should use plain-language labels,
+  status, timing, compact counts, and safe summaries of what each tool did.
+- Off mode: hide passive activity while still showing required permission and
+  plan-review cards.
+
+Verbose cards should be more useful than the current low-information cards:
+
+- show what Pi is trying to accomplish, not just the raw MCP tool name;
+- show whether each step is running, completed, waiting, denied, failed, or
+  skipped;
+- show compact request/result summaries such as `Resolved 2 people`,
+  `Found 250 matching photos`, `Prepared 1 album change`;
+- keep technical MCP arguments behind an expand control;
+- redact provider keys, original-file paths, private prompts, and oversized
+  payloads;
+- cap or virtualize very large timelines so hundreds of tool calls do not create
+  a sluggish page.
+
+Activity compaction/summarization should update the same turn-level view model
+in place. It should not replace a compact block with raw rows for one render
+frame and then replace those rows again with a summary.
+
 ## Data And Contract Changes
 
 ### Model-Facing Placeholder Rendering
@@ -245,6 +294,15 @@ No new table is required. The existing `agent_session_activity_event` table can
 record a terminal failure event. The existing `agent_session.status` enum already
 has `interrupted` and `failed`.
 
+### Activity View Model Stability
+
+No new database table is required for the compact/verbose distinction. The
+frontend should derive a stable turn-level activity view model from messages,
+tool calls, plans, and activity events before rendering. The view model should
+preserve stable keys for the active turn and for individual verbose rows, so
+polling and websocket updates merge into the existing UI instead of causing a
+raw-card flash.
+
 ## Test Strategy
 
 All implementation slices must use TDD:
@@ -256,6 +314,10 @@ All implementation slices must use TDD:
 5. Run the relevant broader suite before committing.
 
 Tests must cover both successful behavior and the production failure shape.
+Every implementation plan derived from this spec must name the automated tests
+for its slice before implementation starts. If an edge case is not testable at
+the unit/integration/component level, the plan must state why and add a concrete
+manual verification step.
 
 ## Edge Cases
 
@@ -273,6 +335,15 @@ Tests must cover both successful behavior and the production failure shape.
 - The runner returns an assistant failure message after a denied tool call.
 - The runner pauses for approval and must not be marked failed/interrupted.
 - A user can continue a session after a recoverable failure cleanup.
+- Compact activity receives a burst of many tool calls and activity events.
+- Websocket and polling updates arrive in either order for the same active turn.
+- Activity summarization/compaction runs while the turn is still active.
+- The user switches between compact, verbose, and off activity while Pi is
+  running.
+- Verbose mode receives dozens or hundreds of rows without freezing or rendering
+  unsafe technical data by default.
+- Reload during a tool-heavy turn reconstructs the same compact or verbose mode
+  without a transient wrong state.
 
 ## Vertical Slices
 
@@ -397,7 +468,49 @@ Edge cases:
 - Runner sends multiple activity events before failure.
 - Session is cancelled while cleanup is happening.
 
-### Slice 6: End-To-End Regression
+### Slice 6: Activity Preview Stability And Verbose Timeline
+
+Scope:
+
+- Make compact/thinking activity render one stable active-turn block during
+  high-volume tool execution.
+- Make verbose activity intentionally render detailed, plain-language tool
+  timeline rows/cards.
+- Preserve the user's compact, verbose, or off activity choice while new tool
+  calls, websocket events, polling results, and summaries arrive.
+- Keep large verbose timelines performant with caps, grouping, or virtualization
+  consistent with the existing activity UI.
+
+TDD coverage:
+
+- Pure view-model test where a burst of many tool calls and activity events
+  produces one compact activity block with stable identity.
+- Pure view-model test where the same burst in verbose mode produces ordered
+  rows/cards with plain-language labels, status, counts, and stable keys.
+- Component test that compact mode never renders multiple raw tool cards between
+  polling/websocket updates.
+- Component test that verbose mode renders many rows only after the user selects
+  verbose activity.
+- Test that off mode hides passive activity while permission cards and
+  plan-review cards still render.
+- Test that polling-first and websocket-first update order produce the same
+  compact and verbose view models.
+- Test that activity summarization updates the existing active-turn block rather
+  than replacing it with a transient raw-card state.
+- Performance-focused test or component assertion that a large verbose timeline
+  does not render an unbounded number of DOM nodes.
+
+Edge cases:
+
+- Fifty or more tool calls complete in one polling response.
+- A running activity event arrives after completed tool-call rows.
+- The user toggles compact -> verbose -> off -> compact while Pi is running.
+- Reload during a tool-heavy turn keeps the selected activity mode.
+- Technical details are available on demand but redacted and collapsed by
+  default.
+- Unknown MCP tools render safe fallback labels in verbose mode.
+
+### Slice 7: End-To-End Regression
 
 Scope:
 
@@ -432,6 +545,12 @@ with photos that have Pierre OR Aurelia in them`.
 5. Confirm the UI shows a reviewable plan instead of an internal-error apology.
 6. If a deliberate invalid handle is injected in test mode, confirm the UI stops
    showing "Pi is working" and the chat remains usable.
+7. During a tool-heavy run, confirm compact activity stays as one stable
+   "Pi is working" block with no flash of many boxes.
+8. Switch to verbose activity and confirm the detailed tool timeline is visible,
+   understandable, and does not expose raw technical payloads unless expanded.
+9. Switch activity off and confirm passive activity disappears while permission
+   and plan-review cards still show.
 
 ## Open Decisions
 
