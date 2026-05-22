@@ -46,6 +46,15 @@ export type AgentToolSearchAssetsRequestMetadata = {
   detail: AgentSearchAssetsDetail;
   fields: AgentSearchAssetsField[];
   sampleSize?: number;
+  createSelectionHandle?: boolean;
+};
+
+export type AgentSearchAssetsSelectionHandle = {
+  id: string;
+  assetCount: number;
+  sampleAssetIds: string[];
+  sourceToolCallId: string | null;
+  expiresAt: Date;
 };
 
 export type AgentResolveAssetSearchFiltersScope = {
@@ -101,6 +110,9 @@ export type AgentToolResponseIdsMetadata = {
   albumIds?: string[];
   spaceIds?: string[];
   userIds?: string[];
+  selectionHandleIds?: string[];
+  selectionHandleAssetCount?: number;
+  selectionHandleSampleAssetIds?: string[];
   resultSize?: AgentToolResultSize;
 };
 
@@ -113,6 +125,14 @@ export type AgentToolOperationPlanRequestMetadata = {
   tagIds?: string[];
   userIds?: string[];
   assetIds: string[];
+  assetCount?: number;
+  assetIdsSample?: string[];
+  attemptedSelectionHandleIds?: string[];
+  selectionHandles?: Array<{
+    id: string;
+    assetCount: number;
+    sampleAssetIds: string[];
+  }>;
 };
 
 export type AgentToolOperationPlanResponseMetadata = {
