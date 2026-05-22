@@ -1080,6 +1080,75 @@ describe(AgentRunnerService.name, () => {
     });
   });
 
+  it('marks a completed resume turn interrupted when the approved tool result failed before continuation', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const toolCallId = '00000000-0000-4000-8000-000000000333';
+    const assistantContent: AgentMessageContent = {
+      blocks: [{ type: 'text', text: 'I could not read those photos because Gallery returned an error.' }],
+    };
+    const failedToolCall = makeToolCall({
+      id: toolCallId,
+      sessionId,
+      toolName: AgentToolName.ReadAssetMetadata,
+      status: AgentToolCallStatus.Failed,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      error: 'Metadata read failed',
+    });
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    toolCallRepository.getBySessionId.mockResolvedValue([failedToolCall]);
+    agentRunnerRepository.streamResume.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: 'provider-message-tool-error',
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(
+      makeAssistantMessage({ sessionId, content: assistantContent, providerMessageId: 'provider-message-tool-error' }),
+    );
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
+
+    await sut.resumeAfterToolApproval({
+      userId,
+      sessionId,
+      runnerSessionId,
+      toolCallId,
+      approvalDecision: 'approved',
+      toolResult: { status: 'error', message: 'Approved tool call failed before returning a result.' },
+    });
+
+    expect(messageRepository.create).toHaveBeenCalledWith({
+      sessionId,
+      role: AgentMessageRole.Assistant,
+      content: assistantContent,
+      providerMessageId: 'provider-message-tool-error',
+      toolCallId: null,
+    });
+    expect(sessionRepository.markInterruptedFromActive).toHaveBeenCalledWith(userId, sessionId);
+    expect(activityService.createSystemEvent).toHaveBeenCalledWith(userId, sessionId, {
+      kind: AgentSessionActivityEventKind.RunnerRecovery,
+      status: AgentSessionActivityEventStatus.Failed,
+      summary: 'The assistant stopped after a Gallery tool error.',
+    });
+    expect(websocketRepository.clientSend).not.toHaveBeenCalledWith(
+      'on_agent_session_event',
+      userId,
+      expect.objectContaining({ type: 'runner-error' }),
+    );
+  });
+
   it('marks the session interrupted and emits an error when runner message streaming fails', async () => {
     const userId = '00000000-0000-4000-8000-000000000001';
     const sessionId = '00000000-0000-4000-8000-000000000100';
