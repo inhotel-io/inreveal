@@ -106,4 +106,6 @@ export const areAgentTimelineToolCallListsEquivalent = (
   secondToolCalls: AgentToolCallResponseDto[],
 ) =>
   firstToolCalls.length === secondToolCalls.length &&
-  firstToolCalls.every((toolCall, index) => getToolCallStateKey(toolCall) === getToolCallStateKey(secondToolCalls[index]));
+  firstToolCalls.every(
+    (toolCall, index) => getToolCallStateKey(toolCall) === getToolCallStateKey(secondToolCalls[index]),
+  );

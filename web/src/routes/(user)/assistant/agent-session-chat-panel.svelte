@@ -206,7 +206,10 @@
     }),
   );
   const coveredToolCallIds = $derived(
-    new Set([...getCoveredToolCallIdsForActivityTurns(activityTurns), ...pendingApprovalToolCallIdsSuppressedForResume]),
+    new Set([
+      ...getCoveredToolCallIdsForActivityTurns(activityTurns),
+      ...pendingApprovalToolCallIdsSuppressedForResume,
+    ]),
   );
   const showAssistantBusyIndicator = $derived(
     isResponsePending &&
