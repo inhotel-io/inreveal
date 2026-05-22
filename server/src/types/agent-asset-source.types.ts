@@ -1,5 +1,10 @@
 import { AssetType, AssetVisibility } from 'src/enum';
-import { AgentSearchAssetsMode, AgentSearchAssetsOrder } from 'src/types/agent-tool.types';
+import type {
+  AgentResolvedAssetSearchFilterResult,
+  AgentSearchAssetsFilters,
+  AgentSearchAssetsMode,
+  AgentSearchAssetsOrder,
+} from 'src/types/agent-tool.types';
 
 export type AgentAssetSourceKind = 'search' | 'previousSearch' | 'selectionHandle' | 'explicitAssets';
 
@@ -41,6 +46,25 @@ export type AgentDeclarativeAssetFilters = {
   visibility?: AssetVisibility;
   withSharedSpaces?: boolean;
 };
+
+export type AgentDeclarativeAssetFilterResolution =
+  | {
+      status: 'success';
+      filters: AgentSearchAssetsFilters;
+      results: AgentResolvedAssetSearchFilterResult[];
+    }
+  | {
+      status: 'needs_clarification';
+      filters: AgentSearchAssetsFilters;
+      results: AgentResolvedAssetSearchFilterResult[];
+      message: string;
+    }
+  | {
+      status: 'denied';
+      filters: AgentSearchAssetsFilters;
+      results: AgentResolvedAssetSearchFilterResult[];
+      reason: string;
+    };
 
 export type AgentAssetSourceInput =
   | {
