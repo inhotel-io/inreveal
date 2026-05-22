@@ -78,6 +78,7 @@ import {
   AgentToolReadAssetMetadataRequestMetadata,
   AgentToolReadSpaceRequestMetadata,
   AgentToolResolveAssetSearchFiltersRequestMetadata,
+  AgentToolResponseIdsMetadata,
   AgentToolResponseMetadata,
   AgentToolResultSize,
   AgentToolSearchAssetsRequestMetadata,
@@ -104,7 +105,12 @@ type AgentReadToolDescriptor<TRequest, TResult extends Record<string, unknown>> 
   perToolLimit: (plan: AgentPermissionPlanSnapshot) => number;
   perToolLimitDenialReason?: (request: TRequest, limit: number) => string;
   perSessionLimit: (plan: AgentPermissionPlanSnapshot) => number;
-  validateAccess: (auth: AuthDto, session: AgentSession, request: TRequest) => Promise<string | null>;
+  validateAccess: (
+    auth: AuthDto,
+    session: AgentSession,
+    request: TRequest,
+    excludedToolCallId?: string,
+  ) => Promise<string | null>;
   execute: (auth: AuthDto, session: AgentSession, request: TRequest, toolCallId: string) => Promise<TResult>;
   responseSummary: (result: TResult) => string;
   responseMetadata: (result: TResult) => AgentToolCall['redactedResponseMetadata'];
@@ -612,7 +618,8 @@ export class AgentToolService {
       requestedAlbumCount: () => 0,
       perToolLimit: (plan) => plan.limits.maxAssetsPerToolCall,
       perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
-      validateAccess: (auth, session, request) => this.validateSearchRequest(auth, session, request),
+      validateAccess: (auth, session, request, excludedToolCallId) =>
+        this.validateSearchRequest(auth, session, request, excludedToolCallId),
       execute: async (auth, session, request, toolCallId) => {
         const normalizedRequest = {
           ...request,
@@ -793,8 +800,13 @@ export class AgentToolService {
       responseSummary: (result) =>
         `Resolved ${result.results.filter((item) => item.status === 'matched').length} search filter(s)`,
       responseMetadata: (result) => ({
+        ...(result.resolvedFilters.tagIds?.length ? { tagIds: result.resolvedFilters.tagIds } : {}),
         ...(result.resolvedFilters.albumIds?.length ? { albumIds: result.resolvedFilters.albumIds } : {}),
         ...(result.resolvedFilters.spaceId ? { spaceIds: [result.resolvedFilters.spaceId] } : {}),
+        ...(result.resolvedFilters.personIds?.length ? { personIds: result.resolvedFilters.personIds } : {}),
+        ...(result.resolvedFilters.spacePersonIds?.length
+          ? { spacePersonIds: result.resolvedFilters.spacePersonIds }
+          : {}),
       }),
       resultAssetCount: () => 0,
       resultAlbumCount: () => 0,
@@ -1733,7 +1745,7 @@ export class AgentToolService {
       }
     }
 
-    return descriptor.validateAccess(auth, session, request);
+    return descriptor.validateAccess(auth, session, request, excludedToolCallId);
   }
 
   private requiresApproval(session: AgentSession, dataClass: AgentToolDataClass): boolean {
@@ -1925,6 +1937,7 @@ export class AgentToolService {
     auth: AuthDto,
     session: AgentSession,
     request: AgentSearchAssetsToolRequestDto,
+    excludedToolCallId?: string,
   ): Promise<string | null> {
     const mode = request.mode ?? 'metadata';
     const page = request.page ?? 1;
@@ -1961,6 +1974,15 @@ export class AgentToolService {
     }
 
     const filters = request.filters ?? {};
+    const droppedResolvedFiltersReason = await this.getDroppedResolvedSearchFilterReason(
+      session.id,
+      filters,
+      excludedToolCallId,
+    );
+    if (droppedResolvedFiltersReason) {
+      return droppedResolvedFiltersReason;
+    }
+
     const spacePersonIds = filters.spacePersonIds ? new Set(filters.spacePersonIds) : new Set<string>();
     const hasSpacePersonIds = spacePersonIds.size > 0;
     if (hasSpacePersonIds && !filters.spaceId) {
@@ -2014,6 +2036,87 @@ export class AgentToolService {
     }
 
     return null;
+  }
+
+  private async getDroppedResolvedSearchFilterReason(
+    sessionId: string,
+    filters: AgentSearchAssetsFilters,
+    excludedToolCallId?: string,
+  ): Promise<string | null> {
+    const resolvedFilters = await this.getLatestResolvedSearchFiltersSinceSuccessfulSearch(
+      sessionId,
+      excludedToolCallId,
+    );
+    if (!resolvedFilters) {
+      return null;
+    }
+
+    const missingParts = [
+      this.getMissingResolvedIdsReason('people', 'personIds', resolvedFilters.personIds, filters.personIds),
+      this.getMissingResolvedIdsReason('tags', 'tagIds', resolvedFilters.tagIds, filters.tagIds),
+      this.getMissingResolvedIdsReason('albums', 'albumIds', resolvedFilters.albumIds, filters.albumIds),
+      this.getMissingResolvedIdsReason(
+        'shared-space people',
+        'spacePersonIds',
+        resolvedFilters.spacePersonIds,
+        filters.spacePersonIds,
+      ),
+    ].filter((part): part is string => Boolean(part));
+
+    if (resolvedFilters.spaceIds?.[0] && filters.spaceId !== resolvedFilters.spaceIds[0]) {
+      missingParts.push(`space filter (spaceId=${resolvedFilters.spaceIds[0]})`);
+    }
+
+    if (missingParts.length === 0) {
+      return null;
+    }
+
+    return `The previous resolveAssetSearchFilters call returned resolved ${missingParts.join(
+      ', ',
+    )} that were omitted from searchAssets.filters. Retry searchAssets with the resolvedFilters copied into filters, or ask a clarifying question instead of running a broad search.`;
+  }
+
+  private async getLatestResolvedSearchFiltersSinceSuccessfulSearch(
+    sessionId: string,
+    excludedToolCallId?: string,
+  ): Promise<AgentToolResponseIdsMetadata | null> {
+    const toolCalls = await this.toolCallRepository.getBySessionId(sessionId);
+
+    for (const toolCall of toolCalls ?? []) {
+      if (excludedToolCallId && toolCall.id === excludedToolCallId) {
+        continue;
+      }
+
+      if (toolCall.toolName === AgentToolName.SearchAssets && toolCall.status === AgentToolCallStatus.Completed) {
+        return null;
+      }
+
+      if (
+        toolCall.toolName === AgentToolName.ResolveAssetSearchFilters &&
+        toolCall.status === AgentToolCallStatus.Completed &&
+        toolCall.redactedResponseMetadata
+      ) {
+        return toolCall.redactedResponseMetadata as AgentToolResponseIdsMetadata;
+      }
+    }
+
+    return null;
+  }
+
+  private getMissingResolvedIdsReason(
+    label: string,
+    key: keyof Pick<AgentSearchAssetsFilters, 'albumIds' | 'personIds' | 'spacePersonIds' | 'tagIds'>,
+    resolvedIds: string[] | undefined,
+    searchIds: string[] | undefined,
+  ) {
+    if (!resolvedIds?.length) {
+      return null;
+    }
+
+    const searchIdSet = new Set(searchIds ?? []);
+    const missingIds = resolvedIds.filter((id) => !searchIdSet.has(id));
+
+    return missingIds.length > 0 ? `${label} filters (${key}=[${missingIds.join(',')}])` : null;
   }
 
   private async assertReturnedAssetsAreAccessible(
