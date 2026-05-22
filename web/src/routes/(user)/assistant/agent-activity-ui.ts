@@ -102,6 +102,12 @@ const unknownToolDefinition: ToolActivityDefinition = {
 };
 
 const toolActivityDefinitions: Partial<Record<AgentToolName, ToolActivityDefinition>> = {
+  [AgentToolName.ResolveAssetSearchFilters]: {
+    kind: 'search',
+    title: 'Resolving filters',
+    completedSummary: 'Matched search filters',
+    coalesceKey: 'resolve-search-filters',
+  },
   [AgentToolName.SearchAssets]: {
     kind: 'search',
     title: 'Searching photos',
@@ -787,6 +793,45 @@ const buildSummary = (items: AgentActivityItem[]) => {
   return parts.length > 0 ? parts.join(', ') : null;
 };
 
+const hasLaterPrimaryActivity = (item: AgentActivityItem, items: AgentActivityItem[]) =>
+  item.kind === 'understanding' &&
+  item.status === 'running' &&
+  items.some(
+    (candidate) =>
+      candidate.id !== item.id &&
+      candidate.kind !== 'understanding' &&
+      isValidIsoDate(candidate.startedAt) &&
+      isValidIsoDate(item.startedAt) &&
+      candidate.startedAt > item.startedAt,
+  );
+
+const compareActiveActivityItems = (first: AgentActivityItem, second: AgentActivityItem) => {
+  const statusComparison = statusPriority[first.status] - statusPriority[second.status];
+  if (statusComparison !== 0) {
+    return statusComparison;
+  }
+
+  const firstValid = isValidIsoDate(first.startedAt);
+  const secondValid = isValidIsoDate(second.startedAt);
+
+  if (firstValid && secondValid) {
+    const timeComparison = second.startedAt.localeCompare(first.startedAt);
+    if (timeComparison !== 0) {
+      return timeComparison;
+    }
+  } else if (firstValid !== secondValid) {
+    return firstValid ? -1 : 1;
+  }
+
+  return typePriority[first.kind] - typePriority[second.kind] || first.id.localeCompare(second.id);
+};
+
+const pickActiveActivityItem = (items: AgentActivityItem[]) =>
+  sortedBy(
+    items.filter((item) => activeStatuses.has(item.status) && !hasLaterPrimaryActivity(item, items)),
+    compareActiveActivityItems,
+  )[0] ?? null;
+
 export const buildAgentActivityModel = (input: BuildAgentActivityModelInput): AgentActivityModel => {
   const verboseToolItems = input.toolCalls.map((toolCall) => buildToolActivityCandidate(toolCall));
   const toolItems = coalesceToolActivities(verboseToolItems);
@@ -823,8 +868,8 @@ export const buildAgentActivityModel = (input: BuildAgentActivityModelInput): Ag
   return {
     items: sortedItems,
     verboseItems: sortedVerboseItems,
-    activeItem: sortedItems.find((item) => activeStatuses.has(item.status)) ?? null,
-    verboseActiveItem: sortedVerboseItems.find((item) => activeStatuses.has(item.status)) ?? null,
+    activeItem: pickActiveActivityItem(sortedItems),
+    verboseActiveItem: pickActiveActivityItem(sortedVerboseItems),
     summary: buildSummary(sortedItems),
   };
 };
