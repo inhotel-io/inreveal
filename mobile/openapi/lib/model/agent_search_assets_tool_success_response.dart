@@ -14,11 +14,17 @@ class AgentSearchAssetsToolSuccessResponse {
   /// Returns a new [AgentSearchAssetsToolSuccessResponse] instance.
   AgentSearchAssetsToolSuccessResponse({
     this.approximateTotal,
+    this.assetIds = const [],
     this.assets = const [],
+    required this.detail,
     required this.hasMore,
     required this.nextPage,
+    required this.resultSize,
     required this.returnedCount,
+    this.sample = const [],
+    this.selectionHandle,
     required this.status,
+    required this.summary,
     required this.toolCall,
     this.totalCount,
   });
@@ -33,17 +39,35 @@ class AgentSearchAssetsToolSuccessResponse {
   ///
   int? approximateTotal;
 
-  List<AgentAssetMetadata> assets;
+  List<String> assetIds;
+
+  List<AgentSearchAssetResult> assets;
+
+  AgentSearchAssetsDetail detail;
 
   bool hasMore;
 
   String? nextPage;
 
+  AgentToolResultSize resultSize;
+
   /// Minimum value: 0
   /// Maximum value: 9007199254740991
   int returnedCount;
 
+  List<AgentSearchAssetResult> sample;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  AgentSearchAssetsSelectionHandle? selectionHandle;
+
   AgentSearchAssetsToolSuccessResponseStatusEnum status;
+
+  String summary;
 
   AgentToolCallResponseDto toolCall;
 
@@ -60,11 +84,17 @@ class AgentSearchAssetsToolSuccessResponse {
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchAssetsToolSuccessResponse &&
     other.approximateTotal == approximateTotal &&
+    _deepEquality.equals(other.assetIds, assetIds) &&
     _deepEquality.equals(other.assets, assets) &&
+    other.detail == detail &&
     other.hasMore == hasMore &&
     other.nextPage == nextPage &&
+    other.resultSize == resultSize &&
     other.returnedCount == returnedCount &&
+    _deepEquality.equals(other.sample, sample) &&
+    other.selectionHandle == selectionHandle &&
     other.status == status &&
+    other.summary == summary &&
     other.toolCall == toolCall &&
     other.totalCount == totalCount;
 
@@ -72,16 +102,22 @@ class AgentSearchAssetsToolSuccessResponse {
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (approximateTotal == null ? 0 : approximateTotal!.hashCode) +
+    (assetIds.hashCode) +
     (assets.hashCode) +
+    (detail.hashCode) +
     (hasMore.hashCode) +
     (nextPage == null ? 0 : nextPage!.hashCode) +
+    (resultSize.hashCode) +
     (returnedCount.hashCode) +
+    (sample.hashCode) +
+    (selectionHandle == null ? 0 : selectionHandle!.hashCode) +
     (status.hashCode) +
+    (summary.hashCode) +
     (toolCall.hashCode) +
     (totalCount == null ? 0 : totalCount!.hashCode);
 
   @override
-  String toString() => 'AgentSearchAssetsToolSuccessResponse[approximateTotal=$approximateTotal, assets=$assets, hasMore=$hasMore, nextPage=$nextPage, returnedCount=$returnedCount, status=$status, toolCall=$toolCall, totalCount=$totalCount]';
+  String toString() => 'AgentSearchAssetsToolSuccessResponse[approximateTotal=$approximateTotal, assetIds=$assetIds, assets=$assets, detail=$detail, hasMore=$hasMore, nextPage=$nextPage, resultSize=$resultSize, returnedCount=$returnedCount, sample=$sample, selectionHandle=$selectionHandle, status=$status, summary=$summary, toolCall=$toolCall, totalCount=$totalCount]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -90,15 +126,25 @@ class AgentSearchAssetsToolSuccessResponse {
     } else {
     //  json[r'approximateTotal'] = null;
     }
+      json[r'assetIds'] = this.assetIds;
       json[r'assets'] = this.assets;
+      json[r'detail'] = this.detail;
       json[r'hasMore'] = this.hasMore;
     if (this.nextPage != null) {
       json[r'nextPage'] = this.nextPage;
     } else {
     //  json[r'nextPage'] = null;
     }
+      json[r'resultSize'] = this.resultSize;
       json[r'returnedCount'] = this.returnedCount;
+      json[r'sample'] = this.sample;
+    if (this.selectionHandle != null) {
+      json[r'selectionHandle'] = this.selectionHandle;
+    } else {
+    //  json[r'selectionHandle'] = null;
+    }
       json[r'status'] = this.status;
+      json[r'summary'] = this.summary;
       json[r'toolCall'] = this.toolCall;
     if (this.totalCount != null) {
       json[r'totalCount'] = this.totalCount;
@@ -118,11 +164,19 @@ class AgentSearchAssetsToolSuccessResponse {
 
       return AgentSearchAssetsToolSuccessResponse(
         approximateTotal: mapValueOfType<int>(json, r'approximateTotal'),
-        assets: AgentAssetMetadata.listFromJson(json[r'assets']),
+        assetIds: json[r'assetIds'] is Iterable
+            ? (json[r'assetIds'] as Iterable).cast<String>().toList(growable: false)
+            : const [],
+        assets: AgentSearchAssetResult.listFromJson(json[r'assets']),
+        detail: AgentSearchAssetsDetail.fromJson(json[r'detail'])!,
         hasMore: mapValueOfType<bool>(json, r'hasMore')!,
         nextPage: mapValueOfType<String>(json, r'nextPage'),
+        resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
         returnedCount: mapValueOfType<int>(json, r'returnedCount')!,
+        sample: AgentSearchAssetResult.listFromJson(json[r'sample']),
+        selectionHandle: AgentSearchAssetsSelectionHandle.fromJson(json[r'selectionHandle']),
         status: AgentSearchAssetsToolSuccessResponseStatusEnum.fromJson(json[r'status'])!,
+        summary: mapValueOfType<String>(json, r'summary')!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
         totalCount: mapValueOfType<int>(json, r'totalCount'),
       );
@@ -172,11 +226,14 @@ class AgentSearchAssetsToolSuccessResponse {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'assets',
+    'assetIds',
+    'detail',
     'hasMore',
     'nextPage',
+    'resultSize',
     'returnedCount',
     'status',
+    'summary',
     'toolCall',
   };
 }

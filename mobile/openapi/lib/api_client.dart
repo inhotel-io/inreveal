@@ -212,10 +212,14 @@ class ApiClient {
           return AgentAssetAddTagOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetMediaReference':
           return AgentAssetMediaReference.fromJson(value);
-        case 'AgentAssetMetadata':
-          return AgentAssetMetadata.fromJson(value);
-        case 'AgentAssetMetadataExif':
-          return AgentAssetMetadataExif.fromJson(value);
+        case 'AgentAssetMetadataDetail':
+          return AgentAssetMetadataDetailTypeTransformer().decode(value);
+        case 'AgentAssetMetadataField':
+          return AgentAssetMetadataFieldTypeTransformer().decode(value);
+        case 'AgentAssetMetadataResult':
+          return AgentAssetMetadataResult.fromJson(value);
+        case 'AgentAssetMetadataResultExifInfo':
+          return AgentAssetMetadataResultExifInfo.fromJson(value);
         case 'AgentAssetMetadataTag':
           return AgentAssetMetadataTag.fromJson(value);
         case 'AgentAssetRemoveTagOperationType':
@@ -466,12 +470,20 @@ class ApiClient {
           return AgentRunnerStatusDto.fromJson(value);
         case 'AgentRunnerStatusReason':
           return AgentRunnerStatusReasonTypeTransformer().decode(value);
+        case 'AgentSearchAssetResult':
+          return AgentSearchAssetResult.fromJson(value);
+        case 'AgentSearchAssetsDetail':
+          return AgentSearchAssetsDetailTypeTransformer().decode(value);
+        case 'AgentSearchAssetsField':
+          return AgentSearchAssetsFieldTypeTransformer().decode(value);
         case 'AgentSearchAssetsFilters':
           return AgentSearchAssetsFilters.fromJson(value);
         case 'AgentSearchAssetsMode':
           return AgentSearchAssetsModeTypeTransformer().decode(value);
         case 'AgentSearchAssetsOrder':
           return AgentSearchAssetsOrderTypeTransformer().decode(value);
+        case 'AgentSearchAssetsSelectionHandle':
+          return AgentSearchAssetsSelectionHandle.fromJson(value);
         case 'AgentSearchAssetsToolApprovalRequiredResponse':
           return AgentSearchAssetsToolApprovalRequiredResponse.fromJson(value);
         case 'AgentSearchAssetsToolDeniedResponse':
@@ -536,6 +548,8 @@ class ApiClient {
           return AgentToolDataClassTypeTransformer().decode(value);
         case 'AgentToolName':
           return AgentToolNameTypeTransformer().decode(value);
+        case 'AgentToolResultSize':
+          return AgentToolResultSize.fromJson(value);
         case 'AgentUserLookupResult':
           return AgentUserLookupResult.fromJson(value);
         case 'AgentUserMessageContent':

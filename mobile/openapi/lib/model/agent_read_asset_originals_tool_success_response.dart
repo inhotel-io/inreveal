@@ -14,11 +14,14 @@ class AgentReadAssetOriginalsToolSuccessResponse {
   /// Returns a new [AgentReadAssetOriginalsToolSuccessResponse] instance.
   AgentReadAssetOriginalsToolSuccessResponse({
     this.originals = const [],
+    required this.resultSize,
     required this.status,
     required this.toolCall,
   });
 
   List<AgentAssetMediaReference> originals;
+
+  AgentToolResultSize resultSize;
 
   AgentReadAssetOriginalsToolSuccessResponseStatusEnum status;
 
@@ -27,6 +30,7 @@ class AgentReadAssetOriginalsToolSuccessResponse {
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadAssetOriginalsToolSuccessResponse &&
     _deepEquality.equals(other.originals, originals) &&
+    other.resultSize == resultSize &&
     other.status == status &&
     other.toolCall == toolCall;
 
@@ -34,15 +38,17 @@ class AgentReadAssetOriginalsToolSuccessResponse {
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (originals.hashCode) +
+    (resultSize.hashCode) +
     (status.hashCode) +
     (toolCall.hashCode);
 
   @override
-  String toString() => 'AgentReadAssetOriginalsToolSuccessResponse[originals=$originals, status=$status, toolCall=$toolCall]';
+  String toString() => 'AgentReadAssetOriginalsToolSuccessResponse[originals=$originals, resultSize=$resultSize, status=$status, toolCall=$toolCall]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'originals'] = this.originals;
+      json[r'resultSize'] = this.resultSize;
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
     return json;
@@ -58,6 +64,7 @@ class AgentReadAssetOriginalsToolSuccessResponse {
 
       return AgentReadAssetOriginalsToolSuccessResponse(
         originals: AgentAssetMediaReference.listFromJson(json[r'originals']),
+        resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
         status: AgentReadAssetOriginalsToolSuccessResponseStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
       );
@@ -108,6 +115,7 @@ class AgentReadAssetOriginalsToolSuccessResponse {
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
     'originals',
+    'resultSize',
     'status',
     'toolCall',
   };

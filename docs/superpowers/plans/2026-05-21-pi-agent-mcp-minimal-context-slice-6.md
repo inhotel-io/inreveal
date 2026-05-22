@@ -101,7 +101,9 @@ it('documents progressive detail search examples that parse through the live DTO
 
 it('documents progressive metadata reads by exact field groups for selected ids', () => {
   const metadata = sut.getReadToolContract(AgentToolName.ReadAssetMetadata);
-  const exactTechnical = metadata?.examples.find((example) => example.name === 'read-technical-fields-for-selected-assets');
+  const exactTechnical = metadata?.examples.find(
+    (example) => example.name === 'read-technical-fields-for-selected-assets',
+  );
 
   expect(metadata?.usage).toContain('Search compact asset ids first');
   expect(metadata?.usage).toContain('fields');
@@ -109,9 +111,9 @@ it('documents progressive metadata reads by exact field groups for selected ids'
     assetIds: ['00000000-0000-4000-8000-000000000001'],
     fields: ['camera', 'dates', 'filename'],
   });
-  expect(AgentReadToolRequestSchemas[AgentToolName.ReadAssetMetadata].safeParse(exactTechnical?.arguments).success).toBe(
-    true,
-  );
+  expect(
+    AgentReadToolRequestSchemas[AgentToolName.ReadAssetMetadata].safeParse(exactTechnical?.arguments).success,
+  ).toBe(true);
 });
 
 it('discourages broad full-metadata and large-limit search calls with actionable hints', () => {
@@ -155,7 +157,7 @@ In `server/src/services/agent-mcp-tool-contract.service.ts`:
 1. Update `readAssetMetadataContract.usage` to include:
 
 ```ts
-'Search compact asset ids first, then call this tool for selected ids with the smallest useful detail preset or fields.'
+'Search compact asset ids first, then call this tool for selected ids with the smallest useful detail preset or fields.';
 ```
 
 2. Add metadata example:
@@ -173,7 +175,7 @@ Add it to `readAssetMetadataContract.examples` before `approvedRetryExample`.
 3. Update `searchAssetsContract.usage` so it includes:
 
 ```ts
-'Default to compact asset ids with detail ids. Use detail summary with fields and sampleSize for a small representative sample. Use detail metadata only after a bounded compact search proves the subset is small. Do not use limit 1000 or request all metadata for broad searches; page with nextPage or ask one narrowing question when hasMore or resultSize.truncated is true.'
+'Default to compact asset ids with detail ids. Use detail summary with fields and sampleSize for a small representative sample. Use detail metadata only after a bounded compact search proves the subset is small. Do not use limit 1000 or request all metadata for broad searches; page with nextPage or ask one narrowing question when hasMore or resultSize.truncated is true.';
 ```
 
 4. Add search examples:
@@ -307,10 +309,10 @@ Update existing prompt length expectations from `2850` to `3800`.
 In `agent-runner/src/pi-runtime.test.mjs`, update `constructs the Pi resource loader with concrete runtime paths`:
 
 ```js
-    assert.equal(calls.loaders[0].systemPrompt.includes('Progressive: resolve names -> search detail ids'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Do not use limit 1000'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Visual curation: search ids first'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Technical metadata: search ids first'), true);
+assert.equal(calls.loaders[0].systemPrompt.includes('Progressive: resolve names -> search detail ids'), true);
+assert.equal(calls.loaders[0].systemPrompt.includes('Do not use limit 1000'), true);
+assert.equal(calls.loaders[0].systemPrompt.includes('Visual curation: search ids first'), true);
+assert.equal(calls.loaders[0].systemPrompt.includes('Technical metadata: search ids first'), true);
 ```
 
 - [ ] **Step 2: Run prompt tests and verify they fail**

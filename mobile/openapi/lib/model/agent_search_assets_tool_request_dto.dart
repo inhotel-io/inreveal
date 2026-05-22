@@ -13,14 +13,36 @@ part of openapi.api;
 class AgentSearchAssetsToolRequestDto {
   /// Returns a new [AgentSearchAssetsToolRequestDto] instance.
   AgentSearchAssetsToolRequestDto({
+    this.createSelectionHandle,
+    this.detail,
+    this.fields = const [],
     this.filters,
     this.limit,
     this.mode,
     this.order,
     this.page,
     this.query,
+    this.sampleSize,
     this.toolCallId,
   });
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? createSelectionHandle;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  AgentSearchAssetsDetail? detail;
+
+  List<AgentSearchAssetsField> fields;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -74,6 +96,16 @@ class AgentSearchAssetsToolRequestDto {
   ///
   String? query;
 
+  /// Minimum value: 0
+  /// Maximum value: 25
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  int? sampleSize;
+
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
   /// does not include a default value (using the "default:" property), however, the generated
@@ -84,30 +116,49 @@ class AgentSearchAssetsToolRequestDto {
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchAssetsToolRequestDto &&
+    other.createSelectionHandle == createSelectionHandle &&
+    other.detail == detail &&
+    _deepEquality.equals(other.fields, fields) &&
     other.filters == filters &&
     other.limit == limit &&
     other.mode == mode &&
     other.order == order &&
     other.page == page &&
     other.query == query &&
+    other.sampleSize == sampleSize &&
     other.toolCallId == toolCallId;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
+    (createSelectionHandle == null ? 0 : createSelectionHandle!.hashCode) +
+    (detail == null ? 0 : detail!.hashCode) +
+    (fields.hashCode) +
     (filters == null ? 0 : filters!.hashCode) +
     (limit == null ? 0 : limit!.hashCode) +
     (mode == null ? 0 : mode!.hashCode) +
     (order == null ? 0 : order!.hashCode) +
     (page == null ? 0 : page!.hashCode) +
     (query == null ? 0 : query!.hashCode) +
+    (sampleSize == null ? 0 : sampleSize!.hashCode) +
     (toolCallId == null ? 0 : toolCallId!.hashCode);
 
   @override
-  String toString() => 'AgentSearchAssetsToolRequestDto[filters=$filters, limit=$limit, mode=$mode, order=$order, page=$page, query=$query, toolCallId=$toolCallId]';
+  String toString() => 'AgentSearchAssetsToolRequestDto[createSelectionHandle=$createSelectionHandle, detail=$detail, fields=$fields, filters=$filters, limit=$limit, mode=$mode, order=$order, page=$page, query=$query, sampleSize=$sampleSize, toolCallId=$toolCallId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+    if (this.createSelectionHandle != null) {
+      json[r'createSelectionHandle'] = this.createSelectionHandle;
+    } else {
+    //  json[r'createSelectionHandle'] = null;
+    }
+    if (this.detail != null) {
+      json[r'detail'] = this.detail;
+    } else {
+    //  json[r'detail'] = null;
+    }
+      json[r'fields'] = this.fields;
     if (this.filters != null) {
       json[r'filters'] = this.filters;
     } else {
@@ -138,6 +189,11 @@ class AgentSearchAssetsToolRequestDto {
     } else {
     //  json[r'query'] = null;
     }
+    if (this.sampleSize != null) {
+      json[r'sampleSize'] = this.sampleSize;
+    } else {
+    //  json[r'sampleSize'] = null;
+    }
     if (this.toolCallId != null) {
       json[r'toolCallId'] = this.toolCallId;
     } else {
@@ -155,12 +211,16 @@ class AgentSearchAssetsToolRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentSearchAssetsToolRequestDto(
+        createSelectionHandle: mapValueOfType<bool>(json, r'createSelectionHandle'),
+        detail: AgentSearchAssetsDetail.fromJson(json[r'detail']),
+        fields: AgentSearchAssetsField.listFromJson(json[r'fields']),
         filters: AgentSearchAssetsFilters.fromJson(json[r'filters']),
         limit: mapValueOfType<int>(json, r'limit'),
         mode: AgentSearchAssetsMode.fromJson(json[r'mode']),
         order: AgentSearchAssetsOrder.fromJson(json[r'order']),
         page: mapValueOfType<int>(json, r'page'),
         query: mapValueOfType<String>(json, r'query'),
+        sampleSize: mapValueOfType<int>(json, r'sampleSize'),
         toolCallId: mapValueOfType<String>(json, r'toolCallId'),
       );
     }
