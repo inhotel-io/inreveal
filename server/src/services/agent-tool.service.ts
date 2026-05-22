@@ -37,6 +37,7 @@ import {
   AssetVisibility,
 } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
+import { AgentSelectionHandleRepository } from 'src/repositories/agent-selection-handle.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
@@ -63,6 +64,7 @@ import {
   AgentResolvedAssetSearchFilterKind,
   AgentResolvedAssetSearchFilterResult,
   AgentSearchAssetResult,
+  AgentSearchAssetsSelectionHandle,
   AgentSearchAssetsDetail,
   AgentSearchAssetsFilters,
   AgentSearchAssetsMode,
@@ -154,6 +156,7 @@ export class AgentToolService {
     private readonly albumRepository: AlbumRepository,
     private readonly sharedSpaceRepository: SharedSpaceRepository,
     private readonly sessionRepository: AgentSessionRepository,
+    private readonly selectionHandleRepository: AgentSelectionHandleRepository,
     private readonly toolCallRepository: AgentToolCallRepository,
     private readonly agentRunnerService: AgentRunnerService,
     private readonly userService: UserService,
@@ -582,6 +585,7 @@ export class AgentToolService {
       nextPage: string | null;
       totalCount?: number;
       approximateTotal?: number;
+      selectionHandle?: AgentSearchAssetsSelectionHandle;
     }
   > {
     return {
@@ -598,6 +602,7 @@ export class AgentToolService {
           page: request.page ?? 1,
           detail: request.detail ?? 'ids',
           fields: request.fields ?? [],
+          ...(request.createSelectionHandle ? { createSelectionHandle: true } : {}),
           ...(request.sampleSize === undefined ? {} : { sampleSize: request.sampleSize }),
           ...(mode === 'smart' && request.order === undefined ? {} : { order: request.order ?? 'desc' }),
           ...(request.query === undefined ? {} : { query: request.query }),
@@ -608,7 +613,7 @@ export class AgentToolService {
       perToolLimit: (plan) => plan.limits.maxAssetsPerToolCall,
       perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
       validateAccess: (auth, session, request) => this.validateSearchRequest(auth, session, request),
-      execute: async (auth, session, request) => {
+      execute: async (auth, session, request, toolCallId) => {
         const normalizedRequest = {
           ...request,
           mode: request.mode ?? 'metadata',
@@ -645,12 +650,34 @@ export class AgentToolService {
         await this.assertReturnedAssetsAreAccessible(auth, session, assetIds);
         const detail = normalizedRequest.detail;
         const fields = normalizedRequest.fields;
+        const selectionHandle = request.createSelectionHandle
+          ? await this.selectionHandleRepository.create({
+              sessionId: session.id,
+              userId: auth.user.id,
+              sourceToolCallId: toolCallId,
+              assetIds,
+              expiresAt: this.getSelectionHandleExpiresAt(session),
+            })
+          : undefined;
+        const compactAssetIds =
+          selectionHandle && assetIds.length > 0 ? assetIds.slice(0, request.sampleSize ?? 25) : assetIds;
         const pageResult = {
           detail,
-          assetIds,
-          returnedCount: assetIds.length,
+          assetIds: compactAssetIds,
+          returnedCount: compactAssetIds.length,
           hasMore: result.hasNextPage,
           nextPage: result.hasNextPage ? String(normalizedRequest.page + 1) : null,
+          ...(selectionHandle
+            ? {
+                selectionHandle: {
+                  id: selectionHandle.id,
+                  assetCount: selectionHandle.assetCount,
+                  sampleAssetIds: selectionHandle.sampleAssetIds,
+                  sourceToolCallId: selectionHandle.sourceToolCallId,
+                  expiresAt: selectionHandle.expiresAt,
+                },
+              }
+            : {}),
         };
 
         if (detail === 'ids') {
@@ -671,7 +698,8 @@ export class AgentToolService {
           };
         }
 
-        const assets = await this.getOrderedAgentMetadata(assetIds);
+        const metadataAssetIds = selectionHandle ? compactAssetIds : assetIds;
+        const assets = await this.getOrderedAgentMetadata(metadataAssetIds);
         const summary = this.getSearchAssetsResponseSummary({ ...pageResult, metadataCount: assets.length });
         return {
           ...pageResult,
@@ -680,8 +708,15 @@ export class AgentToolService {
         };
       },
       responseSummary: (result) => result.summary,
-      responseMetadata: (result) => ({ assetIds: result.assetIds }),
-      resultAssetCount: (result) => result.assetIds.length,
+      responseMetadata: (result) =>
+        result.selectionHandle
+          ? {
+              selectionHandleIds: [result.selectionHandle.id],
+              selectionHandleAssetCount: result.selectionHandle.assetCount,
+              selectionHandleSampleAssetIds: result.selectionHandle.sampleAssetIds,
+            }
+          : { assetIds: result.assetIds },
+      resultAssetCount: (result) => result.selectionHandle?.assetCount ?? result.assetIds.length,
       resultAlbumCount: () => 0,
       resultSize: (result) => ({
         returnedItems: result.assetIds.length,
@@ -697,6 +732,11 @@ export class AgentToolService {
     return request.limit ?? 100;
   }
 
+  private getSelectionHandleExpiresAt(session: AgentSession) {
+    const minutes = session.permissionPlanSnapshot.limits.expiresInMinutes ?? 60;
+    return new Date(Date.now() + minutes * 60_000);
+  }
+
   private getSearchAssetsResponseSummary(result: {
     detail: AgentSearchAssetsDetail;
     assetIds: string[];
@@ -704,9 +744,13 @@ export class AgentToolService {
     nextPage: string | null;
     sampleCount?: number;
     metadataCount?: number;
+    selectionHandle?: AgentSearchAssetsSelectionHandle;
   }) {
-    const summary =
-      result.detail === 'metadata'
+    const summary = result.selectionHandle
+      ? `Created a selection handle for ${result.selectionHandle.assetCount} assets; returned ${
+          result.assetIds.length
+        } sample asset ${result.assetIds.length === 1 ? 'id' : 'ids'}`
+      : result.detail === 'metadata'
         ? this.getReturnedMetadataSummary(result.metadataCount ?? result.assetIds.length)
         : result.detail === 'summary' && (result.sampleCount ?? 0) > 0
           ? `Returned ${result.assetIds.length} asset ${result.assetIds.length === 1 ? 'id' : 'ids'} with ${

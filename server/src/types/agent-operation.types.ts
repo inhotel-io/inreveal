@@ -33,6 +33,7 @@ export type AgentAlbumOperationInput = {
   targetId?: string;
   temporaryTargetId?: string;
   assetIds?: string[];
+  assetSelectionHandleId?: string;
   payload?: AgentOperationPayload;
   dependencyIds?: string[];
   riskLevel: AgentOperationRiskLevel;
