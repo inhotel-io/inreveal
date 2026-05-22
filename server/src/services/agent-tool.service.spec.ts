@@ -2551,6 +2551,7 @@ describe(AgentToolService.name, () => {
       createdAt: now,
       updateId: newUuid(),
     };
+    const sourceRef = `asset-source:search:${handle.id}` as const;
     sessionRepository.getById.mockResolvedValue(session);
     searchRepository.searchMetadata.mockResolvedValue({
       items: assetIds.map((id) => ({ id })) as never,
@@ -2578,6 +2579,7 @@ describe(AgentToolService.name, () => {
         completedAt,
         redactedResponseMetadata: {
           selectionHandleIds: [handle.id],
+          sourceRefs: [sourceRef],
           selectionHandleAssetCount: 60,
           selectionHandleSampleAssetIds: assetIds.slice(0, 25),
           resultSize: expect.any(Object),
@@ -2603,10 +2605,27 @@ describe(AgentToolService.name, () => {
     if (result.status === 'success') {
       expect(result.selectionHandle).toMatchObject({
         id: handle.id,
+        sourceRef,
         assetCount: 60,
         sampleAssetIds: assetIds.slice(0, 25),
         sourceToolCallId: handle.sourceToolCallId,
+        expiresAt: handle.expiresAt,
       });
+      expect(result.selectionHandle?.sourceRef).not.toBe(handle.id);
+      expect(result.selectionHandle?.sourceRef).toMatch(/^asset-source:search:/);
+      expect(toolCallRepository.transition).toHaveBeenCalledWith(
+        session.id,
+        handle.sourceToolCallId,
+        AgentToolCallStatus.Executing,
+        expect.objectContaining({
+          redactedResponseMetadata: expect.objectContaining({
+            selectionHandleIds: [handle.id],
+            sourceRefs: [sourceRef],
+            selectionHandleAssetCount: 60,
+            selectionHandleSampleAssetIds: assetIds.slice(0, 25),
+          }),
+        }),
+      );
       expect(result.assetIds).toEqual(assetIds.slice(0, 5));
       expect(JSON.stringify(result)).not.toContain(assetIds[59]);
     }
@@ -2782,6 +2801,10 @@ describe(AgentToolService.name, () => {
     expect(result.status).toBe('success');
     if (result.status === 'success') {
       expect(result.selectionHandle?.assetCount).toBe(500);
+      expect(result.selectionHandle?.sampleAssetIds).toEqual(assetIds.slice(0, 25));
+      const returnedHandle = result.selectionHandle;
+      expect(returnedHandle).toBeDefined();
+      expect(returnedHandle?.sourceRef).toBe(`asset-source:search:${returnedHandle?.id}`);
       expect(result.resultSize.truncated).toBe(true);
       expect(result.resultSize.omittedFields).toContain('assetIds');
     }
@@ -2855,11 +2878,74 @@ describe(AgentToolService.name, () => {
     expect(result.status).toBe('success');
     if (result.status === 'success') {
       expect(result.selectionHandle?.assetCount).toBe(60);
+      expect(result.selectionHandle?.sourceRef).toBe(`asset-source:search:${handle.id}`);
+      expect(result.selectionHandle?.expiresAt).toEqual(handle.expiresAt);
       expect(result.assetIds).toEqual(assetIds.slice(0, 3));
       expect(result.assets?.map((asset) => asset.id)).toEqual(assetIds.slice(0, 3));
       expect(JSON.stringify(result)).not.toContain(assetIds[59]);
     }
     vi.useRealTimers();
+  });
+
+  it('searchAssets summary detail preserves sourceRef when a selection handle is created', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const auth = AuthFactory.create();
+    const assetIds = Array.from({ length: 4 }, () => newUuid());
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const handle = {
+      id: newUuid(),
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds.slice(0, 4),
+      expiresAt: new Date(now.getTime() + 60 * 60_000),
+      createdAt: now,
+      updateId: newUuid(),
+    };
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({ items: assetIds.map((id) => ({ id })) as never, hasNextPage: false });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    selectionHandleRepository.create.mockResolvedValue(handle);
+    assetRepository.getAgentMetadataByIds.mockResolvedValue(assetIds.slice(0, 2).map((id) => makeMetadata(id)) as never);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: {},
+      detail: 'summary',
+      limit: 4,
+      createSelectionHandle: true,
+      sampleSize: 2,
+    });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.selectionHandle?.sourceRef).toBe(`asset-source:search:${handle.id}`);
+      expect(result.selectionHandle?.assetCount).toBe(4);
+      expect(result.assetIds).toEqual(assetIds.slice(0, 2));
+      expect(result.sample?.map((asset) => asset.id)).toEqual(assetIds.slice(0, 2));
+    }
+    vi.useRealTimers();
+  });
+
+  it('searchAssets omits sourceRef when no selection handle is requested', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({ items: assetIds.map((id) => ({ id })) as never, hasNextPage: false });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+
+    const result = await sut.searchAssets(auth, session.id, { filters: {}, detail: 'ids', limit: 2 });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.selectionHandle).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain('asset-source:search:');
+    }
   });
 
   it('returns field-selected summary samples and caps sampleSize to returned ids', async () => {
