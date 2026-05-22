@@ -550,6 +550,36 @@ const AgentProposeAddAssetsToAlbumFromSearchToolRequestSchema = z
   })
   .meta({ id: 'AgentProposeAddAssetsToAlbumFromSearchToolRequestDto' });
 
+const spaceName = z.string().trim().min(1).max(100);
+const spaceDescription = z.string().max(500).optional();
+
+const AgentProposeSpaceFromSearchToolRequestSchema = z
+  .strictObject({
+    summary: summary.optional(),
+    spaceName,
+    description: spaceDescription,
+    color: UserAvatarColorSchema.optional(),
+    assetSource: AgentAlbumWorkflowAssetSourceInputSchema,
+  })
+  .meta({ id: 'AgentProposeSpaceFromSearchToolRequestDto' });
+
+const AgentProposeAddAssetsToSpaceFromSearchToolRequestSchema = z
+  .strictObject({
+    summary: summary.optional(),
+    spaceId: uuid.optional(),
+    spaceName: spaceName.optional(),
+    assetSource: AgentAlbumWorkflowAssetSourceInputSchema,
+  })
+  .superRefine((value, ctx) => {
+    if (Boolean(value.spaceId) === Boolean(value.spaceName)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide exactly one of spaceId or spaceName',
+      });
+    }
+  })
+  .meta({ id: 'AgentProposeAddAssetsToSpaceFromSearchToolRequestDto' });
+
 const AgentOperationPlanParamsSchema = z
   .strictObject({
     id: uuid,
@@ -580,6 +610,8 @@ export const AgentOperationPlanToolRequestSchemas = {
   [AgentToolName.ProposeAlbumOperations]: AgentProposeAlbumOperationsSchema,
   [AgentToolName.ProposeAlbumFromSearch]: AgentProposeAlbumFromSearchToolRequestSchema,
   [AgentToolName.ProposeAddAssetsToAlbumFromSearch]: AgentProposeAddAssetsToAlbumFromSearchToolRequestSchema,
+  [AgentToolName.ProposeSpaceFromSearch]: AgentProposeSpaceFromSearchToolRequestSchema,
+  [AgentToolName.ProposeAddAssetsToSpaceFromSearch]: AgentProposeAddAssetsToSpaceFromSearchToolRequestSchema,
   [AgentToolName.ReviseProposedOperations]: AgentReviseProposedOperationsToolRequestSchema,
   [AgentToolName.SummarizePlan]: AgentSummarizePlanToolRequestSchema,
 } as const;
@@ -883,6 +915,12 @@ export class AgentProposeAlbumFromSearchToolRequestDto extends createZodDto(
 ) {}
 export class AgentProposeAddAssetsToAlbumFromSearchToolRequestDto extends createZodDto(
   AgentProposeAddAssetsToAlbumFromSearchToolRequestSchema,
+) {}
+export class AgentProposeSpaceFromSearchToolRequestDto extends createZodDto(
+  AgentProposeSpaceFromSearchToolRequestSchema,
+) {}
+export class AgentProposeAddAssetsToSpaceFromSearchToolRequestDto extends createZodDto(
+  AgentProposeAddAssetsToSpaceFromSearchToolRequestSchema,
 ) {}
 export class AgentReviseAlbumOperationsDto extends createZodDto(AgentReviseAlbumOperationsSchema) {}
 export class AgentOperationPlanParamsDto extends createZodDto(AgentOperationPlanParamsSchema) {}

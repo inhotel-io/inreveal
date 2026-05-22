@@ -1026,6 +1026,34 @@ describe(AgentMcpService.name, () => {
       ],
     },
     {
+      toolName: AgentToolName.ProposeSpaceFromSearch,
+      args: {
+        summary: 'Create family space.',
+        spaceName: 'Family South Africa',
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      },
+      serviceMethod: 'proposeSpaceFromSearch' as const,
+      expectedArguments: (authValue: AuthDto, sessionIdValue: string, args: Record<string, unknown>) => [
+        authValue,
+        sessionIdValue,
+        args,
+      ],
+    },
+    {
+      toolName: AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+      args: {
+        summary: 'Add South Africa photos.',
+        spaceId: factory.uuid(),
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      },
+      serviceMethod: 'proposeAddAssetsToSpaceFromSearch' as const,
+      expectedArguments: (authValue: AuthDto, sessionIdValue: string, args: Record<string, unknown>) => [
+        authValue,
+        sessionIdValue,
+        args,
+      ],
+    },
+    {
       toolName: AgentToolName.ReviseProposedOperations,
       args: {
         planId: factory.uuid(),
@@ -1101,6 +1129,24 @@ describe(AgentMcpService.name, () => {
         assetSource: { kind: 'search', filters: { country: 'South Africa' } },
       },
       serviceMethod: 'proposeAddAssetsToAlbumFromSearch' as const,
+    },
+    {
+      toolName: AgentToolName.ProposeSpaceFromSearch,
+      args: {
+        summary: 'Create family space.',
+        spaceName: 'Family South Africa',
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      },
+      serviceMethod: 'proposeSpaceFromSearch' as const,
+    },
+    {
+      toolName: AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+      args: {
+        summary: 'Add South Africa photos.',
+        spaceId: factory.uuid(),
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      },
+      serviceMethod: 'proposeAddAssetsToSpaceFromSearch' as const,
     },
     {
       toolName: AgentToolName.ReviseProposedOperations,
