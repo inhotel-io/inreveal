@@ -1,9 +1,4 @@
-import {
-  AgentToolCallStatus,
-  AgentToolDataClass,
-  AgentToolName,
-  type AgentToolCallResponseDto,
-} from '@immich/sdk';
+import { AgentToolCallStatus, AgentToolDataClass, AgentToolName, type AgentToolCallResponseDto } from '@immich/sdk';
 import {
   areAgentTimelineToolCallListsEquivalent,
   mergeAgentTimelineToolCalls,
