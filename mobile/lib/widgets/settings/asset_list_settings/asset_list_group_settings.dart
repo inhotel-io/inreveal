@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
+import 'package:immich_mobile/providers/infrastructure/setting.provider.dart';
 import 'package:immich_mobile/providers/app_settings.provider.dart';
 import 'package:immich_mobile/services/app_settings.service.dart';
 import 'package:immich_mobile/utils/hooks/app_settings_update_hook.dart';
@@ -19,8 +20,9 @@ class GroupSettings extends HookConsumerWidget {
     final groupBy = GroupAssetsBy.values[groupByIndex.value];
 
     Future<void> updateAppSettings(GroupAssetsBy groupBy) async {
-      await ref.watch(appSettingsServiceProvider).setSetting(AppSettingsEnum.groupAssetsBy, groupBy.index);
+      await ref.read(appSettingsServiceProvider).setSetting(AppSettingsEnum.groupAssetsBy, groupBy.index);
       ref.invalidate(appSettingsServiceProvider);
+      ref.invalidate(settingsProvider);
     }
 
     void changeGroupValue(GroupAssetsBy? value) {
