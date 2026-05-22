@@ -132,12 +132,7 @@ Also add the required imports and helper in `agent-runner.service.spec.ts`:
 
 ```ts
 import { AgentToolCall } from 'src/database';
-import {
-  AgentToolApprovalDecision,
-  AgentToolCallStatus,
-  AgentToolDataClass,
-  AgentToolName,
-} from 'src/enum';
+import { AgentToolApprovalDecision, AgentToolCallStatus, AgentToolDataClass, AgentToolName } from 'src/enum';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 ```
 
@@ -168,16 +163,14 @@ Add tests:
 1. `marks a completed assistant turn interrupted when a same-turn planning tool was denied`
 
 ```ts
-toolCallRepository.getBySessionId
-  .mockResolvedValueOnce([])
-  .mockResolvedValueOnce([
-    makeToolCall({
-      sessionId,
-      toolName: AgentToolName.ProposeAlbumOperations,
-      status: AgentToolCallStatus.Denied,
-      error: 'Selection handle is expired or not available for this session',
-    }),
-  ]);
+toolCallRepository.getBySessionId.mockResolvedValueOnce([]).mockResolvedValueOnce([
+  makeToolCall({
+    sessionId,
+    toolName: AgentToolName.ProposeAlbumOperations,
+    status: AgentToolCallStatus.Denied,
+    error: 'Selection handle is expired or not available for this session',
+  }),
+]);
 sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
 ```
 
