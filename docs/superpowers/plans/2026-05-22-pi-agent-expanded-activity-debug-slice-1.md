@@ -159,9 +159,12 @@ it('keeps a tool call row id stable across permission and execution lifecycle ch
     kind: 'metadata',
     status: 'completed',
   });
-  expect(
-    [pending, approved, executing, completed].map((model) => model.verboseItems[0].id),
-  ).toEqual(['tool-lifecycle-tool', 'tool-lifecycle-tool', 'tool-lifecycle-tool', 'tool-lifecycle-tool']);
+  expect([pending, approved, executing, completed].map((model) => model.verboseItems[0].id)).toEqual([
+    'tool-lifecycle-tool',
+    'tool-lifecycle-tool',
+    'tool-lifecycle-tool',
+    'tool-lifecycle-tool',
+  ]);
 });
 ```
 
@@ -184,9 +187,7 @@ it('keeps every repeated tool call as a separate expanded row while compact rows
   const model = buildModel({ toolCalls: repeatedSearches });
 
   expect(model.verboseItems).toHaveLength(50);
-  expect(model.verboseItems.map((item) => item.id)).toEqual(
-    repeatedSearches.map((toolCall) => `tool-${toolCall.id}`),
-  );
+  expect(model.verboseItems.map((item) => item.id)).toEqual(repeatedSearches.map((toolCall) => `tool-${toolCall.id}`));
   expect(model.items).toHaveLength(1);
   expect(model.items[0]).toMatchObject({
     id: 'tool-search-search-assets',
