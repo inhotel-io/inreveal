@@ -476,14 +476,6 @@
   }}
 >
   {#key person.id}
-    <TimelineRouteGroupingBar
-      grouping={timelineGrouping}
-      filters={timelineFilters}
-      resultCount={numberOfAssets}
-      hidden={assetMultiSelectManager.selectionActive || viewMode !== PersonPageViewMode.VIEW_ASSETS}
-      onGroupingChange={handleTimelineGroupingChange}
-      onClearTemporalFilter={clearPersonTemporalFilter}
-    />
     <Timeline
       enableRouting={true}
       {person}
@@ -500,70 +492,81 @@
       {#if viewMode === PersonPageViewMode.VIEW_ASSETS}
         <!-- Person information block -->
         <div
-          class="relative w-fit p-4 sm:px-6 pt-12"
+          class="relative p-4 sm:px-6 pt-12"
           use:clickOutside={{
             onOutclick: handleCancelEditName,
             onEscape: handleCancelEditName,
           }}
           use:listNavigation={suggestionContainer}
         >
-          <section class="flex w-64 sm:w-96 place-items-center border-black">
-            {#if isEditingName}
-              <EditNameInput
-                {person}
-                bind:suggestedPeople
-                name={person.name}
-                bind:isSearchingPeople
-                onChange={handleNameChange}
-                {thumbnailData}
-              />
-            {:else}
-              <div class="relative">
-                <button
-                  type="button"
-                  class="flex items-center justify-center"
-                  title={$t('edit_name')}
-                  onclick={() => (isEditingName = true)}
-                >
-                  <ImageThumbnail
-                    circle
-                    shadow
-                    url={thumbnailData}
-                    altText={person.name}
-                    widthStyle="3.375rem"
-                    heightStyle="3.375rem"
-                  />
-                  <div class="flex flex-col justify-center text-start px-4 text-primary">
-                    <p class="w-40 sm:w-72 font-medium truncate">{person.name || $t('add_a_name')}</p>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">
-                      {$t('assets_count', { values: { count: numberOfAssets } })}
-                    </p>
-                    {#if featureFlagsManager.value.peopleStatistics}
+          <div class="flex flex-wrap items-center gap-4" data-testid="person-timeline-header">
+            <section class="flex w-fit place-items-center border-black" data-testid="person-timeline-identity">
+              {#if isEditingName}
+                <EditNameInput
+                  {person}
+                  bind:suggestedPeople
+                  name={person.name}
+                  bind:isSearchingPeople
+                  onChange={handleNameChange}
+                  {thumbnailData}
+                />
+              {:else}
+                <div class="relative">
+                  <button
+                    type="button"
+                    class="flex items-center justify-center"
+                    title={$t('edit_name')}
+                    onclick={() => (isEditingName = true)}
+                  >
+                    <ImageThumbnail
+                      circle
+                      shadow
+                      url={thumbnailData}
+                      altText={person.name}
+                      widthStyle="3.375rem"
+                      heightStyle="3.375rem"
+                    />
+                    <div class="flex flex-col justify-center text-start px-4 text-primary">
+                      <p class="w-40 font-medium truncate">{person.name || $t('add_a_name')}</p>
                       <p class="text-sm text-gray-500 dark:text-gray-400">
-                        {$t('faces_count', { values: { count: data.statistics.faces } })}
+                        {$t('assets_count', { values: { count: numberOfAssets } })}
                       </p>
-                    {/if}
-                    {#if person.birthDate}
-                      <p class="text-sm text-gray-500 dark:text-gray-400">
-                        {$t('person_birthdate', {
-                          values: {
-                            date: DateTime.fromISO(person.birthDate).toLocaleString(
-                              {
-                                month: 'numeric',
-                                day: 'numeric',
-                                year: 'numeric',
-                              },
-                              { locale: $locale },
-                            ),
-                          },
-                        })}
-                      </p>
-                    {/if}
-                  </div>
-                </button>
-              </div>
-            {/if}
-          </section>
+                      {#if featureFlagsManager.value.peopleStatistics}
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                          {$t('faces_count', { values: { count: data.statistics.faces } })}
+                        </p>
+                      {/if}
+                      {#if person.birthDate}
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                          {$t('person_birthdate', {
+                            values: {
+                              date: DateTime.fromISO(person.birthDate).toLocaleString(
+                                {
+                                  month: 'numeric',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                },
+                                { locale: $locale },
+                              ),
+                            },
+                          })}
+                        </p>
+                      {/if}
+                    </div>
+                  </button>
+                </div>
+              {/if}
+            </section>
+            <TimelineRouteGroupingBar
+              grouping={timelineGrouping}
+              filters={timelineFilters}
+              resultCount={numberOfAssets}
+              hidden={assetMultiSelectManager.selectionActive || viewMode !== PersonPageViewMode.VIEW_ASSETS}
+              class="shrink-0 px-0 py-0"
+              onGroupingChange={handleTimelineGroupingChange}
+              onClearTemporalFilter={clearPersonTemporalFilter}
+            />
+          </div>
           {#if isEditingName}
             <div class="absolute w-64 sm:w-96 z-1">
               {#if isSearchingPeople}

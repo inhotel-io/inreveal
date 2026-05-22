@@ -779,6 +779,24 @@ describe('Spaces page search URL state', () => {
     });
   });
 
+  it('select-cover mode switches grouped timelines back to day mode so photos remain selectable', async () => {
+    renderPage();
+
+    await fireEvent.click(await screen.findByTestId('timeline-grouping-year'));
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"year"');
+    });
+
+    await fireEvent.click(screen.getByTestId('hero-set-cover-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+      expect(screen.getByTestId('timeline-mobile-grouping-props')).toHaveTextContent(
+        JSON.stringify({ grouping: 'day', hasHandler: true }),
+      );
+    });
+  });
+
   it('renders a desktop grouping control on the space browse timeline', async () => {
     mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
 
@@ -812,6 +830,15 @@ describe('Spaces page search URL state', () => {
       expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"grouping"');
     });
     expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument();
+  });
+
+  it('keeps active filters visually separated from grouped space timeline cards', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?country=Germany');
+
+    renderPage();
+
+    const activeFiltersArea = await screen.findByTestId('space-active-filters-bar-spacing');
+    expect(activeFiltersArea).toHaveClass('mb-4', 'shrink-0');
   });
 
   it('does not show the desktop grouping control during space search results', () => {

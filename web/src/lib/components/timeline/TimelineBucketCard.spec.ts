@@ -1,7 +1,7 @@
 import TimelineBucketCard from '$lib/components/timeline/TimelineBucketCard.svelte';
 import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
 import { AssetMediaSize } from '@immich/sdk';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { tick } from 'svelte';
 
@@ -64,6 +64,18 @@ describe('TimelineBucketCard component', () => {
     });
   });
 
+  it('keeps year labels in an always-visible overlay over representative images', () => {
+    render(TimelineBucketCard, {
+      bucket: makeBucket(),
+      onActivate: vi.fn(),
+    });
+
+    const overlay = screen.getByTestId('timeline-bucket-card-overlay');
+    expect(overlay).toHaveClass('absolute', 'inset-x-0', 'bottom-0');
+    expect(within(overlay).getByTestId('timeline-bucket-card-title')).toHaveTextContent('2015');
+    expect(within(overlay).getByTestId('timeline-bucket-card-count')).toHaveTextContent('438 photos');
+  });
+
   it('renders a month bucket with a locale-specific title', () => {
     render(TimelineBucketCard, {
       bucket: makeBucket({
@@ -79,6 +91,38 @@ describe('TimelineBucketCard component', () => {
     expect(screen.getByRole('button', { name: /Aug 2015, 23 photos/i })).toBeInTheDocument();
     expect(screen.getByText('Aug 2015')).toBeInTheDocument();
     expect(screen.getByText('23 photos')).toBeInTheDocument();
+  });
+
+  it('keeps month labels in the representative card overlay', () => {
+    render(TimelineBucketCard, {
+      bucket: makeBucket({
+        grouping: 'month',
+        date: { year: 2015, month: 8 },
+        timeBucket: '2015-08-01T00:00:00.000Z',
+        count: 23,
+      }),
+      locale: 'en-US',
+      onActivate: vi.fn(),
+    });
+
+    const overlay = screen.getByTestId('timeline-bucket-card-overlay');
+    expect(within(overlay).getByTestId('timeline-bucket-card-title')).toHaveTextContent('Aug 2015');
+    expect(within(overlay).getByTestId('timeline-bucket-card-count')).toHaveTextContent('23 photos');
+  });
+
+  it('crops portrait representatives inside fixed bucket geometry', () => {
+    render(TimelineBucketCard, {
+      bucket: makeBucket({ representativeRatio: 0.5 }),
+      onActivate: vi.fn(),
+    });
+
+    expect(screen.getByTestId('timeline-bucket-card')).toHaveClass('relative', 'h-full', 'min-h-56');
+    expect(screen.getByTestId('timeline-bucket-card-media')).toHaveClass('absolute', 'inset-0');
+    expect(screen.getByTestId('timeline-bucket-card-media')).not.toHaveAttribute(
+      'style',
+      expect.stringContaining('aspect-ratio'),
+    );
+    expect(screen.getByTestId('timeline-bucket-card-image')).toHaveClass('object-cover');
   });
 
   it('uses a singular count label for one photo', () => {
@@ -280,12 +324,17 @@ describe('TimelineBucketCard component', () => {
     expect(screen.queryByTestId('timeline-bucket-card-fallback')).not.toBeInTheDocument();
   });
 
-  it('keeps stable geometry when the representative ratio is missing', () => {
+  it('keeps stable full-height crop geometry when the representative ratio is missing', () => {
     render(TimelineBucketCard, {
       bucket: makeBucket({ representativeRatio: null }),
       onActivate: vi.fn(),
     });
 
-    expect(screen.getByTestId('timeline-bucket-card-media')).toHaveClass('aspect-[16/9]');
+    expect(screen.getByTestId('timeline-bucket-card')).toHaveClass('h-full', 'min-h-56');
+    expect(screen.getByTestId('timeline-bucket-card-media')).toHaveClass('absolute', 'inset-0');
+    expect(screen.getByTestId('timeline-bucket-card-media')).not.toHaveAttribute(
+      'style',
+      expect.stringContaining('aspect-ratio'),
+    );
   });
 });

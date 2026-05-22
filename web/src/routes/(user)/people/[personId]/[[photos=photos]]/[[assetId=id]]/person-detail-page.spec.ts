@@ -298,6 +298,23 @@ describe('Person detail page', () => {
     );
   });
 
+  it('places the person page grouping control inline with the person identity header', async () => {
+    renderPage();
+
+    const header = await screen.findByTestId('person-timeline-header');
+    const identity = screen.getByTestId('person-timeline-identity');
+    const control = await screen.findByTestId('timeline-desktop-grouping-control');
+    const bar = control.parentElement;
+    expect(header).toContainElement(identity);
+    expect(header).toContainElement(control);
+    expect(header).toHaveClass('gap-4');
+    expect(identity).toHaveClass('w-fit');
+    expect(identity).not.toHaveClass('sm:w-96');
+    expect(Array.from(header.children)).toEqual(expect.arrayContaining([identity, bar]));
+    expect(bar).toHaveClass('bg-transparent', 'dark:bg-transparent', 'px-0', 'py-0');
+    expect(bar).not.toHaveClass('bg-gray-50', 'dark:bg-gray-900', 'border-b');
+  });
+
   it('changes person timeline grouping while preserving person scope without temporal chips', async () => {
     renderPage();
 

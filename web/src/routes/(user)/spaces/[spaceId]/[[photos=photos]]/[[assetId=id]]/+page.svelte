@@ -527,6 +527,12 @@
     viewMode = 'view';
   };
 
+  const openSelectCover = () => {
+    timelineGrouping = 'day';
+    temporalAnchor = undefined;
+    viewMode = 'select-cover';
+  };
+
   const handleCloseSelectCover = () => {
     assetMultiSelectManager.clear();
     viewMode = 'view';
@@ -1049,16 +1055,18 @@
 
       <!-- Active filter chips -->
       {#if viewMode === 'view' && (getActiveFilterCount(filters) > 0 || committedSearchQuery.trim().length > 0)}
-        <ActiveFiltersBar
-          {filters}
-          resultCount={showSearchResults ? smartFacetTotal : totalAssetCount}
-          {personNames}
-          {tagNames}
-          onRemoveFilter={handleRemoveFilter}
-          onClearAll={handleClearAllFilters}
-          searchQuery={committedSearchQuery}
-          onClearSearch={clearSearch}
-        />
+        <div class="mb-4 shrink-0" data-testid="space-active-filters-bar-spacing">
+          <ActiveFiltersBar
+            {filters}
+            resultCount={showSearchResults ? smartFacetTotal : totalAssetCount}
+            {personNames}
+            {tagNames}
+            onRemoveFilter={handleRemoveFilter}
+            onClearAll={handleClearAllFilters}
+            searchQuery={committedSearchQuery}
+            onClearSearch={clearSearch}
+          />
+        </div>
       {/if}
 
       {#if showSearchResults}
@@ -1104,7 +1112,7 @@
                   assetCount={space.assetCount ?? 0}
                   currentRole={currentMember?.role}
                   gradientClass={spaceGradient}
-                  onSetCover={isEditor ? () => (viewMode = 'select-cover') : undefined}
+                  onSetCover={isEditor ? openSelectCover : undefined}
                   onReposition={isEditor && space.thumbnailAssetId ? handleReposition : undefined}
                   {repositioning}
                   onSavePosition={handleSavePosition}
@@ -1132,7 +1140,7 @@
                   gradientClass={spaceGradient}
                   onAddPhotos={() => (viewMode = 'select-assets')}
                   onInviteMembers={() => (panelOpen = true)}
-                  onSetCover={() => (viewMode = 'select-cover')}
+                  onSetCover={openSelectCover}
                 />
               {/if}
 

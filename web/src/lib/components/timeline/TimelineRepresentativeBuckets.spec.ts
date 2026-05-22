@@ -75,6 +75,19 @@ describe('TimelineRepresentativeBuckets', () => {
     expect(within(shell2015).getByTestId('timeline-bucket-card')).toHaveTextContent('2015');
   });
 
+  it('passes the fixed shell height through to each representative card', () => {
+    render(TimelineRepresentativeBuckets, {
+      grouping: 'year',
+      buckets: [bucket(2016, 120, { representativeRatio: 0.5 })],
+      visibleWindow: { top: 100, bottom: 600 },
+    });
+
+    const shell = screen.getByTestId('timeline-bucket-shell-2016-01-01');
+    const frame = within(shell).getByTestId('timeline-bucket-frame');
+    expect(frame).toHaveClass('h-full');
+    expect(within(frame).getByTestId('timeline-bucket-card')).toHaveClass('h-full');
+  });
+
   it('does not render a bucket outside the overscan window', () => {
     render(TimelineRepresentativeBuckets, {
       grouping: 'year',

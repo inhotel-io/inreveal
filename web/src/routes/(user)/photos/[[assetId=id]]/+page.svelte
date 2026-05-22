@@ -527,23 +527,25 @@
     <div class="flex flex-1 flex-col overflow-hidden pl-4">
       {#if !showSearchResults && !assetMultiSelectManager.selectionActive}
         <div
-          class="hidden shrink-0 items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2 dark:border-gray-700 dark:bg-gray-900 md:flex"
+          class="mb-2 hidden shrink-0 items-center gap-2 bg-transparent px-4 py-2 dark:bg-transparent md:flex"
           data-testid="timeline-desktop-grouping-control"
         >
           <TimelineGroupingControl grouping={timelineGrouping} onGroupingChange={handleTimelineGroupingChange} />
         </div>
       {/if}
       {#if hasActiveFilters}
-        <ActiveFiltersBar
-          {filters}
-          searchQuery={committedQuery}
-          onClearSearch={clearSearch}
-          resultCount={showSearchResults ? smartFacetTotal : totalAssetCount}
-          {personNames}
-          {tagNames}
-          onRemoveFilter={handleRemoveActiveFilter}
-          onClearAll={handleClearAllFilters}
-        />
+        <div class="mb-4 shrink-0" data-testid="photos-active-filters-bar-spacing">
+          <ActiveFiltersBar
+            {filters}
+            searchQuery={committedQuery}
+            onClearSearch={clearSearch}
+            resultCount={showSearchResults ? smartFacetTotal : totalAssetCount}
+            {personNames}
+            {tagNames}
+            onRemoveFilter={handleRemoveActiveFilter}
+            onClearAll={handleClearAllFilters}
+          />
+        </div>
       {/if}
       {#if showSearchResults}
         <SmartSearchResults

@@ -18,6 +18,19 @@ describe('TimelineRouteGroupingBar', () => {
     expect(screen.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('keeps the route grouping surface transparent instead of drawing a full-width toolbar', () => {
+    render(TimelineRouteGroupingBar, {
+      props: {
+        grouping: 'year',
+        onGroupingChange: () => {},
+      },
+    });
+
+    const bar = screen.getByTestId('timeline-desktop-grouping-control').parentElement;
+    expect(bar).toHaveClass('bg-transparent', 'dark:bg-transparent');
+    expect(bar).not.toHaveClass('bg-gray-50', 'dark:bg-gray-900', 'border-b');
+  });
+
   it('emits grouping changes without mutating temporal filters', async () => {
     const changes: TimelineGrouping[] = [];
     const filters: FilterState = { ...createFilterState(), selectedYear: 2024, selectedMonth: 3 };

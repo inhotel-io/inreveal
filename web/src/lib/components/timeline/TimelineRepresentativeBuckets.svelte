@@ -61,7 +61,7 @@
         style={`position: absolute; height: ${bucket.height}px; width: 100%; transform: translateY(${bucket.top}px);`}
         data-testid={`timeline-bucket-shell-${bucket.timeBucket}`}
       >
-        <div class="mx-auto max-w-5xl px-4">
+        <div class="mx-auto h-full max-w-5xl px-4" data-testid="timeline-bucket-frame">
           <TimelineBucketCard {bucket} {locale} loading={!bucket.isLoaded} {disabled} onActivate={activate} />
         </div>
       </div>

@@ -767,6 +767,26 @@ describe('Photos page search URL state', () => {
     expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('keeps the photos grouping control separated from representative buckets without a colored strip', async () => {
+    mockPage.url = new URL('https://gallery.test/photos');
+
+    renderPage();
+
+    const control = await screen.findByTestId('timeline-desktop-grouping-control');
+    expect(control).toHaveClass('mb-2', 'bg-transparent', 'dark:bg-transparent');
+    expect(control).not.toHaveClass('mb-6');
+    expect(control).not.toHaveClass('bg-gray-50', 'dark:bg-gray-900', 'border-b');
+  });
+
+  it('keeps active filters visually separated from grouped timeline cards', async () => {
+    mockPage.url = new URL('https://gallery.test/photos?country=Germany');
+
+    renderPage();
+
+    const activeFiltersArea = await screen.findByTestId('photos-active-filters-bar-spacing');
+    expect(activeFiltersArea).toHaveClass('mb-4', 'shrink-0');
+  });
+
   it('changes photos grouping from the desktop control without changing filters or URL params', async () => {
     mockPage.url = new URL('https://gallery.test/photos?people=person-1');
 

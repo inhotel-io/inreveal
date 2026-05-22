@@ -9,7 +9,6 @@
     count: number;
     representativeAssetId?: string | null;
     representativeThumbhash?: string | null;
-    representativeRatio?: number | null;
   };
 
   interface Props {
@@ -57,8 +56,6 @@
     });
   });
   let renderState: 'loading' | 'image' | 'fallback' = $derived(loading ? 'loading' : hasImage ? 'image' : 'fallback');
-  let mediaClass = $derived(bucket.representativeRatio ? '' : 'aspect-[16/9]');
-  let mediaStyle = $derived(bucket.representativeRatio ? `aspect-ratio: ${bucket.representativeRatio};` : undefined);
 
   const activate = () => {
     if (disabled) {
@@ -87,18 +84,14 @@
 
 <button
   type="button"
-  class="group block w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50 text-left transition hover:border-gray-300 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700 dark:hover:bg-gray-800"
+  class="group relative block h-full min-h-56 w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-200 text-left text-white shadow-sm transition hover:border-gray-300 hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-immich-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
   aria-label={`${title}, ${countLabel}`}
   {disabled}
   data-state={renderState}
   data-testid="timeline-bucket-card"
   onclick={activate}
 >
-  <div
-    class={`relative w-full overflow-hidden bg-gray-200 dark:bg-gray-800 ${mediaClass}`}
-    style={mediaStyle}
-    data-testid="timeline-bucket-card-media"
-  >
+  <div class="absolute inset-0 overflow-hidden bg-gray-200 dark:bg-gray-800" data-testid="timeline-bucket-card-media">
     {#if hasImage && imageUrl}
       {#if bucket.representativeThumbhash && !imageLoaded}
         <Thumbhash
@@ -113,7 +106,7 @@
           src={imageUrl}
           alt=""
           draggable="false"
-          class="h-full w-full object-cover"
+          class="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
           data-testid="timeline-bucket-card-image"
           data-image-key={imageKey}
           onload={handleImageLoad}
@@ -122,7 +115,7 @@
       {/key}
     {:else}
       <div
-        class="flex h-full min-h-24 w-full items-center justify-center bg-gray-200 px-3 text-center text-lg font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+        class="flex h-full w-full items-center justify-center bg-gray-200 px-3 text-center text-4xl font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300"
         data-testid="timeline-bucket-card-fallback"
       >
         {title}
@@ -130,8 +123,21 @@
     {/if}
   </div>
 
-  <div class="space-y-1 px-3 py-2">
-    <div class="truncate text-sm font-semibold text-gray-900 dark:text-white">{title}</div>
-    <div class="truncate text-xs text-gray-600 dark:text-gray-300">{countLabel}</div>
+  <div
+    class="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/80 via-black/45 to-transparent p-4 text-white"
+    data-testid="timeline-bucket-card-overlay"
+  >
+    <div
+      class="truncate text-2xl font-semibold leading-none tracking-normal sm:text-3xl"
+      data-testid="timeline-bucket-card-title"
+    >
+      {title}
+    </div>
+    <div
+      class="mt-2 inline-flex max-w-full rounded-full bg-white/90 px-2.5 py-1 text-xs font-medium text-gray-900 shadow-sm"
+      data-testid="timeline-bucket-card-count"
+    >
+      {countLabel}
+    </div>
   </div>
 </button>
