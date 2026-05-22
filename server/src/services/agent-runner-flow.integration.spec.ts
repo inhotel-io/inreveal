@@ -3,6 +3,11 @@ import { AgentMessage, AgentSession, AgentSessionActivityEvent, AgentToolCall } 
 import {
   AgentApprovalMode,
   AgentMessageRole,
+  AgentOperationPlanStatus,
+  AgentOperationRiskLevel,
+  AgentOperationStatus,
+  AgentOperationTargetKind,
+  AgentOperationType,
   AgentPermissionPreset,
   AgentProviderType,
   AgentSessionActivityEventKind,
@@ -18,7 +23,12 @@ import {
 } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AgentMessageRepository } from 'src/repositories/agent-message.repository';
+import {
+  AgentOperationPlanRepository,
+  AgentOperationPlanWithOperations,
+} from 'src/repositories/agent-operation-plan.repository';
 import { AgentRunnerRepository } from 'src/repositories/agent-runner.repository';
+import { AgentSelectionHandleRepository } from 'src/repositories/agent-selection-handle.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
@@ -29,13 +39,19 @@ import { MachineLearningRepository } from 'src/repositories/machine-learning.rep
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
+import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
+import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
+import { AgentMcpService } from 'src/services/agent-mcp.service';
 import { AgentMessageService } from 'src/services/agent-message.service';
+import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
+import { AgentMcpSuccessResponse, AgentMcpToolCallResult } from 'src/types/agent-mcp.types';
 import { AgentMessageContent } from 'src/types/agent-message.types';
+import { AgentAlbumOperationInput } from 'src/types/agent-operation.types';
 import { AgentAlbumSummary, AgentAssetMetadata, AgentSpaceSummary } from 'src/types/agent-tool.types';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { newAccessRepositoryMock } from 'test/repositories/access.repository.mock';
@@ -59,6 +75,18 @@ const waitFor = async (assertion: () => void | Promise<void>) => {
 
 const nonActivityEventTypes = (events: Array<{ event: Record<string, unknown> }>) =>
   events.map(({ event }) => event.type).filter((type) => type !== 'activity');
+
+const makeMcpToolCallRequest = (toolName: AgentToolName, args: unknown) => ({
+  jsonrpc: '2.0',
+  id: `${toolName}-call-${newUuid()}`,
+  method: 'tools/call',
+  params: { name: toolName, arguments: args },
+});
+
+const getMcpToolResult = (response: unknown): AgentMcpToolCallResult => {
+  expect(response).toMatchObject({ jsonrpc: '2.0', result: expect.any(Object) });
+  return (response as AgentMcpSuccessResponse).result as AgentMcpToolCallResult;
+};
 
 const normalizeRunnerActivityEvent = (event: Record<string, unknown>) => ({
   kind: event.kind,
@@ -350,11 +378,211 @@ class InMemoryAgentSessionActivityEventService {
   }
 }
 
+class InMemoryAgentSelectionHandleRepository {
+  handles: Array<{
+    id: string;
+    sessionId: string;
+    userId: string;
+    sourceToolCallId: string | null;
+    assetIds: string[];
+    assetCount: number;
+    sampleAssetIds: string[];
+    expiresAt: Date;
+    createdAt: Date;
+    updateId: string;
+  }> = [];
+
+  create = vi.fn(
+    (dto: {
+      sessionId: string;
+      userId: string;
+      sourceToolCallId: string | null;
+      assetIds: string[];
+      expiresAt: Date;
+    }) => {
+      const assetIds = [...new Set(dto.assetIds)];
+      const handle = {
+        id: newUuid(),
+        sessionId: dto.sessionId,
+        userId: dto.userId,
+        sourceToolCallId: dto.sourceToolCallId,
+        assetIds,
+        assetCount: assetIds.length,
+        sampleAssetIds: assetIds.slice(0, 25),
+        expiresAt: dto.expiresAt,
+        createdAt: now(),
+        updateId: newUuid(),
+      };
+      this.handles.push(handle);
+      return Promise.resolve(handle);
+    },
+  );
+
+  getValidForPlanning = vi.fn((dto: { id: string; sessionId: string; userId: string; now: Date }) =>
+    Promise.resolve(
+      this.handles.find(
+        (handle) =>
+          handle.id === dto.id &&
+          handle.sessionId === dto.sessionId &&
+          handle.userId === dto.userId &&
+          handle.expiresAt > dto.now,
+      ),
+    ),
+  );
+
+  listValidForRecovery = vi.fn((dto: { sessionId: string; userId: string; now: Date; limit: number }) =>
+    Promise.resolve(
+      this.handles
+        .filter(
+          (handle) => handle.sessionId === dto.sessionId && handle.userId === dto.userId && handle.expiresAt > dto.now,
+        )
+        .toSorted(
+          (first, second) =>
+            second.createdAt.getTime() - first.createdAt.getTime() || second.id.localeCompare(first.id),
+        )
+        .slice(0, dto.limit)
+        .map(({ id, assetCount, sourceToolCallId, createdAt, expiresAt }) => ({
+          id,
+          assetCount,
+          sourceToolCallId,
+          createdAt,
+          expiresAt,
+        })),
+    ),
+  );
+
+  getForRecovery = vi.fn((dto: { id: string; sessionId: string; userId: string }) =>
+    Promise.resolve(
+      this.handles
+        .filter((handle) => handle.id === dto.id && handle.sessionId === dto.sessionId && handle.userId === dto.userId)
+        .map(({ id, assetCount, sourceToolCallId, createdAt, expiresAt }) => ({
+          id,
+          assetCount,
+          sourceToolCallId,
+          createdAt,
+          expiresAt,
+        }))[0],
+    ),
+  );
+}
+
+class InMemoryAgentOperationPlanRepository {
+  plans: AgentOperationPlanWithOperations[] = [];
+
+  constructor(private readonly sessions: InMemoryAgentSessionRepository) {}
+
+  createReplacementRevision = vi.fn(
+    (
+      sessionId: string,
+      dto: {
+        plan: { sessionId: string; status: AgentOperationPlanStatus; summary: string };
+        operations: AgentAlbumOperationInput[];
+      },
+    ) => {
+      const session = this.sessions.sessions.get(sessionId);
+      if (
+        session &&
+        [
+          AgentSessionStatus.Applying,
+          AgentSessionStatus.Completed,
+          AgentSessionStatus.Cancelled,
+          AgentSessionStatus.Interrupted,
+          AgentSessionStatus.Failed,
+        ].includes(session.status)
+      ) {
+        return;
+      }
+
+      for (const plan of this.plans) {
+        if (plan.sessionId === sessionId && plan.status === AgentOperationPlanStatus.Proposed) {
+          plan.status = AgentOperationPlanStatus.Superseded;
+        }
+      }
+
+      const revision = this.plans.filter((plan) => plan.sessionId === sessionId).length + 1;
+      const createdAt = now();
+      const createOperationIdByTemporaryTargetId = new Map<string, string>();
+      const operations = dto.operations.map((operation, position) => {
+        const created = {
+          id: newUuid(),
+          planId: '',
+          type: operation.type,
+          position,
+          summary: operation.summary,
+          targetKind: operation.targetKind,
+          targetId: operation.targetId ?? null,
+          temporaryTargetId: operation.temporaryTargetId ?? null,
+          assetIds: operation.assetIds ?? [],
+          payload: operation.payload ?? {},
+          dependencyIds: [] as string[],
+          riskLevel: operation.riskLevel,
+          enabled: operation.enabled,
+          status: AgentOperationStatus.Proposed,
+          result: null,
+          error: null,
+          createdAt,
+          updatedAt: createdAt,
+          updateId: newUuid(),
+        };
+        if (created.type === AgentOperationType.AlbumCreate && created.temporaryTargetId) {
+          createOperationIdByTemporaryTargetId.set(created.temporaryTargetId, created.id);
+        }
+        return created;
+      });
+      const planId = newUuid();
+      for (const operation of operations) {
+        operation.planId = planId;
+        if (
+          operation.type !== AgentOperationType.AlbumCreate &&
+          operation.targetKind === AgentOperationTargetKind.NewAlbum &&
+          operation.temporaryTargetId
+        ) {
+          const dependencyId = createOperationIdByTemporaryTargetId.get(operation.temporaryTargetId);
+          operation.dependencyIds = dependencyId ? [dependencyId] : [];
+        }
+      }
+
+      const plan: AgentOperationPlanWithOperations = {
+        id: planId,
+        sessionId,
+        revision,
+        status: dto.plan.status,
+        summary: dto.plan.summary,
+        createdAt,
+        updatedAt: createdAt,
+        operations,
+      };
+      this.plans.push(plan);
+      return plan;
+    },
+  );
+
+  getByIdForSession = vi.fn((sessionId: string, id: string) =>
+    Promise.resolve(this.plans.find((plan) => plan.sessionId === sessionId && plan.id === id)),
+  );
+
+  getCurrentBySessionId = vi.fn((sessionId: string) =>
+    Promise.resolve(
+      this.plans
+        .filter((plan) => plan.sessionId === sessionId && plan.status === AgentOperationPlanStatus.Proposed)
+        .toSorted((first, second) => second.revision - first.revision)[0],
+    ),
+  );
+
+  getAppliedBySessionId = vi.fn((sessionId: string) =>
+    Promise.resolve(
+      this.plans.filter((plan) => plan.sessionId === sessionId && plan.status === AgentOperationPlanStatus.Applied),
+    ),
+  );
+}
+
 const setup = () => {
   const auth = AuthFactory.create();
   const sessions = new InMemoryAgentSessionRepository();
   const messages = new InMemoryAgentMessageRepository();
   const toolCalls = new InMemoryAgentToolCallRepository();
+  const selectionHandles = new InMemoryAgentSelectionHandleRepository();
+  const operationPlans = new InMemoryAgentOperationPlanRepository(sessions);
   const websocketEvents: Array<{ userId: string; event: Record<string, unknown> }> = [];
   const runnerResumeBodies: unknown[] = [];
 
@@ -510,8 +738,25 @@ const setup = () => {
     getAgentMetadataByIds: vi.fn((assetIds: string[]) => Promise.resolve(assetIds.map((assetId) => metadata(assetId)))),
   };
   const searchRepository = {
-    searchMetadata: vi.fn(() => Promise.resolve({ items: [] as Array<{ id: string }>, hasNextPage: false })),
-    searchSmart: vi.fn(() => Promise.resolve({ items: [] as Array<{ id: string }>, hasNextPage: false })),
+    searchMetadata: vi.fn((_pagination?: unknown, _options?: unknown) =>
+      Promise.resolve({ items: [] as Array<{ id: string }>, hasNextPage: false }),
+    ),
+    searchSmart: vi.fn((_pagination?: unknown, _options?: unknown) =>
+      Promise.resolve({ items: [] as Array<{ id: string }>, hasNextPage: false }),
+    ),
+    getFilterSuggestions: vi.fn(() =>
+      Promise.resolve({
+        people: [] as Array<{ id: string; name: string }>,
+        tags: [] as Array<{ id: string; value: string }>,
+        countries: [] as string[],
+        cameraMakes: [] as string[],
+        ratings: [] as number[],
+        mediaTypes: [] as string[],
+        hasUnnamedPeople: false,
+      }),
+    ),
+    getCameraModels: vi.fn(() => Promise.resolve([])),
+    getCameraLensModels: vi.fn(() => Promise.resolve([])),
   };
   const machineLearningRepository = { encodeText: vi.fn(() => Promise.resolve('[1, 2, 3]')) };
   const systemMetadataRepository = {
@@ -532,12 +777,33 @@ const setup = () => {
     albumRepository as unknown as AlbumRepository,
     sharedSpaceRepository as unknown as SharedSpaceRepository,
     sessions as unknown as AgentSessionRepository,
-    { create: vi.fn() } as never,
+    selectionHandles as unknown as AgentSelectionHandleRepository,
     toolCalls as unknown as AgentToolCallRepository,
     runnerService,
     { search: vi.fn(() => Promise.resolve([])) } as never,
   );
   toolServiceContainer.current = toolService;
+  const mcpToolContractService = new AgentMcpToolContractService();
+  const operationPlanService = new AgentOperationPlanService(
+    accessRepository as unknown as AccessRepository,
+    assetRepository as unknown as AssetRepository,
+    {} as never,
+    sessions as unknown as AgentSessionRepository,
+    selectionHandles as unknown as AgentSelectionHandleRepository,
+    operationPlans as unknown as AgentOperationPlanRepository,
+    toolCalls as unknown as AgentToolCallRepository,
+    websocketRepository as unknown as WebsocketRepository,
+    {} as never,
+    {} as never,
+    {} as never,
+    activityService as never,
+  );
+  const mcpService = new AgentMcpService(
+    new AgentMcpToolRegistryService(mcpToolContractService),
+    mcpToolContractService,
+    toolService,
+    operationPlanService,
+  );
 
   return {
     auth,
@@ -563,12 +829,220 @@ const setup = () => {
     },
     toolCalls,
     toolService,
+    mcpService,
+    operationPlans,
+    operationPlanService,
+    selectionHandles,
     getActivityHistory: (sessionId: string) => activityService.getActivityHistory(sessionId),
     websocketEvents,
   };
 };
 
 describe('Pi agent runner flow harness', () => {
+  it('recovers from an example selection handle and creates a plan with resolved people filters', async () => {
+    const harness = setup();
+    const personAlphaId = newUuid();
+    const personBetaId = newUuid();
+    const assetIds = [newUuid(), newUuid(), newUuid()];
+    const albumTemporaryTargetId = 'south-africa-people-album';
+    const planSummary = 'Create South Africa people album.';
+    const albumName = 'South Africa with Person Alpha and Person Beta (Jan 2026)';
+    const exampleHandleId = '00000000-0000-4000-8000-000000000333';
+
+    harness.searchRepository.getFilterSuggestions = vi.fn(() =>
+      Promise.resolve({
+        people: [
+          { id: personAlphaId, name: 'Person Alpha' },
+          { id: personBetaId, name: 'Person Beta' },
+        ],
+        tags: [],
+        countries: [],
+        cameraMakes: [],
+        ratings: [],
+        mediaTypes: [],
+        hasUnnamedPeople: false,
+      }),
+    );
+    harness.searchRepository.getCameraModels = vi.fn(() => Promise.resolve([]));
+    harness.searchRepository.getCameraLensModels = vi.fn(() => Promise.resolve([]));
+    harness.accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([personAlphaId, personBetaId]));
+    harness.accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    harness.accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    harness.assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    harness.searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: false,
+    });
+
+    let realHandleId: string | undefined;
+    const proposeOperations = (assetSelectionHandleId: string): AgentAlbumOperationInput[] => [
+      {
+        type: AgentOperationType.AlbumCreate,
+        summary: 'Create the destination album.',
+        targetKind: AgentOperationTargetKind.NewAlbum,
+        temporaryTargetId: albumTemporaryTargetId,
+        payload: { albumName, description: 'January 2026 South Africa photos with selected people.' },
+        riskLevel: AgentOperationRiskLevel.Low,
+        enabled: true,
+      },
+      {
+        type: AgentOperationType.AlbumAddAssets,
+        summary: 'Add the matching photos.',
+        targetKind: AgentOperationTargetKind.NewAlbum,
+        temporaryTargetId: albumTemporaryTargetId,
+        assetSelectionHandleId,
+        payload: {},
+        riskLevel: AgentOperationRiskLevel.Medium,
+        enabled: true,
+      },
+    ];
+
+    harness.configureRunnerMessage(async function* ({ body }) {
+      const mcpService = harness.mcpService as AgentMcpService;
+      const resolved = getMcpToolResult(
+        await mcpService.handle(
+          harness.auth,
+          body.gallerySessionId,
+          makeMcpToolCallRequest(AgentToolName.ResolveAssetSearchFilters, {
+            people: ['Person Alpha', 'Person Beta'],
+          }),
+        ),
+      );
+      expect(resolved.isError).not.toBe(true);
+      const resolvedContent = resolved.structuredContent as {
+        resolvedFilters: { personIds: string[] };
+      };
+      expect(resolvedContent.resolvedFilters.personIds).toEqual([personAlphaId, personBetaId]);
+
+      const search = getMcpToolResult(
+        await mcpService.handle(
+          harness.auth,
+          body.gallerySessionId,
+          makeMcpToolCallRequest(AgentToolName.SearchAssets, {
+            filters: {
+              ...resolvedContent.resolvedFilters,
+              country: 'South Africa',
+              takenAfter: '2026-01-01T00:00:00.000Z',
+              takenBefore: '2026-01-31T23:59:59.999Z',
+            },
+            detail: 'ids',
+            limit: 50,
+            createSelectionHandle: true,
+            sampleSize: 2,
+          }),
+        ),
+      );
+      expect(search.isError).not.toBe(true);
+      const searchContent = search.structuredContent as {
+        assetIds: string[];
+        selectionHandle: { id: string; assetCount: number; sampleAssetIds: string[] };
+      };
+      realHandleId = searchContent.selectionHandle.id;
+      expect(realHandleId).toEqual(expect.any(String));
+      expect(searchContent.assetIds).toEqual(assetIds.slice(0, 2));
+      expect(searchContent.selectionHandle.assetCount).toBe(3);
+
+      const denied = getMcpToolResult(
+        await mcpService.handle(
+          harness.auth,
+          body.gallerySessionId,
+          makeMcpToolCallRequest(AgentToolName.ProposeAlbumOperations, {
+            summary: planSummary,
+            operations: proposeOperations(exampleHandleId),
+          }),
+        ),
+      );
+      expect(denied.isError).toBe(true);
+      const deniedContent = denied.structuredContent as {
+        recovery: {
+          kind: string;
+          looksLikeExamplePlaceholder: boolean;
+          availableSelectionHandles: Array<{ id: string }>;
+        };
+      };
+      expect(deniedContent.recovery.kind).toBe('invalid-selection-handle');
+      expect(deniedContent.recovery.looksLikeExamplePlaceholder).toBe(true);
+      expect(deniedContent.recovery.availableSelectionHandles[0].id).toBe(realHandleId);
+      expect(harness.operationPlans.plans).toHaveLength(0);
+
+      const created = getMcpToolResult(
+        await mcpService.handle(
+          harness.auth,
+          body.gallerySessionId,
+          makeMcpToolCallRequest(AgentToolName.ProposeAlbumOperations, {
+            summary: planSummary,
+            operations: proposeOperations(realHandleId!),
+          }),
+        ),
+      );
+      expect(created.isError).not.toBe(true);
+      expect((created.structuredContent as { plan: { id: string } }).plan.id).toEqual(expect.any(String));
+      expect(harness.operationPlans.plans).toHaveLength(1);
+
+      yield {
+        type: 'assistant-message-completed',
+        sessionId: body.gallerySessionId,
+        runnerSessionId: 'runner-session-1',
+        providerMessageId: 'provider-message-plan',
+        content: { blocks: [{ type: 'text', text: 'I prepared the album plan.' }] },
+      };
+    });
+
+    const session = await harness.sessionService.create(harness.auth, {
+      providerCredentialId: '00000000-0000-4000-8000-000000000201',
+      model: 'gpt-5.1',
+      permissionPreset: AgentPermissionPreset.VisualOrganizer,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      initialContext: { entrypoint: 'assistant-page' },
+    });
+
+    await harness.messageService.appendUserMessage(harness.auth, session.id, {
+      content: {
+        blocks: [{ type: 'text', text: 'Create an album for Person Alpha and Person Beta in South Africa.' }],
+      },
+    });
+
+    await waitFor(async () => {
+      const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
+      expect(reloadedSession?.status).toBe(AgentSessionStatus.WaitingForPlanReview);
+    });
+
+    const searchOptions = harness.searchRepository.searchMetadata.mock.calls[0]?.[1];
+    expect(harness.searchRepository.searchMetadata).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(searchOptions)).toContain(personAlphaId);
+    expect(JSON.stringify(searchOptions)).toContain(personBetaId);
+    expect(searchOptions).toEqual(
+      expect.objectContaining({
+        country: 'South Africa',
+        takenAfter: new Date('2026-01-01T00:00:00.000Z'),
+        takenBefore: new Date('2026-01-31T23:59:59.999Z'),
+      }),
+    );
+
+    expect(harness.operationPlans.plans).toHaveLength(1);
+    const [plan] = harness.operationPlans.plans;
+    expect(plan.status).toBe(AgentOperationPlanStatus.Proposed);
+    expect(plan.summary).toBe(planSummary);
+    expect(plan.operations.map((operation) => operation.temporaryTargetId)).toEqual([
+      albumTemporaryTargetId,
+      albumTemporaryTargetId,
+    ]);
+    expect(plan.operations[1]).toEqual(
+      expect.objectContaining({
+        type: AgentOperationType.AlbumAddAssets,
+        assetIds,
+      }),
+    );
+    expect(plan.operations[1]).not.toHaveProperty('assetSelectionHandleId');
+
+    const proposeToolCalls = harness.toolCalls.toolCalls.filter(
+      (toolCall) => toolCall.toolName === AgentToolName.ProposeAlbumOperations,
+    );
+    expect(proposeToolCalls.filter((toolCall) => toolCall.status === AgentToolCallStatus.Denied)).toHaveLength(1);
+    expect(proposeToolCalls.filter((toolCall) => toolCall.status === AgentToolCallStatus.Completed)).toHaveLength(1);
+    expect(harness.websocketEvents.map(({ event }) => event.type)).toContain('operation-plan-ready');
+  });
+
   it('returns truncated metadata results with omitted fields without leaking inaccessible assets', async () => {
     const harness = setup();
     const visibleAssetIds = [newUuid(), newUuid(), newUuid()];
