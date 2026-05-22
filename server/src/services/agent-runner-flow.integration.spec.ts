@@ -788,6 +788,7 @@ const setup = () => {
       albumRepository as unknown as AlbumRepository,
       sharedSpaceRepository as unknown as SharedSpaceRepository,
     ),
+    albumRepository as unknown as AlbumRepository,
     operationPlans as unknown as AgentOperationPlanRepository,
     toolCalls as unknown as AgentToolCallRepository,
     websocketRepository as unknown as WebsocketRepository,

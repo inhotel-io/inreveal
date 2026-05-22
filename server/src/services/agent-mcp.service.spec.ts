@@ -998,6 +998,34 @@ describe(AgentMcpService.name, () => {
       ],
     },
     {
+      toolName: AgentToolName.ProposeAlbumFromSearch,
+      args: {
+        summary: 'Create South Africa album.',
+        albumName: 'South Africa',
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      },
+      serviceMethod: 'proposeAlbumFromSearch' as const,
+      expectedArguments: (authValue: AuthDto, sessionIdValue: string, args: Record<string, unknown>) => [
+        authValue,
+        sessionIdValue,
+        { ...args, description: '' },
+      ],
+    },
+    {
+      toolName: AgentToolName.ProposeAddAssetsToAlbumFromSearch,
+      args: {
+        summary: 'Add South Africa photos.',
+        albumId: factory.uuid(),
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      },
+      serviceMethod: 'proposeAddAssetsToAlbumFromSearch' as const,
+      expectedArguments: (authValue: AuthDto, sessionIdValue: string, args: Record<string, unknown>) => [
+        authValue,
+        sessionIdValue,
+        args,
+      ],
+    },
+    {
       toolName: AgentToolName.ReviseProposedOperations,
       args: {
         planId: factory.uuid(),
@@ -1055,6 +1083,24 @@ describe(AgentMcpService.name, () => {
       toolName: AgentToolName.ProposeAlbumOperations,
       args: makePlanningRequest(),
       serviceMethod: 'proposeAlbumOperations' as const,
+    },
+    {
+      toolName: AgentToolName.ProposeAlbumFromSearch,
+      args: {
+        summary: 'Create South Africa album.',
+        albumName: 'South Africa',
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      },
+      serviceMethod: 'proposeAlbumFromSearch' as const,
+    },
+    {
+      toolName: AgentToolName.ProposeAddAssetsToAlbumFromSearch,
+      args: {
+        summary: 'Add South Africa photos.',
+        albumId: factory.uuid(),
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      },
+      serviceMethod: 'proposeAddAssetsToAlbumFromSearch' as const,
     },
     {
       toolName: AgentToolName.ReviseProposedOperations,

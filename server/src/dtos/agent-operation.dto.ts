@@ -517,6 +517,39 @@ const AgentReviseAlbumOperationsSchema = operationRequest('AgentReviseAlbumOpera
   feedback: z.string().trim().min(1).max(2000).optional(),
 });
 
+const albumName = z.string().trim().min(1).max(200);
+const albumDescription = z.string().trim().max(1000).optional().default('');
+
+const AgentAlbumWorkflowAssetSourceInputSchema = agentOperationPlanningAssetSourceInput.meta({
+  id: 'AgentAlbumWorkflowAssetSourceInput',
+});
+
+const AgentProposeAlbumFromSearchToolRequestSchema = z
+  .strictObject({
+    summary: summary.optional(),
+    albumName,
+    description: albumDescription,
+    assetSource: AgentAlbumWorkflowAssetSourceInputSchema,
+  })
+  .meta({ id: 'AgentProposeAlbumFromSearchToolRequestDto' });
+
+const AgentProposeAddAssetsToAlbumFromSearchToolRequestSchema = z
+  .strictObject({
+    summary: summary.optional(),
+    albumId: uuid.optional(),
+    albumName: albumName.optional(),
+    assetSource: AgentAlbumWorkflowAssetSourceInputSchema,
+  })
+  .superRefine((value, ctx) => {
+    if (Boolean(value.albumId) === Boolean(value.albumName)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide exactly one of albumId or albumName',
+      });
+    }
+  })
+  .meta({ id: 'AgentProposeAddAssetsToAlbumFromSearchToolRequestDto' });
+
 const AgentOperationPlanParamsSchema = z
   .strictObject({
     id: uuid,
@@ -545,6 +578,8 @@ const AgentSummarizePlanToolRequestSchema = AgentOperationPlanSummaryRequestSche
 
 export const AgentOperationPlanToolRequestSchemas = {
   [AgentToolName.ProposeAlbumOperations]: AgentProposeAlbumOperationsSchema,
+  [AgentToolName.ProposeAlbumFromSearch]: AgentProposeAlbumFromSearchToolRequestSchema,
+  [AgentToolName.ProposeAddAssetsToAlbumFromSearch]: AgentProposeAddAssetsToAlbumFromSearchToolRequestSchema,
   [AgentToolName.ReviseProposedOperations]: AgentReviseProposedOperationsToolRequestSchema,
   [AgentToolName.SummarizePlan]: AgentSummarizePlanToolRequestSchema,
 } as const;
@@ -843,6 +878,12 @@ function addUniqueTemporaryTargetId(
 }
 
 export class AgentProposeAlbumOperationsDto extends createZodDto(AgentProposeAlbumOperationsSchema) {}
+export class AgentProposeAlbumFromSearchToolRequestDto extends createZodDto(
+  AgentProposeAlbumFromSearchToolRequestSchema,
+) {}
+export class AgentProposeAddAssetsToAlbumFromSearchToolRequestDto extends createZodDto(
+  AgentProposeAddAssetsToAlbumFromSearchToolRequestSchema,
+) {}
 export class AgentReviseAlbumOperationsDto extends createZodDto(AgentReviseAlbumOperationsSchema) {}
 export class AgentOperationPlanParamsDto extends createZodDto(AgentOperationPlanParamsSchema) {}
 export class AgentOperationPlanSummaryRequestDto extends createZodDto(AgentOperationPlanSummaryRequestSchema) {}
