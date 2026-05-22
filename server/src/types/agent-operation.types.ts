@@ -5,6 +5,7 @@ import {
   AgentOperationTargetKind,
   AgentOperationType,
 } from 'src/enum';
+import { AgentAssetSourceInput } from 'src/types/agent-asset-source.types';
 
 export type AgentOperationPayload = Record<string, unknown>;
 
@@ -32,6 +33,7 @@ export type AgentAlbumOperationInput = {
   targetKind: AgentOperationTargetKind;
   targetId?: string;
   temporaryTargetId?: string;
+  assetSource?: AgentAssetSourceInput;
   assetIds?: string[];
   assetSelectionHandleId?: string;
   payload?: AgentOperationPayload;
