@@ -145,8 +145,18 @@ class BackgroundUploadService {
   }
 
   /// Enqueue tasks to the background upload queue
-  Future<List<bool>> enqueueTasks(List<UploadTask> tasks) {
-    return _uploadRepository.enqueueBackgroundAll(tasks);
+  Future<List<bool>> enqueueTasks(List<UploadTask> tasks) async {
+    final results = await _uploadRepository.enqueueBackgroundAll(tasks);
+
+    if (CurrentPlatform.isIOS) {
+      for (var i = 0; i < tasks.length && i < results.length; i++) {
+        if (results[i]) {
+          await _uploadRepository.updateNotification(tasks[i], TaskStatus.enqueued);
+        }
+      }
+    }
+
+    return results;
   }
 
   /// Get a list of tasks that are ENQUEUED or RUNNING

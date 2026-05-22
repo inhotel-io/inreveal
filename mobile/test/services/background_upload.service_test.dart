@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:background_downloader/background_downloader.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:immich_mobile/constants/constants.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/domain/services/store.service.dart';
@@ -73,6 +75,72 @@ void main() {
 
   tearDown(() {
     sut.dispose();
+  });
+
+  group('enqueueTasks', () {
+    test('posts the configured running notification on iOS after successful enqueue', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final task = UploadTask(
+        taskId: 'asset-1',
+        url: 'http://test-server.com/assets',
+        filename: 'asset.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final tasks = [task];
+
+      when(() => mockUploadRepository.enqueueBackgroundAll(tasks)).thenAnswer((_) async => [true]);
+      when(() => mockUploadRepository.updateNotification(task, TaskStatus.enqueued)).thenAnswer((_) async {});
+
+      final result = await sut.enqueueTasks(tasks);
+
+      expect(result, [true]);
+      verify(() => mockUploadRepository.updateNotification(task, TaskStatus.enqueued)).called(1);
+    });
+
+    test('does not post a notification for failed iOS enqueue', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final task = UploadTask(
+        taskId: 'asset-1',
+        url: 'http://test-server.com/assets',
+        filename: 'asset.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final tasks = [task];
+
+      when(() => mockUploadRepository.enqueueBackgroundAll(tasks)).thenAnswer((_) async => [false]);
+
+      final result = await sut.enqueueTasks(tasks);
+
+      expect(result, [false]);
+      verifyNever(() => mockUploadRepository.updateNotification(task, TaskStatus.enqueued));
+    });
+
+    test('does not post early enqueue notifications on Android', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final task = UploadTask(
+        taskId: 'asset-1',
+        url: 'http://test-server.com/assets',
+        filename: 'asset.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final tasks = [task];
+
+      when(() => mockUploadRepository.enqueueBackgroundAll(tasks)).thenAnswer((_) async => [true]);
+
+      final result = await sut.enqueueTasks(tasks);
+
+      expect(result, [true]);
+      verifyNever(() => mockUploadRepository.updateNotification(task, TaskStatus.enqueued));
+    });
   });
 
   group('getUploadTask', () {
