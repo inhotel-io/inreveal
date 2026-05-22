@@ -42,13 +42,25 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
+import {
+  invalidSelectionHandleError,
+  isAgentMcpRecoverableToolError,
+} from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { TagService } from 'src/services/tag.service';
 import { AgentAlbumOperationInput, AgentOperationResult } from 'src/types/agent-operation.types';
-import { AgentToolOperationPlanRequestMetadata } from 'src/types/agent-tool.types';
+import {
+  AgentSelectionHandleRecoveryHint,
+  AgentSelectionHandleRecoveryMetadata,
+  AgentToolOperationPlanRequestMetadata,
+  AgentToolOperationPlanResponseMetadata,
+} from 'src/types/agent-tool.types';
+
+const selectionHandleRecoveryLimit = 5;
+const knownExampleSelectionHandleIds = new Set(['00000000-0000-4000-8000-000000000333']);
 
 type PlanningRequest = {
   summary?: string;
@@ -64,11 +76,19 @@ type PlanningSelectionAudit = Array<{
   sampleAssetIds: string[];
 }>;
 
+type SelectionHandleRecoveryRow = {
+  id: string;
+  assetCount: number;
+  sourceToolCallId: string | null;
+  createdAt: Date;
+  expiresAt: Date;
+};
+
 type PlanningAuditResult = {
   status: AgentToolCallStatus.Completed | AgentToolCallStatus.Denied | AgentToolCallStatus.Failed;
   approvalDecision: AgentToolApprovalDecision;
   responseSummary: string | null;
-  redactedResponseMetadata: { planId: string; operationIds: string[] } | null;
+  redactedResponseMetadata: AgentToolOperationPlanResponseMetadata | null;
   error: string | null;
 };
 
@@ -784,7 +804,7 @@ export class AgentOperationPlanService {
       now: new Date(),
     });
     if (!handle) {
-      throw new BadRequestException('Selection handle is expired or not available for this session');
+      throw await this.createInvalidSelectionHandleError(auth, session, id);
     }
 
     selectionAudit.push({
@@ -794,6 +814,70 @@ export class AgentOperationPlanService {
     });
 
     return handle.assetIds;
+  }
+
+  private async createInvalidSelectionHandleError(auth: AuthDto, session: AgentSession, id: string) {
+    const now = new Date();
+    const [availableSelectionHandles, attemptedHandle] = await Promise.all([
+      this.selectionHandleRepository.listValidForRecovery({
+        sessionId: session.id,
+        userId: auth.user.id,
+        now,
+        limit: selectionHandleRecoveryLimit,
+      }),
+      this.selectionHandleRepository.getForRecovery({
+        id,
+        sessionId: session.id,
+        userId: auth.user.id,
+      }),
+    ]);
+    const expiredSelectionHandle =
+      attemptedHandle && attemptedHandle.expiresAt <= now
+        ? this.toSelectionHandleRecoveryHint(attemptedHandle)
+        : undefined;
+    const recovery: AgentSelectionHandleRecoveryMetadata = {
+      kind: 'invalid-selection-handle',
+      attemptedSelectionHandleId: id,
+      looksLikeExamplePlaceholder: knownExampleSelectionHandleIds.has(id),
+      availableSelectionHandles: availableSelectionHandles.map((handle) => this.toSelectionHandleRecoveryHint(handle)),
+      ...(expiredSelectionHandle ? { expiredSelectionHandle } : {}),
+      instruction: 'Retry proposeAlbumOperations with a valid same-session selection handle, or rerun searchAssets.',
+    };
+    const error = 'Selection handle is expired or not available for this session';
+    const hint = this.invalidSelectionHandleHint(recovery);
+
+    return invalidSelectionHandleError({
+      toolName: AgentToolName.ProposeAlbumOperations,
+      error,
+      hint,
+      recovery,
+    });
+  }
+
+  private toSelectionHandleRecoveryHint(handle: SelectionHandleRecoveryRow): AgentSelectionHandleRecoveryHint {
+    return {
+      id: handle.id,
+      assetCount: handle.assetCount,
+      sourceToolCallId: handle.sourceToolCallId,
+      createdAt: handle.createdAt.toISOString(),
+      expiresAt: handle.expiresAt.toISOString(),
+    };
+  }
+
+  private invalidSelectionHandleHint(recovery: AgentSelectionHandleRecoveryMetadata) {
+    if (recovery.expiredSelectionHandle) {
+      return 'The attempted selection handle is expired. Rerun searchAssets with createSelectionHandle true, then retry proposeAlbumOperations with the returned selectionHandle.id.';
+    }
+
+    if (recovery.availableSelectionHandles.length === 1) {
+      return `Retry proposeAlbumOperations with the exact handle ${recovery.availableSelectionHandles[0].id} if that is the intended search selection.`;
+    }
+
+    if (recovery.availableSelectionHandles.length > 1) {
+      return 'Choose the intended same-session handle from availableSelectionHandles and retry proposeAlbumOperations with that exact id.';
+    }
+
+    return 'Rerun searchAssets with createSelectionHandle true, then retry proposeAlbumOperations with the returned selectionHandle.id.';
   }
 
   private validateWriteScope(session: AgentSession, type: AgentOperationType) {
@@ -2152,18 +2236,28 @@ export class AgentOperationPlanService {
         : AgentToolCallStatus.Failed;
     const approvalDecision =
       status === AgentToolCallStatus.Denied ? AgentToolApprovalDecision.Denied : AgentToolApprovalDecision.Approved;
+    const redactedResponseMetadata =
+      isAgentMcpRecoverableToolError(error) && this.isInvalidSelectionHandleRecoveryMetadata(error.content.recovery)
+        ? { selectionHandleRecovery: error.content.recovery }
+        : null;
 
     try {
       await this.createPlanningAudit(session, toolName, request, {
         status,
         approvalDecision,
         responseSummary: null,
-        redactedResponseMetadata: null,
+        redactedResponseMetadata,
         error: message,
       });
     } catch {
       // Preserve the original preparation error.
     }
+  }
+
+  private isInvalidSelectionHandleRecoveryMetadata(
+    recovery: Record<string, unknown>,
+  ): recovery is AgentSelectionHandleRecoveryMetadata {
+    return recovery.kind === 'invalid-selection-handle';
   }
 
   private redactRequestMetadata(

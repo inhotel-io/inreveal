@@ -16,6 +16,7 @@ import type {
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
 import type { AuthDto } from 'src/dtos/auth.dto';
 import { AgentToolName } from 'src/enum';
+import { isAgentMcpRecoverableToolError } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
@@ -24,6 +25,7 @@ import type {
   AgentMcpErrorResponse,
   AgentMcpHandleResponse,
   AgentMcpInitializeResult,
+  AgentMcpRecoverableToolErrorContent,
   AgentMcpRequestId,
   AgentMcpSuccessResponse,
   AgentMcpToolCallResult,
@@ -180,7 +182,11 @@ export class AgentMcpService {
 
     try {
       return this.success(id, this.toolResult(await delegate(parseResult.data)));
-    } catch {
+    } catch (error) {
+      if (isAgentMcpRecoverableToolError(error)) {
+        return this.success(id, this.recoverableToolErrorResult(error.content));
+      }
+
       return this.error(id, -32_603, 'Internal error');
     }
   }
@@ -284,7 +290,8 @@ export class AgentMcpService {
     if (content?.status === 'error') {
       const error = this.nonEmptyString(content.error) ?? 'Tool error';
       const firstIssue = this.firstValidationIssueText(content);
-      return this.compactToolText(firstIssue ? `${error}: ${firstIssue}` : error);
+      const hint = this.nonEmptyString(content.hint);
+      return this.compactToolText(firstIssue ? `${error}: ${firstIssue}` : hint ? `${error}: ${hint}` : error);
     }
 
     return 'Tool result returned.';
@@ -358,6 +365,13 @@ export class AgentMcpService {
 
   private validationErrorResult(toolName: AgentToolName, error: z.ZodError): AgentMcpToolCallResult {
     return this.validationIssuesResult(toolName, this.normalizeValidationIssues(error.issues), 'tool-arguments');
+  }
+
+  private recoverableToolErrorResult(content: AgentMcpRecoverableToolErrorContent): AgentMcpToolCallResult {
+    return {
+      ...this.toolResult(content),
+      isError: true,
+    };
   }
 
   private validationCorrectionFor(

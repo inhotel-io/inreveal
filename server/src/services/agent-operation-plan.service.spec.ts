@@ -35,6 +35,7 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
+import { AgentMcpRecoverableToolError } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AlbumService } from 'src/services/album.service';
@@ -488,6 +489,8 @@ describe(AgentOperationPlanService.name, () => {
     });
     sessionRepository.getById.mockResolvedValue(session);
     selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue([]);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(void 0);
     toolCallRepository.create.mockResolvedValue(executingToolCall);
 
     await expect(
@@ -521,6 +524,282 @@ describe(AgentOperationPlanService.name, () => {
         }),
       }),
     );
+  });
+
+  it('denies generated-example selection handles with recoverable metadata and no plan persistence', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const attemptedSelectionHandleId = '00000000-0000-4000-8000-000000000333';
+    const validHandle = {
+      id: newUuid(),
+      assetCount: 250,
+      sourceToolCallId: newUuid(),
+      createdAt: new Date('2026-05-22T07:00:00.000Z'),
+      expiresAt: new Date('2026-05-22T08:00:00.000Z'),
+    };
+    const expectedValidHandle = {
+      ...validHandle,
+      createdAt: validHandle.createdAt.toISOString(),
+      expiresAt: validHandle.expiresAt.toISOString(),
+    };
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue([validHandle]);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(void 0);
+
+    let thrown: unknown;
+    try {
+      await sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Add selected photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSelectionHandleId: attemptedSelectionHandleId,
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const error = thrown as AgentMcpRecoverableToolError;
+    expect(error.content).toEqual(
+      expect.objectContaining({
+        status: 'error',
+        error: 'Selection handle is expired or not available for this session',
+        retryable: true,
+        hint: expect.stringContaining(`Retry proposeAlbumOperations with the exact handle ${validHandle.id}`),
+        recovery: expect.objectContaining({
+          kind: 'invalid-selection-handle',
+          attemptedSelectionHandleId,
+          looksLikeExamplePlaceholder: true,
+          availableSelectionHandles: [expectedValidHandle],
+        }),
+      }),
+    );
+    expect(JSON.stringify(error.content.recovery)).not.toContain('assetIds');
+    expect(JSON.stringify(error.content.recovery)).not.toContain('sampleAssetIds');
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error: 'Selection handle is expired or not available for this session',
+        redactedResponseMetadata: {
+          selectionHandleRecovery: error.content.recovery,
+        },
+      }),
+    );
+  });
+
+  it('lists multiple valid same-session handles without choosing one', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const attemptedSelectionHandleId = newUuid();
+    const handles = [
+      {
+        id: newUuid(),
+        assetCount: 20,
+        sourceToolCallId: null,
+        createdAt: new Date('2026-05-22T07:05:00.000Z'),
+        expiresAt: new Date('2026-05-22T08:05:00.000Z'),
+      },
+      {
+        id: newUuid(),
+        assetCount: 10,
+        sourceToolCallId: null,
+        createdAt: new Date('2026-05-22T07:00:00.000Z'),
+        expiresAt: new Date('2026-05-22T08:00:00.000Z'),
+      },
+    ];
+    const expectedHandles = handles.map((handle) => ({
+      ...handle,
+      createdAt: handle.createdAt.toISOString(),
+      expiresAt: handle.expiresAt.toISOString(),
+    }));
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue(handles);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(void 0);
+
+    const thrown = await sut
+      .proposeAlbumOperations(auth, session.id, {
+        summary: 'Add selected photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSelectionHandleId: attemptedSelectionHandleId,
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const recoverableError = thrown as AgentMcpRecoverableToolError;
+    expect(recoverableError).toMatchObject({
+      content: {
+        hint: expect.stringContaining('Choose the intended same-session handle'),
+        recovery: expect.objectContaining({ availableSelectionHandles: expectedHandles }),
+      },
+    });
+
+    const responseMetadata = toolCallRepository.create.mock.calls.at(-1)?.[0].redactedResponseMetadata;
+    expect(responseMetadata).toEqual({
+      selectionHandleRecovery: expect.objectContaining({ availableSelectionHandles: expectedHandles }),
+    });
+    if (!responseMetadata || !('selectionHandleRecovery' in responseMetadata)) {
+      throw new Error('Expected selection handle recovery response metadata');
+    }
+    expect(responseMetadata.selectionHandleRecovery.availableSelectionHandles).toEqual(expectedHandles);
+    expect(recoverableError.content.hint).not.toContain(
+      `Retry proposeAlbumOperations with the exact handle ${handles[0].id}`,
+    );
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('instructs the model to rerun searchAssets when no valid handles are available', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue([]);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(void 0);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Add selected photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSelectionHandleId: newUuid(),
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      content: {
+        hint: expect.stringContaining('Rerun searchAssets with createSelectionHandle true'),
+        recovery: expect.objectContaining({ availableSelectionHandles: [] }),
+      },
+    });
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('reports an attempted same-session expired handle without suggesting it as usable', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const attemptedSelectionHandleId = newUuid();
+    const expiredHandle = {
+      id: attemptedSelectionHandleId,
+      assetCount: 12,
+      sourceToolCallId: null,
+      createdAt: new Date('2026-05-21T06:00:00.000Z'),
+      expiresAt: new Date('2026-05-21T07:00:00.000Z'),
+    };
+    const expectedExpiredHandle = {
+      ...expiredHandle,
+      createdAt: expiredHandle.createdAt.toISOString(),
+      expiresAt: expiredHandle.expiresAt.toISOString(),
+    };
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue([]);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(expiredHandle);
+
+    const thrown = await sut
+      .proposeAlbumOperations(auth, session.id, {
+        summary: 'Add selected photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSelectionHandleId: attemptedSelectionHandleId,
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const error = thrown as AgentMcpRecoverableToolError;
+    expect(error).toMatchObject({
+      content: {
+        hint: expect.stringContaining('expired'),
+        recovery: expect.objectContaining({
+          availableSelectionHandles: [],
+          expiredSelectionHandle: expectedExpiredHandle,
+        }),
+      },
+    });
+    expect(error.content.hint).toContain('Rerun searchAssets');
+    expect(error.content.hint).not.toContain(`Retry proposeAlbumOperations with the exact handle ${expiredHandle.id}`);
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('does not expose cross-session handles in recovery metadata', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const attemptedSelectionHandleId = newUuid();
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue([]);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(void 0);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Add selected photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSelectionHandleId: attemptedSelectionHandleId,
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      content: {
+        recovery: expect.objectContaining({ availableSelectionHandles: [] }),
+      },
+    });
+    expect(selectionHandleRepository.listValidForRecovery).toHaveBeenCalledWith({
+      sessionId: session.id,
+      userId: auth.user.id,
+      now: expect.any(Date),
+      limit: 5,
+    });
+    expect(selectionHandleRepository.getForRecovery).toHaveBeenCalledWith({
+      id: attemptedSelectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+    });
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
   });
 
   it('rejects empty selection handles before plan persistence', async () => {

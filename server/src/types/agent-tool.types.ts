@@ -135,10 +135,31 @@ export type AgentToolOperationPlanRequestMetadata = {
   }>;
 };
 
-export type AgentToolOperationPlanResponseMetadata = {
-  planId: string | null;
-  operationIds: string[];
+export type AgentSelectionHandleRecoveryHint = {
+  id: string;
+  assetCount: number;
+  sourceToolCallId: string | null;
+  createdAt: string;
+  expiresAt: string;
 };
+
+export type AgentSelectionHandleRecoveryMetadata = {
+  kind: 'invalid-selection-handle';
+  attemptedSelectionHandleId: string;
+  looksLikeExamplePlaceholder: boolean;
+  availableSelectionHandles: AgentSelectionHandleRecoveryHint[];
+  expiredSelectionHandle?: AgentSelectionHandleRecoveryHint;
+  instruction: string;
+};
+
+export type AgentToolOperationPlanResponseMetadata =
+  | {
+      planId: string | null;
+      operationIds: string[];
+    }
+  | {
+      selectionHandleRecovery: AgentSelectionHandleRecoveryMetadata;
+    };
 
 export type AgentSearchAssetsFilters = {
   takenAfter?: Date;
