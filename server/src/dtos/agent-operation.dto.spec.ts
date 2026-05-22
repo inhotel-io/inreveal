@@ -146,19 +146,25 @@ describe('Agent operation DTOs', () => {
       }
     });
 
-    it('rejects assetSource kinds that operation planning does not support yet', () => {
+    it('accepts a declarative search assetSource for asset-bearing operations', () => {
       const result = parsePlan({
         summary: 'Add searched photos directly',
         operations: [
           {
             type: AgentOperationType.AlbumAddAssets,
-            summary: 'Add selected photos',
+            summary: 'Add matching photos',
             targetKind: AgentOperationTargetKind.ExistingAlbum,
             targetId: factory.uuid(),
             assetSource: {
               kind: 'search',
-              query: 'beach',
-              limit: 10,
+              mode: 'metadata',
+              filters: {
+                country: 'South Africa',
+                takenAfter: '2026-01-01T00:00:00.000Z',
+                takenBefore: '2026-02-01T00:00:00.000Z',
+                people: { match: 'any', names: ['Pierre', 'Aurelia'] },
+              },
+              materialization: 'all-matches-with-limit',
             },
             riskLevel: AgentOperationRiskLevel.Medium,
             enabled: true,
@@ -167,8 +173,43 @@ describe('Agent operation DTOs', () => {
         ],
       });
 
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.operations[0]).toMatchObject({
+          assetSource: {
+            kind: 'search',
+            mode: 'metadata',
+            filters: {
+              country: 'South Africa',
+              people: { match: 'any', names: ['Pierre', 'Aurelia'] },
+            },
+          },
+        });
+      }
+    });
+
+    it.each([
+      ['selectionHandle', { kind: 'selectionHandle', selectionHandleId: factory.uuid() }],
+      ['explicitAssets', { kind: 'explicitAssets', assetIds: [factory.uuid()] }],
+    ])('rejects %s assetSource in operation planning until that source kind is supported here', (_label, assetSource) => {
+      const result = parsePlan({
+        summary: 'Unsupported source kind',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: factory.uuid(),
+            assetSource,
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+            payload: {},
+          },
+        ],
+      });
+
       expect(result.success).toBe(false);
-      expectIssue(result, ['operations', 0, 'assetSource', 'kind'], 'expected "previousSearch"');
+      expectIssue(result, ['operations', 0, 'assetSource', 'kind'], 'Invalid input');
     });
 
     it('rejects asset-bearing operations that provide assetSource and assetIds', () => {
