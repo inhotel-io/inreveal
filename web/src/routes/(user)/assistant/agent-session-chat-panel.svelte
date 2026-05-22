@@ -114,6 +114,7 @@
   let isSending = $state(false);
   let isAssistantActive = $state(false);
   let errorMessage = $state<string | null>(null);
+  let messagesLoaded = $state(false);
   let streamingText = $state('');
   let busyFrameIndex = $state(0);
   let expandedToolCallIds = $state<Record<string, boolean>>({});
@@ -199,6 +200,7 @@
       activityTurns,
       coveredToolCallIds,
       activityVisibilityMode,
+      messagesLoaded || messages.length > 0,
     ),
   );
   const terminalStatuses = new Set<AgentSessionStatus>([
@@ -221,6 +223,7 @@
     timelineActivityTurns: ReturnType<typeof buildAgentSessionActivityTurns>,
     timelineCoveredToolCallIds: Set<string>,
     timelineActivityVisibilityMode: AgentActivityVisibilityMode,
+    renderUncoveredToolCalls: boolean,
   ): ChatTimelineItem[] {
     const typePriority: Record<ChatTimelineItem['type'], number> = {
       message: 0,
@@ -246,14 +249,16 @@
               occurredAt: turn.occurredAt,
               model: turn.model,
             }))),
-      ...timelineToolCalls
-        .filter((toolCall) => !timelineCoveredToolCallIds.has(toolCall.id))
-        .map((toolCall) => ({
-          type: 'tool-call' as const,
-          id: `tool-call-${toolCall.id}`,
-          occurredAt: toolCall.startedAt,
-          toolCall,
-        })),
+      ...(renderUncoveredToolCalls
+        ? timelineToolCalls
+            .filter((toolCall) => !timelineCoveredToolCallIds.has(toolCall.id))
+            .map((toolCall) => ({
+              type: 'tool-call' as const,
+              id: `tool-call-${toolCall.id}`,
+              occurredAt: toolCall.startedAt,
+              toolCall,
+            }))
+        : []),
       ...dedupeAppliedPlans(timelineAppliedPlans).map((plan) => ({
         type: 'applied-plan' as const,
         id: `applied-plan-${plan.id}-${plan.revision}`,
@@ -604,6 +609,8 @@
     } catch (error) {
       errorMessage = $t('assistant_message_load_error');
       handleError(error, errorMessage);
+    } finally {
+      messagesLoaded = true;
     }
   };
 
@@ -758,6 +765,7 @@
 
     const nextMessages = mergeMessages(messages, seedMessages);
     messages = nextMessages;
+    messagesLoaded = true;
     publishDiscoveredTitle(nextMessages);
   });
 

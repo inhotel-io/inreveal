@@ -109,6 +109,9 @@ export type AgentToolResponseIdsMetadata = {
   assetIds?: string[];
   albumIds?: string[];
   spaceIds?: string[];
+  tagIds?: string[];
+  personIds?: string[];
+  spacePersonIds?: string[];
   userIds?: string[];
   selectionHandleIds?: string[];
   selectionHandleAssetCount?: number;
