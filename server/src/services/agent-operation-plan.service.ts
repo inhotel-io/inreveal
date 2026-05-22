@@ -44,6 +44,7 @@ import { AssetRepository } from 'src/repositories/asset.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import {
   invalidSelectionHandleError,
+  invalidSourceRefError,
   isAgentMcpRecoverableToolError,
   wrongIdDomainError,
 } from 'src/services/agent-mcp-recoverable-tool-error';
@@ -52,17 +53,26 @@ import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { TagService } from 'src/services/tag.service';
-import { AgentIdDomain } from 'src/types/agent-asset-source.types';
+import {
+  AgentAssetSourceInput,
+  AgentIdDomain,
+  AgentSearchSourceRef,
+  validateAgentAssetSourceMechanismCount,
+  validateNoAgentAssetSourceMechanisms,
+} from 'src/types/agent-asset-source.types';
 import { AgentAlbumOperationInput, AgentOperationResult } from 'src/types/agent-operation.types';
 import {
+  AgentSourceRefRecoveryMetadata,
   AgentSelectionHandleRecoveryHint,
   AgentSelectionHandleRecoveryMetadata,
   AgentToolOperationPlanRequestMetadata,
   AgentToolOperationPlanResponseMetadata,
   AgentWrongIdDomainRecoveryMetadata,
 } from 'src/types/agent-tool.types';
+import z from 'zod';
 
 const selectionHandleRecoveryLimit = 5;
+const searchSourceRefPrefix = 'asset-source:search:';
 const knownExampleSelectionHandleIds = new Set(['00000000-0000-4000-8000-000000000333']);
 const knownAgentIdDomains = new Set<AgentIdDomain>([
   'asset',
@@ -87,6 +97,8 @@ type PlanningSelectionAudit = Array<{
   id: string;
   assetCount: number;
   sampleAssetIds: string[];
+  sourceKind?: 'selectionHandle' | 'previousSearch';
+  sourceRef?: AgentSearchSourceRef;
 }>;
 
 type SelectionHandleRecoveryRow = {
@@ -200,7 +212,7 @@ export class AgentOperationPlanService {
 
     let prepared: { operations: AgentAlbumOperationInput[]; selectionAudit: PlanningSelectionAudit };
     try {
-      prepared = await this.prepareOperations(auth, session, dto.operations);
+      prepared = await this.prepareOperations(auth, session, AgentToolName.ProposeAlbumOperations, dto.operations);
     } catch (error) {
       await this.tryCreatePlanningPreparationDeniedAudit(session, AgentToolName.ProposeAlbumOperations, dto, error);
       throw error;
@@ -243,7 +255,7 @@ export class AgentOperationPlanService {
 
     let prepared: { operations: AgentAlbumOperationInput[]; selectionAudit: PlanningSelectionAudit };
     try {
-      prepared = await this.prepareOperations(auth, session, dto.operations);
+      prepared = await this.prepareOperations(auth, session, AgentToolName.ReviseProposedOperations, dto.operations);
     } catch (error) {
       await this.tryCreatePlanningPreparationDeniedAudit(
         session,
@@ -712,7 +724,12 @@ export class AgentOperationPlanService {
     return writableIds;
   }
 
-  private async prepareOperations(auth: AuthDto, session: AgentSession, operations: AgentAlbumOperationInput[]) {
+  private async prepareOperations(
+    auth: AuthDto,
+    session: AgentSession,
+    toolName: AgentToolName,
+    operations: AgentAlbumOperationInput[],
+  ) {
     const createTemporaryTargetIds = new Set<string>();
     const createSpaceTemporaryTargetIds = new Set<string>();
     const allCreateSpaceTemporaryTargetIds = new Set(
@@ -783,9 +800,7 @@ export class AgentOperationPlanService {
         );
       }
 
-      const materializedAssetIds = operation.assetSelectionHandleId
-        ? await this.resolveSelectionHandleAssetIds(auth, session, operation.assetSelectionHandleId, selectionAudit)
-        : (operation.assetIds ?? []);
+      const materializedAssetIds = await this.resolveOperationAssetIds(auth, session, toolName, operation, selectionAudit);
       this.validateMaterializedAssetSelection(operation, materializedAssetIds);
 
       preparedOperations.push({
@@ -795,6 +810,7 @@ export class AgentOperationPlanService {
         targetId: operation.targetId,
         temporaryTargetId: operation.temporaryTargetId,
         assetIds: materializedAssetIds,
+        assetSource: undefined,
         assetSelectionHandleId: undefined,
         payload: operation.payload ?? {},
         dependencyIds: operation.dependencyIds ?? [],
@@ -806,8 +822,93 @@ export class AgentOperationPlanService {
     return { operations: preparedOperations, selectionAudit };
   }
 
+  private async resolveOperationAssetIds(
+    auth: AuthDto,
+    session: AgentSession,
+    toolName: AgentToolName,
+    operation: AgentAlbumOperationInput,
+    selectionAudit: PlanningSelectionAudit,
+  ) {
+    if (!this.isAssetBearingOperation(operation.type)) {
+      const validation = validateNoAgentAssetSourceMechanisms(operation);
+      if (!validation.valid) {
+        throw new BadRequestException(validation.message);
+      }
+
+      return operation.assetIds ?? [];
+    }
+
+    const validation = validateAgentAssetSourceMechanismCount(operation);
+    if (!validation.valid) {
+      throw new BadRequestException(validation.message);
+    }
+
+    if (operation.assetSource) {
+      return this.resolveAssetSourceAssetIds(auth, session, toolName, operation.assetSource, selectionAudit);
+    }
+
+    if (operation.assetSelectionHandleId) {
+      return this.resolveSelectionHandleAssetIds(auth, session, operation.assetSelectionHandleId, selectionAudit);
+    }
+
+    return operation.assetIds ?? [];
+  }
+
+  private isAssetBearingOperation(type: AgentOperationType) {
+    return (
+      type === AgentOperationType.AlbumAddAssets ||
+      type === AgentOperationType.AlbumRemoveAssets ||
+      type === AgentOperationType.AlbumSetCover ||
+      type === AgentOperationType.SpaceAddAssets ||
+      type === AgentOperationType.SpaceRemoveAssets ||
+      type === AgentOperationType.AssetRotate ||
+      type === AgentOperationType.AssetSetFavorite ||
+      type === AgentOperationType.AssetSetArchive ||
+      type === AgentOperationType.AssetAddTag ||
+      type === AgentOperationType.AssetRemoveTag
+    );
+  }
+
+  private async resolveAssetSourceAssetIds(
+    auth: AuthDto,
+    session: AgentSession,
+    toolName: AgentToolName,
+    assetSource: AgentAssetSourceInput,
+    selectionAudit: PlanningSelectionAudit,
+  ) {
+    if (assetSource.kind !== 'previousSearch') {
+      throw new BadRequestException('Only assetSource.previousSearch is supported for operation planning');
+    }
+
+    const selectionHandleId = await this.selectionHandleIdFromSearchSourceRef(auth, session, toolName, assetSource.sourceRef);
+
+    return this.resolveSelectionHandleAssetIds(auth, session, selectionHandleId, selectionAudit, {
+      toolName,
+      sourceKind: 'previousSearch',
+      sourceRef: assetSource.sourceRef,
+    });
+  }
+
+  private async selectionHandleIdFromSearchSourceRef(
+    auth: AuthDto,
+    session: AgentSession,
+    toolName: AgentToolName,
+    sourceRef: string,
+  ) {
+    if (!sourceRef.startsWith(searchSourceRefPrefix)) {
+      throw await this.createInvalidSourceRefError(auth, session, toolName, sourceRef);
+    }
+
+    const id = sourceRef.slice(searchSourceRefPrefix.length);
+    if (!z.uuidv4().safeParse(id).success) {
+      throw await this.createInvalidSourceRefError(auth, session, toolName, sourceRef);
+    }
+
+    return id;
+  }
+
   private validateMaterializedAssetSelection(operation: AgentAlbumOperationInput, assetIds: string[]) {
-    if (!operation.assetSelectionHandleId) {
+    if (!operation.assetSelectionHandleId && !operation.assetSource) {
       return;
     }
 
@@ -835,6 +936,7 @@ export class AgentOperationPlanService {
     session: AgentSession,
     id: string,
     selectionAudit: PlanningSelectionAudit,
+    source?: { toolName: AgentToolName; sourceKind: 'previousSearch'; sourceRef: AgentSearchSourceRef },
   ) {
     const handle = await this.selectionHandleRepository.getValidForPlanning({
       id,
@@ -843,6 +945,9 @@ export class AgentOperationPlanService {
       now: new Date(),
     });
     if (!handle) {
+      if (source?.sourceRef) {
+        throw await this.createInvalidSourceRefError(auth, session, source.toolName, source.sourceRef);
+      }
       throw await this.createInvalidSelectionHandleError(auth, session, id);
     }
 
@@ -850,9 +955,49 @@ export class AgentOperationPlanService {
       id: handle.id,
       assetCount: handle.assetCount,
       sampleAssetIds: handle.sampleAssetIds,
+      ...(source ? { sourceKind: source.sourceKind, sourceRef: source.sourceRef } : {}),
     });
 
     return handle.assetIds;
+  }
+
+  private async createInvalidSourceRefError(
+    auth: AuthDto,
+    session: AgentSession,
+    toolName: AgentToolName,
+    sourceRef: string,
+  ) {
+    const instruction =
+      'Rerun searchAssets with createSelectionHandle true, then retry with the returned selectionHandle.sourceRef.';
+    const recovery: AgentSourceRefRecoveryMetadata = {
+      kind: 'invalid-source-ref',
+      attemptedSourceRef: sourceRef,
+      expectedSourceKind: 'search',
+      instruction,
+    };
+
+    const id = sourceRef.startsWith(searchSourceRefPrefix) ? sourceRef.slice(searchSourceRefPrefix.length) : null;
+    const now = new Date();
+    if (id && z.uuidv4().safeParse(id).success) {
+      const attemptedHandle = await this.selectionHandleRepository.getForRecovery({
+        id,
+        sessionId: session.id,
+        userId: auth.user.id,
+      });
+      if (attemptedHandle && attemptedHandle.expiresAt <= now) {
+        recovery.expiredSourceRef = sourceRef;
+      }
+    }
+
+    const error = 'Source ref is expired or not available for this session';
+    return invalidSourceRefError({
+      toolName,
+      error,
+      hint: recovery.expiredSourceRef
+        ? `The attempted source ref is expired. ${instruction}`
+        : recovery.instruction,
+      recovery,
+    });
   }
 
   private async createInvalidSelectionHandleError(auth: AuthDto, session: AgentSession, id: string) {
@@ -2347,9 +2492,36 @@ export class AgentOperationPlanService {
       return { selectionHandleRecovery: recovery };
     }
 
+    const sourceRefRecovery = this.sanitizeInvalidSourceRefRecoveryMetadata(recovery);
+    if (sourceRefRecovery) {
+      return { sourceRefRecovery };
+    }
+
     const wrongIdDomainRecovery = this.sanitizeWrongIdDomainRecoveryMetadata(recovery);
     if (wrongIdDomainRecovery) {
       return { wrongIdDomainRecovery };
+    }
+
+    return null;
+  }
+
+  private sanitizeInvalidSourceRefRecoveryMetadata(
+    recovery: Record<string, unknown>,
+  ): AgentSourceRefRecoveryMetadata | null {
+    if (
+      recovery.kind === 'invalid-source-ref' &&
+      typeof recovery.attemptedSourceRef === 'string' &&
+      recovery.expectedSourceKind === 'search' &&
+      typeof recovery.instruction === 'string' &&
+      (recovery.expiredSourceRef === undefined || typeof recovery.expiredSourceRef === 'string')
+    ) {
+      return {
+        kind: 'invalid-source-ref',
+        attemptedSourceRef: recovery.attemptedSourceRef,
+        expectedSourceKind: recovery.expectedSourceKind,
+        instruction: recovery.instruction,
+        ...(recovery.expiredSourceRef ? { expiredSourceRef: recovery.expiredSourceRef } : {}),
+      };
     }
 
     return null;

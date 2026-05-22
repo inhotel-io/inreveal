@@ -68,7 +68,7 @@ const makeSpaceCreateOperation = (temporaryTargetId = 'tmp-family-space') => ({
 const parsePlan = (input: unknown) => AgentProposeAlbumOperationsDto.schema.safeParse(input);
 
 describe('Agent operation DTOs', () => {
-  describe('assetSelectionHandleId planning input', () => {
+  describe('asset source planning input', () => {
     it('accepts assetSelectionHandleId instead of explicit assetIds for asset-bearing operations', () => {
       const selectionHandleId = factory.uuid();
       const result = parsePlan({
@@ -114,11 +114,112 @@ describe('Agent operation DTOs', () => {
 
       expect(result.success).toBe(false);
       expect(result.error?.issues.map((issue) => issue.message)).toContain(
-        'Provide either assetIds or assetSelectionHandleId, not both',
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
       );
     });
 
-    it('rejects asset-bearing operations that provide neither assetIds nor assetSelectionHandleId', () => {
+    it('accepts previousSearch assetSource instead of explicit asset ids for asset-bearing operations', () => {
+      const sourceRef = `asset-source:search:${factory.uuid()}`;
+      const result = parsePlan({
+        summary: 'Add prior search photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: factory.uuid(),
+            assetSource: { kind: 'previousSearch', sourceRef },
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+            payload: {},
+          },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.operations[0]).toMatchObject({
+          assetSource: { kind: 'previousSearch', sourceRef },
+        });
+        expect(result.data.operations[0]).not.toHaveProperty('assetIds');
+        expect(result.data.operations[0]).not.toHaveProperty('assetSelectionHandleId');
+      }
+    });
+
+    it('rejects assetSource kinds that operation planning does not support yet', () => {
+      const result = parsePlan({
+        summary: 'Add searched photos directly',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: factory.uuid(),
+            assetSource: {
+              kind: 'search',
+              query: 'beach',
+              limit: 10,
+            },
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+            payload: {},
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+      expectIssue(result, ['operations', 0, 'assetSource', 'kind'], 'expected "previousSearch"');
+    });
+
+    it('rejects asset-bearing operations that provide assetSource and assetIds', () => {
+      const result = parsePlan({
+        summary: 'Invalid mixed selection',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: factory.uuid(),
+            assetSource: { kind: 'previousSearch', sourceRef: `asset-source:search:${factory.uuid()}` },
+            assetIds: [factory.uuid()],
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+            payload: {},
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.map((issue) => issue.message)).toContain(
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
+      );
+    });
+
+    it('rejects asset-bearing operations that provide assetSource and assetSelectionHandleId', () => {
+      const result = parsePlan({
+        summary: 'Invalid mixed selection',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: factory.uuid(),
+            assetSource: { kind: 'previousSearch', sourceRef: `asset-source:search:${factory.uuid()}` },
+            assetSelectionHandleId: factory.uuid(),
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+            payload: {},
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.map((issue) => issue.message)).toContain(
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
+      );
+    });
+
+    it('rejects asset-bearing operations that provide neither assetSource, assetIds nor assetSelectionHandleId', () => {
       const result = parsePlan({
         summary: 'Invalid missing selection',
         operations: [
@@ -136,7 +237,7 @@ describe('Agent operation DTOs', () => {
 
       expect(result.success).toBe(false);
       expect(result.error?.issues.map((issue) => issue.message)).toContain(
-        'Provide assetIds or assetSelectionHandleId',
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
       );
     });
   });

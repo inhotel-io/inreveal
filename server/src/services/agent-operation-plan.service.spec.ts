@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AgentSession, AgentToolCall } from 'src/database';
+import { AgentProposeAlbumOperationsDto } from 'src/dtos/agent-operation.dto';
 import { BulkIdErrorReason } from 'src/dtos/asset-ids.response.dto';
 import { AssetEditAction } from 'src/dtos/editing.dto';
 import {
@@ -475,6 +476,387 @@ describe(AgentOperationPlanService.name, () => {
         }),
       }),
     );
+  });
+
+  it('materializes previousSearch source refs through the backing selection handle before storing a plan', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const selectionHandleId = newUuid();
+    const sourceRef = `asset-source:search:${selectionHandleId}` as const;
+    const assetIds = Array.from({ length: 30 }, () => newUuid());
+    const albumId = newUuid();
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds.slice(0, 25),
+      expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    const createdPlan = makePlan({
+      sessionId: session.id,
+      operations: [
+        makeOperation({
+          type: AgentOperationType.AlbumAddAssets,
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          temporaryTargetId: null,
+          assetIds,
+          payload: {},
+        }),
+      ],
+    });
+    planRepository.createReplacementRevision.mockResolvedValue(createdPlan);
+
+    await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Add previous search photos',
+      operations: [
+        {
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add selected photos',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          assetSource: { kind: 'previousSearch', sourceRef },
+          payload: {},
+          riskLevel: AgentOperationRiskLevel.Medium,
+          enabled: true,
+        },
+      ],
+    });
+
+    expect(selectionHandleRepository.getValidForPlanning).toHaveBeenCalledWith({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      now: expect.any(Date),
+    });
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            assetIds,
+            assetSource: undefined,
+            assetSelectionHandleId: undefined,
+          }),
+        ],
+      }),
+    );
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assetCount: assetIds.length,
+        redactedRequestMetadata: expect.objectContaining({
+          assetCount: assetIds.length,
+          assetIds: assetIds.slice(0, 25),
+          assetIdsSample: assetIds.slice(0, 25),
+          selectionHandles: [
+            {
+              id: selectionHandleId,
+              assetCount: assetIds.length,
+              sampleAssetIds: assetIds.slice(0, 25),
+              sourceKind: 'previousSearch',
+              sourceRef,
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
+  it('rejects mixed source mechanisms before plan persistence', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Add invalid mixed photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'previousSearch', sourceRef: `asset-source:search:${newUuid()}` },
+            assetIds: [newUuid()],
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Provide exactly one of assetSource, assetIds, or assetSelectionHandleId');
+
+    expect(selectionHandleRepository.getValidForPlanning).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('rejects source mechanisms on non-asset operations before plan persistence', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+    const dtoWithBypassedValidation = {
+      summary: 'Create album with invalid source metadata',
+      operations: [
+        {
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Portugal.',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'tmp-portugal',
+          assetSource: { kind: 'previousSearch', sourceRef: `asset-source:search:${newUuid()}` },
+          payload: { albumName: 'Portugal', description: '' },
+          riskLevel: AgentOperationRiskLevel.Low,
+          enabled: true,
+        },
+      ],
+    } as unknown as AgentProposeAlbumOperationsDto;
+
+    await expect(sut.proposeAlbumOperations(auth, session.id, dtoWithBypassedValidation)).rejects.toThrow(
+      'Omit assetSource, assetIds, and assetSelectionHandleId for operations that do not operate on assets',
+    );
+
+    expect(selectionHandleRepository.getValidForPlanning).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed previousSearch source refs before repository lookup', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const sourceRef = 'asset-source:search:not-a-uuid';
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const thrown = await sut
+      .proposeAlbumOperations(auth, session.id, {
+        summary: 'Add malformed source photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'previousSearch', sourceRef },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const error = thrown as AgentMcpRecoverableToolError;
+    expect(error.content.recovery).toEqual({
+      kind: 'invalid-source-ref',
+      attemptedSourceRef: sourceRef,
+      expectedSourceKind: 'search',
+      instruction:
+        'Rerun searchAssets with createSelectionHandle true, then retry with the returned selectionHandle.sourceRef.',
+    });
+    expect(selectionHandleRepository.getValidForPlanning).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('returns reviseProposedOperations recovery for malformed previousSearch source refs during revision', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const plan = makePlan({ sessionId: session.id });
+    const sourceRef = 'asset-source:search:not-a-uuid';
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const thrown = await sut
+      .reviseProposedOperations(auth, session.id, plan.id, {
+        feedback: 'Use the latest search.',
+        summary: 'Revise source photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'previousSearch', sourceRef },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const error = thrown as AgentMcpRecoverableToolError;
+    expect(error.content).toMatchObject({
+      toolName: AgentToolName.ReviseProposedOperations,
+      recovery: {
+        kind: 'invalid-source-ref',
+        attemptedSourceRef: sourceRef,
+        expectedSourceKind: 'search',
+        instruction:
+          'Rerun searchAssets with createSelectionHandle true, then retry with the returned selectionHandle.sourceRef.',
+      },
+    });
+    expect(error.content.hint).not.toContain('proposeAlbumOperations');
+    expect(selectionHandleRepository.getValidForPlanning).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: AgentToolName.ReviseProposedOperations,
+        status: AgentToolCallStatus.Denied,
+        redactedResponseMetadata: {
+          sourceRefRecovery: error.content.recovery,
+        },
+      }),
+    );
+  });
+
+  it('returns invalid-source-ref recovery for expired previousSearch source refs without leaking asset samples', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const selectionHandleId = newUuid();
+    const sourceRef = `asset-source:search:${selectionHandleId}` as const;
+    const expiredHandle = {
+      id: selectionHandleId,
+      assetCount: 12,
+      sourceToolCallId: null,
+      createdAt: new Date('2026-05-21T06:00:00.000Z'),
+      expiresAt: new Date('2026-05-21T07:00:00.000Z'),
+    };
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(expiredHandle);
+
+    const thrown = await sut
+      .proposeAlbumOperations(auth, session.id, {
+        summary: 'Add expired source photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'previousSearch', sourceRef },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const error = thrown as AgentMcpRecoverableToolError;
+    expect(error.content.recovery).toMatchObject({
+      kind: 'invalid-source-ref',
+      attemptedSourceRef: sourceRef,
+      expectedSourceKind: 'search',
+      expiredSourceRef: sourceRef,
+    });
+    expect(JSON.stringify(error.content.recovery)).not.toContain('assetIds');
+    expect(JSON.stringify(error.content.recovery)).not.toContain('sampleAssetIds');
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('denies cross-session previousSearch source refs without leaking recovery metadata', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const selectionHandleId = newUuid();
+    const sourceRef = `asset-source:search:${selectionHandleId}` as const;
+    const leakMarkers = [
+      newUuid(),
+      newUuid(),
+      'foreign-sample-id',
+      'foreign-album-name',
+      'foreign-owner@example.com',
+      'foreign-owner-id',
+    ];
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(void 0);
+
+    const thrown = await sut
+      .proposeAlbumOperations(auth, session.id, {
+        summary: 'Add cross-session source photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'previousSearch', sourceRef },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const error = thrown as AgentMcpRecoverableToolError;
+    expect(selectionHandleRepository.getValidForPlanning).toHaveBeenCalledWith({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      now: expect.any(Date),
+    });
+    expect(selectionHandleRepository.getForRecovery).toHaveBeenCalledWith({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+    });
+    expect(error.content.recovery).toEqual({
+      kind: 'invalid-source-ref',
+      attemptedSourceRef: sourceRef,
+      expectedSourceKind: 'search',
+      instruction:
+        'Rerun searchAssets with createSelectionHandle true, then retry with the returned selectionHandle.sourceRef.',
+    });
+    const serialized = JSON.stringify(error.content);
+    expect(serialized).not.toContain('expiredSourceRef');
+    expect(serialized).not.toContain('assetIds');
+    expect(serialized).not.toContain('sampleAssetIds');
+    for (const marker of leakMarkers) {
+      expect(serialized).not.toContain(marker);
+    }
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('sanitizes invalid source ref recovery metadata before persisting planning audit details', () => {
+    const sourceRef = `asset-source:search:${newUuid()}`;
+    const metadata = (
+      sut as unknown as {
+        recoverablePlanningResponseMetadata: (recovery: Record<string, unknown>) => unknown;
+      }
+    ).recoverablePlanningResponseMetadata({
+      kind: 'invalid-source-ref',
+      attemptedSourceRef: sourceRef,
+      expectedSourceKind: 'search',
+      instruction: 'Rerun searchAssets with createSelectionHandle true.',
+      expiredSourceRef: sourceRef,
+      assetIds: [newUuid()],
+      sampleAssetIds: [newUuid()],
+      ownerEmail: 'foreign-owner@example.com',
+    });
+
+    expect(metadata).toEqual({
+      sourceRefRecovery: {
+        kind: 'invalid-source-ref',
+        attemptedSourceRef: sourceRef,
+        expectedSourceKind: 'search',
+        instruction: 'Rerun searchAssets with createSelectionHandle true.',
+        expiredSourceRef: sourceRef,
+      },
+    });
+    expect(JSON.stringify(metadata)).not.toContain('assetIds');
+    expect(JSON.stringify(metadata)).not.toContain('sampleAssetIds');
+    expect(JSON.stringify(metadata)).not.toContain('foreign-owner@example.com');
   });
 
   it('rejects expired or cross-session selection handles before plan persistence', async () => {

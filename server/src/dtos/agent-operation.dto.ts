@@ -1,4 +1,5 @@
 import { createZodDto } from 'nestjs-zod';
+import { AgentSearchSourceRefSchema } from 'src/dtos/agent-asset-source.dto';
 import { AgentToolCallResponseDto } from 'src/dtos/agent-tool.dto';
 import {
   AgentOperationApplyStatus,
@@ -11,6 +12,7 @@ import {
   SharedSpaceRole,
   UserAvatarColorSchema,
 } from 'src/enum';
+import { AgentAssetSourceInput, validateAgentAssetSourceMechanismCount } from 'src/types/agent-asset-source.types';
 import { isoDatetimeToDate } from 'src/validation';
 import z from 'zod';
 
@@ -48,11 +50,21 @@ const uniqueCoverAssetIds = z
     }
   });
 const assetSelectionHandleId = uuid;
+const agentAssetSourceInput = z
+  .strictObject({
+    kind: z.literal('previousSearch'),
+    sourceRef: AgentSearchSourceRefSchema,
+  })
+  .meta({ id: 'AgentOperationPlanningAssetSourceInput' }) as z.ZodType<
+  Extract<AgentAssetSourceInput, { kind: 'previousSearch' }>
+>;
 const assetSelection = {
+  assetSource: agentAssetSourceInput.optional(),
   assetIds: uniqueAssetIds.optional(),
   assetSelectionHandleId: assetSelectionHandleId.optional(),
 };
 const coverAssetSelection = {
+  assetSource: agentAssetSourceInput.optional(),
   assetIds: uniqueCoverAssetIds.optional(),
   assetSelectionHandleId: assetSelectionHandleId.optional(),
 };
@@ -454,20 +466,14 @@ const removeTagOperationSchema = z
   });
 
 const validateAssetSelection = (
-  operation: { assetIds?: string[]; assetSelectionHandleId?: string },
+  operation: { assetSource?: AgentAssetSourceInput; assetIds?: string[]; assetSelectionHandleId?: string },
   ctx: z.RefinementCtx,
 ) => {
-  if (operation.assetIds && operation.assetSelectionHandleId) {
+  const validation = validateAgentAssetSourceMechanismCount(operation);
+  if (!validation.valid) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: 'Provide either assetIds or assetSelectionHandleId, not both',
-    });
-  }
-
-  if (!operation.assetIds && !operation.assetSelectionHandleId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Provide assetIds or assetSelectionHandleId',
+      message: validation.message,
     });
   }
 };

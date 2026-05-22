@@ -138,6 +138,8 @@ export type AgentToolOperationPlanRequestMetadata = {
     id: string;
     assetCount: number;
     sampleAssetIds: string[];
+    sourceKind?: 'selectionHandle' | 'previousSearch';
+    sourceRef?: AgentSearchSourceRef;
   }>;
 };
 
@@ -166,6 +168,14 @@ export type AgentWrongIdDomainRecoveryMetadata = {
   instruction: string;
 };
 
+export type AgentSourceRefRecoveryMetadata = {
+  kind: 'invalid-source-ref';
+  attemptedSourceRef: string;
+  expectedSourceKind: 'search';
+  instruction: string;
+  expiredSourceRef?: string;
+};
+
 export type AgentToolOperationPlanResponseMetadata =
   | {
       planId: string | null;
@@ -176,6 +186,9 @@ export type AgentToolOperationPlanResponseMetadata =
     }
   | {
       wrongIdDomainRecovery: AgentWrongIdDomainRecoveryMetadata;
+    }
+  | {
+      sourceRefRecovery: AgentSourceRefRecoveryMetadata;
     };
 
 export type AgentSearchAssetsFilters = {
