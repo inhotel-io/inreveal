@@ -91,8 +91,10 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt.length).toBeLessThanOrEqual(3800);
     expect(prompt).toContain('Tool: mcp_gallery_resolveAssetSearchFilters');
     expect(prompt).toContain('R: Known ID filters');
-    expect(prompt).toContain('Write: use album-from-search tools first');
+    expect(prompt).toContain('Write: album/space search use fromSearch tools first');
     expect(prompt).toContain('mcp_gallery_proposeAddAssetsToAlbumFromSearch');
+    expect(prompt).toContain('mcp_gallery_proposeSpaceFromSearch');
+    expect(prompt).toContain('mcp_gallery_proposeAddAssetsToSpaceFromSearch');
     expect(prompt).toContain('other plans use mcp_gallery_proposeAlbumOperations');
     expect(prompt).not.toContain('Tmcp_gallery');
     expect(prompt).not.toContain('RKnown');
@@ -447,8 +449,8 @@ describe(AgentMcpPromptService.name, () => {
       expect(contract.safety.allowsDirectMutation, contract.name).toBe(false);
       expect(contract.safety.requiresGalleryApplyForWrites, contract.name).toBe(true);
     }
-    expect(prompt).toContain('No direct apply/write tool is available');
-    expect(prompt).toContain('Gallery applies final changes only after plan review');
+    expect(prompt).toContain('No direct apply/write tool exists');
+    expect(prompt).toContain('Gallery applies after plan review');
   });
 
   it('does not expose direct apply or unsafe implementation details', () => {

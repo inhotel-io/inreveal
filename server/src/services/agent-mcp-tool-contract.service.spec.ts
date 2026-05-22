@@ -19,6 +19,8 @@ const expectedReadToolNames = [
 const expectedPlanningToolNames = [
   AgentToolName.ProposeAlbumFromSearch,
   AgentToolName.ProposeAddAssetsToAlbumFromSearch,
+  AgentToolName.ProposeSpaceFromSearch,
+  AgentToolName.ProposeAddAssetsToSpaceFromSearch,
   AgentToolName.ProposeAlbumOperations,
   AgentToolName.ReviseProposedOperations,
   AgentToolName.SummarizePlan,
@@ -94,6 +96,32 @@ describe(AgentMcpToolContractService.name, () => {
     );
     expect(add?.examples.map((example) => example.name)).toEqual(
       expect.arrayContaining(['add-search-results-to-album-by-id', 'add-search-results-to-album-by-name']),
+    );
+
+    for (const contract of [create, add]) {
+      expect(contract?.safety).toEqual({
+        allowsDirectMutation: false,
+        exposesSecrets: false,
+        requiresGalleryApplyForWrites: true,
+      });
+      for (const example of contract?.examples ?? []) {
+        const result = AgentOperationPlanToolRequestSchemas[contract!.name].safeParse(example.arguments);
+        expect(result.success, `${contract!.name} ${example.name}`).toBe(true);
+      }
+    }
+  });
+
+  it('defines preferred high-level space workflow contracts and examples', () => {
+    const create = sut.getPlanningToolContract(AgentToolName.ProposeSpaceFromSearch);
+    const add = sut.getPlanningToolContract(AgentToolName.ProposeAddAssetsToSpaceFromSearch);
+
+    expect(create?.description).toMatch(/preferred/i);
+    expect(add?.description).toMatch(/preferred/i);
+    expect(create?.examples.map((example) => example.name)).toEqual(
+      expect.arrayContaining(['create-space-from-declarative-search', 'create-space-from-previous-search']),
+    );
+    expect(add?.examples.map((example) => example.name)).toEqual(
+      expect.arrayContaining(['add-search-results-to-space-by-id', 'add-search-results-to-space-by-name']),
     );
 
     for (const contract of [create, add]) {
