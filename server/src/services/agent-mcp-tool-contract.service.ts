@@ -24,6 +24,7 @@ const exampleSpaceId = '00000000-0000-4000-8000-000000000020';
 const exampleSpacePersonId = '00000000-0000-4000-8000-000000000021';
 const exampleTagId = '00000000-0000-4000-8000-000000000030';
 const examplePersonId = '00000000-0000-4000-8000-000000000040';
+const exampleSecondPersonId = '00000000-0000-4000-8000-000000000041';
 const exampleToolCallId = '00000000-0000-4000-8000-000000000111';
 const examplePlanId = '00000000-0000-4000-8000-000000000222';
 
@@ -202,7 +203,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
   description:
     'Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and bounded result pages.',
   usage:
-    'Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to compact asset ids. createSelectionHandle -> assetSelectionHandleId for large bounded pages. Do not use limit 1000; ask one narrowing question or repeat the same mode, query, filters, order, and limit using the returned nextPage value as page.',
+    'Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to compact asset ids. createSelectionHandle -> assetSelectionHandleId for large bounded pages. Do not use limit 1000; ask one narrowing question or repeat the same mode, query, filters, order, and limit using the returned nextPage value as page. When resolveAssetSearchFilters returns resolvedFilters, copy those fields into searchAssets.filters exactly. For people OR requests, use one personIds array with every resolved person id. For shared-space people, include both spaceId and spacePersonIds.',
   argumentModes: [
     {
       name: 'empty-search',
@@ -409,6 +410,35 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
           personIds: [examplePersonId],
         },
         limit: 25,
+      },
+    },
+    {
+      name: 'search-resolved-pierre-aurelia-people',
+      description:
+        'Search January 2026 South Africa photos after resolving "Pierre OR Aurelia"; keep both IDs in the same personIds array.',
+      arguments: {
+        detail: 'ids',
+        createSelectionHandle: true,
+        filters: {
+          country: 'South Africa',
+          takenAfter: '2026-01-01T00:00:00.000Z',
+          takenBefore: '2026-01-31T23:59:59.999Z',
+          personIds: [examplePersonId, exampleSecondPersonId],
+        },
+        limit: 50,
+      },
+    },
+    {
+      name: 'search-resolved-family-space-people',
+      description:
+        'Search after resolving a named person inside a shared space; spaceId must be sent with the resolved spacePersonIds.',
+      arguments: {
+        detail: 'ids',
+        filters: {
+          spaceId: exampleSpaceId,
+          spacePersonIds: [exampleSpacePersonId],
+        },
+        limit: 50,
       },
     },
     {
@@ -628,7 +658,7 @@ const resolveAssetSearchFiltersContract: AgentMcpToolContract<AgentToolName.Reso
   title: 'Resolve asset search filters',
   description: 'Resolve visible album, tag, person, space, and camera names into searchAssets-compatible filters.',
   usage:
-    'Use before searchAssets when the user gives names for tags, albums, people, spaces, camera makes, camera models, or lenses. For named people in a named shared space, resolve the space and person together so the result can return spaceId plus spacePersonIds. Call searchAssets only after this returns unambiguous resolvedFilters. Use only toolCallId when retrying a Gallery-approved resolver request.',
+    'Use before searchAssets when the user gives names for tags, albums, people, spaces, camera makes, camera models, or lenses. For named people in a named shared space, resolve the space and person together so the result can return spaceId plus spacePersonIds. Call searchAssets only after this returns unambiguous resolvedFilters. Use only toolCallId when retrying a Gallery-approved resolver request. If any requested people, albums, tags, spaces, or camera names cannot be resolved unambiguously, ask a clarifying question instead of running a broad search without the missing resolved filter.',
   argumentModes: [
     {
       name: 'resolve-named-filters',
@@ -657,6 +687,11 @@ const resolveAssetSearchFiltersContract: AgentMcpToolContract<AgentToolName.Reso
       name: 'resolve-space-person-filters',
       description: 'Resolve shared space and person names before searching shared-space assets.',
       arguments: { people: ['Pierre'], spaces: ['Family'] },
+    },
+    {
+      name: 'resolve-pierre-aurelia-people',
+      description: 'Resolve people from "Pierre OR Aurelia" before searching.',
+      arguments: { people: ['Pierre', 'Aurelia'] },
     },
     approvedRetryExample,
   ],
