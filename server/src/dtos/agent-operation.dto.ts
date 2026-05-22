@@ -47,6 +47,15 @@ const uniqueCoverAssetIds = z
       });
     }
   });
+const assetSelectionHandleId = uuid;
+const assetSelection = {
+  assetIds: uniqueAssetIds.optional(),
+  assetSelectionHandleId: assetSelectionHandleId.optional(),
+};
+const coverAssetSelection = {
+  assetIds: uniqueCoverAssetIds.optional(),
+  assetSelectionHandleId: assetSelectionHandleId.optional(),
+};
 const uniqueOperationIds = z
   .array(uuid)
   .min(1)
@@ -177,12 +186,15 @@ const addAssetsOperationSchema = z
     targetKind: AgentOperationTargetKindSchema,
     targetId: uuid.optional(),
     temporaryTargetId: temporaryTargetId.optional(),
-    assetIds: uniqueAssetIds,
+    ...assetSelection,
     riskLevel: operationDefaults.riskLevel,
     enabled: operationDefaults.enabled,
     payload: emptyPayload,
   })
-  .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx, [AgentOperationTargetKind.NewAlbum]));
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateAlbumTarget(operation, ctx, [AgentOperationTargetKind.NewAlbum]);
+  });
 
 const removeAssetsOperationSchema = z
   .strictObject({
@@ -191,12 +203,15 @@ const removeAssetsOperationSchema = z
     targetKind: AgentOperationTargetKindSchema,
     targetId: uuid.optional(),
     temporaryTargetId: temporaryTargetId.optional(),
-    assetIds: uniqueAssetIds,
+    ...assetSelection,
     riskLevel: operationDefaults.riskLevel,
     enabled: operationDefaults.enabled,
     payload: emptyPayload,
   })
-  .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx));
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateAlbumTarget(operation, ctx);
+  });
 
 const updateDetailsOperationSchema = z
   .strictObject({
@@ -224,12 +239,15 @@ const setCoverOperationSchema = z
     targetKind: AgentOperationTargetKindSchema,
     targetId: uuid.optional(),
     temporaryTargetId: temporaryTargetId.optional(),
-    assetIds: uniqueCoverAssetIds,
+    ...coverAssetSelection,
     riskLevel: operationDefaults.riskLevel,
     enabled: operationDefaults.enabled,
     payload: emptyPayload,
   })
-  .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx, [AgentOperationTargetKind.NewAlbum]));
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateAlbumTarget(operation, ctx, [AgentOperationTargetKind.NewAlbum]);
+  });
 
 const createSpaceOperationSchema = z
   .strictObject({
@@ -261,12 +279,15 @@ const spaceAssetsOperationSchema = (type: AgentOperationType.SpaceAddAssets | Ag
       targetKind: AgentOperationTargetKindSchema,
       targetId: uuid.optional(),
       temporaryTargetId: temporaryTargetId.optional(),
-      assetIds: uniqueAssetIds,
+      ...assetSelection,
       riskLevel: operationDefaults.riskLevel,
       enabled: operationDefaults.enabled,
       payload: emptyPayload,
     })
-    .superRefine((operation, ctx) => validateSpaceTarget(operation, ctx, [AgentOperationTargetKind.NewSpace]));
+    .superRefine((operation, ctx) => {
+      validateAssetSelection(operation, ctx);
+      validateSpaceTarget(operation, ctx, [AgentOperationTargetKind.NewSpace]);
+    });
 
 const updateSpaceDetailsOperationSchema = z
   .strictObject({
@@ -358,7 +379,7 @@ const assetBatchBase = {
   targetKind: AgentOperationTargetKindSchema,
   targetId: uuid.optional(),
   temporaryTargetId: temporaryTargetId.optional(),
-  assetIds: uniqueAssetIds,
+  ...assetSelection,
   riskLevel: operationDefaults.riskLevel,
   enabled: operationDefaults.enabled,
 };
@@ -376,9 +397,10 @@ const rotateOperationSchema = z
         }),
     }),
   })
-  .superRefine((operation, ctx) =>
-    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.ImageEditBatch, AgentOperationType.AssetRotate),
-  );
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.ImageEditBatch, AgentOperationType.AssetRotate);
+  });
 
 const setFavoriteOperationSchema = z
   .strictObject({
@@ -386,9 +408,10 @@ const setFavoriteOperationSchema = z
     ...assetBatchBase,
     payload: z.strictObject({ favorite: z.boolean() }),
   })
-  .superRefine((operation, ctx) =>
-    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetSetFavorite),
-  );
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetSetFavorite);
+  });
 
 const setArchiveOperationSchema = z
   .strictObject({
@@ -396,9 +419,10 @@ const setArchiveOperationSchema = z
     ...assetBatchBase,
     payload: z.strictObject({ archived: z.boolean() }),
   })
-  .superRefine((operation, ctx) =>
-    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetSetArchive),
-  );
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetSetArchive);
+  });
 
 const addTagOperationSchema = z
   .strictObject({
@@ -413,9 +437,10 @@ const addTagOperationSchema = z
         message: 'Provide exactly one of tagId or tagName',
       }),
   })
-  .superRefine((operation, ctx) =>
-    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetAddTag),
-  );
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetAddTag);
+  });
 
 const removeTagOperationSchema = z
   .strictObject({
@@ -423,9 +448,29 @@ const removeTagOperationSchema = z
     ...assetBatchBase,
     payload: z.strictObject({ tagId: uuid }),
   })
-  .superRefine((operation, ctx) =>
-    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetRemoveTag),
-  );
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetRemoveTag);
+  });
+
+const validateAssetSelection = (
+  operation: { assetIds?: string[]; assetSelectionHandleId?: string },
+  ctx: z.RefinementCtx,
+) => {
+  if (operation.assetIds && operation.assetSelectionHandleId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Provide either assetIds or assetSelectionHandleId, not both',
+    });
+  }
+
+  if (!operation.assetIds && !operation.assetSelectionHandleId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Provide assetIds or assetSelectionHandleId',
+    });
+  }
+};
 
 const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   createAlbumOperationSchema,

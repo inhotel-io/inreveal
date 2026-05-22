@@ -20,6 +20,7 @@ import {
 } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
+import { AgentSelectionHandleRepository } from 'src/repositories/agent-selection-handle.repository';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
@@ -292,6 +293,7 @@ describe(AgentToolService.name, () => {
   let albumRepository: ReturnType<typeof automock<AlbumRepository>>;
   let sharedSpaceRepository: ReturnType<typeof automock<SharedSpaceRepository>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
+  let selectionHandleRepository: ReturnType<typeof automock<AgentSelectionHandleRepository>>;
   let toolCallRepository: ReturnType<typeof automock<AgentToolCallRepository>>;
   let agentRunnerService: ReturnType<typeof automock<AgentRunnerService>>;
   let userService: { search: ReturnType<typeof vi.fn> };
@@ -308,6 +310,7 @@ describe(AgentToolService.name, () => {
     albumRepository = automock(AlbumRepository, { args: [{} as never] });
     sharedSpaceRepository = automock(SharedSpaceRepository, { args: [{} as never] });
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
+    selectionHandleRepository = automock(AgentSelectionHandleRepository, { args: [{} as never] });
     toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
     agentRunnerService = automock(AgentRunnerService, { args: [] as never });
     userService = { search: vi.fn() };
@@ -322,6 +325,7 @@ describe(AgentToolService.name, () => {
       albumRepository,
       sharedSpaceRepository,
       sessionRepository,
+      selectionHandleRepository,
       toolCallRepository,
       agentRunnerService,
       userService as unknown as UserService,
@@ -2454,6 +2458,220 @@ describe(AgentToolService.name, () => {
       new Set([firstAssetId, secondAssetId]),
       false,
     );
+  });
+
+  it('searchAssets creates a selection handle and returns only compact sample ids when requested', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const auth = AuthFactory.create();
+    const assetIds = Array.from({ length: 60 }, () => newUuid());
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1000, maxAssetsPerSession: 1000 },
+      }),
+    });
+    const handle = {
+      id: newUuid(),
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds.slice(0, 25),
+      expiresAt: new Date(now.getTime() + 60 * 60_000),
+      createdAt: now,
+      updateId: newUuid(),
+    };
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: false,
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    selectionHandleRepository.create.mockResolvedValue(handle);
+    toolCallRepository.createWithSessionLimit.mockResolvedValue({
+      status: 'created',
+      toolCall: makeToolCall({
+        id: handle.sourceToolCallId!,
+        sessionId: session.id,
+        toolName: AgentToolName.SearchAssets,
+      }),
+    });
+    toolCallRepository.transitionWithSessionLimit.mockResolvedValue({
+      status: 'transitioned',
+      toolCall: makeToolCall({
+        id: handle.sourceToolCallId!,
+        sessionId: session.id,
+        toolName: AgentToolName.SearchAssets,
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Created a selection handle for 60 assets; returned 5 sample asset ids',
+        completedAt,
+        redactedResponseMetadata: {
+          selectionHandleIds: [handle.id],
+          selectionHandleAssetCount: 60,
+          selectionHandleSampleAssetIds: assetIds.slice(0, 25),
+          resultSize: expect.any(Object),
+        },
+      }),
+    });
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: {},
+      limit: 60,
+      createSelectionHandle: true,
+      sampleSize: 5,
+    });
+
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith({
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: handle.sourceToolCallId,
+      assetIds,
+      expiresAt: new Date(now.getTime() + 60 * 60_000),
+    });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.selectionHandle).toMatchObject({
+        id: handle.id,
+        assetCount: 60,
+        sampleAssetIds: assetIds.slice(0, 25),
+        sourceToolCallId: handle.sourceToolCallId,
+      });
+      expect(result.assetIds).toEqual(assetIds.slice(0, 5));
+      expect(JSON.stringify(result)).not.toContain(assetIds[59]);
+    }
+    vi.useRealTimers();
+  });
+
+  it('searchAssets creates handles from budget-truncated search output without truncating handle counts', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const auth = AuthFactory.create();
+    const assetIds = Array.from({ length: 500 }, () => newUuid());
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1000, maxAssetsPerSession: 1000 },
+      }),
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: true,
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    selectionHandleRepository.create.mockImplementation((dto) =>
+      Promise.resolve({
+        id: newUuid(),
+        sessionId: dto.sessionId,
+        userId: dto.userId,
+        sourceToolCallId: dto.sourceToolCallId,
+        assetIds: dto.assetIds,
+        assetCount: dto.assetIds.length,
+        sampleAssetIds: dto.assetIds.slice(0, 25),
+        expiresAt: dto.expiresAt,
+        createdAt: now,
+        updateId: newUuid(),
+      }),
+    );
+    vi.spyOn(
+      sut as unknown as { getReadToolResponseBudgetBytes: () => number },
+      'getReadToolResponseBudgetBytes',
+    ).mockReturnValue(900);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: {},
+      limit: 500,
+      createSelectionHandle: true,
+      sampleSize: 25,
+    });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.selectionHandle?.assetCount).toBe(500);
+      expect(result.resultSize.truncated).toBe(true);
+      expect(result.resultSize.omittedFields).toContain('assetIds');
+    }
+    vi.useRealTimers();
+  });
+
+  it('searchAssets with a selection handle only hydrates metadata for compact samples', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const auth = AuthFactory.create();
+    const assetIds = Array.from({ length: 60 }, () => newUuid());
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1000, maxAssetsPerSession: 1000 },
+      }),
+    });
+    const handle = {
+      id: newUuid(),
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds.slice(0, 25),
+      expiresAt: new Date(now.getTime() + 60 * 60_000),
+      createdAt: now,
+      updateId: newUuid(),
+    };
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: false,
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    selectionHandleRepository.create.mockResolvedValue(handle);
+    assetRepository.getAgentMetadataByIds.mockResolvedValue(
+      assetIds.slice(0, 3).map((id) => makeMetadata(id)) as never,
+    );
+    toolCallRepository.createWithSessionLimit.mockResolvedValue({
+      status: 'created',
+      toolCall: makeToolCall({
+        id: handle.sourceToolCallId!,
+        sessionId: session.id,
+        toolName: AgentToolName.SearchAssets,
+      }),
+    });
+    toolCallRepository.transitionWithSessionLimit.mockResolvedValue({
+      status: 'transitioned',
+      toolCall: makeToolCall({
+        id: handle.sourceToolCallId!,
+        sessionId: session.id,
+        toolName: AgentToolName.SearchAssets,
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Created a selection handle for 60 assets; returned 3 sample asset ids',
+        completedAt,
+      }),
+    });
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: {},
+      limit: 60,
+      detail: 'metadata',
+      createSelectionHandle: true,
+      sampleSize: 3,
+    });
+
+    expect(assetRepository.getAgentMetadataByIds).toHaveBeenCalledWith(assetIds.slice(0, 3));
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.selectionHandle?.assetCount).toBe(60);
+      expect(result.assetIds).toEqual(assetIds.slice(0, 3));
+      expect(result.assets?.map((asset) => asset.id)).toEqual(assetIds.slice(0, 3));
+      expect(JSON.stringify(result)).not.toContain(assetIds[59]);
+    }
+    vi.useRealTimers();
   });
 
   it('returns field-selected summary samples and caps sampleSize to returned ids', async () => {

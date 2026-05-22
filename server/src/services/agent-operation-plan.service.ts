@@ -37,6 +37,7 @@ import {
   AgentOperationPlanRepository,
   AgentOperationPlanWithOperations,
 } from 'src/repositories/agent-operation-plan.repository';
+import { AgentSelectionHandleRepository } from 'src/repositories/agent-selection-handle.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
@@ -54,7 +55,14 @@ type PlanningRequest = {
   operations?: AgentAlbumOperationInput[];
   planId?: string;
   focus?: string;
+  selectionHandles?: PlanningSelectionAudit;
 };
+
+type PlanningSelectionAudit = Array<{
+  id: string;
+  assetCount: number;
+  sampleAssetIds: string[];
+}>;
 
 type PlanningAuditResult = {
   status: AgentToolCallStatus.Completed | AgentToolCallStatus.Denied | AgentToolCallStatus.Failed;
@@ -116,11 +124,15 @@ export class AgentOperationPlanService {
     AgentSessionStatus.Interrupted,
   ];
 
+  private static readonly maxAssetSelectionHandleAssets = 10_000;
+  private static readonly maxCoverSelectionHandleAssets = 500;
+
   constructor(
     private readonly accessRepository: AccessRepository,
     private readonly assetRepository: AssetRepository,
     private readonly albumService: AlbumService,
     private readonly sessionRepository: AgentSessionRepository,
+    private readonly selectionHandleRepository: AgentSelectionHandleRepository,
     private readonly planRepository: AgentOperationPlanRepository,
     private readonly toolCallRepository: AgentToolCallRepository,
     private readonly websocketRepository: WebsocketRepository,
@@ -153,24 +165,39 @@ export class AgentOperationPlanService {
   ): Promise<AgentOperationPlanToolResponseDto> {
     const session = await this.getOwnedSession(auth, sessionId, { requireActive: true });
 
-    return this.runPlanningTool(auth, session, AgentToolName.ProposeAlbumOperations, dto, async () => {
-      const operations = this.prepareOperations(session, dto.operations);
-      await this.validateNormalAccess(auth, session, operations);
-      const plan = await this.planRepository.createReplacementRevision(session.id, {
-        plan: {
-          sessionId: session.id,
-          status: AgentOperationPlanStatus.Proposed,
-          summary: dto.summary,
-        },
-        operations,
-      });
-      if (!plan) {
-        throw new BadRequestException('Agent session is not accepting plan revisions');
-      }
+    let prepared: { operations: AgentAlbumOperationInput[]; selectionAudit: PlanningSelectionAudit };
+    try {
+      prepared = await this.prepareOperations(auth, session, dto.operations);
+    } catch (error) {
+      await this.tryCreatePlanningPreparationDeniedAudit(session, AgentToolName.ProposeAlbumOperations, dto, error);
+      throw error;
+    }
 
-      await this.markWaitingForPlanReview(auth, session, plan);
-      return { plan, summary: this.summarize(plan) };
-    });
+    const { operations, selectionAudit } = prepared;
+
+    return this.runPlanningTool(
+      auth,
+      session,
+      AgentToolName.ProposeAlbumOperations,
+      { ...dto, operations, selectionHandles: selectionAudit },
+      async () => {
+        await this.validateNormalAccess(auth, session, operations);
+        const plan = await this.planRepository.createReplacementRevision(session.id, {
+          plan: {
+            sessionId: session.id,
+            status: AgentOperationPlanStatus.Proposed,
+            summary: dto.summary,
+          },
+          operations,
+        });
+        if (!plan) {
+          throw new BadRequestException('Agent session is not accepting plan revisions');
+        }
+
+        await this.markWaitingForPlanReview(auth, session, plan);
+        return { plan, summary: this.summarize(plan) };
+      },
+    );
   }
 
   async reviseProposedOperations(
@@ -181,25 +208,48 @@ export class AgentOperationPlanService {
   ): Promise<AgentOperationPlanToolResponseDto> {
     const session = await this.getOwnedSession(auth, sessionId, { requireActive: true });
 
-    return this.runPlanningTool(auth, session, AgentToolName.ReviseProposedOperations, { ...dto, planId }, async () => {
-      await this.requireCurrentProposedPlan(session.id, planId);
-      const operations = this.prepareOperations(session, dto.operations);
-      await this.validateNormalAccess(auth, session, operations);
-      const replacement = await this.planRepository.createReplacementRevision(session.id, {
-        plan: {
-          sessionId: session.id,
-          status: AgentOperationPlanStatus.Proposed,
-          summary: dto.summary,
+    let prepared: { operations: AgentAlbumOperationInput[]; selectionAudit: PlanningSelectionAudit };
+    try {
+      prepared = await this.prepareOperations(auth, session, dto.operations);
+    } catch (error) {
+      await this.tryCreatePlanningPreparationDeniedAudit(
+        session,
+        AgentToolName.ReviseProposedOperations,
+        {
+          ...dto,
+          planId,
         },
-        operations,
-      });
-      if (!replacement) {
-        throw new BadRequestException('Agent session is not accepting plan revisions');
-      }
+        error,
+      );
+      throw error;
+    }
 
-      await this.markWaitingForPlanReview(auth, session, replacement);
-      return { plan: replacement, summary: this.summarize(replacement) };
-    });
+    const { operations, selectionAudit } = prepared;
+
+    return this.runPlanningTool(
+      auth,
+      session,
+      AgentToolName.ReviseProposedOperations,
+      { ...dto, planId, operations, selectionHandles: selectionAudit },
+      async () => {
+        await this.requireCurrentProposedPlan(session.id, planId);
+        await this.validateNormalAccess(auth, session, operations);
+        const replacement = await this.planRepository.createReplacementRevision(session.id, {
+          plan: {
+            sessionId: session.id,
+            status: AgentOperationPlanStatus.Proposed,
+            summary: dto.summary,
+          },
+          operations,
+        });
+        if (!replacement) {
+          throw new BadRequestException('Agent session is not accepting plan revisions');
+        }
+
+        await this.markWaitingForPlanReview(auth, session, replacement);
+        return { plan: replacement, summary: this.summarize(replacement) };
+      },
+    );
   }
 
   async summarizePlan(
@@ -603,7 +653,7 @@ export class AgentOperationPlanService {
     return writableIds;
   }
 
-  private prepareOperations(session: AgentSession, operations: AgentAlbumOperationInput[]): AgentAlbumOperationInput[] {
+  private async prepareOperations(auth: AuthDto, session: AgentSession, operations: AgentAlbumOperationInput[]) {
     const createTemporaryTargetIds = new Set<string>();
     const createSpaceTemporaryTargetIds = new Set<string>();
     const allCreateSpaceTemporaryTargetIds = new Set(
@@ -612,6 +662,7 @@ export class AgentOperationPlanService {
         .map((operation) => operation.temporaryTargetId as string),
     );
     const preparedOperations: AgentAlbumOperationInput[] = [];
+    const selectionAudit: PlanningSelectionAudit = [];
 
     for (const operation of operations) {
       this.validateWriteScope(session, operation.type);
@@ -673,13 +724,19 @@ export class AgentOperationPlanService {
         );
       }
 
+      const materializedAssetIds = operation.assetSelectionHandleId
+        ? await this.resolveSelectionHandleAssetIds(auth, session, operation.assetSelectionHandleId, selectionAudit)
+        : (operation.assetIds ?? []);
+      this.validateMaterializedAssetSelection(operation, materializedAssetIds);
+
       preparedOperations.push({
         type: operation.type,
         summary: operation.summary,
         targetKind: operation.targetKind,
         targetId: operation.targetId,
         temporaryTargetId: operation.temporaryTargetId,
-        assetIds: operation.assetIds ?? [],
+        assetIds: materializedAssetIds,
+        assetSelectionHandleId: undefined,
         payload: operation.payload ?? {},
         dependencyIds: operation.dependencyIds ?? [],
         riskLevel: operation.riskLevel,
@@ -687,7 +744,56 @@ export class AgentOperationPlanService {
       });
     }
 
-    return preparedOperations;
+    return { operations: preparedOperations, selectionAudit };
+  }
+
+  private validateMaterializedAssetSelection(operation: AgentAlbumOperationInput, assetIds: string[]) {
+    if (!operation.assetSelectionHandleId) {
+      return;
+    }
+
+    if (assetIds.length === 0) {
+      throw new BadRequestException('Selection handle did not contain any assets');
+    }
+
+    if (
+      operation.type === AgentOperationType.AlbumSetCover &&
+      assetIds.length > AgentOperationPlanService.maxCoverSelectionHandleAssets
+    ) {
+      throw new BadRequestException('Selection handle contains too many cover candidates');
+    }
+
+    if (
+      operation.type !== AgentOperationType.AlbumSetCover &&
+      assetIds.length > AgentOperationPlanService.maxAssetSelectionHandleAssets
+    ) {
+      throw new BadRequestException('Selection handle contains too many assets');
+    }
+  }
+
+  private async resolveSelectionHandleAssetIds(
+    auth: AuthDto,
+    session: AgentSession,
+    id: string,
+    selectionAudit: PlanningSelectionAudit,
+  ) {
+    const handle = await this.selectionHandleRepository.getValidForPlanning({
+      id,
+      sessionId: session.id,
+      userId: auth.user.id,
+      now: new Date(),
+    });
+    if (!handle) {
+      throw new BadRequestException('Selection handle is expired or not available for this session');
+    }
+
+    selectionAudit.push({
+      id: handle.id,
+      assetCount: handle.assetCount,
+      sampleAssetIds: handle.sampleAssetIds,
+    });
+
+    return handle.assetIds;
   }
 
   private validateWriteScope(session: AgentSession, type: AgentOperationType) {
@@ -1945,6 +2051,7 @@ export class AgentOperationPlanService {
   ) {
     const operations = request.operations ?? [];
     const assetIds = [...new Set(operations.flatMap((operation) => operation.assetIds ?? []))];
+    const attemptedSelectionHandleIds = this.getAttemptedSelectionHandleIds(operations);
     const albumIds = [
       ...new Set(
         operations
@@ -1985,6 +2092,7 @@ export class AgentOperationPlanService {
         tagIds,
         userIds,
         assetIds,
+        attemptedSelectionHandleIds,
       }),
       redactedResponseMetadata: result.redactedResponseMetadata,
       dataClass: AgentToolDataClass.Plan,
@@ -2031,19 +2139,68 @@ export class AgentOperationPlanService {
     }
   }
 
+  private async tryCreatePlanningPreparationDeniedAudit(
+    session: AgentSession,
+    toolName: AgentToolName,
+    request: PlanningRequest,
+    error: unknown,
+  ): Promise<void> {
+    const message = error instanceof Error ? error.message : 'Agent operation planning failed';
+    const status =
+      error instanceof BadRequestException || error instanceof NotFoundException
+        ? AgentToolCallStatus.Denied
+        : AgentToolCallStatus.Failed;
+    const approvalDecision =
+      status === AgentToolCallStatus.Denied ? AgentToolApprovalDecision.Denied : AgentToolApprovalDecision.Approved;
+
+    try {
+      await this.createPlanningAudit(session, toolName, request, {
+        status,
+        approvalDecision,
+        responseSummary: null,
+        redactedResponseMetadata: null,
+        error: message,
+      });
+    } catch {
+      // Preserve the original preparation error.
+    }
+  }
+
   private redactRequestMetadata(
     _toolName: AgentToolName,
     request: PlanningRequest,
     operations: AgentAlbumOperationInput[],
-    ids: { albumIds: string[]; spaceIds: string[]; tagIds: string[]; userIds: string[]; assetIds: string[] },
+    ids: {
+      albumIds: string[];
+      spaceIds: string[];
+      tagIds: string[];
+      userIds: string[];
+      assetIds: string[];
+      attemptedSelectionHandleIds: string[];
+    },
   ): AgentToolOperationPlanRequestMetadata {
+    const handleDerived = (request.selectionHandles?.length ?? 0) > 0;
+    const assetIdsForAudit = handleDerived ? ids.assetIds.slice(0, 25) : ids.assetIds;
     const metadata: AgentToolOperationPlanRequestMetadata = {
       planId: request.planId,
       operationCount: operations.length,
       operationTypes: operations.map((operation) => operation.type),
       albumIds: ids.albumIds,
-      assetIds: ids.assetIds,
+      assetIds: assetIdsForAudit,
     };
+
+    if (operations.length > 0 || handleDerived) {
+      metadata.assetCount = ids.assetIds.length;
+    }
+
+    if (handleDerived) {
+      metadata.assetIdsSample = assetIdsForAudit;
+      metadata.selectionHandles = request.selectionHandles;
+    }
+
+    if (ids.attemptedSelectionHandleIds.length > 0) {
+      metadata.attemptedSelectionHandleIds = ids.attemptedSelectionHandleIds;
+    }
 
     if (ids.spaceIds.length > 0) {
       metadata.spaceIds = ids.spaceIds;
@@ -2058,6 +2215,16 @@ export class AgentOperationPlanService {
     }
 
     return metadata;
+  }
+
+  private getAttemptedSelectionHandleIds(operations: AgentAlbumOperationInput[]) {
+    return [
+      ...new Set(
+        operations.flatMap((operation) =>
+          operation.assetSelectionHandleId && !operation.assetIds?.length ? [operation.assetSelectionHandleId] : [],
+        ),
+      ),
+    ];
   }
 
   private mapPlan(plan: AgentOperationPlanWithOperations): AgentOperationPlanResponseDto {

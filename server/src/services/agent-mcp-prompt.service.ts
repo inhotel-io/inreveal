@@ -81,6 +81,7 @@ export class AgentMcpPromptService {
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
         'Progressive: resolve names -> search detail ids -> readAssetMetadata fields for selected ids -> plan. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.',
+        'Large selections: searchAssets createSelectionHandle true for current bounded page, then plan with assetSelectionHandleId. Do not paste hundreds of assetIds.',
         `Resolve names before searchAssets: ${resolveFilters.piToolName} ${this.formatJson(resolveFilters.arguments)}`,
         `Compact search: ${compactSearch.piToolName} ${this.formatJson(compactSearch.arguments)}`,
         `Sample fields: ${sampleSearch.piToolName} ${this.formatJson(sampleSearch.arguments)}`,
