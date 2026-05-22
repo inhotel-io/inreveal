@@ -40,6 +40,12 @@ type RunnerActivityContext = {
   failureSummary: string;
 };
 
+type RunnerStreamCleanupContext = {
+  activityContext: RunnerActivityContext;
+  baselineToolCallIds: Set<string> | undefined;
+  approvedToolResultFailed: boolean;
+};
+
 @Injectable()
 export class AgentRunnerService {
   private static readonly completionActiveStatuses = [
@@ -281,8 +287,7 @@ export class AgentRunnerService {
           body: { gallerySessionId: sessionId, messageId, content },
         }),
         emptyStreamMessage: 'Agent runner message stream ended before completion',
-        activityContext,
-        baselineToolCallIds,
+        cleanupContext: { activityContext, baselineToolCallIds, approvedToolResultFailed: false },
       });
     } catch (error) {
       await this.emitRunnerFailure(userId, sessionId, error, {
@@ -343,8 +348,11 @@ export class AgentRunnerService {
           body,
         }),
         emptyStreamMessage: 'Agent runner resume stream ended before completion',
-        activityContext,
-        baselineToolCallIds,
+        cleanupContext: {
+          activityContext,
+          baselineToolCallIds,
+          approvedToolResultFailed: approvalDecision === 'approved' && this.isFailedToolResult(toolResult),
+        },
       });
     } catch (error) {
       await this.emitRunnerFailure(userId, sessionId, error, {
@@ -361,16 +369,14 @@ export class AgentRunnerService {
     runnerSessionId,
     stream,
     emptyStreamMessage,
-    activityContext,
-    baselineToolCallIds,
+    cleanupContext,
   }: {
     userId: string;
     sessionId: string;
     runnerSessionId: string;
     stream: AsyncGenerator<AgentRunnerStreamEvent>;
     emptyStreamMessage: string;
-    activityContext: RunnerActivityContext;
-    baselineToolCallIds: Set<string> | undefined;
+    cleanupContext: RunnerStreamCleanupContext;
   }) {
     let completedEvent: Extract<AgentRunnerStreamEvent, { type: 'assistant-message-completed' }> | undefined;
     let suppressAssistantOutput = false;
@@ -439,7 +445,7 @@ export class AgentRunnerService {
       message: this.mapMessage(message),
       createdAt: this.toIsoNow(),
     });
-    await this.cleanupSameTurnToolFailure(userId, sessionId, session.status, activityContext, baselineToolCallIds);
+    await this.cleanupSameTurnToolFailure(userId, sessionId, session.status, cleanupContext);
   }
 
   private async isWaitingForToolApproval(userId: string, sessionId: string) {
@@ -487,25 +493,14 @@ export class AgentRunnerService {
     userId: string,
     sessionId: string,
     sessionStatus: AgentSessionStatus,
-    activityContext: RunnerActivityContext,
-    baselineToolCallIds: Set<string> | undefined,
+    cleanupContext: RunnerStreamCleanupContext,
   ) {
-    if (sessionStatus !== AgentSessionStatus.Running || !baselineToolCallIds || !this.toolCallRepository) {
+    if (sessionStatus !== AgentSessionStatus.Running) {
       return;
     }
 
-    let toolCalls;
-    try {
-      toolCalls = await this.toolCallRepository.getBySessionId(sessionId);
-    } catch {
-      return;
-    }
-
-    const hasSameTurnFailure = toolCalls.some(
-      (toolCall) =>
-        !baselineToolCallIds.has(toolCall.id) &&
-        [AgentToolCallStatus.Denied, AgentToolCallStatus.Failed].includes(toolCall.status),
-    );
+    const hasSameTurnFailure =
+      cleanupContext.approvedToolResultFailed || (await this.hasNewFailedToolCall(sessionId, cleanupContext));
     if (!hasSameTurnFailure) {
       return;
     }
@@ -518,9 +513,37 @@ export class AgentRunnerService {
     this.createFailedActivityEvent(
       userId,
       sessionId,
-      activityContext.kind,
+      cleanupContext.activityContext.kind,
       'The assistant stopped after a Gallery tool error.',
     );
+  }
+
+  private async hasNewFailedToolCall(sessionId: string, cleanupContext: RunnerStreamCleanupContext) {
+    if (!cleanupContext.baselineToolCallIds || !this.toolCallRepository) {
+      return false;
+    }
+
+    let toolCalls;
+    try {
+      toolCalls = await this.toolCallRepository.getBySessionId(sessionId);
+    } catch {
+      return false;
+    }
+
+    return toolCalls.some(
+      (toolCall) =>
+        !cleanupContext.baselineToolCallIds?.has(toolCall.id) &&
+        [AgentToolCallStatus.Denied, AgentToolCallStatus.Failed].includes(toolCall.status),
+    );
+  }
+
+  private isFailedToolResult(toolResult: unknown) {
+    if (!toolResult || typeof toolResult !== 'object' || Array.isArray(toolResult)) {
+      return false;
+    }
+
+    const { status } = toolResult as { status?: unknown };
+    return status === 'denied' || status === 'error';
   }
 
   private createRunnerActivityEvent(userId: string, sessionId: string, event: AgentRunnerActivityStreamEvent) {
