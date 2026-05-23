@@ -234,7 +234,9 @@ describe('AgentPlanDestinationCard', () => {
 
     expect(screen.getByText(createId)).toBeInTheDocument();
 
-    await fireEvent.click(within(screen.getByTestId('agent-plan-photo-stage')).getByRole('button', { name: 'Review photos' }));
+    await fireEvent.click(
+      within(screen.getByTestId('agent-plan-photo-stage')).getByRole('button', { name: 'Review photos' }),
+    );
 
     expect(screen.getByText(createId)).toBeInTheDocument();
     expect(screen.queryByText(addId)).not.toBeInTheDocument();
