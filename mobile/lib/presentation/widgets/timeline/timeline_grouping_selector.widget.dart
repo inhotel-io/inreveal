@@ -146,22 +146,15 @@ class _TimelineGroupingCompactSelector extends StatelessWidget {
                 onLongPress: enabled ? () => unawaited(_showMenu(context)) : null,
                 borderRadius: BorderRadius.circular(999),
                 child: Padding(
-                  padding: const EdgeInsetsDirectional.only(start: 12, end: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelLarge?.copyWith(color: foreground, fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(Icons.expand_more_rounded, size: 18, color: foreground),
-                    ],
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Center(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                      softWrap: false,
+                      style: theme.textTheme.labelLarge?.copyWith(color: foreground, fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
               ),

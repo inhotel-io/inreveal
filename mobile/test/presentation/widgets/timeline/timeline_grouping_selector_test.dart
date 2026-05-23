@@ -295,6 +295,7 @@ void main() {
       expect(find.byKey(const Key('timeline-grouping-day')), findsNothing);
       expect(find.text('Day'), findsOneWidget);
       expect(find.text('Days'), findsNothing);
+      expect(find.byIcon(Icons.expand_more_rounded), findsNothing);
       expect(tester.getSize(find.byKey(const Key('timeline-grouping-compact-selector'))).width, lessThanOrEqualTo(92));
     });
 
@@ -326,6 +327,27 @@ void main() {
       expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.month.index);
       expect(find.text('Month'), findsOneWidget);
       expect(find.text('Months'), findsNothing);
+    });
+
+    testWidgets('compact mode fits Month without ellipsizing at large mobile text scale', (tester) async {
+      await Store.put(StoreKey.groupAssetsBy, GroupAssetsBy.month.index);
+
+      await tester.pumpConsumerWidget(
+        const MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(1.25)),
+          child: CustomScrollView(
+            slivers: [
+              SliverAppBar(actions: [TimelineGroupingSelector.compact()]),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Month'), findsOneWidget);
+      expect(find.textContaining('...'), findsNothing);
+      expect(tester.getSize(find.byKey(const Key('timeline-grouping-compact-selector'))).width, lessThanOrEqualTo(112));
+      expect(tester.takeException(), isNull);
     });
   });
 }
