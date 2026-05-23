@@ -311,7 +311,7 @@
       <div
         class="grid gap-2"
         data-testid="agent-plan-item-review-tile-grid"
-        style={`grid-template-columns: repeat(${virtualColumnCount}, minmax(0, 1fr)); grid-auto-rows: ${itemSize}px;`}
+        style={`grid-template-columns: repeat(${virtualColumnCount}, ${itemSize}px); grid-auto-rows: ${itemSize}px;`}
       >
         {#each virtualWindow.visibleAssetIds as assetId, visibleIndex (assetId)}
           {@const selected = isAssetSelectedForOperation(item, assetId)}
