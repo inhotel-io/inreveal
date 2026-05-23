@@ -23,6 +23,8 @@ type AgentRunnerProbeConfig = {
   timeoutMs: number;
 };
 
+const MAX_CONTENT_BYTES = 32_768;
+
 export type AgentRunnerProbeResult = {
   healthy: boolean;
   reason: Exclude<AgentRunnerStatusReason, 'not-configured'>;
@@ -32,6 +34,8 @@ export type AgentRunnerProbeResult = {
 
 const stringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+const jsonByteLength = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8');
 
 const objectRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -74,7 +78,23 @@ const isValidateSessionResult = (value: unknown): value is AgentRunnerValidateSe
   return body.ok === true && objectRecord(body.capabilities) === body.capabilities;
 };
 
-const optionalString = (value: unknown): boolean => value === undefined || typeof value === 'string';
+const isBoundedTrimmedString = (value: unknown, min: number, max: number): boolean =>
+  typeof value === 'string' && value.trim().length >= min && value.trim().length <= max;
+const isUuidV4 = (value: unknown): boolean =>
+  typeof value === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+const hasOnlyKeys = (value: Record<string, unknown>, keys: ReadonlySet<string>): boolean =>
+  Object.keys(value).every((key) => keys.has(key));
+const textBlockKeys = new Set(['type', 'text']);
+const toolCallBlockKeys = new Set(['type', 'toolCallId', 'summary']);
+const assetBlockKeys = new Set(['type', 'assetId', 'label']);
+const planBlockKeys = new Set(['type', 'planId', 'label']);
+const clarificationKinds = new Set(['person', 'tag', 'album', 'space', 'cameraMake', 'cameraModel', 'lensModel']);
+const clarificationBlockKeys = new Set(['type', 'kind', 'query', 'summary', 'textFallback', 'choices']);
+const clarificationChoiceKeys = new Set(['choiceRef', 'label', 'description', 'thumbnailAssetId']);
+const isChoiceRef = (value: unknown): boolean =>
+  typeof value === 'string' &&
+  /^choice:(person|tag|album|space|cameraMake|cameraModel|lensModel):[A-Za-z0-9_-]{8,120}$/.test(value);
 const activityKinds = new Set<AgentRunnerActivityKind>([
   'start-processing',
   'plan-composing',
@@ -88,19 +108,59 @@ const activityCountKeys = new Set(['total', 'applied', 'skipped', 'failed']);
 const isMessageBlock = (value: unknown): boolean => {
   const block = objectRecord(value);
   if (block.type === 'text') {
-    return typeof block.text === 'string';
+    return hasOnlyKeys(block, textBlockKeys) && isBoundedTrimmedString(block.text, 1, 8000);
   }
 
   if (block.type === 'tool-call') {
-    return typeof block.toolCallId === 'string' && optionalString(block.summary);
+    return (
+      hasOnlyKeys(block, toolCallBlockKeys) &&
+      isUuidV4(block.toolCallId) &&
+      (block.summary === undefined || isBoundedTrimmedString(block.summary, 1, 500))
+    );
   }
 
   if (block.type === 'asset') {
-    return typeof block.assetId === 'string' && optionalString(block.label);
+    return (
+      hasOnlyKeys(block, assetBlockKeys) &&
+      isUuidV4(block.assetId) &&
+      (block.label === undefined || isBoundedTrimmedString(block.label, 1, 500))
+    );
   }
 
   if (block.type === 'plan') {
-    return typeof block.planId === 'string' && optionalString(block.label);
+    return (
+      hasOnlyKeys(block, planBlockKeys) &&
+      isUuidV4(block.planId) &&
+      (block.label === undefined || isBoundedTrimmedString(block.label, 1, 500))
+    );
+  }
+
+  if (block.type === 'clarification') {
+    return (
+      hasOnlyKeys(block, clarificationBlockKeys) &&
+      typeof block.kind === 'string' &&
+      clarificationKinds.has(block.kind) &&
+      isBoundedTrimmedString(block.query, 1, 500) &&
+      isBoundedTrimmedString(block.summary, 1, 1000) &&
+      isBoundedTrimmedString(block.textFallback, 1, 1000) &&
+      Array.isArray(block.choices) &&
+      block.choices.length >= 1 &&
+      block.choices.length <= 10 &&
+      block.choices.every((choice) => {
+        const normalizedChoice = objectRecord(choice);
+        return (
+          hasOnlyKeys(normalizedChoice, clarificationChoiceKeys) &&
+          isChoiceRef(normalizedChoice.choiceRef) &&
+          normalizedChoice.choiceRef.startsWith(`choice:${block.kind}:`) &&
+          isBoundedTrimmedString(normalizedChoice.label, 1, 500) &&
+          (normalizedChoice.description === undefined ||
+            isBoundedTrimmedString(normalizedChoice.description, 1, 500)) &&
+          (normalizedChoice.thumbnailAssetId === undefined ||
+            normalizedChoice.thumbnailAssetId === null ||
+            isUuidV4(normalizedChoice.thumbnailAssetId))
+        );
+      })
+    );
   }
 
   return false;
@@ -108,7 +168,13 @@ const isMessageBlock = (value: unknown): boolean => {
 
 const isMessageContent = (value: unknown): boolean => {
   const content = objectRecord(value);
-  return Array.isArray(content.blocks) && content.blocks.every((block) => isMessageBlock(block));
+  return (
+    Array.isArray(content.blocks) &&
+    content.blocks.length >= 1 &&
+    content.blocks.length <= 100 &&
+    jsonByteLength(content) <= MAX_CONTENT_BYTES &&
+    content.blocks.every((block) => isMessageBlock(block))
+  );
 };
 
 const normalizeActivityEvent = (value: unknown): AgentRunnerActivityStreamEvent | null => {

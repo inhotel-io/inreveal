@@ -6,19 +6,26 @@ import z from 'zod';
 const MAX_CONTENT_BYTES = 32_768;
 const text = z.string().trim().min(1).max(8000);
 const label = z.string().trim().min(1).max(500).optional();
+const clarificationLabel = z.string().trim().min(1).max(500);
+const clarificationKinds = ['person', 'tag', 'album', 'space', 'cameraMake', 'cameraModel', 'lensModel'] as const;
+const choiceRef = z
+  .string()
+  .regex(/^choice:(person|tag|album|space|cameraMake|cameraModel|lensModel):[A-Za-z0-9_-]{8,120}$/, {
+    message: 'choiceRef must use the choice:<kind>:<token> format',
+  });
 const jsonByteLength = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8');
 
 const AgentMessageRoleSchema = z.enum(AgentMessageRole).meta({ id: 'AgentMessageRole' });
 
 const AgentMessageTextBlockSchema = z
-  .object({
+  .strictObject({
     type: z.literal('text').meta({ id: 'AgentMessageTextBlockType' }),
     text,
   })
   .meta({ id: 'AgentMessageTextBlock' });
 
 const AgentMessageToolCallBlockSchema = z
-  .object({
+  .strictObject({
     type: z.literal('tool-call').meta({ id: 'AgentMessageToolCallBlockType' }),
     toolCallId: z.uuidv4(),
     summary: label,
@@ -26,7 +33,7 @@ const AgentMessageToolCallBlockSchema = z
   .meta({ id: 'AgentMessageToolCallBlock' });
 
 const AgentMessageAssetBlockSchema = z
-  .object({
+  .strictObject({
     type: z.literal('asset').meta({ id: 'AgentMessageAssetBlockType' }),
     assetId: z.uuidv4(),
     label,
@@ -34,12 +41,36 @@ const AgentMessageAssetBlockSchema = z
   .meta({ id: 'AgentMessageAssetBlock' });
 
 const AgentMessagePlanBlockSchema = z
-  .object({
+  .strictObject({
     type: z.literal('plan').meta({ id: 'AgentMessagePlanBlockType' }),
     planId: z.uuidv4(),
     label,
   })
   .meta({ id: 'AgentMessagePlanBlock' });
+
+const AgentMessageClarificationChoiceSchema = z
+  .strictObject({
+    choiceRef,
+    label: clarificationLabel,
+    description: clarificationLabel.optional(),
+    thumbnailAssetId: z.uuidv4().nullable().optional(),
+  })
+  .meta({ id: 'AgentMessageClarificationChoice' });
+
+const AgentMessageClarificationBlockSchema = z
+  .strictObject({
+    type: z.literal('clarification').meta({ id: 'AgentMessageClarificationBlockType' }),
+    kind: z.enum(clarificationKinds),
+    query: z.string().trim().min(1).max(500),
+    summary: z.string().trim().min(1).max(1000),
+    textFallback: z.string().trim().min(1).max(1000),
+    choices: z.array(AgentMessageClarificationChoiceSchema).min(1).max(10),
+  })
+  .refine((block) => block.choices.every((choice) => choice.choiceRef.startsWith(`choice:${block.kind}:`)), {
+    path: ['choices'],
+    message: 'choiceRef kind must match clarification kind',
+  })
+  .meta({ id: 'AgentMessageClarificationBlock' });
 
 const AgentMessageBlockSchema = z
   .discriminatedUnion('type', [
@@ -47,6 +78,7 @@ const AgentMessageBlockSchema = z
     AgentMessageToolCallBlockSchema,
     AgentMessageAssetBlockSchema,
     AgentMessagePlanBlockSchema,
+    AgentMessageClarificationBlockSchema,
   ])
   .meta({ id: 'AgentMessageBlock' });
 
