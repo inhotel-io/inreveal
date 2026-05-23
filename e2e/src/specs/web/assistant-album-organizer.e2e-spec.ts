@@ -239,7 +239,7 @@ test.describe('Assistant album organizer', () => {
     await renamedPortugalDestination.getByRole('button', { name: 'Show technical details' }).nth(1).click();
     await expect(page.getByText(proposedAddOperation!.id)).toBeVisible();
 
-    await renamedPortugalDestination.getByRole('button', { name: 'Change selection' }).click();
+    await renamedPortugalDestination.getByRole('button', { name: 'Change selection' }).nth(1).click();
     const photoReviewDialog = page.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
     await photoReviewDialog.getByRole('checkbox', { name: 'Include photo 2' }).uncheck();
     await photoReviewDialog.getByRole('button', { name: 'Done reviewing' }).click();
@@ -340,7 +340,7 @@ test.describe('Assistant album organizer', () => {
     const excludedAssetId = addOperation.assetIds[1];
     const portugalDestination = getPortugalDestination(page);
 
-    await portugalDestination.getByRole('button', { name: 'Change selection' }).click();
+    await portugalDestination.getByRole('button', { name: 'Change selection' }).nth(1).click();
     const photoReviewDialog = page.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
     await expect(photoReviewDialog.getByRole('checkbox', { name: 'Include photo 2' })).toBeVisible();
     await photoReviewDialog.getByRole('checkbox', { name: 'Include photo 2' }).uncheck();
