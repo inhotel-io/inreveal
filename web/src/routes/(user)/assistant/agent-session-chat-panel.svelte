@@ -976,7 +976,7 @@
 
   <div class="h-full overflow-y-auto" aria-live={showAssistantBusyIndicator ? 'off' : 'polite'}>
     <div
-      class="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 px-4 pb-36 pt-6 md:px-0"
+      class="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-4 px-4 pb-36 pt-6 md:px-0"
       data-testid="agent-session-chat-transcript"
     >
       {#each chatTimelineItems as item (item.id)}
@@ -1073,7 +1073,7 @@
           {@const detailsOpen = expandedToolCallIds[toolCall.id] === true}
           <article
             data-chat-item
-            class="mr-auto max-w-[82%] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-slate-700 shadow-sm dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
+            class="mr-auto w-full max-w-4xl rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-slate-700 shadow-sm dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
             aria-label={`${actionText.replace(/\.$/, '')}: ${toolStatus}`}
           >
             <div class="flex flex-wrap items-center gap-2">
