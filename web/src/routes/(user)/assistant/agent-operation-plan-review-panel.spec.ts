@@ -504,6 +504,27 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(screen.getByRole('button', { name: 'Apply 2 selected' })).toBeInTheDocument();
   });
 
+  it('omits stale collapsed thumbnails when all asset items are excluded', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+
+    render(AgentOperationPlanReviewPanel, { props: { session, variant: 'dock' } });
+
+    const detailsButtons = await screen.findAllByText('Details');
+    await fireEvent.click(detailsButtons[1]);
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 1' }));
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
+
+    expect(screen.getByRole('button', { name: 'Apply 2 selected' })).toBeInTheDocument();
+    expect(screen.getByText('2 changes · 0 assets selected')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Collapse plan' }));
+
+    const collapsedSummary = screen.getByTestId('agent-operation-plan-collapsed-summary');
+    expect(within(collapsedSummary).getByText('2 selected changes')).toBeInTheDocument();
+    expect(within(collapsedSummary).getByText('0 selected assets')).toBeInTheDocument();
+    expect(within(collapsedSummary).queryByTestId('agent-plan-thumbnail-strip')).not.toBeInTheDocument();
+  });
+
   it('preserves disabled operations, sparse selections, and field overrides after collapse while hiding raw IDs again', async () => {
     sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
 
