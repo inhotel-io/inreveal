@@ -12,8 +12,8 @@ import {
   SharedSpaceRole,
   UserAvatarColorSchema,
 } from 'src/enum';
-import { validateAgentAssetSourceMechanismCount } from 'src/types/agent-asset-source.types';
 import type { AgentAssetSourceInput } from 'src/types/agent-asset-source.types';
+import { validateAgentAssetSourceMechanismCount } from 'src/types/agent-asset-source.types';
 import { isoDatetimeToDate } from 'src/validation';
 import z from 'zod';
 
