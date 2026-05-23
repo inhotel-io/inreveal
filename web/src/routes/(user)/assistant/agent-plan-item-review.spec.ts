@@ -194,8 +194,8 @@ describe('AgentPlanItemReview', () => {
     const tileGrid = screen.getByTestId('agent-plan-item-review-tile-grid');
 
     expect(tileGrid).toHaveStyle({
-      'grid-template-columns': 'repeat(6, 128px)',
-      'grid-auto-rows': '128px',
+      'grid-template-columns': 'repeat(6, 168px)',
+      'grid-auto-rows': '168px',
     });
   });
 
@@ -286,9 +286,10 @@ describe('AgentPlanItemReview', () => {
     const grid = screen.getByTestId('agent-plan-item-review-grid');
     const tileGrid = within(grid).getByTestId('agent-plan-item-review-tile-grid');
 
-    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(10, 128px)' });
-    expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(40);
-    expect(screen.getByText('Showing 40 of 100 photos')).toBeInTheDocument();
+    expect(grid).toHaveStyle({ width: '1400px', 'max-width': '100%' });
+    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(8, 168px)' });
+    expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(32);
+    expect(screen.getByText('Showing 32 of 100 photos')).toBeInTheDocument();
   });
 
   it('shows excluded counts and reset action for partial selection', async () => {
