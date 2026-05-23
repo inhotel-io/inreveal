@@ -21,11 +21,28 @@ export type AgentMessagePlanBlock = {
   label?: string;
 };
 
+export type AgentMessageClarificationChoice = {
+  choiceRef: string;
+  label: string;
+  description?: string;
+  thumbnailAssetId?: string | null;
+};
+
+export type AgentMessageClarificationBlock = {
+  type: 'clarification';
+  kind: 'person' | 'tag' | 'album' | 'space' | 'cameraMake' | 'cameraModel' | 'lensModel';
+  query: string;
+  summary: string;
+  textFallback: string;
+  choices: AgentMessageClarificationChoice[];
+};
+
 export type AgentMessageBlock =
   | AgentMessageTextBlock
   | AgentMessageToolCallBlock
   | AgentMessageAssetBlock
-  | AgentMessagePlanBlock;
+  | AgentMessagePlanBlock
+  | AgentMessageClarificationBlock;
 
 export type AgentMessageContent = {
   blocks: AgentMessageBlock[];
