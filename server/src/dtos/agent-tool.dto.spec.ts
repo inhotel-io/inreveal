@@ -1389,6 +1389,38 @@ describe('Agent tool DTOs', () => {
       expectIssue(result, ['results', 0, 'choices', 0, 'choiceRef'], 'choiceRef must use');
     });
 
+    it('rejects resolve filter choices with raw UUID choice ref tokens', () => {
+      const tagId = factory.uuid();
+      const result = AgentResolveAssetSearchFiltersToolResponseDto.schema.safeParse({
+        status: 'success',
+        toolCall: makeEncodedToolCall(),
+        resolvedFilters: { tagIds: [tagId] },
+        resultSize: makeResultSize({ returnedItems: 1 }),
+        results: [
+          {
+            kind: 'tag',
+            query: 'Travel',
+            status: 'matched',
+            id: tagId,
+            value: 'Travel',
+            searchFilter: { tagIds: [tagId] },
+            choices: [
+              {
+                id: tagId,
+                choiceRef: `choice:tag:${factory.uuid()}`,
+                value: 'Travel',
+                label: 'Travel',
+                searchFilter: { tagIds: [tagId] },
+              },
+            ],
+            message: 'Matched tag Travel.',
+          },
+        ],
+      });
+
+      expectIssue(result, ['results', 0, 'choices', 0, 'choiceRef'], 'choiceRef token must not be a UUID');
+    });
+
     it('rejects resolve filter choices with refs from a different result kind', () => {
       const tagId = factory.uuid();
       const result = AgentResolveAssetSearchFiltersToolResponseDto.schema.safeParse({
