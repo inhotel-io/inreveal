@@ -216,6 +216,29 @@ describe('AgentPlanDestinationCard', () => {
     expect(screen.queryByRole('group', { name: 'Review photos for Add 2 photos' })).not.toBeInTheDocument();
   });
 
+  it('shows only selected thumbnails in the photo stage after item exclusions', () => {
+    render(AgentPlanDestinationCard, {
+      props: {
+        group: group(undefined, { [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] } }),
+        canChangeSelection: true,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+      },
+    });
+
+    const stage = screen.getByTestId('agent-plan-photo-stage');
+    const thumbnailStrip = within(stage).getByTestId('agent-plan-thumbnail-strip');
+    const images = within(thumbnailStrip).getAllByTestId('agent-plan-thumbnail-image');
+
+    expect(stage).toHaveTextContent('1 selected trip photos');
+    expect(thumbnailStrip).toHaveAttribute('aria-label', '1 photo previews');
+    expect(images).toHaveLength(1);
+    expect(images[0]).toHaveAttribute('src', `/api/assets/${assetA}/thumbnail?size=thumbnail`);
+    expect(within(thumbnailStrip).queryByText(/\+\d+/)).not.toBeInTheDocument();
+  });
+
   it('keeps another row open when the photo stage opens the review modal', async () => {
     const onOpenItemReview = vi.fn();
     render(AgentPlanDestinationCard, {

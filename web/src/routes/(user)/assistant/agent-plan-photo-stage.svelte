@@ -11,13 +11,26 @@
 
   let { group, primaryItem, onOpenItemReview = () => undefined }: Props = $props();
 
-  const selectedAssetCount = $derived(
-    new Set(
-      group.operations
-        .filter((operation) => operation.enabled && !operation.blocked)
-        .flatMap((operation) => operation.selectedAssetIds),
-    ).size,
+  const selectedAssetIds = $derived(
+    Array.from(
+      new Set(
+        group.operations
+          .filter((operation) => operation.enabled && !operation.blocked)
+          .flatMap((operation) => operation.selectedAssetIds),
+      ),
+    ),
   );
+  const selectedAssetCount = $derived(selectedAssetIds.length);
+  const selectedThumbnailGroup = $derived({
+    ...group,
+    assetCount: selectedAssetCount,
+    thumbnailSummary: {
+      totalCount: selectedAssetCount,
+      representativeAssetIds: selectedAssetIds,
+      hasMore: false,
+    },
+    representativeAssetIds: selectedAssetIds,
+  });
   const supportsItemSelection = $derived(Boolean(primaryItem?.review.selection.supportsItemSelection));
 </script>
 
@@ -49,6 +62,6 @@
       {/if}
     </div>
 
-    <AgentPlanThumbnailStrip {group} variant="mosaic" maxVisible={7} />
+    <AgentPlanThumbnailStrip group={selectedThumbnailGroup} variant="mosaic" maxVisible={7} />
   </section>
 {/if}
