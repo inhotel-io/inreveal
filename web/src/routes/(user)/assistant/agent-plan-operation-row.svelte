@@ -15,6 +15,8 @@
     onResetItemSelection: (operationId: string) => void;
     onSetFieldOverride?: (operationId: string, fieldKey: string, value: string | undefined) => void;
     onResetFieldOverride?: (operationId: string, fieldKey: string) => void;
+    itemReviewOpen?: boolean;
+    onToggleItemReview?: (open: boolean) => void;
   }
 
   let {
@@ -27,8 +29,11 @@
     onResetItemSelection,
     onSetFieldOverride = () => {},
     onResetFieldOverride = () => {},
+    itemReviewOpen,
+    onToggleItemReview,
   }: Props = $props();
-  let itemReviewOpen = $state(false);
+  let localItemReviewOpen = $state(false);
+  const effectiveItemReviewOpen = $derived(itemReviewOpen ?? localItemReviewOpen);
 
   const checkboxState = $derived({
     checked: item.enabled,
@@ -52,6 +57,17 @@
     update(state);
 
     return { update };
+  };
+
+  const toggleItemReview = () => {
+    const nextOpen = !effectiveItemReviewOpen;
+
+    if (onToggleItemReview) {
+      onToggleItemReview(nextOpen);
+      return;
+    }
+
+    localItemReviewOpen = nextOpen;
   };
 </script>
 
@@ -111,13 +127,13 @@
       <button
         type="button"
         class="text-xs font-medium text-gray-600 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-immich-primary dark:text-gray-300"
-        aria-expanded={itemReviewOpen}
-        onclick={() => (itemReviewOpen = !itemReviewOpen)}
+        aria-expanded={effectiveItemReviewOpen}
+        onclick={toggleItemReview}
       >
-        {$t(itemReviewOpen ? 'assistant_operation_detail_hide' : 'assistant_operation_detail_show')}
+        {$t(effectiveItemReviewOpen ? 'assistant_operation_detail_hide' : 'assistant_operation_detail_show')}
       </button>
 
-      {#if itemReviewOpen}
+      {#if effectiveItemReviewOpen}
         <AgentPlanItemReview
           {item}
           {canChangeSelection}
@@ -129,6 +145,6 @@
       {/if}
     </div>
 
-    <AgentPlanTechnicalDetails {item} expanded={itemReviewOpen} showToggle={false} />
+    <AgentPlanTechnicalDetails {item} expanded={effectiveItemReviewOpen} showToggle={false} />
   </div>
 </div>
