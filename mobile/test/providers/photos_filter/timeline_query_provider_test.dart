@@ -13,6 +13,7 @@ import 'package:immich_mobile/providers/infrastructure/user.provider.dart' as in
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/timeline_query.provider.dart';
 import 'package:immich_mobile/providers/sync_status.provider.dart';
+import 'package:immich_mobile/providers/timeline/temporal_scope.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -136,6 +137,75 @@ void main() {
       container.read(photosTimelineQueryProvider);
       await Future<void>.delayed(const Duration(milliseconds: 5));
 
+      verifyNever(() => search.search(any(), any()));
+    });
+
+    test('temporal scope alone makes the Photos timeline search-backed with date bounds', () async {
+      final factory = _MockFactory();
+      final search = _MockSearch();
+      final fake = _FakeService();
+      SearchFilter? captured;
+      when(() => search.search(any(), 1)).thenAnswer((invocation) async {
+        captured = invocation.positionalArguments.first as SearchFilter;
+        return const SearchResult(assets: []);
+      });
+      when(() => factory.fromAssetStream(any(), any(), TimelineOrigin.search)).thenReturn(fake);
+
+      final container = _container(factory: factory, search: search, user: _user('u1'));
+      container.read(timelineTemporalScopeProvider.notifier).setYear(2025);
+      addTearDown(container.dispose);
+
+      final svc = container.read(photosTimelineQueryProvider);
+      expect(svc, same(fake));
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+
+      expect(captured, isNotNull);
+      expect(captured!.date.takenAfter, DateTime(2025));
+      expect(captured!.date.takenBefore, DateTime(2025, 12, 31, 23, 59, 59));
+      verify(() => factory.fromAssetStream(any(), any(), TimelineOrigin.search)).called(1);
+    });
+
+    test('temporal scope composes with active text filter for search-backed timeline', () async {
+      final factory = _MockFactory();
+      final search = _MockSearch();
+      final fake = _FakeService();
+      SearchFilter? captured;
+      when(() => search.search(any(), 1)).thenAnswer((invocation) async {
+        captured = invocation.positionalArguments.first as SearchFilter;
+        return const SearchResult(assets: []);
+      });
+      when(() => factory.fromAssetStream(any(), any(), TimelineOrigin.search)).thenReturn(fake);
+
+      final container = _container(factory: factory, search: search, user: _user('u1'));
+      container.read(photosFilterProvider.notifier).setText('paris');
+      container.read(timelineTemporalScopeProvider.notifier).setMonth(year: 2025, month: 3);
+      addTearDown(container.dispose);
+
+      final svc = container.read(photosTimelineQueryProvider);
+      expect(svc, same(fake));
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+
+      expect(captured, isNotNull);
+      expect(captured!.context, 'paris');
+      expect(captured!.date.takenAfter, DateTime(2025, 3));
+      expect(captured!.date.takenBefore, DateTime(2025, 3, 31, 23, 59, 59));
+    });
+
+    test('cleared temporal scope returns empty Photos filter to main-library service', () {
+      final factory = _MockFactory();
+      final search = _MockSearch();
+      final fake = _FakeService();
+      when(() => factory.main(any(), any())).thenReturn(fake);
+
+      final container = _container(factory: factory, search: search, user: _user('u1'));
+      final temporal = container.read(timelineTemporalScopeProvider.notifier);
+      temporal.setYear(2025);
+      temporal.clear();
+      addTearDown(container.dispose);
+
+      final svc = container.read(photosTimelineQueryProvider);
+      expect(svc, same(fake));
+      verify(() => factory.main(any(), 'u1')).called(1);
       verifyNever(() => search.search(any(), any()));
     });
 

@@ -1,18 +1,19 @@
 // photosTimelineQueryProvider — overrides `timelineServiceProvider` inside
 // `MainTimelinePage`. Empty filter / pre-login → main library service.
 // Non-empty + logged-in → search-backed service driven by the paginating
-// `photosFilterSearchProvider` notifier. 500 ms debounce lives in
-// `photosTimelineFilterProvider`; consumers watch the result here.
+// `photosFilterSearchProvider` notifier. The effective provider composes
+// temporal scope through the 500 ms debounced Photos filter before consumers
+// watch the result here.
 
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/services/timeline.service.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
-import 'package:immich_mobile/providers/photos_filter/filter_debounce.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter_search.provider.dart';
+import 'package:immich_mobile/providers/photos_filter/timeline_temporal_filter.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
 
 final photosTimelineQueryProvider = Provider<TimelineService>((ref) {
-  final filter = ref.watch(photosTimelineFilterProvider);
+  final filter = ref.watch(photosTimelineEffectiveFilterProvider);
   final userId = ref.watch(currentUserProvider.select((u) => u?.id));
   final timelineUsers = ref.watch(timelineUsersProvider).valueOrNull ?? const <String>[];
   final factory = ref.watch(timelineFactoryProvider);
