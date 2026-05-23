@@ -557,7 +557,9 @@
             {#if planExpanded}
               <div class="flex flex-col gap-1 text-sm font-medium text-gray-600 dark:text-gray-300 sm:text-right">
                 <span>{$t('assistant_operation_plan_no_destructive_changes')}</span>
-                <span>{$t('assistant_operation_selected_count', { values: { count: selectedOperationIds.length } })}</span>
+                <span
+                  >{$t('assistant_operation_selected_count', { values: { count: selectedOperationIds.length } })}</span
+                >
               </div>
             {/if}
             <button

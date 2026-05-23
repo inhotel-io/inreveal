@@ -56,10 +56,7 @@
     {#if strip.hasThumbnails}
       <div class={wrapperClass}>
         {#each strip.assetIds as assetId, index (assetId)}
-          <figure
-            class={tileClass(index)}
-            data-testid="agent-plan-thumbnail-tile"
-          >
+          <figure class={tileClass(index)} data-testid="agent-plan-thumbnail-tile">
             <img
               class="size-full object-cover"
               data-testid="agent-plan-thumbnail-image"

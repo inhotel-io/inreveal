@@ -319,7 +319,9 @@
           <label
             class={[
               'group relative aspect-square overflow-hidden rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800',
-              variant === 'modal' && selected ? 'ring-2 ring-immich-primary ring-offset-2 dark:ring-immich-dark-primary dark:ring-offset-gray-950' : '',
+              variant === 'modal' && selected
+                ? 'ring-2 ring-immich-primary ring-offset-2 dark:ring-immich-dark-primary dark:ring-offset-gray-950'
+                : '',
               variant === 'modal' && !selected ? 'opacity-60' : '',
             ]
               .filter(Boolean)
