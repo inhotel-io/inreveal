@@ -230,10 +230,24 @@ class ApiClient {
           return AgentAssetSetArchiveOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetSetFavoriteOperationType':
           return AgentAssetSetFavoriteOperationTypeTypeTransformer().decode(value);
+        case 'AgentAssetSourceInput':
+          return AgentAssetSourceInput.fromJson(value);
         case 'AgentAssignableSharedSpaceMemberRole':
           return AgentAssignableSharedSpaceMemberRoleTypeTransformer().decode(value);
         case 'AgentCredentialSnapshot':
           return AgentCredentialSnapshot.fromJson(value);
+        case 'AgentDeclarativeAssetFilters':
+          return AgentDeclarativeAssetFilters.fromJson(value);
+        case 'AgentDeclarativeCameraFilter':
+          return AgentDeclarativeCameraFilter.fromJson(value);
+        case 'AgentDeclarativeNameMatch':
+          return AgentDeclarativeNameMatchTypeTransformer().decode(value);
+        case 'AgentDeclarativeNamedFilter':
+          return AgentDeclarativeNamedFilter.fromJson(value);
+        case 'AgentDeclarativeSpaceFilter':
+          return AgentDeclarativeSpaceFilter.fromJson(value);
+        case 'AgentExplicitAssetsAssetSourceInput':
+          return AgentExplicitAssetsAssetSourceInput.fromJson(value);
         case 'AgentListAlbumsToolApprovalRequiredResponse':
           return AgentListAlbumsToolApprovalRequiredResponse.fromJson(value);
         case 'AgentListAlbumsToolDeniedResponse':
@@ -260,6 +274,12 @@ class ApiClient {
           return AgentMessageAssetBlockTypeTypeTransformer().decode(value);
         case 'AgentMessageBlock':
           return AgentMessageBlock.fromJson(value);
+        case 'AgentMessageClarificationBlock':
+          return AgentMessageClarificationBlock.fromJson(value);
+        case 'AgentMessageClarificationBlockType':
+          return AgentMessageClarificationBlockTypeTypeTransformer().decode(value);
+        case 'AgentMessageClarificationChoice':
+          return AgentMessageClarificationChoice.fromJson(value);
         case 'AgentMessageContent':
           return AgentMessageContent.fromJson(value);
         case 'AgentMessageCreateDto':
@@ -316,6 +336,8 @@ class ApiClient {
           return AgentOperationPlanSummaryRequestDto.fromJson(value);
         case 'AgentOperationPlanToolResponseDto':
           return AgentOperationPlanToolResponseDto.fromJson(value);
+        case 'AgentOperationPlanningAssetSourceInput':
+          return AgentOperationPlanningAssetSourceInput.fromJson(value);
         case 'AgentOperationResponseDto':
           return AgentOperationResponseDto.fromJson(value);
         case 'AgentOperationRiskLevel':
@@ -340,6 +362,8 @@ class ApiClient {
           return AgentPermissionPlanWriteScope.fromJson(value);
         case 'AgentPermissionPreset':
           return AgentPermissionPresetTypeTransformer().decode(value);
+        case 'AgentPreviousSearchAssetSourceInput':
+          return AgentPreviousSearchAssetSourceInput.fromJson(value);
         case 'AgentProposeAlbumOperationsDto':
           return AgentProposeAlbumOperationsDto.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInner':
@@ -472,6 +496,8 @@ class ApiClient {
           return AgentRunnerStatusReasonTypeTransformer().decode(value);
         case 'AgentSearchAssetResult':
           return AgentSearchAssetResult.fromJson(value);
+        case 'AgentSearchAssetSourceInput':
+          return AgentSearchAssetSourceInput.fromJson(value);
         case 'AgentSearchAssetsDetail':
           return AgentSearchAssetsDetailTypeTransformer().decode(value);
         case 'AgentSearchAssetsField':
@@ -504,6 +530,8 @@ class ApiClient {
           return AgentSearchUsersToolResponseDto.fromJson(value);
         case 'AgentSearchUsersToolSuccessResponse':
           return AgentSearchUsersToolSuccessResponse.fromJson(value);
+        case 'AgentSelectionHandleAssetSourceInput':
+          return AgentSelectionHandleAssetSourceInput.fromJson(value);
         case 'AgentSessionActivityEventCounts':
           return AgentSessionActivityEventCounts.fromJson(value);
         case 'AgentSessionActivityEventResponseDto':

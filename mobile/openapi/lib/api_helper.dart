@@ -97,8 +97,14 @@ String parameterToString(dynamic value) {
   if (value is AgentAssignableSharedSpaceMemberRole) {
     return AgentAssignableSharedSpaceMemberRoleTypeTransformer().encode(value).toString();
   }
+  if (value is AgentDeclarativeNameMatch) {
+    return AgentDeclarativeNameMatchTypeTransformer().encode(value).toString();
+  }
   if (value is AgentMessageAssetBlockType) {
     return AgentMessageAssetBlockTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentMessageClarificationBlockType) {
+    return AgentMessageClarificationBlockTypeTypeTransformer().encode(value).toString();
   }
   if (value is AgentMessagePlanBlockType) {
     return AgentMessagePlanBlockTypeTypeTransformer().encode(value).toString();
