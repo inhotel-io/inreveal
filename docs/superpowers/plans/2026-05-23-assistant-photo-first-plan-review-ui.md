@@ -52,6 +52,7 @@
 ## Task 1: Rounded Plan Sheet And Collapsed Chat Summary
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-operation-plan-review-panel.svelte`
 - Modify: `web/src/routes/(user)/assistant/agent-operation-plan-review-panel.spec.ts`
 - Modify: `i18n/en.json`
@@ -134,7 +135,9 @@ const cardClass = $derived(
     'overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-xl shadow-black/5',
     'dark:border-neutral-800 dark:bg-neutral-950 dark:shadow-black/40',
     variant === 'dock' ? '' : 'p-0',
-  ].filter(Boolean).join(' '),
+  ]
+    .filter(Boolean)
+    .join(' '),
 );
 ```
 
@@ -281,6 +284,7 @@ git commit -m "feat: add rounded assistant plan shell"
 ## Task 2: Photo-first Destination Stage
 
 **Files:**
+
 - Create: `web/src/routes/(user)/assistant/agent-plan-photo-stage.svelte`
 - Modify: `web/src/routes/(user)/assistant/agent-plan-destination-card.svelte`
 - Modify: `web/src/routes/(user)/assistant/agent-plan-thumbnail-strip.svelte`
@@ -462,7 +466,9 @@ const tileClass = (index: number) =>
         ? 'size-10 rounded-xl'
         : 'size-14 rounded-md',
     variant === 'mosaic' && index === 0 ? 'sm:col-span-2 sm:row-span-2' : '',
-  ].filter(Boolean).join(' ');
+  ]
+    .filter(Boolean)
+    .join(' ');
 ```
 
 Use those classes in the markup:
@@ -559,6 +565,7 @@ git commit -m "feat: add photo-first plan stage"
 ## Task 3: Modal Photo Review
 
 **Files:**
+
 - Create: `web/src/routes/(user)/assistant/agent-plan-photo-review-modal.svelte`
 - Create: `web/src/routes/(user)/assistant/agent-plan-photo-review-modal.spec.ts`
 - Modify: `web/src/routes/(user)/assistant/agent-operation-plan-review-panel.spec.ts`
@@ -1118,6 +1125,7 @@ git commit -m "feat: add assistant photo review modal"
 ## Task 4: Separate Change Selection From Technical Details
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-plan-operation-row.svelte`
 - Modify: `web/src/routes/(user)/assistant/agent-plan-operation-row.spec.ts`
 - Modify: `web/src/routes/(user)/assistant/agent-plan-technical-details.svelte`
@@ -1289,6 +1297,7 @@ git commit -m "feat: separate photo review from technical details"
 ## Task 5: Rounded Header, Apply Dock, Chat Width, And Activity Timeline
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-session-header.svelte`
 - Modify: `web/src/routes/(user)/assistant/agent-session-header.spec.ts`
 - Modify: `web/src/routes/(user)/assistant/agent-activity-visibility-menu.svelte`
@@ -1503,6 +1512,7 @@ git commit -m "style: polish assistant plan review surfaces"
 ## Task 6: Full Verification And Visual Check
 
 **Files:**
+
 - Modify only files needed to fix failures found by this task.
 
 - [ ] **Step 1: Run all assistant frontend tests**
