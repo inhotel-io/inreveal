@@ -92,7 +92,7 @@ const planBlockKeys = new Set(['type', 'planId', 'label']);
 const clarificationKinds = new Set(['person', 'tag', 'album', 'space', 'cameraMake', 'cameraModel', 'lensModel']);
 const clarificationBlockKeys = new Set(['type', 'kind', 'query', 'summary', 'textFallback', 'choices']);
 const clarificationChoiceKeys = new Set(['choiceRef', 'label', 'description', 'thumbnailAssetId']);
-const isChoiceRef = (value: unknown): boolean =>
+const isChoiceRef = (value: unknown): value is string =>
   typeof value === 'string' &&
   /^choice:(person|tag|album|space|cameraMake|cameraModel|lensModel):[A-Za-z0-9_-]{8,120}$/.test(value);
 const activityKinds = new Set<AgentRunnerActivityKind>([
