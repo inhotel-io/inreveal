@@ -998,7 +998,7 @@
                     {#if message.role === AgentMessageRole.Assistant}
                       {@render assistantMarkdown(parseAssistantMarkdown(block.text))}
                     {:else}
-                      {block.text}
+                      <p class="whitespace-pre-wrap">{block.text}</p>
                     {/if}
                   {:else if message.role === AgentMessageRole.Assistant && isClarificationMessageBlock(block)}
                     <div class="space-y-3 whitespace-normal">
