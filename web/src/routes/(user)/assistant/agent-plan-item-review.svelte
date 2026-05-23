@@ -66,6 +66,7 @@
   const filteredAssetIds = $derived(filteredAssets.map((asset) => asset.id));
   const facets = $derived(getAgentPlanAvailableFilterFacets(reviewAssets));
   const videoAssetIds = $derived(reviewAssets.filter((asset) => asset.kind === 'video').map((asset) => asset.id));
+  const hasSelectionOverride = $derived(item.review.selection.mode !== 'all');
   const effectiveItemSize = $derived(itemSize ?? (variant === 'modal' ? MODAL_ITEM_SIZE : DEFAULT_ITEM_SIZE));
   const configuredColumnCount = $derived(columnCount === undefined ? undefined : Math.max(1, Math.floor(columnCount)));
   const measuredColumnCount = $derived(
@@ -171,16 +172,21 @@
         {/if}
       </div>
 
-      {#if item.review.selection.mode !== 'all'}
-        <button
-          type="button"
-          class="rounded-md px-2 py-1 text-sm font-medium text-immich-primary hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-immich-dark-primary dark:hover:bg-gray-800"
-          disabled={!canChangeSelection}
-          onclick={() => onResetSelection(item.id)}
-        >
-          {$t('assistant_operation_item_reset')}
-        </button>
-      {/if}
+      <button
+        type="button"
+        class={[
+          'rounded-md px-2 py-1 text-sm font-medium text-immich-primary hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-immich-dark-primary dark:hover:bg-gray-800',
+          hasSelectionOverride ? '' : 'invisible pointer-events-none',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        disabled={!canChangeSelection || !hasSelectionOverride}
+        aria-hidden={!hasSelectionOverride}
+        tabindex={hasSelectionOverride ? undefined : -1}
+        onclick={() => onResetSelection(item.id)}
+      >
+        {$t('assistant_operation_item_reset')}
+      </button>
     </div>
 
     <div
