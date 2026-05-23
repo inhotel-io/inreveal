@@ -152,9 +152,7 @@ it('rejects workflow asset sources that require raw ids or handles', () => {
   });
 
   expect(result.success).toBe(false);
-  expect(result.error?.issues).toEqual([
-    expect.objectContaining({ path: ['assetSource', 'kind'] }),
-  ]);
+  expect(result.error?.issues).toEqual([expect.objectContaining({ path: ['assetSource', 'kind'] })]);
 });
 
 it('keeps album workflow text validation aligned with album.create planning constraints', () => {
@@ -364,7 +362,11 @@ it('proposeAddAssetsToAlbumFromSearch creates only an add-assets operation for a
   const albumId = newUuid();
   const assetIds = [newUuid()];
   sessionRepository.getById.mockResolvedValue(session);
-  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
+  });
   sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
   searchRepository.searchMetadata.mockResolvedValue({
     items: assetIds.map((id) => ({ id })),
@@ -430,7 +432,11 @@ it('proposeAddAssetsToAlbumFromSearch resolves a unique visible album name befor
   albumRepository.getAgentAlbums.mockResolvedValue([
     { id: albumId, albumName: 'South Africa', ownerId: auth.user.id },
   ] as never);
-  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
+  });
   sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
   searchRepository.searchMetadata.mockResolvedValue({
     items: assetIds.map((id) => ({ id })),
@@ -1061,7 +1067,8 @@ const proposeAlbumFromSearchContract: AgentMcpPlanningToolContract = {
       description: 'Create a new album and add matching search results.',
       requiredFields: ['albumName', 'assetSource'],
       forbiddenFields: ['operations', 'assetIds', 'assetSelectionHandleId'],
-      whenToUse: 'Use for requests like create an album from photos matching date, place, people, tags, or a previous search.',
+      whenToUse:
+        'Use for requests like create an album from photos matching date, place, people, tags, or a previous search.',
     },
   ],
   examples: proposeAlbumFromSearchExamples,
@@ -1079,7 +1086,8 @@ const proposeAlbumFromSearchContract: AgentMcpPlanningToolContract = {
 const proposeAddAssetsToAlbumFromSearchContract: AgentMcpPlanningToolContract = {
   name: AgentToolName.ProposeAddAssetsToAlbumFromSearch,
   title: 'Propose add assets to album from search',
-  description: 'Preferred tool for adding matching photos to an existing album from a declarative or previous search source.',
+  description:
+    'Preferred tool for adding matching photos to an existing album from a declarative or previous search source.',
   usage:
     'Use this before low-level proposeAlbumOperations when the user asks to add matching photos to an existing album. Provide albumId when known, or a uniquely visible albumName. Gallery creates a reviewable plan only.',
   argumentModes: [
