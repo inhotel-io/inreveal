@@ -21,8 +21,18 @@ final photosTimelineQueryProvider = Provider<TimelineService>((ref) {
 });
 
 TimelineService buildPhotosTimelineRouteService(Ref ref, TimelineTemporalScope temporalScope) {
-  final filter = applyTimelineTemporalScope(ref.watch(photosTimelineFilterProvider), temporalScope);
-  return buildPhotosTimelineQuery(ref, filter);
+  final filter = ref.watch(photosTimelineFilterProvider);
+  final userId = ref.watch(currentUserProvider.select((u) => u?.id));
+  final timelineUsers = ref.watch(timelineUsersProvider).valueOrNull ?? const <String>[];
+  final factory = ref.watch(timelineFactoryProvider);
+
+  if (filter.isEmpty) {
+    final svc = factory.main(timelineUsers, userId ?? '', temporalScope: temporalScope);
+    ref.onDispose(svc.dispose);
+    return svc;
+  }
+
+  return buildPhotosTimelineQuery(ref, applyTimelineTemporalScope(filter, temporalScope));
 }
 
 TimelineService buildPhotosTimelineQuery(Ref ref, SearchFilter filter) {

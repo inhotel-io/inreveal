@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/search_result.model.dart';
+import 'package:immich_mobile/domain/models/timeline_temporal_scope.model.dart';
 import 'package:immich_mobile/domain/models/user.model.dart';
 import 'package:immich_mobile/domain/services/search.service.dart';
 import 'package:immich_mobile/domain/services/timeline.service.dart';
@@ -66,6 +67,7 @@ void main() {
   setUpAll(() {
     registerFallbackValue(_FakeFilter());
     registerFallbackValue(TimelineOrigin.main);
+    registerFallbackValue(const TimelineTemporalScope.none());
     registerFallbackValue(() => const <BaseAsset>[]);
     registerFallbackValue(const Stream<int>.empty());
   });
@@ -214,11 +216,11 @@ void main() {
       verifyNever(() => search.search(any(), any()));
     });
 
-    test('supports Photos timeline builder inside a route-local temporal scope', () {
+    test('temporal-only Photos timeline builder delegates to main timeline with route scope', () {
       final factory = _MockFactory();
       final search = _MockSearch();
       final fake = _FakeService();
-      when(() => factory.main(any(), any())).thenReturn(fake);
+      when(() => factory.main(any(), any(), temporalScope: any(named: 'temporalScope'))).thenReturn(fake);
 
       final parent = _container(factory: factory, search: search, user: _user('u1'));
       addTearDown(parent.dispose);
@@ -234,16 +236,56 @@ void main() {
       );
       addTearDown(route.dispose);
 
+      route.read(timelineTemporalScopeProvider.notifier).setYear(2025);
+
       expect(route.read(timelineServiceProvider), same(fake));
+      verify(() => factory.main(any(), 'u1', temporalScope: const TimelineTemporalScope.year(2025))).called(1);
+      verifyNever(() => search.search(any(), any()));
     });
 
-    testWidgets('TimelineRouteScope can host the Photos timeline builder', (tester) async {
+    test('filtered Photos timeline builder composes route scope into search filter', () async {
+      final factory = _MockFactory();
+      final search = _MockSearch();
+      final fake = _FakeService();
+      SearchFilter? captured;
+      when(() => search.search(any(), 1)).thenAnswer((invocation) async {
+        captured = invocation.positionalArguments.first as SearchFilter;
+        return const SearchResult(assets: []);
+      });
+      when(() => factory.fromAssetStream(any(), any(), TimelineOrigin.search)).thenReturn(fake);
+
+      final parent = _container(factory: factory, search: search, user: _user('u1'));
+      parent.read(photosFilterProvider.notifier).setText('paris');
+      addTearDown(parent.dispose);
+      final route = ProviderContainer(
+        parent: parent,
+        overrides: [
+          timelineTemporalScopeProvider.overrideWith(TimelineTemporalScopeNotifier.new),
+          timelineServiceProvider.overrideWith((ref) {
+            final temporalScope = ref.watch(timelineTemporalScopeProvider);
+            return buildPhotosTimelineRouteService(ref, temporalScope);
+          }),
+        ],
+      );
+      addTearDown(route.dispose);
+
+      route.read(timelineTemporalScopeProvider.notifier).setMonth(year: 2025, month: 3);
+
+      expect(route.read(timelineServiceProvider), same(fake));
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      expect(captured, isNotNull);
+      expect(captured!.context, 'paris');
+      expect(captured!.date.takenAfter, DateTime(2025, 3));
+      expect(captured!.date.takenBefore, DateTime(2025, 3, 31, 23, 59, 59));
+    });
+
+    testWidgets('TimelineRouteScope can host the temporal-only Photos timeline builder', (tester) async {
       final factory = _MockFactory();
       final search = _MockSearch();
       final fake = _FakeService();
       final user = _user('u1');
       final mockUserSvc = _MockUserService();
-      when(() => factory.main(any(), any())).thenReturn(fake);
+      when(() => factory.main(any(), any(), temporalScope: any(named: 'temporalScope'))).thenReturn(fake);
       when(() => mockUserSvc.tryGetMyUser()).thenReturn(user);
       when(() => mockUserSvc.watchMyUser()).thenAnswer((_) => const Stream<UserDto?>.empty());
 
