@@ -105,7 +105,7 @@
       </button>
     </header>
 
-    <div class="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+    <div class="min-h-0 flex-1 overflow-y-auto p-4">
       <AgentPlanItemReview
         {item}
         {canChangeSelection}
@@ -115,23 +115,6 @@
         {onResetSelection}
         variant="modal"
       />
-
-      <aside
-        class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200"
-        aria-label={$t('assistant_operation_photo_review_selection')}
-      >
-        <h3 class="font-semibold">{$t('assistant_operation_photo_review_selection')}</h3>
-        <p class="mt-3">
-          {$t('assistant_operation_item_selected_count', {
-            values: { selected: item.review.selection.selectedCount, total: item.review.selection.totalCount },
-          })}
-        </p>
-        {#if item.excludedAssetCount > 0}
-          <p class="mt-1">
-            {$t('assistant_operation_item_excluded_count', { values: { count: item.excludedAssetCount } })}
-          </p>
-        {/if}
-      </aside>
     </div>
 
     <footer class="flex flex-wrap justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
