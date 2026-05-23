@@ -70,7 +70,7 @@
   });
 </script>
 
-<div class="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-3 sm:items-center sm:p-6">
+<div class="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-2 sm:items-center sm:p-4">
   <button
     type="button"
     class="absolute inset-0 cursor-default"
@@ -81,7 +81,7 @@
 
   <div
     bind:this={dialog}
-    class="relative flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-gray-950"
+    class="relative flex h-[min(92vh,58rem)] max-h-full w-full max-w-[96rem] flex-col overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-gray-950"
     role="dialog"
     aria-modal="true"
     aria-labelledby={titleId}
@@ -105,7 +105,7 @@
       </button>
     </header>
 
-    <div class="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
+    <div class="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <AgentPlanItemReview
         {item}
         {canChangeSelection}
