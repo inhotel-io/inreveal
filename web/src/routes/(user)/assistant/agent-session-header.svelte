@@ -57,10 +57,11 @@
 </script>
 
 <section
-  class="flex min-h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800 md:px-6"
+  data-testid="agent-session-header"
+  class="flex min-h-16 shrink-0 flex-wrap items-center gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800 md:px-6"
   aria-labelledby="agent-session-header-title"
 >
-  <div class="min-w-0 flex-1">
+  <div data-testid="agent-session-header-title-group" class="min-w-0 flex-1 basis-72">
     <div class="flex min-w-0 items-center gap-2">
       <h1
         id="agent-session-header-title"
@@ -87,7 +88,7 @@
     </div>
   </div>
 
-  <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+  <div data-testid="agent-session-header-actions" class="flex min-w-0 flex-wrap items-center justify-end gap-2">
     {#if onCancel}
       <button
         type="button"
