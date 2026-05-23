@@ -880,6 +880,7 @@
   "assistant_operation_item_virtual_summary": "Showing {visible, number} of {total, number} {total, plural, one {photo} other {photos}}",
   "assistant_operation_partial_asset_summary": "{applied, plural, one {# applied} other {{applied, number} applied}} · {failed, plural, one {# failed} other {{failed, number} failed}}",
   "assistant_operation_photo_review_close": "Close",
+  "assistant_operation_photo_review_dismiss_backdrop": "Dismiss photo review backdrop",
   "assistant_operation_photo_review_done": "Done reviewing",
   "assistant_operation_photo_review_keep_original": "Keep original selection",
   "assistant_operation_photo_review_selection": "Selection",
