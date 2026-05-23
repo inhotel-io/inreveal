@@ -777,8 +777,8 @@ describe('AgentOperationPlanReviewPanel', () => {
     const itemSelection =
       sdkMock.applyApprovedOperations.mock.calls[0][0].agentOperationPlanApplyRequestDto.itemSelections?.[addId];
     expect(itemSelection).toMatchObject({ itemKind: 'asset', mode: 'allExcept' });
-    expect(itemSelection?.itemIds).toEqual(expect.arrayContaining(largeAssetIds.slice(0, 42)));
-    expect(itemSelection?.itemIds).toHaveLength(42);
+    expect(itemSelection?.itemIds).toEqual(expect.arrayContaining(largeAssetIds.slice(0, 36)));
+    expect(itemSelection?.itemIds).toHaveLength(36);
     expect(itemSelection?.itemIds?.length).toBeLessThan(80);
   });
 
@@ -830,7 +830,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     const changeSelection = await screen.findByRole('button', { name: 'Change selection' });
     await fireEvent.click(changeSelection);
     let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 1000 photos' });
-    expect(within(dialog).getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(42);
+    expect(within(dialog).getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(36);
 
     await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 1' }));
     expect(screen.getAllByText('999 of 1000 selected').length).toBeGreaterThan(0);
@@ -842,7 +842,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     dialog = screen.getByRole('dialog', { name: 'Review photos for Add 1000 photos' });
     expect(screen.getAllByText('999 of 1000 selected').length).toBeGreaterThan(0);
     expect(within(dialog).getByRole('checkbox', { name: 'Include photo 1' })).not.toBeChecked();
-    expect(within(dialog).getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(42);
+    expect(within(dialog).getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(36);
     expect(within(dialog).queryByRole('checkbox', { name: 'Include photo 1000' })).not.toBeInTheDocument();
   });
 
