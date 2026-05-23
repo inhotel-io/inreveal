@@ -17,6 +17,11 @@ import type {
   AgentSearchAssetsFilters,
 } from 'src/types/agent-tool.types';
 
+type SelectedChoiceRefs = {
+  all: Set<string>;
+  consumed: Set<string>;
+};
+
 @Injectable()
 export class AgentAssetSearchFilterResolverService {
   constructor(
@@ -72,23 +77,25 @@ export class AgentAssetSearchFilterResolverService {
           }),
           session.id,
         );
-        if (matched.status === 'matched') {
-          if (resolvedFilters.spaceId && resolvedFilters.spaceId !== matched.id) {
+        if (matched.result.status === 'matched') {
+          if (resolvedFilters.spaceId && resolvedFilters.spaceId !== matched.result.id) {
             results.push({
-              ...matched,
+              ...matched.result,
               status: 'ambiguous',
               searchFilter: undefined,
               choices: [
-                this.choiceForIdCandidate({ id: matched.id!, value: matched.value! }, 'space', { spaceId: matched.id }),
+                this.choiceForIdCandidate({ id: matched.result.id!, value: matched.result.value! }, 'space', {
+                  spaceId: matched.result.id,
+                }),
               ],
               message: 'Only one spaceId can be used in searchAssets',
             });
           } else {
-            resolvedFilters.spaceId = matched.id;
-            results.push(matched);
+            resolvedFilters.spaceId = matched.result.id;
+            results.push(matched.result);
           }
         } else {
-          results.push(matched);
+          results.push(matched.result);
         }
       }
     }
@@ -159,19 +166,19 @@ export class AgentAssetSearchFilterResolverService {
           (candidate) => ({ make: candidate.value }),
           session.id,
         );
-        if (matched.status === 'matched') {
-          resolvedFilters.make = matched.value;
+        if (matched.result.status === 'matched') {
+          resolvedFilters.make = matched.result.value;
           const models = await this.searchRepository.getCameraModels([auth.user.id], {
             ...repositoryScope,
-            make: matched.value,
+            make: matched.result.value,
           });
-          matched.choices = models.slice(0, 5).map((model) => ({
+          matched.result.choices = models.slice(0, 5).map((model) => ({
             value: model,
             label: model,
-            searchFilter: { make: matched.value, model },
+            searchFilter: { make: matched.result.value, model },
           }));
         }
-        results.push(matched);
+        results.push(matched.result);
       }
     }
 
@@ -190,10 +197,10 @@ export class AgentAssetSearchFilterResolverService {
           (candidate) => ({ model: candidate.value }),
           session.id,
         );
-        if (matched.status === 'matched') {
-          resolvedFilters.model = matched.value;
+        if (matched.result.status === 'matched') {
+          resolvedFilters.model = matched.result.value;
         }
-        results.push(matched);
+        results.push(matched.result);
       }
     }
 
@@ -213,10 +220,10 @@ export class AgentAssetSearchFilterResolverService {
           (candidate) => ({ lensModel: candidate.value }),
           session.id,
         );
-        if (matched.status === 'matched') {
-          resolvedFilters.lensModel = matched.value;
+        if (matched.result.status === 'matched') {
+          resolvedFilters.lensModel = matched.result.value;
         }
-        results.push(matched);
+        results.push(matched.result);
       }
     }
 
@@ -401,11 +408,13 @@ export class AgentAssetSearchFilterResolverService {
     sessionId: string,
     choiceRefs?: string[],
   ) {
+    const selected = choiceRefs?.length ? this.toSelectedChoiceRefs(choiceRefs) : undefined;
     const candidates = people.map((person) => ({
       id: person.primaryProfile?.id ?? person.id,
       value: person.name,
       searchFilter: this.getPersonSearchFilter(person, resolvedFilters.spaceId),
     }));
+    const deferredOrdinaryMatches: AgentResolvedAssetSearchFilterResult[] = [];
 
     for (const query of queries) {
       const matched = this.matchVisibleCandidates(
@@ -414,12 +423,29 @@ export class AgentAssetSearchFilterResolverService {
         'person',
         (candidate) => candidate.searchFilter,
         sessionId,
-        choiceRefs,
+        selected,
       );
-      if (matched.status === 'matched') {
-        this.mergeResolvedPersonFilter(resolvedFilters, matched.searchFilter);
+      if (selected && matched.selectionReplay === 'fallback') {
+        deferredOrdinaryMatches.push(matched.result);
+        continue;
       }
-      results.push(matched);
+
+      if (matched.result.status === 'matched') {
+        this.mergeResolvedPersonFilter(resolvedFilters, matched.result.searchFilter);
+      }
+      results.push(matched.result);
+    }
+
+    if (selected) {
+      if (selected.consumed.size > 0) {
+        for (const matched of deferredOrdinaryMatches) {
+          if (matched.status === 'matched') {
+            this.mergeResolvedPersonFilter(resolvedFilters, matched.searchFilter);
+          }
+          results.push(matched);
+        }
+      }
+      this.appendUnconsumedChoiceRefResult(results, 'person', selected);
     }
   }
 
@@ -481,6 +507,9 @@ export class AgentAssetSearchFilterResolverService {
     sessionId: string,
     choiceRefs?: string[],
   ) {
+    const selected = choiceRefs?.length ? this.toSelectedChoiceRefs(choiceRefs) : undefined;
+    const deferredOrdinaryMatches: AgentResolvedAssetSearchFilterResult[] = [];
+
     for (const query of queries) {
       const matched = this.matchVisibleCandidates(
         candidates,
@@ -490,13 +519,31 @@ export class AgentAssetSearchFilterResolverService {
           [filterKey]: [candidate.id],
         }),
         sessionId,
-        choiceRefs,
+        selected,
       );
-      if (matched.status === 'matched' && matched.id) {
-        const ids = (matched.searchFilter?.[filterKey] as string[] | undefined) ?? [matched.id];
+      if (selected && matched.selectionReplay === 'fallback') {
+        deferredOrdinaryMatches.push(matched.result);
+        continue;
+      }
+
+      if (matched.result.status === 'matched' && matched.result.id) {
+        const ids = (matched.result.searchFilter?.[filterKey] as string[] | undefined) ?? [matched.result.id];
         resolvedFilters[filterKey] = [...new Set([...(resolvedFilters[filterKey] ?? []), ...ids])];
       }
-      results.push(matched);
+      results.push(matched.result);
+    }
+
+    if (selected) {
+      if (selected.consumed.size > 0) {
+        for (const matched of deferredOrdinaryMatches) {
+          if (matched.status === 'matched' && matched.id) {
+            const ids = (matched.searchFilter?.[filterKey] as string[] | undefined) ?? [matched.id];
+            resolvedFilters[filterKey] = [...new Set([...(resolvedFilters[filterKey] ?? []), ...ids])];
+          }
+          results.push(matched);
+        }
+      }
+      this.appendUnconsumedChoiceRefResult(results, kind, selected);
     }
   }
 
@@ -506,82 +553,135 @@ export class AgentAssetSearchFilterResolverService {
     kind: AgentResolvedAssetSearchFilterKind,
     getSearchFilter: (candidate: T) => Partial<AgentSearchAssetsFilters>,
     sessionId: string,
-    choiceRefs?: string[],
-  ): AgentResolvedAssetSearchFilterResult {
+    selected?: SelectedChoiceRefs,
+  ): { result: AgentResolvedAssetSearchFilterResult; selectionReplay?: 'matched' | 'fallback' } {
     const exactMatches = candidates.filter((candidate) => this.isExactMatch(candidate.value, query));
-    if (choiceRefs?.length) {
-      const choices = exactMatches.flatMap((candidate) => {
-        const searchFilter = getSearchFilter(candidate);
-        return this.hasSearchFilter(searchFilter)
-          ? [this.choiceForIdCandidate(candidate, kind, searchFilter, sessionId, query)]
-          : [];
-      });
-      const selected = choices.filter((choice) => choice.choiceRef && choiceRefs.includes(choice.choiceRef));
-      if (selected.length === 0) {
+    if (selected) {
+      const choices = this.getReplayableChoices(candidates, exactMatches, query, kind, getSearchFilter, sessionId);
+      const matchedChoices = choices.filter((choice) => choice.choiceRef && selected.all.has(choice.choiceRef));
+      if (matchedChoices.length > 0) {
+        for (const choice of matchedChoices) {
+          if (choice.choiceRef) {
+            selected.consumed.add(choice.choiceRef);
+          }
+        }
+
         return {
-          kind,
-          query,
-          status: 'not_found',
-          choices,
-          message: `Selected ${kind} choice is no longer available; choose again`,
+          selectionReplay: 'matched',
+          result: {
+            kind,
+            query,
+            status: 'matched',
+            id: matchedChoices[0].id,
+            value: matchedChoices[0].value,
+            searchFilter: this.mergeChoiceSearchFilters(matchedChoices.map((choice) => choice.searchFilter ?? {})),
+            choices: [],
+            message: `Matched selected ${kind} choice "${query}"`,
+          },
         };
       }
-
-      return {
-        kind,
-        query,
-        status: 'matched',
-        id: selected[0].id,
-        value: selected[0].value,
-        searchFilter: this.mergeChoiceSearchFilters(selected.map((choice) => choice.searchFilter ?? {})),
-        choices: [],
-        message: `Matched selected ${kind} choice "${query}"`,
-      };
     }
 
     if (exactMatches.length === 1) {
       const candidate = exactMatches[0];
       return {
-        kind,
-        query,
-        status: 'matched',
-        id: candidate.id,
-        value: candidate.value,
-        searchFilter: getSearchFilter(candidate),
-        choices: [],
-        message: `Matched ${kind} "${query}"`,
+        ...(selected ? { selectionReplay: 'fallback' as const } : {}),
+        result: {
+          kind,
+          query,
+          status: 'matched',
+          id: candidate.id,
+          value: candidate.value,
+          searchFilter: getSearchFilter(candidate),
+          choices: [],
+          message: `Matched ${kind} "${query}"`,
+        },
       };
     }
 
     if (exactMatches.length > 1) {
       return {
-        kind,
-        query,
-        status: 'ambiguous',
-        choices: exactMatches.flatMap((candidate) => {
-          const searchFilter = getSearchFilter(candidate);
-          return this.hasSearchFilter(searchFilter)
-            ? [this.choiceForIdCandidate(candidate, kind, searchFilter, sessionId, query)]
-            : [];
-        }),
-        message: `Multiple visible ${kind} matches found`,
+        ...(selected ? { selectionReplay: 'fallback' as const } : {}),
+        result: {
+          kind,
+          query,
+          status: 'ambiguous',
+          choices: this.toChoiceRefs(exactMatches, kind, getSearchFilter, sessionId, query),
+          message: `Multiple visible ${kind} matches found`,
+        },
       };
     }
 
     return {
-      kind,
-      query,
-      status: 'not_found',
-      choices: this.getNotFoundSuggestionCandidates(candidates, query)
-        .flatMap((candidate) => {
-          const searchFilter = getSearchFilter(candidate);
-          return this.hasSearchFilter(searchFilter)
-            ? [this.choiceForIdCandidate(candidate, kind, searchFilter, sessionId, query)]
-            : [];
-        })
-        .slice(0, 5),
-      message: `No visible ${kind} match found`,
+      ...(selected ? { selectionReplay: 'fallback' as const } : {}),
+      result: {
+        kind,
+        query,
+        status: 'not_found',
+        choices: this.toChoiceRefs(
+          this.getNotFoundSuggestionCandidates(candidates, query).slice(0, 5),
+          kind,
+          getSearchFilter,
+          sessionId,
+          query,
+        ),
+        message: `No visible ${kind} match found`,
+      },
     };
+  }
+
+  private getReplayableChoices<T extends { id?: string; value: string }>(
+    candidates: T[],
+    exactMatches: T[],
+    query: string,
+    kind: AgentResolvedAssetSearchFilterKind,
+    getSearchFilter: (candidate: T) => Partial<AgentSearchAssetsFilters>,
+    sessionId: string,
+  ): AgentResolvedAssetSearchFilterChoice[] {
+    const replayableCandidates =
+      exactMatches.length > 0 ? exactMatches : this.getNotFoundSuggestionCandidates(candidates, query).slice(0, 5);
+    return this.toChoiceRefs(replayableCandidates, kind, getSearchFilter, sessionId, query);
+  }
+
+  private toChoiceRefs<T extends { id?: string; value: string }>(
+    candidates: T[],
+    kind: AgentResolvedAssetSearchFilterKind,
+    getSearchFilter: (candidate: T) => Partial<AgentSearchAssetsFilters>,
+    sessionId: string,
+    query: string,
+  ): AgentResolvedAssetSearchFilterChoice[] {
+    return candidates.flatMap((candidate) => {
+      const searchFilter = getSearchFilter(candidate);
+      return this.hasSearchFilter(searchFilter)
+        ? [this.choiceForIdCandidate(candidate, kind, searchFilter, sessionId, query)]
+        : [];
+    });
+  }
+
+  private toSelectedChoiceRefs(choiceRefs: string[]): SelectedChoiceRefs {
+    return {
+      all: new Set(choiceRefs),
+      consumed: new Set<string>(),
+    };
+  }
+
+  private appendUnconsumedChoiceRefResult(
+    results: AgentResolvedAssetSearchFilterResult[],
+    kind: AgentResolvedAssetSearchFilterKind,
+    selected: SelectedChoiceRefs,
+  ): void {
+    const unconsumed = [...selected.all].filter((choiceRef) => !selected.consumed.has(choiceRef));
+    if (unconsumed.length === 0) {
+      return;
+    }
+
+    results.push({
+      kind,
+      query: unconsumed.join(', '),
+      status: 'not_found',
+      choices: [],
+      message: `Selected ${kind} choice is no longer available; choose again`,
+    });
   }
 
   private hasSearchFilter(searchFilter: Partial<AgentSearchAssetsFilters>): boolean {
