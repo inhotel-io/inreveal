@@ -17,6 +17,7 @@ class AgentSearchAssetsSelectionHandle {
     required this.expiresAt,
     required this.id,
     this.sampleAssetIds = const [],
+    required this.sourceRef,
     required this.sourceToolCallId,
   });
 
@@ -30,6 +31,8 @@ class AgentSearchAssetsSelectionHandle {
 
   List<String> sampleAssetIds;
 
+  String sourceRef;
+
   String? sourceToolCallId;
 
   @override
@@ -38,6 +41,7 @@ class AgentSearchAssetsSelectionHandle {
     other.expiresAt == expiresAt &&
     other.id == id &&
     _deepEquality.equals(other.sampleAssetIds, sampleAssetIds) &&
+    other.sourceRef == sourceRef &&
     other.sourceToolCallId == sourceToolCallId;
 
   @override
@@ -47,10 +51,11 @@ class AgentSearchAssetsSelectionHandle {
     (expiresAt.hashCode) +
     (id.hashCode) +
     (sampleAssetIds.hashCode) +
+    (sourceRef.hashCode) +
     (sourceToolCallId == null ? 0 : sourceToolCallId!.hashCode);
 
   @override
-  String toString() => 'AgentSearchAssetsSelectionHandle[assetCount=$assetCount, expiresAt=$expiresAt, id=$id, sampleAssetIds=$sampleAssetIds, sourceToolCallId=$sourceToolCallId]';
+  String toString() => 'AgentSearchAssetsSelectionHandle[assetCount=$assetCount, expiresAt=$expiresAt, id=$id, sampleAssetIds=$sampleAssetIds, sourceRef=$sourceRef, sourceToolCallId=$sourceToolCallId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -60,6 +65,7 @@ class AgentSearchAssetsSelectionHandle {
         : this.expiresAt.toUtc().toIso8601String();
       json[r'id'] = this.id;
       json[r'sampleAssetIds'] = this.sampleAssetIds;
+      json[r'sourceRef'] = this.sourceRef;
     if (this.sourceToolCallId != null) {
       json[r'sourceToolCallId'] = this.sourceToolCallId;
     } else {
@@ -83,6 +89,7 @@ class AgentSearchAssetsSelectionHandle {
         sampleAssetIds: json[r'sampleAssetIds'] is Iterable
             ? (json[r'sampleAssetIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],
+        sourceRef: mapValueOfType<String>(json, r'sourceRef')!,
         sourceToolCallId: mapValueOfType<String>(json, r'sourceToolCallId'),
       );
     }
@@ -135,6 +142,7 @@ class AgentSearchAssetsSelectionHandle {
     'expiresAt',
     'id',
     'sampleAssetIds',
+    'sourceRef',
     'sourceToolCallId',
   };
 }
