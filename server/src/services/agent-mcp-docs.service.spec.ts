@@ -81,6 +81,23 @@ describe(AgentMcpDocsService.name, () => {
     expect(markdown).toMatch(/preferred/i);
   });
 
+  it('documents the high-level asset batch workflow tool and approved examples', () => {
+    const markdown = sut.generateMarkdown();
+    const documentedNames = sut.listDocumentedToolArgumentExamples().map((example) => example.exampleName);
+
+    for (const name of [
+      'favorite-search-results',
+      'archive-search-results',
+      'tag-search-results',
+      'rotate-previous-search-results',
+    ]) {
+      expect(markdown).toContain(name);
+      expect(documentedNames).toContain(name);
+    }
+    expect(markdown).toContain('proposeAssetBatchFromSearch');
+    expect(markdown).toMatch(/preferred/i);
+  });
+
   it('includes the space lookup tools and parseable documented examples', () => {
     const markdown = sut.generateMarkdown();
     const examples = sut

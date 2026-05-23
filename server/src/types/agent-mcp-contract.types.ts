@@ -71,6 +71,7 @@ export type AgentMcpPlanningToolName =
   | AgentToolName.ProposeAddAssetsToAlbumFromSearch
   | AgentToolName.ProposeSpaceFromSearch
   | AgentToolName.ProposeAddAssetsToSpaceFromSearch
+  | AgentToolName.ProposeAssetBatchFromSearch
   | AgentToolName.ReviseProposedOperations
   | AgentToolName.SummarizePlan;
 

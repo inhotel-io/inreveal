@@ -21,6 +21,7 @@ const expectedPlanningToolNames = [
   AgentToolName.ProposeAddAssetsToAlbumFromSearch,
   AgentToolName.ProposeSpaceFromSearch,
   AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+  AgentToolName.ProposeAssetBatchFromSearch,
   AgentToolName.ProposeAlbumOperations,
   AgentToolName.ReviseProposedOperations,
   AgentToolName.SummarizePlan,
@@ -135,6 +136,50 @@ describe(AgentMcpToolContractService.name, () => {
         expect(result.success, `${contract!.name} ${example.name}`).toBe(true);
       }
     }
+  });
+
+  it('defines preferred high-level asset batch workflow examples that parse through the live DTO schema', () => {
+    const contract = sut.getPlanningToolContract(AgentToolName.ProposeAssetBatchFromSearch);
+    const exampleNames = contract?.examples.map((example) => example.name);
+
+    expect(contract?.description).toMatch(/preferred/i);
+    expect(exampleNames).toEqual([
+      'favorite-search-results',
+      'archive-search-results',
+      'tag-search-results',
+      'rotate-previous-search-results',
+    ]);
+
+    for (const example of contract?.examples ?? []) {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse(
+        example.arguments,
+      );
+
+      expect(result.success, example.name).toBe(true);
+    }
+  });
+
+  it('documents asset batch workflow mistakes for raw asset ids and unsupported actions', () => {
+    const contract = sut.getPlanningToolContract(AgentToolName.ProposeAssetBatchFromSearch);
+    const mistakeIds = contract?.commonMistakes.map((mistake) => mistake.id);
+
+    expect(mistakeIds).toEqual(
+      expect.arrayContaining(['asset-batch-workflow-raw-asset-ids', 'asset-batch-workflow-unsupported-action']),
+    );
+    expect(contract?.commonMistakes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'asset-batch-workflow-raw-asset-ids',
+          hint: expect.stringMatching(/raw asset ids/i),
+          exampleName: 'favorite-search-results',
+        }),
+        expect.objectContaining({
+          id: 'asset-batch-workflow-unsupported-action',
+          hint: expect.stringMatching(/asset\.setFavorite.*asset\.setArchive.*asset\.addTag.*asset\.rotate/i),
+          exampleName: 'favorite-search-results',
+        }),
+      ]),
+    );
   });
 
   it('returns all tool contracts in stable MCP tool order', () => {
