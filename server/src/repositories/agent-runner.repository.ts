@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { isAgentChoiceRef } from 'src/dtos/agent-asset-source.dto';
 import { AgentRunnerCapabilities, AgentRunnerStatusReason } from 'src/dtos/agent-runner.dto';
 import type {
   AgentRunnerActivityKind,
@@ -81,8 +82,7 @@ const isValidateSessionResult = (value: unknown): value is AgentRunnerValidateSe
 const isBoundedTrimmedString = (value: unknown, min: number, max: number): boolean =>
   typeof value === 'string' && value.trim().length >= min && value.trim().length <= max;
 const isUuidV4 = (value: unknown): boolean =>
-  typeof value === 'string' &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const hasOnlyKeys = (value: Record<string, unknown>, keys: ReadonlySet<string>): boolean =>
   Object.keys(value).every((key) => keys.has(key));
 const textBlockKeys = new Set(['type', 'text']);
@@ -92,9 +92,7 @@ const planBlockKeys = new Set(['type', 'planId', 'label']);
 const clarificationKinds = new Set(['person', 'tag', 'album', 'space', 'cameraMake', 'cameraModel', 'lensModel']);
 const clarificationBlockKeys = new Set(['type', 'kind', 'query', 'summary', 'textFallback', 'choices']);
 const clarificationChoiceKeys = new Set(['choiceRef', 'label', 'description', 'thumbnailAssetId']);
-const isChoiceRef = (value: unknown): value is string =>
-  typeof value === 'string' &&
-  /^choice:(person|tag|album|space|cameraMake|cameraModel|lensModel):[A-Za-z0-9_-]{8,120}$/.test(value);
+const isChoiceRef = isAgentChoiceRef;
 const activityKinds = new Set<AgentRunnerActivityKind>([
   'start-processing',
   'plan-composing',
