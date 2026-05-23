@@ -9,7 +9,7 @@ final photosTimelineEffectiveFilterProvider = Provider<SearchFilter>((ref) {
   final scope = ref.watch(timelineTemporalScopeProvider);
 
   return applyTimelineTemporalScope(filter, scope);
-});
+}, dependencies: [photosTimelineFilterProvider, timelineTemporalScopeProvider]);
 
 SearchFilter applyTimelineTemporalScope(SearchFilter filter, TimelineTemporalScope scope) {
   final scopeStart = scope.start;

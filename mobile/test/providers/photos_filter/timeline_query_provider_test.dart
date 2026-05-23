@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/search_result.model.dart';
@@ -15,6 +16,7 @@ import 'package:immich_mobile/providers/photos_filter/timeline_query.provider.da
 import 'package:immich_mobile/providers/sync_status.provider.dart';
 import 'package:immich_mobile/providers/timeline/temporal_scope.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
+import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockFactory extends Mock implements TimelineFactory {}
@@ -22,6 +24,9 @@ class _MockFactory extends Mock implements TimelineFactory {}
 class _MockSearch extends Mock implements SearchService {}
 
 class _FakeService extends Fake implements TimelineService {
+  @override
+  TimelineOrigin get origin => TimelineOrigin.main;
+
   bool disposed = false;
   @override
   Future<void> dispose() async {
@@ -207,6 +212,62 @@ void main() {
       expect(svc, same(fake));
       verify(() => factory.main(any(), 'u1')).called(1);
       verifyNever(() => search.search(any(), any()));
+    });
+
+    test('supports Photos timeline builder inside a route-local temporal scope', () {
+      final factory = _MockFactory();
+      final search = _MockSearch();
+      final fake = _FakeService();
+      when(() => factory.main(any(), any())).thenReturn(fake);
+
+      final parent = _container(factory: factory, search: search, user: _user('u1'));
+      addTearDown(parent.dispose);
+      final route = ProviderContainer(
+        parent: parent,
+        overrides: [
+          timelineTemporalScopeProvider.overrideWith(TimelineTemporalScopeNotifier.new),
+          timelineServiceProvider.overrideWith((ref) {
+            final temporalScope = ref.watch(timelineTemporalScopeProvider);
+            return buildPhotosTimelineRouteService(ref, temporalScope);
+          }),
+        ],
+      );
+      addTearDown(route.dispose);
+
+      expect(route.read(timelineServiceProvider), same(fake));
+    });
+
+    testWidgets('TimelineRouteScope can host the Photos timeline builder', (tester) async {
+      final factory = _MockFactory();
+      final search = _MockSearch();
+      final fake = _FakeService();
+      final user = _user('u1');
+      final mockUserSvc = _MockUserService();
+      when(() => factory.main(any(), any())).thenReturn(fake);
+      when(() => mockUserSvc.tryGetMyUser()).thenReturn(user);
+      when(() => mockUserSvc.watchMyUser()).thenAnswer((_) => const Stream<UserDto?>.empty());
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            timelineFactoryProvider.overrideWithValue(factory),
+            searchServiceProvider.overrideWithValue(search),
+            infra.userServiceProvider.overrideWithValue(mockUserSvc),
+            currentUserProvider.overrideWith((ref) => _StubCurrentUserNotifier(mockUserSvc, user)),
+            timelineUsersProvider.overrideWith((_) => Stream<List<String>>.value([user.id])),
+          ],
+          child: TimelineRouteScope(
+            timelineServiceBuilder: buildPhotosTimelineRouteService,
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Consumer(builder: (context, ref, child) => Text(ref.watch(timelineServiceProvider).origin.name)),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text(fake.origin.name), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     test('disposes the created service when the container disposes', () async {
