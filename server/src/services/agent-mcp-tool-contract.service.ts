@@ -1670,7 +1670,8 @@ const proposeAlbumFromSearchContract: AgentMcpPlanningToolContract = {
       description: 'Create a new album and add matching search results.',
       requiredFields: ['albumName', 'assetSource'],
       forbiddenFields: ['operations', 'assetIds', 'assetSelectionHandleId'],
-      whenToUse: 'Use for requests like create an album from photos matching date, place, people, tags, or a previous search.',
+      whenToUse:
+        'Use for requests like create an album from photos matching date, place, people, tags, or a previous search.',
     },
   ],
   examples: proposeAlbumFromSearchExamples,
@@ -1688,7 +1689,8 @@ const proposeAlbumFromSearchContract: AgentMcpPlanningToolContract = {
 const proposeAddAssetsToAlbumFromSearchContract: AgentMcpPlanningToolContract = {
   name: AgentToolName.ProposeAddAssetsToAlbumFromSearch,
   title: 'Propose add assets to album from search',
-  description: 'preferred tool for adding matching photos to an existing album from a declarative or previous search source.',
+  description:
+    'preferred tool for adding matching photos to an existing album from a declarative or previous search source.',
   usage:
     'Use this before low-level proposeAlbumOperations when the user asks to add matching photos to an existing album. Provide albumId when known, or a uniquely visible albumName. Gallery creates a reviewable plan only.',
   argumentModes: [

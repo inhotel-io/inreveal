@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { AgentSession, AgentToolCall } from 'src/database';
+import { buildAgentSourceRef } from 'src/dtos/agent-asset-source.dto';
 import {
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
@@ -24,7 +25,6 @@ import {
   AgentToolApprovalDto,
   AgentToolCallResponseDto,
 } from 'src/dtos/agent-tool.dto';
-import { buildAgentSourceRef } from 'src/dtos/agent-asset-source.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
   AgentApprovalMode,
@@ -49,12 +49,9 @@ import { MachineLearningRepository } from 'src/repositories/machine-learning.rep
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
-import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
-import {
-  isAgentMcpRecoverableToolError,
-  wrongIdDomainError,
-} from 'src/services/agent-mcp-recoverable-tool-error';
+import { isAgentMcpRecoverableToolError, wrongIdDomainError } from 'src/services/agent-mcp-recoverable-tool-error';
+import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { buildAgentSearch } from 'src/services/agent-search-filter-mapper';
 import { UserService } from 'src/services/user.service';
 import { AgentIdDomain, AgentSearchSourceRef } from 'src/types/agent-asset-source.types';
@@ -824,7 +821,8 @@ export class AgentToolService {
       perSessionLimit: () => Number.MAX_SAFE_INTEGER,
       validateAccess: (auth, session, request) =>
         this.assetSearchFilterResolverService.validateToolAccess(auth, session, request),
-      execute: (auth, session, request) => this.assetSearchFilterResolverService.resolveToolFilters(auth, session, request),
+      execute: (auth, session, request) =>
+        this.assetSearchFilterResolverService.resolveToolFilters(auth, session, request),
       responseSummary: (result) =>
         `Resolved ${result.results.filter((item) => item.status === 'matched').length} search filter(s)`,
       responseMetadata: (result) => ({

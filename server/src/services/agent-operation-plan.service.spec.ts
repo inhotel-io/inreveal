@@ -495,7 +495,11 @@ describe(AgentOperationPlanService.name, () => {
     const albumId = newUuid();
     const assetIds = [newUuid()];
     sessionRepository.getById.mockResolvedValue(session);
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
     sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({
       items: assetIds.map((id) => ({ id })),
@@ -617,7 +621,11 @@ describe(AgentOperationPlanService.name, () => {
     albumRepository.getAgentAlbums.mockResolvedValue([
       { id: albumId, albumName: 'South Africa', ownerId: auth.user.id },
     ] as never);
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
     sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({
       items: assetIds.map((id) => ({ id })),
@@ -891,7 +899,11 @@ describe(AgentOperationPlanService.name, () => {
     const spaceId = newUuid();
     const assetIds = [newUuid()];
     sessionRepository.getById.mockResolvedValue(session);
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
     sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({
       items: assetIds.map((id) => ({ id })),
@@ -1023,11 +1035,24 @@ describe(AgentOperationPlanService.name, () => {
     const assetIds = [newUuid()];
     sessionRepository.getById.mockResolvedValue(session);
     sharedSpaceRepository.getAllByUserId.mockResolvedValue([
-      { id: spaceId, name: 'Family South Africa', description: null, color: UserAvatarColor.Blue, createdById: auth.user.id },
+      {
+        id: spaceId,
+        name: 'Family South Africa',
+        description: null,
+        color: UserAvatarColor.Blue,
+        createdById: auth.user.id,
+      },
     ] as never);
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
     sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
-    searchRepository.searchMetadata.mockResolvedValue({ items: assetIds.map((id) => ({ id })), hasNextPage: false } as never);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })),
+      hasNextPage: false,
+    } as never);
     accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([spaceId]));
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
     assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
@@ -1085,8 +1110,20 @@ describe(AgentOperationPlanService.name, () => {
     const secondSpaceId = newUuid();
     sessionRepository.getById.mockResolvedValue(session);
     sharedSpaceRepository.getAllByUserId.mockResolvedValue([
-      { id: firstSpaceId, name: 'Family', description: 'Owned', color: UserAvatarColor.Blue, createdById: auth.user.id },
-      { id: secondSpaceId, name: 'family', description: 'Shared', color: UserAvatarColor.Green, createdById: newUuid() },
+      {
+        id: firstSpaceId,
+        name: 'Family',
+        description: 'Owned',
+        color: UserAvatarColor.Blue,
+        createdById: auth.user.id,
+      },
+      {
+        id: secondSpaceId,
+        name: 'family',
+        description: 'Shared',
+        color: UserAvatarColor.Green,
+        createdById: newUuid(),
+      },
     ] as never);
 
     await expect(
@@ -1158,7 +1195,11 @@ describe(AgentOperationPlanService.name, () => {
 
   it.each([
     ['createSpace', { createSpace: false }, 'Agent permission policy does not allow creating spaces'],
-    ['addAssetsToSpaces', { addAssetsToSpaces: false }, 'Agent permission policy does not allow adding assets to spaces'],
+    [
+      'addAssetsToSpaces',
+      { addAssetsToSpaces: false },
+      'Agent permission policy does not allow adding assets to spaces',
+    ],
   ])(
     'proposeSpaceFromSearch enforces %s write scope through existing planning validation',
     async (_field, writeScopeOverride, expectedError) => {
@@ -1206,10 +1247,17 @@ describe(AgentOperationPlanService.name, () => {
     expect(accessRepository.sharedSpace.checkRoleAccess).not.toHaveBeenCalled();
     expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
 
-    const allowedSession = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const allowedSession = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
     sessionRepository.getById.mockResolvedValue(allowedSession);
     accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set());
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
     sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: newUuid() }], hasNextPage: false } as never);
     assetRepository.getAgentReadableIds.mockResolvedValue(new Set());
@@ -1464,35 +1512,38 @@ describe(AgentOperationPlanService.name, () => {
     ['archiveAssets', AgentOperationType.AssetSetArchive, { archiveAssets: false }],
     ['tagAssets', AgentOperationType.AssetAddTag, { tagAssets: false }],
     ['editAssets', AgentOperationType.AssetRotate, { editAssets: false }],
-  ])('proposeAssetBatchFromSearch denies missing %s write scope before materializing', async (_field, type, override) => {
-    const auth = AuthFactory.create();
-    const session = makeSession({
-      userId: auth.user.id,
-      permissionPlanSnapshot: {
-        ...expandedPermissionPlanSnapshot,
-        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, ...override },
-      },
-    });
-    const action =
-      type === AgentOperationType.AssetSetFavorite
-        ? { type, favorite: true }
-        : type === AgentOperationType.AssetSetArchive
-          ? { type, archived: true }
-          : type === AgentOperationType.AssetAddTag
-            ? { type, tagName: 'Receipts' }
-            : { type, angle: 90 };
-    sessionRepository.getById.mockResolvedValue(session);
+  ])(
+    'proposeAssetBatchFromSearch denies missing %s write scope before materializing',
+    async (_field, type, override) => {
+      const auth = AuthFactory.create();
+      const session = makeSession({
+        userId: auth.user.id,
+        permissionPlanSnapshot: {
+          ...expandedPermissionPlanSnapshot,
+          writeScope: { ...expandedPermissionPlanSnapshot.writeScope, ...override },
+        },
+      });
+      const action =
+        type === AgentOperationType.AssetSetFavorite
+          ? { type, favorite: true }
+          : type === AgentOperationType.AssetSetArchive
+            ? { type, archived: true }
+            : type === AgentOperationType.AssetAddTag
+              ? { type, tagName: 'Receipts' }
+              : { type, angle: 90 };
+      sessionRepository.getById.mockResolvedValue(session);
 
-    await expect(
-      (sut as any).proposeAssetBatchFromSearch(auth, session.id, {
-        action,
-        assetSource: { kind: 'search', filters: {} },
-      }),
-    ).rejects.toThrow('Agent permission policy does not allow');
+      await expect(
+        (sut as any).proposeAssetBatchFromSearch(auth, session.id, {
+          action,
+          assetSource: { kind: 'search', filters: {} },
+        }),
+      ).rejects.toThrow('Agent permission policy does not allow');
 
-    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
-    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
-  });
+      expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+      expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    },
+  );
 
   it('proposeAssetBatchFromSearch rejects empty and over-broad search sources before persistence', async () => {
     const auth = AuthFactory.create();
@@ -1538,7 +1589,11 @@ describe(AgentOperationPlanService.name, () => {
     const existingAssetId = newUuid();
     const newAssetId = newUuid();
     sessionRepository.getById.mockResolvedValue(session);
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
     sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({
       items: [existingAssetId, newAssetId].map((id) => ({ id })),
@@ -1950,7 +2005,11 @@ describe(AgentOperationPlanService.name, () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id });
     sessionRepository.getById.mockResolvedValue(session);
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
     sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false } as never);
 
@@ -2087,9 +2146,15 @@ describe(AgentOperationPlanService.name, () => {
   it('does not create a plan when assetSource.search is over the planning cap', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id });
-    const assetIds = Array.from({ length: AgentOperationPlanService.maxAssetSelectionHandleAssets + 1 }, () => newUuid());
+    const assetIds = Array.from({ length: AgentOperationPlanService.maxAssetSelectionHandleAssets + 1 }, () =>
+      newUuid(),
+    );
     sessionRepository.getById.mockResolvedValue(session);
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
     sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({
       items: assetIds.map((id) => ({ id })),
@@ -2124,7 +2189,11 @@ describe(AgentOperationPlanService.name, () => {
     const albumId = newUuid();
     const assetIds = [newUuid(), newUuid()];
     sessionRepository.getById.mockResolvedValue(session);
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
     sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({
       items: assetIds.map((id) => ({ id })),
@@ -2175,9 +2244,15 @@ describe(AgentOperationPlanService.name, () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id });
     const albumId = newUuid();
-    const assetIds = Array.from({ length: AgentOperationPlanService.maxCoverSelectionHandleAssets + 1 }, () => newUuid());
+    const assetIds = Array.from({ length: AgentOperationPlanService.maxCoverSelectionHandleAssets + 1 }, () =>
+      newUuid(),
+    );
     sessionRepository.getById.mockResolvedValue(session);
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
     sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({
       items: assetIds.map((id) => ({ id })),
@@ -2355,7 +2430,11 @@ describe(AgentOperationPlanService.name, () => {
     const albumId = newUuid();
     const assetIds = [newUuid(), newUuid()];
     sessionRepository.getById.mockResolvedValue(session);
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
     sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({
       items: assetIds.map((id) => ({ id })),
