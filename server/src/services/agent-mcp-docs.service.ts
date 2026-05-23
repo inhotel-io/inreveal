@@ -167,6 +167,13 @@ export class AgentMcpDocsService {
       '- If `hasMore` is true, page or narrow before claiming the handle covers every matching photo.',
       '- Plan review still shows counts and samples; Gallery applies only after user approval.',
       '',
+      '## Source-Backed Planning Defaults',
+      '',
+      'Use high-level workflow tools first for album, space, and asset batch requests. Prefer `assetSource.search` when the user already gave the filter intent. Prefer `previousSearch.sourceRef` after an inspection search. Use explicit IDs only for small inspected sets where the user is selecting exact assets.',
+      '',
+      'Treat `wrong_id_domain` as recoverable: retry with `assetSource.search`, `previousSearch.sourceRef`, or exact IDs from the correct tool domain. Treat `needs_clarification` as recoverable: ask the user to choose one Gallery-provided option, then pass the selected `choiceRefs` in the next declarative named filter.',
+      '',
+      ...this.renderSourceBackedWorkflowExamples(),
       '## Tools',
       '',
       ...contracts.flatMap((contract) => this.renderTool(contract)),
@@ -221,6 +228,38 @@ export class AgentMcpDocsService {
       markdownJson(example.arguments),
       '',
     ];
+  }
+
+  private renderSourceBackedWorkflowExamples(): string[] {
+    const examples = this.listDocumentedToolArgumentExamples();
+    const pick = (toolName: AgentToolName, exampleName: string) => {
+      const example = examples.find(
+        (candidate) => candidate.toolName === toolName && candidate.exampleName === exampleName,
+      );
+      if (!example) {
+        throw new Error(`Missing source-backed workflow docs example ${toolName} ${exampleName}`);
+      }
+
+      return example;
+    };
+
+    const selected = [
+      pick(AgentToolName.ProposeAlbumFromSearch, 'create-south-africa-pierre-aurelia-album'),
+      pick(AgentToolName.ProposeAlbumFromSearch, 'create-album-from-previous-search'),
+      pick(AgentToolName.ProposeSpaceFromSearch, 'create-space-from-declarative-search'),
+      pick(AgentToolName.ProposeAssetBatchFromSearch, 'favorite-search-results'),
+    ];
+
+    return selected.flatMap((example) => [
+      `### ${example.description}`,
+      '',
+      `MCP tool name: \`${example.toolName}\``,
+      '',
+      `Example: \`${example.exampleName}\``,
+      '',
+      markdownJson(example.arguments),
+      '',
+    ]);
   }
 
   private renderMistakes(contract: AgentMcpToolContract): string[] {
