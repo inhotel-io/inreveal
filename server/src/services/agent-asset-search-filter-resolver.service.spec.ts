@@ -105,11 +105,13 @@ describe(AgentAssetSearchFilterResolverService.name, () => {
     const tagId = newUuid();
     const albumId = newUuid();
     const spaceId = newUuid();
-    searchRepository.getFilterSuggestions.mockResolvedValue(filterSuggestions({
-      people: [{ id: personId, name: 'Pierre' }],
-      tags: [{ id: tagId, value: 'Travel' }],
-      cameraMakes: [],
-    }));
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({
+        people: [{ id: personId, name: 'Pierre' }],
+        tags: [{ id: tagId, value: 'Travel' }],
+        cameraMakes: [],
+      }),
+    );
     albumRepository.getAgentAlbums.mockResolvedValue([
       { id: albumId, albumName: 'South Africa', ownerId: auth.user.id },
     ] as never);
@@ -154,14 +156,16 @@ describe(AgentAssetSearchFilterResolverService.name, () => {
     const aureliaId = newUuid();
     const tagId = newUuid();
     const albumId = newUuid();
-    searchRepository.getFilterSuggestions.mockResolvedValue(filterSuggestions({
-      people: [
-        { id: pierreId, name: 'Pierre' },
-        { id: aureliaId, name: 'Aurelia' },
-      ],
-      tags: [{ id: tagId, value: 'Travel' }],
-      cameraMakes: [],
-    }));
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({
+        people: [
+          { id: pierreId, name: 'Pierre' },
+          { id: aureliaId, name: 'Aurelia' },
+        ],
+        tags: [{ id: tagId, value: 'Travel' }],
+        cameraMakes: [],
+      }),
+    );
     albumRepository.getAgentAlbums.mockResolvedValue([
       { id: albumId, albumName: 'South Africa', ownerId: auth.user.id },
     ] as never);
@@ -199,11 +203,13 @@ describe(AgentAssetSearchFilterResolverService.name, () => {
   it('resolves declarative camera fields through existing camera resolver behavior', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id });
-    searchRepository.getFilterSuggestions.mockResolvedValue(filterSuggestions({
-      people: [],
-      tags: [],
-      cameraMakes: ['FUJIFILM'],
-    }));
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({
+        people: [],
+        tags: [],
+        cameraMakes: ['FUJIFILM'],
+      }),
+    );
     searchRepository.getCameraModels.mockResolvedValue(['X100VI']);
     searchRepository.getCameraLensModels.mockResolvedValue(['23mm F2']);
 
@@ -224,14 +230,16 @@ describe(AgentAssetSearchFilterResolverService.name, () => {
     const session = makeSession({ userId: auth.user.id });
     const firstPierre = newUuid();
     const secondPierre = newUuid();
-    searchRepository.getFilterSuggestions.mockResolvedValue(filterSuggestions({
-      people: [
-        { id: firstPierre, name: 'Pierre' },
-        { id: secondPierre, name: 'Pierre' },
-      ],
-      tags: [],
-      cameraMakes: [],
-    }));
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({
+        people: [
+          { id: firstPierre, name: 'Pierre' },
+          { id: secondPierre, name: 'Pierre' },
+        ],
+        tags: [],
+        cameraMakes: [],
+      }),
+    );
 
     const result = await sut.resolveDeclarativeFilters(auth, session, {
       people: { match: 'any', names: ['Pierre'] },
@@ -251,6 +259,93 @@ describe(AgentAssetSearchFilterResolverService.name, () => {
     ]);
   });
 
+  it('returns opaque choice refs for ambiguous people choices', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const firstPierre = newUuid();
+    const secondPierre = newUuid();
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({
+        people: [
+          { id: firstPierre, name: 'Pierre' },
+          { id: secondPierre, name: 'Pierre' },
+        ],
+        tags: [],
+        cameraMakes: [],
+      }),
+    );
+
+    const result = await sut.resolveDeclarativeFilters(auth, session, {
+      people: { match: 'any', names: ['Pierre'] },
+    });
+
+    const choices = result.results[0].choices;
+    expect(choices).toHaveLength(2);
+    for (const choice of choices) {
+      expect(choice.choiceRef).toMatch(/^choice:person:[A-Za-z0-9_-]{8,120}$/);
+      expect(choice.choiceRef).not.toContain(choice.id);
+    }
+  });
+
+  it('resolves selected people choice refs on follow-up declarative filters', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const firstPierre = newUuid();
+    const secondPierre = newUuid();
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({
+        people: [
+          { id: firstPierre, name: 'Pierre' },
+          { id: secondPierre, name: 'Pierre' },
+        ],
+        tags: [],
+        cameraMakes: [],
+      }),
+    );
+
+    const ambiguous = await sut.resolveDeclarativeFilters(auth, session, {
+      people: { match: 'any', names: ['Pierre'] },
+    });
+    const selected = ambiguous.results[0].choices[1];
+
+    const result = await sut.resolveDeclarativeFilters(auth, session, {
+      people: { match: 'any', names: ['Pierre'], choiceRefs: [selected.choiceRef!] },
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.filters.personIds).toEqual([selected.id]);
+    expect(result.results[0]).toEqual(
+      expect.objectContaining({
+        kind: 'person',
+        query: 'Pierre',
+        status: 'matched',
+        id: selected.id,
+        searchFilter: { personIds: [selected.id] },
+      }),
+    );
+  });
+
+  it('returns needs_clarification for stale selected people choice refs', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const pierreId = newUuid();
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({
+        people: [{ id: pierreId, name: 'Pierre' }],
+        tags: [],
+        cameraMakes: [],
+      }),
+    );
+
+    const result = await sut.resolveDeclarativeFilters(auth, session, {
+      people: { match: 'any', names: ['Pierre'], choiceRefs: ['choice:person:staleChoice0000'] },
+    });
+
+    expect(result.status).toBe('needs_clarification');
+    expect(result.filters.personIds).toBeUndefined();
+    expect(result.status === 'needs_clarification' ? result.message : '').toMatch(/choice/i);
+  });
+
   it.each<[string, AgentDeclarativeAssetFilters]>([
     ['people', { people: { match: 'any', names: ['Missing Person'] } }],
     ['tags', { tags: { match: 'any', names: ['missing-tag'] } }],
@@ -258,7 +353,9 @@ describe(AgentAssetSearchFilterResolverService.name, () => {
   ])('returns needs_clarification for missing %s without broad success', async (_label, filters) => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id });
-    searchRepository.getFilterSuggestions.mockResolvedValue(filterSuggestions({ people: [], tags: [], cameraMakes: [] }));
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({ people: [], tags: [], cameraMakes: [] }),
+    );
     albumRepository.getAgentAlbums.mockResolvedValue([]);
 
     const result = await sut.resolveDeclarativeFilters(auth, session, filters);
@@ -309,17 +406,19 @@ describe(AgentAssetSearchFilterResolverService.name, () => {
     const spaceId = newUuid();
     const spacePersonId = newUuid();
     sharedSpaceRepository.getAllByUserId.mockResolvedValue([{ id: spaceId, name: 'Family' }] as never);
-    searchRepository.getFilterSuggestions.mockResolvedValue(filterSuggestions({
-      people: [
-        {
-          id: newUuid(),
-          name: 'Pierre',
-          primaryProfile: { type: 'space-person', id: spacePersonId, spaceId },
-        },
-      ],
-      tags: [],
-      cameraMakes: [],
-    }));
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({
+        people: [
+          {
+            id: newUuid(),
+            name: 'Pierre',
+            primaryProfile: { type: 'space-person', id: spacePersonId, spaceId },
+          },
+        ],
+        tags: [],
+        cameraMakes: [],
+      }),
+    );
 
     const result = await sut.resolveDeclarativeFilters(auth, session, {
       space: { name: 'Family' },
