@@ -1,6 +1,7 @@
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import {
   AgentApprovalMode,
+  AgentMessageClarificationBlockType,
   AgentMessageRole,
   AgentMessageTextBlockType,
   AgentOperationApplyStatus,
@@ -81,6 +82,10 @@ vi.mock('svelte-i18n', () => {
     assistant_activity_window_summary: 'Showing {visible} of {total} actions',
     assistant_agent_tool_data_class_metadata: 'Metadata',
     assistant_agent_tool_name_listAlbums: 'List albums',
+    assistant_clarification_choice_thumbnail_alt: '{label} preview',
+    assistant_clarification_choice_unavailable: 'No preview',
+    assistant_clarification_choices_label: 'Clarification choices',
+    assistant_clarification_send_choice: 'Use {label}',
     assistant_operation_applied_plan: 'Applied plan',
     assistant_operation_applied_plan_label: 'Applied plan: {summary}',
     assistant_operation_apply_partial_summary: '{applied} applied · {skipped} skipped · {failed} failed.',
@@ -179,6 +184,34 @@ const makeMessage = (
     blocks: [{ type: AgentMessageTextBlockType.Text, text }],
   },
   createdAt: '2026-05-14T00:00:00.000Z',
+});
+
+const makeClarificationMessage = (): AgentMessageResponseDto => ({
+  ...makeMessage('message-clarification', AgentMessageRole.Assistant, 'fallback'),
+  content: {
+    blocks: [
+      {
+        type: AgentMessageClarificationBlockType.Clarification,
+        kind: 'person',
+        query: 'Pierre',
+        summary: 'I found two people named Pierre.',
+        textFallback: 'Which Pierre should I use?',
+        choices: [
+          {
+            choiceRef: 'choice:person:abcDEF1234567890',
+            label: 'Pierre M.',
+            description: '12 matching photos',
+            thumbnailAssetId: '00000000-0000-4000-8000-000000000010',
+          },
+          {
+            choiceRef: 'choice:person:defABC1234567890',
+            label: 'Pierre',
+            thumbnailAssetId: null,
+          },
+        ],
+      },
+    ],
+  },
 });
 
 const makeToolCall = (overrides: Partial<AgentToolCallResponseDto> = {}): AgentToolCallResponseDto => ({
@@ -324,6 +357,8 @@ const setAppliedPlanHistory = (plans: AgentOperationPlanResponseDto[]) => {
 describe(AgentSessionChatPanel.name, () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sdkMock.getAssetThumbnailPath.mockImplementation((id) => `/assets/${id}/thumbnail`);
+    sdkMock.getBaseUrl.mockReturnValue('/api');
     sdkMock.getAgentSessionMessages.mockResolvedValue([]);
     sdkActivityMock.getAgentSessionActivityEvents.mockResolvedValue([]);
     websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
@@ -361,6 +396,49 @@ describe(AgentSessionChatPanel.name, () => {
     expect(screen.getByRole('list')).toBeInTheDocument();
     expect(screen.getByText('Beach day').closest('li')).toBeInTheDocument();
     expect(screen.getByText('Birthday cake').closest('li')).toBeInTheDocument();
+  });
+
+  it('renders persisted clarification choices with thumbnails and text fallback', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([makeClarificationMessage()]);
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    expect(await screen.findByText('I found two people named Pierre.')).toBeInTheDocument();
+    expect(screen.getByText('Which Pierre should I use?')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Clarification choices' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use Pierre M.' })).toBeInTheDocument();
+    expect(screen.getByText('12 matching photos')).toBeInTheDocument();
+    expect(screen.getByAltText('Pierre M. preview')).toHaveAttribute('src', expect.stringContaining('/api/assets/'));
+    expect(screen.getByText('No preview')).toBeInTheDocument();
+    expect(screen.queryByText('choice:person:abcDEF1234567890')).not.toBeInTheDocument();
+  });
+
+  it('sends the safe choice ref as the next user message when a clarification choice is clicked', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([makeClarificationMessage()]);
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(
+      makeMessage(
+        'reply',
+        AgentMessageRole.User,
+        'Use choice:person:abcDEF1234567890 for person "Pierre" (Pierre M.).',
+      ),
+    );
+
+    render(AgentSessionChatPanel, { props: { session } });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Use Pierre M.' }));
+
+    expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledWith({
+      id: session.id,
+      agentMessageCreateDto: {
+        content: {
+          blocks: [
+            {
+              type: AgentMessageTextBlockType.Text,
+              text: 'Use choice:person:abcDEF1234567890 for person "Pierre" (Pierre M.).',
+            },
+          ],
+        },
+      },
+    });
   });
 
   it('renders current-turn tool calls in the activity block without technical details', async () => {
