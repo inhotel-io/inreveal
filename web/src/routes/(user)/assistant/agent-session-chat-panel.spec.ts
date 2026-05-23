@@ -12,6 +12,7 @@ import {
   AgentOperationType,
   AgentPermissionPreset,
   AgentProviderType,
+  Kind2 as AgentResolvedAssetSearchFilterKind,
   Kind as AgentSessionActivityEventKind,
   AgentSessionActivityEventSource,
   AgentSessionActivityEventStatus,
@@ -192,7 +193,7 @@ const makeClarificationMessage = (): AgentMessageResponseDto => ({
     blocks: [
       {
         type: AgentMessageClarificationBlockType.Clarification,
-        kind: 'person',
+        kind: AgentResolvedAssetSearchFilterKind.Person,
         query: 'Pierre',
         summary: 'I found two people named Pierre.',
         textFallback: 'Which Pierre should I use?',
