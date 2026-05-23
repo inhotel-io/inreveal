@@ -69,27 +69,6 @@
       activeReviewOperationId = null;
     }
   });
-
-  const openDestinationPhotoReview = (event: MouseEvent, group: OperationReviewGroup) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) {
-      return;
-    }
-
-    const reviewButton = target.closest('button');
-    const photoStage = target.closest('[data-testid="agent-plan-photo-stage"]');
-    const primaryReviewItem = group.operations.find(
-      (operation) => operation.review.selection.supportsItemSelection && operation.assetCount > 0,
-    );
-
-    if (!reviewButton || !photoStage || !primaryReviewItem) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    activeReviewOperationId = primaryReviewItem.id;
-  };
 </script>
 
 <div
@@ -127,21 +106,15 @@
 
   <div class="flex flex-col gap-3">
     {#each model.groups as group (group.id)}
-      <div onclickcapture={(event) => openDestinationPhotoReview(event, group)}>
-        <AgentPlanDestinationCard
-          {group}
-          canChangeSelection={effectiveCanChangeSelection}
-          {onToggleGroup}
-          {onToggleOperation}
-          {onToggleItem}
-          {onBulkSetItems}
-          {onSetOnlyItems}
-          {onResetItemSelection}
-          {onSetFieldOverride}
-          {onResetFieldOverride}
-          onOpenItemReview={(operationId) => (activeReviewOperationId = operationId)}
-        />
-      </div>
+      <AgentPlanDestinationCard
+        {group}
+        canChangeSelection={effectiveCanChangeSelection}
+        {onToggleGroup}
+        {onToggleOperation}
+        {onSetFieldOverride}
+        {onResetFieldOverride}
+        onOpenItemReview={(operationId) => (activeReviewOperationId = operationId)}
+      />
     {/each}
   </div>
 
