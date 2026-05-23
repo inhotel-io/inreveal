@@ -35,6 +35,7 @@
     itemSize?: number;
     columnCount?: number;
     overscanRows?: number;
+    variant?: 'inline' | 'modal';
   }
 
   let {
@@ -49,6 +50,7 @@
     itemSize = DEFAULT_ITEM_SIZE,
     columnCount,
     overscanRows = DEFAULT_OVERSCAN_ROWS,
+    variant = 'inline',
   }: Props = $props();
 
   let failedAssetIds = $state(new Set<string>());
@@ -134,11 +136,22 @@
     const asset = reviewAssetById.get(assetId);
     return asset?.filename ?? asset?.label ?? assetId;
   };
+
+  const sectionClass = $derived(
+    variant === 'modal'
+      ? 'rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-950'
+      : 'mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40',
+  );
+  const gridClass = $derived(
+    variant === 'modal'
+      ? 'mt-2 max-h-[min(70vh,34rem)] overflow-y-auto rounded-lg border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-900'
+      : 'mt-2 max-h-[min(65vh,28rem)] overflow-y-auto rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800',
+  );
 </script>
 
 {#if item.review.selection.supportsItemSelection}
   <section
-    class="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40"
+    class={sectionClass}
     role="group"
     aria-label={$t('assistant_operation_item_review_label', { values: { summary: item.review.summary } })}
   >
@@ -284,7 +297,7 @@
     <div
       bind:this={gridElement}
       use:measureGrid
-      class="mt-2 max-h-[min(65vh,28rem)] overflow-y-auto rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
+      class={gridClass}
       data-testid="agent-plan-item-review-grid"
       style={viewportHeight === DEFAULT_VIEWPORT_HEIGHT ? undefined : `max-height: ${viewportHeight}px;`}
       onscroll={(event) => (scrollTop = event.currentTarget.scrollTop)}
@@ -304,8 +317,15 @@
           {@const selected = isAssetSelectedForOperation(item, assetId)}
           {@const absoluteIndex = virtualWindow.startIndex + visibleIndex + 1}
           <label
-            class="group relative aspect-square overflow-hidden rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
+            class={[
+              'group relative aspect-square overflow-hidden rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800',
+              variant === 'modal' && selected ? 'ring-2 ring-immich-primary ring-offset-2 dark:ring-immich-dark-primary dark:ring-offset-gray-950' : '',
+              variant === 'modal' && !selected ? 'opacity-60' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
             data-testid="agent-plan-item-thumbnail"
+            data-selected={String(selected)}
           >
             <img
               class="size-full object-cover opacity-100"
