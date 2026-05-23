@@ -753,7 +753,7 @@ export class AgentAssetSearchFilterResolverService {
     });
     const resolvedFilters = result.resolvedFilters;
     const results = [...result.results];
-    const repositoryScope = request.scope ?? {};
+    const repositoryScope = resolvedFilters.spaceId ? { spaceId: resolvedFilters.spaceId } : (request.scope ?? {});
     const canUseRepositoryCandidates = this.canUseResolverRepositoryCandidates(session, repositoryScope);
     const suggestions =
       (selected.people?.length || selected.tags?.length) && canUseRepositoryCandidates
