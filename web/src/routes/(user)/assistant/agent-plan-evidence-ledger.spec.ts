@@ -7,7 +7,7 @@ import {
   type AgentOperationPlanResponseDto,
   type AgentOperationResponseDto,
 } from '@immich/sdk';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import { buildOperationReviewModel, setOperationFieldOverride } from './agent-operation-plan-ui';
 import AgentPlanEvidenceLedger from './agent-plan-evidence-ledger.svelte';
@@ -44,6 +44,9 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_plan_review: 'Plan review',
     assistant_operation_plan_selected_asset_count: '{count} selected assets',
     assistant_operation_plan_selected_change_count: '{count} selected changes',
+    assistant_operation_photo_stage_review: 'Review photos',
+    assistant_operation_photo_stage_summary: '{count} selected trip photos',
+    assistant_operation_photo_stage_title: 'Photos in this plan',
     assistant_operation_status_applied: 'Applied',
     assistant_operation_status_failed: 'Failed',
     assistant_operation_status_partial: 'Partially applied',
@@ -75,6 +78,12 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_item_toggle: 'Include photo {index}',
     assistant_operation_item_virtual_summary: 'Showing {visible} of {total} photos',
     assistant_operation_risk_low: 'Low risk',
+    assistant_operation_thumbnail_alt: 'Photo preview {index} of {count}',
+    assistant_operation_thumbnail_empty: '{count} photos without previews',
+    assistant_operation_thumbnail_overflow: '+{count}',
+    assistant_operation_thumbnail_overflow_label: '{count} more photos',
+    assistant_operation_thumbnail_strip_label: '{count} photo previews',
+    assistant_operation_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_type_album_add_assets: 'Add assets',
     assistant_operation_type_album_create: 'Create album',
     assistant_operation_type_album_update_details: 'Update album details',
@@ -94,6 +103,7 @@ vi.mock('svelte-i18n', () => {
         .replace('{selected}', String(options?.values?.selected ?? ''))
         .replace('{skipped}', String(options?.values?.skipped ?? ''))
         .replace('{failed}', String(options?.values?.failed ?? ''))
+        .replace('{summary}', String(options?.values?.summary ?? ''))
         .replace('{total}', String(options?.values?.total ?? ''))
         .replace('{visible}', String(options?.values?.visible ?? '')),
     ),
@@ -375,6 +385,39 @@ describe('AgentPlanEvidenceLedger', () => {
     expect(onResetItemSelection).toHaveBeenCalledWith(addId);
   });
 
+  it('opens the existing row item review from the photo stage and threads item callbacks', async () => {
+    const onToggleItem = vi.fn();
+    const onResetItemSelection = vi.fn();
+    render(AgentPlanEvidenceLedger, {
+      props: {
+        model: model({ [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] } }),
+        selectedOperationIds: [createId, addId, updateId],
+        canChangeSelection: true,
+        canApply: true,
+        applying: false,
+        errorMessage: null,
+        applyErrorMessage: null,
+        applyMessage: null,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem,
+        onResetItemSelection,
+        onApply: vi.fn(),
+      },
+    });
+
+    const stage = screen.getByTestId('agent-plan-photo-stage');
+    await fireEvent.click(within(stage).getByRole('button', { name: 'Review photos' }));
+
+    expect(screen.getByRole('group', { name: 'Review photos for Add 2 photos' })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Reset selection' }));
+
+    expect(onToggleItem).toHaveBeenCalledWith(addId, assetB, true);
+    expect(onResetItemSelection).toHaveBeenCalledWith(addId);
+  });
+
   it('threads bulk item callbacks through destination cards', async () => {
     const onBulkSetItems = vi.fn();
     const onSetOnlyItems = vi.fn();
@@ -543,7 +586,7 @@ describe('AgentPlanEvidenceLedger', () => {
     expect(screen.queryByText('Better notes')).not.toBeInTheDocument();
   });
 
-  it('keeps selection controls disabled for applied plans', () => {
+  it('keeps selection controls disabled for applied plans while allowing read-only photo review', async () => {
     render(AgentPlanEvidenceLedger, {
       props: {
         model: buildOperationReviewModel(plan(model().plan.operations, AgentOperationPlanStatus.Applied), {
@@ -568,5 +611,14 @@ describe('AgentPlanEvidenceLedger', () => {
 
     expect(screen.getByRole('checkbox', { name: 'Select destination Portugal' })).toBeDisabled();
     expect(screen.getByRole('checkbox', { name: 'Add 2 photos' })).toBeDisabled();
+
+    const stage = screen.getByTestId('agent-plan-photo-stage');
+    const reviewButton = within(stage).getByRole('button', { name: 'Review photos' });
+    expect(reviewButton).toBeEnabled();
+
+    await fireEvent.click(reviewButton);
+
+    expect(screen.getByRole('group', { name: 'Review photos for Add 2 photos' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Include photo 1' })).toBeDisabled();
   });
 });
