@@ -179,13 +179,41 @@
     expandedWindowStart = nextWindowStart;
     void focusPagingButton(nextWindowStart + verboseLimit < model.verboseItems.length ? 'newer' : 'older');
   }
+
+  function getActivityDotClass(status: AgentActivityStatus) {
+    switch (status) {
+      case 'blocked': {
+        return 'before:bg-amber-500 before:ring-amber-100 dark:before:ring-amber-900/50';
+      }
+
+      case 'completed': {
+        return 'before:bg-green-500 before:ring-green-100 dark:before:ring-green-900/50';
+      }
+
+      case 'failed': {
+        return 'before:bg-red-500 before:ring-red-100 dark:before:ring-red-900/50';
+      }
+
+      case 'pending': {
+        return 'before:bg-gray-400 before:ring-gray-100 dark:before:ring-neutral-800';
+      }
+
+      case 'running': {
+        return 'before:bg-blue-500 before:ring-blue-100 dark:before:ring-blue-900/50';
+      }
+
+      case 'skipped': {
+        return 'before:bg-gray-300 before:ring-gray-100 dark:before:bg-neutral-600 dark:before:ring-neutral-800';
+      }
+    }
+  }
 </script>
 
 {#if model.items.length > 0 || model.verboseItems.length > 0}
   <article
     bind:this={articleElement}
     data-chat-item
-    class="mr-auto w-full max-w-[82%] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-slate-800 shadow-sm dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100"
+    class="mr-auto w-full max-w-4xl rounded-3xl border border-gray-200/80 bg-gray-50/80 px-4 py-3 text-sm text-slate-800 shadow-sm shadow-black/5 dark:border-neutral-800 dark:bg-neutral-950/80 dark:text-neutral-100 dark:shadow-black/20"
     aria-label={heading}
   >
     <header class="flex flex-wrap items-center justify-between gap-2">
@@ -249,7 +277,8 @@
 
     <div
       id={rowsId}
-      class="mt-3 flex flex-col gap-2"
+      data-activity-rail
+      class="relative mt-3 flex flex-col gap-2 before:absolute before:bottom-3 before:left-3 before:top-3 before:w-px before:bg-gray-200 dark:before:bg-neutral-800"
       role={isActive ? 'status' : undefined}
       aria-live={isActive ? 'polite' : undefined}
     >
@@ -259,7 +288,10 @@
         {@const technicalDetailsExpanded = expandedTechnicalRowIds.has(item.id)}
         <div
           data-activity-row
-          class="min-w-0 rounded-md border border-gray-100 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900"
+          class={[
+            'relative min-w-0 rounded-2xl border border-gray-100 bg-white px-3 py-2 pl-8 shadow-sm shadow-black/5 before:absolute before:left-[0.4375rem] before:top-4 before:size-3 before:rounded-full before:ring-4 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/20',
+            getActivityDotClass(item.status),
+          ]}
         >
           <div class="flex flex-wrap items-center gap-2">
             <span
