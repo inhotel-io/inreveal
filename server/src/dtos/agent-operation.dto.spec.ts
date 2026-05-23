@@ -17,6 +17,7 @@ import {
   AgentOperationTargetKind,
   AgentOperationType,
   AgentToolName,
+  AssetType,
   SharedSpaceRole,
   UserAvatarColor,
 } from 'src/enum';
@@ -1756,6 +1757,116 @@ describe('Agent operation DTOs', () => {
       expect(longName.success).toBe(false);
       expect(longDescription.success).toBe(false);
       expect(invalidColor.success).toBe(false);
+    });
+
+    it.each([
+      [
+        'favorite',
+        {
+          action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+          assetSource: { kind: 'search', filters: { isFavorite: false } },
+        },
+      ],
+      [
+        'archive',
+        {
+          action: { type: AgentOperationType.AssetSetArchive, archived: true },
+          assetSource: { kind: 'search', filters: { rating: 1 } },
+        },
+      ],
+      [
+        'unarchive',
+        {
+          action: { type: AgentOperationType.AssetSetArchive, archived: false },
+          assetSource: { kind: 'search', filters: { visibility: 'archive' } },
+        },
+      ],
+      [
+        'tag by name',
+        {
+          action: { type: AgentOperationType.AssetAddTag, tagName: 'Receipts' },
+          assetSource: { kind: 'search', mode: 'ocr', query: 'receipt' },
+        },
+      ],
+      [
+        'tag by id',
+        {
+          action: { type: AgentOperationType.AssetAddTag, tagId: factory.uuid() },
+          assetSource: { kind: 'search', filters: { city: 'Berlin' } },
+        },
+      ],
+      [
+        'rotate',
+        {
+          action: { type: AgentOperationType.AssetRotate, angle: 90 },
+          assetSource: { kind: 'search', filters: { type: AssetType.Image } },
+        },
+      ],
+      [
+        'previous search',
+        {
+          action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+          assetSource: { kind: 'previousSearch', sourceRef: `asset-source:search:${factory.uuid()}` },
+        },
+      ],
+    ])('accepts proposeAssetBatchFromSearch for %s', (_label, request) => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
+        summary: 'Update matching photos.',
+        ...request,
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it.each([
+      ['remove tag', { type: AgentOperationType.AssetRemoveTag, tagId: factory.uuid() }],
+      ['album operation', { type: AgentOperationType.AlbumAddAssets }],
+      ['space operation', { type: AgentOperationType.SpaceAddAssets }],
+    ])('rejects unsupported proposeAssetBatchFromSearch action %s', (_label, action) => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
+        action,
+        assetSource: { kind: 'search', filters: {} },
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it.each([
+      ['missing tag target', { type: AgentOperationType.AssetAddTag }],
+      ['both tag targets', { type: AgentOperationType.AssetAddTag, tagId: factory.uuid(), tagName: 'Receipts' }],
+    ])('rejects proposeAssetBatchFromSearch tag action with %s', (_label, action) => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
+        action,
+        assetSource: { kind: 'search', filters: {} },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues).toEqual([
+        expect.objectContaining({ message: 'Provide exactly one of tagId or tagName' }),
+      ]);
+    });
+
+    it.each([0, 45, 91, 360])('rejects proposeAssetBatchFromSearch rotate angle %s', (angle) => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
+        action: { type: AgentOperationType.AssetRotate, angle },
+        assetSource: { kind: 'search', filters: {} },
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects proposeAssetBatchFromSearch raw id and selection-handle sources', () => {
+      const rawIds = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
+        action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+        assetSource: { kind: 'explicitAssets', assetIds: [factory.uuid()] },
+      });
+      const handle = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
+        action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+        assetSource: { kind: 'selectionHandle', selectionHandleId: factory.uuid() },
+      });
+
+      expect(rawIds.success).toBe(false);
+      expect(handle.success).toBe(false);
     });
 
     it('requires planId for reviseProposedOperations MCP calls and keeps the body fields', () => {
