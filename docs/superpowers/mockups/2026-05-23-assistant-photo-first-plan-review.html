@@ -38,7 +38,13 @@
           radial-gradient(circle at 88% 12%, rgba(98, 161, 255, 0.12), transparent 28rem),
           linear-gradient(180deg, #070809 0%, var(--page) 52%, #020303 100%);
         color: var(--text);
-        font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font:
+          14px/1.45 ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
       }
 
       button,
@@ -92,8 +98,7 @@
           linear-gradient(135deg, #ef6461 0 28%, transparent 29%),
           linear-gradient(225deg, #8fbaff 0 28%, transparent 29%),
           linear-gradient(45deg, #f4c95d 0 28%, transparent 29%),
-          linear-gradient(315deg, #6bdc9a 0 28%, transparent 29%),
-          #111;
+          linear-gradient(315deg, #6bdc9a 0 28%, transparent 29%), #111;
         box-shadow: inset 0 0 0 3px #0c0c0c;
       }
 
@@ -334,9 +339,7 @@
       .plan-sheet {
         border: 1px solid var(--line);
         border-radius: var(--radius-lg);
-        background:
-          linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 36%),
-          var(--panel);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 36%), var(--panel);
         box-shadow: var(--shadow);
       }
 
@@ -377,7 +380,7 @@
       }
 
       .activity-rail::before {
-        content: "";
+        content: '';
         position: absolute;
         left: 5px;
         top: 9px;
@@ -399,7 +402,7 @@
       }
 
       .activity-step::before {
-        content: "";
+        content: '';
         position: absolute;
         left: -18px;
         top: 18px;
@@ -549,14 +552,12 @@
         position: relative;
         overflow: hidden;
         border-radius: 18px;
-        background:
-          linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent),
-          var(--photo);
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent), var(--photo);
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
       }
 
       .photo::after {
-        content: "";
+        content: '';
         position: absolute;
         inset: 0;
         background:
@@ -689,11 +690,11 @@
       }
 
       summary::after {
-        content: " +";
+        content: ' +';
       }
 
       details[open] summary::after {
-        content: " -";
+        content: ' -';
       }
 
       .technical-content {
@@ -781,9 +782,7 @@
         overflow: hidden;
         border: 1px solid #343d49;
         border-radius: 30px;
-        background:
-          linear-gradient(180deg, rgba(143, 186, 255, 0.12), transparent 18rem),
-          #0b0d10;
+        background: linear-gradient(180deg, rgba(143, 186, 255, 0.12), transparent 18rem), #0b0d10;
         box-shadow: 0 32px 110px rgba(0, 0, 0, 0.64);
       }
 
@@ -872,14 +871,12 @@
         overflow: hidden;
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 18px;
-        background:
-          radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.25), transparent 18%),
-          var(--photo);
+        background: radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.25), transparent 18%), var(--photo);
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
       }
 
       .review-thumb::before {
-        content: "";
+        content: '';
         position: absolute;
         inset: 0;
         background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, 0.45));
@@ -1181,7 +1178,9 @@
                     <p>Country: South Africa · Date range: Jan 1-31, 2026</p>
                     <details>
                       <summary>Technical details</summary>
-                      <div class="technical-content">source: user_message · confidence: high · parser: trip_date_range</div>
+                      <div class="technical-content">
+                        source: user_message · confidence: high · parser: trip_date_range
+                      </div>
                     </details>
                   </div>
                   <span class="mini-pill">Done</span>
@@ -1192,7 +1191,9 @@
                     <p>Found mountain photos featuring Pierre or Aurelia.</p>
                     <details>
                       <summary>Technical details</summary>
-                      <div class="technical-content">search: country:South Africa date:2026-01 smart:mountain people:any(Pierre,Aurelia)</div>
+                      <div class="technical-content">
+                        search: country:South Africa date:2026-01 smart:mountain people:any(Pierre,Aurelia)
+                      </div>
                     </details>
                   </div>
                   <span class="mini-pill">733 photos</span>
@@ -1208,7 +1209,10 @@
             </article>
 
             <div class="assistant-copy">
-              <p>I found a matching South Africa photo set and prepared a shared space plan. Review the photos first, then apply the selected changes when it looks right.</p>
+              <p>
+                I found a matching South Africa photo set and prepared a shared space plan. Review the photos first,
+                then apply the selected changes when it looks right.
+              </p>
             </div>
 
             <article class="plan-sheet" data-plan-sheet>
@@ -1219,9 +1223,14 @@
                       <p class="eyebrow">Plan review</p>
                       <h2>South Africa with Pierre and Aurelia - Jan 2026</h2>
                     </div>
-                    <button class="pill-button" type="button" data-toggle-plan aria-expanded="true">Collapse plan</button>
+                    <button class="pill-button" type="button" data-toggle-plan aria-expanded="true">
+                      Collapse plan
+                    </button>
                   </div>
-                  <p>Creates one shared space and adds the matching trip photos. The photo set is shown first because it is the thing you are approving.</p>
+                  <p>
+                    Creates one shared space and adds the matching trip photos. The photo set is shown first because it
+                    is the thing you are approving.
+                  </p>
                   <div class="plan-summary">
                     <span class="mini-pill">1 destination</span>
                     <span class="mini-pill">2 selected changes</span>
@@ -1239,15 +1248,26 @@
 
               <div class="plan-collapsed-summary" aria-label="Collapsed plan summary">
                 <div class="collapsed-thumbs">
-                  <div class="collapsed-thumb" style="--photo: linear-gradient(145deg, #9fb76f, #364c34 46%, #192028 100%)"></div>
-                  <div class="collapsed-thumb" style="--photo: linear-gradient(145deg, #e4be8b, #8b6043 52%, #1e2730)"></div>
-                  <div class="collapsed-thumb" style="--photo: linear-gradient(145deg, #bfd3e9, #6b8da7 44%, #253242)"></div>
+                  <div
+                    class="collapsed-thumb"
+                    style="--photo: linear-gradient(145deg, #9fb76f, #364c34 46%, #192028 100%)"
+                  ></div>
+                  <div
+                    class="collapsed-thumb"
+                    style="--photo: linear-gradient(145deg, #e4be8b, #8b6043 52%, #1e2730)"
+                  ></div>
+                  <div
+                    class="collapsed-thumb"
+                    style="--photo: linear-gradient(145deg, #bfd3e9, #6b8da7 44%, #253242)"
+                  ></div>
                 </div>
                 <div>
                   <strong>Plan collapsed</strong>
                   <div style="color: var(--muted)">2 changes · 733 photos selected · no photos will be deleted</div>
                 </div>
-                <button class="pill-button primary" type="button" data-toggle-plan aria-expanded="false">Expand plan</button>
+                <button class="pill-button primary" type="button" data-toggle-plan aria-expanded="false">
+                  Expand plan
+                </button>
               </div>
 
               <div class="photo-stage">
@@ -1288,7 +1308,9 @@
                     <div class="inline-actions">
                       <details>
                         <summary>Technical details</summary>
-                        <div class="technical-content">operation: create_space · visibility: shared · title_source: assistant_plan</div>
+                        <div class="technical-content">
+                          operation: create_space · visibility: shared · title_source: assistant_plan
+                        </div>
                       </details>
                     </div>
                   </div>
@@ -1304,7 +1326,10 @@
                       <button class="pill-button" type="button" data-open-review>Change selection</button>
                       <details>
                         <summary>Technical details</summary>
-                        <div class="technical-content">operation: add_assets_to_space · asset_count: 733 · evidence_handle: search_result_2026_01_sa_mountain</div>
+                        <div class="technical-content">
+                          operation: add_assets_to_space · asset_count: 733 · evidence_handle:
+                          search_result_2026_01_sa_mountain
+                        </div>
                       </details>
                     </div>
                   </div>
@@ -1335,7 +1360,13 @@
       </main>
     </div>
 
-    <div class="review-backdrop" role="dialog" aria-modal="true" aria-labelledby="photo-review-title" aria-hidden="true">
+    <div
+      class="review-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="photo-review-title"
+      aria-hidden="true"
+    >
       <section class="review-sheet">
         <header class="review-header">
           <div>
@@ -1357,99 +1388,195 @@
         <div class="review-body">
           <div class="review-grid-wrap">
             <div class="review-grid" aria-label="Editable photo selection grid">
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #9fb76f, #364c34 46%, #192028 100%)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #9fb76f, #364c34 46%, #192028 100%)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Table Mountain</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #e4be8b, #8b6043 52%, #1e2730)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #e4be8b, #8b6043 52%, #1e2730)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Camp lunch</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #bfd3e9, #6b8da7 44%, #253242)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #bfd3e9, #6b8da7 44%, #253242)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Cloud ridge</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #d7c4a2, #58725f 48%, #222c2b)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #d7c4a2, #58725f 48%, #222c2b)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Trail view</span>
               </button>
-              <button class="review-thumb excluded" style="--photo: linear-gradient(145deg, #b7c9dc, #4f6178 46%, #1f2229)" aria-pressed="false">
+              <button
+                class="review-thumb excluded"
+                style="--photo: linear-gradient(145deg, #b7c9dc, #4f6178 46%, #1f2229)"
+                aria-pressed="false"
+              >
                 <span class="mark">-</span>
                 <span class="caption">Blurred frame</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #f0d0a0, #9b714c 46%, #25313c)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #f0d0a0, #9b714c 46%, #25313c)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Golden hour</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #738f61, #2f4536 48%, #11181f)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #738f61, #2f4536 48%, #11181f)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Lookout</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #d9b48a, #78644b 52%, #202733)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #d9b48a, #78644b 52%, #202733)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Aurelia</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #9cb9cf, #465e77 44%, #1b2028)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #9cb9cf, #465e77 44%, #1b2028)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Pierre</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #c6d49d, #697f5a 48%, #1e2727)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #c6d49d, #697f5a 48%, #1e2727)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Fynbos</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #e7c5a2, #936847 46%, #252d37)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #e7c5a2, #936847 46%, #252d37)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Road stop</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #c6d7eb, #6d829a 44%, #222b38)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #c6d7eb, #6d829a 44%, #222b38)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Peak line</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #a8bc83, #4f633f 50%, #1b2427)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #a8bc83, #4f633f 50%, #1b2427)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Valley</span>
               </button>
-              <button class="review-thumb excluded" style="--photo: linear-gradient(145deg, #d3c1aa, #736655 48%, #242934)" aria-pressed="false">
+              <button
+                class="review-thumb excluded"
+                style="--photo: linear-gradient(145deg, #d3c1aa, #736655 48%, #242934)"
+                aria-pressed="false"
+              >
                 <span class="mark">-</span>
                 <span class="caption">Duplicate</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #a3c2dd, #50708c 46%, #202835)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #a3c2dd, #50708c 46%, #202835)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Overlook</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #e6cba6, #9a7a54 50%, #27303a)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #e6cba6, #9a7a54 50%, #27303a)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Rest stop</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #b2c88f, #637647 48%, #1c2522)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #b2c88f, #637647 48%, #1c2522)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Green trail</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #cedbe9, #778ba0 44%, #222b32)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #cedbe9, #778ba0 44%, #222b32)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Mist</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #ddb489, #8d5f42 48%, #202631)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #ddb489, #8d5f42 48%, #202631)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Trail snack</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #8aa478, #405842 50%, #172021)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #8aa478, #405842 50%, #172021)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Mountain path</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #bdcde0, #5d7692 45%, #1d2530)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #bdcde0, #5d7692 45%, #1d2530)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Blue ridge</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #ecd0a6, #a57952 50%, #28313a)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #ecd0a6, #a57952 50%, #28313a)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Sunset</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #a9bf8b, #596f4b 46%, #1c2526)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #a9bf8b, #596f4b 46%, #1c2526)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">Wide shot</span>
               </button>
-              <button class="review-thumb selected" style="--photo: linear-gradient(145deg, #d5e0ea, #71869a 48%, #202934)" aria-pressed="true">
+              <button
+                class="review-thumb selected"
+                style="--photo: linear-gradient(145deg, #d5e0ea, #71869a 48%, #202934)"
+                aria-pressed="true"
+              >
                 <span class="mark">✓</span>
                 <span class="caption">More photos</span>
               </button>
@@ -1480,7 +1607,9 @@
               </ul>
               <details style="margin-top: 12px">
                 <summary>Technical details</summary>
-                <div class="technical-content">operation: edit_asset_selection · original_count: 733 · selected_count: 731 · excluded_count: 2</div>
+                <div class="technical-content">
+                  operation: edit_asset_selection · original_count: 733 · selected_count: 731 · excluded_count: 2
+                </div>
               </details>
             </div>
           </aside>
@@ -1500,49 +1629,49 @@
     </div>
 
     <script>
-      const reviewBackdrop = document.querySelector(".review-backdrop");
-      const planSheet = document.querySelector("[data-plan-sheet]");
-      const planToggleButtons = document.querySelectorAll("[data-toggle-plan]");
+      const reviewBackdrop = document.querySelector('.review-backdrop');
+      const planSheet = document.querySelector('[data-plan-sheet]');
+      const planToggleButtons = document.querySelectorAll('[data-toggle-plan]');
 
       const setPlanCollapsed = (collapsed) => {
-        planSheet?.classList.toggle("collapsed", collapsed);
+        planSheet?.classList.toggle('collapsed', collapsed);
         planToggleButtons.forEach((button) => {
-          button.textContent = collapsed ? "Expand plan" : "Collapse plan";
-          button.setAttribute("aria-expanded", String(!collapsed));
+          button.textContent = collapsed ? 'Expand plan' : 'Collapse plan';
+          button.setAttribute('aria-expanded', String(!collapsed));
         });
       };
 
       const openReview = () => {
-        document.body.classList.add("review-open");
-        reviewBackdrop?.setAttribute("aria-hidden", "false");
+        document.body.classList.add('review-open');
+        reviewBackdrop?.setAttribute('aria-hidden', 'false');
       };
       const closeReview = () => {
-        document.body.classList.remove("review-open");
-        reviewBackdrop?.setAttribute("aria-hidden", "true");
+        document.body.classList.remove('review-open');
+        reviewBackdrop?.setAttribute('aria-hidden', 'true');
       };
 
-      document.querySelectorAll("[data-open-review]").forEach((button) => {
-        button.addEventListener("click", openReview);
+      document.querySelectorAll('[data-open-review]').forEach((button) => {
+        button.addEventListener('click', openReview);
       });
 
       planToggleButtons.forEach((button) => {
-        button.addEventListener("click", () => {
-          setPlanCollapsed(!planSheet?.classList.contains("collapsed"));
+        button.addEventListener('click', () => {
+          setPlanCollapsed(!planSheet?.classList.contains('collapsed'));
         });
       });
 
-      document.querySelectorAll("[data-close-review]").forEach((button) => {
-        button.addEventListener("click", closeReview);
+      document.querySelectorAll('[data-close-review]').forEach((button) => {
+        button.addEventListener('click', closeReview);
       });
 
-      reviewBackdrop?.addEventListener("click", (event) => {
+      reviewBackdrop?.addEventListener('click', (event) => {
         if (event.target === reviewBackdrop) {
           closeReview();
         }
       });
 
-      document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") {
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
           closeReview();
         }
       });
