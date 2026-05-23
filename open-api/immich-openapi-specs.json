@@ -22947,8 +22947,7 @@
         "additionalProperties": false,
         "properties": {
           "choiceRef": {
-            "pattern": "^choice:(person|tag|album|space|cameraMake|cameraModel|lensModel):[A-Za-z0-9_-]{8,120}$",
-            "type": "string"
+            "$ref": "#/components/schemas/AgentChoiceRef"
           },
           "description": {
             "maxLength": 500,
