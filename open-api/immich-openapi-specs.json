@@ -22410,11 +22410,33 @@
         ],
         "type": "string"
       },
+      "AgentAssetSourceInput": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentSearchAssetSourceInput"
+          },
+          {
+            "$ref": "#/components/schemas/AgentPreviousSearchAssetSourceInput"
+          },
+          {
+            "$ref": "#/components/schemas/AgentSelectionHandleAssetSourceInput"
+          },
+          {
+            "$ref": "#/components/schemas/AgentExplicitAssetsAssetSourceInput"
+          }
+        ]
+      },
       "AgentAssignableSharedSpaceMemberRole": {
         "enum": [
           "editor",
           "viewer"
         ],
+        "type": "string"
+      },
+      "AgentChoiceRef": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^choice:(person|tag|album|space|cameraMake|cameraModel|lensModel):[A-Za-z0-9_-]{8,120}$",
         "type": "string"
       },
       "AgentCredentialSnapshot": {
@@ -22459,6 +22481,168 @@
           "label",
           "models",
           "providerType"
+        ],
+        "type": "object"
+      },
+      "AgentDeclarativeAssetFilters": {
+        "additionalProperties": false,
+        "properties": {
+          "albums": {
+            "$ref": "#/components/schemas/AgentDeclarativeNamedFilter"
+          },
+          "camera": {
+            "$ref": "#/components/schemas/AgentDeclarativeCameraFilter"
+          },
+          "city": {
+            "nullable": true,
+            "type": "string"
+          },
+          "country": {
+            "nullable": true,
+            "type": "string"
+          },
+          "isFavorite": {
+            "type": "boolean"
+          },
+          "isNotInAlbum": {
+            "type": "boolean"
+          },
+          "people": {
+            "$ref": "#/components/schemas/AgentDeclarativeNamedFilter"
+          },
+          "rating": {
+            "maximum": 5,
+            "minimum": 1,
+            "nullable": true,
+            "type": "integer"
+          },
+          "space": {
+            "$ref": "#/components/schemas/AgentDeclarativeSpaceFilter"
+          },
+          "state": {
+            "nullable": true,
+            "type": "string"
+          },
+          "tags": {
+            "$ref": "#/components/schemas/AgentDeclarativeNamedFilter"
+          },
+          "takenAfter": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "takenBefore": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AssetTypeEnum"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/AssetVisibility"
+          },
+          "withSharedSpaces": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "AgentDeclarativeCameraFilter": {
+        "additionalProperties": false,
+        "properties": {
+          "lensModel": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "make": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AgentDeclarativeNameMatch": {
+        "enum": [
+          "any",
+          "all"
+        ],
+        "type": "string"
+      },
+      "AgentDeclarativeNamedFilter": {
+        "additionalProperties": false,
+        "properties": {
+          "choiceRefs": {
+            "items": {
+              "$ref": "#/components/schemas/AgentChoiceRef"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "match": {
+            "$ref": "#/components/schemas/AgentDeclarativeNameMatch"
+          },
+          "names": {
+            "items": {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "match",
+          "names"
+        ],
+        "type": "object"
+      },
+      "AgentDeclarativeSpaceFilter": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "AgentExplicitAssetsAssetSourceInput": {
+        "additionalProperties": false,
+        "properties": {
+          "assetIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "explicitAssets"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "assetIds",
+          "kind"
         ],
         "type": "object"
       },
@@ -22654,6 +22838,7 @@
         "type": "object"
       },
       "AgentMessageAssetBlock": {
+        "additionalProperties": false,
         "properties": {
           "assetId": {
             "format": "uuid",
@@ -22694,8 +22879,99 @@
           },
           {
             "$ref": "#/components/schemas/AgentMessagePlanBlock"
+          },
+          {
+            "$ref": "#/components/schemas/AgentMessageClarificationBlock"
           }
         ]
+      },
+      "AgentMessageClarificationBlock": {
+        "additionalProperties": false,
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/AgentMessageClarificationChoice"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "person",
+              "tag",
+              "album",
+              "space",
+              "cameraMake",
+              "cameraModel",
+              "lensModel"
+            ],
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "textFallback": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AgentMessageClarificationBlockType"
+          }
+        },
+        "required": [
+          "choices",
+          "kind",
+          "query",
+          "summary",
+          "textFallback",
+          "type"
+        ],
+        "type": "object"
+      },
+      "AgentMessageClarificationBlockType": {
+        "enum": [
+          "clarification"
+        ],
+        "type": "string"
+      },
+      "AgentMessageClarificationChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "choiceRef": {
+            "pattern": "^choice:(person|tag|album|space|cameraMake|cameraModel|lensModel):[A-Za-z0-9_-]{8,120}$",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "thumbnailAssetId": {
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "choiceRef",
+          "label"
+        ],
+        "type": "object"
       },
       "AgentMessageContent": {
         "properties": {
@@ -22725,6 +23001,7 @@
         "type": "object"
       },
       "AgentMessagePlanBlock": {
+        "additionalProperties": false,
         "properties": {
           "label": {
             "maxLength": 500,
@@ -22808,6 +23085,7 @@
         "type": "string"
       },
       "AgentMessageTextBlock": {
+        "additionalProperties": false,
         "properties": {
           "text": {
             "maxLength": 8000,
@@ -22831,6 +23109,7 @@
         "type": "string"
       },
       "AgentMessageToolCallBlock": {
+        "additionalProperties": false,
         "properties": {
           "summary": {
             "maxLength": 500,
@@ -23245,6 +23524,23 @@
         ],
         "type": "object"
       },
+      "AgentOperationPlanningAssetSourceInput": {
+        "$ref": "#/components/schemas/AgentAssetSourceInput",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentSearchAssetSourceInput"
+          },
+          {
+            "$ref": "#/components/schemas/AgentPreviousSearchAssetSourceInput"
+          },
+          {
+            "$ref": "#/components/schemas/AgentSelectionHandleAssetSourceInput"
+          },
+          {
+            "$ref": "#/components/schemas/AgentExplicitAssetsAssetSourceInput"
+          }
+        ]
+      },
       "AgentOperationResponseDto": {
         "properties": {
           "assetIds": {
@@ -23604,6 +23900,25 @@
         ],
         "type": "string"
       },
+      "AgentPreviousSearchAssetSourceInput": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "previousSearch"
+            ],
+            "type": "string"
+          },
+          "sourceRef": {
+            "$ref": "#/components/schemas/AgentSearchSourceRef"
+          }
+        },
+        "required": [
+          "kind",
+          "sourceRef"
+        ],
+        "type": "object"
+      },
       "AgentProposeAlbumOperationsDto": {
         "additionalProperties": false,
         "properties": {
@@ -23691,6 +24006,9 @@
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
                     },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
                     "assetIds": {
                       "minItems": 1,
                       "maxItems": 10000,
@@ -23751,6 +24069,9 @@
                       "minLength": 1,
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
                     },
                     "assetIds": {
                       "minItems": 1,
@@ -23863,6 +24184,9 @@
                       "minLength": 1,
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
                     },
                     "assetIds": {
                       "minItems": 1,
@@ -23986,6 +24310,9 @@
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
                     },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
                     "assetIds": {
                       "minItems": 1,
                       "maxItems": 10000,
@@ -24049,6 +24376,9 @@
                       "minLength": 1,
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
                     },
                     "assetIds": {
                       "minItems": 1,
@@ -24365,6 +24695,9 @@
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
                     },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
                     "assetIds": {
                       "minItems": 1,
                       "maxItems": 10000,
@@ -24436,6 +24769,9 @@
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
                     },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
                     "assetIds": {
                       "minItems": 1,
                       "maxItems": 10000,
@@ -24505,6 +24841,9 @@
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
                     },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
                     "assetIds": {
                       "minItems": 1,
                       "maxItems": 10000,
@@ -24573,6 +24912,9 @@
                       "minLength": 1,
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
                     },
                     "assetIds": {
                       "minItems": 1,
@@ -24646,6 +24988,9 @@
                       "minLength": 1,
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
                     },
                     "assetIds": {
                       "minItems": 1,
@@ -25488,6 +25833,9 @@
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
                     },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
                     "assetIds": {
                       "minItems": 1,
                       "maxItems": 10000,
@@ -25548,6 +25896,9 @@
                       "minLength": 1,
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
                     },
                     "assetIds": {
                       "minItems": 1,
@@ -25660,6 +26011,9 @@
                       "minLength": 1,
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
                     },
                     "assetIds": {
                       "minItems": 1,
@@ -25783,6 +26137,9 @@
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
                     },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
                     "assetIds": {
                       "minItems": 1,
                       "maxItems": 10000,
@@ -25846,6 +26203,9 @@
                       "minLength": 1,
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
                     },
                     "assetIds": {
                       "minItems": 1,
@@ -26162,6 +26522,9 @@
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
                     },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
                     "assetIds": {
                       "minItems": 1,
                       "maxItems": 10000,
@@ -26233,6 +26596,9 @@
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
                     },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
                     "assetIds": {
                       "minItems": 1,
                       "maxItems": 10000,
@@ -26302,6 +26668,9 @@
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
                     },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
                     "assetIds": {
                       "minItems": 1,
                       "maxItems": 10000,
@@ -26370,6 +26739,9 @@
                       "minLength": 1,
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
                     },
                     "assetIds": {
                       "minItems": 1,
@@ -26443,6 +26815,9 @@
                       "minLength": 1,
                       "maxLength": 120,
                       "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
                     },
                     "assetIds": {
                       "minItems": 1,
@@ -26708,6 +27083,64 @@
         ],
         "type": "object"
       },
+      "AgentSearchAssetSourceInput": {
+        "additionalProperties": false,
+        "properties": {
+          "filters": {
+            "$ref": "#/components/schemas/AgentDeclarativeAssetFilters"
+          },
+          "kind": {
+            "enum": [
+              "search"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "maximum": 10000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "materialization": {
+            "enum": [
+              "bounded-page",
+              "all-matches-with-limit"
+            ],
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "metadata",
+              "smart",
+              "description",
+              "ocr",
+              "filename"
+            ],
+            "type": "string"
+          },
+          "order": {
+            "enum": [
+              "asc",
+              "desc",
+              "relevance"
+            ],
+            "type": "string"
+          },
+          "page": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
       "AgentSearchAssetsDetail": {
         "enum": [
           "ids",
@@ -26740,6 +27173,9 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "albumMatchAny": {
+            "type": "boolean"
           },
           "city": {
             "nullable": true,
@@ -26787,6 +27223,9 @@
             },
             "type": "array"
           },
+          "personMatchAny": {
+            "type": "boolean"
+          },
           "rating": {
             "maximum": 5,
             "minimum": 1,
@@ -26817,6 +27256,9 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "tagMatchAny": {
+            "type": "boolean"
           },
           "takenAfter": {
             "example": "2024-01-01T00:00:00.000Z",
@@ -26899,6 +27341,9 @@
             "maxItems": 25,
             "type": "array"
           },
+          "sourceRef": {
+            "$ref": "#/components/schemas/AgentSearchSourceRef"
+          },
           "sourceToolCallId": {
             "format": "uuid",
             "nullable": true,
@@ -26911,6 +27356,7 @@
           "expiresAt",
           "id",
           "sampleAssetIds",
+          "sourceRef",
           "sourceToolCallId"
         ],
         "type": "object"
@@ -27101,6 +27547,12 @@
         ],
         "type": "object"
       },
+      "AgentSearchSourceRef": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^asset-source:search:[A-Za-z0-9_-]{8,120}$",
+        "type": "string"
+      },
       "AgentSearchUsersToolApprovalRequiredResponse": {
         "properties": {
           "status": {
@@ -27202,6 +27654,27 @@
           "status",
           "toolCall",
           "users"
+        ],
+        "type": "object"
+      },
+      "AgentSelectionHandleAssetSourceInput": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "selectionHandle"
+            ],
+            "type": "string"
+          },
+          "selectionHandleId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "selectionHandleId"
         ],
         "type": "object"
       },
@@ -27814,6 +28287,11 @@
           "readSpace",
           "searchUsers",
           "proposeAlbumOperations",
+          "proposeAlbumFromSearch",
+          "proposeAddAssetsToAlbumFromSearch",
+          "proposeSpaceFromSearch",
+          "proposeAddAssetsToSpaceFromSearch",
+          "proposeAssetBatchFromSearch",
           "reviseProposedOperations",
           "summarizePlan"
         ],
