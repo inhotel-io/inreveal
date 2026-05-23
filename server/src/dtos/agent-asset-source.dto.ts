@@ -14,6 +14,7 @@ const sourceRefToken = z
 const sourceRefKind = z.enum(['search', 'selection']);
 const namedFilterName = z.string().trim().min(1).max(120);
 const namedFilterNames = z.array(namedFilterName).min(1).max(20);
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const AgentSourceRefSchema = z
   .string()
@@ -42,6 +43,9 @@ export const AgentChoiceRefSchema = z
   .max(200)
   .regex(/^choice:(person|tag|album|space|cameraMake|cameraModel|lensModel):[A-Za-z0-9_-]{8,120}$/, {
     message: 'choiceRef must use the choice:<kind>:<token> format',
+  })
+  .refine((choiceRef) => !uuidPattern.test(choiceRef.split(':')[2] ?? ''), {
+    message: 'choiceRef token must not be a UUID',
   })
   .meta({ id: 'AgentChoiceRef' });
 
