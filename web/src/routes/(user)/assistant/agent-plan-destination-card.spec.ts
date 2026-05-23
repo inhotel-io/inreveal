@@ -172,8 +172,6 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
-        onToggleItem: vi.fn(),
-        onResetItemSelection: vi.fn(),
       },
     });
 
@@ -200,10 +198,6 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
-        onToggleItem: vi.fn(),
-        onBulkSetItems: vi.fn(),
-        onSetOnlyItems: vi.fn(),
-        onResetItemSelection: vi.fn(),
         onSetFieldOverride: vi.fn(),
         onResetFieldOverride: vi.fn(),
         onOpenItemReview,
@@ -230,10 +224,6 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
-        onToggleItem: vi.fn(),
-        onBulkSetItems: vi.fn(),
-        onSetOnlyItems: vi.fn(),
-        onResetItemSelection: vi.fn(),
         onSetFieldOverride: vi.fn(),
         onResetFieldOverride: vi.fn(),
         onOpenItemReview,
@@ -275,8 +265,6 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
-        onToggleItem: vi.fn(),
-        onResetItemSelection: vi.fn(),
       },
     });
 
@@ -294,8 +282,6 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
-        onToggleItem: vi.fn(),
-        onResetItemSelection: vi.fn(),
       },
     });
 
@@ -314,8 +300,6 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup,
         onToggleOperation: vi.fn(),
-        onToggleItem: vi.fn(),
-        onResetItemSelection: vi.fn(),
       },
     });
 
@@ -334,8 +318,6 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
-        onToggleItem: vi.fn(),
-        onResetItemSelection: vi.fn(),
       },
     });
 
@@ -354,8 +336,6 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
-        onToggleItem: vi.fn(),
-        onResetItemSelection: vi.fn(),
         onOpenItemReview,
       },
     });
@@ -373,8 +353,6 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: false,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
-        onToggleItem: vi.fn(),
-        onResetItemSelection: vi.fn(),
       },
     });
 
@@ -390,8 +368,6 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
-        onToggleItem: vi.fn(),
-        onResetItemSelection: vi.fn(),
         onSetFieldOverride,
         onResetFieldOverride,
       },
@@ -418,8 +394,6 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
-        onToggleItem: vi.fn(),
-        onResetItemSelection: vi.fn(),
         onSetFieldOverride: vi.fn(),
         onResetFieldOverride: vi.fn(),
       },
