@@ -222,6 +222,25 @@ Overview cards must expose button semantics:
 
 Cards must work with large text, reduced motion, dark mode, light mode, and high-contrast settings. Labels and count badges must remain legible over varied photos. Motion during mode switches should be subtle and non-essential.
 
+Slice 6 acceptance criteria:
+
+- Selector semantics identify one container, three reachable mode buttons, and the selected mode. Disabled or hidden selector states must not leave stale actionable semantics behind.
+- Overview-card semantics are localized, include the period label, pluralized count, and action, and are exposed only when the card can be activated. Fallback and failed-thumbnail cards still announce the period and count when drilldown is available.
+- Temporal scope chips expose a remove/clear action that is distinguishable from normal filter-chip copy and only clears the temporal scope.
+- Focus traversal reads the selector before route-local temporal chips and reads overview cards in visual order.
+- The selector and cards keep at least Material minimum interactive target sizes where they are actionable.
+- RTL locales mirror layout without reversing the persisted grouping model: the visual order follows directional UI expectations, semantics remain understandable, and card labels anchor to the directional start edge.
+- Reduced-motion mode disables nonessential selector/card transitions; state changes still happen immediately.
+- High-contrast, dark, and light themes keep label and count contrast readable over representative photos and fallback backgrounds.
+
+Slice 6 localization requirements:
+
+- All new screen-reader copy uses generated translation keys rather than hard-coded English strings.
+- Count copy uses ICU plural forms.
+- Month labels use locale-aware date skeletons, not hand-built English month strings.
+- Tests must cover English singular/plural, a non-English month order or month name, a long localized month label, and an RTL locale.
+- Regenerate mobile localization loader/key files after adding keys.
+
 ## Development Process
 
 Implementation must use test-driven development. Each implementation slice should start with the smallest failing tests for the behavior it introduces, confirm those tests fail on the current implementation, then make the minimal production changes needed to pass.
@@ -237,6 +256,8 @@ Recommended slice order:
 
 Do not rely on screenshots alone. Use widget tests for state and semantics, repository/provider tests for filtering, and integration tests for the Photos drilldown flow.
 
+Slice 6 must also follow TDD. Start with failing semantics, localization, and responsive widget tests before changing selector/card APIs. Each responsive rule must be testable: narrow widths and large text keep content inside bounds; landscape/tablet widths do not add extra controls; RTL mirrors alignment without breaking tap behavior.
+
 ## Testing
 
 Selector and setting tests:
@@ -250,6 +271,9 @@ Selector and setting tests:
 - Existing enum indexes remain unchanged.
 - Very narrow width or large text does not overflow the app bar.
 - Selection mode and asset viewer overlays hide or disable the selector where needed.
+- Selector semantics include a selected-state announcement and no duplicate child labels.
+- Reduced-motion media settings remove nonessential selector animation without changing persistence behavior.
+- RTL layout preserves tap behavior and presents the three modes in directional visual order.
 
 Overview card tests:
 
@@ -261,6 +285,11 @@ Overview card tests:
 - Video-only buckets render a usable thumbnail or fallback.
 - Labels remain legible in dark and light themes.
 - Accessibility labels include date, count, and action.
+- Accessibility labels use localized month names, ICU plural counts, and the correct drilldown action.
+- Non-actionable zero-count or no-handler cards do not expose button semantics.
+- RTL cards anchor label and count to the directional start edge.
+- Long localized month labels and large text remain within the card instead of overflowing.
+- High-contrast fallback cards preserve visible label and count contrast.
 
 Temporal drilldown tests:
 
@@ -322,6 +351,7 @@ Repository/provider tests:
 - Long localized month labels and singular/plural photo counts.
 - Landscape phones and tablets.
 - Foldables or unusually narrow app widths.
+- RTL locales and mixed-direction month labels.
 - Multi-select mode entered from day mode after visiting overview modes.
 - Asset viewer opened from scoped day mode and then closed.
 - Filter sheet open while grouping changes through Settings.

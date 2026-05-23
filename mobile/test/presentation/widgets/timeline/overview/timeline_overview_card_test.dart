@@ -1,7 +1,8 @@
 import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
-import 'package:easy_localization/easy_localization.dart';
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
@@ -40,13 +41,29 @@ void main() {
     await db.close();
   });
 
-  Widget wrap(Widget child) {
+  Widget wrap(
+    Widget child, {
+    List<Locale> supportedLocales = const [Locale('en')],
+    Locale locale = const Locale('en'),
+    TextDirection textDirection = TextDirection.ltr,
+    MediaQueryData? mediaQuery,
+    ThemeData? theme,
+  }) {
     return EasyLocalization(
-      supportedLocales: const [Locale('en')],
+      supportedLocales: supportedLocales,
       path: '../i18n',
       fallbackLocale: const Locale('en'),
+      startLocale: locale,
       child: MaterialApp(
-        home: Scaffold(body: Center(child: child)),
+        locale: locale,
+        theme: theme,
+        home: Directionality(
+          textDirection: textDirection,
+          child: MediaQuery(
+            data: mediaQuery ?? const MediaQueryData(),
+            child: Scaffold(body: Center(child: child)),
+          ),
+        ),
       ),
     );
   }
@@ -102,5 +119,304 @@ void main() {
     expect(find.byKey(const ValueKey('timeline-overview-card-fallback')), findsOneWidget);
     expect(find.text('2024'), findsOneWidget);
     expect(find.text('2 photos'), findsOneWidget);
+  });
+
+  testWidgets('actionable year card exposes localized button semantics', (tester) async {
+    final semantics = tester.ensureSemantics();
+    var taps = 0;
+
+    await tester.pumpWidget(
+      wrap(
+        TimelineOverviewCard(
+          bucket: TimeBucket(date: DateTime(2025), assetCount: 1),
+          groupBy: GroupAssetsBy.year,
+          onTap: () => taps++,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('2025, 1 photo, show months'), findsOneWidget);
+    final node = tester.getSemantics(find.bySemanticsLabel('2025, 1 photo, show months'));
+    expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+
+    await tester.tap(find.byType(TimelineOverviewCard));
+    await tester.pumpAndSettle();
+
+    expect(taps, 1);
+    semantics.dispose();
+  });
+
+  testWidgets('actionable month card exposes full localized month and plural count semantics', (tester) async {
+    final semantics = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      wrap(
+        TimelineOverviewCard(
+          bucket: TimeBucket(date: DateTime(2025, 3), assetCount: 4),
+          groupBy: GroupAssetsBy.month,
+          onTap: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mar 2025'), findsOneWidget);
+    expect(find.bySemanticsLabel('March 2025, 4 photos, show days'), findsOneWidget);
+    final node = tester.getSemantics(find.bySemanticsLabel('March 2025, 4 photos, show days'));
+    expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    semantics.dispose();
+  });
+
+  testWidgets('non-actionable cards do not expose button semantics', (tester) async {
+    final semantics = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      wrap(
+        TimelineOverviewCard(
+          bucket: TimeBucket(date: DateTime(2025), assetCount: 0),
+          groupBy: GroupAssetsBy.year,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('2025'), findsOneWidget);
+    expect(find.text('0 photos'), findsOneWidget);
+    expect(find.bySemanticsLabel('2025, 0 photos, show months'), findsNothing);
+    semantics.dispose();
+  });
+
+  testWidgets('fallback card keeps actionable semantics when thumbnail is missing', (tester) async {
+    final semantics = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      wrap(
+        TimelineOverviewCard(
+          bucket: TimeBucket(date: DateTime(2025, 3), assetCount: 2),
+          groupBy: GroupAssetsBy.month,
+          onTap: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('timeline-overview-card-fallback')), findsOneWidget);
+    expect(find.bySemanticsLabel('March 2025, 2 photos, show days'), findsOneWidget);
+    final node = tester.getSemantics(find.bySemanticsLabel('March 2025, 2 photos, show days'));
+    expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    semantics.dispose();
+  });
+
+  testWidgets('German locale uses localized month label and English fallback action', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await initializeDateFormatting('de');
+
+    await tester.pumpWidget(
+      wrap(
+        TimelineOverviewCard(
+          bucket: TimeBucket(date: DateTime(2025, 3), assetCount: 3),
+          groupBy: GroupAssetsBy.month,
+          onTap: () {},
+        ),
+        supportedLocales: const [Locale('de'), Locale('en')],
+        locale: const Locale('de'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining(RegExp('Mär|März')), findsWidgets);
+    expect(find.bySemanticsLabel(RegExp('März 2025, 3 photos, show days')), findsOneWidget);
+    semantics.dispose();
+  });
+
+  testWidgets('Arabic locale uses RTL month labels and localized semantics order', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await initializeDateFormatting('ar');
+    var taps = 0;
+
+    await tester.pumpWidget(
+      wrap(
+        TimelineOverviewCard(
+          bucket: TimeBucket(date: DateTime(2025, 3), assetCount: 5),
+          groupBy: GroupAssetsBy.month,
+          onTap: () => taps++,
+        ),
+        supportedLocales: const [Locale('ar'), Locale('en')],
+        locale: const Locale('ar'),
+        textDirection: TextDirection.rtl,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mar 2025'), findsNothing);
+    expect(find.bySemanticsLabel(RegExp('مارس.*show days')), findsOneWidget);
+
+    await tester.tap(find.byType(TimelineOverviewCard));
+    expect(taps, 1);
+    semantics.dispose();
+  });
+
+  testWidgets('rtl card anchors label group to the directional start edge', (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        SizedBox(
+          width: 320,
+          child: TimelineOverviewCard(
+            bucket: TimeBucket(date: DateTime(2025), assetCount: 1),
+            groupBy: GroupAssetsBy.year,
+            onTap: () {},
+          ),
+        ),
+        textDirection: TextDirection.rtl,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final cardRect = tester.getRect(find.byKey(const ValueKey('timeline-overview-card-size')));
+    final labelRect = tester.getRect(find.text('2025'));
+
+    expect(cardRect.right - labelRect.right, lessThan(labelRect.left - cardRect.left));
+  });
+
+  testWidgets('long localized month labels and large text stay within the card', (tester) async {
+    await initializeDateFormatting('de');
+
+    await tester.pumpWidget(
+      wrap(
+        SizedBox(
+          width: 240,
+          child: TimelineOverviewCard(
+            bucket: TimeBucket(date: DateTime(2025, 9), assetCount: 10),
+            groupBy: GroupAssetsBy.month,
+            onTap: () {},
+          ),
+        ),
+        supportedLocales: const [Locale('de'), Locale('en')],
+        locale: const Locale('de'),
+        mediaQuery: const MediaQueryData(textScaler: TextScaler.linear(2.4)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('Sept'), findsOneWidget);
+    expect(find.text('10 photos'), findsOneWidget);
+  });
+
+  testWidgets('high contrast fallback preserves legible label and count colors', (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        TimelineOverviewCard(
+          bucket: TimeBucket(date: DateTime(2025), assetCount: 1),
+          groupBy: GroupAssetsBy.year,
+        ),
+        mediaQuery: const MediaQueryData(highContrast: true),
+        theme: ThemeData.dark(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final period = tester.widget<Text>(find.text('2025'));
+    final count = tester.widget<Text>(find.text('1 photo'));
+
+    expect(period.style?.color, Colors.white);
+    expect(count.style?.color, Colors.black);
+  });
+
+  testWidgets('reduced motion overview card has no nonessential animations', (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        TimelineOverviewCard(
+          bucket: TimeBucket(date: DateTime(2025), assetCount: 1),
+          groupBy: GroupAssetsBy.year,
+          onTap: () {},
+        ),
+        mediaQuery: const MediaQueryData(disableAnimations: true, accessibleNavigation: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AnimatedContainer), findsNothing);
+    expect(find.byType(AnimatedOpacity), findsNothing);
+    expect(find.byType(AnimatedSwitcher), findsNothing);
+
+    await tester.pumpWidget(
+      wrap(
+        TimelineOverviewCard(
+          bucket: TimeBucket(date: DateTime(2025), assetCount: 1),
+          groupBy: GroupAssetsBy.year,
+          onTap: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AnimatedContainer), findsNothing);
+    expect(find.byType(AnimatedOpacity), findsNothing);
+    expect(find.byType(AnimatedSwitcher), findsNothing);
+  });
+
+  testWidgets('multiple overview cards expose semantics in visual order', (tester) async {
+    final semantics = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      wrap(
+        Column(
+          children: [
+            TimelineOverviewCard(
+              bucket: TimeBucket(date: DateTime(2025), assetCount: 2),
+              groupBy: GroupAssetsBy.year,
+              onTap: () {},
+            ),
+            TimelineOverviewCard(
+              bucket: TimeBucket(date: DateTime(2024), assetCount: 3),
+              groupBy: GroupAssetsBy.year,
+              onTap: () {},
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('2025, 2 photos, show months'), findsOneWidget);
+    expect(find.bySemanticsLabel('2024, 3 photos, show months'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.bySemanticsLabel('2025, 2 photos, show months')).dy,
+      lessThan(tester.getTopLeft(find.bySemanticsLabel('2024, 3 photos, show months')).dy),
+    );
+
+    await tester.pumpWidget(
+      wrap(
+        Column(
+          children: [
+            TimelineOverviewCard(
+              bucket: TimeBucket(date: DateTime(2025), assetCount: 2),
+              groupBy: GroupAssetsBy.year,
+              onTap: () {},
+            ),
+            TimelineOverviewCard(
+              bucket: TimeBucket(date: DateTime(2024), assetCount: 3),
+              groupBy: GroupAssetsBy.year,
+              onTap: () {},
+            ),
+          ],
+        ),
+        textDirection: TextDirection.rtl,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('2025, 2 photos, show months'), findsOneWidget);
+    expect(find.bySemanticsLabel('2024, 3 photos, show months'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.bySemanticsLabel('2025, 2 photos, show months')).dy,
+      lessThan(tester.getTopLeft(find.bySemanticsLabel('2024, 3 photos, show months')).dy),
+    );
+    semantics.dispose();
   });
 }

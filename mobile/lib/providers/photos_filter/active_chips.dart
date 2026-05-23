@@ -5,12 +5,12 @@
 //   people → tags → location → date → rating → media → favourite → archive
 //   → not-in-album → untagged → text.
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/timeline_temporal_scope.model.dart';
 import 'package:immich_mobile/models/search/search_filter.model.dart';
 import 'package:immich_mobile/providers/photos_filter/chip_id.dart';
-import 'package:intl/intl.dart';
 import 'package:openapi/api.dart';
 
 enum ChipVisual { person, tag, location, when, rating, media, toggle, text }
@@ -22,6 +22,7 @@ class ActiveChipSpec {
   final List<String>? avatarPersonIds;
   final int? tagDotSeed;
   final IconData? icon;
+  final String? semanticsLabel;
 
   const ActiveChipSpec({
     required this.id,
@@ -30,6 +31,7 @@ class ActiveChipSpec {
     this.avatarPersonIds,
     this.tagDotSeed,
     this.icon,
+    this.semanticsLabel,
   });
 }
 
@@ -229,20 +231,32 @@ List<ActiveChipSpec> activeChipsFromFilter(SearchFilter filter, {FilterSuggestio
 }
 
 ActiveChipSpec? activeTemporalScopeChip(TimelineTemporalScope scope, {String? locale}) {
+  String clearSemanticsLabel(String label) {
+    final translated = 'timeline_temporal_scope_clear_semantics'.tr(namedArgs: {'label': label});
+    if (translated != 'timeline_temporal_scope_clear_semantics' && !translated.contains('{label}')) {
+      return translated;
+    }
+    return '$label, clear timeline date filter';
+  }
+
   switch (scope.kind) {
     case TimelineTemporalScopeKind.none:
       return null;
     case TimelineTemporalScopeKind.year:
+      final label = DateFormat.y(locale).format(DateTime(scope.year!));
       return ActiveChipSpec(
         id: const TemporalScopeChipId(),
-        label: DateFormat.y(locale).format(DateTime(scope.year!)),
+        label: label,
         visual: ChipVisual.when,
+        semanticsLabel: clearSemanticsLabel(label),
       );
     case TimelineTemporalScopeKind.month:
+      final label = DateFormat.yMMM(locale).format(DateTime(scope.year!, scope.month!));
       return ActiveChipSpec(
         id: const TemporalScopeChipId(),
-        label: DateFormat.yMMM(locale).format(DateTime(scope.year!, scope.month!)),
+        label: label,
         visual: ChipVisual.when,
+        semanticsLabel: clearSemanticsLabel(label),
       );
   }
 }

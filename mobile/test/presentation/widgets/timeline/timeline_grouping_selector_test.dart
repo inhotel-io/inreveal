@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
@@ -72,6 +73,36 @@ void main() {
       expect(selected(tester, GroupAssetsBy.year), isFalse);
     });
 
+    testWidgets('selected segment exposes button semantics without duplicate child text', (tester) async {
+      await Store.put(StoreKey.groupAssetsBy, GroupAssetsBy.month.index);
+      final semantics = tester.ensureSemantics();
+      try {
+        await tester.pumpConsumerWidget(const TimelineGroupingSelector());
+        await tester.pumpAndSettle();
+
+        expect(tester.getSemantics(find.byKey(const Key('timeline-grouping-selector'))).label, 'Timeline grouping');
+        expect(find.bySemanticsLabel('Years'), findsOneWidget);
+        expect(find.bySemanticsLabel('Months'), findsOneWidget);
+        expect(find.bySemanticsLabel('Days'), findsOneWidget);
+
+        final years = tester.getSemantics(find.byKey(const Key('timeline-grouping-year')));
+        final months = tester.getSemantics(find.byKey(const Key('timeline-grouping-month')));
+        final days = tester.getSemantics(find.byKey(const Key('timeline-grouping-day')));
+
+        expect(years.hasFlag(SemanticsFlag.isButton), isTrue);
+        expect(years.hasFlag(SemanticsFlag.isSelected), isFalse);
+        expect(years.hasFlag(SemanticsFlag.isEnabled), isTrue);
+        expect(months.hasFlag(SemanticsFlag.isButton), isTrue);
+        expect(months.hasFlag(SemanticsFlag.isSelected), isTrue);
+        expect(months.hasFlag(SemanticsFlag.isEnabled), isTrue);
+        expect(days.hasFlag(SemanticsFlag.isButton), isTrue);
+        expect(days.hasFlag(SemanticsFlag.isSelected), isFalse);
+        expect(days.hasFlag(SemanticsFlag.isEnabled), isTrue);
+      } finally {
+        semantics.dispose();
+      }
+    });
+
     testWidgets('normalizes unsupported auto and none values to Days visually', (tester) async {
       await Store.put(StoreKey.groupAssetsBy, GroupAssetsBy.auto.index);
       await tester.pumpConsumerWidget(const TimelineGroupingSelector());
@@ -130,20 +161,117 @@ void main() {
       expect(selected(tester, GroupAssetsBy.day), isTrue);
     });
 
-    testWidgets('narrow width does not throw layout overflow', (tester) async {
+    testWidgets('disabled selector removes actionable semantics and does not write settings', (tester) async {
+      await Store.put(StoreKey.groupAssetsBy, GroupAssetsBy.day.index);
+      final semantics = tester.ensureSemantics();
+      try {
+        await tester.pumpConsumerWidget(const TimelineGroupingSelector(enabled: false));
+        await tester.pumpAndSettle();
+
+        for (final groupBy in timelineGroupingSelectorGroups) {
+          final label = switch (groupBy) {
+            GroupAssetsBy.year => 'Years',
+            GroupAssetsBy.month => 'Months',
+            GroupAssetsBy.day => 'Days',
+            GroupAssetsBy.auto || GroupAssetsBy.none => 'Days',
+          };
+          final node = tester.getSemantics(find.byKey(Key('timeline-grouping-${groupBy.name}')));
+          expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isFalse, reason: label);
+          expect(node.hasFlag(SemanticsFlag.hasEnabledState), isTrue, reason: label);
+          expect(node.hasFlag(SemanticsFlag.isEnabled), isFalse, reason: label);
+        }
+
+        await tester.tap(find.byKey(const Key('timeline-grouping-year')), warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.day.index);
+      } finally {
+        semantics.dispose();
+      }
+    });
+
+    testWidgets('segments meet compact mobile tap target inside the app bar slot', (tester) async {
+      await tester.pumpConsumerWidget(
+        const CustomScrollView(
+          slivers: [
+            SliverAppBar(actions: [TimelineGroupingSelector()]),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.getSize(find.byKey(const Key('timeline-grouping-selector'))).height, greaterThanOrEqualTo(48));
+      for (final groupBy in timelineGroupingSelectorGroups) {
+        expect(tester.getSize(find.byKey(Key('timeline-grouping-${groupBy.name}'))).height, greaterThanOrEqualTo(48));
+      }
+    });
+
+    testWidgets('large text and narrow width keep all labels inside the selector', (tester) async {
       await tester.binding.setSurfaceSize(const Size(180, 120));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       await tester.pumpConsumerWidget(
-        const Align(
-          alignment: Alignment.topRight,
-          child: SizedBox(width: 150, child: TimelineGroupingSelector()),
+        MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: const Align(
+            alignment: Alignment.topRight,
+            child: SizedBox(width: 150, child: TimelineGroupingSelector()),
+          ),
         ),
       );
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
       expect(tester.getSize(find.byKey(const Key('timeline-grouping-selector'))).width, lessThanOrEqualTo(150));
+      expect(find.byKey(const Key('timeline-grouping-year')), findsOneWidget);
+      expect(find.byKey(const Key('timeline-grouping-month')), findsOneWidget);
+      expect(find.byKey(const Key('timeline-grouping-day')), findsOneWidget);
+    });
+
+    testWidgets('reduced motion removes nonessential selector animation', (tester) async {
+      await tester.pumpConsumerWidget(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: true, accessibleNavigation: true),
+          child: const TimelineGroupingSelector(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final reducedDurations = tester
+          .widgetList<AnimatedContainer>(find.byType(AnimatedContainer))
+          .map((w) => w.duration);
+      expect(reducedDurations, isNotEmpty);
+      expect(reducedDurations, everyElement(Duration.zero));
+
+      await tester.pumpConsumerWidget(const TimelineGroupingSelector());
+      await tester.pumpAndSettle();
+
+      final normalDurations = tester
+          .widgetList<AnimatedContainer>(find.byType(AnimatedContainer))
+          .map((w) => w.duration);
+      expect(normalDurations, isNotEmpty);
+      expect(normalDurations, everyElement(isNot(Duration.zero)));
+    });
+
+    testWidgets('rtl layout preserves tap behavior and directional visual order', (tester) async {
+      await Store.put(StoreKey.groupAssetsBy, GroupAssetsBy.month.index);
+
+      await tester.pumpConsumerWidget(
+        const Directionality(textDirection: TextDirection.rtl, child: TimelineGroupingSelector()),
+      );
+      await tester.pumpAndSettle();
+
+      final years = tester.getCenter(find.byKey(const Key('timeline-grouping-year')));
+      final months = tester.getCenter(find.byKey(const Key('timeline-grouping-month')));
+      final days = tester.getCenter(find.byKey(const Key('timeline-grouping-day')));
+
+      expect(years.dx, greaterThan(months.dx));
+      expect(months.dx, greaterThan(days.dx));
+
+      await tester.tap(find.byKey(const Key('timeline-grouping-day')));
+      await tester.pumpAndSettle();
+
+      expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.day.index);
     });
   });
 }

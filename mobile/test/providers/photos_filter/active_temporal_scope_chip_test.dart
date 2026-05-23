@@ -19,6 +19,7 @@ void main() {
 
       expect(spec?.id, const TemporalScopeChipId());
       expect(spec?.label, '2025');
+      expect(spec?.semanticsLabel, '2025, clear timeline date filter');
       expect(spec?.visual, ChipVisual.when);
     });
 
@@ -27,6 +28,7 @@ void main() {
 
       expect(spec?.id, const TemporalScopeChipId());
       expect(spec?.label, 'Mar 2025');
+      expect(spec?.semanticsLabel, 'Mar 2025, clear timeline date filter');
       expect(spec?.visual, ChipVisual.when);
     });
   });

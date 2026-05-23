@@ -24,53 +24,58 @@ class ActiveFilterChip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    void removeChip() {
+      HapticFeedback.selectionClick();
+      final callback = onRemove;
+      if (callback != null) {
+        callback();
+      } else {
+        ref.read(photosFilterProvider.notifier).removeChip(spec.id);
+      }
+    }
+
     return Semantics(
       button: true,
-      label: '${spec.label}, ${'remove_filter'.tr()}',
-      child: Material(
-        color: theme.colorScheme.surfaceContainer,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(999),
-          side: BorderSide(color: theme.colorScheme.outlineVariant),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _leading(context),
-              if (_needsLeadingGap) const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  spec.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: spec.visual == ChipVisual.when
-                      ? theme.textTheme.labelLarge?.copyWith(
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                          letterSpacing: 0.4,
-                        )
-                      : theme.textTheme.labelLarge,
+      label: spec.semanticsLabel ?? '${spec.label}, ${'remove_filter'.tr()}',
+      onTap: removeChip,
+      child: ExcludeSemantics(
+        child: Material(
+          color: theme.colorScheme.surfaceContainer,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+            side: BorderSide(color: theme.colorScheme.outlineVariant),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _leading(context),
+                if (_needsLeadingGap) const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    spec.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: spec.visual == ChipVisual.when
+                        ? theme.textTheme.labelLarge?.copyWith(
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                            letterSpacing: 0.4,
+                          )
+                        : theme.textTheme.labelLarge,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  final callback = onRemove;
-                  if (callback != null) {
-                    callback();
-                  } else {
-                    ref.read(photosFilterProvider.notifier).removeChip(spec.id);
-                  }
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(Icons.close_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+                InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: removeChip,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.close_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

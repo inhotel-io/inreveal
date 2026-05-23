@@ -30,7 +30,7 @@ class TimelineGroupingHeaderSliver extends ConsumerWidget {
       child: Container(
         height: kTimelineGroupingHeaderSliverHeight,
         color: colors.surface,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         child: Row(
           children: [
             const TimelineGroupingSelector(),

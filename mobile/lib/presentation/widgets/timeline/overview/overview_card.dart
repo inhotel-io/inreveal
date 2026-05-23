@@ -33,6 +33,17 @@ class TimelineOverviewCard extends StatelessWidget {
     };
   }
 
+  String _semanticsPeriod(BuildContext context) {
+    final locale = context.locale.toLanguageTag();
+    return switch (groupBy) {
+      GroupAssetsBy.year => DateFormat.y(locale).format(bucket.date),
+      GroupAssetsBy.month => DateFormat.yMMMM(locale).format(bucket.date),
+      GroupAssetsBy.day ||
+      GroupAssetsBy.auto ||
+      GroupAssetsBy.none => DateFormat.yMMMMEEEEd(locale).format(bucket.date),
+    };
+  }
+
   String _countLabel() {
     final count = bucket.assetCount;
     final translated = 'timeline_overview_photo_count'.tr(namedArgs: {'count': count.toString()});
@@ -43,13 +54,49 @@ class TimelineOverviewCard extends StatelessWidget {
     return count == 1 ? '1 photo' : '$count photos';
   }
 
+  String? _actionLabel() {
+    final key = switch (groupBy) {
+      GroupAssetsBy.year => 'timeline_overview_show_months',
+      GroupAssetsBy.month => 'timeline_overview_show_days',
+      GroupAssetsBy.day || GroupAssetsBy.auto || GroupAssetsBy.none => null,
+    };
+    if (key == null) {
+      return null;
+    }
+
+    final translated = key.tr();
+    if (translated != key) {
+      return translated;
+    }
+
+    return switch (groupBy) {
+      GroupAssetsBy.year => 'show months',
+      GroupAssetsBy.month => 'show days',
+      GroupAssetsBy.day || GroupAssetsBy.auto || GroupAssetsBy.none => null,
+    };
+  }
+
+  String _cardSemanticsLabel(BuildContext context, String countLabel, String actionLabel) {
+    final period = _semanticsPeriod(context);
+    final translated = 'timeline_overview_card_semantics'.tr(
+      namedArgs: {'period': period, 'countLabel': countLabel, 'action': actionLabel},
+    );
+    if (translated != 'timeline_overview_card_semantics' && !translated.contains('{period}')) {
+      return translated;
+    }
+
+    return '$period, $countLabel, $actionLabel';
+  }
+
   @override
   Widget build(BuildContext context) {
     final label = _label(context);
     final countLabel = _countLabel();
     final representativeAsset = this.representativeAsset;
+    final actionLabel = _actionLabel();
+    final isActionable = onTap != null && bucket.assetCount > 0 && actionLabel != null;
 
-    return Padding(
+    final card = Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: kTimelineOverviewCardHorizontalPadding,
         vertical: kTimelineOverviewCardVerticalPadding,
@@ -61,7 +108,7 @@ class TimelineOverviewCard extends StatelessWidget {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: onTap,
+            onTap: isActionable ? onTap : null,
             borderRadius: BorderRadius.circular(8),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
@@ -85,9 +132,9 @@ class TimelineOverviewCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Positioned(
-                    left: 16,
-                    right: 16,
+                  PositionedDirectional(
+                    start: 16,
+                    end: 16,
                     bottom: 14,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,6 +177,18 @@ class TimelineOverviewCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+
+    if (!isActionable) {
+      return card;
+    }
+
+    return Semantics(
+      button: true,
+      enabled: true,
+      label: _cardSemanticsLabel(context, countLabel, actionLabel),
+      onTap: onTap,
+      child: ExcludeSemantics(child: card),
     );
   }
 }
