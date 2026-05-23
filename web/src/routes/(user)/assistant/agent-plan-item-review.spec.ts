@@ -183,6 +183,34 @@ describe('AgentPlanItemReview', () => {
     expect(firstTile).toHaveClass('aspect-square');
   });
 
+  it('marks modal tiles with selected state styling and dims excluded photos', () => {
+    const baseItem = item(['asset-1', 'asset-2']);
+    render(AgentPlanItemReview, {
+      props: defaultProps({
+        item: {
+          ...baseItem,
+          review: {
+            ...baseItem.review,
+            selection: {
+              ...baseItem.review.selection,
+              selectedCount: 1,
+              mode: 'allExcept',
+              itemIds: ['asset-2'],
+            },
+          },
+          excludedAssetCount: 1,
+        },
+        variant: 'modal',
+      }),
+    });
+
+    const tiles = screen.getAllByTestId('agent-plan-item-thumbnail');
+    expect(tiles[0]).toHaveAttribute('data-selected', 'true');
+    expect(tiles[0]).toHaveClass('ring-2', 'ring-immich-primary');
+    expect(tiles[1]).toHaveAttribute('data-selected', 'false');
+    expect(tiles[1]).toHaveClass('opacity-60');
+  });
+
   it('uses the same configured column count for virtual math and rendered grid columns', () => {
     const assetIds = Array.from({ length: 100 }, (_, index) => `asset-${index.toString().padStart(4, '0')}`);
     render(AgentPlanItemReview, {
