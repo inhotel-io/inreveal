@@ -182,6 +182,76 @@ describe(AgentMcpToolContractService.name, () => {
     );
   });
 
+  it('defines source-backed workflow examples for album, space, batch, and previous search defaults', () => {
+    const albumCreate = sut.getPlanningToolContract(AgentToolName.ProposeAlbumFromSearch)!;
+    const albumAdd = sut.getPlanningToolContract(AgentToolName.ProposeAddAssetsToAlbumFromSearch)!;
+    const spaceCreate = sut.getPlanningToolContract(AgentToolName.ProposeSpaceFromSearch)!;
+    const spaceAdd = sut.getPlanningToolContract(AgentToolName.ProposeAddAssetsToSpaceFromSearch)!;
+    const batch = sut.getPlanningToolContract(AgentToolName.ProposeAssetBatchFromSearch)!;
+
+    const albumRegression = albumCreate.examples.find(
+      (example) => example.name === 'create-south-africa-pierre-aurelia-album',
+    );
+
+    expect(albumRegression?.description).toMatch(/South Africa.*Pierre.*Aurelia/i);
+    expect(albumRegression?.arguments).toMatchObject({
+      albumName: expect.stringMatching(/South Africa/i),
+      assetSource: {
+        kind: 'search',
+        filters: {
+          country: 'South Africa',
+          people: { match: 'any', names: ['Pierre', 'Aurelia'] },
+        },
+        materialization: 'all-matches-with-limit',
+      },
+    });
+    expect(JSON.stringify(albumRegression?.arguments)).not.toContain('personIds');
+    expect(JSON.stringify(albumRegression?.arguments)).not.toContain('assetIds');
+
+    for (const [contract, exampleName] of [
+      [albumCreate, 'create-south-africa-pierre-aurelia-album'],
+      [albumCreate, 'create-album-from-previous-search'],
+      [albumAdd, 'add-search-results-to-album-by-name'],
+      [spaceCreate, 'create-space-from-declarative-search'],
+      [spaceCreate, 'create-space-from-previous-search'],
+      [spaceAdd, 'add-search-results-to-space-by-name'],
+      [batch, 'favorite-search-results'],
+      [batch, 'rotate-previous-search-results'],
+    ] as const) {
+      const example = contract.examples.find((candidate) => candidate.name === exampleName);
+
+      expect(example, `${contract.name} ${exampleName}`).toBeDefined();
+      expect(
+        AgentOperationPlanToolRequestSchemas[contract.name].safeParse(example?.arguments).success,
+        `${contract.name} ${exampleName}`,
+      ).toBe(true);
+    }
+  });
+
+  it('keeps low-level planning mistakes available while preferring source-backed workflow tools', () => {
+    const lowLevel = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations)!;
+    const workflowContracts = [
+      sut.getPlanningToolContract(AgentToolName.ProposeAlbumFromSearch)!,
+      sut.getPlanningToolContract(AgentToolName.ProposeAddAssetsToAlbumFromSearch)!,
+      sut.getPlanningToolContract(AgentToolName.ProposeSpaceFromSearch)!,
+      sut.getPlanningToolContract(AgentToolName.ProposeAddAssetsToSpaceFromSearch)!,
+      sut.getPlanningToolContract(AgentToolName.ProposeAssetBatchFromSearch)!,
+    ];
+
+    expect(lowLevel.commonMistakes.map((mistake) => mistake.id)).toEqual(
+      expect.arrayContaining([
+        'planning-tool-arguments-missing',
+        'planning-missing-temporary-target-dependency',
+        'planning-pasted-large-asset-ids',
+      ]),
+    );
+
+    for (const contract of workflowContracts) {
+      expect(`${contract.description} ${contract.usage}`).toMatch(/preferred|before low-level/i);
+      expect(JSON.stringify(contract.commonMistakes)).toMatch(/assetSource\.search|assetSource\.previousSearch/);
+    }
+  });
+
   it('returns all tool contracts in stable MCP tool order', () => {
     expect(sut.listToolContracts().map((contract) => contract.name)).toEqual([
       ...expectedReadToolNames,
