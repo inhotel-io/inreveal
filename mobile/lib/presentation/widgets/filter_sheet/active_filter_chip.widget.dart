@@ -15,10 +15,11 @@ import 'package:immich_mobile/utils/image_url_builder.dart';
 ///   * location/rating/media/toggle/text — icon from spec.
 ///   * when    — no leading; label uses tabular figures.
 ///
-/// Trailing × calls `photosFilterProvider.notifier.removeChip(spec.id)`.
+/// Trailing × calls [onRemove] when provided, otherwise removes [spec.id].
 class ActiveFilterChip extends ConsumerWidget {
   final ActiveChipSpec spec;
-  const ActiveFilterChip({super.key, required this.spec});
+  final VoidCallback? onRemove;
+  const ActiveFilterChip({super.key, required this.spec, this.onRemove});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -57,7 +58,12 @@ class ActiveFilterChip extends ConsumerWidget {
                 customBorder: const CircleBorder(),
                 onTap: () {
                   HapticFeedback.selectionClick();
-                  ref.read(photosFilterProvider.notifier).removeChip(spec.id);
+                  final callback = onRemove;
+                  if (callback != null) {
+                    callback();
+                  } else {
+                    ref.read(photosFilterProvider.notifier).removeChip(spec.id);
+                  }
                 },
                 child: Padding(
                   padding: const EdgeInsets.all(4),

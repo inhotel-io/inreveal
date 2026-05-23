@@ -37,6 +37,14 @@ class DateChipId extends ChipId {
   int get hashCode => (DateChipId).hashCode;
 }
 
+class TemporalScopeChipId extends ChipId {
+  const TemporalScopeChipId();
+  @override
+  bool operator ==(Object other) => other is TemporalScopeChipId;
+  @override
+  int get hashCode => (TemporalScopeChipId).hashCode;
+}
+
 class RatingChipId extends ChipId {
   const RatingChipId();
   @override

@@ -108,6 +108,8 @@ class PhotosFilterNotifier extends Notifier<SearchFilter> {
         setLocation(null);
       case DateChipId():
         setDateRange(start: null, end: null);
+      case TemporalScopeChipId():
+        return;
       case RatingChipId():
         setRating(null);
       case MediaTypeChipId():

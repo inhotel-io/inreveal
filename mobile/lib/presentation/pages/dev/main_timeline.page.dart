@@ -2,17 +2,18 @@ import 'package:auto_route/auto_route.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_icon_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_sheet.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/sort_icon_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/memory/memory_lane.widget.dart';
 import 'package:immich_mobile/presentation/widgets/photos_filter/filter_subheader.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
+import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_selector.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/memory.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter_search.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/timeline_query.provider.dart';
+import 'package:immich_mobile/providers/timeline/overview_drilldown.provider.dart';
 import 'package:immich_mobile/widgets/common/immich_sliver_app_bar.dart';
 
 @RoutePage()
@@ -28,7 +29,10 @@ class _MainTimelinePageState extends ConsumerState<MainTimelinePage> {
   Widget build(BuildContext context) {
     final hasMemories = ref.watch(driftMemoryFutureProvider.select((state) => state.value?.isNotEmpty ?? false));
     return ProviderScope(
-      overrides: [timelineServiceProvider.overrideWith((ref) => ref.watch(photosTimelineQueryProvider))],
+      overrides: [
+        timelineServiceProvider.overrideWith((ref) => ref.watch(photosTimelineQueryProvider)),
+        timelineOverviewDrilldownProvider.overrideWith((ref) => ref.watch(photosTimelineOverviewDrilldownProvider)),
+      ],
       child: Stack(
         children: [
           NotificationListener<ScrollUpdateNotification>(
@@ -90,5 +94,16 @@ class _SearchLoadMoreFooter extends ConsumerWidget {
         child: Center(child: Text('search_no_more_result'.tr())),
       ),
     );
+  }
+}
+
+class PhotosTimelineAppBar extends StatelessWidget {
+  const PhotosTimelineAppBar({super.key});
+
+  static const actions = <Widget>[TimelineGroupingSelector()];
+
+  @override
+  Widget build(BuildContext context) {
+    return const ImmichSliverAppBar(floating: true, pinned: false, snap: false, actions: actions);
   }
 }

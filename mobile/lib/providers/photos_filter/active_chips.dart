@@ -7,6 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
+import 'package:immich_mobile/domain/models/timeline_temporal_scope.model.dart';
 import 'package:immich_mobile/models/search/search_filter.model.dart';
 import 'package:immich_mobile/providers/photos_filter/chip_id.dart';
 import 'package:intl/intl.dart';
@@ -225,4 +226,23 @@ List<ActiveChipSpec> activeChipsFromFilter(SearchFilter filter, {FilterSuggestio
   }
 
   return out;
+}
+
+ActiveChipSpec? activeTemporalScopeChip(TimelineTemporalScope scope, {String? locale}) {
+  switch (scope.kind) {
+    case TimelineTemporalScopeKind.none:
+      return null;
+    case TimelineTemporalScopeKind.year:
+      return ActiveChipSpec(
+        id: const TemporalScopeChipId(),
+        label: DateFormat.y(locale).format(DateTime(scope.year!)),
+        visual: ChipVisual.when,
+      );
+    case TimelineTemporalScopeKind.month:
+      return ActiveChipSpec(
+        id: const TemporalScopeChipId(),
+        label: DateFormat.yMMM(locale).format(DateTime(scope.year!, scope.month!)),
+        visual: ChipVisual.when,
+      );
+  }
 }

@@ -4,9 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/active_filter_chip.widget.dart';
 import 'package:immich_mobile/providers/photos_filter/active_chips.dart';
+import 'package:immich_mobile/providers/photos_filter/chip_id.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_debounce.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
+import 'package:immich_mobile/providers/timeline/temporal_scope.provider.dart';
 
 /// Top-of-timeline active-filters summary. Returns a sliver that collapses to
 /// zero height when no filters are active, otherwise renders a single-line
@@ -23,13 +25,19 @@ class PhotosFilterSubheader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isEmpty = ref.watch(photosFilterProvider.select((f) => f.isEmpty));
-    if (isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
+    final isFilterEmpty = ref.watch(photosFilterProvider.select((f) => f.isEmpty));
+    final temporalScope = ref.watch(timelineTemporalScopeProvider);
+    if (isFilterEmpty && temporalScope.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
 
     final filter = ref.watch(photosFilterProvider);
     final debounced = ref.watch(photosFilterDebouncedProvider);
     final suggestions = ref.watch(photosFilterSuggestionsProvider(debounced)).valueOrNull;
     final chips = activeChipsFromFilter(filter, suggestions: suggestions);
+    final temporalChip = activeTemporalScopeChip(
+      temporalScope,
+      locale: Localizations.localeOf(context).toLanguageTag(),
+    );
+    final allChips = [...chips, if (temporalChip != null) temporalChip];
     final theme = Theme.of(context);
 
     return SliverToBoxAdapter(
@@ -44,16 +52,27 @@ class PhotosFilterSubheader extends ConsumerWidget {
               onTap: () {
                 HapticFeedback.selectionClick();
                 ref.read(photosFilterProvider.notifier).reset();
+                ref.read(timelineTemporalScopeProvider.notifier).clear();
               },
             ),
             const SizedBox(width: 10),
             Expanded(
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                itemCount: chips.length,
+                itemCount: allChips.length,
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 separatorBuilder: (_, _) => const SizedBox(width: 8),
-                itemBuilder: (_, i) => Center(child: ActiveFilterChip(spec: chips[i])),
+                itemBuilder: (_, i) {
+                  final chip = allChips[i];
+                  return Center(
+                    child: ActiveFilterChip(
+                      spec: chip,
+                      onRemove: chip.id is TemporalScopeChipId
+                          ? () => ref.read(timelineTemporalScopeProvider.notifier).clear()
+                          : null,
+                    ),
+                  );
+                },
               ),
             ),
             const SizedBox(width: 16),

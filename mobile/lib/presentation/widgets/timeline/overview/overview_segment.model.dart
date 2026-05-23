@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/widgets.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -6,6 +8,7 @@ import 'package:immich_mobile/domain/models/timeline.model.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/overview/overview_card.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/segment.model.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
+import 'package:immich_mobile/providers/timeline/overview_drilldown.provider.dart';
 
 class TimelineOverviewSegment extends Segment {
   const TimelineOverviewSegment({
@@ -50,6 +53,10 @@ class _TimelineOverviewSegmentCard extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
+    final drilldown = ref.read(timelineOverviewDrilldownProvider);
+    final onTap = drilldown != null && bucket.assetCount > 0
+        ? () => unawaited(drilldown(bucket, segment.groupBy))
+        : null;
     final timelineService = ref.read(timelineServiceProvider);
     BaseAsset? representativeAsset;
     if (timelineService.hasRange(segment.firstAssetIndex, 1)) {
@@ -57,14 +64,24 @@ class _TimelineOverviewSegmentCard extends ConsumerWidget {
     }
 
     if (representativeAsset != null || bucket.assetCount <= 0) {
-      return TimelineOverviewCard(bucket: bucket, groupBy: segment.groupBy, representativeAsset: representativeAsset);
+      return TimelineOverviewCard(
+        bucket: bucket,
+        groupBy: segment.groupBy,
+        representativeAsset: representativeAsset,
+        onTap: onTap,
+      );
     }
 
     return FutureBuilder<List<BaseAsset>>(
       future: timelineService.loadAssets(segment.firstAssetIndex, 1),
       builder: (context, snapshot) {
         final assets = snapshot.data ?? const <BaseAsset>[];
-        return TimelineOverviewCard(bucket: bucket, groupBy: segment.groupBy, representativeAsset: assets.firstOrNull);
+        return TimelineOverviewCard(
+          bucket: bucket,
+          groupBy: segment.groupBy,
+          representativeAsset: assets.firstOrNull,
+          onTap: onTap,
+        );
       },
     );
   }

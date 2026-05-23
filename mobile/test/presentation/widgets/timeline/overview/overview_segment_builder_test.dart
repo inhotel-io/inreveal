@@ -20,6 +20,7 @@ import 'package:immich_mobile/presentation/widgets/timeline/overview/overview_ca
 import 'package:immich_mobile/presentation/widgets/timeline/overview/overview_segment.model.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/overview/overview_segment_builder.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
+import 'package:immich_mobile/providers/timeline/overview_drilldown.provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -156,5 +157,142 @@ void main() {
     expect(find.byType(Thumbnail), findsOneWidget);
     expect(find.text('2024'), findsOneWidget);
     expect(find.text('1 photo'), findsOneWidget);
+  });
+
+  testWidgets('passes overview drilldown handler to rendered card when override exists', (tester) async {
+    final tapped = <({DateTime date, GroupAssetsBy groupBy})>[];
+    final representativeAsset = TestUtils.createRemoteAsset(id: 'asset-0');
+    final timelineService = TimelineService((
+      bucketSource: () => Stream.value([TimeBucket(date: DateTime(2025), assetCount: 1)]),
+      assetSource: (_, _) async => [representativeAsset],
+      origin: TimelineOrigin.main,
+    ));
+    addTearDown(timelineService.dispose);
+
+    final segment = TimelineOverviewSegment(
+      firstIndex: 0,
+      lastIndex: 0,
+      startOffset: 0,
+      endOffset: kTimelineOverviewSegmentExtent,
+      firstAssetIndex: 0,
+      bucket: TimeBucket(date: DateTime(2025), assetCount: 1),
+      groupBy: GroupAssetsBy.year,
+      header: HeaderType.year,
+    );
+
+    await tester.pumpWidget(
+      EasyLocalization(
+        supportedLocales: const [Locale('en')],
+        path: '../i18n',
+        fallbackLocale: const Locale('en'),
+        child: ProviderScope(
+          overrides: [
+            timelineServiceProvider.overrideWithValue(timelineService),
+            timelineOverviewDrilldownProvider.overrideWithValue((bucket, groupBy) async {
+              tapped.add((date: bucket.date, groupBy: groupBy));
+            }),
+          ],
+          child: MaterialApp(
+            home: Scaffold(body: Builder(builder: (context) => segment.builder(context, segment.firstIndex))),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(TimelineOverviewCard));
+    await tester.pump();
+
+    expect(tapped, [(date: DateTime(2025), groupBy: GroupAssetsBy.year)]);
+  });
+
+  testWidgets('leaves rendered card onTap null without overview drilldown handler', (tester) async {
+    final representativeAsset = TestUtils.createRemoteAsset(id: 'asset-0');
+    final timelineService = TimelineService((
+      bucketSource: () => Stream.value([TimeBucket(date: DateTime(2025), assetCount: 1)]),
+      assetSource: (_, _) async => [representativeAsset],
+      origin: TimelineOrigin.main,
+    ));
+    addTearDown(timelineService.dispose);
+
+    final segment = TimelineOverviewSegment(
+      firstIndex: 0,
+      lastIndex: 0,
+      startOffset: 0,
+      endOffset: kTimelineOverviewSegmentExtent,
+      firstAssetIndex: 0,
+      bucket: TimeBucket(date: DateTime(2025), assetCount: 1),
+      groupBy: GroupAssetsBy.year,
+      header: HeaderType.year,
+    );
+
+    await tester.pumpWidget(
+      EasyLocalization(
+        supportedLocales: const [Locale('en')],
+        path: '../i18n',
+        fallbackLocale: const Locale('en'),
+        child: ProviderScope(
+          overrides: [timelineServiceProvider.overrideWithValue(timelineService)],
+          child: MaterialApp(
+            home: Scaffold(body: Builder(builder: (context) => segment.builder(context, segment.firstIndex))),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    final card = tester.widget<TimelineOverviewCard>(find.byType(TimelineOverviewCard));
+    expect(card.onTap, isNull);
+  });
+
+  testWidgets('leaves zero-count overview card onTap null even with drilldown handler override', (tester) async {
+    final tapped = <({DateTime date, GroupAssetsBy groupBy})>[];
+    final timelineService = TimelineService((
+      bucketSource: () => Stream.value([TimeBucket(date: DateTime(2025), assetCount: 0)]),
+      assetSource: (_, _) async => const <BaseAsset>[],
+      origin: TimelineOrigin.main,
+    ));
+    addTearDown(timelineService.dispose);
+
+    final segment = TimelineOverviewSegment(
+      firstIndex: 0,
+      lastIndex: 0,
+      startOffset: 0,
+      endOffset: kTimelineOverviewSegmentExtent,
+      firstAssetIndex: 0,
+      bucket: TimeBucket(date: DateTime(2025), assetCount: 0),
+      groupBy: GroupAssetsBy.year,
+      header: HeaderType.year,
+    );
+
+    await tester.pumpWidget(
+      EasyLocalization(
+        supportedLocales: const [Locale('en')],
+        path: '../i18n',
+        fallbackLocale: const Locale('en'),
+        child: ProviderScope(
+          overrides: [
+            timelineServiceProvider.overrideWithValue(timelineService),
+            timelineOverviewDrilldownProvider.overrideWithValue((bucket, groupBy) async {
+              tapped.add((date: bucket.date, groupBy: groupBy));
+            }),
+          ],
+          child: MaterialApp(
+            home: Scaffold(body: Builder(builder: (context) => segment.builder(context, segment.firstIndex))),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    final card = tester.widget<TimelineOverviewCard>(find.byType(TimelineOverviewCard));
+    expect(card.onTap, isNull);
+
+    await tester.tap(find.byType(TimelineOverviewCard));
+    await tester.pump();
+
+    expect(tapped, isEmpty);
   });
 }
