@@ -8,8 +8,8 @@ import {
   AgentOperationPlanToolResponseDto,
   AgentProposeAddAssetsToAlbumFromSearchToolRequestDto,
   AgentProposeAddAssetsToSpaceFromSearchToolRequestDto,
-  AgentProposeAlbumOperationsDto,
   AgentProposeAlbumFromSearchToolRequestDto,
+  AgentProposeAlbumOperationsDto,
   AgentProposeAssetBatchFromSearchToolRequestDto,
   AgentProposeSpaceFromSearchToolRequestDto,
   AgentReviseAlbumOperationsDto,
@@ -52,7 +52,6 @@ import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
-import { buildAgentSearch } from 'src/services/agent-search-filter-mapper';
 import {
   AgentMcpRecoverableToolError,
   invalidSelectionHandleError,
@@ -60,29 +59,30 @@ import {
   isAgentMcpRecoverableToolError,
   wrongIdDomainError,
 } from 'src/services/agent-mcp-recoverable-tool-error';
+import { buildAgentSearch } from 'src/services/agent-search-filter-mapper';
 import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { TagService } from 'src/services/tag.service';
-import {
-  validateAgentAssetSourceMechanismCount,
-  validateNoAgentAssetSourceMechanisms,
-} from 'src/types/agent-asset-source.types';
 import type {
   AgentAssetSourceInput,
   AgentDeclarativeAssetFilters,
   AgentIdDomain,
   AgentSearchSourceRef,
 } from 'src/types/agent-asset-source.types';
+import {
+  validateAgentAssetSourceMechanismCount,
+  validateNoAgentAssetSourceMechanisms,
+} from 'src/types/agent-asset-source.types';
 import type { AgentAlbumOperationInput, AgentOperationResult } from 'src/types/agent-operation.types';
 import type {
-  AgentSourceRefRecoveryMetadata,
-  AgentSelectionHandleRecoveryHint,
-  AgentSelectionHandleRecoveryMetadata,
+  AgentSearchAssetsFilters,
   AgentSearchAssetsMode,
   AgentSearchAssetsOrder,
-  AgentSearchAssetsFilters,
+  AgentSelectionHandleRecoveryHint,
+  AgentSelectionHandleRecoveryMetadata,
+  AgentSourceRefRecoveryMetadata,
   AgentToolOperationPlanRequestMetadata,
   AgentToolOperationPlanResponseMetadata,
   AgentWrongIdDomainRecoveryMetadata,
@@ -538,7 +538,9 @@ export class AgentOperationPlanService {
         ? session.permissionPlanSnapshot.assetScope.owned
         : session.permissionPlanSnapshot.assetScope.sharedSpaces;
     });
-    const matches = visibleAlbums.filter((album) => album.albumName.trim().toLowerCase() === requestedName.toLowerCase());
+    const matches = visibleAlbums.filter(
+      (album) => album.albumName.trim().toLowerCase() === requestedName.toLowerCase(),
+    );
 
     if (matches.length === 1) {
       return { albumId: matches[0].id, albumName: matches[0].albumName };
@@ -971,7 +973,11 @@ export class AgentOperationPlanService {
 
   private async validateExistingSpaceRoleAccess(auth: AuthDto, spaceId: string, role: SharedSpaceRole) {
     const requestedSpaceIds = new Set([spaceId]);
-    const writableSpaceIds = await this.accessRepository.sharedSpace.checkRoleAccess(auth.user.id, requestedSpaceIds, role);
+    const writableSpaceIds = await this.accessRepository.sharedSpace.checkRoleAccess(
+      auth.user.id,
+      requestedSpaceIds,
+      role,
+    );
     if (!writableSpaceIds.has(spaceId)) {
       throw new BadRequestException('One or more target spaces are not accessible');
     }
@@ -1198,7 +1204,13 @@ export class AgentOperationPlanService {
         );
       }
 
-      const materializedAssetIds = await this.resolveOperationAssetIds(auth, session, toolName, operation, selectionAudit);
+      const materializedAssetIds = await this.resolveOperationAssetIds(
+        auth,
+        session,
+        toolName,
+        operation,
+        selectionAudit,
+      );
       this.validateMaterializedAssetSelection(operation, materializedAssetIds);
 
       preparedOperations.push({
@@ -1242,7 +1254,14 @@ export class AgentOperationPlanService {
     }
 
     if (operation.assetSource) {
-      return this.resolveAssetSourceAssetIds(auth, session, toolName, operation.assetSource, operation.type, selectionAudit);
+      return this.resolveAssetSourceAssetIds(
+        auth,
+        session,
+        toolName,
+        operation.assetSource,
+        operation.type,
+        selectionAudit,
+      );
     }
 
     if (operation.assetSelectionHandleId) {
@@ -1294,7 +1313,9 @@ export class AgentOperationPlanService {
       return this.resolveSearchAssetSourceAssetIds(auth, session, toolName, assetSource, operationType, selectionAudit);
     }
 
-    throw new BadRequestException('Only assetSource.search and assetSource.previousSearch are supported for operation planning');
+    throw new BadRequestException(
+      'Only assetSource.search and assetSource.previousSearch are supported for operation planning',
+    );
   }
 
   private async resolveSearchAssetSourceAssetIds(
@@ -1375,7 +1396,9 @@ export class AgentOperationPlanService {
     }
 
     if (assetIds.length > cap) {
-      throw new BadRequestException(`Search matched more than ${cap} assets. Narrow the search or use a smaller bounded page.`);
+      throw new BadRequestException(
+        `Search matched more than ${cap} assets. Narrow the search or use a smaller bounded page.`,
+      );
     }
 
     selectionAudit.push({
@@ -1589,9 +1612,7 @@ export class AgentOperationPlanService {
     return invalidSourceRefError({
       toolName,
       error,
-      hint: recovery.expiredSourceRef
-        ? `The attempted source ref is expired. ${instruction}`
-        : recovery.instruction,
+      hint: recovery.expiredSourceRef ? `The attempted source ref is expired. ${instruction}` : recovery.instruction,
       recovery,
     });
   }
