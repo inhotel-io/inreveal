@@ -122,7 +122,8 @@ export const AgentDeclarativeAssetFiltersSchema = z
     ] as const;
 
     for (const [field, expectedKind] of fields) {
-      filters[field]?.choiceRefs?.forEach((choiceRef, index) => {
+      const choiceRefs = filters[field]?.choiceRefs ?? [];
+      for (const [index, choiceRef] of choiceRefs.entries()) {
         if (getAgentChoiceRefKind(choiceRef) !== expectedKind) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
@@ -130,7 +131,7 @@ export const AgentDeclarativeAssetFiltersSchema = z
             message: `choiceRef kind must match ${field} filter`,
           });
         }
-      });
+      }
     }
   })
   .meta({ id: 'AgentDeclarativeAssetFilters' });

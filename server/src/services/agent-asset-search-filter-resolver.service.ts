@@ -858,7 +858,7 @@ export class AgentAssetSearchFilterResolverService {
     }
     return Object.fromEntries(
       Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
+        .toSorted(([left], [right]) => left.localeCompare(right))
         .map(([key, item]) => [key, this.sortObject(item)]),
     );
   }

@@ -11,6 +11,13 @@ const forbiddenGeneratedDocPattern =
   /bearer\s+[a-z0-9._-]{10,}|provider[- ]?key|stack trace|\/(?:srv|home|tmp|var|etc|opt|mnt|Users)\/[^\s`)]*|\/api\/agent\/internal|applyAlbumOperations|applyOperations|createAlbum|addAssetsToAlbum(?!FromSearch)/i;
 const directMutationToolNamePattern = /(?:^|_)(?:apply|execute|mutate|write|delete|destroy|directWrite)(?:$|_)/i;
 
+const section = (markdown: string, title: string) => {
+  const start = markdown.indexOf(title);
+  expect(start, `${title} should exist`).toBeGreaterThanOrEqual(0);
+  const next = markdown.indexOf('\n## ', start + title.length);
+  return markdown.slice(start, next === -1 ? undefined : next);
+};
+
 describe(AgentMcpDocsService.name, () => {
   let contractService: AgentMcpToolContractService;
   let sut: AgentMcpDocsService;
@@ -19,13 +26,6 @@ describe(AgentMcpDocsService.name, () => {
     contractService = new AgentMcpToolContractService();
     sut = new AgentMcpDocsService(contractService);
   });
-
-  const section = (markdown: string, title: string) => {
-    const start = markdown.indexOf(title);
-    expect(start, `${title} should exist`).toBeGreaterThanOrEqual(0);
-    const next = markdown.indexOf('\n## ', start + title.length);
-    return markdown.slice(start, next === -1 ? undefined : next);
-  };
 
   it('generates the required MCP guide sections from the contract', () => {
     const markdown = sut.generateMarkdown();

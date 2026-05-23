@@ -601,7 +601,8 @@ describe(AgentOperationPlanService.name, () => {
       summary: 'Prepared plan',
       counts: { total: assetIds.length },
     });
-    for (const [, , event] of vi.mocked(activityEventService.createSystemEvent).mock.calls) {
+    for (const call of vi.mocked(activityEventService.createSystemEvent).mock.calls) {
+      const event = call[2];
       expect(event).not.toHaveProperty('operationIds');
       expect(event).not.toHaveProperty('assetIds');
     }
