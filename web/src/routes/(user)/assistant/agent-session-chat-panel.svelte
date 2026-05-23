@@ -1,5 +1,6 @@
 <script lang="ts">
   import { websocketEvents, type AgentSessionClientEvent } from '$lib/stores/websocket';
+  import { getAssetMediaUrl } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
   import {
     appendAgentSessionMessage,
@@ -9,10 +10,14 @@
   } from '@immich/sdk';
   import * as agentSdk from '@immich/sdk';
   import {
+    AgentMessageClarificationBlockType,
     AgentMessageRole,
     AgentMessageTextBlockType,
     AgentSessionStatus,
     AgentToolCallStatus,
+    AssetMediaSize,
+    type AgentMessageClarificationBlock,
+    type AgentMessageClarificationChoice,
     type AgentMessageResponseDto,
     type AgentOperationPlanResponseDto,
     type AgentSessionResponseDto,
@@ -39,6 +44,7 @@
     getAgentToolDataClassLabelKey,
     getAgentToolNameLabelKey,
   } from './agent-tool-approval-ui';
+  import { buildAgentClarificationChoiceReply, getAgentClarificationInitials } from './agent-message-clarification-ui';
   import { deriveAgentSessionTitleFromMessages } from './agent-session-workspace-ui';
   import AgentActivityBlock from './agent-activity-block.svelte';
   import AgentAppliedPlanTimelineCard from './agent-applied-plan-timeline-card.svelte';
@@ -238,11 +244,19 @@
     AgentSessionStatus.Failed,
   ]);
 
-  const textForMessage = (message: AgentMessageResponseDto) =>
-    message.content.blocks
-      .filter((block) => block.type === AgentMessageTextBlockType.Text)
-      .map((block) => block.text)
-      .join('\n');
+  type AgentMessageBlock = AgentMessageResponseDto['content']['blocks'][number];
+
+  const isTextMessageBlock = (block: AgentMessageBlock) => block.type === AgentMessageTextBlockType.Text;
+
+  const isClarificationMessageBlock = (block: AgentMessageBlock): block is AgentMessageClarificationBlock =>
+    block.type === AgentMessageClarificationBlockType.Clarification;
+
+  const hasRenderableMessageBlocks = (message: AgentMessageResponseDto) =>
+    message.content.blocks.some(
+      (block) =>
+        isTextMessageBlock(block) ||
+        (message.role === AgentMessageRole.Assistant && isClarificationMessageBlock(block)),
+    );
 
   function buildChatTimelineItems(
     timelineMessages: AgentMessageResponseDto[],
@@ -749,6 +763,18 @@
     }
   };
 
+  const sendClarificationChoice = async (
+    block: AgentMessageClarificationBlock,
+    choice: AgentMessageClarificationChoice,
+  ) => {
+    if (isResponsePending || composerDisabled) {
+      return;
+    }
+
+    draft = buildAgentClarificationChoiceReply(block, choice);
+    await sendMessage();
+  };
+
   const handleComposerKeydown = (event: KeyboardEvent) => {
     if (
       event.key !== 'Enter' ||
@@ -956,8 +982,7 @@
       {#each chatTimelineItems as item (item.id)}
         {#if item.type === 'message'}
           {@const message = item.message}
-          {@const text = textForMessage(message)}
-          {#if text}
+          {#if hasRenderableMessageBlocks(message)}
             <article
               data-chat-item
               class={[
@@ -967,11 +992,67 @@
                   : 'mr-auto text-slate-950 dark:text-neutral-100',
               ]}
             >
-              {#if message.role === AgentMessageRole.Assistant}
-                {@render assistantMarkdown(parseAssistantMarkdown(text))}
-              {:else}
-                {text}
-              {/if}
+              <div class="space-y-3">
+                {#each message.content.blocks as block, blockIndex (`${message.id}-${blockIndex}`)}
+                  {#if isTextMessageBlock(block)}
+                    {#if message.role === AgentMessageRole.Assistant}
+                      {@render assistantMarkdown(parseAssistantMarkdown(block.text))}
+                    {:else}
+                      {block.text}
+                    {/if}
+                  {:else if message.role === AgentMessageRole.Assistant && isClarificationMessageBlock(block)}
+                    <div class="space-y-3 whitespace-normal">
+                      <div>
+                        <p class="text-sm text-slate-950 dark:text-neutral-100">{block.summary}</p>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{block.textFallback}</p>
+                      </div>
+                      <div role="group" aria-label={$t('assistant_clarification_choices_label')} class="grid gap-2">
+                        {#each block.choices as choice (choice.choiceRef)}
+                          <button
+                            type="button"
+                            class="flex min-w-0 items-center gap-3 rounded-lg border border-gray-200 bg-white p-2 text-left shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:hover:bg-neutral-900"
+                            aria-label={$t('assistant_clarification_send_choice', { values: { label: choice.label } })}
+                            disabled={isResponsePending || composerDisabled}
+                            onclick={() => sendClarificationChoice(block, choice)}
+                          >
+                            <span
+                              class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-gray-100 text-xs font-semibold text-gray-600 dark:bg-neutral-800 dark:text-neutral-300"
+                            >
+                              {#if choice.thumbnailAssetId}
+                                <img
+                                  class="size-full object-cover"
+                                  src={getAssetMediaUrl({
+                                    id: choice.thumbnailAssetId,
+                                    size: AssetMediaSize.Thumbnail,
+                                  })}
+                                  alt={$t('assistant_clarification_choice_thumbnail_alt', {
+                                    values: { label: choice.label },
+                                  })}
+                                  loading="lazy"
+                                  draggable="false"
+                                />
+                              {:else}
+                                <span aria-hidden="true">{getAgentClarificationInitials(choice.label)}</span>
+                                <span class="sr-only">{$t('assistant_clarification_choice_unavailable')}</span>
+                              {/if}
+                            </span>
+                            <span class="min-w-0">
+                              <span class="block truncate text-sm font-medium text-slate-950 dark:text-neutral-50">
+                                {choice.label}
+                              </span>
+                              {#if choice.description}
+                                <span class="block truncate text-xs text-gray-500 dark:text-gray-400">
+                                  {choice.description}
+                                </span>
+                              {/if}
+                            </span>
+                          </button>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+                {/each}
+              </div>
             </article>
           {/if}
         {:else if item.type === 'activity'}
