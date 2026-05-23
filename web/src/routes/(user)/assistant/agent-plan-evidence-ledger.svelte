@@ -9,6 +9,7 @@
   } from './agent-operation-plan-ui';
   import AgentPlanApplyBar from './agent-plan-apply-bar.svelte';
   import AgentPlanDestinationCard from './agent-plan-destination-card.svelte';
+  import AgentPlanPhotoReviewModal from './agent-plan-photo-review-modal.svelte';
 
   interface Props {
     model: OperationReviewModel;
@@ -52,11 +53,43 @@
     onApply,
   }: Props = $props();
 
+  let activeReviewOperationId = $state<string | null>(null);
+
   const impact = $derived(buildOperationReviewImpactSummary(model));
   const applyStateSummary = $derived(buildOperationReviewApplyStateSummary(model));
   const effectiveCanChangeSelection = $derived(
     canChangeSelection && model.plan.status === AgentOperationPlanStatus.Proposed,
   );
+  const activeReviewItem = $derived(
+    activeReviewOperationId ? model.operationsById.get(activeReviewOperationId) : undefined,
+  );
+
+  $effect(() => {
+    if (activeReviewOperationId && !model.operationsById.has(activeReviewOperationId)) {
+      activeReviewOperationId = null;
+    }
+  });
+
+  const openDestinationPhotoReview = (event: MouseEvent, group: OperationReviewGroup) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const reviewButton = target.closest('button');
+    const photoStage = target.closest('[data-testid="agent-plan-photo-stage"]');
+    const primaryReviewItem = group.operations.find(
+      (operation) => operation.review.selection.supportsItemSelection && operation.assetCount > 0,
+    );
+
+    if (!reviewButton || !photoStage || !primaryReviewItem) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    activeReviewOperationId = primaryReviewItem.id;
+  };
 </script>
 
 <div
@@ -94,18 +127,20 @@
 
   <div class="flex flex-col gap-3">
     {#each model.groups as group (group.id)}
-      <AgentPlanDestinationCard
-        {group}
-        canChangeSelection={effectiveCanChangeSelection}
-        {onToggleGroup}
-        {onToggleOperation}
-        {onToggleItem}
-        {onBulkSetItems}
-        {onSetOnlyItems}
-        {onResetItemSelection}
-        {onSetFieldOverride}
-        {onResetFieldOverride}
-      />
+      <div onclickcapture={(event) => openDestinationPhotoReview(event, group)}>
+        <AgentPlanDestinationCard
+          {group}
+          canChangeSelection={effectiveCanChangeSelection}
+          {onToggleGroup}
+          {onToggleOperation}
+          {onToggleItem}
+          {onBulkSetItems}
+          {onSetOnlyItems}
+          {onResetItemSelection}
+          {onSetFieldOverride}
+          {onResetFieldOverride}
+        />
+      </div>
     {/each}
   </div>
 
@@ -152,4 +187,16 @@
   {/if}
 
   <AgentPlanApplyBar {impact} {selectedOperationIds} {canApply} {applying} {onApply} />
+
+  {#if activeReviewItem}
+    <AgentPlanPhotoReviewModal
+      item={activeReviewItem}
+      canChangeSelection={effectiveCanChangeSelection}
+      onClose={() => (activeReviewOperationId = null)}
+      {onToggleItem}
+      {onBulkSetItems}
+      {onSetOnlyItems}
+      onResetSelection={onResetItemSelection}
+    />
+  {/if}
 </div>
