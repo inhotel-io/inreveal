@@ -120,7 +120,7 @@ Add a derived group for the compact collapsed summary:
 const collapsedThumbnailGroup = $derived(model?.groups.find((group) => group.assetCount > 0) ?? null);
 ```
 
-In `web/src/routes/(user)/assistant/agent-operation-plan-review-panel.svelte`, replace the `cardClass`/`headerClass` definitions with rounded sheet classes:
+In `web/src/routes/(user)/assistant/agent-operation-plan-review-panel.svelte`, replace the `cardClass` definition with rounded sheet classes and remove the old `headerClass` derived value because the plan sheet no longer uses a native `<summary>`:
 
 ```ts
 const rootClass = $derived(
@@ -494,10 +494,12 @@ In `agent-plan-destination-card.svelte`, import the component:
 import AgentPlanPhotoStage from './agent-plan-photo-stage.svelte';
 ```
 
-Add the prop:
+Remove the old `AgentPlanThumbnailStrip` import from this file; the strip is now owned by `AgentPlanPhotoStage`.
+
+Add the optional prop:
 
 ```ts
-onOpenItemReview: (operationId: string) => void;
+onOpenItemReview?: (operationId: string) => void;
 ```
 
 Add it to `$props()` with a no-op default:
@@ -559,6 +561,7 @@ git commit -m "feat: add photo-first plan stage"
 **Files:**
 - Create: `web/src/routes/(user)/assistant/agent-plan-photo-review-modal.svelte`
 - Create: `web/src/routes/(user)/assistant/agent-plan-photo-review-modal.spec.ts`
+- Modify: `web/src/routes/(user)/assistant/agent-operation-plan-review-panel.spec.ts`
 - Modify: `web/src/routes/(user)/assistant/agent-plan-evidence-ledger.svelte`
 - Modify: `web/src/routes/(user)/assistant/agent-plan-evidence-ledger.spec.ts`
 - Modify: `web/src/routes/(user)/assistant/agent-plan-item-review.svelte`
@@ -586,6 +589,7 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_photo_review_keep_original: 'Keep original selection',
     assistant_operation_photo_review_selection: 'Selection',
     assistant_operation_photo_review_title: 'Review photos for {summary}',
+    assistant_operation_photo_stage_title: 'Photos in this plan',
     assistant_operation_item_review_label: 'Review photos for {summary}',
     assistant_operation_item_selected_count: '{selected} of {total} selected',
     assistant_operation_item_excluded_count: '{count} excluded',
@@ -662,10 +666,40 @@ describe('AgentPlanPhotoReviewModal', () => {
 
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it('closes on Escape and restores focus when the modal unmounts', async () => {
+    const trigger = document.createElement('button');
+    trigger.textContent = 'Open review';
+    document.body.append(trigger);
+    trigger.focus();
+    const onClose = vi.fn();
+
+    const view = render(AgentPlanPhotoReviewModal, {
+      props: {
+        item,
+        canChangeSelection: true,
+        onClose,
+        onToggleItem: vi.fn(),
+        onBulkSetItems: vi.fn(),
+        onSetOnlyItems: vi.fn(),
+        onResetSelection: vi.fn(),
+      },
+    });
+
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+
+    await fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onClose).toHaveBeenCalledOnce();
+
+    view.unmount();
+    expect(trigger).toHaveFocus();
+    trigger.remove();
+  });
 });
 ```
 
-- [ ] **Step 2: Write failing ledger integration test**
+- [ ] **Step 2: Write failing ledger and panel integration tests**
 
 In `agent-plan-evidence-ledger.spec.ts`, add mocked modal strings and this test:
 
@@ -702,15 +736,77 @@ it('opens the photo review modal from the destination photo stage', async () => 
 });
 ```
 
+In `agent-operation-plan-review-panel.spec.ts`, update the existing sparse item-selection tests that open row details for the photo grid. Those tests should open the modal through `Review photos` or `Change selection` instead of clicking `Details`. Keep at least this end-to-end assertion so the modal is proven to update parent selection state and the apply payload:
+
+Add these mocked strings to the panel spec before adding the test:
+
+```ts
+assistant_operation_item_change_selection: 'Change selection',
+assistant_operation_photo_review_close: 'Close',
+assistant_operation_photo_review_done: 'Done reviewing',
+assistant_operation_photo_review_keep_original: 'Keep original selection',
+assistant_operation_photo_review_selection: 'Selection',
+assistant_operation_photo_review_title: 'Review photos for {summary}',
+assistant_operation_photo_stage_review: 'Review photos',
+assistant_operation_photo_stage_summary: '{count} selected photos',
+assistant_operation_photo_stage_title: 'Photos in this plan',
+```
+
+```ts
+it('publishes and applies sparse item selections from the photo review modal', async () => {
+  sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
+  sdkMock.applyApprovedOperations.mockResolvedValue({
+    status: AgentOperationApplyStatus.Applied,
+    plan: appliedPlan(),
+    appliedOperationIds: [createId, addId, existingId],
+    skippedOperationIds: [],
+    failedOperationIds: [],
+    summary: 'Applied 3 operation(s), skipped 0, failed 0.',
+  });
+  const onSelectionChange = vi.fn();
+
+  render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
+
+  await fireEvent.click(await screen.findByRole('button', { name: 'Review photos' }));
+  await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Done reviewing' }));
+
+  expect(onSelectionChange).toHaveBeenLastCalledWith({
+    planId,
+    planRevision: 1,
+    operationIds: [createId, addId, existingId],
+    itemSelections: {
+      [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
+    },
+  });
+  expect(screen.getAllByText('1 of 2 photos selected')).toHaveLength(2);
+  expect(screen.getByText('3 changes · 1 assets selected')).toBeInTheDocument();
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Apply 3 selected' }));
+
+  expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith({
+    id: session.id,
+    planId,
+    agentOperationPlanApplyRequestDto: {
+      operationIds: [createId, addId, existingId],
+      itemSelections: {
+        [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
+      },
+      planRevision: 1,
+    },
+  });
+});
+```
+
 - [ ] **Step 3: Run failing tests**
 
 Run:
 
 ```bash
-pnpm --dir web exec vitest run 'src/routes/(user)/assistant/agent-plan-photo-review-modal.spec.ts' 'src/routes/(user)/assistant/agent-plan-evidence-ledger.spec.ts'
+pnpm --dir web exec vitest run 'src/routes/(user)/assistant/agent-plan-photo-review-modal.spec.ts' 'src/routes/(user)/assistant/agent-plan-evidence-ledger.spec.ts' 'src/routes/(user)/assistant/agent-operation-plan-review-panel.spec.ts'
 ```
 
-Expected: FAIL because the modal component and ledger state are missing.
+Expected: FAIL because the modal component, ledger state, and panel modal-selection path are missing.
 
 - [ ] **Step 4: Add modal variant to item review**
 
@@ -740,6 +836,15 @@ const gridClass = $derived(
     ? 'mt-2 max-h-[min(62vh,34rem)] overflow-y-auto rounded-2xl border border-gray-200 bg-gray-100 dark:border-neutral-800 dark:bg-neutral-900'
     : 'mt-2 max-h-[min(65vh,28rem)] overflow-y-auto rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800',
 );
+
+const tileClass = (selected: boolean) =>
+  [
+    'group relative aspect-square overflow-hidden border bg-gray-100 dark:bg-gray-800',
+    variant === 'modal' ? 'rounded-2xl' : 'rounded-md',
+    selected
+      ? 'border-immich-primary ring-2 ring-immich-primary/20 dark:border-immich-dark-primary dark:ring-immich-dark-primary/20'
+      : 'border-gray-200 opacity-55 dark:border-gray-700',
+  ].join(' ');
 ```
 
 Use them in the section and grid:
@@ -748,6 +853,60 @@ Use them in the section and grid:
 <section class={sectionClass} ...>
 ...
 <div bind:this={gridElement} use:measureGrid class={gridClass} ...>
+```
+
+Inside the tile loop, replace the static label class with `class={tileClass(selected)}` and add a selected-state mark that is visible in the modal:
+
+```svelte
+<label class={tileClass(selected)} data-testid="agent-plan-item-thumbnail" data-selected={selected}>
+  ...
+  {#if variant === 'modal'}
+    <span
+      class="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-black/60 text-xs font-bold text-white backdrop-blur"
+      class:bg-immich-primary={selected}
+      class:text-white={selected}
+      aria-hidden="true"
+    >
+      {selected ? '✓' : '-'}
+    </span>
+  {/if}
+  <input ... />
+</label>
+```
+
+In `agent-plan-item-review.spec.ts`, add this regression test:
+
+```ts
+it('shows clear selected and excluded tile states in modal review mode', () => {
+  const baseItem = item(['asset-1', 'asset-2']);
+
+  render(AgentPlanItemReview, {
+    props: defaultProps({
+      item: {
+        ...baseItem,
+        review: {
+          ...baseItem.review,
+          selection: {
+            itemKind: 'asset',
+            totalCount: 2,
+            selectedCount: 1,
+            mode: 'allExcept',
+            itemIds: ['asset-2'],
+            supportsItemSelection: true,
+          },
+        },
+        excludedAssetCount: 1,
+      },
+      variant: 'modal',
+    }),
+  });
+
+  const tiles = screen.getAllByTestId('agent-plan-item-thumbnail');
+  expect(tiles[0]).toHaveAttribute('data-selected', 'true');
+  expect(tiles[0]).toHaveClass('ring-2');
+  expect(tiles[1]).toHaveAttribute('data-selected', 'false');
+  expect(tiles[1]).toHaveClass('opacity-55');
+});
 ```
 
 - [ ] **Step 5: Implement the modal component**
@@ -776,16 +935,13 @@ Create `agent-plan-photo-review-modal.svelte`:
 
   const titleId = $props.id();
   let closeButton: HTMLButtonElement | undefined = $state();
+  let previousFocusedElement: HTMLElement | null = null;
 
   onMount(() => {
+    previousFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     void tick().then(() => closeButton?.focus());
+    return () => previousFocusedElement?.focus();
   });
-
-  const handleBackdropClick = (event: MouseEvent) => {
-    if (event.target === event.currentTarget) {
-      onClose();
-    }
-  };
 
   const handleKeydown = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -795,14 +951,20 @@ Create `agent-plan-photo-review-modal.svelte`:
   };
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div
-  class="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 backdrop-blur-md sm:items-center sm:p-6"
+  class="fixed inset-0 z-50 flex items-end justify-center p-3 sm:items-center sm:p-6"
   role="presentation"
-  onclick={handleBackdropClick}
-  onkeydown={handleKeydown}
 >
+  <button
+    type="button"
+    class="absolute inset-0 bg-black/60 backdrop-blur-md"
+    aria-label={$t('assistant_operation_photo_review_close')}
+    onclick={onClose}
+  ></button>
   <section
-    class="grid max-h-[calc(100vh-1.5rem)] w-full max-w-6xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-3xl border border-neutral-700 bg-white text-black shadow-2xl dark:bg-neutral-950 dark:text-white"
+    class="relative grid max-h-[calc(100vh-1.5rem)] w-full max-w-6xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-3xl border border-neutral-700 bg-white text-black shadow-2xl dark:bg-neutral-950 dark:text-white"
     role="dialog"
     aria-modal="true"
     aria-labelledby={titleId}
@@ -939,7 +1101,7 @@ In `i18n/en.json`, add:
 Run:
 
 ```bash
-pnpm --dir web exec vitest run 'src/routes/(user)/assistant/agent-plan-photo-review-modal.spec.ts' 'src/routes/(user)/assistant/agent-plan-evidence-ledger.spec.ts' 'src/routes/(user)/assistant/agent-plan-item-review.spec.ts'
+pnpm --dir web exec vitest run 'src/routes/(user)/assistant/agent-plan-photo-review-modal.spec.ts' 'src/routes/(user)/assistant/agent-plan-evidence-ledger.spec.ts' 'src/routes/(user)/assistant/agent-operation-plan-review-panel.spec.ts' 'src/routes/(user)/assistant/agent-plan-item-review.spec.ts'
 ```
 
 Expected: PASS.
@@ -947,7 +1109,7 @@ Expected: PASS.
 - [ ] **Step 9: Commit Task 3**
 
 ```bash
-git add web/src/routes/\(user\)/assistant/agent-plan-photo-review-modal.svelte web/src/routes/\(user\)/assistant/agent-plan-photo-review-modal.spec.ts web/src/routes/\(user\)/assistant/agent-plan-evidence-ledger.svelte web/src/routes/\(user\)/assistant/agent-plan-evidence-ledger.spec.ts web/src/routes/\(user\)/assistant/agent-plan-item-review.svelte web/src/routes/\(user\)/assistant/agent-plan-item-review.spec.ts i18n/en.json
+git add web/src/routes/\(user\)/assistant/agent-plan-photo-review-modal.svelte web/src/routes/\(user\)/assistant/agent-plan-photo-review-modal.spec.ts web/src/routes/\(user\)/assistant/agent-operation-plan-review-panel.spec.ts web/src/routes/\(user\)/assistant/agent-plan-evidence-ledger.svelte web/src/routes/\(user\)/assistant/agent-plan-evidence-ledger.spec.ts web/src/routes/\(user\)/assistant/agent-plan-item-review.svelte web/src/routes/\(user\)/assistant/agent-plan-item-review.spec.ts i18n/en.json
 git commit -m "feat: add assistant photo review modal"
 ```
 
