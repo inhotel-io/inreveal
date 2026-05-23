@@ -14,7 +14,7 @@
 
   const DEFAULT_VIEWPORT_HEIGHT = 420;
   const DEFAULT_ITEM_SIZE = 104;
-  const MODAL_ITEM_SIZE = 128;
+  const MODAL_ITEM_SIZE = 168;
   const DEFAULT_COLUMN_COUNT = 6;
   const GRID_GAP = 8;
   const DEFAULT_OVERSCAN_ROWS = 2;
@@ -58,7 +58,7 @@
   let filter = $state<AgentPlanItemFilterState>({ query: '', kind: 'all' });
   let scrollTop = $state(0);
   let measuredGridWidth = $state(0);
-  let gridElement: HTMLDivElement | undefined = $state();
+  let scrollElement: HTMLDivElement | undefined = $state();
 
   const reviewAssets = $derived(buildAgentPlanReviewAssets(item.operation.assetIds, metadataByAssetId));
   const reviewAssetById = $derived(new Map(reviewAssets.map((asset) => [asset.id, asset])));
@@ -85,11 +85,14 @@
       overscanRows,
     }),
   );
+  const gridContentWidth = $derived(
+    virtualColumnCount * effectiveItemSize + Math.max(0, virtualColumnCount - 1) * GRID_GAP,
+  );
 
   const resetGridScroll = () => {
     scrollTop = 0;
-    if (gridElement) {
-      gridElement.scrollTop = 0;
+    if (scrollElement) {
+      scrollElement.scrollTop = 0;
     }
   };
 
@@ -147,8 +150,8 @@
   );
   const gridClass = $derived(
     variant === 'modal'
-      ? 'mt-2 max-h-[min(70vh,34rem)] overflow-y-auto rounded-lg border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-900'
-      : 'mt-2 max-h-[min(65vh,28rem)] overflow-y-auto rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800',
+      ? 'max-h-[min(76vh,42rem)] overflow-y-auto rounded-lg border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-900'
+      : 'max-h-[min(65vh,28rem)] overflow-y-auto rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800',
   );
 </script>
 
@@ -302,70 +305,76 @@
       })}
     </div>
 
-    <div
-      bind:this={gridElement}
-      use:measureGrid
-      class={gridClass}
-      data-testid="agent-plan-item-review-grid"
-      style={viewportHeight === DEFAULT_VIEWPORT_HEIGHT ? undefined : `max-height: ${viewportHeight}px;`}
-      onscroll={(event) => (scrollTop = event.currentTarget.scrollTop)}
-    >
-      {#if filteredAssetIds.length === 0}
-        <div class="flex min-h-32 items-center justify-center px-3 text-sm text-gray-500 dark:text-gray-400">
-          {$t('assistant_operation_item_empty_filter')}
-        </div>
-      {/if}
-      <div style={`height: ${virtualWindow.beforeHeight}px;`}></div>
+    <div class="mt-2 w-full overflow-x-auto" use:measureGrid data-testid="agent-plan-item-review-grid-shell">
       <div
-        class="grid gap-2"
-        data-testid="agent-plan-item-review-tile-grid"
-        style={`grid-template-columns: repeat(${virtualColumnCount}, ${effectiveItemSize}px); grid-auto-rows: ${effectiveItemSize}px;`}
+        bind:this={scrollElement}
+        class={gridClass}
+        data-testid="agent-plan-item-review-grid"
+        style={[
+          `width: ${gridContentWidth}px; max-width: 100%;`,
+          viewportHeight === DEFAULT_VIEWPORT_HEIGHT ? undefined : `max-height: ${viewportHeight}px;`,
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        onscroll={(event) => (scrollTop = event.currentTarget.scrollTop)}
       >
-        {#each virtualWindow.visibleAssetIds as assetId, visibleIndex (assetId)}
-          {@const selected = isAssetSelectedForOperation(item, assetId)}
-          {@const absoluteIndex = virtualWindow.startIndex + visibleIndex + 1}
-          <label
-            class={[
-              'group relative aspect-square overflow-hidden rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800',
-              variant === 'modal' && selected
-                ? 'ring-2 ring-immich-primary ring-offset-2 dark:ring-immich-dark-primary dark:ring-offset-gray-950'
-                : '',
-              variant === 'modal' && !selected ? 'opacity-60' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            data-testid="agent-plan-item-thumbnail"
-            data-selected={String(selected)}
-          >
-            <img
-              class="size-full object-cover opacity-100"
-              class:opacity-40={!selected}
-              data-testid="agent-plan-item-review-image"
-              src={getAssetMediaUrl({ id: assetId, size: AssetMediaSize.Thumbnail })}
-              alt={getAssetAlt(assetId)}
-              loading="lazy"
-              draggable="false"
-              onerror={() => markFailed(assetId)}
-            />
-            {#if failedAssetIds.has(assetId)}
-              <span
-                class="absolute inset-0 flex items-center justify-center bg-gray-200 px-1 text-center text-[10px] leading-tight text-gray-600 dark:bg-gray-800 dark:text-gray-300"
-              >
-                {$t('assistant_operation_item_thumbnail_unavailable')}
-              </span>
-            {/if}
-            <input
-              class="absolute left-1.5 top-1.5 size-4"
-              type="checkbox"
-              aria-label={$t('assistant_operation_item_toggle', { values: { index: absoluteIndex } })}
-              checked={selected}
-              disabled={!canChangeSelection}
-              onchange={(event) => onToggleItem(item.id, assetId, event.currentTarget.checked)}
-            />
-          </label>
-        {/each}
+        {#if filteredAssetIds.length === 0}
+          <div class="flex min-h-32 items-center justify-center px-3 text-sm text-gray-500 dark:text-gray-400">
+            {$t('assistant_operation_item_empty_filter')}
+          </div>
+        {/if}
+        <div style={`height: ${virtualWindow.beforeHeight}px;`}></div>
+        <div
+          class="grid gap-2"
+          data-testid="agent-plan-item-review-tile-grid"
+          style={`grid-template-columns: repeat(${virtualColumnCount}, ${effectiveItemSize}px); grid-auto-rows: ${effectiveItemSize}px;`}
+        >
+          {#each virtualWindow.visibleAssetIds as assetId, visibleIndex (assetId)}
+            {@const selected = isAssetSelectedForOperation(item, assetId)}
+            {@const absoluteIndex = virtualWindow.startIndex + visibleIndex + 1}
+            <label
+              class={[
+                'group relative aspect-square overflow-hidden rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800',
+                variant === 'modal' && selected
+                  ? 'ring-2 ring-immich-primary ring-offset-2 dark:ring-immich-dark-primary dark:ring-offset-gray-950'
+                  : '',
+                variant === 'modal' && !selected ? 'opacity-60' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              data-testid="agent-plan-item-thumbnail"
+              data-selected={String(selected)}
+            >
+              <img
+                class="size-full object-cover opacity-100"
+                class:opacity-40={!selected}
+                data-testid="agent-plan-item-review-image"
+                src={getAssetMediaUrl({ id: assetId, size: AssetMediaSize.Thumbnail })}
+                alt={getAssetAlt(assetId)}
+                loading="lazy"
+                draggable="false"
+                onerror={() => markFailed(assetId)}
+              />
+              {#if failedAssetIds.has(assetId)}
+                <span
+                  class="absolute inset-0 flex items-center justify-center bg-gray-200 px-1 text-center text-[10px] leading-tight text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                >
+                  {$t('assistant_operation_item_thumbnail_unavailable')}
+                </span>
+              {/if}
+              <input
+                class="absolute left-1.5 top-1.5 size-4"
+                type="checkbox"
+                aria-label={$t('assistant_operation_item_toggle', { values: { index: absoluteIndex } })}
+                checked={selected}
+                disabled={!canChangeSelection}
+                onchange={(event) => onToggleItem(item.id, assetId, event.currentTarget.checked)}
+              />
+            </label>
+          {/each}
+        </div>
+        <div style={`height: ${virtualWindow.afterHeight}px;`}></div>
       </div>
-      <div style={`height: ${virtualWindow.afterHeight}px;`}></div>
     </div>
   </section>
 {/if}
