@@ -1229,6 +1229,110 @@ Add matching photos to a uniquely named visible shared space.
 }
 ```
 
+### Propose asset batch from search
+
+MCP tool name: `proposeAssetBatchFromSearch`
+
+preferred tool for proposing favorite, archive, tag, or rotate actions from a declarative or previous search source.
+
+Use this before low-level proposeAlbumOperations when the user asks to favorite, archive, unarchive, tag, or rotate matching photos. Gallery materializes the source and creates a reviewable plan only.
+
+Argument modes:
+
+- `asset-batch-from-search`: Use for favorite, archive, unarchive, add tag, or rotate requests over search results.
+  Required fields: `action`, `assetSource`.
+  Forbidden fields: `operations`, `assetIds`, `assetSelectionHandleId`, `targetKind`.
+
+#### favorite-search-results
+
+Favorite all photos matching a declarative search.
+
+<!-- mcp-docs:tool-arguments tool="proposeAssetBatchFromSearch" example="favorite-search-results" -->
+
+```json
+{
+  "summary": "Favorite matching Berlin receipt photos.",
+  "action": {
+    "type": "asset.setFavorite",
+    "favorite": true
+  },
+  "assetSource": {
+    "kind": "search",
+    "mode": "ocr",
+    "query": "receipt",
+    "filters": {
+      "city": "Berlin"
+    },
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
+
+#### archive-search-results
+
+Archive all photos matching a declarative search.
+
+<!-- mcp-docs:tool-arguments tool="proposeAssetBatchFromSearch" example="archive-search-results" -->
+
+```json
+{
+  "summary": "Archive matching low-rated photos.",
+  "action": {
+    "type": "asset.setArchive",
+    "archived": true
+  },
+  "assetSource": {
+    "kind": "search",
+    "filters": {
+      "rating": 1
+    },
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
+
+#### tag-search-results
+
+Tag all photos matching a declarative search.
+
+<!-- mcp-docs:tool-arguments tool="proposeAssetBatchFromSearch" example="tag-search-results" -->
+
+```json
+{
+  "summary": "Tag matching receipt photos.",
+  "action": {
+    "type": "asset.addTag",
+    "tagName": "Receipts"
+  },
+  "assetSource": {
+    "kind": "search",
+    "mode": "ocr",
+    "query": "receipt",
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
+
+#### rotate-previous-search-results
+
+Rotate photos from a previous search source reference after review.
+
+<!-- mcp-docs:tool-arguments tool="proposeAssetBatchFromSearch" example="rotate-previous-search-results" -->
+
+```json
+{
+  "summary": "Rotate previous search results.",
+  "action": {
+    "type": "asset.rotate",
+    "angle": 90
+  },
+  "assetSource": {
+    "kind": "previousSearch",
+    "sourceRef": "<sourceRef from searchAssets>"
+  }
+}
+```
+
 ### Propose album operations
 
 MCP tool name: `proposeAlbumOperations`
@@ -2484,6 +2588,11 @@ Summarize plan risks and selected changes.
 ### Propose add assets to space from search
 
 - `space-workflow-missing-target`: Provide spaceId from listSpaces/readSpace, or provide one exact visible spaceName.
+
+### Propose asset batch from search
+
+- `asset-batch-workflow-raw-asset-ids`: Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.
+- `asset-batch-workflow-unsupported-action`: Use only asset.setFavorite, asset.setArchive, asset.addTag, or asset.rotate with this workflow tool.
 
 ### Propose album operations
 

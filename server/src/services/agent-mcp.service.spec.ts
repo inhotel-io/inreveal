@@ -1054,6 +1054,20 @@ describe(AgentMcpService.name, () => {
       ],
     },
     {
+      toolName: AgentToolName.ProposeAssetBatchFromSearch,
+      args: {
+        summary: 'Favorite South Africa photos.',
+        action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      },
+      serviceMethod: 'proposeAssetBatchFromSearch' as const,
+      expectedArguments: (authValue: AuthDto, sessionIdValue: string, args: Record<string, unknown>) => [
+        authValue,
+        sessionIdValue,
+        args,
+      ],
+    },
+    {
       toolName: AgentToolName.ReviseProposedOperations,
       args: {
         planId: factory.uuid(),
@@ -1147,6 +1161,14 @@ describe(AgentMcpService.name, () => {
         assetSource: { kind: 'search', filters: { country: 'South Africa' } },
       },
       serviceMethod: 'proposeAddAssetsToSpaceFromSearch' as const,
+    },
+    {
+      toolName: AgentToolName.ProposeAssetBatchFromSearch,
+      args: {
+        action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+        assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+      },
+      serviceMethod: 'proposeAssetBatchFromSearch' as const,
     },
     {
       toolName: AgentToolName.ReviseProposedOperations,
@@ -1294,6 +1316,24 @@ describe(AgentMcpService.name, () => {
     expect(toolService.readAlbum).not.toHaveBeenCalled();
     expect(toolService.listSpaces).not.toHaveBeenCalled();
     expect(toolService.readSpace).not.toHaveBeenCalled();
+  });
+
+  it('returns enriched validation error and does not delegate unsupported proposeAssetBatchFromSearch actions', async () => {
+    const response = (await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(AgentToolName.ProposeAssetBatchFromSearch, {
+        action: { type: AgentOperationType.AssetRemoveTag, tagId: factory.uuid() },
+        assetSource: { kind: 'search', filters: { city: 'Berlin' } },
+      }),
+    )) as AgentMcpSuccessResponse;
+
+    expectEnrichedToolValidationError(response, {
+      toolName: AgentToolName.ProposeAssetBatchFromSearch,
+      path: 'action.type',
+      hintIncludes: 'Use only asset.setFavorite, asset.setArchive, asset.addTag, or asset.rotate',
+    });
+    expect(operationPlanService.proposeAssetBatchFromSearch).not.toHaveBeenCalled();
   });
 
   it('does not serialize raw malformed argument values, secrets, routes, or filesystem paths in validation errors', async () => {

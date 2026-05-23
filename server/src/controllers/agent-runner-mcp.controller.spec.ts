@@ -286,6 +286,7 @@ describe(AgentRunnerMcpController.name, () => {
         AgentToolName.ProposeAddAssetsToAlbumFromSearch,
         AgentToolName.ProposeSpaceFromSearch,
         AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+        AgentToolName.ProposeAssetBatchFromSearch,
         AgentToolName.ProposeAlbumOperations,
         AgentToolName.ReviseProposedOperations,
         AgentToolName.SummarizePlan,

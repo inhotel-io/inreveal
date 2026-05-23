@@ -95,6 +95,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('mcp_gallery_proposeAddAssetsToAlbumFromSearch');
     expect(prompt).toContain('mcp_gallery_proposeSpaceFromSearch');
     expect(prompt).toContain('mcp_gallery_proposeAddAssetsToSpaceFromSearch');
+    expect(prompt).toContain('mcp_gallery_proposeAssetBatchFromSearch');
     expect(prompt).toContain('other plans use mcp_gallery_proposeAlbumOperations');
     expect(prompt).not.toContain('Tmcp_gallery');
     expect(prompt).not.toContain('RKnown');
