@@ -90,11 +90,10 @@ export class AgentMcpPromptService {
         `R: Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds; if hasMore, use nextPage as page.`,
         'Patterns: unalbumed=isNotInAlbum; 5-star videos=rating 5+type VIDEO; OCR invoice=mode ocr+query invoice; names=resolve names first.',
         'Text search: smart/ocr/description/filename require query',
-        `Default write: ${albumSourceSearch.piToolName}; ${spaceSourceSearch.piToolName}; ${batchSourceSearch.piToolName}; explicit IDs only for small inspected sets.`,
-        `assetSource.search intent: ${albumSourceSearch.piToolName} ${this.formatJson(albumSourceSearch.arguments)}`,
-        `After inspection previousSearch.sourceRef, not assetIds: ${albumPreviousSearch.piToolName} ${this.formatJson(albumPreviousSearch.arguments)}`,
-        `Source writes: ${spaceSourceSearch.piToolName},${batchSourceSearch.piToolName} use assetSource.search.`,
-        `Recoverable: wrong_id_domain -> assetSource.search/right domain; needs_clarification -> ask, send choiceRefs.`,
+        `Default write: ${albumSourceSearch.piToolName},${this.toPiToolName(AgentToolName.ProposeAddAssetsToAlbumFromSearch)},${spaceSourceSearch.piToolName},${this.toPiToolName(AgentToolName.ProposeAddAssetsToSpaceFromSearch)},${batchSourceSearch.piToolName}.`,
+        `assetSource.search: ${albumSourceSearch.piToolName} ${this.formatJson(albumSourceSearch.arguments)}`,
+        `previousSearch.sourceRef after inspect: ${albumPreviousSearch.piToolName} ${this.formatJson(albumPreviousSearch.arguments)}`,
+        `Recoverable: wrong_id_domain->assetSource.search/right; needs_clarification->ask, use choiceRefs.`,
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
         'Progressive: resolve names -> search detail ids {"detail":"ids"} -> readAssetMetadata fields for selected ids. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.',
@@ -109,7 +108,7 @@ export class AgentMcpPromptService {
         `${this.formatJson(listSpaces.arguments)} -> ${this.formatJson(readSpace.arguments)}`,
         'Space: no matching space: ask. No matching assets/no photos/none in space: explain. assetIdsTruncated false: exclude already in space; only remove already in space; true:narrow.',
         'Details: space.updateDetails spaceName, description, color. Same name/description/color: no-op. Never update thumbnails, pets, faces, linked libraries, or delete spaces.',
-        `Plan ${this.toPiToolName(AgentToolName.ProposeAlbumOperations)}: album.create temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id-from-searchAssets>"]}`,
+        `Low-level explicit IDs only for small inspected sets: ${this.toPiToolName(AgentToolName.ProposeAlbumOperations)} album.create temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id-from-searchAssets>"]}`,
         this.renderValidationRecoveryGuidance(validationMistake),
       ].join('\n'),
     );
@@ -188,16 +187,18 @@ export class AgentMcpPromptService {
 
   private compactPromptValue(value: unknown): unknown {
     if (value && typeof value === 'object' && !Array.isArray(value) && 'assetSource' in value) {
-      const { action, assetSource } = value as Record<string, unknown>;
+      const { albumName, spaceName, albumId, spaceId, action, assetSource } = value as Record<string, unknown>;
       const compactAssetSource =
         assetSource && typeof assetSource === 'object' && !Array.isArray(assetSource)
-          ? Object.fromEntries(
-              Object.entries(assetSource).filter(([fieldName]) => fieldName !== 'materialization'),
-            )
+          ? Object.fromEntries(Object.entries(assetSource).filter(([fieldName]) => fieldName !== 'materialization'))
           : assetSource;
 
       return Object.fromEntries(
         Object.entries({
+          albumName,
+          spaceName,
+          albumId,
+          spaceId,
           action,
           assetSource: compactAssetSource,
         }).filter(([, fieldValue]) => fieldValue !== undefined),
