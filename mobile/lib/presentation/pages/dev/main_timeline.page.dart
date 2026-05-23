@@ -98,7 +98,7 @@ class _SearchLoadMoreFooter extends ConsumerWidget {
 class PhotosTimelineAppBar extends StatelessWidget {
   const PhotosTimelineAppBar({super.key});
 
-  static const actions = <Widget>[TimelineGroupingSelector()];
+  static const actions = <Widget>[TimelineGroupingSelector.compact()];
 
   @override
   Widget build(BuildContext context) {

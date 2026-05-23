@@ -275,5 +275,54 @@ void main() {
 
       expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.day.index);
     });
+
+    testWidgets('compact mode renders only the current grouping in a small app-bar chip', (tester) async {
+      await Store.put(StoreKey.groupAssetsBy, GroupAssetsBy.day.index);
+
+      await tester.pumpConsumerWidget(
+        const CustomScrollView(
+          slivers: [
+            SliverAppBar(actions: [TimelineGroupingSelector.compact()]),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('timeline-grouping-compact-selector')), findsOneWidget);
+      expect(find.byKey(const Key('timeline-grouping-selector')), findsNothing);
+      expect(find.byKey(const Key('timeline-grouping-year')), findsNothing);
+      expect(find.byKey(const Key('timeline-grouping-month')), findsNothing);
+      expect(find.byKey(const Key('timeline-grouping-day')), findsNothing);
+      expect(find.text('Days'), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('timeline-grouping-compact-selector'))).width, lessThanOrEqualTo(116));
+    });
+
+    testWidgets('compact mode cycles to the next grouping on tap', (tester) async {
+      await Store.put(StoreKey.groupAssetsBy, GroupAssetsBy.day.index);
+
+      await tester.pumpConsumerWidget(const TimelineGroupingSelector.compact());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('timeline-grouping-compact-selector')));
+      await tester.pumpAndSettle();
+
+      expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.year.index);
+      expect(find.text('Years'), findsOneWidget);
+    });
+
+    testWidgets('compact mode opens a direct selection menu on long press', (tester) async {
+      await Store.put(StoreKey.groupAssetsBy, GroupAssetsBy.day.index);
+
+      await tester.pumpConsumerWidget(const TimelineGroupingSelector.compact());
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byKey(const Key('timeline-grouping-compact-selector')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('timeline-grouping-menu-month')));
+      await tester.pumpAndSettle();
+
+      expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.month.index);
+      expect(find.text('Months'), findsOneWidget);
+    });
   });
 }

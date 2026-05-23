@@ -27,12 +27,17 @@ GroupAssetsBy timelineGroupingFromSettingIndex(int index) {
 }
 
 class TimelineGroupingSelector extends ConsumerWidget {
-  const TimelineGroupingSelector({super.key, this.enabled = true});
+  const TimelineGroupingSelector({super.key, this.enabled = true}) : compact = false;
+
+  const TimelineGroupingSelector.compact({super.key, this.enabled = true}) : compact = true;
 
   static const double _maxWidth = 218;
   static const double _height = 48;
+  static const double _compactWidth = 104;
+  static const double _compactHeight = 44;
 
   final bool enabled;
+  final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,6 +46,17 @@ class TimelineGroupingSelector extends ConsumerWidget {
     );
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+
+    if (compact) {
+      return _TimelineGroupingCompactSelector(
+        selected: selected,
+        enabled: enabled,
+        onSelected: (groupBy) async {
+          unawaited(HapticFeedback.selectionClick());
+          await ref.read(settingsProvider.notifier).set(Setting.groupAssetsBy, groupBy.index);
+        },
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -83,6 +99,108 @@ class TimelineGroupingSelector extends ConsumerWidget {
         );
       },
     );
+  }
+}
+
+class _TimelineGroupingCompactSelector extends StatelessWidget {
+  const _TimelineGroupingCompactSelector({required this.selected, required this.enabled, required this.onSelected});
+
+  final GroupAssetsBy selected;
+  final bool enabled;
+  final Future<void> Function(GroupAssetsBy groupBy) onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final label = _label(context, selected);
+    final foreground = enabled ? colors.onPrimary : colors.onSurface.withValues(alpha: 0.5);
+
+    return Semantics(
+      key: const Key('timeline-grouping-compact-selector'),
+      container: true,
+      button: true,
+      enabled: enabled,
+      label: _translated('timeline_grouping_selector', 'Timeline grouping'),
+      value: label,
+      onTap: enabled ? () => unawaited(_selectNext()) : null,
+      onLongPress: enabled ? () => unawaited(_showMenu(context)) : null,
+      child: ExcludeSemantics(
+        child: Opacity(
+          opacity: enabled ? 1 : 0.45,
+          child: SizedBox(
+            width: TimelineGroupingSelector._compactWidth,
+            height: TimelineGroupingSelector._compactHeight,
+            child: Material(
+              color: enabled ? colors.primary : colors.surfaceContainerHighest,
+              shape: StadiumBorder(
+                side: BorderSide(
+                  color: enabled
+                      ? colors.primary.withValues(alpha: 0.42)
+                      : colors.outlineVariant.withValues(alpha: 0.7),
+                ),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: enabled ? () => unawaited(_selectNext()) : null,
+                onLongPress: enabled ? () => unawaited(_showMenu(context)) : null,
+                borderRadius: BorderRadius.circular(999),
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.only(start: 16, end: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelLarge?.copyWith(color: foreground, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.expand_more_rounded, size: 18, color: foreground),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectNext() async {
+    await onSelected(switch (selected) {
+      GroupAssetsBy.year => GroupAssetsBy.month,
+      GroupAssetsBy.month => GroupAssetsBy.day,
+      GroupAssetsBy.day || GroupAssetsBy.auto || GroupAssetsBy.none => GroupAssetsBy.year,
+    });
+  }
+
+  Future<void> _showMenu(BuildContext context) async {
+    final renderBox = context.findRenderObject()! as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final offset = renderBox.localToGlobal(Offset.zero, ancestor: overlay);
+    final position = RelativeRect.fromRect(offset & renderBox.size, Offset.zero & overlay.size);
+    final selectedGroupBy = await showMenu<GroupAssetsBy>(
+      context: context,
+      position: position,
+      items: [
+        for (final groupBy in timelineGroupingSelectorGroups)
+          PopupMenuItem<GroupAssetsBy>(
+            key: Key('timeline-grouping-menu-${groupBy.name}'),
+            value: groupBy,
+            child: Text(_label(context, groupBy)),
+          ),
+      ],
+    );
+
+    if (selectedGroupBy != null && context.mounted) {
+      await onSelected(selectedGroupBy);
+    }
   }
 }
 

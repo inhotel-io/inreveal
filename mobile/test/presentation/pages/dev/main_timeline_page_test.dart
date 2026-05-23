@@ -36,11 +36,12 @@ void main() {
     test('uses grouping selector without filter action', () {
       expect(PhotosTimelineAppBar.actions, hasLength(1));
       expect(PhotosTimelineAppBar.actions.single, isA<TimelineGroupingSelector>());
+      expect((PhotosTimelineAppBar.actions.single as TimelineGroupingSelector).compact, isTrue);
       expect(PhotosTimelineAppBar.actions.whereType<FilterIconButton>(), isEmpty);
       expect(MainTimelinePage.timelineOverviewControlsEnabled, isTrue);
     });
 
-    testWidgets('landscape tablet app bar keeps a single grouping selector action', (tester) async {
+    testWidgets('app bar keeps a compact grouping selector action', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1024, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -53,6 +54,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(TimelineGroupingSelector), findsOneWidget);
+      expect(find.byKey(const Key('timeline-grouping-compact-selector')), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('timeline-grouping-compact-selector'))).width, lessThanOrEqualTo(116));
       expect(find.byIcon(Icons.search), findsNothing);
       expect(find.byIcon(Icons.filter_alt_outlined), findsNothing);
       expect(find.byType(FilterIconButton), findsNothing);
