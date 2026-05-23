@@ -188,16 +188,14 @@ describe('AgentPlanItemReview', () => {
       props: defaultProps({
         item: item(Array.from({ length: 65 }, (_, index) => `asset-${index + 1}`)),
         variant: 'modal',
-        itemSize: 104,
-        columnCount: 6,
       }),
     });
 
     const tileGrid = screen.getByTestId('agent-plan-item-review-tile-grid');
 
     expect(tileGrid).toHaveStyle({
-      'grid-template-columns': 'repeat(6, 104px)',
-      'grid-auto-rows': '104px',
+      'grid-template-columns': 'repeat(6, 128px)',
+      'grid-auto-rows': '128px',
     });
   });
 
@@ -271,26 +269,26 @@ describe('AgentPlanItemReview', () => {
     expect(screen.getByText('Showing 10 of 100 photos')).toBeInTheDocument();
   });
 
-  it('caps measured wide layouts at the desktop default column count', async () => {
+  it('uses the available modal width instead of capping wide layouts at six columns', async () => {
     const setMeasuredWidth = stubMeasuredGridWidth();
     const assetIds = Array.from({ length: 100 }, (_, index) => `asset-${index.toString().padStart(4, '0')}`);
     render(AgentPlanItemReview, {
       props: defaultProps({
         item: item(assetIds),
         viewportHeight: 360,
-        itemSize: 96,
+        variant: 'modal',
         overscanRows: 1,
       }),
     });
 
-    await setMeasuredWidth(1200);
+    await setMeasuredWidth(1400);
 
     const grid = screen.getByTestId('agent-plan-item-review-grid');
     const tileGrid = within(grid).getByTestId('agent-plan-item-review-tile-grid');
 
-    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(6, 96px)' });
-    expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(30);
-    expect(screen.getByText('Showing 30 of 100 photos')).toBeInTheDocument();
+    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(10, 128px)' });
+    expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(40);
+    expect(screen.getByText('Showing 40 of 100 photos')).toBeInTheDocument();
   });
 
   it('shows excluded counts and reset action for partial selection', async () => {

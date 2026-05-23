@@ -14,6 +14,7 @@
 
   const DEFAULT_VIEWPORT_HEIGHT = 420;
   const DEFAULT_ITEM_SIZE = 104;
+  const MODAL_ITEM_SIZE = 128;
   const DEFAULT_COLUMN_COUNT = 6;
   const GRID_GAP = 8;
   const DEFAULT_OVERSCAN_ROWS = 2;
@@ -47,7 +48,7 @@
     onResetSelection,
     metadataByAssetId = {},
     viewportHeight = DEFAULT_VIEWPORT_HEIGHT,
-    itemSize = DEFAULT_ITEM_SIZE,
+    itemSize,
     columnCount,
     overscanRows = DEFAULT_OVERSCAN_ROWS,
     variant = 'inline',
@@ -65,10 +66,11 @@
   const filteredAssetIds = $derived(filteredAssets.map((asset) => asset.id));
   const facets = $derived(getAgentPlanAvailableFilterFacets(reviewAssets));
   const videoAssetIds = $derived(reviewAssets.filter((asset) => asset.kind === 'video').map((asset) => asset.id));
+  const effectiveItemSize = $derived(itemSize ?? (variant === 'modal' ? MODAL_ITEM_SIZE : DEFAULT_ITEM_SIZE));
   const configuredColumnCount = $derived(columnCount === undefined ? undefined : Math.max(1, Math.floor(columnCount)));
   const measuredColumnCount = $derived(
     measuredGridWidth > 0
-      ? Math.min(DEFAULT_COLUMN_COUNT, Math.max(1, Math.floor((measuredGridWidth + GRID_GAP) / (itemSize + GRID_GAP))))
+      ? Math.max(1, Math.floor((measuredGridWidth + GRID_GAP) / (effectiveItemSize + GRID_GAP)))
       : DEFAULT_COLUMN_COUNT,
   );
   const virtualColumnCount = $derived(configuredColumnCount ?? measuredColumnCount);
@@ -77,7 +79,7 @@
       assetIds: filteredAssetIds,
       scrollTop,
       viewportHeight,
-      itemSize,
+      itemSize: effectiveItemSize,
       columnCount: virtualColumnCount,
       overscanRows,
     }),
@@ -311,7 +313,7 @@
       <div
         class="grid gap-2"
         data-testid="agent-plan-item-review-tile-grid"
-        style={`grid-template-columns: repeat(${virtualColumnCount}, ${itemSize}px); grid-auto-rows: ${itemSize}px;`}
+        style={`grid-template-columns: repeat(${virtualColumnCount}, ${effectiveItemSize}px); grid-auto-rows: ${effectiveItemSize}px;`}
       >
         {#each virtualWindow.visibleAssetIds as assetId, visibleIndex (assetId)}
           {@const selected = isAssetSelectedForOperation(item, assetId)}
