@@ -80,6 +80,35 @@ const collectStream = async <T>(stream: AsyncGenerator<T>): Promise<T[]> => {
   return events;
 };
 
+const validClarificationBlock = () => ({
+  type: 'clarification',
+  kind: 'person',
+  query: 'Pierre',
+  summary: 'I found two people named Pierre.',
+  textFallback: 'Which Pierre should I use?',
+  choices: [
+    {
+      choiceRef: 'choice:person:abcDEF1234567890',
+      label: 'Pierre M.',
+      description: '12 matching photos',
+      thumbnailAssetId: '90c8090a-e461-4265-9bf0-7a8a191a6216',
+    },
+    {
+      choiceRef: 'choice:person:defABC1234567890',
+      label: 'Pierre',
+      thumbnailAssetId: null,
+    },
+  ],
+});
+
+const completedClarificationEvent = (block: Record<string, unknown>) => ({
+  type: 'assistant-message-completed',
+  sessionId: 'gallery-session-1',
+  runnerSessionId: 'runner-session-1',
+  providerMessageId: 'provider-message-1',
+  content: { blocks: [block] },
+});
+
 describe(AgentRunnerRepository.name, () => {
   let sut: AgentRunnerRepository;
 
@@ -374,6 +403,175 @@ describe(AgentRunnerRepository.name, () => {
         }),
       ),
     ).resolves.toEqual([completedEvent]);
+  });
+
+  it('accepts completed runner message content with clarification blocks', async () => {
+    const completedEvent = completedClarificationEvent(validClarificationBlock());
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`data: ${JSON.stringify(completedEvent)}\n\n`),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).resolves.toEqual([completedEvent]);
+  });
+
+  it('throws when completed runner message content has an unsafe clarification choice ref', async () => {
+    const block = validClarificationBlock();
+    block.choices = [{ choiceRef: 'not-safe', label: 'Pierre', thumbnailAssetId: null }];
+    const completedEvent = completedClarificationEvent(block);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`data: ${JSON.stringify(completedEvent)}\n\n`),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).rejects.toThrow('Agent runner returned an invalid stream event');
+  });
+
+  it.each([
+    {
+      name: 'invalid thumbnail UUID',
+      mutate: (block: ReturnType<typeof validClarificationBlock>) => {
+        block.choices[0].thumbnailAssetId = 'asset-1';
+      },
+    },
+    {
+      name: 'blank query',
+      mutate: (block: ReturnType<typeof validClarificationBlock>) => {
+        block.query = '   ';
+      },
+    },
+    {
+      name: 'overlong summary',
+      mutate: (block: ReturnType<typeof validClarificationBlock>) => {
+        block.summary = 'x'.repeat(1001);
+      },
+    },
+    {
+      name: 'overlong text fallback',
+      mutate: (block: ReturnType<typeof validClarificationBlock>) => {
+        block.textFallback = 'x'.repeat(1001);
+      },
+    },
+    {
+      name: 'blank choice label',
+      mutate: (block: ReturnType<typeof validClarificationBlock>) => {
+        block.choices[0].label = '   ';
+      },
+    },
+    {
+      name: 'overlong choice description',
+      mutate: (block: ReturnType<typeof validClarificationBlock>) => {
+        block.choices[0].description = 'x'.repeat(501);
+      },
+    },
+    {
+      name: 'raw choice id',
+      mutate: (block: ReturnType<typeof validClarificationBlock>) => {
+        Object.assign(block.choices[0], { id: '90c8090a-e461-4265-9bf0-7a8a191a6216' });
+      },
+    },
+    {
+      name: 'choice search filter',
+      mutate: (block: ReturnType<typeof validClarificationBlock>) => {
+        Object.assign(block.choices[0], { searchFilter: { personIds: ['90c8090a-e461-4265-9bf0-7a8a191a6216'] } });
+      },
+    },
+    {
+      name: 'extra block field',
+      mutate: (block: ReturnType<typeof validClarificationBlock>) => {
+        Object.assign(block, { searchFilter: { personIds: ['90c8090a-e461-4265-9bf0-7a8a191a6216'] } });
+      },
+    },
+    {
+      name: 'choice ref kind mismatch',
+      mutate: (block: ReturnType<typeof validClarificationBlock>) => {
+        block.choices[0].choiceRef = 'choice:album:abcDEF1234567890';
+      },
+    },
+  ])('throws when completed runner message content has $name in a clarification block', async ({ mutate }) => {
+    const block = validClarificationBlock();
+    mutate(block);
+    const completedEvent = completedClarificationEvent(block);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`data: ${JSON.stringify(completedEvent)}\n\n`),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).rejects.toThrow('Agent runner returned an invalid stream event');
+  });
+
+  it.each([
+    {
+      name: 'empty block list',
+      content: { blocks: [] },
+    },
+    {
+      name: 'more than 100 blocks',
+      content: { blocks: Array.from({ length: 101 }, () => ({ type: 'text', text: 'Hello.' })) },
+    },
+    {
+      name: 'content JSON over 32 KiB',
+      content: {
+        blocks: Array.from({ length: 5 }, (_, index) => ({
+          type: 'text',
+          text: `${index}-${'x'.repeat(8000)}`,
+        })),
+      },
+    },
+  ])('throws when assistant-message-completed content has $name', async ({ content }) => {
+    const completedEvent = {
+      type: 'assistant-message-completed',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      providerMessageId: 'provider-message-1',
+      content,
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`data: ${JSON.stringify(completedEvent)}\n\n`),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).rejects.toThrow('Agent runner returned an invalid stream event');
   });
 
   it('streams runner resume SSE events from the continue endpoint', async () => {
@@ -757,6 +955,38 @@ describe(AgentRunnerRepository.name, () => {
       runnerSessionId: 'runner-session-1',
       providerMessageId: 'provider-message-1',
       content: { blocks: [123] },
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`data: ${JSON.stringify(completedEvent)}\n\n`),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).rejects.toThrow('Agent runner returned an invalid stream event');
+  });
+
+  it.each([
+    { name: 'blank text block', block: { type: 'text', text: '   ' } },
+    { name: 'overlong text block', block: { type: 'text', text: 'x'.repeat(8001) } },
+    { name: 'invalid asset UUID', block: { type: 'asset', assetId: 'asset-1' } },
+    { name: 'overlong asset label', block: { type: 'asset', assetId: '90c8090a-e461-4265-9bf0-7a8a191a6216', label: 'x'.repeat(501) } },
+    { name: 'extra text block key', block: { type: 'text', text: 'Hello.', id: 'raw-id' } },
+  ])('throws when assistant-message-completed message content has malformed legacy block: $name', async ({ block }) => {
+    const completedEvent = {
+      type: 'assistant-message-completed',
+      sessionId: 'gallery-session-1',
+      runnerSessionId: 'runner-session-1',
+      providerMessageId: 'provider-message-1',
+      content: { blocks: [block] },
     };
     mockFetch.mockResolvedValue({
       ok: true,
