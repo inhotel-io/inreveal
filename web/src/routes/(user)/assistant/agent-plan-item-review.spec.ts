@@ -179,8 +179,26 @@ describe('AgentPlanItemReview', () => {
 
     expect(grid).toHaveClass('max-h-[min(65vh,28rem)]');
     expect(grid).not.toHaveStyle({ height: '420px' });
-    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(6, minmax(0, 1fr))' });
+    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(6, 104px)' });
     expect(firstTile).toHaveClass('aspect-square');
+  });
+
+  it('keeps rendered modal tile tracks aligned with virtual row height', () => {
+    render(AgentPlanItemReview, {
+      props: defaultProps({
+        item: item(Array.from({ length: 65 }, (_, index) => `asset-${index + 1}`)),
+        variant: 'modal',
+        itemSize: 104,
+        columnCount: 6,
+      }),
+    });
+
+    const tileGrid = screen.getByTestId('agent-plan-item-review-tile-grid');
+
+    expect(tileGrid).toHaveStyle({
+      'grid-template-columns': 'repeat(6, 104px)',
+      'grid-auto-rows': '104px',
+    });
   });
 
   it('marks modal tiles with selected state styling and dims excluded photos', () => {
@@ -226,7 +244,7 @@ describe('AgentPlanItemReview', () => {
     const grid = screen.getByTestId('agent-plan-item-review-grid');
     const tileGrid = within(grid).getByTestId('agent-plan-item-review-tile-grid');
 
-    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(2, minmax(0, 1fr))' });
+    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(2, 96px)' });
     expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(10);
     expect(screen.getByText('Showing 10 of 100 photos')).toBeInTheDocument();
   });
@@ -248,7 +266,7 @@ describe('AgentPlanItemReview', () => {
     const grid = screen.getByTestId('agent-plan-item-review-grid');
     const tileGrid = within(grid).getByTestId('agent-plan-item-review-tile-grid');
 
-    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(2, minmax(0, 1fr))' });
+    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(2, 96px)' });
     expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(10);
     expect(screen.getByText('Showing 10 of 100 photos')).toBeInTheDocument();
   });
@@ -270,7 +288,7 @@ describe('AgentPlanItemReview', () => {
     const grid = screen.getByTestId('agent-plan-item-review-grid');
     const tileGrid = within(grid).getByTestId('agent-plan-item-review-tile-grid');
 
-    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(6, minmax(0, 1fr))' });
+    expect(tileGrid).toHaveStyle({ 'grid-template-columns': 'repeat(6, 96px)' });
     expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(30);
     expect(screen.getByText('Showing 30 of 100 photos')).toBeInTheDocument();
   });
