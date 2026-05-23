@@ -1,5 +1,9 @@
 import { createZodDto, type ZodDto } from 'nestjs-zod';
-import { AgentChoiceRefSchema, AgentSearchSourceRefSchema } from 'src/dtos/agent-asset-source.dto';
+import {
+  AgentChoiceRefSchema,
+  AgentSearchSourceRefSchema,
+  getAgentChoiceRefKind,
+} from 'src/dtos/agent-asset-source.dto';
 import {
   AgentToolApprovalDecision,
   AgentToolCallStatus,
@@ -727,6 +731,17 @@ export const AgentResolvedAssetSearchFilterResultSchema = z
     searchFilter: AgentPartialSearchAssetsFiltersSchema.optional(),
     choices: z.array(AgentResolvedAssetSearchFilterChoiceSchema),
     message: z.string(),
+  })
+  .superRefine((result, ctx) => {
+    result.choices.forEach((choice, index) => {
+      if (choice.choiceRef && getAgentChoiceRefKind(choice.choiceRef) !== result.kind) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['choices', index, 'choiceRef'],
+          message: 'choiceRef kind must match result kind',
+        });
+      }
+    });
   })
   .meta({ id: 'AgentResolvedAssetSearchFilterResult' });
 

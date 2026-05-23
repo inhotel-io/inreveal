@@ -45,6 +45,9 @@ export const AgentChoiceRefSchema = z
   })
   .meta({ id: 'AgentChoiceRef' });
 
+export const getAgentChoiceRefKind = (choiceRef: string): string | null =>
+  choiceRef.match(/^choice:([^:]+):/)?.[1] ?? null;
+
 const uniqueChoiceRefs = z
   .array(AgentChoiceRefSchema)
   .max(20)
@@ -103,6 +106,25 @@ export const AgentDeclarativeAssetFiltersSchema = z
     type: AssetTypeSchema.optional(),
     visibility: AssetVisibilitySchema.optional(),
     withSharedSpaces: z.boolean().optional(),
+  })
+  .superRefine((filters, ctx) => {
+    const fields = [
+      ['people', 'person'],
+      ['tags', 'tag'],
+      ['albums', 'album'],
+    ] as const;
+
+    for (const [field, expectedKind] of fields) {
+      filters[field]?.choiceRefs?.forEach((choiceRef, index) => {
+        if (getAgentChoiceRefKind(choiceRef) !== expectedKind) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field, 'choiceRefs', index],
+            message: `choiceRef kind must match ${field} filter`,
+          });
+        }
+      });
+    }
   })
   .meta({ id: 'AgentDeclarativeAssetFilters' });
 

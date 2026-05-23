@@ -75,6 +75,21 @@ describe('Agent asset source DTOs', () => {
     expect(result.success).toBe(false);
   });
 
+  it.each([
+    ['people', 'choice:tag:abcDEF1234567890'],
+    ['tags', 'choice:person:abcDEF1234567890'],
+    ['albums', 'choice:space:abcDEF1234567890'],
+  ])('rejects %s choice refs with a mismatched kind', (field, choiceRef) => {
+    const result = AgentAssetSourceInputDto.schema.safeParse({
+      kind: 'search',
+      filters: {
+        [field]: { match: 'any', names: ['Pierre'], choiceRefs: [choiceRef] },
+      },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it('accepts a previous search source ref', () => {
     const result = AgentAssetSourceInputSchema.safeParse({
       kind: 'previousSearch',
