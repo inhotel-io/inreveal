@@ -85,16 +85,15 @@ const defaultProps = (
 });
 
 describe('AgentPlanPhotoReviewModal', () => {
-  it('renders a named dialog with the reusable review grid and side selection summary', () => {
+  it('renders a named dialog with the reusable review grid without a duplicate side selection summary', () => {
     render(AgentPlanPhotoReviewModal, { props: defaultProps() });
 
     const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
-    const summary = within(dialog).getByRole('complementary', { name: 'Selection' });
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(within(dialog).getByTestId('agent-plan-item-review-grid')).toBeInTheDocument();
-    expect(within(summary).getByText('Selection')).toBeInTheDocument();
-    expect(within(summary).getByText('1 of 2 selected')).toBeInTheDocument();
-    expect(within(summary).getByText('1 excluded')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('complementary', { name: 'Selection' })).not.toBeInTheDocument();
+    expect(within(dialog).getByText('1 of 2 selected')).toBeInTheDocument();
+    expect(within(dialog).getByText('1 excluded')).toBeInTheDocument();
   });
 
   it('uses an expanded review surface for large photo selections', () => {
