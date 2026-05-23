@@ -6,13 +6,37 @@
 
   interface Props {
     group: OperationReviewGroup;
+    variant?: 'strip' | 'mosaic' | 'compact';
     maxVisible?: number;
   }
 
-  let { group, maxVisible }: Props = $props();
+  let { group, variant = 'strip', maxVisible }: Props = $props();
   let failedAssetIds = $state(new Set<string>());
 
   const strip = $derived(buildAgentPlanThumbnailStrip(group, maxVisible));
+  const wrapperClass = $derived(
+    variant === 'mosaic' ? 'grid grid-cols-3 gap-2 sm:grid-cols-4' : 'flex flex-wrap gap-1.5',
+  );
+  const tileBaseClass =
+    'relative overflow-hidden border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800';
+  const tileClass = (index: number) => {
+    if (variant === 'mosaic') {
+      return `${tileBaseClass} aspect-square rounded-lg ${index === 0 ? 'sm:col-span-2 sm:row-span-2' : ''}`;
+    }
+
+    if (variant === 'compact') {
+      return `${tileBaseClass} size-10 rounded`;
+    }
+
+    return `${tileBaseClass} size-14 rounded-md`;
+  };
+  const overflowClass = $derived(
+    variant === 'mosaic'
+      ? 'flex aspect-square items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-sm font-semibold text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'
+      : variant === 'compact'
+        ? 'flex size-10 items-center justify-center rounded border border-gray-200 bg-gray-100 text-xs font-semibold text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'
+        : 'flex size-14 items-center justify-center rounded-md border border-gray-200 bg-gray-100 text-sm font-semibold text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  );
 
   const markFailed = (assetId: string) => {
     if (failedAssetIds.has(assetId)) {
@@ -30,10 +54,10 @@
     aria-label={$t('assistant_operation_thumbnail_strip_label', { values: { count: strip.totalCount } })}
   >
     {#if strip.hasThumbnails}
-      <div class="flex flex-wrap gap-1.5">
+      <div class={wrapperClass}>
         {#each strip.assetIds as assetId, index (assetId)}
           <figure
-            class="relative size-14 overflow-hidden rounded-md border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
+            class={tileClass(index)}
             data-testid="agent-plan-thumbnail-tile"
           >
             <img
@@ -59,7 +83,7 @@
 
         {#if strip.hasMore}
           <div
-            class="flex size-14 items-center justify-center rounded-md border border-gray-200 bg-gray-100 text-sm font-semibold text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+            class={overflowClass}
             aria-label={$t('assistant_operation_thumbnail_overflow_label', {
               values: { count: strip.overflowCount },
             })}
