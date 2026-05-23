@@ -324,6 +324,21 @@ describe('AgentPlanItemReview', () => {
     expect(onResetSelection).toHaveBeenCalledWith('operation-1');
   });
 
+  it('reserves reset action space before a partial selection exists', () => {
+    render(AgentPlanItemReview, {
+      props: defaultProps({
+        item: item(['asset-1', 'asset-2']),
+      }),
+    });
+
+    const resetButton = screen.getByText('Reset selection').closest('button');
+
+    expect(resetButton).toBeInTheDocument();
+    expect(resetButton).toHaveClass('invisible');
+    expect(resetButton).toHaveAttribute('aria-hidden', 'true');
+    expect(resetButton).toHaveAttribute('tabindex', '-1');
+  });
+
   it('renders only the virtualized visible window plus overscan for large operations', () => {
     const assetIds = Array.from({ length: 1000 }, (_, index) => `asset-${index.toString().padStart(4, '0')}`);
     render(AgentPlanItemReview, {
