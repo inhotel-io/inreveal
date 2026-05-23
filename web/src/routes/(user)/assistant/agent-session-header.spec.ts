@@ -151,6 +151,23 @@ describe(AgentSessionHeader.name, () => {
     expect(screen.getByTestId('agent-session-header-model').className).toContain('truncate');
   });
 
+  it('allows header actions to wrap without forcing the title and metadata off screen', () => {
+    renderHeader({
+      activityVisibilityMode: 'compact',
+      onActivityVisibilityModeChange: vi.fn(),
+      onCancel: vi.fn(),
+      title: 'A very long discovered assistant session title that should keep readable room',
+    });
+
+    expect(screen.getByTestId('agent-session-header').className).toContain('flex-wrap');
+    expect(screen.getByTestId('agent-session-header-title-group').className).toContain('min-w-0');
+
+    const actions = screen.getByTestId('agent-session-header-actions');
+    expect(actions.className).toContain('min-w-0');
+    expect(actions.className).toContain('flex-wrap');
+    expect(actions.className).not.toContain('shrink-0');
+  });
+
   it('fires New chat and Details callbacks from accessible buttons', async () => {
     const user = userEvent.setup();
     const { onNewChat, onOpenDetails } = renderHeader();
