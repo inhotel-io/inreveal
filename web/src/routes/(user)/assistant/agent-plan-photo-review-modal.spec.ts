@@ -33,6 +33,7 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_item_toggle: 'Include photo {index}',
     assistant_operation_item_virtual_summary: 'Showing {visible} of {total} photos',
     assistant_operation_photo_review_close: 'Close',
+    assistant_operation_photo_review_dismiss_backdrop: 'Dismiss photo review backdrop',
     assistant_operation_photo_review_done: 'Done reviewing',
     assistant_operation_photo_review_keep_original: 'Keep original selection',
     assistant_operation_photo_review_selection: 'Selection',
@@ -121,5 +122,43 @@ describe('AgentPlanPhotoReviewModal', () => {
     unmount();
     expect(trigger).toHaveFocus();
     trigger.remove();
+  });
+
+  it('wraps focus from the last focusable control to the first with Tab', async () => {
+    render(AgentPlanPhotoReviewModal, { props: defaultProps() });
+
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    const closeButton = within(dialog).getByRole('button', { name: 'Close' });
+    const doneButton = within(dialog).getByRole('button', { name: 'Done reviewing' });
+
+    doneButton.focus();
+    await fireEvent.keyDown(dialog, { key: 'Tab' });
+
+    expect(closeButton).toHaveFocus();
+  });
+
+  it('wraps focus from the first focusable control to the last with Shift+Tab', async () => {
+    render(AgentPlanPhotoReviewModal, { props: defaultProps() });
+
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    const closeButton = within(dialog).getByRole('button', { name: 'Close' });
+    const doneButton = within(dialog).getByRole('button', { name: 'Done reviewing' });
+
+    closeButton.focus();
+    await fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+
+    expect(doneButton).toHaveFocus();
+  });
+
+  it('keeps Escape closing the modal while focus is contained', async () => {
+    const onClose = vi.fn();
+    render(AgentPlanPhotoReviewModal, { props: defaultProps({ onClose }) });
+
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    within(dialog).getByRole('button', { name: 'Close' }).focus();
+
+    await fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });

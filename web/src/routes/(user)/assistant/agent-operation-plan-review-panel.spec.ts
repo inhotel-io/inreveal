@@ -83,6 +83,7 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_plan_selected_asset_count: '{count} selected assets',
     assistant_operation_plan_selected_change_count: '{count} selected changes',
     assistant_operation_photo_review_close: 'Close',
+    assistant_operation_photo_review_dismiss_backdrop: 'Dismiss photo review backdrop',
     assistant_operation_photo_review_done: 'Done reviewing',
     assistant_operation_photo_review_keep_original: 'Keep original selection',
     assistant_operation_photo_review_selection: 'Selection',
