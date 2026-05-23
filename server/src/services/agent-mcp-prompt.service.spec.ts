@@ -109,11 +109,14 @@ describe(AgentMcpPromptService.name, () => {
 
   it('teaches source-backed workflow tools as the default write path', () => {
     const prompt = sut.generatePromptCheatSheet();
+    const defaultWrite = prompt.split('\n').find((line) => line.startsWith('Default write:'));
 
     expect(prompt).toContain('Default write:');
-    expect(prompt).toContain('mcp_gallery_proposeAlbumFromSearch');
-    expect(prompt).toContain('mcp_gallery_proposeSpaceFromSearch');
-    expect(prompt).toContain('mcp_gallery_proposeAssetBatchFromSearch');
+    expect(defaultWrite).toContain('mcp_gallery_proposeAlbumFromSearch');
+    expect(defaultWrite).toContain('mcp_gallery_proposeAddAssetsToAlbumFromSearch');
+    expect(defaultWrite).toContain('mcp_gallery_proposeSpaceFromSearch');
+    expect(defaultWrite).toContain('mcp_gallery_proposeAddAssetsToSpaceFromSearch');
+    expect(defaultWrite).toContain('mcp_gallery_proposeAssetBatchFromSearch');
     expect(prompt).toContain('assetSource.search');
     expect(prompt).toContain('previousSearch.sourceRef');
     expect(prompt).toMatch(/explicit IDs only for small inspected sets/i);
@@ -121,6 +124,35 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('needs_clarification');
     expect(prompt).toContain('choiceRefs');
     expect(prompt.length).toBeLessThanOrEqual(4200);
+  });
+
+  it('renders schema-valid source-backed prompt snippets with required workflow fields', () => {
+    const prompt = sut.generatePromptCheatSheet();
+    const lineJson = (prefix: string) => {
+      const line = prompt.split('\n').find((candidate) => candidate.startsWith(prefix));
+
+      expect(line, prefix).toBeDefined();
+      return JSON.parse(line!.slice(prefix.length)) as Record<string, unknown>;
+    };
+    const albumSearch = lineJson('assetSource.search: mcp_gallery_proposeAlbumFromSearch ');
+    const previousSearch = lineJson('previousSearch.sourceRef after inspect: mcp_gallery_proposeAlbumFromSearch ');
+
+    expect(albumSearch).toMatchObject({
+      albumName: 'South Africa with Pierre & Aurelia',
+      assetSource: { kind: 'search' },
+    });
+    expect(previousSearch).toMatchObject({
+      albumName: 'Recent favorites',
+      assetSource: { kind: 'previousSearch' },
+    });
+    expect(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumFromSearch].safeParse(albumSearch).success,
+    ).toBe(true);
+    (previousSearch.assetSource as Record<string, unknown>).sourceRef =
+      'asset-source:search:00000000-0000-4000-8000-000000000333';
+    expect(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumFromSearch].safeParse(previousSearch).success,
+    ).toBe(true);
   });
 
   it('does not tell Pi deterministic people, space, or visibility filters are unavailable', () => {
@@ -212,6 +244,9 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('createSelectionHandle');
     expect(prompt).toContain('assetSelectionHandleId');
     expect(prompt).toContain('Do not paste hundreds of assetIds');
+    expect(prompt).toMatch(
+      /low-level explicit IDs only for small inspected sets.*album\.addAssets.*space\.addAssets/is,
+    );
   });
 
   it('includes compact visual and technical metadata guidance without direct writes', () => {
