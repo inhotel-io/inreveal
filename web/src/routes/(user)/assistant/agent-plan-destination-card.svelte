@@ -60,7 +60,6 @@
 
     return { update };
   };
-
 </script>
 
 <div

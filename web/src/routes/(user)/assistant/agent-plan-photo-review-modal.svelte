@@ -14,15 +14,8 @@
     onResetSelection: (operationId: string) => void;
   }
 
-  let {
-    item,
-    canChangeSelection,
-    onClose,
-    onToggleItem,
-    onBulkSetItems,
-    onSetOnlyItems,
-    onResetSelection,
-  }: Props = $props();
+  let { item, canChangeSelection, onClose, onToggleItem, onBulkSetItems, onSetOnlyItems, onResetSelection }: Props =
+    $props();
 
   let dialog: HTMLDivElement | undefined = $state();
   let closeButton: HTMLButtonElement | undefined = $state();
@@ -119,7 +112,7 @@
         {onToggleItem}
         {onBulkSetItems}
         {onSetOnlyItems}
-        onResetSelection={onResetSelection}
+        {onResetSelection}
         variant="modal"
       />
 
