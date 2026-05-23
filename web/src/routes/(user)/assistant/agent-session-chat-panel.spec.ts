@@ -395,7 +395,8 @@ describe(AgentSessionChatPanel.name, () => {
 
     render(AgentSessionChatPanel, { props: { session } });
 
-    expect((await screen.findByText('First line')).tagName).toBe('P');
+    const firstLine = await screen.findByText('First line');
+    expect(firstLine.tagName).toBe('P');
     expect(screen.getByText('Second line').tagName).toBe('P');
   });
 
