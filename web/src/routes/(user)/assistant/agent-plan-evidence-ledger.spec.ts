@@ -47,6 +47,11 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_photo_stage_review: 'Review photos',
     assistant_operation_photo_stage_summary: '{count} selected trip photos',
     assistant_operation_photo_stage_title: 'Photos in this plan',
+    assistant_operation_photo_review_close: 'Close',
+    assistant_operation_photo_review_done: 'Done reviewing',
+    assistant_operation_photo_review_keep_original: 'Keep original selection',
+    assistant_operation_photo_review_selection: 'Selection',
+    assistant_operation_photo_review_title: 'Review photos for {summary}',
     assistant_operation_status_applied: 'Applied',
     assistant_operation_status_failed: 'Failed',
     assistant_operation_status_partial: 'Partially applied',
@@ -385,7 +390,7 @@ describe('AgentPlanEvidenceLedger', () => {
     expect(onResetItemSelection).toHaveBeenCalledWith(addId);
   });
 
-  it('opens the existing row item review from the photo stage and threads item callbacks', async () => {
+  it('opens the photo review modal from the photo stage and threads item callbacks', async () => {
     const onToggleItem = vi.fn();
     const onResetItemSelection = vi.fn();
     render(AgentPlanEvidenceLedger, {
@@ -409,13 +414,16 @@ describe('AgentPlanEvidenceLedger', () => {
     const stage = screen.getByTestId('agent-plan-photo-stage');
     await fireEvent.click(within(stage).getByRole('button', { name: 'Review photos' }));
 
-    expect(screen.getByRole('group', { name: 'Review photos for Add 2 photos' })).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    expect(within(dialog).getByTestId('agent-plan-item-review-grid')).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Reset selection' }));
+    await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Keep original selection' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
 
     expect(onToggleItem).toHaveBeenCalledWith(addId, assetB, true);
     expect(onResetItemSelection).toHaveBeenCalledWith(addId);
+    expect(screen.queryByRole('dialog', { name: 'Review photos for Add 2 photos' })).not.toBeInTheDocument();
   });
 
   it('threads bulk item callbacks through destination cards', async () => {
@@ -618,7 +626,7 @@ describe('AgentPlanEvidenceLedger', () => {
 
     await fireEvent.click(reviewButton);
 
-    expect(screen.getByRole('group', { name: 'Review photos for Add 2 photos' })).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Include photo 1' })).toBeDisabled();
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    expect(within(dialog).getByRole('checkbox', { name: 'Include photo 1' })).toBeDisabled();
   });
 });

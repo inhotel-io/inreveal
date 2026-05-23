@@ -82,6 +82,14 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_plan_review: 'Plan review',
     assistant_operation_plan_selected_asset_count: '{count} selected assets',
     assistant_operation_plan_selected_change_count: '{count} selected changes',
+    assistant_operation_photo_review_close: 'Close',
+    assistant_operation_photo_review_done: 'Done reviewing',
+    assistant_operation_photo_review_keep_original: 'Keep original selection',
+    assistant_operation_photo_review_selection: 'Selection',
+    assistant_operation_photo_review_title: 'Review photos for {summary}',
+    assistant_operation_photo_stage_review: 'Review photos',
+    assistant_operation_photo_stage_summary: '{count} selected trip photos',
+    assistant_operation_photo_stage_title: 'Photos in this plan',
     assistant_operation_status_applied: 'Applied',
     assistant_operation_status_failed: 'Failed',
     assistant_operation_status_skipped: 'Skipped',
@@ -671,7 +679,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(groupToggle).toHaveAttribute('aria-checked', 'mixed');
   });
 
-  it('publishes and applies sparse item selections after a user excludes one photo', async () => {
+  it('publishes and applies sparse item selections after a user excludes one photo from the review modal', async () => {
     sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
     sdkMock.applyApprovedOperations.mockResolvedValue({
       status: AgentOperationApplyStatus.Applied,
@@ -685,9 +693,11 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
 
-    const detailsButtons = await screen.findAllByText('Details');
-    await fireEvent.click(detailsButtons[1]);
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
+    const reviewButton = await screen.findByRole('button', { name: 'Review photos' });
+    await fireEvent.click(reviewButton);
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
 
     expect(onSelectionChange).toHaveBeenLastCalledWith({
       planId,
@@ -699,6 +709,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     });
     expect(screen.getAllByText('1 of 2 photos selected')).toHaveLength(2);
     expect(screen.getByText('3 changes · 1 assets selected')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Review photos for Add 2 photos' })).not.toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Apply 3 selected' }));
 
