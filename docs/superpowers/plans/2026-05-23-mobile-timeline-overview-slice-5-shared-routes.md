@@ -75,6 +75,7 @@ Do not implement Slice 6 accessibility/localization polish here beyond reusing e
 ## Task 1: Shared Drilldown And Route-Local Scope Harness
 
 **Files:**
+
 - Modify: `mobile/lib/providers/timeline/overview_drilldown.provider.dart`
 - Create: `mobile/lib/presentation/widgets/timeline/timeline_route_scope.dart`
 - Test: `mobile/test/providers/timeline/overview_drilldown_provider_test.dart`
@@ -263,6 +264,7 @@ Expected: all tests pass.
 ## Task 2: Temporal Scope In Repository And Factory Queries
 
 **Files:**
+
 - Modify: `mobile/lib/domain/services/timeline.service.dart`
 - Modify: `mobile/lib/infrastructure/repositories/timeline.repository.dart`
 - Test: `mobile/test/infrastructure/repositories/timeline_temporal_scope_repository_test.dart`
@@ -445,6 +447,7 @@ Expected: all tests pass.
 ## Task 3: Route-Local Grouping Header And Scrubber Offset
 
 **Files:**
+
 - Create: `mobile/lib/presentation/widgets/timeline/timeline_grouping_header_sliver.widget.dart`
 - Modify: `mobile/lib/presentation/widgets/timeline/timeline.widget.dart`
 - Test: `mobile/test/presentation/widgets/timeline/timeline_grouping_header_sliver_test.dart`
@@ -604,6 +607,7 @@ Expected: all tests pass.
 ## Task 4: Adopt Shared Routes With Scoped Queries
 
 **Files:**
+
 - Modify:
   - `mobile/lib/presentation/pages/dev/main_timeline.page.dart`
   - `mobile/lib/presentation/pages/drift_person.page.dart`
@@ -744,6 +748,7 @@ Expected: all tests pass.
 ## Task 5: Picker, Embedded, Search, And Cleanup Guardrails
 
 **Files:**
+
 - Modify: `mobile/lib/presentation/pages/drift_asset_selection_timeline.page.dart`
 - Modify: `mobile/lib/presentation/widgets/bottom_sheet/map_bottom_sheet.widget.dart`
 - Modify: `mobile/lib/presentation/pages/search/drift_search.page.dart`

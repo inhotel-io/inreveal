@@ -15,6 +15,8 @@ import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_he
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_selector.widget.dart';
 import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
 import 'package:immich_mobile/providers/timeline/temporal_scope.provider.dart';
+// easy_localization initializes shared_preferences internally; tests need the mock initializer.
+// ignore: depend_on_referenced_packages
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../test_utils.dart';

@@ -13,6 +13,8 @@ import 'package:immich_mobile/infrastructure/repositories/store.repository.dart'
 import 'package:immich_mobile/presentation/widgets/images/thumbnail.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/overview/overview_card.dart';
 import 'package:intl/date_symbol_data_local.dart';
+// easy_localization initializes shared_preferences internally; tests need the mock initializer.
+// ignore: depend_on_referenced_packages
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../test_utils.dart';
@@ -138,7 +140,7 @@ void main() {
 
     expect(find.bySemanticsLabel('2025, 1 photo, show months'), findsOneWidget);
     final node = tester.getSemantics(find.bySemanticsLabel('2025, 1 photo, show months'));
-    expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
+    expect(node.flagsCollection.isButton, isTrue);
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
 
     await tester.tap(find.byType(TimelineOverviewCard));
@@ -165,7 +167,7 @@ void main() {
     expect(find.text('Mar 2025'), findsOneWidget);
     expect(find.bySemanticsLabel('March 2025, 4 photos, show days'), findsOneWidget);
     final node = tester.getSemantics(find.bySemanticsLabel('March 2025, 4 photos, show days'));
-    expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
+    expect(node.flagsCollection.isButton, isTrue);
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
     semantics.dispose();
   });
@@ -206,7 +208,7 @@ void main() {
     expect(find.byKey(const ValueKey('timeline-overview-card-fallback')), findsOneWidget);
     expect(find.bySemanticsLabel('March 2025, 2 photos, show days'), findsOneWidget);
     final node = tester.getSemantics(find.bySemanticsLabel('March 2025, 2 photos, show days'));
-    expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
+    expect(node.flagsCollection.isButton, isTrue);
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
     semantics.dispose();
   });

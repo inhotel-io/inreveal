@@ -22,6 +22,8 @@ import 'package:immich_mobile/presentation/widgets/timeline/overview/overview_se
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/timeline/overview_drilldown.provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
+// easy_localization initializes shared_preferences internally; tests need the mock initializer.
+// ignore: depend_on_referenced_packages
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../test_utils.dart';

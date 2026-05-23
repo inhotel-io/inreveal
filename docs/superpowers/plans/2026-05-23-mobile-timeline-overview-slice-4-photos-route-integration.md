@@ -51,6 +51,7 @@
 ## Task 1: Temporal Chip Specs And Removable Chip Callback
 
 **Files:**
+
 - Modify: `mobile/lib/providers/photos_filter/chip_id.dart`
 - Modify: `mobile/lib/providers/photos_filter/photos_filter.provider.dart`
 - Modify: `mobile/lib/providers/photos_filter/active_chips.dart`
@@ -271,6 +272,7 @@ Expected: all tests pass.
 - [ ] **Step 12: Task 1 self-review**
 
 Check:
+
 - Normal chips still call `photosFilterProvider.notifier.removeChip`.
 - `TemporalScopeChipId` is a no-op in `removeChip` and does not change `SearchFilter`.
 - `TemporalScopeChipId` equality matches the value-less id pattern in `chip_id.dart`.
@@ -279,6 +281,7 @@ Check:
 ## Task 2: Photos Filter Subheader Temporal Scope Composition
 
 **Files:**
+
 - Modify: `mobile/lib/presentation/widgets/photos_filter/filter_subheader.widget.dart`
 - Test: `mobile/test/presentation/widgets/photos_filter/filter_subheader_test.dart`
 
@@ -414,6 +417,7 @@ Expected: all tests pass.
 - [ ] **Step 5: Task 2 self-review**
 
 Check:
+
 - The subheader is hidden only when both normal filters and temporal scope are empty.
 - The temporal chip clears only temporal scope.
 - Clear all clears both temporal and non-temporal filters.
@@ -422,6 +426,7 @@ Check:
 ## Task 3: Overview Drilldown Provider And Card Tap Wiring
 
 **Files:**
+
 - Create: `mobile/lib/providers/timeline/overview_drilldown.provider.dart`
 - Modify: `mobile/lib/presentation/widgets/timeline/overview/overview_segment.model.dart`
 - Test: `mobile/test/providers/timeline/overview_drilldown_provider_test.dart`
@@ -732,6 +737,7 @@ Expected: all tests pass.
 - [ ] **Step 9: Task 3 self-review**
 
 Check:
+
 - Default `timelineOverviewDrilldownProvider` is null so shared routes are not changed in this slice.
 - Photos handler preserves non-time filters by touching only `timelineTemporalScopeProvider` and `Setting.groupAssetsBy`.
 - Year cards switch to month grouping; month cards switch to day grouping.
@@ -740,6 +746,7 @@ Check:
 ## Task 4: Main Photos Route App-Bar Integration
 
 **Files:**
+
 - Modify: `mobile/lib/presentation/pages/dev/main_timeline.page.dart`
 - Test: `mobile/test/presentation/pages/dev/main_timeline_page_test.dart`
 - Regression command: `mobile/test/providers/gallery_nav/gallery_search_action_test.dart`

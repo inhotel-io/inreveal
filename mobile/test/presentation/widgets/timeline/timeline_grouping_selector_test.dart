@@ -89,15 +89,17 @@ void main() {
         final months = tester.getSemantics(find.byKey(const Key('timeline-grouping-month')));
         final days = tester.getSemantics(find.byKey(const Key('timeline-grouping-day')));
 
-        expect(years.hasFlag(SemanticsFlag.isButton), isTrue);
-        expect(years.hasFlag(SemanticsFlag.isSelected), isFalse);
-        expect(years.hasFlag(SemanticsFlag.isEnabled), isTrue);
-        expect(months.hasFlag(SemanticsFlag.isButton), isTrue);
-        expect(months.hasFlag(SemanticsFlag.isSelected), isTrue);
-        expect(months.hasFlag(SemanticsFlag.isEnabled), isTrue);
-        expect(days.hasFlag(SemanticsFlag.isButton), isTrue);
-        expect(days.hasFlag(SemanticsFlag.isSelected), isFalse);
-        expect(days.hasFlag(SemanticsFlag.isEnabled), isTrue);
+        expect(years.flagsCollection.isButton, isTrue);
+        expect(years.flagsCollection.toStrings(), contains('hasSelectedState'));
+        expect(years.flagsCollection.toStrings(), isNot(contains('isSelected')));
+        expect(years.flagsCollection.toStrings(), contains('isEnabled'));
+        expect(months.flagsCollection.isButton, isTrue);
+        expect(months.flagsCollection.toStrings(), contains('isSelected'));
+        expect(months.flagsCollection.toStrings(), contains('isEnabled'));
+        expect(days.flagsCollection.isButton, isTrue);
+        expect(days.flagsCollection.toStrings(), contains('hasSelectedState'));
+        expect(days.flagsCollection.toStrings(), isNot(contains('isSelected')));
+        expect(days.flagsCollection.toStrings(), contains('isEnabled'));
       } finally {
         semantics.dispose();
       }
@@ -177,8 +179,8 @@ void main() {
           };
           final node = tester.getSemantics(find.byKey(Key('timeline-grouping-${groupBy.name}')));
           expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isFalse, reason: label);
-          expect(node.hasFlag(SemanticsFlag.hasEnabledState), isTrue, reason: label);
-          expect(node.hasFlag(SemanticsFlag.isEnabled), isFalse, reason: label);
+          expect(node.flagsCollection.toStrings(), contains('hasEnabledState'), reason: label);
+          expect(node.flagsCollection.toStrings(), isNot(contains('isEnabled')), reason: label);
         }
 
         await tester.tap(find.byKey(const Key('timeline-grouping-year')), warnIfMissed: false);
@@ -211,9 +213,9 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       await tester.pumpConsumerWidget(
-        MediaQuery(
-          data: const MediaQueryData(textScaler: TextScaler.linear(2)),
-          child: const Align(
+        const MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: Align(
             alignment: Alignment.topRight,
             child: SizedBox(width: 150, child: TimelineGroupingSelector()),
           ),
@@ -230,9 +232,9 @@ void main() {
 
     testWidgets('reduced motion removes nonessential selector animation', (tester) async {
       await tester.pumpConsumerWidget(
-        MediaQuery(
-          data: const MediaQueryData(disableAnimations: true, accessibleNavigation: true),
-          child: const TimelineGroupingSelector(),
+        const MediaQuery(
+          data: MediaQueryData(disableAnimations: true, accessibleNavigation: true),
+          child: TimelineGroupingSelector(),
         ),
       );
       await tester.pumpAndSettle();
