@@ -380,6 +380,24 @@ describe(AgentSessionChatPanel.name, () => {
     expect(sdkMock.getAgentSessionMessages).toHaveBeenCalledWith({ id: session.id });
   });
 
+  it('keeps ordinary prose bubbles capped inside the wider transcript lane', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      makeMessage('message-user', AgentMessageRole.User, 'Show me my albums'),
+      makeMessage('message-assistant', AgentMessageRole.Assistant, 'I can help with that.'),
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    const transcript = screen.getByTestId('agent-session-chat-transcript');
+    expect(transcript.className).toContain('max-w-5xl');
+
+    const bubbles = await screen.findAllByTestId('agent-session-message-bubble');
+    expect(bubbles).toHaveLength(2);
+    for (const bubble of bubbles) {
+      expect(bubble.className).toContain('max-w-[min(80%,48rem)]');
+    }
+  });
+
   it('renders multiple user text blocks as separate preserved blocks', async () => {
     sdkMock.getAgentSessionMessages.mockResolvedValue([
       {
@@ -477,6 +495,7 @@ describe(AgentSessionChatPanel.name, () => {
     });
 
     const activity = await screen.findByRole('article', { name: 'Pi is working' });
+    expect(activity.className).toContain('max-w-4xl');
     expect(activity).toHaveTextContent('Searching albums');
     expect(activity).toHaveTextContent('Found matching albums');
     expect(activity).toHaveTextContent('1 items');
@@ -2047,6 +2066,7 @@ describe(AgentSessionChatPanel.name, () => {
     render(AgentSessionChatPanel, { props: { session } });
 
     const appliedCard = await screen.findByRole('article', { name: 'Applied plan: Organize Portugal holiday' });
+    expect(appliedCard.className).toContain('max-w-[92%]');
     expect(appliedCard).toHaveTextContent('Applied plan');
     expect(appliedCard).toHaveTextContent('Organize Portugal holiday');
     expect(appliedCard).toHaveTextContent('1 applied · 0 skipped · 1 failed.');
