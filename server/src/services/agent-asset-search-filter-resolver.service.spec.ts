@@ -585,6 +585,59 @@ describe(AgentAssetSearchFilterResolverService.name, () => {
     expect(result.filters).not.toHaveProperty('personIds');
   });
 
+  it('replays selected people choice refs using the resolved space-name scope', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...permissionPlanSnapshot,
+        assetScope: { owned: false, sharedSpaces: true, locked: false },
+      },
+    });
+    const spaceId = newUuid();
+    const firstSpacePersonId = newUuid();
+    const secondSpacePersonId = newUuid();
+    sharedSpaceRepository.getAllByUserId.mockResolvedValue([{ id: spaceId, name: 'Family' }] as never);
+    searchRepository.getFilterSuggestions.mockImplementation(async (_userIds, scope) =>
+      scope?.spaceId === spaceId
+        ? filterSuggestions({
+            people: [
+              {
+                id: newUuid(),
+                name: 'Pierre',
+                primaryProfile: { type: 'space-person', id: firstSpacePersonId, spaceId },
+              },
+              {
+                id: newUuid(),
+                name: 'Pierre',
+                primaryProfile: { type: 'space-person', id: secondSpacePersonId, spaceId },
+              },
+            ],
+            tags: [],
+            cameraMakes: [],
+          })
+        : filterSuggestions({ people: [], tags: [], cameraMakes: [] }),
+    );
+
+    const ambiguous = await sut.resolveDeclarativeFilters(auth, session, {
+      space: { name: 'Family' },
+      people: { match: 'any', names: ['Pierre'] },
+    });
+    const selected = ambiguous.results.find((result) => result.kind === 'person')?.choices[1];
+
+    const result = await sut.resolveDeclarativeFilters(auth, session, {
+      space: { name: 'Family' },
+      people: { match: 'any', names: ['Pierre'], choiceRefs: [selected!.choiceRef!] },
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.filters).toMatchObject({
+      spaceId,
+      spacePersonIds: [secondSpacePersonId],
+    });
+    expect(searchRepository.getFilterSuggestions).toHaveBeenNthCalledWith(2, [auth.user.id], { spaceId });
+  });
+
   it('denies declarative shared-space scope when the session permission preset blocks shared spaces', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({
