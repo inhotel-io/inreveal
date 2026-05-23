@@ -561,7 +561,11 @@ it('does not create a plan when assetSource.search resolves to no assets', async
   const auth = AuthFactory.create();
   const session = makeSession({ userId: auth.user.id });
   sessionRepository.getById.mockResolvedValue(session);
-  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
+  });
   sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
   searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false } as never);
 
@@ -625,7 +629,11 @@ it('does not create a plan when assetSource.search is over the planning cap', as
   const session = makeSession({ userId: auth.user.id });
   const assetIds = Array.from({ length: AgentOperationPlanService.maxAssetSelectionHandleAssets + 1 }, () => newUuid());
   sessionRepository.getById.mockResolvedValue(session);
-  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
+  });
   sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
   searchRepository.searchMetadata.mockResolvedValue({
     items: assetIds.map((id) => ({ id })),
@@ -660,7 +668,11 @@ it('forces all-matches assetSource.search materialization to the first page', as
   const albumId = newUuid();
   const assetIds = [newUuid(), newUuid()];
   sessionRepository.getById.mockResolvedValue(session);
-  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
+  });
   sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
   searchRepository.searchMetadata.mockResolvedValue({
     items: assetIds.map((id) => ({ id })),
@@ -852,7 +864,11 @@ it('allows bounded-page assetSource.search materialization even when more pages 
   const albumId = newUuid();
   const assetIds = [newUuid(), newUuid()];
   sessionRepository.getById.mockResolvedValue(session);
-  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
+  });
   sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
   searchRepository.searchMetadata.mockResolvedValue({
     items: assetIds.map((id) => ({ id })),

@@ -204,11 +204,7 @@ describe(AgentAssetSearchFilterResolverService.name, () => {
     searchRepository = automock(SearchRepository, { args: [{} as never] });
     albumRepository = automock(AlbumRepository, { args: [{} as never] });
     sharedSpaceRepository = automock(SharedSpaceRepository, { args: [{} as never] });
-    sut = new AgentAssetSearchFilterResolverService(
-      searchRepository,
-      albumRepository,
-      sharedSpaceRepository,
-    );
+    sut = new AgentAssetSearchFilterResolverService(searchRepository, albumRepository, sharedSpaceRepository);
   });
 
   it('resolves existing resolver requests for people, tags, albums, and spaces', async () => {

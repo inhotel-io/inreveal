@@ -367,7 +367,8 @@ In `server/src/repositories/agent-runner.repository.ts`, add helpers:
 ```ts
 const clarificationKinds = new Set(['person', 'tag', 'album', 'space', 'cameraMake', 'cameraModel', 'lensModel']);
 const isChoiceRef = (value: unknown) =>
-  typeof value === 'string' && /^choice:(person|tag|album|space|cameraMake|cameraModel|lensModel):[A-Za-z0-9_-]{8,120}$/.test(value);
+  typeof value === 'string' &&
+  /^choice:(person|tag|album|space|cameraMake|cameraModel|lensModel):[A-Za-z0-9_-]{8,120}$/.test(value);
 ```
 
 Extend `isMessageBlock()`:
@@ -388,7 +389,9 @@ if (block.type === 'clarification') {
         isChoiceRef(choice.choiceRef) &&
         typeof choice.label === 'string' &&
         optionalString(choice.description) &&
-        (choice.thumbnailAssetId === undefined || choice.thumbnailAssetId === null || typeof choice.thumbnailAssetId === 'string'),
+        (choice.thumbnailAssetId === undefined ||
+          choice.thumbnailAssetId === null ||
+          typeof choice.thumbnailAssetId === 'string'),
     )
   );
 }
@@ -608,10 +611,7 @@ const choiceRefKinds = new Set(['person', 'tag', 'album', 'space', 'cameraMake',
 const normalizeChoiceRefQuery = (query: string) => query.trim().toLocaleLowerCase();
 
 const stableChoiceRefToken = (parts: unknown[]) =>
-  createHash('sha256')
-    .update(JSON.stringify(parts))
-    .digest('base64url')
-    .slice(0, 22);
+  createHash('sha256').update(JSON.stringify(parts)).digest('base64url').slice(0, 22);
 ```
 
 Add a private method:
@@ -717,11 +717,7 @@ export const buildAgentClarificationChoiceReply = (
 ) => `Use ${choice.choiceRef} for ${block.kind} "${block.query}" (${choice.label}).`;
 
 export const getAgentClarificationInitials = (label: string) => {
-  const words = label
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2);
+  const words = label.trim().split(/\s+/).filter(Boolean).slice(0, 2);
 
   const initials = words.map((word) => word[0]?.toLocaleUpperCase()).join('');
   return initials || '?';
