@@ -853,6 +853,7 @@
   "assistant_operation_field_cover_thumbnail_alt": "Cover photo option {index, number}",
   "assistant_operation_field_reset": "Reset {field}",
   "assistant_operation_field_thumbnail_unavailable": "Preview unavailable",
+  "assistant_operation_item_change_selection": "Change selection",
   "assistant_operation_item_deselect_all_filtered": "Deselect all filtered",
   "assistant_operation_item_empty_filter": "No matching photos",
   "assistant_operation_item_exclude_videos": "Exclude videos",

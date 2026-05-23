@@ -50,6 +50,7 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_thumbnail_strip_label: '{count} photo previews',
     assistant_operation_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_item_excluded_count: '{count} excluded',
+    assistant_operation_item_change_selection: 'Change selection',
     assistant_operation_item_exclude_videos: 'Exclude videos',
     assistant_operation_item_exclude_visible: 'Exclude visible',
     assistant_operation_item_filter_label: 'Filter photos',
@@ -192,6 +193,7 @@ describe('AgentPlanDestinationCard', () => {
   });
 
   it('puts photo evidence before change rows for photo-affecting plans', async () => {
+    const onOpenItemReview = vi.fn();
     render(AgentPlanDestinationCard, {
       props: {
         group: group(),
@@ -204,6 +206,7 @@ describe('AgentPlanDestinationCard', () => {
         onResetItemSelection: vi.fn(),
         onSetFieldOverride: vi.fn(),
         onResetFieldOverride: vi.fn(),
+        onOpenItemReview,
       },
     });
 
@@ -215,10 +218,12 @@ describe('AgentPlanDestinationCard', () => {
 
     await fireEvent.click(within(stage).getByRole('button', { name: 'Review photos' }));
 
-    expect(screen.getByRole('group', { name: 'Review photos for Add 2 photos' })).toBeInTheDocument();
+    expect(onOpenItemReview).toHaveBeenCalledWith(addId);
+    expect(screen.queryByRole('group', { name: 'Review photos for Add 2 photos' })).not.toBeInTheDocument();
   });
 
-  it('keeps another row open when the photo stage opens its matching item review', async () => {
+  it('keeps another row open when the photo stage opens the review modal', async () => {
+    const onOpenItemReview = vi.fn();
     render(AgentPlanDestinationCard, {
       props: {
         group: group(),
@@ -231,6 +236,7 @@ describe('AgentPlanDestinationCard', () => {
         onResetItemSelection: vi.fn(),
         onSetFieldOverride: vi.fn(),
         onResetFieldOverride: vi.fn(),
+        onOpenItemReview,
       },
     });
 
@@ -241,8 +247,9 @@ describe('AgentPlanDestinationCard', () => {
     await fireEvent.click(within(screen.getByTestId('agent-plan-photo-stage')).getByRole('button', { name: 'Review photos' }));
 
     expect(screen.getByText(createId)).toBeInTheDocument();
-    expect(screen.getByText(addId)).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Review photos for Add 2 photos' })).toBeInTheDocument();
+    expect(screen.queryByText(addId)).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Review photos for Add 2 photos' })).not.toBeInTheDocument();
+    expect(onOpenItemReview).toHaveBeenCalledWith(addId);
   });
 
   it('renders bounded thumbnails for a destination with 1,000 affected photos', () => {
@@ -336,9 +343,8 @@ describe('AgentPlanDestinationCard', () => {
     expect(within(compactCounts).getByText('1 of 2 photos selected')).toBeInTheDocument();
   });
 
-  it('threads item selection callbacks through operation rows', async () => {
-    const onToggleItem = vi.fn();
-    const onResetItemSelection = vi.fn();
+  it('opens row photo selection through the modal opener', async () => {
+    const onOpenItemReview = vi.fn();
     render(AgentPlanDestinationCard, {
       props: {
         group: group(
@@ -348,41 +354,31 @@ describe('AgentPlanDestinationCard', () => {
         canChangeSelection: true,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
-        onToggleItem,
-        onResetItemSelection,
+        onToggleItem: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onOpenItemReview,
       },
     });
 
-    await fireEvent.click(screen.getAllByText('Details')[1]);
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Reset selection' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Change selection' }));
 
-    expect(onToggleItem).toHaveBeenCalledWith(addId, assetB, true);
-    expect(onResetItemSelection).toHaveBeenCalledWith(addId);
+    expect(onOpenItemReview).toHaveBeenCalledWith(addId);
+    expect(screen.queryByRole('group', { name: 'Review photos for Add 2 photos' })).not.toBeInTheDocument();
   });
 
-  it('threads bulk item callbacks through operation rows', async () => {
-    const onBulkSetItems = vi.fn();
-    const onSetOnlyItems = vi.fn();
+  it('disables row photo selection when changes cannot be edited', () => {
     render(AgentPlanDestinationCard, {
       props: {
         group: group(),
-        canChangeSelection: true,
+        canChangeSelection: false,
         onToggleGroup: vi.fn(),
         onToggleOperation: vi.fn(),
         onToggleItem: vi.fn(),
-        onBulkSetItems,
-        onSetOnlyItems,
         onResetItemSelection: vi.fn(),
       },
     });
 
-    await fireEvent.click(screen.getAllByText('Details')[1]);
-    await fireEvent.click(screen.getByRole('button', { name: 'Exclude visible' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Select all filtered' }));
-
-    expect(onBulkSetItems).toHaveBeenCalledWith(addId, [assetA, assetB], false);
-    expect(onSetOnlyItems).toHaveBeenCalledWith(addId, [assetA, assetB]);
+    expect(screen.getByRole('button', { name: 'Change selection' })).toBeDisabled();
   });
 
   it('updates the destination title from album-name overrides and threads field callbacks through rows', async () => {
