@@ -139,6 +139,7 @@
           {onResetItemSelection}
           {onSetFieldOverride}
           {onResetFieldOverride}
+          onOpenItemReview={(operationId) => (activeReviewOperationId = operationId)}
         />
       </div>
     {/each}

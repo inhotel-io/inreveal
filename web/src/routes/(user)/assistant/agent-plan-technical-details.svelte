@@ -31,7 +31,7 @@
   {#if showToggle}
     <button
       type="button"
-      class="text-left font-medium text-gray-600 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-immich-primary dark:text-gray-300"
+      class="inline-flex items-center justify-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 font-semibold text-gray-700 transition-colors hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-immich-primary dark:border-neutral-700 dark:bg-neutral-900 dark:text-gray-200 dark:hover:bg-neutral-800"
       aria-expanded={open}
       aria-controls={detailsId}
       onclick={() => (internalOpen = !internalOpen)}
@@ -41,7 +41,10 @@
   {/if}
 
   {#if open}
-    <div id={detailsId} class="mt-2 grid gap-3">
+    <div
+      id={detailsId}
+      class="mt-3 grid gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-3 text-xs dark:border-neutral-800 dark:bg-neutral-950"
+    >
       <dl class="grid gap-1 sm:grid-cols-[max-content_1fr]">
         <dt class="font-medium">{$t('assistant_operation_detail_type')}</dt>
         <dd>{$t(item.typeLabelKey)}</dd>
