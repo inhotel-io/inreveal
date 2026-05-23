@@ -11,6 +11,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
   import AgentPlanEvidenceLedger from './agent-plan-evidence-ledger.svelte';
+  import AgentPlanThumbnailStrip from './agent-plan-thumbnail-strip.svelte';
   import {
     buildGroupEnabledState,
     buildOperationReviewImpactSummary,
@@ -67,6 +68,7 @@
   );
   const selectionPayload = $derived(model ? buildSelectionPayload(model) : null);
   const selectedOperationIds = $derived(selectionPayload?.operationIds ?? []);
+  const collapsedThumbnailGroup = $derived(model?.groups.find((group) => group.assetCount > 0) ?? null);
   const canChangeSelection = $derived(
     model !== null && model.plan.status === AgentOperationPlanStatus.Proposed && !applying,
   );
@@ -76,7 +78,7 @@
   const rootClass = $derived(
     variant === 'dock'
       ? 'flex w-full flex-col gap-3 text-black dark:text-white'
-      : 'mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 pb-10 text-black dark:text-white md:px-8',
+      : 'mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 pb-10 text-black dark:text-white md:px-8',
   );
   const passiveRootClass = $derived(
     variant === 'dock'
@@ -87,11 +89,14 @@
     variant === 'dock' ? 'w-full text-sm' : 'mx-auto w-full max-w-3xl px-4 pb-10 text-sm md:px-8',
   );
   const cardClass = $derived(
-    variant === 'dock'
-      ? 'rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-immich-dark-gray'
-      : 'rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-immich-dark-gray',
+    [
+      'overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-xl shadow-black/5',
+      'dark:border-neutral-800 dark:bg-neutral-950 dark:shadow-black/40',
+      variant === 'dock' ? '' : 'p-0',
+    ]
+      .filter(Boolean)
+      .join(' '),
   );
-  const headerClass = $derived(variant === 'dock' ? 'flex cursor-pointer list-none flex-col gap-2 p-4' : 'list-none');
 
   const buildPublishedSelectionPayload = (
     nextPlan: AgentOperationPlanResponseDto,
@@ -491,18 +496,63 @@
 {:else}
   {@const impact = buildOperationReviewImpactSummary(model)}
   <div class={rootClass} role="region" aria-labelledby="assistant-operation-plan-title">
-    <details class={cardClass} bind:open={planExpanded}>
-      <summary class={headerClass}>
+    <article class={cardClass} data-testid="agent-operation-plan-sheet">
+      <header class="flex flex-col gap-4 p-4 sm:p-5">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
+          <div class="min-w-0">
             <h2 id="assistant-operation-plan-title" class="text-lg font-semibold">
               {$t('assistant_operation_plan_review')}
             </h2>
-            <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">{model.plan.summary}</p>
-            <div class="mt-2 flex flex-wrap gap-2 text-sm text-gray-500 dark:text-gray-400">
-              <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
-                {$t('assistant_operation_plan_destination_count', { values: { count: impact.destinationCount } })}
-              </span>
+            <p class="mt-1 break-words text-sm text-gray-600 dark:text-gray-300">{model.plan.summary}</p>
+            {#if planExpanded}
+              <div class="mt-3 flex flex-wrap gap-2 text-sm text-gray-500 dark:text-gray-400">
+                <span class="rounded-full bg-gray-100 px-3 py-1 dark:bg-gray-800">
+                  {$t('assistant_operation_plan_destination_count', { values: { count: impact.destinationCount } })}
+                </span>
+                <span class="rounded-full bg-gray-100 px-3 py-1 dark:bg-gray-800">
+                  {$t('assistant_operation_plan_selected_change_count', {
+                    values: { count: impact.selectedOperationCount },
+                  })}
+                </span>
+                <span class="rounded-full bg-gray-100 px-3 py-1 dark:bg-gray-800">
+                  {$t('assistant_operation_plan_selected_asset_count', {
+                    values: { count: impact.selectedAssetCount },
+                  })}
+                </span>
+              </div>
+            {/if}
+          </div>
+          <div class="flex shrink-0 flex-col gap-3 sm:items-end">
+            {#if planExpanded}
+              <div class="flex flex-col gap-1 text-sm font-medium text-gray-600 dark:text-gray-300 sm:text-right">
+                <span>{$t('assistant_operation_plan_no_destructive_changes')}</span>
+                <span>{$t('assistant_operation_selected_count', { values: { count: selectedOperationIds.length } })}</span>
+              </div>
+            {/if}
+            <button
+              type="button"
+              class="inline-flex items-center justify-center rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-immich-primary dark:border-neutral-700 dark:bg-neutral-900 dark:text-gray-200 dark:hover:bg-neutral-800"
+              aria-expanded={planExpanded}
+              onclick={() => (planExpanded = !planExpanded)}
+            >
+              {#if planExpanded}
+                {$t('assistant_operation_plan_collapse')}
+              {:else}
+                {$t('assistant_operation_plan_expand')}
+              {/if}
+            </button>
+          </div>
+        </div>
+
+        {#if !planExpanded}
+          <div
+            class="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-neutral-800 dark:bg-neutral-900"
+            data-testid="agent-operation-plan-collapsed-summary"
+          >
+            <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {$t('assistant_operation_plan_collapsed')}
+            </p>
+            <div class="mt-3 flex flex-wrap gap-2 text-sm text-gray-600 dark:text-gray-300">
               <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
                 {$t('assistant_operation_plan_selected_change_count', {
                   values: { count: impact.selectedOperationCount },
@@ -511,17 +561,19 @@
               <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
                 {$t('assistant_operation_plan_selected_asset_count', { values: { count: impact.selectedAssetCount } })}
               </span>
+              <span class="rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-800">
+                {$t('assistant_operation_plan_no_destructive_changes')}
+              </span>
             </div>
+            {#if collapsedThumbnailGroup}
+              <AgentPlanThumbnailStrip group={collapsedThumbnailGroup} maxVisible={3} />
+            {/if}
           </div>
-          <div class="flex flex-col gap-1 text-sm font-medium text-gray-600 dark:text-gray-300 sm:text-right">
-            <span>{$t('assistant_operation_plan_no_destructive_changes')}</span>
-            <span>{$t('assistant_operation_selected_count', { values: { count: selectedOperationIds.length } })}</span>
-          </div>
-        </div>
-      </summary>
+        {/if}
+      </header>
 
       {#if planExpanded}
-        <div class={variant === 'dock' ? 'px-4 pb-4' : ''}>
+        <div class={variant === 'dock' ? 'px-4 pb-4 sm:px-5 sm:pb-5' : 'px-5 pb-5'}>
           <AgentPlanEvidenceLedger
             {model}
             {selectedOperationIds}
@@ -544,6 +596,6 @@
           />
         </div>
       {/if}
-    </details>
+    </article>
   </div>
 {/if}
