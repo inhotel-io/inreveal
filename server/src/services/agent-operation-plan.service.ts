@@ -10,6 +10,7 @@ import {
   AgentProposeAddAssetsToSpaceFromSearchToolRequestDto,
   AgentProposeAlbumOperationsDto,
   AgentProposeAlbumFromSearchToolRequestDto,
+  AgentProposeAssetBatchFromSearchToolRequestDto,
   AgentProposeSpaceFromSearchToolRequestDto,
   AgentReviseAlbumOperationsDto,
 } from 'src/dtos/agent-operation.dto';
@@ -376,6 +377,88 @@ export class AgentOperationPlanService {
         },
       ],
     });
+  }
+
+  async proposeAssetBatchFromSearch(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentProposeAssetBatchFromSearchToolRequestDto,
+  ): Promise<AgentOperationPlanToolResponseDto> {
+    const operation = {
+      type: dto.action.type,
+      summary: this.getAssetBatchWorkflowActionSummary(dto.action),
+      targetKind: this.getAssetBatchWorkflowTargetKind(dto.action),
+      assetSource: dto.assetSource,
+      payload: this.getAssetBatchWorkflowPayload(dto.action),
+      riskLevel: this.getAssetBatchWorkflowRiskLevel(dto.action),
+      enabled: true,
+    };
+
+    return this.proposeOperations(auth, sessionId, AgentToolName.ProposeAssetBatchFromSearch, {
+      summary: dto.summary ?? operation.summary,
+      operations: [operation as AgentProposeAlbumOperationsDto['operations'][number]],
+    });
+  }
+
+  private getAssetBatchWorkflowActionSummary(dto: AgentProposeAssetBatchFromSearchToolRequestDto['action']): string {
+    switch (dto.type) {
+      case AgentOperationType.AssetSetFavorite: {
+        return dto.favorite ? 'Mark matching photos as favorites' : 'Remove matching photos from favorites';
+      }
+      case AgentOperationType.AssetSetArchive: {
+        return dto.archived ? 'Archive matching photos' : 'Move matching photos back to timeline';
+      }
+      case AgentOperationType.AssetAddTag: {
+        return dto.tagName ? `Add tag "${dto.tagName}" to matching photos` : 'Add selected tag to matching photos';
+      }
+      case AgentOperationType.AssetRotate: {
+        return `Rotate matching photos ${dto.angle} degrees`;
+      }
+    }
+  }
+
+  private getAssetBatchWorkflowTargetKind(
+    dto: AgentProposeAssetBatchFromSearchToolRequestDto['action'],
+  ): AgentOperationTargetKind {
+    return dto.type === AgentOperationType.AssetRotate
+      ? AgentOperationTargetKind.ImageEditBatch
+      : AgentOperationTargetKind.AssetBatch;
+  }
+
+  private getAssetBatchWorkflowPayload(
+    dto: AgentProposeAssetBatchFromSearchToolRequestDto['action'],
+  ): Record<string, unknown> {
+    switch (dto.type) {
+      case AgentOperationType.AssetSetFavorite: {
+        return { favorite: dto.favorite };
+      }
+      case AgentOperationType.AssetSetArchive: {
+        return { archived: dto.archived };
+      }
+      case AgentOperationType.AssetAddTag: {
+        return dto.tagId ? { tagId: dto.tagId } : { tagName: dto.tagName };
+      }
+      case AgentOperationType.AssetRotate: {
+        return { angle: dto.angle };
+      }
+    }
+  }
+
+  private getAssetBatchWorkflowRiskLevel(
+    dto: AgentProposeAssetBatchFromSearchToolRequestDto['action'],
+  ): AgentOperationRiskLevel {
+    switch (dto.type) {
+      case AgentOperationType.AssetSetFavorite: {
+        return AgentOperationRiskLevel.Low;
+      }
+      case AgentOperationType.AssetSetArchive: {
+        return AgentOperationRiskLevel.High;
+      }
+      case AgentOperationType.AssetAddTag:
+      case AgentOperationType.AssetRotate: {
+        return AgentOperationRiskLevel.Medium;
+      }
+    }
   }
 
   private validateSpaceNameResolutionScope(
