@@ -20,11 +20,11 @@ export type AgentMcpPromptExample = {
 };
 
 const promptExampleSelections = [
+  { toolName: AgentToolName.ProposeAlbumFromSearch, exampleName: 'create-south-africa-pierre-aurelia-album' },
+  { toolName: AgentToolName.ProposeAlbumFromSearch, exampleName: 'create-album-from-previous-search' },
+  { toolName: AgentToolName.ProposeSpaceFromSearch, exampleName: 'create-space-from-declarative-search' },
+  { toolName: AgentToolName.ProposeAssetBatchFromSearch, exampleName: 'favorite-search-results' },
   { toolName: AgentToolName.ResolveAssetSearchFilters, exampleName: 'resolve-named-filters' },
-  { toolName: AgentToolName.ResolveAssetSearchFilters, exampleName: 'resolve-pierre-aurelia-people' },
-  { toolName: AgentToolName.SearchAssets, exampleName: 'compact-date-location-search' },
-  { toolName: AgentToolName.SearchAssets, exampleName: 'search-resolved-pierre-aurelia-people' },
-  { toolName: AgentToolName.SearchAssets, exampleName: 'search-resolved-family-space-people' },
   { toolName: AgentToolName.SearchAssets, exampleName: 'summary-sample-search' },
   { toolName: AgentToolName.SearchAssets, exampleName: 'visual-curation-candidate-search' },
   { toolName: AgentToolName.ReadAssetMetadata, exampleName: 'read-technical-fields-for-selected-assets' },
@@ -55,10 +55,25 @@ export class AgentMcpPromptService {
       AgentToolName.ResolveAssetSearchFilters,
       'resolve-named-filters',
     );
-    const peopleOrSearch = this.getPromptExample(
+    const albumSourceSearch = this.getPromptExample(
       examples,
-      AgentToolName.SearchAssets,
-      'search-resolved-pierre-aurelia-people',
+      AgentToolName.ProposeAlbumFromSearch,
+      'create-south-africa-pierre-aurelia-album',
+    );
+    const albumPreviousSearch = this.getPromptExample(
+      examples,
+      AgentToolName.ProposeAlbumFromSearch,
+      'create-album-from-previous-search',
+    );
+    const spaceSourceSearch = this.getPromptExample(
+      examples,
+      AgentToolName.ProposeSpaceFromSearch,
+      'create-space-from-declarative-search',
+    );
+    const batchSourceSearch = this.getPromptExample(
+      examples,
+      AgentToolName.ProposeAssetBatchFromSearch,
+      'favorite-search-results',
     );
     const sampleSearch = this.getPromptExample(examples, AgentToolName.SearchAssets, 'summary-sample-search');
     const listSpaces = this.getPromptExample(examples, AgentToolName.ListSpaces, 'list-visible-spaces');
@@ -75,14 +90,17 @@ export class AgentMcpPromptService {
         `R: Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds; if hasMore, use nextPage as page.`,
         'Patterns: unalbumed=isNotInAlbum; 5-star videos=rating 5+type VIDEO; OCR invoice=mode ocr+query invoice; names=resolve names first.',
         'Text search: smart/ocr/description/filename require query',
-        `Write: album/space search use fromSearch tools first; favorite/archive/tag/rotate use ${this.toPiToolName(AgentToolName.ProposeAssetBatchFromSearch)}; other plans use ${this.toPiToolName(planContract.name)}.`,
+        `Default write: ${albumSourceSearch.piToolName}; ${spaceSourceSearch.piToolName}; ${batchSourceSearch.piToolName}; explicit IDs only for small inspected sets.`,
+        `assetSource.search intent: ${albumSourceSearch.piToolName} ${this.formatJson(albumSourceSearch.arguments)}`,
+        `After inspection previousSearch.sourceRef, not assetIds: ${albumPreviousSearch.piToolName} ${this.formatJson(albumPreviousSearch.arguments)}`,
+        `Source writes: ${spaceSourceSearch.piToolName},${batchSourceSearch.piToolName} use assetSource.search.`,
+        `Recoverable: wrong_id_domain -> assetSource.search/right domain; needs_clarification -> ask, send choiceRefs.`,
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
-        'Progressive: resolve names -> search detail ids -> readAssetMetadata fields for selected ids. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.',
-        'Large: assetSelectionHandleId. Do not paste hundreds of assetIds.',
+        'Progressive: resolve names -> search detail ids {"detail":"ids"} -> readAssetMetadata fields for selected ids. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.',
+        'Large: createSelectionHandle -> assetSelectionHandleId. Do not paste hundreds of assetIds.',
         `Resolve names before searchAssets ${resolveFilters.piToolName} {"tags":["Travel"]}`,
         'Resolver fidelity: copy resolvedFilters into searchAssets.filters. Missing/ambiguous: ask clarifying.',
-        `People OR Pierre/Aurelia -> search ${this.formatJson(peopleOrSearch.arguments)}`,
         `Shared-space people: {"filters":{"spaceId":"<space.id from listSpaces/readSpace>","spacePersonIds":["<spacePersonIds value from resolveAssetSearchFilters>"]}}`,
         `Sample: ${sampleSearch.piToolName} {"fields":["dates","location"]}`,
         'Visual curation: search ids first, then previews for shortlisted assetIds only.',
@@ -169,6 +187,23 @@ export class AgentMcpPromptService {
   }
 
   private compactPromptValue(value: unknown): unknown {
+    if (value && typeof value === 'object' && !Array.isArray(value) && 'assetSource' in value) {
+      const { action, assetSource } = value as Record<string, unknown>;
+      const compactAssetSource =
+        assetSource && typeof assetSource === 'object' && !Array.isArray(assetSource)
+          ? Object.fromEntries(
+              Object.entries(assetSource).filter(([fieldName]) => fieldName !== 'materialization'),
+            )
+          : assetSource;
+
+      return Object.fromEntries(
+        Object.entries({
+          action,
+          assetSource: compactAssetSource,
+        }).filter(([, fieldValue]) => fieldValue !== undefined),
+      );
+    }
+
     if (!value || typeof value !== 'object' || !('operations' in value)) {
       return value;
     }
