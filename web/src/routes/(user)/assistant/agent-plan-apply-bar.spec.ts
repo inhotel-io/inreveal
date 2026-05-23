@@ -46,6 +46,8 @@ describe('AgentPlanApplyBar', () => {
     const summary = screen.getByText('2 changes · 4 assets selected');
     expect(applyRegion).toContainElement(summary);
     expect(applyRegion).toHaveAttribute('aria-describedby', summary.id);
+    expect(applyRegion.className).toContain('rounded-3xl');
+    expect(applyRegion.className).not.toContain('border-t');
   });
 
   it('uses a native disabled apply button without fake disabled focus behavior', () => {

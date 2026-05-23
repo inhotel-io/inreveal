@@ -94,7 +94,7 @@
   <button
     bind:this={triggerElement}
     type="button"
-    class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-black hover:bg-gray-50 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
+    class="rounded-full border border-gray-300 px-3 py-2 text-sm font-medium text-black hover:bg-gray-50 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
     aria-haspopup="menu"
     aria-expanded={isOpen}
     onclick={toggleMenu}
