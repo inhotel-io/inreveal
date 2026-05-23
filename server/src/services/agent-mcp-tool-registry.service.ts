@@ -81,6 +81,7 @@ const propertyDescriptions = {
   operations: 'The reviewable Gallery operations to propose or revise. Do not apply changes directly.',
   assetSource:
     'Preferred source object for search-backed planning. Use kind search for declarative filters or previousSearch for a sourceRef returned by searchAssets.',
+  action: 'One constrained asset batch action to propose from a search source.',
   planId: 'The id of an existing proposed plan returned by Gallery.',
   feedback: 'Optional user feedback explaining how to revise the existing plan.',
   focus: 'An optional summary focus, such as risks, selected changes, or skipped operations.',
@@ -235,6 +236,13 @@ const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolCont
       title: 'Propose add assets to space from search',
       description: 'Preferred workflow for adding search matches to an existing shared space as a reviewable plan.',
       schema: AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAddAssetsToSpaceFromSearch],
+      annotations: planningToolAnnotations,
+    }),
+    defineTool({
+      name: AgentToolName.ProposeAssetBatchFromSearch,
+      title: 'Propose asset batch from search',
+      description: 'Preferred workflow for favorite, archive, tag, or rotate actions on matching photos.',
+      schema: AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch],
       annotations: planningToolAnnotations,
     }),
     defineTool({

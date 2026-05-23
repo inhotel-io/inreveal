@@ -400,18 +400,33 @@ const assetBatchBase = {
   enabled: operationDefaults.enabled,
 };
 
+const assetRotatePayloadSchema = z.strictObject({
+  angle: z
+    .number()
+    .int()
+    .refine((angle): angle is 90 | 180 | 270 => angle === 90 || angle === 180 || angle === 270, {
+      message: 'angle must be 90, 180, or 270',
+    }),
+});
+
+const assetSetFavoritePayloadSchema = z.strictObject({ favorite: z.boolean() });
+
+const assetSetArchivePayloadSchema = z.strictObject({ archived: z.boolean() });
+
+const assetAddTagPayloadSchema = z
+  .strictObject({
+    tagId: uuid.optional(),
+    tagName: z.string().trim().min(1).max(200).optional(),
+  })
+  .refine((payload) => Number(payload.tagId !== undefined) + Number(payload.tagName !== undefined) === 1, {
+    message: 'Provide exactly one of tagId or tagName',
+  });
+
 const rotateOperationSchema = z
   .strictObject({
     type: z.literal(AgentOperationType.AssetRotate).meta({ id: 'AgentAssetRotateOperationType' }),
     ...assetBatchBase,
-    payload: z.strictObject({
-      angle: z
-        .number()
-        .int()
-        .refine((angle): angle is 90 | 180 | 270 => angle === 90 || angle === 180 || angle === 270, {
-          message: 'angle must be 90, 180, or 270',
-        }),
-    }),
+    payload: assetRotatePayloadSchema,
   })
   .superRefine((operation, ctx) => {
     validateAssetSelection(operation, ctx);
@@ -422,7 +437,7 @@ const setFavoriteOperationSchema = z
   .strictObject({
     type: z.literal(AgentOperationType.AssetSetFavorite).meta({ id: 'AgentAssetSetFavoriteOperationType' }),
     ...assetBatchBase,
-    payload: z.strictObject({ favorite: z.boolean() }),
+    payload: assetSetFavoritePayloadSchema,
   })
   .superRefine((operation, ctx) => {
     validateAssetSelection(operation, ctx);
@@ -433,7 +448,7 @@ const setArchiveOperationSchema = z
   .strictObject({
     type: z.literal(AgentOperationType.AssetSetArchive).meta({ id: 'AgentAssetSetArchiveOperationType' }),
     ...assetBatchBase,
-    payload: z.strictObject({ archived: z.boolean() }),
+    payload: assetSetArchivePayloadSchema,
   })
   .superRefine((operation, ctx) => {
     validateAssetSelection(operation, ctx);
@@ -444,14 +459,7 @@ const addTagOperationSchema = z
   .strictObject({
     type: z.literal(AgentOperationType.AssetAddTag).meta({ id: 'AgentAssetAddTagOperationType' }),
     ...assetBatchBase,
-    payload: z
-      .strictObject({
-        tagId: uuid.optional(),
-        tagName: z.string().trim().min(1).max(200).optional(),
-      })
-      .refine((payload) => Number(payload.tagId !== undefined) + Number(payload.tagName !== undefined) === 1, {
-        message: 'Provide exactly one of tagId or tagName',
-      }),
+    payload: assetAddTagPayloadSchema,
   })
   .superRefine((operation, ctx) => {
     validateAssetSelection(operation, ctx);
@@ -580,6 +588,31 @@ const AgentProposeAddAssetsToSpaceFromSearchToolRequestSchema = z
   })
   .meta({ id: 'AgentProposeAddAssetsToSpaceFromSearchToolRequestDto' });
 
+const AgentAssetBatchWorkflowActionSchema = z
+  .discriminatedUnion('type', [
+    assetSetFavoritePayloadSchema.extend({
+      type: z.literal(AgentOperationType.AssetSetFavorite),
+    }),
+    assetSetArchivePayloadSchema.extend({
+      type: z.literal(AgentOperationType.AssetSetArchive),
+    }),
+    assetAddTagPayloadSchema.extend({
+      type: z.literal(AgentOperationType.AssetAddTag),
+    }),
+    assetRotatePayloadSchema.extend({
+      type: z.literal(AgentOperationType.AssetRotate),
+    }),
+  ])
+  .meta({ id: 'AgentAssetBatchWorkflowAction' });
+
+const AgentProposeAssetBatchFromSearchToolRequestSchema = z
+  .strictObject({
+    summary: summary.optional(),
+    action: AgentAssetBatchWorkflowActionSchema,
+    assetSource: AgentAlbumWorkflowAssetSourceInputSchema,
+  })
+  .meta({ id: 'AgentProposeAssetBatchFromSearchToolRequestDto' });
+
 const AgentOperationPlanParamsSchema = z
   .strictObject({
     id: uuid,
@@ -612,6 +645,7 @@ export const AgentOperationPlanToolRequestSchemas = {
   [AgentToolName.ProposeAddAssetsToAlbumFromSearch]: AgentProposeAddAssetsToAlbumFromSearchToolRequestSchema,
   [AgentToolName.ProposeSpaceFromSearch]: AgentProposeSpaceFromSearchToolRequestSchema,
   [AgentToolName.ProposeAddAssetsToSpaceFromSearch]: AgentProposeAddAssetsToSpaceFromSearchToolRequestSchema,
+  [AgentToolName.ProposeAssetBatchFromSearch]: AgentProposeAssetBatchFromSearchToolRequestSchema,
   [AgentToolName.ReviseProposedOperations]: AgentReviseProposedOperationsToolRequestSchema,
   [AgentToolName.SummarizePlan]: AgentSummarizePlanToolRequestSchema,
 } as const;
@@ -921,6 +955,9 @@ export class AgentProposeSpaceFromSearchToolRequestDto extends createZodDto(
 ) {}
 export class AgentProposeAddAssetsToSpaceFromSearchToolRequestDto extends createZodDto(
   AgentProposeAddAssetsToSpaceFromSearchToolRequestSchema,
+) {}
+export class AgentProposeAssetBatchFromSearchToolRequestDto extends createZodDto(
+  AgentProposeAssetBatchFromSearchToolRequestSchema,
 ) {}
 export class AgentReviseAlbumOperationsDto extends createZodDto(AgentReviseAlbumOperationsSchema) {}
 export class AgentOperationPlanParamsDto extends createZodDto(AgentOperationPlanParamsSchema) {}

@@ -39,6 +39,7 @@ const promptExampleSelections = [
   { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'update-existing-space-description' },
   { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'clear-existing-space-description' },
   { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'update-existing-space-color' },
+  { toolName: AgentToolName.ProposeAssetBatchFromSearch, exampleName: 'favorite-search-results' },
 ] as const;
 
 @Injectable()
@@ -74,12 +75,12 @@ export class AgentMcpPromptService {
         `R: Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds; if hasMore, use nextPage as page.`,
         'Patterns: unalbumed=isNotInAlbum; 5-star videos=rating 5+type VIDEO; OCR invoice=mode ocr+query invoice; names=resolve names first.',
         'Text search: smart/ocr/description/filename require query',
-        `Write: album/space search use fromSearch tools first; other plans use ${this.toPiToolName(planContract.name)}.`,
+        `Write: album/space search use fromSearch tools first; favorite/archive/tag/rotate use ${this.toPiToolName(AgentToolName.ProposeAssetBatchFromSearch)}; other plans use ${this.toPiToolName(planContract.name)}.`,
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
         'Progressive: resolve names -> search detail ids -> readAssetMetadata fields for selected ids. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.',
-        'Large: handle -> assetSelectionHandleId. Do not paste hundreds of assetIds.',
-        `Resolve names before searchAssets: ${resolveFilters.piToolName} {"tags":["Travel"]}`,
+        'Large: assetSelectionHandleId. Do not paste hundreds of assetIds.',
+        `Resolve names before searchAssets ${resolveFilters.piToolName} {"tags":["Travel"]}`,
         'Resolver fidelity: copy resolvedFilters into searchAssets.filters. Missing/ambiguous: ask clarifying.',
         `People OR Pierre/Aurelia -> search ${this.formatJson(peopleOrSearch.arguments)}`,
         `Shared-space people: {"filters":{"spaceId":"<space.id from listSpaces/readSpace>","spacePersonIds":["<spacePersonIds value from resolveAssetSearchFilters>"]}}`,
@@ -88,9 +89,9 @@ export class AgentMcpPromptService {
         'Technical metadata: search ids first, then readAssetMetadata fields camera/dates/filename.',
         `Space lookup: ${listSpaces.piToolName}->${readSpace.piToolName}:`,
         `${this.formatJson(listSpaces.arguments)} -> ${this.formatJson(readSpace.arguments)}`,
-        'Existing-space: list/read. Ambiguous/no matching space: ask. No matching assets/no photos/none to remove: explain. assetIdsTruncated false: exclude already in space adds; only remove already in space; true: narrow/ask.',
-        'Details: existing_space targetId; space.updateDetails fields spaceName, description, color. Same name/description/color: no-op. Never update thumbnails, pets, faces, linked libraries, or delete spaces.',
-        `Plan ${this.toPiToolName(AgentToolName.ProposeAlbumOperations)}: album.create temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id-from-searchAssets>"]}.`,
+        'Space: no matching space: ask. No matching assets/no photos/none in space: explain. assetIdsTruncated false: exclude already in space; only remove already in space; true:narrow.',
+        'Details: space.updateDetails spaceName, description, color. Same name/description/color: no-op. Never update thumbnails, pets, faces, linked libraries, or delete spaces.',
+        `Plan ${this.toPiToolName(AgentToolName.ProposeAlbumOperations)}: album.create temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id-from-searchAssets>"]}`,
         this.renderValidationRecoveryGuidance(validationMistake),
       ].join('\n'),
     );
@@ -212,7 +213,7 @@ export class AgentMcpPromptService {
       throw new Error(`Missing MCP prompt approval retry contract for ${contract.name}`);
     }
 
-    return `Approval retry: ${contract.approvalRetry.instruction} Retry uses only {"${contract.approvalRetry.field}":"<approved-toolCallId>"}; omit old request fields: ${retryMode.forbiddenFields.join(', ')}.`;
+    return `${contract.approvalRetry.instruction} Retry uses only {"${contract.approvalRetry.field}":"<approved-toolCallId>"}; omit old request fields: ${retryMode.forbiddenFields.join(', ')}.`;
   }
 
   private renderSafetyGuidance(contracts: AgentMcpToolContract[]): string {
@@ -223,7 +224,7 @@ export class AgentMcpPromptService {
       throw new Error(`MCP prompt cannot render direct-mutation tool ${unsafeContract.name}`);
     }
 
-    return 'No direct apply/write tool exists. Gallery applies after plan review.';
+    return 'No direct apply/write tool exists; Gallery applies after plan review.';
   }
 
   private renderValidationRecoveryGuidance(
