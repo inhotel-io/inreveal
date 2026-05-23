@@ -10,7 +10,7 @@ typedef TimelineOverviewDrilldownHandler = Future<void> Function(TimeBucket buck
 
 final timelineOverviewDrilldownProvider = Provider<TimelineOverviewDrilldownHandler?>((ref) => null);
 
-final photosTimelineOverviewDrilldownProvider = Provider<TimelineOverviewDrilldownHandler>((ref) {
+final sharedTimelineOverviewDrilldownProvider = Provider<TimelineOverviewDrilldownHandler>((ref) {
   return (bucket, groupBy) async {
     switch (groupBy) {
       case GroupAssetsBy.year:
@@ -28,4 +28,6 @@ final photosTimelineOverviewDrilldownProvider = Provider<TimelineOverviewDrilldo
     await Future<void>.delayed(Duration.zero);
     EventStream.shared.emit(const ScrollToTopEvent());
   };
-});
+}, dependencies: [timelineTemporalScopeProvider]);
+
+final photosTimelineOverviewDrilldownProvider = sharedTimelineOverviewDrilldownProvider;

@@ -43,7 +43,7 @@ void main() {
     final subscription = EventStream.shared.listen<ScrollToTopEvent>((_) => scrollEvents++);
     addTearDown(subscription.cancel);
 
-    await container.read(photosTimelineOverviewDrilldownProvider)(
+    await container.read(sharedTimelineOverviewDrilldownProvider)(
       TimeBucket(date: DateTime(2025), assetCount: 4),
       GroupAssetsBy.year,
     );
@@ -60,7 +60,7 @@ void main() {
     final subscription = EventStream.shared.listen<ScrollToTopEvent>((_) => scrollEvents++);
     addTearDown(subscription.cancel);
 
-    await container.read(photosTimelineOverviewDrilldownProvider)(
+    await container.read(sharedTimelineOverviewDrilldownProvider)(
       TimeBucket(date: DateTime(2025, 3), assetCount: 4),
       GroupAssetsBy.month,
     );
@@ -75,7 +75,7 @@ void main() {
     test('$groupBy grouping is ignored and leaves scope and settings unchanged', () async {
       await Store.put(StoreKey.groupAssetsBy, GroupAssetsBy.year.index);
 
-      await container.read(photosTimelineOverviewDrilldownProvider)(
+      await container.read(sharedTimelineOverviewDrilldownProvider)(
         TimeBucket(date: DateTime(2025, 3), assetCount: 4),
         groupBy,
       );
@@ -84,4 +84,11 @@ void main() {
       expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.year.index);
     });
   }
+
+  test('photos drilldown provider aliases shared drilldown handler', () {
+    expect(
+      container.read(photosTimelineOverviewDrilldownProvider),
+      same(container.read(sharedTimelineOverviewDrilldownProvider)),
+    );
+  });
 }

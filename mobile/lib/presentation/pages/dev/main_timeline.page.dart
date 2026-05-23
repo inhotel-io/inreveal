@@ -8,17 +8,19 @@ import 'package:immich_mobile/presentation/widgets/memory/memory_lane.widget.dar
 import 'package:immich_mobile/presentation/widgets/photos_filter/filter_subheader.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_selector.widget.dart';
+import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
 import 'package:immich_mobile/providers/infrastructure/memory.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter_search.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/timeline_query.provider.dart';
-import 'package:immich_mobile/providers/timeline/overview_drilldown.provider.dart';
 import 'package:immich_mobile/widgets/common/immich_sliver_app_bar.dart';
 
 @RoutePage()
 class MainTimelinePage extends ConsumerStatefulWidget {
   const MainTimelinePage({super.key});
+
+  static const timelineOverviewControlsEnabled = true;
 
   @override
   ConsumerState<MainTimelinePage> createState() => _MainTimelinePageState();
@@ -28,11 +30,8 @@ class _MainTimelinePageState extends ConsumerState<MainTimelinePage> {
   @override
   Widget build(BuildContext context) {
     final hasMemories = ref.watch(driftMemoryFutureProvider.select((state) => state.value?.isNotEmpty ?? false));
-    return ProviderScope(
-      overrides: [
-        timelineServiceProvider.overrideWith((ref) => ref.watch(photosTimelineQueryProvider)),
-        timelineOverviewDrilldownProvider.overrideWith((ref) => ref.watch(photosTimelineOverviewDrilldownProvider)),
-      ],
+    return TimelineRouteScope(
+      overrides: [timelineServiceProvider.overrideWith((ref) => ref.watch(photosTimelineQueryProvider))],
       child: Stack(
         children: [
           NotificationListener<ScrollUpdateNotification>(

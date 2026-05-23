@@ -9,6 +9,7 @@ void main() {
       expect(PhotosTimelineAppBar.actions, hasLength(1));
       expect(PhotosTimelineAppBar.actions.single, isA<TimelineGroupingSelector>());
       expect(PhotosTimelineAppBar.actions.whereType<FilterIconButton>(), isEmpty);
+      expect(MainTimelinePage.timelineOverviewControlsEnabled, isTrue);
     });
   });
 }

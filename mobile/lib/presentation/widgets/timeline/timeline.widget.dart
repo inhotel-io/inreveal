@@ -34,6 +34,10 @@ import 'package:immich_mobile/widgets/common/immich_sliver_app_bar.dart';
 import 'package:immich_mobile/widgets/common/mesmerizing_sliver_app_bar.dart';
 import 'package:immich_mobile/widgets/common/selection_sliver_app_bar.dart';
 
+double timelineScrubberSnappingOffset({required double? topSliverWidgetHeight, required double appBarExpandedHeight}) {
+  return (topSliverWidgetHeight ?? 0) + appBarExpandedHeight;
+}
+
 class Timeline extends StatelessWidget {
   const Timeline({
     super.key,
@@ -479,7 +483,10 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
               timelineHeight: maxHeight,
               topPadding: topPadding,
               bottomPadding: scrubberBottomPadding,
-              monthSegmentSnappingOffset: widget.topSliverWidgetHeight ?? 0 + appBarExpandedHeight,
+              monthSegmentSnappingOffset: timelineScrubberSnappingOffset(
+                topSliverWidgetHeight: widget.topSliverWidgetHeight,
+                appBarExpandedHeight: appBarExpandedHeight,
+              ),
               hasAppBar: widget.appBar != null,
               child: grid,
             );
