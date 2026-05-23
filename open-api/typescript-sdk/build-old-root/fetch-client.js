@@ -1,3571 +1,6367 @@
 /**
  * Immich
- * 2.6.3
+ * 2.7.5
  * DO NOT MODIFY - This file has been generated using oazapfts.
  * See https://www.npmjs.com/package/oazapfts
  */
-import * as Oazapfts from "@oazapfts/runtime";
-import * as QS from "@oazapfts/runtime/query";
+import * as Oazapfts from '@oazapfts/runtime';
+import * as QS from '@oazapfts/runtime/query';
 export const defaults = {
-    headers: {},
-    baseUrl: "/api"
+  headers: {},
+  baseUrl: '/api',
 };
 const oazapfts = Oazapfts.runtime(defaults);
 export const servers = {
-    server1: "/api"
+  server1: '/api',
 };
 /**
  * List all activities
  */
-export function getActivities({ albumId, assetId, level, $type, userId }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/activities${QS.query(QS.explode({
-        albumId,
-        assetId,
-        level,
-        "type": $type,
-        userId
-    }))}`, {
-        ...opts
-    }));
+export function getActivities(
+  { albumId, assetId, level, $type, userId },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/activities${QS.query(
+        QS.explode({
+          albumId,
+          assetId,
+          level,
+          type: $type,
+          userId,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Create an activity
  */
 export function createActivity({ activityCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/activities", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/activities',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: activityCreateDto
-    })));
+        method: 'POST',
+        body: activityCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve activity statistics
  */
 export function getActivityStatistics({ albumId, assetId }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/activities/statistics${QS.query(QS.explode({
-        albumId,
-        assetId
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/activities/statistics${QS.query(
+        QS.explode({
+          albumId,
+          assetId,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Delete an activity
  */
 export function deleteActivity({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/activities/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/activities/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Unlink all OAuth accounts
  */
 export function unlinkAllOAuthAccountsAdmin(opts) {
-    return oazapfts.ok(oazapfts.fetchText("/admin/auth/unlink-all", {
-        ...opts,
-        method: "POST"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText('/admin/auth/unlink-all', {
+      ...opts,
+      method: 'POST',
+    }),
+  );
 }
 /**
  * Delete database backup
  */
 export function deleteDatabaseBackup({ databaseBackupDeleteDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/admin/database-backups", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/admin/database-backups',
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: databaseBackupDeleteDto
-    })));
+        method: 'DELETE',
+        body: databaseBackupDeleteDto,
+      }),
+    ),
+  );
 }
 /**
  * List database backups
  */
 export function listDatabaseBackups(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/admin/database-backups", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/admin/database-backups', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Start database backup restore flow
  */
 export function startDatabaseRestoreFlow(opts) {
-    return oazapfts.ok(oazapfts.fetchText("/admin/database-backups/start-restore", {
-        ...opts,
-        method: "POST"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText('/admin/database-backups/start-restore', {
+      ...opts,
+      method: 'POST',
+    }),
+  );
 }
 /**
  * Upload database backup
  */
 export function uploadDatabaseBackup({ databaseBackupUploadDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/admin/database-backups/upload", oazapfts.multipart({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/admin/database-backups/upload',
+      oazapfts.multipart({
         ...opts,
-        method: "POST",
-        body: databaseBackupUploadDto
-    })));
+        method: 'POST',
+        body: databaseBackupUploadDto,
+      }),
+    ),
+  );
 }
 /**
  * Download database backup
  */
 export function downloadDatabaseBackup({ filename }, opts) {
-    return oazapfts.ok(oazapfts.fetchBlob(`/admin/database-backups/${encodeURIComponent(filename)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchBlob(
+      `/admin/database-backups/${encodeURIComponent(filename)}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Set maintenance mode
  */
 export function setMaintenanceMode({ setMaintenanceModeDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/admin/maintenance", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/admin/maintenance',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: setMaintenanceModeDto
-    })));
+        method: 'POST',
+        body: setMaintenanceModeDto,
+      }),
+    ),
+  );
 }
 /**
  * Detect existing install
  */
 export function detectPriorInstall(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/admin/maintenance/detect-install", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/admin/maintenance/detect-install', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Log into maintenance mode
  */
 export function maintenanceLogin({ maintenanceLoginDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/admin/maintenance/login", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/admin/maintenance/login',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: maintenanceLoginDto
-    })));
+        method: 'POST',
+        body: maintenanceLoginDto,
+      }),
+    ),
+  );
 }
 /**
  * Get maintenance mode status
  */
 export function getMaintenanceStatus(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/admin/maintenance/status", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/admin/maintenance/status', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Create a notification
  */
 export function createNotification({ notificationCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/admin/notifications", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/admin/notifications',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: notificationCreateDto
-    })));
+        method: 'POST',
+        body: notificationCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Render email template
  */
 export function getNotificationTemplateAdmin({ name, templateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/admin/notifications/templates/${encodeURIComponent(name)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/admin/notifications/templates/${encodeURIComponent(name)}`,
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: templateDto
-    })));
+        method: 'POST',
+        body: templateDto,
+      }),
+    ),
+  );
 }
 /**
  * Send test email
  */
 export function sendTestEmailAdmin({ systemConfigSmtpDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/admin/notifications/test-email", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/admin/notifications/test-email',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: systemConfigSmtpDto
-    })));
+        method: 'POST',
+        body: systemConfigSmtpDto,
+      }),
+    ),
+  );
 }
 /**
  * Search users
  */
 export function searchUsersAdmin({ id, withDeleted }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/admin/users${QS.query(QS.explode({
-        id,
-        withDeleted
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/admin/users${QS.query(
+        QS.explode({
+          id,
+          withDeleted,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Create a user
  */
 export function createUserAdmin({ userAdminCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/admin/users", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/admin/users',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: userAdminCreateDto
-    })));
+        method: 'POST',
+        body: userAdminCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete a user
  */
 export function deleteUserAdmin({ id, userAdminDeleteDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/admin/users/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/admin/users/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: userAdminDeleteDto
-    })));
+        method: 'DELETE',
+        body: userAdminDeleteDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve a user
  */
 export function getUserAdmin({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/admin/users/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/admin/users/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update a user
  */
 export function updateUserAdmin({ id, userAdminUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/admin/users/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/admin/users/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: userAdminUpdateDto
-    })));
+        method: 'PUT',
+        body: userAdminUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve user preferences
  */
 export function getUserPreferencesAdmin({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/admin/users/${encodeURIComponent(id)}/preferences`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/admin/users/${encodeURIComponent(id)}/preferences`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update user preferences
  */
-export function updateUserPreferencesAdmin({ id, userPreferencesUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/admin/users/${encodeURIComponent(id)}/preferences`, oazapfts.json({
+export function updateUserPreferencesAdmin(
+  { id, userPreferencesUpdateDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/admin/users/${encodeURIComponent(id)}/preferences`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: userPreferencesUpdateDto
-    })));
+        method: 'PUT',
+        body: userPreferencesUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Restore a deleted user
  */
 export function restoreUserAdmin({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/admin/users/${encodeURIComponent(id)}/restore`, {
-        ...opts,
-        method: "POST"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/admin/users/${encodeURIComponent(id)}/restore`, {
+      ...opts,
+      method: 'POST',
+    }),
+  );
 }
 /**
  * Retrieve user sessions
  */
 export function getUserSessionsAdmin({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/admin/users/${encodeURIComponent(id)}/sessions`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/admin/users/${encodeURIComponent(id)}/sessions`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Retrieve user statistics
  */
-export function getUserStatisticsAdmin({ id, isFavorite, isTrashed, visibility }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/admin/users/${encodeURIComponent(id)}/statistics${QS.query(QS.explode({
-        isFavorite,
-        isTrashed,
-        visibility
-    }))}`, {
-        ...opts
-    }));
+export function getUserStatisticsAdmin(
+  { id, isFavorite, isTrashed, visibility },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/admin/users/${encodeURIComponent(id)}/statistics${QS.query(
+        QS.explode({
+          isFavorite,
+          isTrashed,
+          visibility,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
+}
+/**
+ * Handle the internal runner MCP endpoint
+ */
+export function handle({ id }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/agent/internal/mcp/sessions/${encodeURIComponent(id)}`,
+      {
+        ...opts,
+        method: 'POST',
+      },
+    ),
+  );
+}
+/**
+ * List agent provider credentials
+ */
+export function getAgentProviderCredentials(opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson('/agent/provider-credentials', {
+      ...opts,
+    }),
+  );
+}
+/**
+ * Create an agent provider credential
+ */
+export function createAgentProviderCredential(
+  { agentProviderCredentialCreateDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/agent/provider-credentials',
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentProviderCredentialCreateDto,
+      }),
+    ),
+  );
+}
+/**
+ * Delete an agent provider credential
+ */
+export function deleteAgentProviderCredential({ id }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/agent/provider-credentials/${encodeURIComponent(id)}`,
+      {
+        ...opts,
+        method: 'DELETE',
+      },
+    ),
+  );
+}
+/**
+ * Retrieve an agent provider credential
+ */
+export function getAgentProviderCredential({ id }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/provider-credentials/${encodeURIComponent(id)}`,
+      {
+        ...opts,
+      },
+    ),
+  );
+}
+/**
+ * Update an agent provider credential
+ */
+export function updateAgentProviderCredential(
+  { id, agentProviderCredentialUpdateDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/provider-credentials/${encodeURIComponent(id)}`,
+      oazapfts.json({
+        ...opts,
+        method: 'PUT',
+        body: agentProviderCredentialUpdateDto,
+      }),
+    ),
+  );
+}
+/**
+ * Get agent runner status
+ */
+export function getAgentRunnerStatus(opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson('/agent/runner/status', {
+      ...opts,
+    }),
+  );
+}
+/**
+ * List agent sessions
+ */
+export function getAgentSessions(opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson('/agent/sessions', {
+      ...opts,
+    }),
+  );
+}
+/**
+ * Create an agent session
+ */
+export function createAgentSession({ agentSessionCreateDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/agent/sessions',
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentSessionCreateDto,
+      }),
+    ),
+  );
+}
+/**
+ * Validate an agent session setup
+ */
+export function validateAgentSession({ agentSessionCreateDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/agent/sessions/validate',
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentSessionCreateDto,
+      }),
+    ),
+  );
+}
+/**
+ * Delete an agent session
+ */
+export function deleteAgentSession({ id }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchText(`/agent/sessions/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
+}
+/**
+ * Retrieve an agent session
+ */
+export function getAgentSession({ id }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/agent/sessions/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
+}
+/**
+ * Update an agent session
+ */
+export function updateAgentSession({ id, agentSessionUpdateDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}`,
+      oazapfts.json({
+        ...opts,
+        method: 'PUT',
+        body: agentSessionUpdateDto,
+      }),
+    ),
+  );
+}
+/**
+ * List agent session activity events
+ */
+export function getAgentSessionActivityEvents({ id }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/activity-events`,
+      {
+        ...opts,
+      },
+    ),
+  );
+}
+/**
+ * Cancel an agent session
+ */
+export function cancelAgentSession({ id }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/agent/sessions/${encodeURIComponent(id)}/cancel`, {
+      ...opts,
+      method: 'POST',
+    }),
+  );
+}
+/**
+ * List agent session messages
+ */
+export function getAgentSessionMessages({ id }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/agent/sessions/${encodeURIComponent(id)}/messages`, {
+      ...opts,
+    }),
+  );
+}
+/**
+ * Append an agent session message
+ */
+export function appendAgentSessionMessage({ id, agentMessageCreateDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/messages`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentMessageCreateDto,
+      }),
+    ),
+  );
+}
+/**
+ * Get the current agent operation plan
+ */
+export function getCurrentOperationPlan({ id }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/operation-plan`,
+      {
+        ...opts,
+      },
+    ),
+  );
+}
+/**
+ * Get applied agent operation plans
+ */
+export function getAppliedOperationPlans({ id }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/operation-plan/applied`,
+      {
+        ...opts,
+      },
+    ),
+  );
+}
+/**
+ * Propose agent album operations
+ */
+export function proposeAlbumOperations(
+  { id, agentProposeAlbumOperationsDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/operation-plan/proposals`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentProposeAlbumOperationsDto,
+      }),
+    ),
+  );
+}
+/**
+ * Apply approved agent album operations
+ */
+export function applyApprovedOperations(
+  { id, planId, agentOperationPlanApplyRequestDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/operation-plan/${encodeURIComponent(planId)}/apply`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentOperationPlanApplyRequestDto,
+      }),
+    ),
+  );
+}
+/**
+ * Revise agent album operations
+ */
+export function reviseProposedOperations(
+  { id, planId, agentReviseAlbumOperationsDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/operation-plan/${encodeURIComponent(planId)}/revisions`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentReviseAlbumOperationsDto,
+      }),
+    ),
+  );
+}
+/**
+ * Summarize an agent operation plan
+ */
+export function summarizePlan(
+  { id, planId, agentOperationPlanSummaryRequestDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/operation-plan/${encodeURIComponent(planId)}/summary`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentOperationPlanSummaryRequestDto,
+      }),
+    ),
+  );
+}
+/**
+ * List agent tool calls
+ */
+export function getToolCalls({ id }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/agent/sessions/${encodeURIComponent(id)}/tool-calls`, {
+      ...opts,
+    }),
+  );
+}
+/**
+ * Approve or deny an agent tool call
+ */
+export function approveToolCall(
+  { id, toolCallId, agentToolApprovalDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/tool-calls/${encodeURIComponent(toolCallId)}/approval`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentToolApprovalDto,
+      }),
+    ),
+  );
+}
+/**
+ * Execute the internal listAlbums agent tool
+ */
+export function listAlbums({ id, agentListAlbumsToolRequestDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/tools/list-albums`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentListAlbumsToolRequestDto,
+      }),
+    ),
+  );
+}
+/**
+ * Execute the internal listSpaces agent tool
+ */
+export function listSpaces({ id, agentListSpacesToolRequestDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/tools/list-spaces`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentListSpacesToolRequestDto,
+      }),
+    ),
+  );
+}
+/**
+ * Execute the internal readAlbum agent tool
+ */
+export function readAlbum({ id, agentReadAlbumToolRequestDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/tools/read-album`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentReadAlbumToolRequestDto,
+      }),
+    ),
+  );
+}
+/**
+ * Execute the internal readAssetMetadata agent tool
+ */
+export function readAssetMetadata(
+  { id, agentReadAssetMetadataToolRequestDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/tools/read-asset-metadata`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentReadAssetMetadataToolRequestDto,
+      }),
+    ),
+  );
+}
+/**
+ * Execute the internal readAssetOriginals agent tool
+ */
+export function readAssetOriginals(
+  { id, agentReadAssetOriginalsToolRequestDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/tools/read-asset-originals`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentReadAssetOriginalsToolRequestDto,
+      }),
+    ),
+  );
+}
+/**
+ * Execute the internal readAssetPreviews agent tool
+ */
+export function readAssetPreviews(
+  { id, agentReadAssetPreviewsToolRequestDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/tools/read-asset-previews`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentReadAssetPreviewsToolRequestDto,
+      }),
+    ),
+  );
+}
+/**
+ * Execute the internal readSpace agent tool
+ */
+export function readSpace({ id, agentReadSpaceToolRequestDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/tools/read-space`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentReadSpaceToolRequestDto,
+      }),
+    ),
+  );
+}
+/**
+ * Execute the internal searchAssets agent tool
+ */
+export function executeAgentSearchAssets(
+  { id, agentSearchAssetsToolRequestDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/tools/search-assets`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentSearchAssetsToolRequestDto,
+      }),
+    ),
+  );
+}
+/**
+ * Execute the internal searchUsers agent tool
+ */
+export function searchAgentUsers({ id, agentSearchUsersToolRequestDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/agent/sessions/${encodeURIComponent(id)}/tools/search-users`,
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: agentSearchUsersToolRequestDto,
+      }),
+    ),
+  );
 }
 /**
  * List all albums
  */
 export function getAllAlbums({ assetId, shared }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/albums${QS.query(QS.explode({
-        assetId,
-        shared
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/albums${QS.query(
+        QS.explode({
+          assetId,
+          shared,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Create an album
  */
 export function createAlbum({ createAlbumDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/albums", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/albums',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: createAlbumDto
-    })));
+        method: 'POST',
+        body: createAlbumDto,
+      }),
+    ),
+  );
 }
 /**
  * Add assets to albums
  */
-export function addAssetsToAlbums({ key, slug, albumsAddAssetsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/albums/assets${QS.query(QS.explode({
-        key,
-        slug
-    }))}`, oazapfts.json({
+export function addAssetsToAlbums({ albumsAddAssetsDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/albums/assets',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: albumsAddAssetsDto
-    })));
+        method: 'PUT',
+        body: albumsAddAssetsDto,
+      }),
+    ),
+  );
+}
+/**
+ * Retrieve album names
+ */
+export function getAlbumNames(opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson('/albums/names', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Retrieve album statistics
  */
 export function getAlbumStatistics(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/albums/statistics", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/albums/statistics', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Delete an album
  */
 export function deleteAlbum({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/albums/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/albums/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Retrieve an album
  */
-export function getAlbumInfo({ id, key, slug, withoutAssets }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/albums/${encodeURIComponent(id)}${QS.query(QS.explode({
-        key,
-        slug,
-        withoutAssets
-    }))}`, {
-        ...opts
-    }));
+export function getAlbumInfo({ id, key, slug }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/albums/${encodeURIComponent(id)}${QS.query(
+        QS.explode({
+          key,
+          slug,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Update an album
  */
 export function updateAlbumInfo({ id, updateAlbumDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/albums/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/albums/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PATCH",
-        body: updateAlbumDto
-    })));
+        method: 'PATCH',
+        body: updateAlbumDto,
+      }),
+    ),
+  );
 }
 /**
  * Remove assets from an album
  */
 export function removeAssetFromAlbum({ id, bulkIdsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/albums/${encodeURIComponent(id)}/assets`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/albums/${encodeURIComponent(id)}/assets`,
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: bulkIdsDto
-    })));
+        method: 'DELETE',
+        body: bulkIdsDto,
+      }),
+    ),
+  );
 }
 /**
  * Add assets to an album
  */
-export function addAssetsToAlbum({ id, key, slug, bulkIdsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/albums/${encodeURIComponent(id)}/assets${QS.query(QS.explode({
-        key,
-        slug
-    }))}`, oazapfts.json({
+export function addAssetsToAlbum({ id, bulkIdsDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/albums/${encodeURIComponent(id)}/assets`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: bulkIdsDto
-    })));
+        method: 'PUT',
+        body: bulkIdsDto,
+      }),
+    ),
+  );
+}
+/**
+ * Retrieve album map markers
+ */
+export function getAlbumMapMarkers({ id, key, slug }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/albums/${encodeURIComponent(id)}/map-markers${QS.query(
+        QS.explode({
+          key,
+          slug,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Remove user from album
  */
 export function removeUserFromAlbum({ id, userId }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/albums/${encodeURIComponent(id)}/user/${encodeURIComponent(userId)}`, {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/albums/${encodeURIComponent(id)}/user/${encodeURIComponent(userId)}`,
+      {
         ...opts,
-        method: "DELETE"
-    }));
+        method: 'DELETE',
+      },
+    ),
+  );
 }
 /**
  * Update user role
  */
 export function updateAlbumUser({ id, userId, updateAlbumUserDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/albums/${encodeURIComponent(id)}/user/${encodeURIComponent(userId)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/albums/${encodeURIComponent(id)}/user/${encodeURIComponent(userId)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: updateAlbumUserDto
-    })));
+        method: 'PUT',
+        body: updateAlbumUserDto,
+      }),
+    ),
+  );
 }
 /**
  * Share album with users
  */
 export function addUsersToAlbum({ id, addUsersDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/albums/${encodeURIComponent(id)}/users`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/albums/${encodeURIComponent(id)}/users`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: addUsersDto
-    })));
+        method: 'PUT',
+        body: addUsersDto,
+      }),
+    ),
+  );
 }
 /**
  * List all API keys
  */
 export function getApiKeys(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/api-keys", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/api-keys', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Create an API key
  */
 export function createApiKey({ apiKeyCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/api-keys", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/api-keys',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: apiKeyCreateDto
-    })));
+        method: 'POST',
+        body: apiKeyCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve the current API key
  */
 export function getMyApiKey(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/api-keys/me", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/api-keys/me', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Delete an API key
  */
 export function deleteApiKey({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/api-keys/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/api-keys/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Retrieve an API key
  */
 export function getApiKey({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/api-keys/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/api-keys/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update an API key
  */
 export function updateApiKey({ id, apiKeyUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/api-keys/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/api-keys/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: apiKeyUpdateDto
-    })));
+        method: 'PUT',
+        body: apiKeyUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete assets
  */
 export function deleteAssets({ assetBulkDeleteDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/assets", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/assets',
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: assetBulkDeleteDto
-    })));
+        method: 'DELETE',
+        body: assetBulkDeleteDto,
+      }),
+    ),
+  );
 }
 /**
  * Upload asset
  */
-export function uploadAsset({ key, slug, xImmichChecksum, assetMediaCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/assets${QS.query(QS.explode({
-        key,
-        slug
-    }))}`, oazapfts.multipart({
+export function uploadAsset(
+  { key, slug, xImmichChecksum, assetMediaCreateDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/assets${QS.query(
+        QS.explode({
+          key,
+          slug,
+        }),
+      )}`,
+      oazapfts.multipart({
         ...opts,
-        method: "POST",
+        method: 'POST',
         body: assetMediaCreateDto,
         headers: oazapfts.mergeHeaders(opts?.headers, {
-            "x-immich-checksum": xImmichChecksum
-        })
-    })));
+          'x-immich-checksum': xImmichChecksum,
+        }),
+      }),
+    ),
+  );
 }
 /**
  * Update assets
  */
 export function updateAssets({ assetBulkUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/assets", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/assets',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: assetBulkUpdateDto
-    })));
+        method: 'PUT',
+        body: assetBulkUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Check bulk upload
  */
 export function checkBulkUpload({ assetBulkUploadCheckDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/assets/bulk-upload-check", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/assets/bulk-upload-check',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: assetBulkUploadCheckDto
-    })));
+        method: 'POST',
+        body: assetBulkUploadCheckDto,
+      }),
+    ),
+  );
 }
 /**
  * Copy asset
  */
 export function copyAsset({ assetCopyDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/assets/copy", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/assets/copy',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: assetCopyDto
-    })));
-}
-/**
- * Retrieve assets by device ID
- */
-export function getAllUserAssetsByDeviceId({ deviceId }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/assets/device/${encodeURIComponent(deviceId)}`, {
-        ...opts
-    }));
-}
-/**
- * Check existing assets
- */
-export function checkExistingAssets({ checkExistingAssetsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/assets/exist", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: checkExistingAssetsDto
-    })));
+        method: 'PUT',
+        body: assetCopyDto,
+      }),
+    ),
+  );
 }
 /**
  * Run an asset job
  */
 export function runAssetJobs({ assetJobsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/assets/jobs", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/assets/jobs',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: assetJobsDto
-    })));
+        method: 'POST',
+        body: assetJobsDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete asset metadata
  */
 export function deleteBulkAssetMetadata({ assetMetadataBulkDeleteDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/assets/metadata", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/assets/metadata',
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: assetMetadataBulkDeleteDto
-    })));
+        method: 'DELETE',
+        body: assetMetadataBulkDeleteDto,
+      }),
+    ),
+  );
 }
 /**
  * Upsert asset metadata
  */
 export function updateBulkAssetMetadata({ assetMetadataBulkUpsertDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/assets/metadata", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/assets/metadata',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: assetMetadataBulkUpsertDto
-    })));
-}
-/**
- * Get random assets
- */
-export function getRandom({ count }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/assets/random${QS.query(QS.explode({
-        count
-    }))}`, {
-        ...opts
-    }));
+        method: 'PUT',
+        body: assetMetadataBulkUpsertDto,
+      }),
+    ),
+  );
 }
 /**
  * Get asset statistics
  */
-export function getAssetStatistics({ isFavorite, isTrashed, visibility }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/assets/statistics${QS.query(QS.explode({
-        isFavorite,
-        isTrashed,
-        visibility
-    }))}`, {
-        ...opts
-    }));
+export function getAssetStatistics(
+  { isFavorite, isTrashed, visibility },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/assets/statistics${QS.query(
+        QS.explode({
+          isFavorite,
+          isTrashed,
+          visibility,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Retrieve an asset
  */
 export function getAssetInfo({ id, key, slug, spaceId }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/assets/${encodeURIComponent(id)}${QS.query(QS.explode({
-        key,
-        slug,
-        spaceId
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/assets/${encodeURIComponent(id)}${QS.query(
+        QS.explode({
+          key,
+          slug,
+          spaceId,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Update an asset
  */
 export function updateAsset({ id, updateAssetDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/assets/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/assets/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: updateAssetDto
-    })));
+        method: 'PUT',
+        body: updateAssetDto,
+      }),
+    ),
+  );
 }
 /**
  * Remove edits from an existing asset
  */
 export function removeAssetEdits({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/assets/${encodeURIComponent(id)}/edits`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/assets/${encodeURIComponent(id)}/edits`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Retrieve edits for an existing asset
  */
 export function getAssetEdits({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/assets/${encodeURIComponent(id)}/edits`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/assets/${encodeURIComponent(id)}/edits`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Apply edits to an existing asset
  */
 export function editAsset({ id, assetEditsCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/assets/${encodeURIComponent(id)}/edits`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/assets/${encodeURIComponent(id)}/edits`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: assetEditsCreateDto
-    })));
+        method: 'PUT',
+        body: assetEditsCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Get asset metadata
  */
 export function getAssetMetadata({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/assets/${encodeURIComponent(id)}/metadata`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/assets/${encodeURIComponent(id)}/metadata`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update asset metadata
  */
 export function updateAssetMetadata({ id, assetMetadataUpsertDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/assets/${encodeURIComponent(id)}/metadata`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/assets/${encodeURIComponent(id)}/metadata`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: assetMetadataUpsertDto
-    })));
+        method: 'PUT',
+        body: assetMetadataUpsertDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete asset metadata by key
  */
 export function deleteAssetMetadata({ id, key }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/assets/${encodeURIComponent(id)}/metadata/${encodeURIComponent(key)}`, {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/assets/${encodeURIComponent(id)}/metadata/${encodeURIComponent(key)}`,
+      {
         ...opts,
-        method: "DELETE"
-    }));
+        method: 'DELETE',
+      },
+    ),
+  );
 }
 /**
  * Retrieve asset metadata by key
  */
 export function getAssetMetadataByKey({ id, key }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/assets/${encodeURIComponent(id)}/metadata/${encodeURIComponent(key)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/assets/${encodeURIComponent(id)}/metadata/${encodeURIComponent(key)}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Retrieve asset OCR data
  */
 export function getAssetOcr({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/assets/${encodeURIComponent(id)}/ocr`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/assets/${encodeURIComponent(id)}/ocr`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Download original asset
  */
-export function downloadAsset({ edited, id, key, slug }, opts) {
-    return oazapfts.ok(oazapfts.fetchBlob(`/assets/${encodeURIComponent(id)}/original${QS.query(QS.explode({
-        edited,
-        key,
-        slug
-    }))}`, {
-        ...opts
-    }));
-}
-/**
- * Replace asset
- */
-export function replaceAsset({ id, key, slug, assetMediaReplaceDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/assets/${encodeURIComponent(id)}/original${QS.query(QS.explode({
-        key,
-        slug
-    }))}`, oazapfts.multipart({
+export function downloadAsset({ download, edited, id, key, slug }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchBlob(
+      `/assets/${encodeURIComponent(id)}/original${QS.query(
+        QS.explode({
+          download,
+          edited,
+          key,
+          slug,
+        }),
+      )}`,
+      {
         ...opts,
-        method: "PUT",
-        body: assetMediaReplaceDto
-    })));
+      },
+    ),
+  );
 }
 /**
  * View asset thumbnail
  */
 export function viewAsset({ edited, id, key, size, slug }, opts) {
-    return oazapfts.ok(oazapfts.fetchBlob(`/assets/${encodeURIComponent(id)}/thumbnail${QS.query(QS.explode({
-        edited,
-        key,
-        size,
-        slug
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchBlob(
+      `/assets/${encodeURIComponent(id)}/thumbnail${QS.query(
+        QS.explode({
+          edited,
+          key,
+          size,
+          slug,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Play asset video
  */
 export function playAssetVideo({ id, key, slug }, opts) {
-    return oazapfts.ok(oazapfts.fetchBlob(`/assets/${encodeURIComponent(id)}/video/playback${QS.query(QS.explode({
-        key,
-        slug
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchBlob(
+      `/assets/${encodeURIComponent(id)}/video/playback${QS.query(
+        QS.explode({
+          key,
+          slug,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Register admin
  */
 export function signUpAdmin({ signUpDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/auth/admin-sign-up", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/auth/admin-sign-up',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: signUpDto
-    })));
+        method: 'POST',
+        body: signUpDto,
+      }),
+    ),
+  );
 }
 /**
  * Change password
  */
 export function changePassword({ changePasswordDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/auth/change-password", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/auth/change-password',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: changePasswordDto
-    })));
+        method: 'POST',
+        body: changePasswordDto,
+      }),
+    ),
+  );
 }
 /**
  * Login
  */
 export function login({ loginCredentialDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/auth/login", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/auth/login',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: loginCredentialDto
-    })));
+        method: 'POST',
+        body: loginCredentialDto,
+      }),
+    ),
+  );
 }
 /**
  * Logout
  */
 export function logout(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/auth/logout", {
-        ...opts,
-        method: "POST"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/auth/logout', {
+      ...opts,
+      method: 'POST',
+    }),
+  );
 }
 /**
  * Reset pin code
  */
 export function resetPinCode({ pinCodeResetDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/auth/pin-code", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/auth/pin-code',
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: pinCodeResetDto
-    })));
+        method: 'DELETE',
+        body: pinCodeResetDto,
+      }),
+    ),
+  );
 }
 /**
  * Setup pin code
  */
 export function setupPinCode({ pinCodeSetupDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/auth/pin-code", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/auth/pin-code',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: pinCodeSetupDto
-    })));
+        method: 'POST',
+        body: pinCodeSetupDto,
+      }),
+    ),
+  );
 }
 /**
  * Change pin code
  */
 export function changePinCode({ pinCodeChangeDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/auth/pin-code", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/auth/pin-code',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: pinCodeChangeDto
-    })));
+        method: 'PUT',
+        body: pinCodeChangeDto,
+      }),
+    ),
+  );
 }
 /**
  * Lock auth session
  */
 export function lockAuthSession(opts) {
-    return oazapfts.ok(oazapfts.fetchText("/auth/session/lock", {
-        ...opts,
-        method: "POST"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText('/auth/session/lock', {
+      ...opts,
+      method: 'POST',
+    }),
+  );
 }
 /**
  * Unlock auth session
  */
 export function unlockAuthSession({ sessionUnlockDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/auth/session/unlock", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/auth/session/unlock',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: sessionUnlockDto
-    })));
+        method: 'POST',
+        body: sessionUnlockDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve auth status
  */
 export function getAuthStatus(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/auth/status", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/auth/status', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Validate access token
  */
 export function validateAccessToken(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/auth/validateToken", {
-        ...opts,
-        method: "POST"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/auth/validateToken', {
+      ...opts,
+      method: 'POST',
+    }),
+  );
 }
 /**
  * Scan all libraries for classification
  */
 export function scanClassification(opts) {
-    return oazapfts.ok(oazapfts.fetchText("/classification/scan", {
-        ...opts,
-        method: "POST"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText('/classification/scan', {
+      ...opts,
+      method: 'POST',
+    }),
+  );
 }
 /**
  * Download asset archive
  */
 export function downloadArchive({ key, slug, downloadArchiveDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchBlob(`/download/archive${QS.query(QS.explode({
-        key,
-        slug
-    }))}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchBlob(
+      `/download/archive${QS.query(
+        QS.explode({
+          key,
+          slug,
+        }),
+      )}`,
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: downloadArchiveDto
-    })));
+        method: 'POST',
+        body: downloadArchiveDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve download information
  */
 export function getDownloadInfo({ key, slug, downloadInfoDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/download/info${QS.query(QS.explode({
-        key,
-        slug
-    }))}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/download/info${QS.query(
+        QS.explode({
+          key,
+          slug,
+        }),
+      )}`,
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: downloadInfoDto
-    })));
+        method: 'POST',
+        body: downloadInfoDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete duplicates
  */
 export function deleteDuplicates({ bulkIdsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/duplicates", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/duplicates',
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: bulkIdsDto
-    })));
+        method: 'DELETE',
+        body: bulkIdsDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve duplicates
  */
 export function getAssetDuplicates(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/duplicates", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/duplicates', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Resolve duplicate groups
  */
 export function resolveDuplicates({ duplicateResolveDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/duplicates/resolve", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/duplicates/resolve',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: duplicateResolveDto
-    })));
+        method: 'POST',
+        body: duplicateResolveDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete a duplicate
  */
 export function deleteDuplicate({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/duplicates/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/duplicates/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Retrieve faces for asset
  */
 export function getFaces({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/faces${QS.query(QS.explode({
-        id
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/faces${QS.query(
+        QS.explode({
+          id,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Create a face
  */
 export function createFace({ assetFaceCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/faces", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/faces',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: assetFaceCreateDto
-    })));
+        method: 'POST',
+        body: assetFaceCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete a face
  */
 export function deleteFace({ id, assetFaceDeleteDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/faces/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/faces/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: assetFaceDeleteDto
-    })));
+        method: 'DELETE',
+        body: assetFaceDeleteDto,
+      }),
+    ),
+  );
 }
 /**
  * Re-assign a face to another person
  */
 export function reassignFacesById({ id, faceDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/faces/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/faces/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: faceDto
-    })));
+        method: 'PUT',
+        body: faceDto,
+      }),
+    ),
+  );
 }
 /**
  * Get filtered map markers
  */
-export function getFilteredMapMarkers({ city, country, isFavorite, make, model, personIds, rating, spaceId, tagIds, takenAfter, takenBefore, $type }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/gallery/map/markers${QS.query(QS.explode({
-        city,
-        country,
-        isFavorite,
-        make,
-        model,
-        personIds,
-        rating,
-        spaceId,
-        tagIds,
-        takenAfter,
-        takenBefore,
-        "type": $type
-    }))}`, {
-        ...opts
-    }));
+export function getFilteredMapMarkers(
+  {
+    city,
+    country,
+    isFavorite,
+    isNotInAlbum,
+    make,
+    model,
+    personIds,
+    rating,
+    spaceId,
+    tagIds,
+    takenAfter,
+    takenBefore,
+    $type,
+    withSharedSpaces,
+  },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/gallery/map/markers${QS.query(
+        QS.explode({
+          city,
+          country,
+          isFavorite,
+          isNotInAlbum,
+          make,
+          model,
+          personIds,
+          rating,
+          spaceId,
+          tagIds,
+          takenAfter,
+          takenBefore,
+          type: $type,
+          withSharedSpaces,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Retrieve queue counts and status
  */
 export function getQueuesLegacy(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/jobs", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/jobs', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Create a manual job
  */
 export function createJob({ jobCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/jobs", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/jobs',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: jobCreateDto
-    })));
+        method: 'POST',
+        body: jobCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Run jobs
  */
 export function runQueueCommandLegacy({ name, queueCommandDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/jobs/${encodeURIComponent(name)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/jobs/${encodeURIComponent(name)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: queueCommandDto
-    })));
+        method: 'PUT',
+        body: queueCommandDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve libraries
  */
 export function getAllLibraries(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/libraries", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/libraries', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Create a library
  */
 export function createLibrary({ createLibraryDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/libraries", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/libraries',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: createLibraryDto
-    })));
+        method: 'POST',
+        body: createLibraryDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete a library
  */
 export function deleteLibrary({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/libraries/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/libraries/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Retrieve a library
  */
 export function getLibrary({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/libraries/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/libraries/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update a library
  */
 export function updateLibrary({ id, updateLibraryDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/libraries/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/libraries/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: updateLibraryDto
-    })));
+        method: 'PUT',
+        body: updateLibraryDto,
+      }),
+    ),
+  );
 }
 /**
  * Scan a library
  */
 export function scanLibrary({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/libraries/${encodeURIComponent(id)}/scan`, {
-        ...opts,
-        method: "POST"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/libraries/${encodeURIComponent(id)}/scan`, {
+      ...opts,
+      method: 'POST',
+    }),
+  );
 }
 /**
  * Retrieve library statistics
  */
 export function getLibraryStatistics({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/libraries/${encodeURIComponent(id)}/statistics`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/libraries/${encodeURIComponent(id)}/statistics`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Validate library settings
  */
 export function validate({ id, validateLibraryDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/libraries/${encodeURIComponent(id)}/validate`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/libraries/${encodeURIComponent(id)}/validate`,
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: validateLibraryDto
-    })));
+        method: 'POST',
+        body: validateLibraryDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve map markers
  */
-export function getMapMarkers({ fileCreatedAfter, fileCreatedBefore, isArchived, isFavorite, withPartners, withSharedAlbums }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/map/markers${QS.query(QS.explode({
-        fileCreatedAfter,
-        fileCreatedBefore,
-        isArchived,
-        isFavorite,
-        withPartners,
-        withSharedAlbums
-    }))}`, {
-        ...opts
-    }));
+export function getMapMarkers(
+  {
+    fileCreatedAfter,
+    fileCreatedBefore,
+    isArchived,
+    isFavorite,
+    withPartners,
+    withSharedAlbums,
+    withSharedSpaces,
+  },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/map/markers${QS.query(
+        QS.explode({
+          fileCreatedAfter,
+          fileCreatedBefore,
+          isArchived,
+          isFavorite,
+          withPartners,
+          withSharedAlbums,
+          withSharedSpaces,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Reverse geocode coordinates
  */
 export function reverseGeocode({ lat, lon }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/map/reverse-geocode${QS.query(QS.explode({
-        lat,
-        lon
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/map/reverse-geocode${QS.query(
+        QS.explode({
+          lat,
+          lon,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Retrieve memories
  */
-export function searchMemories({ $for, isSaved, isTrashed, order, size, $type }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/memories${QS.query(QS.explode({
-        "for": $for,
-        isSaved,
-        isTrashed,
-        order,
-        size,
-        "type": $type
-    }))}`, {
-        ...opts
-    }));
+export function searchMemories(
+  { $for, isSaved, isTrashed, order, size, $type },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/memories${QS.query(
+        QS.explode({
+          for: $for,
+          isSaved,
+          isTrashed,
+          order,
+          size,
+          type: $type,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Create a memory
  */
 export function createMemory({ memoryCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/memories", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/memories',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: memoryCreateDto
-    })));
+        method: 'POST',
+        body: memoryCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve memories statistics
  */
-export function memoriesStatistics({ $for, isSaved, isTrashed, order, size, $type }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/memories/statistics${QS.query(QS.explode({
-        "for": $for,
-        isSaved,
-        isTrashed,
-        order,
-        size,
-        "type": $type
-    }))}`, {
-        ...opts
-    }));
+export function memoriesStatistics(
+  { $for, isSaved, isTrashed, order, size, $type },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/memories/statistics${QS.query(
+        QS.explode({
+          for: $for,
+          isSaved,
+          isTrashed,
+          order,
+          size,
+          type: $type,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Delete a memory
  */
 export function deleteMemory({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/memories/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/memories/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Retrieve a memory
  */
 export function getMemory({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/memories/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/memories/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update a memory
  */
 export function updateMemory({ id, memoryUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/memories/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/memories/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: memoryUpdateDto
-    })));
+        method: 'PUT',
+        body: memoryUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Remove assets from a memory
  */
 export function removeMemoryAssets({ id, bulkIdsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/memories/${encodeURIComponent(id)}/assets`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/memories/${encodeURIComponent(id)}/assets`,
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: bulkIdsDto
-    })));
+        method: 'DELETE',
+        body: bulkIdsDto,
+      }),
+    ),
+  );
 }
 /**
  * Add assets to a memory
  */
 export function addMemoryAssets({ id, bulkIdsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/memories/${encodeURIComponent(id)}/assets`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/memories/${encodeURIComponent(id)}/assets`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: bulkIdsDto
-    })));
+        method: 'PUT',
+        body: bulkIdsDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete notifications
  */
 export function deleteNotifications({ notificationDeleteAllDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/notifications", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/notifications',
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: notificationDeleteAllDto
-    })));
+        method: 'DELETE',
+        body: notificationDeleteAllDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve notifications
  */
 export function getNotifications({ id, level, $type, unread }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/notifications${QS.query(QS.explode({
-        id,
-        level,
-        "type": $type,
-        unread
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/notifications${QS.query(
+        QS.explode({
+          id,
+          level,
+          type: $type,
+          unread,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Update notifications
  */
 export function updateNotifications({ notificationUpdateAllDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/notifications", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/notifications',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: notificationUpdateAllDto
-    })));
+        method: 'PUT',
+        body: notificationUpdateAllDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete a notification
  */
 export function deleteNotification({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/notifications/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/notifications/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Get a notification
  */
 export function getNotification({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/notifications/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/notifications/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update a notification
  */
 export function updateNotification({ id, notificationUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/notifications/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/notifications/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: notificationUpdateDto
-    })));
+        method: 'PUT',
+        body: notificationUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Start OAuth
  */
 export function startOAuth({ oAuthConfigDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/oauth/authorize", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/oauth/authorize',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: oAuthConfigDto
-    })));
+        method: 'POST',
+        body: oAuthConfigDto,
+      }),
+    ),
+  );
+}
+/**
+ * Backchannel OAuth logout
+ */
+export function logoutOAuth({ oAuthBackchannelLogoutDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/oauth/backchannel-logout',
+      oazapfts.form({
+        ...opts,
+        method: 'POST',
+        body: oAuthBackchannelLogoutDto,
+      }),
+    ),
+  );
 }
 /**
  * Finish OAuth
  */
 export function finishOAuth({ oAuthCallbackDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/oauth/callback", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/oauth/callback',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: oAuthCallbackDto
-    })));
+        method: 'POST',
+        body: oAuthCallbackDto,
+      }),
+    ),
+  );
 }
 /**
  * Link OAuth account
  */
 export function linkOAuthAccount({ oAuthCallbackDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/oauth/link", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/oauth/link',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: oAuthCallbackDto
-    })));
+        method: 'POST',
+        body: oAuthCallbackDto,
+      }),
+    ),
+  );
 }
 /**
  * Redirect OAuth to mobile
  */
 export function redirectOAuthToMobile(opts) {
-    return oazapfts.ok(oazapfts.fetchText("/oauth/mobile-redirect", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText('/oauth/mobile-redirect', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Unlink OAuth account
  */
 export function unlinkOAuthAccount(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/oauth/unlink", {
-        ...opts,
-        method: "POST"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/oauth/unlink', {
+      ...opts,
+      method: 'POST',
+    }),
+  );
 }
 /**
  * Retrieve partners
  */
 export function getPartners({ direction }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/partners${QS.query(QS.explode({
-        direction
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/partners${QS.query(
+        QS.explode({
+          direction,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Create a partner
  */
 export function createPartner({ partnerCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/partners", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/partners',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: partnerCreateDto
-    })));
+        method: 'POST',
+        body: partnerCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Remove a partner
  */
 export function removePartner({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/partners/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/partners/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Create a partner
  */
 export function createPartnerDeprecated({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/partners/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "POST"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/partners/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'POST',
+    }),
+  );
 }
 /**
  * Update a partner
  */
 export function updatePartner({ id, partnerUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/partners/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/partners/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: partnerUpdateDto
-    })));
+        method: 'PUT',
+        body: partnerUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete people
  */
 export function deletePeople({ bulkIdsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/people", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/people',
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: bulkIdsDto
-    })));
+        method: 'DELETE',
+        body: bulkIdsDto,
+      }),
+    ),
+  );
 }
 /**
  * Get all people
  */
-export function getAllPeople({ closestAssetId, closestPersonId, page, size, withHidden }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/people${QS.query(QS.explode({
-        closestAssetId,
-        closestPersonId,
-        page,
-        size,
-        withHidden
-    }))}`, {
-        ...opts
-    }));
+export function getAllPeople(
+  { closestAssetId, closestPersonId, page, size, withHidden, withSharedSpaces },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/people${QS.query(
+        QS.explode({
+          closestAssetId,
+          closestPersonId,
+          page,
+          size,
+          withHidden,
+          withSharedSpaces,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Create a person
  */
 export function createPerson({ personCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/people", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/people',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: personCreateDto
-    })));
+        method: 'POST',
+        body: personCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Update people
  */
 export function updatePeople({ peopleUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/people", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/people',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: peopleUpdateDto
-    })));
+        method: 'PUT',
+        body: peopleUpdateDto,
+      }),
+    ),
+  );
+}
+/**
+ * Detach a scoped person profile
+ */
+export function detachScopedPerson({ detachScopedPersonDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/people/detach-profile',
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: detachScopedPersonDto,
+      }),
+    ),
+  );
+}
+/**
+ * Get people face statistics
+ */
+export function getPeopleFaceStatistics(
+  { closestAssetId, closestPersonId, page, size, withHidden, withSharedSpaces },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/people/face-statistics${QS.query(
+        QS.explode({
+          closestAssetId,
+          closestPersonId,
+          page,
+          size,
+          withHidden,
+          withSharedSpaces,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
+}
+/**
+ * Merge scoped people by identity
+ */
+export function mergeScopedPeople({ mergeScopedPeopleDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/people/same-person',
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: mergeScopedPeopleDto,
+      }),
+    ),
+  );
+}
+/**
+ * Get people statistics
+ */
+export function getPeopleStatistics(
+  { closestAssetId, closestPersonId, page, size, withHidden, withSharedSpaces },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/people/statistics${QS.query(
+        QS.explode({
+          closestAssetId,
+          closestPersonId,
+          page,
+          size,
+          withHidden,
+          withSharedSpaces,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Delete person
  */
 export function deletePerson({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/people/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/people/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Get a person
  */
 export function getPerson({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/people/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/people/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update person
  */
 export function updatePerson({ id, personUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/people/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/people/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: personUpdateDto
-    })));
+        method: 'PUT',
+        body: personUpdateDto,
+      }),
+    ),
+  );
+}
+/**
+ * Get person faces
+ */
+export function getPersonFaces({ id, page, size }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/people/${encodeURIComponent(id)}/faces${QS.query(
+        QS.explode({
+          page,
+          size,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
+}
+/**
+ * Get person face thumbnail
+ */
+export function getPersonFaceThumbnail({ faceId, id }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchBlob(
+      `/people/${encodeURIComponent(id)}/faces/${encodeURIComponent(faceId)}/thumbnail`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Merge people
  */
 export function mergePerson({ id, mergePersonDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/people/${encodeURIComponent(id)}/merge`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/people/${encodeURIComponent(id)}/merge`,
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: mergePersonDto
-    })));
+        method: 'POST',
+        body: mergePersonDto,
+      }),
+    ),
+  );
 }
 /**
  * Reassign faces
  */
 export function reassignFaces({ id, assetFaceUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/people/${encodeURIComponent(id)}/reassign`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/people/${encodeURIComponent(id)}/reassign`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: assetFaceUpdateDto
-    })));
+        method: 'PUT',
+        body: assetFaceUpdateDto,
+      }),
+    ),
+  );
+}
+/**
+ * Update representative face
+ */
+export function updateRepresentativeFace(
+  { id, representativeFaceUpdateDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/people/${encodeURIComponent(id)}/representative-face`,
+      oazapfts.json({
+        ...opts,
+        method: 'PUT',
+        body: representativeFaceUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Get person statistics
  */
 export function getPersonStatistics({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/people/${encodeURIComponent(id)}/statistics`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/people/${encodeURIComponent(id)}/statistics`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Get person thumbnail
  */
 export function getPersonThumbnail({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchBlob(`/people/${encodeURIComponent(id)}/thumbnail`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchBlob(`/people/${encodeURIComponent(id)}/thumbnail`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * List all plugins
  */
 export function getPlugins(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/plugins", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/plugins', {
+      ...opts,
+    }),
+  );
 }
 /**
  * List all plugin triggers
  */
 export function getPluginTriggers(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/plugins/triggers", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/plugins/triggers', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Retrieve a plugin
  */
 export function getPlugin({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/plugins/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/plugins/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * List all queues
  */
 export function getQueues(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/queues", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/queues', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Retrieve a queue
  */
 export function getQueue({ name }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/queues/${encodeURIComponent(name)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/queues/${encodeURIComponent(name)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update a queue
  */
 export function updateQueue({ name, queueUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/queues/${encodeURIComponent(name)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/queues/${encodeURIComponent(name)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: queueUpdateDto
-    })));
+        method: 'PUT',
+        body: queueUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Empty a queue
  */
 export function emptyQueue({ name, queueDeleteDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/queues/${encodeURIComponent(name)}/jobs`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/queues/${encodeURIComponent(name)}/jobs`,
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: queueDeleteDto
-    })));
+        method: 'DELETE',
+        body: queueDeleteDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve queue jobs
  */
 export function getQueueJobs({ name, status }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/queues/${encodeURIComponent(name)}/jobs${QS.query(QS.explode({
-        status
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/queues/${encodeURIComponent(name)}/jobs${QS.query(
+        QS.explode({
+          status,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Retrieve assets by city
  */
 export function getAssetsByCity(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/search/cities", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/search/cities', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Retrieve explore data
  */
 export function getExploreData(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/search/explore", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/search/explore', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Search large assets
  */
-export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, deviceId, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, spaceId, spacePersonIds, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/search/large-assets${QS.query(QS.explode({
-        albumIds,
-        city,
-        country,
-        createdAfter,
-        createdBefore,
-        deviceId,
-        isEncoded,
-        isFavorite,
-        isMotion,
-        isNotInAlbum,
-        isOffline,
-        lensModel,
-        libraryId,
-        make,
-        minFileSize,
-        model,
-        ocr,
-        personIds,
-        rating,
-        size,
-        spaceId,
-        spacePersonIds,
-        state,
-        tagIds,
-        takenAfter,
-        takenBefore,
-        trashedAfter,
-        trashedBefore,
-        "type": $type,
-        updatedAfter,
-        updatedBefore,
-        visibility,
-        withDeleted,
-        withExif
-    }))}`, {
+export function searchLargeAssets(
+  {
+    albumIds,
+    city,
+    country,
+    createdAfter,
+    createdBefore,
+    isEncoded,
+    isFavorite,
+    isMotion,
+    isNotInAlbum,
+    isOffline,
+    lensModel,
+    libraryId,
+    make,
+    minFileSize,
+    model,
+    ocr,
+    personIds,
+    rating,
+    size,
+    spaceId,
+    spacePersonIds,
+    state,
+    tagIds,
+    takenAfter,
+    takenBefore,
+    trashedAfter,
+    trashedBefore,
+    $type,
+    updatedAfter,
+    updatedBefore,
+    visibility,
+    withDeleted,
+    withExif,
+    withSharedSpaces,
+  },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/search/large-assets${QS.query(
+        QS.explode({
+          albumIds,
+          city,
+          country,
+          createdAfter,
+          createdBefore,
+          isEncoded,
+          isFavorite,
+          isMotion,
+          isNotInAlbum,
+          isOffline,
+          lensModel,
+          libraryId,
+          make,
+          minFileSize,
+          model,
+          ocr,
+          personIds,
+          rating,
+          size,
+          spaceId,
+          spacePersonIds,
+          state,
+          tagIds,
+          takenAfter,
+          takenBefore,
+          trashedAfter,
+          trashedBefore,
+          type: $type,
+          updatedAfter,
+          updatedBefore,
+          visibility,
+          withDeleted,
+          withExif,
+          withSharedSpaces,
+        }),
+      )}`,
+      {
         ...opts,
-        method: "POST"
-    }));
+        method: 'POST',
+      },
+    ),
+  );
 }
 /**
  * Search assets by metadata
  */
 export function searchAssets({ metadataSearchDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/search/metadata", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/search/metadata',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: metadataSearchDto
-    })));
+        method: 'POST',
+        body: metadataSearchDto,
+      }),
+    ),
+  );
 }
 /**
  * Search people
  */
-export function searchPerson({ name, withHidden }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/search/person${QS.query(QS.explode({
-        name,
-        withHidden
-    }))}`, {
-        ...opts
-    }));
+export function searchPerson({ name, withHidden, withSharedSpaces }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/search/person${QS.query(
+        QS.explode({
+          name,
+          withHidden,
+          withSharedSpaces,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Search places
  */
 export function searchPlaces({ name }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/search/places${QS.query(QS.explode({
-        name
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/search/places${QS.query(
+        QS.explode({
+          name,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Search random assets
  */
 export function searchRandom({ randomSearchDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/search/random", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/search/random',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: randomSearchDto
-    })));
+        method: 'POST',
+        body: randomSearchDto,
+      }),
+    ),
+  );
 }
 /**
  * Smart asset search
  */
 export function searchSmart({ smartSearchDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/search/smart", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/search/smart',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: smartSearchDto
-    })));
+        method: 'POST',
+        body: smartSearchDto,
+      }),
+    ),
+  );
+}
+/**
+ * Smart asset search facets
+ */
+export function searchSmartFacets({ smartSearchFacetsDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/search/smart/facets',
+      oazapfts.json({
+        ...opts,
+        method: 'POST',
+        body: smartSearchFacetsDto,
+      }),
+    ),
+  );
 }
 /**
  * Search asset statistics
  */
 export function searchAssetStatistics({ statisticsSearchDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/search/statistics", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/search/statistics',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: statisticsSearchDto
-    })));
+        method: 'POST',
+        body: statisticsSearchDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve search suggestions
  */
-export function getSearchSuggestions({ country, includeNull, lensModel, make, model, spaceId, state, takenAfter, takenBefore, $type, withSharedSpaces }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/search/suggestions${QS.query(QS.explode({
-        country,
-        includeNull,
-        lensModel,
-        make,
-        model,
-        spaceId,
-        state,
-        takenAfter,
-        takenBefore,
-        "type": $type,
-        withSharedSpaces
-    }))}`, {
-        ...opts
-    }));
+export function getSearchSuggestions(
+  {
+    albumId,
+    country,
+    includeNull,
+    isFavorite,
+    isNotInAlbum,
+    lensModel,
+    make,
+    model,
+    personIds,
+    rating,
+    spaceId,
+    state,
+    tagIds,
+    takenAfter,
+    takenBefore,
+    $type,
+    withSharedSpaces,
+  },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/search/suggestions${QS.query(
+        QS.explode({
+          albumId,
+          country,
+          includeNull,
+          isFavorite,
+          isNotInAlbum,
+          lensModel,
+          make,
+          model,
+          personIds,
+          rating,
+          spaceId,
+          state,
+          tagIds,
+          takenAfter,
+          takenBefore,
+          type: $type,
+          withSharedSpaces,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Retrieve dynamic filter suggestions
  */
-export function getFilterSuggestions({ city, country, isFavorite, make, mediaType, model, personIds, rating, spaceId, tagIds, takenAfter, takenBefore, withSharedSpaces }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/search/suggestions/filters${QS.query(QS.explode({
-        city,
-        country,
-        isFavorite,
-        make,
-        mediaType,
-        model,
-        personIds,
-        rating,
-        spaceId,
-        tagIds,
-        takenAfter,
-        takenBefore,
-        withSharedSpaces
-    }))}`, {
-        ...opts
-    }));
+export function getFilterSuggestions(
+  {
+    albumId,
+    city,
+    country,
+    isFavorite,
+    isNotInAlbum,
+    make,
+    mediaType,
+    model,
+    personIds,
+    rating,
+    spaceId,
+    tagIds,
+    takenAfter,
+    takenBefore,
+    withSharedSpaces,
+  },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/search/suggestions/filters${QS.query(
+        QS.explode({
+          albumId,
+          city,
+          country,
+          isFavorite,
+          isNotInAlbum,
+          make,
+          mediaType,
+          model,
+          personIds,
+          rating,
+          spaceId,
+          tagIds,
+          takenAfter,
+          takenBefore,
+          withSharedSpaces,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Retrieve tag suggestions
  */
-export function getTagSuggestions({ spaceId, takenAfter, takenBefore, withSharedSpaces }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/search/suggestions/tags${QS.query(QS.explode({
-        spaceId,
-        takenAfter,
-        takenBefore,
-        withSharedSpaces
-    }))}`, {
-        ...opts
-    }));
+export function getTagSuggestions(
+  { spaceId, takenAfter, takenBefore, withSharedSpaces },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/search/suggestions/tags${QS.query(
+        QS.explode({
+          spaceId,
+          takenAfter,
+          takenBefore,
+          withSharedSpaces,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Get server information
  */
 export function getAboutInfo(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/about", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/server/about', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Get APK links
  */
 export function getApkLinks(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/apk-links", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/server/apk-links', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Get config
  */
 export function getServerConfig(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/config", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/server/config', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Get features
  */
 export function getServerFeatures(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/features", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/server/features', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Delete server product key
  */
 export function deleteServerLicense(opts) {
-    return oazapfts.ok(oazapfts.fetchText("/server/license", {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText('/server/license', {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Get product key
  */
 export function getServerLicense(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/license", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText('/server/license', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Set server product key
  */
 export function setServerLicense({ licenseKeyDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/license", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/server/license',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: licenseKeyDto
-    })));
+        method: 'PUT',
+        body: licenseKeyDto,
+      }),
+    ),
+  );
 }
 /**
  * Get supported media types
  */
 export function getSupportedMediaTypes(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/media-types", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/server/media-types', {
+      ...opts,
+    }),
+  );
+}
+/**
+ * Smart search health
+ */
+export function getMlHealth(opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson('/server/ml-health', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Ping
  */
 export function pingServer(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/ping", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/server/ping', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Get statistics
  */
 export function getServerStatistics(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/statistics", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/server/statistics', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Get storage
  */
 export function getStorage(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/storage", {
-        ...opts
-    }));
-}
-/**
- * Get theme
- */
-export function getTheme(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/theme", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/server/storage', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Get server version
  */
 export function getServerVersion(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/version", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/server/version', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Get version check status
  */
 export function getVersionCheck(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/version-check", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/server/version-check', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Get version history
  */
 export function getVersionHistory(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/server/version-history", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/server/version-history', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Delete all sessions
  */
 export function deleteAllSessions(opts) {
-    return oazapfts.ok(oazapfts.fetchText("/sessions", {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText('/sessions', {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Retrieve sessions
  */
 export function getSessions(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/sessions", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/sessions', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Create a session
  */
 export function createSession({ sessionCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/sessions", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/sessions',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: sessionCreateDto
-    })));
+        method: 'POST',
+        body: sessionCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete a session
  */
 export function deleteSession({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/sessions/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/sessions/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Update a session
  */
 export function updateSession({ id, sessionUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/sessions/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/sessions/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: sessionUpdateDto
-    })));
+        method: 'PUT',
+        body: sessionUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Lock a session
  */
 export function lockSession({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/sessions/${encodeURIComponent(id)}/lock`, {
-        ...opts,
-        method: "POST"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/sessions/${encodeURIComponent(id)}/lock`, {
+      ...opts,
+      method: 'POST',
+    }),
+  );
 }
 /**
  * Retrieve all shared links
  */
 export function getAllSharedLinks({ albumId, id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-links${QS.query(QS.explode({
-        albumId,
-        id
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-links${QS.query(
+        QS.explode({
+          albumId,
+          id,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Create a shared link
  */
 export function createSharedLink({ sharedLinkCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/shared-links", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/shared-links',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: sharedLinkCreateDto
-    })));
+        method: 'POST',
+        body: sharedLinkCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Shared link login
  */
 export function sharedLinkLogin({ key, slug, sharedLinkLoginDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-links/login${QS.query(QS.explode({
-        key,
-        slug
-    }))}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-links/login${QS.query(
+        QS.explode({
+          key,
+          slug,
+        }),
+      )}`,
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: sharedLinkLoginDto
-    })));
+        method: 'POST',
+        body: sharedLinkLoginDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve current shared link
  */
-export function getMySharedLink({ key, password, slug, token }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-links/me${QS.query(QS.explode({
-        key,
-        password,
-        slug,
-        token
-    }))}`, {
-        ...opts
-    }));
+export function getMySharedLink({ key, slug }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-links/me${QS.query(
+        QS.explode({
+          key,
+          slug,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Delete a shared link
  */
 export function removeSharedLink({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-links/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/shared-links/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Retrieve a shared link
  */
 export function getSharedLinkById({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-links/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/shared-links/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update a shared link
  */
 export function updateSharedLink({ id, sharedLinkEditDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-links/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-links/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PATCH",
-        body: sharedLinkEditDto
-    })));
+        method: 'PATCH',
+        body: sharedLinkEditDto,
+      }),
+    ),
+  );
 }
 /**
  * Remove assets from a shared link
  */
 export function removeSharedLinkAssets({ id, assetIdsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-links/${encodeURIComponent(id)}/assets`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-links/${encodeURIComponent(id)}/assets`,
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: assetIdsDto
-    })));
+        method: 'DELETE',
+        body: assetIdsDto,
+      }),
+    ),
+  );
 }
 /**
  * Add assets to a shared link
  */
-export function addSharedLinkAssets({ id, key, slug, assetIdsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-links/${encodeURIComponent(id)}/assets${QS.query(QS.explode({
-        key,
-        slug
-    }))}`, oazapfts.json({
+export function addSharedLinkAssets({ id, assetIdsDto }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-links/${encodeURIComponent(id)}/assets`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: assetIdsDto
-    })));
+        method: 'PUT',
+        body: assetIdsDto,
+      }),
+    ),
+  );
 }
 /**
  * Get all shared spaces
  */
 export function getAllSpaces(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/shared-spaces", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/shared-spaces', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Create a shared space
  */
 export function createSpace({ sharedSpaceCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/shared-spaces", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/shared-spaces',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: sharedSpaceCreateDto
-    })));
+        method: 'POST',
+        body: sharedSpaceCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete a shared space
  */
 export function removeSpace({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Get a shared space
  */
 export function getSpace({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update a shared space
  */
 export function updateSpace({ id, sharedSpaceUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PATCH",
-        body: sharedSpaceUpdateDto
-    })));
+        method: 'PATCH',
+        body: sharedSpaceUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Get space activity feed
  */
 export function getSpaceActivities({ id, limit, offset }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}/activities${QS.query(QS.explode({
-        limit,
-        offset
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/activities${QS.query(
+        QS.explode({
+          limit,
+          offset,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Remove assets from a shared space
  */
 export function removeAssets({ id, sharedSpaceAssetRemoveDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/assets`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/shared-spaces/${encodeURIComponent(id)}/assets`,
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: sharedSpaceAssetRemoveDto
-    })));
+        method: 'DELETE',
+        body: sharedSpaceAssetRemoveDto,
+      }),
+    ),
+  );
 }
 /**
  * Add assets to a shared space
  */
 export function addAssets({ id, sharedSpaceAssetAddDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/assets`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/shared-spaces/${encodeURIComponent(id)}/assets`,
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: sharedSpaceAssetAddDto
-    })));
+        method: 'POST',
+        body: sharedSpaceAssetAddDto,
+      }),
+    ),
+  );
 }
 /**
  * Add all user assets to a shared space
  */
 export function bulkAddAssets({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/assets/bulk-add`, {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/shared-spaces/${encodeURIComponent(id)}/assets/bulk-add`,
+      {
         ...opts,
-        method: "POST"
-    }));
+        method: 'POST',
+      },
+    ),
+  );
 }
 /**
  * Link a library to a shared space
  */
 export function linkLibrary({ id, sharedSpaceLibraryLinkDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/libraries`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/shared-spaces/${encodeURIComponent(id)}/libraries`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: sharedSpaceLibraryLinkDto
-    })));
+        method: 'PUT',
+        body: sharedSpaceLibraryLinkDto,
+      }),
+    ),
+  );
 }
 /**
  * Unlink a library from a shared space
  */
 export function unlinkLibrary({ id, libraryId }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/libraries/${encodeURIComponent(libraryId)}`, {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/shared-spaces/${encodeURIComponent(id)}/libraries/${encodeURIComponent(libraryId)}`,
+      {
         ...opts,
-        method: "DELETE"
-    }));
+        method: 'DELETE',
+      },
+    ),
+  );
 }
 /**
  * Get map markers for a shared space
  */
 export function getSpaceMapMarkers({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}/map-markers`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}/map-markers`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Get members of a shared space
  */
 export function getMembers({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}/members`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}/members`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Add a member to a shared space
  */
 export function addMember({ id, sharedSpaceMemberCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}/members`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/members`,
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: sharedSpaceMemberCreateDto
-    })));
+        method: 'POST',
+        body: sharedSpaceMemberCreateDto,
+      }),
+    ),
+  );
+}
+/**
+ * Update current member preferences
+ */
+export function updateMemberPreferences(
+  { id, sharedSpaceMemberPreferencesDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/members/me/preferences`,
+      oazapfts.json({
+        ...opts,
+        method: 'PATCH',
+        body: sharedSpaceMemberPreferencesDto,
+      }),
+    ),
+  );
 }
 /**
  * Update timeline visibility for current member
  */
-export function updateMemberTimeline({ id, sharedSpaceMemberTimelineDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}/members/me/timeline`, oazapfts.json({
+export function updateMemberTimeline(
+  { id, sharedSpaceMemberTimelineDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/members/me/timeline`,
+      oazapfts.json({
         ...opts,
-        method: "PATCH",
-        body: sharedSpaceMemberTimelineDto
-    })));
+        method: 'PATCH',
+        body: sharedSpaceMemberTimelineDto,
+      }),
+    ),
+  );
 }
 /**
  * Remove a member from a shared space
  */
 export function removeMember({ id, userId }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/shared-spaces/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`,
+      {
         ...opts,
-        method: "DELETE"
-    }));
+        method: 'DELETE',
+      },
+    ),
+  );
 }
 /**
  * Update a member in a shared space
  */
 export function updateMember({ id, userId, sharedSpaceMemberUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`,
+      oazapfts.json({
         ...opts,
-        method: "PATCH",
-        body: sharedSpaceMemberUpdateDto
-    })));
+        method: 'PATCH',
+        body: sharedSpaceMemberUpdateDto,
+      }),
+    ),
+  );
+}
+/**
+ * Disable member person metadata contribution
+ */
+export function updateMemberMetadataContribution(
+  { id, userId, sharedSpaceMemberMetadataContributionDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}/metadata-contribution`,
+      oazapfts.json({
+        ...opts,
+        method: 'PATCH',
+        body: sharedSpaceMemberMetadataContributionDto,
+      }),
+    ),
+  );
 }
 /**
  * Get people in a shared space
  */
-export function getSpacePeople({ id, limit, named, offset, takenAfter, takenBefore, withHidden }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}/people${QS.query(QS.explode({
-        limit,
-        named,
-        offset,
-        takenAfter,
-        takenBefore,
-        withHidden
-    }))}`, {
-        ...opts
-    }));
+export function getSpacePeople(
+  { id, limit, name, named, offset, takenAfter, takenBefore, withHidden },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/people${QS.query(
+        QS.explode({
+          limit,
+          name,
+          named,
+          offset,
+          takenAfter,
+          takenBefore,
+          withHidden,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Deduplicate people in a shared space
  */
 export function deduplicateSpacePeople({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/deduplicate`, {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/shared-spaces/${encodeURIComponent(id)}/people/deduplicate`,
+      {
         ...opts,
-        method: "POST"
-    }));
+        method: 'POST',
+      },
+    ),
+  );
+}
+/**
+ * Get people face statistics in a shared space
+ */
+export function getSpacePeopleFaceStatistics(
+  { id, limit, name, named, offset, takenAfter, takenBefore, withHidden },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/people/face-statistics${QS.query(
+        QS.explode({
+          limit,
+          name,
+          named,
+          offset,
+          takenAfter,
+          takenBefore,
+          withHidden,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
+}
+/**
+ * Get people statistics in a shared space
+ */
+export function getSpacePeopleStatistics(
+  { id, limit, name, named, offset, takenAfter, takenBefore, withHidden },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/people/statistics${QS.query(
+        QS.explode({
+          limit,
+          name,
+          named,
+          offset,
+          takenAfter,
+          takenBefore,
+          withHidden,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Delete a person from a shared space
  */
 export function deleteSpacePerson({ id, personId }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}`, {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}`,
+      {
         ...opts,
-        method: "DELETE"
-    }));
+        method: 'DELETE',
+      },
+    ),
+  );
 }
 /**
  * Get a person in a shared space
  */
 export function getSpacePerson({ id, personId }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Update a person in a shared space
  */
-export function updateSpacePerson({ id, personId, sharedSpacePersonUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}`, oazapfts.json({
+export function updateSpacePerson(
+  { id, personId, sharedSpacePersonUpdateDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: sharedSpacePersonUpdateDto
-    })));
+        method: 'PUT',
+        body: sharedSpacePersonUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete a person alias in a shared space
  */
 export function deleteSpacePersonAlias({ id, personId }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/alias`, {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/alias`,
+      {
         ...opts,
-        method: "DELETE"
-    }));
+        method: 'DELETE',
+      },
+    ),
+  );
 }
 /**
  * Set a person alias in a shared space
  */
-export function setSpacePersonAlias({ id, personId, sharedSpacePersonAliasDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/alias`, oazapfts.json({
+export function setSpacePersonAlias(
+  { id, personId, sharedSpacePersonAliasDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/alias`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: sharedSpacePersonAliasDto
-    })));
+        method: 'PUT',
+        body: sharedSpacePersonAliasDto,
+      }),
+    ),
+  );
 }
 /**
  * Get assets for a person in a shared space
  */
 export function getSpacePersonAssets({ id, personId }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/assets`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/assets`,
+      {
+        ...opts,
+      },
+    ),
+  );
+}
+/**
+ * Get space person faces
+ */
+export function getSpacePersonFaces({ id, page, personId, size }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/faces${QS.query(
+        QS.explode({
+          page,
+          size,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
+}
+/**
+ * Get space person face thumbnail
+ */
+export function getSpacePersonFaceThumbnail({ faceId, id, personId }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchBlob(
+      `/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/faces/${encodeURIComponent(faceId)}/thumbnail`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Merge people in a shared space
  */
-export function mergeSpacePeople({ id, personId, sharedSpacePersonMergeDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/merge`, oazapfts.json({
+export function mergeSpacePeople(
+  { id, personId, sharedSpacePersonMergeDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/merge`,
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: sharedSpacePersonMergeDto
-    })));
+        method: 'POST',
+        body: sharedSpacePersonMergeDto,
+      }),
+    ),
+  );
+}
+/**
+ * Update space person representative face
+ */
+export function updateSpacePersonRepresentativeFace(
+  { id, personId, spaceRepresentativeFaceUpdateDto },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/representative-face`,
+      oazapfts.json({
+        ...opts,
+        method: 'PUT',
+        body: spaceRepresentativeFaceUpdateDto,
+      }),
+    ),
+  );
+}
+/**
+ * Get space person statistics
+ */
+export function getSpacePersonStatistics({ id, personId }, opts) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/statistics`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Get a space person thumbnail
  */
 export function getSpacePersonThumbnail({ id, personId }, opts) {
-    return oazapfts.ok(oazapfts.fetchBlob(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/thumbnail`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchBlob(
+      `/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/thumbnail`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Mark space as viewed
  */
 export function markSpaceViewed({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/view`, {
-        ...opts,
-        method: "PATCH"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/view`, {
+      ...opts,
+      method: 'PATCH',
+    }),
+  );
 }
 /**
  * Delete stacks
  */
 export function deleteStacks({ bulkIdsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/stacks", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/stacks',
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: bulkIdsDto
-    })));
+        method: 'DELETE',
+        body: bulkIdsDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve stacks
  */
 export function searchStacks({ primaryAssetId }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/stacks${QS.query(QS.explode({
-        primaryAssetId
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/stacks${QS.query(
+        QS.explode({
+          primaryAssetId,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Create a stack
  */
 export function createStack({ stackCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/stacks", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/stacks',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: stackCreateDto
-    })));
+        method: 'POST',
+        body: stackCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete a stack
  */
 export function deleteStack({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/stacks/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/stacks/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Retrieve a stack
  */
 export function getStack({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/stacks/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/stacks/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update a stack
  */
 export function updateStack({ id, stackUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/stacks/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/stacks/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: stackUpdateDto
-    })));
+        method: 'PUT',
+        body: stackUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Remove an asset from a stack
  */
 export function removeAssetFromStack({ assetId, id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/stacks/${encodeURIComponent(id)}/assets/${encodeURIComponent(assetId)}`, {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/stacks/${encodeURIComponent(id)}/assets/${encodeURIComponent(assetId)}`,
+      {
         ...opts,
-        method: "DELETE"
-    }));
+        method: 'DELETE',
+      },
+    ),
+  );
 }
 /**
  * Get storage migration estimate
  */
 export function getEstimate({ direction }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/storage-migration/estimate${QS.query(QS.explode({
-        direction
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/storage-migration/estimate${QS.query(
+        QS.explode({
+          direction,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Rollback a storage migration batch
  */
 export function rollback({ batchId }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/storage-migration/rollback/${encodeURIComponent(batchId)}`, {
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      `/storage-migration/rollback/${encodeURIComponent(batchId)}`,
+      {
         ...opts,
-        method: "POST"
-    }));
+        method: 'POST',
+      },
+    ),
+  );
 }
 /**
  * Start storage migration
  */
 export function start({ storageMigrationStartDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/storage-migration/start", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/storage-migration/start',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: storageMigrationStartDto
-    })));
+        method: 'POST',
+        body: storageMigrationStartDto,
+      }),
+    ),
+  );
 }
 /**
  * Get storage migration status
  */
 export function getStatus(opts) {
-    return oazapfts.ok(oazapfts.fetchText("/storage-migration/status", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText('/storage-migration/status', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Delete acknowledgements
  */
 export function deleteSyncAck({ syncAckDeleteDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/sync/ack", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/sync/ack',
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: syncAckDeleteDto
-    })));
+        method: 'DELETE',
+        body: syncAckDeleteDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve acknowledgements
  */
 export function getSyncAck(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/sync/ack", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/sync/ack', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Acknowledge changes
  */
 export function sendSyncAck({ syncAckSetDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/sync/ack", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/sync/ack',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: syncAckSetDto
-    })));
-}
-/**
- * Get delta sync for user
- */
-export function getDeltaSync({ assetDeltaSyncDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/sync/delta-sync", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: assetDeltaSyncDto
-    })));
-}
-/**
- * Get full sync for user
- */
-export function getFullSyncForUser({ assetFullSyncDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/sync/full-sync", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: assetFullSyncDto
-    })));
+        method: 'POST',
+        body: syncAckSetDto,
+      }),
+    ),
+  );
 }
 /**
  * Stream sync changes
  */
 export function getSyncStream({ syncStreamDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/sync/stream", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/sync/stream',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: syncStreamDto
-    })));
+        method: 'POST',
+        body: syncStreamDto,
+      }),
+    ),
+  );
 }
 /**
  * Get system configuration
  */
 export function getConfig(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/system-config", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/system-config', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update system configuration
  */
 export function updateConfig({ systemConfigDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/system-config", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/system-config',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: systemConfigDto
-    })));
+        method: 'PUT',
+        body: systemConfigDto,
+      }),
+    ),
+  );
 }
 /**
  * Get system configuration defaults
  */
 export function getConfigDefaults(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/system-config/defaults", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/system-config/defaults', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Get storage template options
  */
 export function getStorageTemplateOptions(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/system-config/storage-template-options", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/system-config/storage-template-options', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Retrieve admin onboarding
  */
 export function getAdminOnboarding(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/system-metadata/admin-onboarding", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/system-metadata/admin-onboarding', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update admin onboarding
  */
 export function updateAdminOnboarding({ adminOnboardingUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchText("/system-metadata/admin-onboarding", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchText(
+      '/system-metadata/admin-onboarding',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: adminOnboardingUpdateDto
-    })));
+        method: 'POST',
+        body: adminOnboardingUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve reverse geocoding state
  */
 export function getReverseGeocodingState(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/system-metadata/reverse-geocoding-state", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/system-metadata/reverse-geocoding-state', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Retrieve version check state
  */
 export function getVersionCheckState(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/system-metadata/version-check-state", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/system-metadata/version-check-state', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Retrieve tags
  */
 export function getAllTags(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/tags", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/tags', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Create a tag
  */
 export function createTag({ tagCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/tags", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/tags',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: tagCreateDto
-    })));
+        method: 'POST',
+        body: tagCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Upsert tags
  */
 export function upsertTags({ tagUpsertDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/tags", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/tags',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: tagUpsertDto
-    })));
+        method: 'PUT',
+        body: tagUpsertDto,
+      }),
+    ),
+  );
 }
 /**
  * Tag assets
  */
 export function bulkTagAssets({ tagBulkAssetsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/tags/assets", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/tags/assets',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: tagBulkAssetsDto
-    })));
+        method: 'PUT',
+        body: tagBulkAssetsDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete a tag
  */
 export function deleteTag({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/tags/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/tags/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Retrieve a tag
  */
 export function getTagById({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/tags/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/tags/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update a tag
  */
 export function updateTag({ id, tagUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/tags/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/tags/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: tagUpdateDto
-    })));
+        method: 'PUT',
+        body: tagUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Untag assets
  */
 export function untagAssets({ id, bulkIdsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/tags/${encodeURIComponent(id)}/assets`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/tags/${encodeURIComponent(id)}/assets`,
+      oazapfts.json({
         ...opts,
-        method: "DELETE",
-        body: bulkIdsDto
-    })));
+        method: 'DELETE',
+        body: bulkIdsDto,
+      }),
+    ),
+  );
 }
 /**
  * Tag assets
  */
 export function tagAssets({ id, bulkIdsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/tags/${encodeURIComponent(id)}/assets`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/tags/${encodeURIComponent(id)}/assets`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: bulkIdsDto
-    })));
+        method: 'PUT',
+        body: bulkIdsDto,
+      }),
+    ),
+  );
 }
 /**
  * Get time bucket
  */
-export function getTimeBucket({ albumId, bbox, city, country, isFavorite, isTrashed, key, make, model, order, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, timeBucket, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/timeline/bucket${QS.query(QS.explode({
-        albumId,
-        bbox,
-        city,
-        country,
-        isFavorite,
-        isTrashed,
-        key,
-        make,
-        model,
-        order,
-        personId,
-        personIds,
-        rating,
-        slug,
-        spaceId,
-        spacePersonId,
-        spacePersonIds,
-        tagId,
-        tagIds,
-        takenAfter,
-        takenBefore,
-        timeBucket,
-        "type": $type,
-        userId,
-        visibility,
-        withCoordinates,
-        withPartners,
-        withSharedSpaces,
-        withStacked
-    }))}`, {
-        ...opts
-    }));
+export function getTimeBucket(
+  {
+    albumId,
+    bbox,
+    city,
+    country,
+    isFavorite,
+    isNotInAlbum,
+    isTrashed,
+    key,
+    make,
+    model,
+    order,
+    personId,
+    personIds,
+    rating,
+    slug,
+    spaceId,
+    spacePersonId,
+    spacePersonIds,
+    tagId,
+    tagIds,
+    takenAfter,
+    takenBefore,
+    timeBucket,
+    $type,
+    userId,
+    visibility,
+    withCoordinates,
+    withPartners,
+    withSharedSpaces,
+    withStacked,
+  },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/timeline/bucket${QS.query(
+        QS.explode({
+          albumId,
+          bbox,
+          city,
+          country,
+          isFavorite,
+          isNotInAlbum,
+          isTrashed,
+          key,
+          make,
+          model,
+          order,
+          personId,
+          personIds,
+          rating,
+          slug,
+          spaceId,
+          spacePersonId,
+          spacePersonIds,
+          tagId,
+          tagIds,
+          takenAfter,
+          takenBefore,
+          timeBucket,
+          type: $type,
+          userId,
+          visibility,
+          withCoordinates,
+          withPartners,
+          withSharedSpaces,
+          withStacked,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Get time buckets
  */
-export function getTimeBuckets({ albumId, bbox, city, country, isFavorite, isTrashed, key, make, model, order, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/timeline/buckets${QS.query(QS.explode({
-        albumId,
-        bbox,
-        city,
-        country,
-        isFavorite,
-        isTrashed,
-        key,
-        make,
-        model,
-        order,
-        personId,
-        personIds,
-        rating,
-        slug,
-        spaceId,
-        spacePersonId,
-        spacePersonIds,
-        tagId,
-        tagIds,
-        takenAfter,
-        takenBefore,
-        "type": $type,
-        userId,
-        visibility,
-        withCoordinates,
-        withPartners,
-        withSharedSpaces,
-        withStacked
-    }))}`, {
-        ...opts
-    }));
+export function getTimeBuckets(
+  {
+    albumId,
+    bbox,
+    city,
+    country,
+    isFavorite,
+    isNotInAlbum,
+    isTrashed,
+    key,
+    make,
+    model,
+    order,
+    personId,
+    personIds,
+    rating,
+    slug,
+    spaceId,
+    spacePersonId,
+    spacePersonIds,
+    tagId,
+    tagIds,
+    takenAfter,
+    takenBefore,
+    $type,
+    userId,
+    visibility,
+    withCoordinates,
+    withPartners,
+    withSharedSpaces,
+    withStacked,
+  },
+  opts,
+) {
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/timeline/buckets${QS.query(
+        QS.explode({
+          albumId,
+          bbox,
+          city,
+          country,
+          isFavorite,
+          isNotInAlbum,
+          isTrashed,
+          key,
+          make,
+          model,
+          order,
+          personId,
+          personIds,
+          rating,
+          slug,
+          spaceId,
+          spacePersonId,
+          spacePersonIds,
+          tagId,
+          tagIds,
+          takenAfter,
+          takenBefore,
+          type: $type,
+          userId,
+          visibility,
+          withCoordinates,
+          withPartners,
+          withSharedSpaces,
+          withStacked,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Empty trash
  */
 export function emptyTrash(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/trash/empty", {
-        ...opts,
-        method: "POST"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/trash/empty', {
+      ...opts,
+      method: 'POST',
+    }),
+  );
 }
 /**
  * Restore trash
  */
 export function restoreTrash(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/trash/restore", {
-        ...opts,
-        method: "POST"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/trash/restore', {
+      ...opts,
+      method: 'POST',
+    }),
+  );
 }
 /**
  * Restore assets
  */
 export function restoreAssets({ bulkIdsDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/trash/restore/assets", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/trash/restore/assets',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: bulkIdsDto
-    })));
+        method: 'POST',
+        body: bulkIdsDto,
+      }),
+    ),
+  );
 }
 /**
  * Get all user groups
  */
 export function getAllGroups(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/user-groups", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/user-groups', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Create a user group
  */
 export function createGroup({ userGroupCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/user-groups", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/user-groups',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: userGroupCreateDto
-    })));
+        method: 'POST',
+        body: userGroupCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete a user group
  */
 export function removeGroup({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/user-groups/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/user-groups/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Get a user group
  */
 export function getGroup({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/user-groups/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/user-groups/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update a user group
  */
 export function updateGroup({ id, userGroupUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/user-groups/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/user-groups/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PATCH",
-        body: userGroupUpdateDto
-    })));
+        method: 'PATCH',
+        body: userGroupUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Set group members
  */
 export function setMembers({ id, userGroupMemberSetDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/user-groups/${encodeURIComponent(id)}/members`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/user-groups/${encodeURIComponent(id)}/members`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: userGroupMemberSetDto
-    })));
+        method: 'PUT',
+        body: userGroupMemberSetDto,
+      }),
+    ),
+  );
 }
 /**
  * Get all users
  */
 export function searchUsers(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/users", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/users', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Get current user
  */
 export function getMyUser(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/users/me", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/users/me', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update current user
  */
 export function updateMyUser({ userUpdateMeDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/users/me", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/users/me',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: userUpdateMeDto
-    })));
+        method: 'PUT',
+        body: userUpdateMeDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete user product key
  */
 export function deleteUserLicense(opts) {
-    return oazapfts.ok(oazapfts.fetchText("/users/me/license", {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText('/users/me/license', {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Retrieve user product key
  */
 export function getUserLicense(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/users/me/license", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/users/me/license', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Set user product key
  */
 export function setUserLicense({ licenseKeyDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/users/me/license", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/users/me/license',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: licenseKeyDto
-    })));
+        method: 'PUT',
+        body: licenseKeyDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete user onboarding
  */
 export function deleteUserOnboarding(opts) {
-    return oazapfts.ok(oazapfts.fetchText("/users/me/onboarding", {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText('/users/me/onboarding', {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Retrieve user onboarding
  */
 export function getUserOnboarding(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/users/me/onboarding", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/users/me/onboarding', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update user onboarding
  */
 export function setUserOnboarding({ onboardingDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/users/me/onboarding", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/users/me/onboarding',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: onboardingDto
-    })));
+        method: 'PUT',
+        body: onboardingDto,
+      }),
+    ),
+  );
 }
 /**
  * Get my preferences
  */
 export function getMyPreferences(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/users/me/preferences", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/users/me/preferences', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update my preferences
  */
 export function updateMyPreferences({ userPreferencesUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/users/me/preferences", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/users/me/preferences',
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: userPreferencesUpdateDto
-    })));
+        method: 'PUT',
+        body: userPreferencesUpdateDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete user profile image
  */
 export function deleteProfileImage(opts) {
-    return oazapfts.ok(oazapfts.fetchText("/users/profile-image", {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText('/users/profile-image', {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Create user profile image
  */
 export function createProfileImage({ createProfileImageDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/users/profile-image", oazapfts.multipart({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/users/profile-image',
+      oazapfts.multipart({
         ...opts,
-        method: "POST",
-        body: createProfileImageDto
-    })));
+        method: 'POST',
+        body: createProfileImageDto,
+      }),
+    ),
+  );
 }
 /**
  * Retrieve a user
  */
 export function getUser({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/users/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/users/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Retrieve user profile image
  */
 export function getProfileImage({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchBlob(`/users/${encodeURIComponent(id)}/profile-image`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchBlob(`/users/${encodeURIComponent(id)}/profile-image`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Retrieve assets by original path
  */
 export function getAssetsByOriginalPath({ path }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/view/folder${QS.query(QS.explode({
-        path
-    }))}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/view/folder${QS.query(
+        QS.explode({
+          path,
+        }),
+      )}`,
+      {
+        ...opts,
+      },
+    ),
+  );
 }
 /**
  * Retrieve unique paths
  */
 export function getUniqueOriginalPaths(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/view/folder/unique-paths", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/view/folder/unique-paths', {
+      ...opts,
+    }),
+  );
 }
 /**
  * List all workflows
  */
 export function getWorkflows(opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/workflows", {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson('/workflows', {
+      ...opts,
+    }),
+  );
 }
 /**
  * Create a workflow
  */
 export function createWorkflow({ workflowCreateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson("/workflows", oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      '/workflows',
+      oazapfts.json({
         ...opts,
-        method: "POST",
-        body: workflowCreateDto
-    })));
+        method: 'POST',
+        body: workflowCreateDto,
+      }),
+    ),
+  );
 }
 /**
  * Delete a workflow
  */
 export function deleteWorkflow({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchText(`/workflows/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchText(`/workflows/${encodeURIComponent(id)}`, {
+      ...opts,
+      method: 'DELETE',
+    }),
+  );
 }
 /**
  * Retrieve a workflow
  */
 export function getWorkflow({ id }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/workflows/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
+  return oazapfts.ok(
+    oazapfts.fetchJson(`/workflows/${encodeURIComponent(id)}`, {
+      ...opts,
+    }),
+  );
 }
 /**
  * Update a workflow
  */
 export function updateWorkflow({ id, workflowUpdateDto }, opts) {
-    return oazapfts.ok(oazapfts.fetchJson(`/workflows/${encodeURIComponent(id)}`, oazapfts.json({
+  return oazapfts.ok(
+    oazapfts.fetchJson(
+      `/workflows/${encodeURIComponent(id)}`,
+      oazapfts.json({
         ...opts,
-        method: "PUT",
-        body: workflowUpdateDto
-    })));
+        method: 'PUT',
+        body: workflowUpdateDto,
+      }),
+    ),
+  );
 }
 export var ReactionLevel;
 (function (ReactionLevel) {
-    ReactionLevel["Album"] = "album";
-    ReactionLevel["Asset"] = "asset";
+  ReactionLevel['Album'] = 'album';
+  ReactionLevel['Asset'] = 'asset';
 })(ReactionLevel || (ReactionLevel = {}));
 export var ReactionType;
 (function (ReactionType) {
-    ReactionType["Comment"] = "comment";
-    ReactionType["Like"] = "like";
+  ReactionType['Comment'] = 'comment';
+  ReactionType['Like'] = 'like';
 })(ReactionType || (ReactionType = {}));
 export var UserAvatarColor;
 (function (UserAvatarColor) {
-    UserAvatarColor["Primary"] = "primary";
-    UserAvatarColor["Pink"] = "pink";
-    UserAvatarColor["Red"] = "red";
-    UserAvatarColor["Yellow"] = "yellow";
-    UserAvatarColor["Blue"] = "blue";
-    UserAvatarColor["Green"] = "green";
-    UserAvatarColor["Purple"] = "purple";
-    UserAvatarColor["Orange"] = "orange";
-    UserAvatarColor["Gray"] = "gray";
-    UserAvatarColor["Amber"] = "amber";
+  UserAvatarColor['Primary'] = 'primary';
+  UserAvatarColor['Pink'] = 'pink';
+  UserAvatarColor['Red'] = 'red';
+  UserAvatarColor['Yellow'] = 'yellow';
+  UserAvatarColor['Blue'] = 'blue';
+  UserAvatarColor['Green'] = 'green';
+  UserAvatarColor['Purple'] = 'purple';
+  UserAvatarColor['Orange'] = 'orange';
+  UserAvatarColor['Gray'] = 'gray';
+  UserAvatarColor['Amber'] = 'amber';
 })(UserAvatarColor || (UserAvatarColor = {}));
 export var MaintenanceAction;
 (function (MaintenanceAction) {
-    MaintenanceAction["Start"] = "start";
-    MaintenanceAction["End"] = "end";
-    MaintenanceAction["SelectDatabaseRestore"] = "select_database_restore";
-    MaintenanceAction["RestoreDatabase"] = "restore_database";
+  MaintenanceAction['Start'] = 'start';
+  MaintenanceAction['End'] = 'end';
+  MaintenanceAction['SelectDatabaseRestore'] = 'select_database_restore';
+  MaintenanceAction['RestoreDatabase'] = 'restore_database';
 })(MaintenanceAction || (MaintenanceAction = {}));
 export var StorageFolder;
 (function (StorageFolder) {
-    StorageFolder["EncodedVideo"] = "encoded-video";
-    StorageFolder["Library"] = "library";
-    StorageFolder["Upload"] = "upload";
-    StorageFolder["Profile"] = "profile";
-    StorageFolder["Thumbs"] = "thumbs";
-    StorageFolder["Backups"] = "backups";
+  StorageFolder['EncodedVideo'] = 'encoded-video';
+  StorageFolder['Library'] = 'library';
+  StorageFolder['Upload'] = 'upload';
+  StorageFolder['Profile'] = 'profile';
+  StorageFolder['Thumbs'] = 'thumbs';
+  StorageFolder['Backups'] = 'backups';
 })(StorageFolder || (StorageFolder = {}));
 export var NotificationLevel;
 (function (NotificationLevel) {
-    NotificationLevel["Success"] = "success";
-    NotificationLevel["Error"] = "error";
-    NotificationLevel["Warning"] = "warning";
-    NotificationLevel["Info"] = "info";
+  NotificationLevel['Success'] = 'success';
+  NotificationLevel['Error'] = 'error';
+  NotificationLevel['Warning'] = 'warning';
+  NotificationLevel['Info'] = 'info';
 })(NotificationLevel || (NotificationLevel = {}));
 export var NotificationType;
 (function (NotificationType) {
-    NotificationType["JobFailed"] = "JobFailed";
-    NotificationType["BackupFailed"] = "BackupFailed";
-    NotificationType["SystemMessage"] = "SystemMessage";
-    NotificationType["AlbumInvite"] = "AlbumInvite";
-    NotificationType["AlbumUpdate"] = "AlbumUpdate";
-    NotificationType["Custom"] = "Custom";
+  NotificationType['JobFailed'] = 'JobFailed';
+  NotificationType['BackupFailed'] = 'BackupFailed';
+  NotificationType['SystemMessage'] = 'SystemMessage';
+  NotificationType['AlbumInvite'] = 'AlbumInvite';
+  NotificationType['AlbumUpdate'] = 'AlbumUpdate';
+  NotificationType['Custom'] = 'Custom';
 })(NotificationType || (NotificationType = {}));
 export var UserStatus;
 (function (UserStatus) {
-    UserStatus["Active"] = "active";
-    UserStatus["Removing"] = "removing";
-    UserStatus["Deleted"] = "deleted";
+  UserStatus['Active'] = 'active';
+  UserStatus['Removing'] = 'removing';
+  UserStatus['Deleted'] = 'deleted';
 })(UserStatus || (UserStatus = {}));
 export var AssetOrder;
 (function (AssetOrder) {
-    AssetOrder["Asc"] = "asc";
-    AssetOrder["Desc"] = "desc";
+  AssetOrder['Asc'] = 'asc';
+  AssetOrder['Desc'] = 'desc';
 })(AssetOrder || (AssetOrder = {}));
 export var AssetVisibility;
 (function (AssetVisibility) {
-    AssetVisibility["Archive"] = "archive";
-    AssetVisibility["Timeline"] = "timeline";
-    AssetVisibility["Hidden"] = "hidden";
-    AssetVisibility["Locked"] = "locked";
+  AssetVisibility['Archive'] = 'archive';
+  AssetVisibility['Timeline'] = 'timeline';
+  AssetVisibility['Hidden'] = 'hidden';
+  AssetVisibility['Locked'] = 'locked';
 })(AssetVisibility || (AssetVisibility = {}));
-export var AlbumUserRole;
-(function (AlbumUserRole) {
-    AlbumUserRole["Editor"] = "editor";
-    AlbumUserRole["Viewer"] = "viewer";
-})(AlbumUserRole || (AlbumUserRole = {}));
-export var SourceType;
-(function (SourceType) {
-    SourceType["MachineLearning"] = "machine-learning";
-    SourceType["Exif"] = "exif";
-    SourceType["Manual"] = "manual";
-})(SourceType || (SourceType = {}));
+export var ProviderType;
+(function (ProviderType) {
+  ProviderType['Openai'] = 'openai';
+  ProviderType['Anthropic'] = 'anthropic';
+  ProviderType['OpenaiCompatible'] = 'openai-compatible';
+})(ProviderType || (ProviderType = {}));
+export var AgentRunnerStatusReason;
+(function (AgentRunnerStatusReason) {
+  AgentRunnerStatusReason['NotConfigured'] = 'not-configured';
+  AgentRunnerStatusReason['Healthy'] = 'healthy';
+  AgentRunnerStatusReason['Unhealthy'] = 'unhealthy';
+  AgentRunnerStatusReason['Timeout'] = 'timeout';
+  AgentRunnerStatusReason['InvalidResponse'] = 'invalid-response';
+})(AgentRunnerStatusReason || (AgentRunnerStatusReason = {}));
+export var AgentApprovalMode;
+(function (AgentApprovalMode) {
+  AgentApprovalMode['Strict'] = 'strict';
+  AgentApprovalMode['AskOnEscalation'] = 'ask-on-escalation';
+  AgentApprovalMode['PlanOnly'] = 'plan-only';
+  AgentApprovalMode['DangerouslySkipPermissions'] =
+    'dangerously-skip-permissions';
+})(AgentApprovalMode || (AgentApprovalMode = {}));
+export var AgentProviderType;
+(function (AgentProviderType) {
+  AgentProviderType['Openai'] = 'openai';
+  AgentProviderType['Anthropic'] = 'anthropic';
+  AgentProviderType['OpenaiCompatible'] = 'openai-compatible';
+})(AgentProviderType || (AgentProviderType = {}));
+export var AgentPermissionPreset;
+(function (AgentPermissionPreset) {
+  AgentPermissionPreset['Careful'] = 'careful';
+  AgentPermissionPreset['VisualOrganizer'] = 'visual-organizer';
+  AgentPermissionPreset['LocalPowerUser'] = 'local-power-user';
+  AgentPermissionPreset['Custom'] = 'custom';
+})(AgentPermissionPreset || (AgentPermissionPreset = {}));
+export var AgentSessionStatus;
+(function (AgentSessionStatus) {
+  AgentSessionStatus['Created'] = 'created';
+  AgentSessionStatus['Running'] = 'running';
+  AgentSessionStatus['WaitingForToolApproval'] = 'waiting_for_tool_approval';
+  AgentSessionStatus['WaitingForPlanReview'] = 'waiting_for_plan_review';
+  AgentSessionStatus['Applying'] = 'applying';
+  AgentSessionStatus['Completed'] = 'completed';
+  AgentSessionStatus['Cancelled'] = 'cancelled';
+  AgentSessionStatus['Interrupted'] = 'interrupted';
+  AgentSessionStatus['Failed'] = 'failed';
+})(AgentSessionStatus || (AgentSessionStatus = {}));
+export var Kind;
+(function (Kind) {
+  Kind['StartProcessing'] = 'start-processing';
+  Kind['PlanComposing'] = 'plan-composing';
+  Kind['ApplyProgress'] = 'apply-progress';
+  Kind['RunnerRecovery'] = 'runner-recovery';
+  Kind['Unknown'] = 'unknown';
+})(Kind || (Kind = {}));
+export var AgentSessionActivityEventSource;
+(function (AgentSessionActivityEventSource) {
+  AgentSessionActivityEventSource['Server'] = 'server';
+  AgentSessionActivityEventSource['Runner'] = 'runner';
+})(AgentSessionActivityEventSource || (AgentSessionActivityEventSource = {}));
+export var AgentSessionActivityEventStatus;
+(function (AgentSessionActivityEventStatus) {
+  AgentSessionActivityEventStatus['Running'] = 'running';
+  AgentSessionActivityEventStatus['Completed'] = 'completed';
+  AgentSessionActivityEventStatus['Failed'] = 'failed';
+  AgentSessionActivityEventStatus['Skipped'] = 'skipped';
+})(AgentSessionActivityEventStatus || (AgentSessionActivityEventStatus = {}));
+export var AgentMessageTextBlockType;
+(function (AgentMessageTextBlockType) {
+  AgentMessageTextBlockType['Text'] = 'text';
+})(AgentMessageTextBlockType || (AgentMessageTextBlockType = {}));
+export var AgentMessageToolCallBlockType;
+(function (AgentMessageToolCallBlockType) {
+  AgentMessageToolCallBlockType['ToolCall'] = 'tool-call';
+})(AgentMessageToolCallBlockType || (AgentMessageToolCallBlockType = {}));
+export var AgentMessageAssetBlockType;
+(function (AgentMessageAssetBlockType) {
+  AgentMessageAssetBlockType['Asset'] = 'asset';
+})(AgentMessageAssetBlockType || (AgentMessageAssetBlockType = {}));
+export var AgentMessagePlanBlockType;
+(function (AgentMessagePlanBlockType) {
+  AgentMessagePlanBlockType['Plan'] = 'plan';
+})(AgentMessagePlanBlockType || (AgentMessagePlanBlockType = {}));
+export var Kind2;
+(function (Kind2) {
+  Kind2['Person'] = 'person';
+  Kind2['Tag'] = 'tag';
+  Kind2['Album'] = 'album';
+  Kind2['Space'] = 'space';
+  Kind2['CameraMake'] = 'cameraMake';
+  Kind2['CameraModel'] = 'cameraModel';
+  Kind2['LensModel'] = 'lensModel';
+})(Kind2 || (Kind2 = {}));
+export var AgentMessageClarificationBlockType;
+(function (AgentMessageClarificationBlockType) {
+  AgentMessageClarificationBlockType['Clarification'] = 'clarification';
+})(
+  AgentMessageClarificationBlockType ||
+    (AgentMessageClarificationBlockType = {}),
+);
+export var AgentMessageRole;
+(function (AgentMessageRole) {
+  AgentMessageRole['User'] = 'user';
+  AgentMessageRole['Assistant'] = 'assistant';
+  AgentMessageRole['System'] = 'system';
+  AgentMessageRole['Tool'] = 'tool';
+})(AgentMessageRole || (AgentMessageRole = {}));
+export var AgentOperationRiskLevel;
+(function (AgentOperationRiskLevel) {
+  AgentOperationRiskLevel['Low'] = 'low';
+  AgentOperationRiskLevel['Medium'] = 'medium';
+  AgentOperationRiskLevel['High'] = 'high';
+})(AgentOperationRiskLevel || (AgentOperationRiskLevel = {}));
+export var AgentOperationStatus;
+(function (AgentOperationStatus) {
+  AgentOperationStatus['Proposed'] = 'proposed';
+  AgentOperationStatus['Applied'] = 'applied';
+  AgentOperationStatus['Skipped'] = 'skipped';
+  AgentOperationStatus['Failed'] = 'failed';
+})(AgentOperationStatus || (AgentOperationStatus = {}));
+export var AgentOperationTargetKind;
+(function (AgentOperationTargetKind) {
+  AgentOperationTargetKind['NewAlbum'] = 'new_album';
+  AgentOperationTargetKind['ExistingAlbum'] = 'existing_album';
+  AgentOperationTargetKind['NewSpace'] = 'new_space';
+  AgentOperationTargetKind['ExistingSpace'] = 'existing_space';
+  AgentOperationTargetKind['AssetBatch'] = 'asset_batch';
+  AgentOperationTargetKind['ImageEditBatch'] = 'image_edit_batch';
+})(AgentOperationTargetKind || (AgentOperationTargetKind = {}));
+export var AgentOperationType;
+(function (AgentOperationType) {
+  AgentOperationType['AlbumCreate'] = 'album.create';
+  AgentOperationType['AlbumAddAssets'] = 'album.addAssets';
+  AgentOperationType['AlbumRemoveAssets'] = 'album.removeAssets';
+  AgentOperationType['AlbumUpdateDetails'] = 'album.updateDetails';
+  AgentOperationType['AlbumSetCover'] = 'album.setCover';
+  AgentOperationType['SpaceCreate'] = 'space.create';
+  AgentOperationType['SpaceAddAssets'] = 'space.addAssets';
+  AgentOperationType['SpaceRemoveAssets'] = 'space.removeAssets';
+  AgentOperationType['SpaceUpdateDetails'] = 'space.updateDetails';
+  AgentOperationType['SpaceAddMembers'] = 'space.addMembers';
+  AgentOperationType['SpaceRemoveMembers'] = 'space.removeMembers';
+  AgentOperationType['SpaceUpdateMemberRole'] = 'space.updateMemberRole';
+  AgentOperationType['AssetRotate'] = 'asset.rotate';
+  AgentOperationType['AssetSetFavorite'] = 'asset.setFavorite';
+  AgentOperationType['AssetSetArchive'] = 'asset.setArchive';
+  AgentOperationType['AssetAddTag'] = 'asset.addTag';
+  AgentOperationType['AssetRemoveTag'] = 'asset.removeTag';
+})(AgentOperationType || (AgentOperationType = {}));
+export var AgentOperationPlanStatus;
+(function (AgentOperationPlanStatus) {
+  AgentOperationPlanStatus['Proposed'] = 'proposed';
+  AgentOperationPlanStatus['Superseded'] = 'superseded';
+  AgentOperationPlanStatus['Applied'] = 'applied';
+  AgentOperationPlanStatus['Cancelled'] = 'cancelled';
+})(AgentOperationPlanStatus || (AgentOperationPlanStatus = {}));
+export var AgentAlbumCreateOperationType;
+(function (AgentAlbumCreateOperationType) {
+  AgentAlbumCreateOperationType['AlbumCreate'] = 'album.create';
+})(AgentAlbumCreateOperationType || (AgentAlbumCreateOperationType = {}));
+export var AgentOperationNewAlbumTargetKind;
+(function (AgentOperationNewAlbumTargetKind) {
+  AgentOperationNewAlbumTargetKind['NewAlbum'] = 'new_album';
+})(AgentOperationNewAlbumTargetKind || (AgentOperationNewAlbumTargetKind = {}));
+export var AgentAlbumAddAssetsOperationType;
+(function (AgentAlbumAddAssetsOperationType) {
+  AgentAlbumAddAssetsOperationType['AlbumAddAssets'] = 'album.addAssets';
+})(AgentAlbumAddAssetsOperationType || (AgentAlbumAddAssetsOperationType = {}));
+export var AgentDeclarativeNameMatch;
+(function (AgentDeclarativeNameMatch) {
+  AgentDeclarativeNameMatch['Any'] = 'any';
+  AgentDeclarativeNameMatch['All'] = 'all';
+})(AgentDeclarativeNameMatch || (AgentDeclarativeNameMatch = {}));
 export var AssetTypeEnum;
 (function (AssetTypeEnum) {
-    AssetTypeEnum["Image"] = "IMAGE";
-    AssetTypeEnum["Video"] = "VIDEO";
-    AssetTypeEnum["Audio"] = "AUDIO";
-    AssetTypeEnum["Other"] = "OTHER";
+  AssetTypeEnum['Image'] = 'IMAGE';
+  AssetTypeEnum['Video'] = 'VIDEO';
+  AssetTypeEnum['Audio'] = 'AUDIO';
+  AssetTypeEnum['Other'] = 'OTHER';
 })(AssetTypeEnum || (AssetTypeEnum = {}));
+export var Kind3;
+(function (Kind3) {
+  Kind3['Search'] = 'search';
+})(Kind3 || (Kind3 = {}));
+export var Materialization;
+(function (Materialization) {
+  Materialization['BoundedPage'] = 'bounded-page';
+  Materialization['AllMatchesWithLimit'] = 'all-matches-with-limit';
+})(Materialization || (Materialization = {}));
+export var Mode;
+(function (Mode) {
+  Mode['Metadata'] = 'metadata';
+  Mode['Smart'] = 'smart';
+  Mode['Description'] = 'description';
+  Mode['Ocr'] = 'ocr';
+  Mode['Filename'] = 'filename';
+})(Mode || (Mode = {}));
+export var Order;
+(function (Order) {
+  Order['Asc'] = 'asc';
+  Order['Desc'] = 'desc';
+  Order['Relevance'] = 'relevance';
+})(Order || (Order = {}));
+export var Kind4;
+(function (Kind4) {
+  Kind4['PreviousSearch'] = 'previousSearch';
+})(Kind4 || (Kind4 = {}));
+export var Kind5;
+(function (Kind5) {
+  Kind5['SelectionHandle'] = 'selectionHandle';
+})(Kind5 || (Kind5 = {}));
+export var Kind6;
+(function (Kind6) {
+  Kind6['ExplicitAssets'] = 'explicitAssets';
+})(Kind6 || (Kind6 = {}));
+export var AgentAlbumRemoveAssetsOperationType;
+(function (AgentAlbumRemoveAssetsOperationType) {
+  AgentAlbumRemoveAssetsOperationType['AlbumRemoveAssets'] =
+    'album.removeAssets';
+})(
+  AgentAlbumRemoveAssetsOperationType ||
+    (AgentAlbumRemoveAssetsOperationType = {}),
+);
+export var AgentAlbumUpdateDetailsOperationType;
+(function (AgentAlbumUpdateDetailsOperationType) {
+  AgentAlbumUpdateDetailsOperationType['AlbumUpdateDetails'] =
+    'album.updateDetails';
+})(
+  AgentAlbumUpdateDetailsOperationType ||
+    (AgentAlbumUpdateDetailsOperationType = {}),
+);
+export var AgentOperationExistingAlbumTargetKind;
+(function (AgentOperationExistingAlbumTargetKind) {
+  AgentOperationExistingAlbumTargetKind['ExistingAlbum'] = 'existing_album';
+})(
+  AgentOperationExistingAlbumTargetKind ||
+    (AgentOperationExistingAlbumTargetKind = {}),
+);
+export var AgentAlbumSetCoverOperationType;
+(function (AgentAlbumSetCoverOperationType) {
+  AgentAlbumSetCoverOperationType['AlbumSetCover'] = 'album.setCover';
+})(AgentAlbumSetCoverOperationType || (AgentAlbumSetCoverOperationType = {}));
+export var AgentSpaceCreateOperationType;
+(function (AgentSpaceCreateOperationType) {
+  AgentSpaceCreateOperationType['SpaceCreate'] = 'space.create';
+})(AgentSpaceCreateOperationType || (AgentSpaceCreateOperationType = {}));
+export var AgentOperationNewSpaceTargetKind;
+(function (AgentOperationNewSpaceTargetKind) {
+  AgentOperationNewSpaceTargetKind['NewSpace'] = 'new_space';
+})(AgentOperationNewSpaceTargetKind || (AgentOperationNewSpaceTargetKind = {}));
+export var Type;
+(function (Type) {
+  Type['SpaceAddAssets'] = 'space.addAssets';
+})(Type || (Type = {}));
+export var Type2;
+(function (Type2) {
+  Type2['SpaceRemoveAssets'] = 'space.removeAssets';
+})(Type2 || (Type2 = {}));
+export var AgentSpaceUpdateDetailsOperationType;
+(function (AgentSpaceUpdateDetailsOperationType) {
+  AgentSpaceUpdateDetailsOperationType['SpaceUpdateDetails'] =
+    'space.updateDetails';
+})(
+  AgentSpaceUpdateDetailsOperationType ||
+    (AgentSpaceUpdateDetailsOperationType = {}),
+);
+export var AgentOperationExistingSpaceTargetKind;
+(function (AgentOperationExistingSpaceTargetKind) {
+  AgentOperationExistingSpaceTargetKind['ExistingSpace'] = 'existing_space';
+})(
+  AgentOperationExistingSpaceTargetKind ||
+    (AgentOperationExistingSpaceTargetKind = {}),
+);
+export var AgentSpaceAddMembersOperationType;
+(function (AgentSpaceAddMembersOperationType) {
+  AgentSpaceAddMembersOperationType['SpaceAddMembers'] = 'space.addMembers';
+})(
+  AgentSpaceAddMembersOperationType || (AgentSpaceAddMembersOperationType = {}),
+);
+export var AgentAssignableSharedSpaceMemberRole;
+(function (AgentAssignableSharedSpaceMemberRole) {
+  AgentAssignableSharedSpaceMemberRole['Editor'] = 'editor';
+  AgentAssignableSharedSpaceMemberRole['Viewer'] = 'viewer';
+})(
+  AgentAssignableSharedSpaceMemberRole ||
+    (AgentAssignableSharedSpaceMemberRole = {}),
+);
+export var AgentSpaceRemoveMembersOperationType;
+(function (AgentSpaceRemoveMembersOperationType) {
+  AgentSpaceRemoveMembersOperationType['SpaceRemoveMembers'] =
+    'space.removeMembers';
+})(
+  AgentSpaceRemoveMembersOperationType ||
+    (AgentSpaceRemoveMembersOperationType = {}),
+);
+export var AgentSpaceUpdateMemberRoleOperationType;
+(function (AgentSpaceUpdateMemberRoleOperationType) {
+  AgentSpaceUpdateMemberRoleOperationType['SpaceUpdateMemberRole'] =
+    'space.updateMemberRole';
+})(
+  AgentSpaceUpdateMemberRoleOperationType ||
+    (AgentSpaceUpdateMemberRoleOperationType = {}),
+);
+export var AgentAssetRotateOperationType;
+(function (AgentAssetRotateOperationType) {
+  AgentAssetRotateOperationType['AssetRotate'] = 'asset.rotate';
+})(AgentAssetRotateOperationType || (AgentAssetRotateOperationType = {}));
+export var AgentAssetSetFavoriteOperationType;
+(function (AgentAssetSetFavoriteOperationType) {
+  AgentAssetSetFavoriteOperationType['AssetSetFavorite'] = 'asset.setFavorite';
+})(
+  AgentAssetSetFavoriteOperationType ||
+    (AgentAssetSetFavoriteOperationType = {}),
+);
+export var AgentAssetSetArchiveOperationType;
+(function (AgentAssetSetArchiveOperationType) {
+  AgentAssetSetArchiveOperationType['AssetSetArchive'] = 'asset.setArchive';
+})(
+  AgentAssetSetArchiveOperationType || (AgentAssetSetArchiveOperationType = {}),
+);
+export var AgentAssetAddTagOperationType;
+(function (AgentAssetAddTagOperationType) {
+  AgentAssetAddTagOperationType['AssetAddTag'] = 'asset.addTag';
+})(AgentAssetAddTagOperationType || (AgentAssetAddTagOperationType = {}));
+export var AgentAssetRemoveTagOperationType;
+(function (AgentAssetRemoveTagOperationType) {
+  AgentAssetRemoveTagOperationType['AssetRemoveTag'] = 'asset.removeTag';
+})(AgentAssetRemoveTagOperationType || (AgentAssetRemoveTagOperationType = {}));
+export var Status;
+(function (Status) {
+  Status['Success'] = 'success';
+})(Status || (Status = {}));
+export var AgentToolApprovalDecision;
+(function (AgentToolApprovalDecision) {
+  AgentToolApprovalDecision['Approved'] = 'approved';
+  AgentToolApprovalDecision['Denied'] = 'denied';
+})(AgentToolApprovalDecision || (AgentToolApprovalDecision = {}));
+export var AgentToolDataClass;
+(function (AgentToolDataClass) {
+  AgentToolDataClass['Metadata'] = 'metadata';
+  AgentToolDataClass['Previews'] = 'previews';
+  AgentToolDataClass['Originals'] = 'originals';
+  AgentToolDataClass['Plan'] = 'plan';
+})(AgentToolDataClass || (AgentToolDataClass = {}));
+export var AgentToolCallStatus;
+(function (AgentToolCallStatus) {
+  AgentToolCallStatus['PendingApproval'] = 'pending_approval';
+  AgentToolCallStatus['Approved'] = 'approved';
+  AgentToolCallStatus['Executing'] = 'executing';
+  AgentToolCallStatus['Denied'] = 'denied';
+  AgentToolCallStatus['Completed'] = 'completed';
+  AgentToolCallStatus['Failed'] = 'failed';
+})(AgentToolCallStatus || (AgentToolCallStatus = {}));
+export var AgentToolName;
+(function (AgentToolName) {
+  AgentToolName['SearchAssets'] = 'searchAssets';
+  AgentToolName['ResolveAssetSearchFilters'] = 'resolveAssetSearchFilters';
+  AgentToolName['ReadAssetMetadata'] = 'readAssetMetadata';
+  AgentToolName['ReadAssetPreviews'] = 'readAssetPreviews';
+  AgentToolName['ReadAssetOriginals'] = 'readAssetOriginals';
+  AgentToolName['ListAlbums'] = 'listAlbums';
+  AgentToolName['ReadAlbum'] = 'readAlbum';
+  AgentToolName['ListSpaces'] = 'listSpaces';
+  AgentToolName['ReadSpace'] = 'readSpace';
+  AgentToolName['SearchUsers'] = 'searchUsers';
+  AgentToolName['ProposeAlbumOperations'] = 'proposeAlbumOperations';
+  AgentToolName['ProposeAlbumFromSearch'] = 'proposeAlbumFromSearch';
+  AgentToolName['ProposeAddAssetsToAlbumFromSearch'] =
+    'proposeAddAssetsToAlbumFromSearch';
+  AgentToolName['ProposeSpaceFromSearch'] = 'proposeSpaceFromSearch';
+  AgentToolName['ProposeAddAssetsToSpaceFromSearch'] =
+    'proposeAddAssetsToSpaceFromSearch';
+  AgentToolName['ProposeAssetBatchFromSearch'] = 'proposeAssetBatchFromSearch';
+  AgentToolName['ReviseProposedOperations'] = 'reviseProposedOperations';
+  AgentToolName['SummarizePlan'] = 'summarizePlan';
+})(AgentToolName || (AgentToolName = {}));
+export var AgentOperationItemKind;
+(function (AgentOperationItemKind) {
+  AgentOperationItemKind['Asset'] = 'asset';
+  AgentOperationItemKind['Album'] = 'album';
+  AgentOperationItemKind['Space'] = 'space';
+  AgentOperationItemKind['Person'] = 'person';
+  AgentOperationItemKind['Tag'] = 'tag';
+})(AgentOperationItemKind || (AgentOperationItemKind = {}));
+export var Mode2;
+(function (Mode2) {
+  Mode2['All'] = 'all';
+})(Mode2 || (Mode2 = {}));
+export var Mode3;
+(function (Mode3) {
+  Mode3['AllExcept'] = 'allExcept';
+})(Mode3 || (Mode3 = {}));
+export var Mode4;
+(function (Mode4) {
+  Mode4['Only'] = 'only';
+})(Mode4 || (Mode4 = {}));
+export var Mode5;
+(function (Mode5) {
+  Mode5['None'] = 'none';
+})(Mode5 || (Mode5 = {}));
+export var AgentOperationApplyStatus;
+(function (AgentOperationApplyStatus) {
+  AgentOperationApplyStatus['Applied'] = 'applied';
+  AgentOperationApplyStatus['PartiallyApplied'] = 'partially_applied';
+  AgentOperationApplyStatus['Failed'] = 'failed';
+})(AgentOperationApplyStatus || (AgentOperationApplyStatus = {}));
+export var Type3;
+(function (Type3) {
+  Type3['SpaceAddAssets'] = 'space.addAssets';
+})(Type3 || (Type3 = {}));
+export var Type4;
+(function (Type4) {
+  Type4['SpaceRemoveAssets'] = 'space.removeAssets';
+})(Type4 || (Type4 = {}));
+export var Status2;
+(function (Status2) {
+  Status2['ApprovalRequired'] = 'approval-required';
+})(Status2 || (Status2 = {}));
+export var Status3;
+(function (Status3) {
+  Status3['Denied'] = 'denied';
+})(Status3 || (Status3 = {}));
+export var Status4;
+(function (Status4) {
+  Status4['Success'] = 'success';
+})(Status4 || (Status4 = {}));
+export var Status5;
+(function (Status5) {
+  Status5['ApprovalRequired'] = 'approval-required';
+})(Status5 || (Status5 = {}));
+export var Status6;
+(function (Status6) {
+  Status6['Denied'] = 'denied';
+})(Status6 || (Status6 = {}));
+export var Status7;
+(function (Status7) {
+  Status7['Success'] = 'success';
+})(Status7 || (Status7 = {}));
+export var Status8;
+(function (Status8) {
+  Status8['ApprovalRequired'] = 'approval-required';
+})(Status8 || (Status8 = {}));
+export var Status9;
+(function (Status9) {
+  Status9['Denied'] = 'denied';
+})(Status9 || (Status9 = {}));
+export var Status10;
+(function (Status10) {
+  Status10['Success'] = 'success';
+})(Status10 || (Status10 = {}));
+export var AgentAssetMetadataDetail;
+(function (AgentAssetMetadataDetail) {
+  AgentAssetMetadataDetail['Basic'] = 'basic';
+  AgentAssetMetadataDetail['Descriptive'] = 'descriptive';
+  AgentAssetMetadataDetail['Technical'] = 'technical';
+  AgentAssetMetadataDetail['AllSafe'] = 'allSafe';
+})(AgentAssetMetadataDetail || (AgentAssetMetadataDetail = {}));
+export var AgentAssetMetadataField;
+(function (AgentAssetMetadataField) {
+  AgentAssetMetadataField['Type'] = 'type';
+  AgentAssetMetadataField['Dates'] = 'dates';
+  AgentAssetMetadataField['Location'] = 'location';
+  AgentAssetMetadataField['Camera'] = 'camera';
+  AgentAssetMetadataField['Tags'] = 'tags';
+  AgentAssetMetadataField['Rating'] = 'rating';
+  AgentAssetMetadataField['Filename'] = 'filename';
+  AgentAssetMetadataField['Favorite'] = 'favorite';
+  AgentAssetMetadataField['Visibility'] = 'visibility';
+})(AgentAssetMetadataField || (AgentAssetMetadataField = {}));
+export var Status11;
+(function (Status11) {
+  Status11['ApprovalRequired'] = 'approval-required';
+})(Status11 || (Status11 = {}));
+export var Status12;
+(function (Status12) {
+  Status12['Denied'] = 'denied';
+})(Status12 || (Status12 = {}));
+export var Status13;
+(function (Status13) {
+  Status13['Success'] = 'success';
+})(Status13 || (Status13 = {}));
+export var Status14;
+(function (Status14) {
+  Status14['ApprovalRequired'] = 'approval-required';
+})(Status14 || (Status14 = {}));
+export var Status15;
+(function (Status15) {
+  Status15['Denied'] = 'denied';
+})(Status15 || (Status15 = {}));
+export var Status16;
+(function (Status16) {
+  Status16['Success'] = 'success';
+})(Status16 || (Status16 = {}));
+export var Status17;
+(function (Status17) {
+  Status17['ApprovalRequired'] = 'approval-required';
+})(Status17 || (Status17 = {}));
+export var Status18;
+(function (Status18) {
+  Status18['Denied'] = 'denied';
+})(Status18 || (Status18 = {}));
+export var Status19;
+(function (Status19) {
+  Status19['Success'] = 'success';
+})(Status19 || (Status19 = {}));
+export var Status20;
+(function (Status20) {
+  Status20['ApprovalRequired'] = 'approval-required';
+})(Status20 || (Status20 = {}));
+export var Status21;
+(function (Status21) {
+  Status21['Denied'] = 'denied';
+})(Status21 || (Status21 = {}));
+export var Status22;
+(function (Status22) {
+  Status22['Success'] = 'success';
+})(Status22 || (Status22 = {}));
+export var AgentSearchAssetsDetail;
+(function (AgentSearchAssetsDetail) {
+  AgentSearchAssetsDetail['Ids'] = 'ids';
+  AgentSearchAssetsDetail['Summary'] = 'summary';
+  AgentSearchAssetsDetail['Metadata'] = 'metadata';
+})(AgentSearchAssetsDetail || (AgentSearchAssetsDetail = {}));
+export var AgentSearchAssetsField;
+(function (AgentSearchAssetsField) {
+  AgentSearchAssetsField['Type'] = 'type';
+  AgentSearchAssetsField['Dates'] = 'dates';
+  AgentSearchAssetsField['Location'] = 'location';
+  AgentSearchAssetsField['Camera'] = 'camera';
+  AgentSearchAssetsField['Tags'] = 'tags';
+  AgentSearchAssetsField['Rating'] = 'rating';
+  AgentSearchAssetsField['Filename'] = 'filename';
+  AgentSearchAssetsField['Favorite'] = 'favorite';
+  AgentSearchAssetsField['Visibility'] = 'visibility';
+})(AgentSearchAssetsField || (AgentSearchAssetsField = {}));
+export var AgentSearchAssetsMode;
+(function (AgentSearchAssetsMode) {
+  AgentSearchAssetsMode['Metadata'] = 'metadata';
+  AgentSearchAssetsMode['Smart'] = 'smart';
+  AgentSearchAssetsMode['Description'] = 'description';
+  AgentSearchAssetsMode['Ocr'] = 'ocr';
+  AgentSearchAssetsMode['Filename'] = 'filename';
+})(AgentSearchAssetsMode || (AgentSearchAssetsMode = {}));
+export var AgentSearchAssetsOrder;
+(function (AgentSearchAssetsOrder) {
+  AgentSearchAssetsOrder['Asc'] = 'asc';
+  AgentSearchAssetsOrder['Desc'] = 'desc';
+  AgentSearchAssetsOrder['Relevance'] = 'relevance';
+})(AgentSearchAssetsOrder || (AgentSearchAssetsOrder = {}));
+export var Status23;
+(function (Status23) {
+  Status23['ApprovalRequired'] = 'approval-required';
+})(Status23 || (Status23 = {}));
+export var Status24;
+(function (Status24) {
+  Status24['Denied'] = 'denied';
+})(Status24 || (Status24 = {}));
+export var Status25;
+(function (Status25) {
+  Status25['Success'] = 'success';
+})(Status25 || (Status25 = {}));
+export var Status26;
+(function (Status26) {
+  Status26['ApprovalRequired'] = 'approval-required';
+})(Status26 || (Status26 = {}));
+export var Status27;
+(function (Status27) {
+  Status27['Denied'] = 'denied';
+})(Status27 || (Status27 = {}));
+export var Status28;
+(function (Status28) {
+  Status28['Success'] = 'success';
+})(Status28 || (Status28 = {}));
+export var AlbumUserRole;
+(function (AlbumUserRole) {
+  AlbumUserRole['Editor'] = 'editor';
+  AlbumUserRole['Viewer'] = 'viewer';
+})(AlbumUserRole || (AlbumUserRole = {}));
 export var BulkIdErrorReason;
 (function (BulkIdErrorReason) {
-    BulkIdErrorReason["Duplicate"] = "duplicate";
-    BulkIdErrorReason["NoPermission"] = "no_permission";
-    BulkIdErrorReason["NotFound"] = "not_found";
-    BulkIdErrorReason["Unknown"] = "unknown";
-    BulkIdErrorReason["Validation"] = "validation";
+  BulkIdErrorReason['Duplicate'] = 'duplicate';
+  BulkIdErrorReason['NoPermission'] = 'no_permission';
+  BulkIdErrorReason['NotFound'] = 'not_found';
+  BulkIdErrorReason['Unknown'] = 'unknown';
+  BulkIdErrorReason['Validation'] = 'validation';
 })(BulkIdErrorReason || (BulkIdErrorReason = {}));
-export var Error;
-(function (Error) {
-    Error["Duplicate"] = "duplicate";
-    Error["NoPermission"] = "no_permission";
-    Error["NotFound"] = "not_found";
-    Error["Unknown"] = "unknown";
-    Error["Validation"] = "validation";
-})(Error || (Error = {}));
 export var Permission;
 (function (Permission) {
-    Permission["All"] = "all";
-    Permission["ActivityCreate"] = "activity.create";
-    Permission["ActivityRead"] = "activity.read";
-    Permission["ActivityUpdate"] = "activity.update";
-    Permission["ActivityDelete"] = "activity.delete";
-    Permission["ActivityStatistics"] = "activity.statistics";
-    Permission["ApiKeyCreate"] = "apiKey.create";
-    Permission["ApiKeyRead"] = "apiKey.read";
-    Permission["ApiKeyUpdate"] = "apiKey.update";
-    Permission["ApiKeyDelete"] = "apiKey.delete";
-    Permission["AssetRead"] = "asset.read";
-    Permission["AssetUpdate"] = "asset.update";
-    Permission["AssetDelete"] = "asset.delete";
-    Permission["AssetStatistics"] = "asset.statistics";
-    Permission["AssetShare"] = "asset.share";
-    Permission["AssetView"] = "asset.view";
-    Permission["AssetDownload"] = "asset.download";
-    Permission["AssetUpload"] = "asset.upload";
-    Permission["AssetReplace"] = "asset.replace";
-    Permission["AssetCopy"] = "asset.copy";
-    Permission["AssetDerive"] = "asset.derive";
-    Permission["AssetEditGet"] = "asset.edit.get";
-    Permission["AssetEditCreate"] = "asset.edit.create";
-    Permission["AssetEditDelete"] = "asset.edit.delete";
-    Permission["AlbumCreate"] = "album.create";
-    Permission["AlbumRead"] = "album.read";
-    Permission["AlbumUpdate"] = "album.update";
-    Permission["AlbumDelete"] = "album.delete";
-    Permission["AlbumStatistics"] = "album.statistics";
-    Permission["AlbumShare"] = "album.share";
-    Permission["AlbumDownload"] = "album.download";
-    Permission["AlbumAssetCreate"] = "albumAsset.create";
-    Permission["AlbumAssetDelete"] = "albumAsset.delete";
-    Permission["AlbumUserCreate"] = "albumUser.create";
-    Permission["AlbumUserUpdate"] = "albumUser.update";
-    Permission["AlbumUserDelete"] = "albumUser.delete";
-    Permission["AuthChangePassword"] = "auth.changePassword";
-    Permission["AuthDeviceDelete"] = "authDevice.delete";
-    Permission["ArchiveRead"] = "archive.read";
-    Permission["BackupList"] = "backup.list";
-    Permission["BackupDownload"] = "backup.download";
-    Permission["BackupUpload"] = "backup.upload";
-    Permission["BackupDelete"] = "backup.delete";
-    Permission["DuplicateRead"] = "duplicate.read";
-    Permission["DuplicateDelete"] = "duplicate.delete";
-    Permission["FaceCreate"] = "face.create";
-    Permission["FaceRead"] = "face.read";
-    Permission["FaceUpdate"] = "face.update";
-    Permission["FaceDelete"] = "face.delete";
-    Permission["FolderRead"] = "folder.read";
-    Permission["JobCreate"] = "job.create";
-    Permission["JobRead"] = "job.read";
-    Permission["LibraryCreate"] = "library.create";
-    Permission["LibraryRead"] = "library.read";
-    Permission["LibraryUpdate"] = "library.update";
-    Permission["LibraryDelete"] = "library.delete";
-    Permission["LibraryStatistics"] = "library.statistics";
-    Permission["TimelineRead"] = "timeline.read";
-    Permission["TimelineDownload"] = "timeline.download";
-    Permission["Maintenance"] = "maintenance";
-    Permission["MapRead"] = "map.read";
-    Permission["MapSearch"] = "map.search";
-    Permission["MemoryCreate"] = "memory.create";
-    Permission["MemoryRead"] = "memory.read";
-    Permission["MemoryUpdate"] = "memory.update";
-    Permission["MemoryDelete"] = "memory.delete";
-    Permission["MemoryStatistics"] = "memory.statistics";
-    Permission["MemoryAssetCreate"] = "memoryAsset.create";
-    Permission["MemoryAssetDelete"] = "memoryAsset.delete";
-    Permission["NotificationCreate"] = "notification.create";
-    Permission["NotificationRead"] = "notification.read";
-    Permission["NotificationUpdate"] = "notification.update";
-    Permission["NotificationDelete"] = "notification.delete";
-    Permission["PartnerCreate"] = "partner.create";
-    Permission["PartnerRead"] = "partner.read";
-    Permission["PartnerUpdate"] = "partner.update";
-    Permission["PartnerDelete"] = "partner.delete";
-    Permission["SharedSpaceCreate"] = "sharedSpace.create";
-    Permission["SharedSpaceRead"] = "sharedSpace.read";
-    Permission["SharedSpaceUpdate"] = "sharedSpace.update";
-    Permission["SharedSpaceDelete"] = "sharedSpace.delete";
-    Permission["SharedSpaceMemberCreate"] = "sharedSpaceMember.create";
-    Permission["SharedSpaceMemberUpdate"] = "sharedSpaceMember.update";
-    Permission["SharedSpaceMemberDelete"] = "sharedSpaceMember.delete";
-    Permission["SharedSpaceAssetCreate"] = "sharedSpaceAsset.create";
-    Permission["SharedSpaceAssetRead"] = "sharedSpaceAsset.read";
-    Permission["SharedSpaceAssetDelete"] = "sharedSpaceAsset.delete";
-    Permission["SharedSpaceLibraryCreate"] = "sharedSpaceLibrary.create";
-    Permission["SharedSpaceLibraryDelete"] = "sharedSpaceLibrary.delete";
-    Permission["UserGroupCreate"] = "userGroup.create";
-    Permission["UserGroupRead"] = "userGroup.read";
-    Permission["UserGroupUpdate"] = "userGroup.update";
-    Permission["UserGroupDelete"] = "userGroup.delete";
-    Permission["PersonCreate"] = "person.create";
-    Permission["PersonRead"] = "person.read";
-    Permission["PersonUpdate"] = "person.update";
-    Permission["PersonDelete"] = "person.delete";
-    Permission["PersonStatistics"] = "person.statistics";
-    Permission["PersonMerge"] = "person.merge";
-    Permission["PersonReassign"] = "person.reassign";
-    Permission["PinCodeCreate"] = "pinCode.create";
-    Permission["PinCodeUpdate"] = "pinCode.update";
-    Permission["PinCodeDelete"] = "pinCode.delete";
-    Permission["PluginCreate"] = "plugin.create";
-    Permission["PluginRead"] = "plugin.read";
-    Permission["PluginUpdate"] = "plugin.update";
-    Permission["PluginDelete"] = "plugin.delete";
-    Permission["ServerAbout"] = "server.about";
-    Permission["ServerApkLinks"] = "server.apkLinks";
-    Permission["ServerStorage"] = "server.storage";
-    Permission["ServerStatistics"] = "server.statistics";
-    Permission["ServerVersionCheck"] = "server.versionCheck";
-    Permission["ServerLicenseRead"] = "serverLicense.read";
-    Permission["ServerLicenseUpdate"] = "serverLicense.update";
-    Permission["ServerLicenseDelete"] = "serverLicense.delete";
-    Permission["SessionCreate"] = "session.create";
-    Permission["SessionRead"] = "session.read";
-    Permission["SessionUpdate"] = "session.update";
-    Permission["SessionDelete"] = "session.delete";
-    Permission["SessionLock"] = "session.lock";
-    Permission["SharedLinkCreate"] = "sharedLink.create";
-    Permission["SharedLinkRead"] = "sharedLink.read";
-    Permission["SharedLinkUpdate"] = "sharedLink.update";
-    Permission["SharedLinkDelete"] = "sharedLink.delete";
-    Permission["StackCreate"] = "stack.create";
-    Permission["StackRead"] = "stack.read";
-    Permission["StackUpdate"] = "stack.update";
-    Permission["StackDelete"] = "stack.delete";
-    Permission["SyncStream"] = "sync.stream";
-    Permission["SyncCheckpointRead"] = "syncCheckpoint.read";
-    Permission["SyncCheckpointUpdate"] = "syncCheckpoint.update";
-    Permission["SyncCheckpointDelete"] = "syncCheckpoint.delete";
-    Permission["SystemConfigRead"] = "systemConfig.read";
-    Permission["SystemConfigUpdate"] = "systemConfig.update";
-    Permission["SystemMetadataRead"] = "systemMetadata.read";
-    Permission["SystemMetadataUpdate"] = "systemMetadata.update";
-    Permission["TagCreate"] = "tag.create";
-    Permission["TagRead"] = "tag.read";
-    Permission["TagUpdate"] = "tag.update";
-    Permission["TagDelete"] = "tag.delete";
-    Permission["TagAsset"] = "tag.asset";
-    Permission["UserRead"] = "user.read";
-    Permission["UserUpdate"] = "user.update";
-    Permission["UserLicenseCreate"] = "userLicense.create";
-    Permission["UserLicenseRead"] = "userLicense.read";
-    Permission["UserLicenseUpdate"] = "userLicense.update";
-    Permission["UserLicenseDelete"] = "userLicense.delete";
-    Permission["UserOnboardingRead"] = "userOnboarding.read";
-    Permission["UserOnboardingUpdate"] = "userOnboarding.update";
-    Permission["UserOnboardingDelete"] = "userOnboarding.delete";
-    Permission["UserPreferenceRead"] = "userPreference.read";
-    Permission["UserPreferenceUpdate"] = "userPreference.update";
-    Permission["UserProfileImageCreate"] = "userProfileImage.create";
-    Permission["UserProfileImageRead"] = "userProfileImage.read";
-    Permission["UserProfileImageUpdate"] = "userProfileImage.update";
-    Permission["UserProfileImageDelete"] = "userProfileImage.delete";
-    Permission["QueueRead"] = "queue.read";
-    Permission["QueueUpdate"] = "queue.update";
-    Permission["QueueJobCreate"] = "queueJob.create";
-    Permission["QueueJobRead"] = "queueJob.read";
-    Permission["QueueJobUpdate"] = "queueJob.update";
-    Permission["QueueJobDelete"] = "queueJob.delete";
-    Permission["WorkflowCreate"] = "workflow.create";
-    Permission["WorkflowRead"] = "workflow.read";
-    Permission["WorkflowUpdate"] = "workflow.update";
-    Permission["WorkflowDelete"] = "workflow.delete";
-    Permission["AdminUserCreate"] = "adminUser.create";
-    Permission["AdminUserRead"] = "adminUser.read";
-    Permission["AdminUserUpdate"] = "adminUser.update";
-    Permission["AdminUserDelete"] = "adminUser.delete";
-    Permission["AdminSessionRead"] = "adminSession.read";
-    Permission["AdminAuthUnlinkAll"] = "adminAuth.unlinkAll";
+  Permission['All'] = 'all';
+  Permission['ActivityCreate'] = 'activity.create';
+  Permission['ActivityRead'] = 'activity.read';
+  Permission['ActivityUpdate'] = 'activity.update';
+  Permission['ActivityDelete'] = 'activity.delete';
+  Permission['ActivityStatistics'] = 'activity.statistics';
+  Permission['ApiKeyCreate'] = 'apiKey.create';
+  Permission['ApiKeyRead'] = 'apiKey.read';
+  Permission['ApiKeyUpdate'] = 'apiKey.update';
+  Permission['ApiKeyDelete'] = 'apiKey.delete';
+  Permission['AgentCredentialCreate'] = 'agentCredential.create';
+  Permission['AgentCredentialRead'] = 'agentCredential.read';
+  Permission['AgentCredentialUpdate'] = 'agentCredential.update';
+  Permission['AgentCredentialDelete'] = 'agentCredential.delete';
+  Permission['AgentRunnerRead'] = 'agentRunner.read';
+  Permission['AgentSessionCreate'] = 'agentSession.create';
+  Permission['AgentSessionRead'] = 'agentSession.read';
+  Permission['AgentSessionUpdate'] = 'agentSession.update';
+  Permission['AssetRead'] = 'asset.read';
+  Permission['AssetUpdate'] = 'asset.update';
+  Permission['AssetDelete'] = 'asset.delete';
+  Permission['AssetStatistics'] = 'asset.statistics';
+  Permission['AssetShare'] = 'asset.share';
+  Permission['AssetView'] = 'asset.view';
+  Permission['AssetDownload'] = 'asset.download';
+  Permission['AssetUpload'] = 'asset.upload';
+  Permission['AssetCopy'] = 'asset.copy';
+  Permission['AssetDerive'] = 'asset.derive';
+  Permission['AssetEditGet'] = 'asset.edit.get';
+  Permission['AssetEditCreate'] = 'asset.edit.create';
+  Permission['AssetEditDelete'] = 'asset.edit.delete';
+  Permission['AlbumCreate'] = 'album.create';
+  Permission['AlbumRead'] = 'album.read';
+  Permission['AlbumUpdate'] = 'album.update';
+  Permission['AlbumDelete'] = 'album.delete';
+  Permission['AlbumStatistics'] = 'album.statistics';
+  Permission['AlbumShare'] = 'album.share';
+  Permission['AlbumDownload'] = 'album.download';
+  Permission['AlbumAssetCreate'] = 'albumAsset.create';
+  Permission['AlbumAssetDelete'] = 'albumAsset.delete';
+  Permission['AlbumUserCreate'] = 'albumUser.create';
+  Permission['AlbumUserUpdate'] = 'albumUser.update';
+  Permission['AlbumUserDelete'] = 'albumUser.delete';
+  Permission['AuthChangePassword'] = 'auth.changePassword';
+  Permission['AuthDeviceDelete'] = 'authDevice.delete';
+  Permission['ArchiveRead'] = 'archive.read';
+  Permission['BackupList'] = 'backup.list';
+  Permission['BackupDownload'] = 'backup.download';
+  Permission['BackupUpload'] = 'backup.upload';
+  Permission['BackupDelete'] = 'backup.delete';
+  Permission['DuplicateRead'] = 'duplicate.read';
+  Permission['DuplicateDelete'] = 'duplicate.delete';
+  Permission['FaceCreate'] = 'face.create';
+  Permission['FaceRead'] = 'face.read';
+  Permission['FaceUpdate'] = 'face.update';
+  Permission['FaceDelete'] = 'face.delete';
+  Permission['FolderRead'] = 'folder.read';
+  Permission['JobCreate'] = 'job.create';
+  Permission['JobRead'] = 'job.read';
+  Permission['LibraryCreate'] = 'library.create';
+  Permission['LibraryRead'] = 'library.read';
+  Permission['LibraryUpdate'] = 'library.update';
+  Permission['LibraryDelete'] = 'library.delete';
+  Permission['LibraryStatistics'] = 'library.statistics';
+  Permission['TimelineRead'] = 'timeline.read';
+  Permission['TimelineDownload'] = 'timeline.download';
+  Permission['Maintenance'] = 'maintenance';
+  Permission['MapRead'] = 'map.read';
+  Permission['MapSearch'] = 'map.search';
+  Permission['MemoryCreate'] = 'memory.create';
+  Permission['MemoryRead'] = 'memory.read';
+  Permission['MemoryUpdate'] = 'memory.update';
+  Permission['MemoryDelete'] = 'memory.delete';
+  Permission['MemoryStatistics'] = 'memory.statistics';
+  Permission['MemoryAssetCreate'] = 'memoryAsset.create';
+  Permission['MemoryAssetDelete'] = 'memoryAsset.delete';
+  Permission['NotificationCreate'] = 'notification.create';
+  Permission['NotificationRead'] = 'notification.read';
+  Permission['NotificationUpdate'] = 'notification.update';
+  Permission['NotificationDelete'] = 'notification.delete';
+  Permission['PartnerCreate'] = 'partner.create';
+  Permission['PartnerRead'] = 'partner.read';
+  Permission['PartnerUpdate'] = 'partner.update';
+  Permission['PartnerDelete'] = 'partner.delete';
+  Permission['SharedSpaceCreate'] = 'sharedSpace.create';
+  Permission['SharedSpaceRead'] = 'sharedSpace.read';
+  Permission['SharedSpaceUpdate'] = 'sharedSpace.update';
+  Permission['SharedSpaceDelete'] = 'sharedSpace.delete';
+  Permission['SharedSpaceMemberCreate'] = 'sharedSpaceMember.create';
+  Permission['SharedSpaceMemberUpdate'] = 'sharedSpaceMember.update';
+  Permission['SharedSpaceMemberDelete'] = 'sharedSpaceMember.delete';
+  Permission['SharedSpaceAssetCreate'] = 'sharedSpaceAsset.create';
+  Permission['SharedSpaceAssetRead'] = 'sharedSpaceAsset.read';
+  Permission['SharedSpaceAssetDelete'] = 'sharedSpaceAsset.delete';
+  Permission['SharedSpaceLibraryCreate'] = 'sharedSpaceLibrary.create';
+  Permission['SharedSpaceLibraryDelete'] = 'sharedSpaceLibrary.delete';
+  Permission['UserGroupCreate'] = 'userGroup.create';
+  Permission['UserGroupRead'] = 'userGroup.read';
+  Permission['UserGroupUpdate'] = 'userGroup.update';
+  Permission['UserGroupDelete'] = 'userGroup.delete';
+  Permission['PersonCreate'] = 'person.create';
+  Permission['PersonRead'] = 'person.read';
+  Permission['PersonUpdate'] = 'person.update';
+  Permission['PersonDelete'] = 'person.delete';
+  Permission['PersonStatistics'] = 'person.statistics';
+  Permission['PersonMerge'] = 'person.merge';
+  Permission['PersonReassign'] = 'person.reassign';
+  Permission['PinCodeCreate'] = 'pinCode.create';
+  Permission['PinCodeUpdate'] = 'pinCode.update';
+  Permission['PinCodeDelete'] = 'pinCode.delete';
+  Permission['PluginCreate'] = 'plugin.create';
+  Permission['PluginRead'] = 'plugin.read';
+  Permission['PluginUpdate'] = 'plugin.update';
+  Permission['PluginDelete'] = 'plugin.delete';
+  Permission['ServerAbout'] = 'server.about';
+  Permission['ServerApkLinks'] = 'server.apkLinks';
+  Permission['ServerStorage'] = 'server.storage';
+  Permission['ServerStatistics'] = 'server.statistics';
+  Permission['ServerVersionCheck'] = 'server.versionCheck';
+  Permission['ServerLicenseRead'] = 'serverLicense.read';
+  Permission['ServerLicenseUpdate'] = 'serverLicense.update';
+  Permission['ServerLicenseDelete'] = 'serverLicense.delete';
+  Permission['SessionCreate'] = 'session.create';
+  Permission['SessionRead'] = 'session.read';
+  Permission['SessionUpdate'] = 'session.update';
+  Permission['SessionDelete'] = 'session.delete';
+  Permission['SessionLock'] = 'session.lock';
+  Permission['SharedLinkCreate'] = 'sharedLink.create';
+  Permission['SharedLinkRead'] = 'sharedLink.read';
+  Permission['SharedLinkUpdate'] = 'sharedLink.update';
+  Permission['SharedLinkDelete'] = 'sharedLink.delete';
+  Permission['StackCreate'] = 'stack.create';
+  Permission['StackRead'] = 'stack.read';
+  Permission['StackUpdate'] = 'stack.update';
+  Permission['StackDelete'] = 'stack.delete';
+  Permission['SyncStream'] = 'sync.stream';
+  Permission['SyncCheckpointRead'] = 'syncCheckpoint.read';
+  Permission['SyncCheckpointUpdate'] = 'syncCheckpoint.update';
+  Permission['SyncCheckpointDelete'] = 'syncCheckpoint.delete';
+  Permission['SystemConfigRead'] = 'systemConfig.read';
+  Permission['SystemConfigUpdate'] = 'systemConfig.update';
+  Permission['SystemMetadataRead'] = 'systemMetadata.read';
+  Permission['SystemMetadataUpdate'] = 'systemMetadata.update';
+  Permission['TagCreate'] = 'tag.create';
+  Permission['TagRead'] = 'tag.read';
+  Permission['TagUpdate'] = 'tag.update';
+  Permission['TagDelete'] = 'tag.delete';
+  Permission['TagAsset'] = 'tag.asset';
+  Permission['UserRead'] = 'user.read';
+  Permission['UserUpdate'] = 'user.update';
+  Permission['UserLicenseCreate'] = 'userLicense.create';
+  Permission['UserLicenseRead'] = 'userLicense.read';
+  Permission['UserLicenseUpdate'] = 'userLicense.update';
+  Permission['UserLicenseDelete'] = 'userLicense.delete';
+  Permission['UserOnboardingRead'] = 'userOnboarding.read';
+  Permission['UserOnboardingUpdate'] = 'userOnboarding.update';
+  Permission['UserOnboardingDelete'] = 'userOnboarding.delete';
+  Permission['UserPreferenceRead'] = 'userPreference.read';
+  Permission['UserPreferenceUpdate'] = 'userPreference.update';
+  Permission['UserProfileImageCreate'] = 'userProfileImage.create';
+  Permission['UserProfileImageRead'] = 'userProfileImage.read';
+  Permission['UserProfileImageUpdate'] = 'userProfileImage.update';
+  Permission['UserProfileImageDelete'] = 'userProfileImage.delete';
+  Permission['QueueRead'] = 'queue.read';
+  Permission['QueueUpdate'] = 'queue.update';
+  Permission['QueueJobCreate'] = 'queueJob.create';
+  Permission['QueueJobRead'] = 'queueJob.read';
+  Permission['QueueJobUpdate'] = 'queueJob.update';
+  Permission['QueueJobDelete'] = 'queueJob.delete';
+  Permission['WorkflowCreate'] = 'workflow.create';
+  Permission['WorkflowRead'] = 'workflow.read';
+  Permission['WorkflowUpdate'] = 'workflow.update';
+  Permission['WorkflowDelete'] = 'workflow.delete';
+  Permission['AdminUserCreate'] = 'adminUser.create';
+  Permission['AdminUserRead'] = 'adminUser.read';
+  Permission['AdminUserUpdate'] = 'adminUser.update';
+  Permission['AdminUserDelete'] = 'adminUser.delete';
+  Permission['AdminSessionRead'] = 'adminSession.read';
+  Permission['AdminAuthUnlinkAll'] = 'adminAuth.unlinkAll';
 })(Permission || (Permission = {}));
 export var AssetMediaStatus;
 (function (AssetMediaStatus) {
-    AssetMediaStatus["Created"] = "created";
-    AssetMediaStatus["Replaced"] = "replaced";
-    AssetMediaStatus["Duplicate"] = "duplicate";
+  AssetMediaStatus['Created'] = 'created';
+  AssetMediaStatus['Duplicate'] = 'duplicate';
 })(AssetMediaStatus || (AssetMediaStatus = {}));
-export var Action;
-(function (Action) {
-    Action["Accept"] = "accept";
-    Action["Reject"] = "reject";
-})(Action || (Action = {}));
-export var Reason;
-(function (Reason) {
-    Reason["Duplicate"] = "duplicate";
-    Reason["UnsupportedFormat"] = "unsupported-format";
-})(Reason || (Reason = {}));
+export var AssetUploadAction;
+(function (AssetUploadAction) {
+  AssetUploadAction['Accept'] = 'accept';
+  AssetUploadAction['Reject'] = 'reject';
+})(AssetUploadAction || (AssetUploadAction = {}));
+export var AssetRejectReason;
+(function (AssetRejectReason) {
+  AssetRejectReason['Duplicate'] = 'duplicate';
+  AssetRejectReason['UnsupportedFormat'] = 'unsupported-format';
+})(AssetRejectReason || (AssetRejectReason = {}));
 export var AssetJobName;
 (function (AssetJobName) {
-    AssetJobName["RefreshFaces"] = "refresh-faces";
-    AssetJobName["RefreshMetadata"] = "refresh-metadata";
-    AssetJobName["RegenerateThumbnail"] = "regenerate-thumbnail";
-    AssetJobName["TranscodeVideo"] = "transcode-video";
+  AssetJobName['RefreshFaces'] = 'refresh-faces';
+  AssetJobName['RefreshMetadata'] = 'refresh-metadata';
+  AssetJobName['RegenerateThumbnail'] = 'regenerate-thumbnail';
+  AssetJobName['TranscodeVideo'] = 'transcode-video';
 })(AssetJobName || (AssetJobName = {}));
+export var SourceType;
+(function (SourceType) {
+  SourceType['MachineLearning'] = 'machine-learning';
+  SourceType['Exif'] = 'exif';
+  SourceType['Manual'] = 'manual';
+})(SourceType || (SourceType = {}));
+export var Type5;
+(function (Type5) {
+  Type5['UserPerson'] = 'user-person';
+  Type5['SpacePerson'] = 'space-person';
+})(Type5 || (Type5 = {}));
 export var AssetEditAction;
 (function (AssetEditAction) {
-    AssetEditAction["Crop"] = "crop";
-    AssetEditAction["Rotate"] = "rotate";
-    AssetEditAction["Mirror"] = "mirror";
-    AssetEditAction["Trim"] = "trim";
+  AssetEditAction['Crop'] = 'crop';
+  AssetEditAction['Rotate'] = 'rotate';
+  AssetEditAction['Mirror'] = 'mirror';
+  AssetEditAction['Trim'] = 'trim';
 })(AssetEditAction || (AssetEditAction = {}));
 export var MirrorAxis;
 (function (MirrorAxis) {
-    MirrorAxis["Horizontal"] = "horizontal";
-    MirrorAxis["Vertical"] = "vertical";
+  MirrorAxis['Horizontal'] = 'horizontal';
+  MirrorAxis['Vertical'] = 'vertical';
 })(MirrorAxis || (MirrorAxis = {}));
 export var AssetMediaSize;
 (function (AssetMediaSize) {
-    AssetMediaSize["Original"] = "original";
-    AssetMediaSize["Fullsize"] = "fullsize";
-    AssetMediaSize["Preview"] = "preview";
-    AssetMediaSize["Thumbnail"] = "thumbnail";
+  AssetMediaSize['Original'] = 'original';
+  AssetMediaSize['Fullsize'] = 'fullsize';
+  AssetMediaSize['Preview'] = 'preview';
+  AssetMediaSize['Thumbnail'] = 'thumbnail';
 })(AssetMediaSize || (AssetMediaSize = {}));
+export var MapMediaType;
+(function (MapMediaType) {
+  MapMediaType['Image'] = 'IMAGE';
+  MapMediaType['Video'] = 'VIDEO';
+})(MapMediaType || (MapMediaType = {}));
 export var ManualJobName;
 (function (ManualJobName) {
-    ManualJobName["PersonCleanup"] = "person-cleanup";
-    ManualJobName["TagCleanup"] = "tag-cleanup";
-    ManualJobName["UserCleanup"] = "user-cleanup";
-    ManualJobName["MemoryCleanup"] = "memory-cleanup";
-    ManualJobName["MemoryCreate"] = "memory-create";
-    ManualJobName["BackupDatabase"] = "backup-database";
+  ManualJobName['PersonCleanup'] = 'person-cleanup';
+  ManualJobName['TagCleanup'] = 'tag-cleanup';
+  ManualJobName['UserCleanup'] = 'user-cleanup';
+  ManualJobName['MemoryCleanup'] = 'memory-cleanup';
+  ManualJobName['MemoryCreate'] = 'memory-create';
+  ManualJobName['BackupDatabase'] = 'backup-database';
+  ManualJobName['FaceIdentityBackfill'] = 'face-identity-backfill';
+  ManualJobName['SharedSpacePersonMetadataBackfill'] =
+    'shared-space-person-metadata-backfill';
 })(ManualJobName || (ManualJobName = {}));
 export var QueueName;
 (function (QueueName) {
-    QueueName["ThumbnailGeneration"] = "thumbnailGeneration";
-    QueueName["MetadataExtraction"] = "metadataExtraction";
-    QueueName["VideoConversion"] = "videoConversion";
-    QueueName["FaceDetection"] = "faceDetection";
-    QueueName["FacialRecognition"] = "facialRecognition";
-    QueueName["SmartSearch"] = "smartSearch";
-    QueueName["DuplicateDetection"] = "duplicateDetection";
-    QueueName["BackgroundTask"] = "backgroundTask";
-    QueueName["StorageTemplateMigration"] = "storageTemplateMigration";
-    QueueName["Migration"] = "migration";
-    QueueName["Search"] = "search";
-    QueueName["Sidecar"] = "sidecar";
-    QueueName["Library"] = "library";
-    QueueName["Notifications"] = "notifications";
-    QueueName["BackupDatabase"] = "backupDatabase";
-    QueueName["Ocr"] = "ocr";
-    QueueName["PetDetection"] = "petDetection";
-    QueueName["Workflow"] = "workflow";
-    QueueName["Editor"] = "editor";
-    QueueName["StorageBackendMigration"] = "storageBackendMigration";
-    QueueName["Classification"] = "classification";
+  QueueName['ThumbnailGeneration'] = 'thumbnailGeneration';
+  QueueName['MetadataExtraction'] = 'metadataExtraction';
+  QueueName['VideoConversion'] = 'videoConversion';
+  QueueName['FaceDetection'] = 'faceDetection';
+  QueueName['FacialRecognition'] = 'facialRecognition';
+  QueueName['SmartSearch'] = 'smartSearch';
+  QueueName['DuplicateDetection'] = 'duplicateDetection';
+  QueueName['BackgroundTask'] = 'backgroundTask';
+  QueueName['PeopleBackfill'] = 'peopleBackfill';
+  QueueName['StorageTemplateMigration'] = 'storageTemplateMigration';
+  QueueName['Migration'] = 'migration';
+  QueueName['Search'] = 'search';
+  QueueName['Sidecar'] = 'sidecar';
+  QueueName['Library'] = 'library';
+  QueueName['Notifications'] = 'notifications';
+  QueueName['BackupDatabase'] = 'backupDatabase';
+  QueueName['Ocr'] = 'ocr';
+  QueueName['PetDetection'] = 'petDetection';
+  QueueName['Workflow'] = 'workflow';
+  QueueName['Editor'] = 'editor';
+  QueueName['StorageBackendMigration'] = 'storageBackendMigration';
+  QueueName['Classification'] = 'classification';
 })(QueueName || (QueueName = {}));
 export var QueueCommand;
 (function (QueueCommand) {
-    QueueCommand["Start"] = "start";
-    QueueCommand["Pause"] = "pause";
-    QueueCommand["Resume"] = "resume";
-    QueueCommand["Empty"] = "empty";
-    QueueCommand["ClearFailed"] = "clear-failed";
+  QueueCommand['Start'] = 'start';
+  QueueCommand['Pause'] = 'pause';
+  QueueCommand['Resume'] = 'resume';
+  QueueCommand['Empty'] = 'empty';
+  QueueCommand['ClearFailed'] = 'clear-failed';
 })(QueueCommand || (QueueCommand = {}));
 export var MemorySearchOrder;
 (function (MemorySearchOrder) {
-    MemorySearchOrder["Asc"] = "asc";
-    MemorySearchOrder["Desc"] = "desc";
-    MemorySearchOrder["Random"] = "random";
+  MemorySearchOrder['Asc'] = 'asc';
+  MemorySearchOrder['Desc'] = 'desc';
+  MemorySearchOrder['Random'] = 'random';
 })(MemorySearchOrder || (MemorySearchOrder = {}));
 export var MemoryType;
 (function (MemoryType) {
-    MemoryType["OnThisDay"] = "on_this_day";
+  MemoryType['OnThisDay'] = 'on_this_day';
+  MemoryType['Rule'] = 'rule';
 })(MemoryType || (MemoryType = {}));
 export var PartnerDirection;
 (function (PartnerDirection) {
-    PartnerDirection["SharedBy"] = "shared-by";
-    PartnerDirection["SharedWith"] = "shared-with";
+  PartnerDirection['SharedBy'] = 'shared-by';
+  PartnerDirection['SharedWith'] = 'shared-with';
 })(PartnerDirection || (PartnerDirection = {}));
+export var Type6;
+(function (Type6) {
+  Type6['Person'] = 'person';
+  Type6['SpacePerson'] = 'space-person';
+})(Type6 || (Type6 = {}));
+export var PluginJsonSchemaType;
+(function (PluginJsonSchemaType) {
+  PluginJsonSchemaType['String'] = 'string';
+  PluginJsonSchemaType['Number'] = 'number';
+  PluginJsonSchemaType['Integer'] = 'integer';
+  PluginJsonSchemaType['Boolean'] = 'boolean';
+  PluginJsonSchemaType['Object'] = 'object';
+  PluginJsonSchemaType['Array'] = 'array';
+  PluginJsonSchemaType['Null'] = 'null';
+})(PluginJsonSchemaType || (PluginJsonSchemaType = {}));
 export var PluginContextType;
 (function (PluginContextType) {
-    PluginContextType["Asset"] = "asset";
-    PluginContextType["Album"] = "album";
-    PluginContextType["Person"] = "person";
+  PluginContextType['Asset'] = 'asset';
+  PluginContextType['Album'] = 'album';
+  PluginContextType['Person'] = 'person';
 })(PluginContextType || (PluginContextType = {}));
 export var PluginTriggerType;
 (function (PluginTriggerType) {
-    PluginTriggerType["AssetCreate"] = "AssetCreate";
-    PluginTriggerType["PersonRecognized"] = "PersonRecognized";
+  PluginTriggerType['AssetCreate'] = 'AssetCreate';
+  PluginTriggerType['PersonRecognized'] = 'PersonRecognized';
 })(PluginTriggerType || (PluginTriggerType = {}));
-export var QueueJobStatus;
-(function (QueueJobStatus) {
-    QueueJobStatus["Active"] = "active";
-    QueueJobStatus["Failed"] = "failed";
-    QueueJobStatus["Completed"] = "completed";
-    QueueJobStatus["Delayed"] = "delayed";
-    QueueJobStatus["Waiting"] = "waiting";
-    QueueJobStatus["Paused"] = "paused";
-})(QueueJobStatus || (QueueJobStatus = {}));
 export var JobName;
 (function (JobName) {
-    JobName["AssetDelete"] = "AssetDelete";
-    JobName["AssetDeleteCheck"] = "AssetDeleteCheck";
-    JobName["AssetDetectFacesQueueAll"] = "AssetDetectFacesQueueAll";
-    JobName["AssetDetectFaces"] = "AssetDetectFaces";
-    JobName["AssetDetectDuplicatesQueueAll"] = "AssetDetectDuplicatesQueueAll";
-    JobName["AssetDetectDuplicates"] = "AssetDetectDuplicates";
-    JobName["AssetEditThumbnailGeneration"] = "AssetEditThumbnailGeneration";
-    JobName["AssetEncodeVideoQueueAll"] = "AssetEncodeVideoQueueAll";
-    JobName["AssetEncodeVideo"] = "AssetEncodeVideo";
-    JobName["AssetEmptyTrash"] = "AssetEmptyTrash";
-    JobName["AssetExtractMetadataQueueAll"] = "AssetExtractMetadataQueueAll";
-    JobName["AssetExtractMetadata"] = "AssetExtractMetadata";
-    JobName["AssetFileMigration"] = "AssetFileMigration";
-    JobName["AssetGenerateThumbnailsQueueAll"] = "AssetGenerateThumbnailsQueueAll";
-    JobName["AssetGenerateThumbnails"] = "AssetGenerateThumbnails";
-    JobName["AuditLogCleanup"] = "AuditLogCleanup";
-    JobName["AuditTableCleanup"] = "AuditTableCleanup";
-    JobName["DatabaseBackup"] = "DatabaseBackup";
-    JobName["FacialRecognitionQueueAll"] = "FacialRecognitionQueueAll";
-    JobName["FacialRecognition"] = "FacialRecognition";
-    JobName["FileDelete"] = "FileDelete";
-    JobName["FileMigrationQueueAll"] = "FileMigrationQueueAll";
-    JobName["LibraryDeleteCheck"] = "LibraryDeleteCheck";
-    JobName["LibraryDelete"] = "LibraryDelete";
-    JobName["LibraryRemoveAsset"] = "LibraryRemoveAsset";
-    JobName["LibraryScanAssetsQueueAll"] = "LibraryScanAssetsQueueAll";
-    JobName["LibrarySyncAssets"] = "LibrarySyncAssets";
-    JobName["LibrarySyncFilesQueueAll"] = "LibrarySyncFilesQueueAll";
-    JobName["LibrarySyncFiles"] = "LibrarySyncFiles";
-    JobName["LibraryScanQueueAll"] = "LibraryScanQueueAll";
-    JobName["MemoryCleanup"] = "MemoryCleanup";
-    JobName["MemoryGenerate"] = "MemoryGenerate";
-    JobName["NotificationsCleanup"] = "NotificationsCleanup";
-    JobName["NotifyUserSignup"] = "NotifyUserSignup";
-    JobName["NotifyAlbumInvite"] = "NotifyAlbumInvite";
-    JobName["NotifyAlbumUpdate"] = "NotifyAlbumUpdate";
-    JobName["UserDelete"] = "UserDelete";
-    JobName["UserDeleteCheck"] = "UserDeleteCheck";
-    JobName["UserSyncUsage"] = "UserSyncUsage";
-    JobName["PersonCleanup"] = "PersonCleanup";
-    JobName["PersonFileMigration"] = "PersonFileMigration";
-    JobName["PersonGenerateThumbnail"] = "PersonGenerateThumbnail";
-    JobName["SessionCleanup"] = "SessionCleanup";
-    JobName["SendMail"] = "SendMail";
-    JobName["SidecarQueueAll"] = "SidecarQueueAll";
-    JobName["SidecarCheck"] = "SidecarCheck";
-    JobName["SidecarWrite"] = "SidecarWrite";
-    JobName["SmartSearchQueueAll"] = "SmartSearchQueueAll";
-    JobName["SmartSearch"] = "SmartSearch";
-    JobName["StorageTemplateMigration"] = "StorageTemplateMigration";
-    JobName["StorageTemplateMigrationSingle"] = "StorageTemplateMigrationSingle";
-    JobName["TagCleanup"] = "TagCleanup";
-    JobName["VersionCheck"] = "VersionCheck";
-    JobName["OcrQueueAll"] = "OcrQueueAll";
-    JobName["Ocr"] = "Ocr";
-    JobName["PetDetectionQueueAll"] = "PetDetectionQueueAll";
-    JobName["PetDetection"] = "PetDetection";
-    JobName["WorkflowRun"] = "WorkflowRun";
-    JobName["StorageBackendMigrationQueueAll"] = "StorageBackendMigrationQueueAll";
-    JobName["StorageBackendMigrationSingle"] = "StorageBackendMigrationSingle";
-    JobName["SharedSpaceFaceMatch"] = "SharedSpaceFaceMatch";
-    JobName["SharedSpaceFaceMatchAll"] = "SharedSpaceFaceMatchAll";
-    JobName["SharedSpaceLibraryFaceSync"] = "SharedSpaceLibraryFaceSync";
-    JobName["SharedSpacePersonDedup"] = "SharedSpacePersonDedup";
-    JobName["SharedSpaceBulkAddAssets"] = "SharedSpaceBulkAddAssets";
-    JobName["AssetClassifyQueueAll"] = "AssetClassifyQueueAll";
-    JobName["AssetClassify"] = "AssetClassify";
+  JobName['AssetDelete'] = 'AssetDelete';
+  JobName['AssetDeleteCheck'] = 'AssetDeleteCheck';
+  JobName['AssetDetectFacesQueueAll'] = 'AssetDetectFacesQueueAll';
+  JobName['AssetDetectFaces'] = 'AssetDetectFaces';
+  JobName['AssetDetectDuplicatesQueueAll'] = 'AssetDetectDuplicatesQueueAll';
+  JobName['AssetDetectDuplicates'] = 'AssetDetectDuplicates';
+  JobName['AssetEditThumbnailGeneration'] = 'AssetEditThumbnailGeneration';
+  JobName['AssetEncodeVideoQueueAll'] = 'AssetEncodeVideoQueueAll';
+  JobName['AssetEncodeVideo'] = 'AssetEncodeVideo';
+  JobName['AssetEmptyTrash'] = 'AssetEmptyTrash';
+  JobName['AssetExtractMetadataQueueAll'] = 'AssetExtractMetadataQueueAll';
+  JobName['AssetExtractMetadata'] = 'AssetExtractMetadata';
+  JobName['AssetFileMigration'] = 'AssetFileMigration';
+  JobName['AssetGenerateThumbnailsQueueAll'] =
+    'AssetGenerateThumbnailsQueueAll';
+  JobName['AssetGenerateThumbnails'] = 'AssetGenerateThumbnails';
+  JobName['AuditTableCleanup'] = 'AuditTableCleanup';
+  JobName['DatabaseBackup'] = 'DatabaseBackup';
+  JobName['FacialRecognitionQueueAll'] = 'FacialRecognitionQueueAll';
+  JobName['FacialRecognition'] = 'FacialRecognition';
+  JobName['FaceIdentityBackfill'] = 'FaceIdentityBackfill';
+  JobName['FaceIdentityMaintenanceAfterRecognition'] =
+    'FaceIdentityMaintenanceAfterRecognition';
+  JobName['FileDelete'] = 'FileDelete';
+  JobName['FileMigrationQueueAll'] = 'FileMigrationQueueAll';
+  JobName['LibraryDeleteCheck'] = 'LibraryDeleteCheck';
+  JobName['LibraryDelete'] = 'LibraryDelete';
+  JobName['LibraryRemoveAsset'] = 'LibraryRemoveAsset';
+  JobName['LibraryScanAssetsQueueAll'] = 'LibraryScanAssetsQueueAll';
+  JobName['LibrarySyncAssets'] = 'LibrarySyncAssets';
+  JobName['LibrarySyncFilesQueueAll'] = 'LibrarySyncFilesQueueAll';
+  JobName['LibrarySyncFiles'] = 'LibrarySyncFiles';
+  JobName['LibraryScanQueueAll'] = 'LibraryScanQueueAll';
+  JobName['MemoryCleanup'] = 'MemoryCleanup';
+  JobName['MemoryGenerate'] = 'MemoryGenerate';
+  JobName['NotificationsCleanup'] = 'NotificationsCleanup';
+  JobName['NotifyUserSignup'] = 'NotifyUserSignup';
+  JobName['NotifyAlbumInvite'] = 'NotifyAlbumInvite';
+  JobName['NotifyAlbumUpdate'] = 'NotifyAlbumUpdate';
+  JobName['UserDelete'] = 'UserDelete';
+  JobName['UserDeleteCheck'] = 'UserDeleteCheck';
+  JobName['UserSyncUsage'] = 'UserSyncUsage';
+  JobName['PersonCleanup'] = 'PersonCleanup';
+  JobName['PersonFileMigration'] = 'PersonFileMigration';
+  JobName['PersonGenerateThumbnail'] = 'PersonGenerateThumbnail';
+  JobName['SessionCleanup'] = 'SessionCleanup';
+  JobName['SendMail'] = 'SendMail';
+  JobName['SidecarQueueAll'] = 'SidecarQueueAll';
+  JobName['SidecarCheck'] = 'SidecarCheck';
+  JobName['SidecarWrite'] = 'SidecarWrite';
+  JobName['SmartSearchQueueAll'] = 'SmartSearchQueueAll';
+  JobName['SmartSearch'] = 'SmartSearch';
+  JobName['StorageTemplateMigration'] = 'StorageTemplateMigration';
+  JobName['StorageTemplateMigrationSingle'] = 'StorageTemplateMigrationSingle';
+  JobName['TagCleanup'] = 'TagCleanup';
+  JobName['VersionCheck'] = 'VersionCheck';
+  JobName['OcrQueueAll'] = 'OcrQueueAll';
+  JobName['Ocr'] = 'Ocr';
+  JobName['PetDetectionQueueAll'] = 'PetDetectionQueueAll';
+  JobName['PetDetection'] = 'PetDetection';
+  JobName['WorkflowRun'] = 'WorkflowRun';
+  JobName['StorageBackendMigrationQueueAll'] =
+    'StorageBackendMigrationQueueAll';
+  JobName['StorageBackendMigrationSingle'] = 'StorageBackendMigrationSingle';
+  JobName['SharedSpaceFaceMatch'] = 'SharedSpaceFaceMatch';
+  JobName['SharedSpaceFaceMatchAll'] = 'SharedSpaceFaceMatchAll';
+  JobName['SharedSpaceFaceMatchPage'] = 'SharedSpaceFaceMatchPage';
+  JobName['SharedSpaceFaceMatchFromBackfill'] =
+    'SharedSpaceFaceMatchFromBackfill';
+  JobName['SharedSpaceLibraryFaceSync'] = 'SharedSpaceLibraryFaceSync';
+  JobName['SharedSpaceIdentityReconciliation'] =
+    'SharedSpaceIdentityReconciliation';
+  JobName['SharedSpacePersonDedup'] = 'SharedSpacePersonDedup';
+  JobName['SharedSpacePersonMetadataBackfill'] =
+    'SharedSpacePersonMetadataBackfill';
+  JobName['SharedSpaceBulkAddAssets'] = 'SharedSpaceBulkAddAssets';
+  JobName['AssetClassifyQueueAll'] = 'AssetClassifyQueueAll';
+  JobName['AssetClassify'] = 'AssetClassify';
 })(JobName || (JobName = {}));
+export var QueueJobStatus;
+(function (QueueJobStatus) {
+  QueueJobStatus['Active'] = 'active';
+  QueueJobStatus['Failed'] = 'failed';
+  QueueJobStatus['Completed'] = 'completed';
+  QueueJobStatus['Delayed'] = 'delayed';
+  QueueJobStatus['Waiting'] = 'waiting';
+  QueueJobStatus['Paused'] = 'paused';
+})(QueueJobStatus || (QueueJobStatus = {}));
 export var SearchSuggestionType;
 (function (SearchSuggestionType) {
-    SearchSuggestionType["Country"] = "country";
-    SearchSuggestionType["State"] = "state";
-    SearchSuggestionType["City"] = "city";
-    SearchSuggestionType["CameraMake"] = "camera-make";
-    SearchSuggestionType["CameraModel"] = "camera-model";
-    SearchSuggestionType["CameraLensModel"] = "camera-lens-model";
+  SearchSuggestionType['Country'] = 'country';
+  SearchSuggestionType['State'] = 'state';
+  SearchSuggestionType['City'] = 'city';
+  SearchSuggestionType['CameraMake'] = 'camera-make';
+  SearchSuggestionType['CameraModel'] = 'camera-model';
+  SearchSuggestionType['CameraLensModel'] = 'camera-lens-model';
 })(SearchSuggestionType || (SearchSuggestionType = {}));
 export var SharedLinkType;
 (function (SharedLinkType) {
-    SharedLinkType["Album"] = "ALBUM";
-    SharedLinkType["Individual"] = "INDIVIDUAL";
+  SharedLinkType['Album'] = 'ALBUM';
+  SharedLinkType['Individual'] = 'INDIVIDUAL';
 })(SharedLinkType || (SharedLinkType = {}));
-export var Error2;
-(function (Error2) {
-    Error2["Duplicate"] = "duplicate";
-    Error2["NoPermission"] = "no_permission";
-    Error2["NotFound"] = "not_found";
-})(Error2 || (Error2 = {}));
-export var Color;
-(function (Color) {
-    Color["Primary"] = "primary";
-    Color["Pink"] = "pink";
-    Color["Red"] = "red";
-    Color["Yellow"] = "yellow";
-    Color["Blue"] = "blue";
-    Color["Green"] = "green";
-    Color["Purple"] = "purple";
-    Color["Orange"] = "orange";
-    Color["Gray"] = "gray";
-    Color["Amber"] = "amber";
-})(Color || (Color = {}));
-export var Role;
-(function (Role) {
-    Role["Owner"] = "owner";
-    Role["Editor"] = "editor";
-    Role["Viewer"] = "viewer";
-})(Role || (Role = {}));
+export var AssetIdErrorReason;
+(function (AssetIdErrorReason) {
+  AssetIdErrorReason['Duplicate'] = 'duplicate';
+  AssetIdErrorReason['NoPermission'] = 'no_permission';
+  AssetIdErrorReason['NotFound'] = 'not_found';
+})(AssetIdErrorReason || (AssetIdErrorReason = {}));
 export var SharedSpaceRole;
 (function (SharedSpaceRole) {
-    SharedSpaceRole["Owner"] = "owner";
-    SharedSpaceRole["Editor"] = "editor";
-    SharedSpaceRole["Viewer"] = "viewer";
+  SharedSpaceRole['Owner'] = 'owner';
+  SharedSpaceRole['Editor'] = 'editor';
+  SharedSpaceRole['Viewer'] = 'viewer';
 })(SharedSpaceRole || (SharedSpaceRole = {}));
-export var Direction;
-(function (Direction) {
-    Direction["ToS3"] = "toS3";
-    Direction["ToDisk"] = "toDisk";
-})(Direction || (Direction = {}));
+export var RepresentativeFaceSource;
+(function (RepresentativeFaceSource) {
+  RepresentativeFaceSource['Auto'] = 'auto';
+  RepresentativeFaceSource['Manual'] = 'manual';
+})(RepresentativeFaceSource || (RepresentativeFaceSource = {}));
+export var StorageMigrationDirection;
+(function (StorageMigrationDirection) {
+  StorageMigrationDirection['ToS3'] = 'toS3';
+  StorageMigrationDirection['ToDisk'] = 'toDisk';
+})(StorageMigrationDirection || (StorageMigrationDirection = {}));
 export var SyncEntityType;
 (function (SyncEntityType) {
-    SyncEntityType["AuthUserV1"] = "AuthUserV1";
-    SyncEntityType["UserV1"] = "UserV1";
-    SyncEntityType["UserDeleteV1"] = "UserDeleteV1";
-    SyncEntityType["AssetV1"] = "AssetV1";
-    SyncEntityType["AssetDeleteV1"] = "AssetDeleteV1";
-    SyncEntityType["AssetExifV1"] = "AssetExifV1";
-    SyncEntityType["AssetEditV1"] = "AssetEditV1";
-    SyncEntityType["AssetEditDeleteV1"] = "AssetEditDeleteV1";
-    SyncEntityType["AssetMetadataV1"] = "AssetMetadataV1";
-    SyncEntityType["AssetMetadataDeleteV1"] = "AssetMetadataDeleteV1";
-    SyncEntityType["PartnerV1"] = "PartnerV1";
-    SyncEntityType["PartnerDeleteV1"] = "PartnerDeleteV1";
-    SyncEntityType["PartnerAssetV1"] = "PartnerAssetV1";
-    SyncEntityType["PartnerAssetBackfillV1"] = "PartnerAssetBackfillV1";
-    SyncEntityType["PartnerAssetDeleteV1"] = "PartnerAssetDeleteV1";
-    SyncEntityType["PartnerAssetExifV1"] = "PartnerAssetExifV1";
-    SyncEntityType["PartnerAssetExifBackfillV1"] = "PartnerAssetExifBackfillV1";
-    SyncEntityType["PartnerStackBackfillV1"] = "PartnerStackBackfillV1";
-    SyncEntityType["PartnerStackDeleteV1"] = "PartnerStackDeleteV1";
-    SyncEntityType["PartnerStackV1"] = "PartnerStackV1";
-    SyncEntityType["AlbumV1"] = "AlbumV1";
-    SyncEntityType["AlbumDeleteV1"] = "AlbumDeleteV1";
-    SyncEntityType["AlbumUserV1"] = "AlbumUserV1";
-    SyncEntityType["AlbumUserBackfillV1"] = "AlbumUserBackfillV1";
-    SyncEntityType["AlbumUserDeleteV1"] = "AlbumUserDeleteV1";
-    SyncEntityType["AlbumAssetCreateV1"] = "AlbumAssetCreateV1";
-    SyncEntityType["AlbumAssetUpdateV1"] = "AlbumAssetUpdateV1";
-    SyncEntityType["AlbumAssetBackfillV1"] = "AlbumAssetBackfillV1";
-    SyncEntityType["AlbumAssetExifCreateV1"] = "AlbumAssetExifCreateV1";
-    SyncEntityType["AlbumAssetExifUpdateV1"] = "AlbumAssetExifUpdateV1";
-    SyncEntityType["AlbumAssetExifBackfillV1"] = "AlbumAssetExifBackfillV1";
-    SyncEntityType["AlbumToAssetV1"] = "AlbumToAssetV1";
-    SyncEntityType["AlbumToAssetDeleteV1"] = "AlbumToAssetDeleteV1";
-    SyncEntityType["AlbumToAssetBackfillV1"] = "AlbumToAssetBackfillV1";
-    SyncEntityType["MemoryV1"] = "MemoryV1";
-    SyncEntityType["MemoryDeleteV1"] = "MemoryDeleteV1";
-    SyncEntityType["MemoryToAssetV1"] = "MemoryToAssetV1";
-    SyncEntityType["MemoryToAssetDeleteV1"] = "MemoryToAssetDeleteV1";
-    SyncEntityType["StackV1"] = "StackV1";
-    SyncEntityType["StackDeleteV1"] = "StackDeleteV1";
-    SyncEntityType["PersonV1"] = "PersonV1";
-    SyncEntityType["PersonDeleteV1"] = "PersonDeleteV1";
-    SyncEntityType["AssetFaceV1"] = "AssetFaceV1";
-    SyncEntityType["AssetFaceV2"] = "AssetFaceV2";
-    SyncEntityType["AssetFaceDeleteV1"] = "AssetFaceDeleteV1";
-    SyncEntityType["UserMetadataV1"] = "UserMetadataV1";
-    SyncEntityType["UserMetadataDeleteV1"] = "UserMetadataDeleteV1";
-    SyncEntityType["SyncAckV1"] = "SyncAckV1";
-    SyncEntityType["SyncResetV1"] = "SyncResetV1";
-    SyncEntityType["SyncCompleteV1"] = "SyncCompleteV1";
+  SyncEntityType['AuthUserV1'] = 'AuthUserV1';
+  SyncEntityType['UserV1'] = 'UserV1';
+  SyncEntityType['UserDeleteV1'] = 'UserDeleteV1';
+  SyncEntityType['AssetV1'] = 'AssetV1';
+  SyncEntityType['AssetDeleteV1'] = 'AssetDeleteV1';
+  SyncEntityType['AssetExifV1'] = 'AssetExifV1';
+  SyncEntityType['AssetEditV1'] = 'AssetEditV1';
+  SyncEntityType['AssetEditDeleteV1'] = 'AssetEditDeleteV1';
+  SyncEntityType['AssetMetadataV1'] = 'AssetMetadataV1';
+  SyncEntityType['AssetMetadataDeleteV1'] = 'AssetMetadataDeleteV1';
+  SyncEntityType['PartnerV1'] = 'PartnerV1';
+  SyncEntityType['PartnerDeleteV1'] = 'PartnerDeleteV1';
+  SyncEntityType['PartnerAssetV1'] = 'PartnerAssetV1';
+  SyncEntityType['PartnerAssetBackfillV1'] = 'PartnerAssetBackfillV1';
+  SyncEntityType['PartnerAssetDeleteV1'] = 'PartnerAssetDeleteV1';
+  SyncEntityType['PartnerAssetExifV1'] = 'PartnerAssetExifV1';
+  SyncEntityType['PartnerAssetExifBackfillV1'] = 'PartnerAssetExifBackfillV1';
+  SyncEntityType['PartnerStackBackfillV1'] = 'PartnerStackBackfillV1';
+  SyncEntityType['PartnerStackDeleteV1'] = 'PartnerStackDeleteV1';
+  SyncEntityType['PartnerStackV1'] = 'PartnerStackV1';
+  SyncEntityType['AlbumV1'] = 'AlbumV1';
+  SyncEntityType['AlbumDeleteV1'] = 'AlbumDeleteV1';
+  SyncEntityType['AlbumUserV1'] = 'AlbumUserV1';
+  SyncEntityType['AlbumUserBackfillV1'] = 'AlbumUserBackfillV1';
+  SyncEntityType['AlbumUserDeleteV1'] = 'AlbumUserDeleteV1';
+  SyncEntityType['AlbumAssetCreateV1'] = 'AlbumAssetCreateV1';
+  SyncEntityType['AlbumAssetUpdateV1'] = 'AlbumAssetUpdateV1';
+  SyncEntityType['AlbumAssetBackfillV1'] = 'AlbumAssetBackfillV1';
+  SyncEntityType['AlbumAssetExifCreateV1'] = 'AlbumAssetExifCreateV1';
+  SyncEntityType['AlbumAssetExifUpdateV1'] = 'AlbumAssetExifUpdateV1';
+  SyncEntityType['AlbumAssetExifBackfillV1'] = 'AlbumAssetExifBackfillV1';
+  SyncEntityType['AlbumToAssetV1'] = 'AlbumToAssetV1';
+  SyncEntityType['AlbumToAssetDeleteV1'] = 'AlbumToAssetDeleteV1';
+  SyncEntityType['AlbumToAssetBackfillV1'] = 'AlbumToAssetBackfillV1';
+  SyncEntityType['MemoryV1'] = 'MemoryV1';
+  SyncEntityType['MemoryDeleteV1'] = 'MemoryDeleteV1';
+  SyncEntityType['MemoryToAssetV1'] = 'MemoryToAssetV1';
+  SyncEntityType['MemoryToAssetDeleteV1'] = 'MemoryToAssetDeleteV1';
+  SyncEntityType['StackV1'] = 'StackV1';
+  SyncEntityType['StackDeleteV1'] = 'StackDeleteV1';
+  SyncEntityType['PersonV1'] = 'PersonV1';
+  SyncEntityType['PersonDeleteV1'] = 'PersonDeleteV1';
+  SyncEntityType['AssetFaceV1'] = 'AssetFaceV1';
+  SyncEntityType['AssetFaceV2'] = 'AssetFaceV2';
+  SyncEntityType['AssetFaceDeleteV1'] = 'AssetFaceDeleteV1';
+  SyncEntityType['UserMetadataV1'] = 'UserMetadataV1';
+  SyncEntityType['UserMetadataDeleteV1'] = 'UserMetadataDeleteV1';
+  SyncEntityType['SharedSpaceV1'] = 'SharedSpaceV1';
+  SyncEntityType['SharedSpaceDeleteV1'] = 'SharedSpaceDeleteV1';
+  SyncEntityType['SharedSpaceMemberV1'] = 'SharedSpaceMemberV1';
+  SyncEntityType['SharedSpaceMemberDeleteV1'] = 'SharedSpaceMemberDeleteV1';
+  SyncEntityType['SharedSpaceMemberBackfillV1'] = 'SharedSpaceMemberBackfillV1';
+  SyncEntityType['SharedSpaceAssetCreateV1'] = 'SharedSpaceAssetCreateV1';
+  SyncEntityType['SharedSpaceAssetUpdateV1'] = 'SharedSpaceAssetUpdateV1';
+  SyncEntityType['SharedSpaceAssetBackfillV1'] = 'SharedSpaceAssetBackfillV1';
+  SyncEntityType['SharedSpaceAssetExifCreateV1'] =
+    'SharedSpaceAssetExifCreateV1';
+  SyncEntityType['SharedSpaceAssetExifUpdateV1'] =
+    'SharedSpaceAssetExifUpdateV1';
+  SyncEntityType['SharedSpaceAssetExifBackfillV1'] =
+    'SharedSpaceAssetExifBackfillV1';
+  SyncEntityType['SharedSpaceToAssetV1'] = 'SharedSpaceToAssetV1';
+  SyncEntityType['SharedSpaceToAssetDeleteV1'] = 'SharedSpaceToAssetDeleteV1';
+  SyncEntityType['SharedSpaceToAssetBackfillV1'] =
+    'SharedSpaceToAssetBackfillV1';
+  SyncEntityType['LibraryV1'] = 'LibraryV1';
+  SyncEntityType['LibraryDeleteV1'] = 'LibraryDeleteV1';
+  SyncEntityType['LibraryAssetCreateV1'] = 'LibraryAssetCreateV1';
+  SyncEntityType['LibraryAssetDeleteV1'] = 'LibraryAssetDeleteV1';
+  SyncEntityType['LibraryAssetBackfillV1'] = 'LibraryAssetBackfillV1';
+  SyncEntityType['LibraryAssetExifCreateV1'] = 'LibraryAssetExifCreateV1';
+  SyncEntityType['LibraryAssetExifBackfillV1'] = 'LibraryAssetExifBackfillV1';
+  SyncEntityType['SharedSpaceLibraryV1'] = 'SharedSpaceLibraryV1';
+  SyncEntityType['SharedSpaceLibraryDeleteV1'] = 'SharedSpaceLibraryDeleteV1';
+  SyncEntityType['SharedSpaceLibraryBackfillV1'] =
+    'SharedSpaceLibraryBackfillV1';
+  SyncEntityType['SyncAckV1'] = 'SyncAckV1';
+  SyncEntityType['SyncResetV1'] = 'SyncResetV1';
+  SyncEntityType['SyncCompleteV1'] = 'SyncCompleteV1';
 })(SyncEntityType || (SyncEntityType = {}));
 export var SyncRequestType;
 (function (SyncRequestType) {
-    SyncRequestType["AlbumsV1"] = "AlbumsV1";
-    SyncRequestType["AlbumUsersV1"] = "AlbumUsersV1";
-    SyncRequestType["AlbumToAssetsV1"] = "AlbumToAssetsV1";
-    SyncRequestType["AlbumAssetsV1"] = "AlbumAssetsV1";
-    SyncRequestType["AlbumAssetExifsV1"] = "AlbumAssetExifsV1";
-    SyncRequestType["AssetsV1"] = "AssetsV1";
-    SyncRequestType["AssetExifsV1"] = "AssetExifsV1";
-    SyncRequestType["AssetEditsV1"] = "AssetEditsV1";
-    SyncRequestType["AssetMetadataV1"] = "AssetMetadataV1";
-    SyncRequestType["AuthUsersV1"] = "AuthUsersV1";
-    SyncRequestType["MemoriesV1"] = "MemoriesV1";
-    SyncRequestType["MemoryToAssetsV1"] = "MemoryToAssetsV1";
-    SyncRequestType["PartnersV1"] = "PartnersV1";
-    SyncRequestType["PartnerAssetsV1"] = "PartnerAssetsV1";
-    SyncRequestType["PartnerAssetExifsV1"] = "PartnerAssetExifsV1";
-    SyncRequestType["PartnerStacksV1"] = "PartnerStacksV1";
-    SyncRequestType["StacksV1"] = "StacksV1";
-    SyncRequestType["UsersV1"] = "UsersV1";
-    SyncRequestType["PeopleV1"] = "PeopleV1";
-    SyncRequestType["AssetFacesV1"] = "AssetFacesV1";
-    SyncRequestType["AssetFacesV2"] = "AssetFacesV2";
-    SyncRequestType["UserMetadataV1"] = "UserMetadataV1";
+  SyncRequestType['AlbumsV1'] = 'AlbumsV1';
+  SyncRequestType['AlbumUsersV1'] = 'AlbumUsersV1';
+  SyncRequestType['AlbumToAssetsV1'] = 'AlbumToAssetsV1';
+  SyncRequestType['AlbumAssetsV1'] = 'AlbumAssetsV1';
+  SyncRequestType['AlbumAssetExifsV1'] = 'AlbumAssetExifsV1';
+  SyncRequestType['AssetsV1'] = 'AssetsV1';
+  SyncRequestType['AssetExifsV1'] = 'AssetExifsV1';
+  SyncRequestType['AssetEditsV1'] = 'AssetEditsV1';
+  SyncRequestType['AssetMetadataV1'] = 'AssetMetadataV1';
+  SyncRequestType['AuthUsersV1'] = 'AuthUsersV1';
+  SyncRequestType['MemoriesV1'] = 'MemoriesV1';
+  SyncRequestType['MemoryToAssetsV1'] = 'MemoryToAssetsV1';
+  SyncRequestType['PartnersV1'] = 'PartnersV1';
+  SyncRequestType['PartnerAssetsV1'] = 'PartnerAssetsV1';
+  SyncRequestType['PartnerAssetExifsV1'] = 'PartnerAssetExifsV1';
+  SyncRequestType['PartnerStacksV1'] = 'PartnerStacksV1';
+  SyncRequestType['StacksV1'] = 'StacksV1';
+  SyncRequestType['UsersV1'] = 'UsersV1';
+  SyncRequestType['PeopleV1'] = 'PeopleV1';
+  SyncRequestType['AssetFacesV1'] = 'AssetFacesV1';
+  SyncRequestType['AssetFacesV2'] = 'AssetFacesV2';
+  SyncRequestType['UserMetadataV1'] = 'UserMetadataV1';
+  SyncRequestType['SharedSpacesV1'] = 'SharedSpacesV1';
+  SyncRequestType['SharedSpaceMembersV1'] = 'SharedSpaceMembersV1';
+  SyncRequestType['SharedSpaceAssetsV1'] = 'SharedSpaceAssetsV1';
+  SyncRequestType['SharedSpaceAssetExifsV1'] = 'SharedSpaceAssetExifsV1';
+  SyncRequestType['SharedSpaceToAssetsV1'] = 'SharedSpaceToAssetsV1';
+  SyncRequestType['LibrariesV1'] = 'LibrariesV1';
+  SyncRequestType['LibraryAssetsV1'] = 'LibraryAssetsV1';
+  SyncRequestType['LibraryAssetExifsV1'] = 'LibraryAssetExifsV1';
+  SyncRequestType['SharedSpaceLibrariesV1'] = 'SharedSpaceLibrariesV1';
 })(SyncRequestType || (SyncRequestType = {}));
-export var Action2;
-(function (Action2) {
-    Action2["Tag"] = "tag";
-    Action2["TagAndArchive"] = "tag_and_archive";
-})(Action2 || (Action2 = {}));
+export var Action;
+(function (Action) {
+  Action['Tag'] = 'tag';
+  Action['TagAndArchive'] = 'tag_and_archive';
+})(Action || (Action = {}));
+export var ClassificationFaceExclusion;
+(function (ClassificationFaceExclusion) {
+  ClassificationFaceExclusion['Off'] = 'off';
+  ClassificationFaceExclusion['AnyAssignedFace'] = 'any_assigned_face';
+  ClassificationFaceExclusion['NamedPeople'] = 'named_people';
+  ClassificationFaceExclusion['NamedVisiblePeople'] = 'named_visible_people';
+})(ClassificationFaceExclusion || (ClassificationFaceExclusion = {}));
 export var TranscodeHWAccel;
 (function (TranscodeHWAccel) {
-    TranscodeHWAccel["Nvenc"] = "nvenc";
-    TranscodeHWAccel["Qsv"] = "qsv";
-    TranscodeHWAccel["Vaapi"] = "vaapi";
-    TranscodeHWAccel["Rkmpp"] = "rkmpp";
-    TranscodeHWAccel["Disabled"] = "disabled";
+  TranscodeHWAccel['Nvenc'] = 'nvenc';
+  TranscodeHWAccel['Qsv'] = 'qsv';
+  TranscodeHWAccel['Vaapi'] = 'vaapi';
+  TranscodeHWAccel['Rkmpp'] = 'rkmpp';
+  TranscodeHWAccel['Disabled'] = 'disabled';
 })(TranscodeHWAccel || (TranscodeHWAccel = {}));
 export var AudioCodec;
 (function (AudioCodec) {
-    AudioCodec["Mp3"] = "mp3";
-    AudioCodec["Aac"] = "aac";
-    AudioCodec["Libopus"] = "libopus";
-    AudioCodec["Opus"] = "opus";
-    AudioCodec["PcmS16Le"] = "pcm_s16le";
+  AudioCodec['Mp3'] = 'mp3';
+  AudioCodec['Aac'] = 'aac';
+  AudioCodec['Libopus'] = 'libopus';
+  AudioCodec['Opus'] = 'opus';
+  AudioCodec['PcmS16Le'] = 'pcm_s16le';
 })(AudioCodec || (AudioCodec = {}));
 export var VideoContainer;
 (function (VideoContainer) {
-    VideoContainer["Mov"] = "mov";
-    VideoContainer["Mp4"] = "mp4";
-    VideoContainer["Ogg"] = "ogg";
-    VideoContainer["Webm"] = "webm";
+  VideoContainer['Mov'] = 'mov';
+  VideoContainer['Mp4'] = 'mp4';
+  VideoContainer['Ogg'] = 'ogg';
+  VideoContainer['Webm'] = 'webm';
 })(VideoContainer || (VideoContainer = {}));
 export var VideoCodec;
 (function (VideoCodec) {
-    VideoCodec["H264"] = "h264";
-    VideoCodec["Hevc"] = "hevc";
-    VideoCodec["Vp9"] = "vp9";
-    VideoCodec["Av1"] = "av1";
+  VideoCodec['H264'] = 'h264';
+  VideoCodec['Hevc'] = 'hevc';
+  VideoCodec['Vp9'] = 'vp9';
+  VideoCodec['Av1'] = 'av1';
 })(VideoCodec || (VideoCodec = {}));
 export var CQMode;
 (function (CQMode) {
-    CQMode["Auto"] = "auto";
-    CQMode["Cqp"] = "cqp";
-    CQMode["Icq"] = "icq";
+  CQMode['Auto'] = 'auto';
+  CQMode['Cqp'] = 'cqp';
+  CQMode['Icq'] = 'icq';
 })(CQMode || (CQMode = {}));
 export var ToneMapping;
 (function (ToneMapping) {
-    ToneMapping["Hable"] = "hable";
-    ToneMapping["Mobius"] = "mobius";
-    ToneMapping["Reinhard"] = "reinhard";
-    ToneMapping["Disabled"] = "disabled";
+  ToneMapping['Hable'] = 'hable';
+  ToneMapping['Mobius'] = 'mobius';
+  ToneMapping['Reinhard'] = 'reinhard';
+  ToneMapping['Disabled'] = 'disabled';
 })(ToneMapping || (ToneMapping = {}));
 export var TranscodePolicy;
 (function (TranscodePolicy) {
-    TranscodePolicy["All"] = "all";
-    TranscodePolicy["Optimal"] = "optimal";
-    TranscodePolicy["Bitrate"] = "bitrate";
-    TranscodePolicy["Required"] = "required";
-    TranscodePolicy["Disabled"] = "disabled";
+  TranscodePolicy['All'] = 'all';
+  TranscodePolicy['Optimal'] = 'optimal';
+  TranscodePolicy['Bitrate'] = 'bitrate';
+  TranscodePolicy['Required'] = 'required';
+  TranscodePolicy['Disabled'] = 'disabled';
 })(TranscodePolicy || (TranscodePolicy = {}));
 export var Colorspace;
 (function (Colorspace) {
-    Colorspace["Srgb"] = "srgb";
-    Colorspace["P3"] = "p3";
+  Colorspace['Srgb'] = 'srgb';
+  Colorspace['P3'] = 'p3';
 })(Colorspace || (Colorspace = {}));
 export var ImageFormat;
 (function (ImageFormat) {
-    ImageFormat["Jpeg"] = "jpeg";
-    ImageFormat["Webp"] = "webp";
+  ImageFormat['Jpeg'] = 'jpeg';
+  ImageFormat['Webp'] = 'webp';
 })(ImageFormat || (ImageFormat = {}));
 export var LogLevel;
 (function (LogLevel) {
-    LogLevel["Verbose"] = "verbose";
-    LogLevel["Debug"] = "debug";
-    LogLevel["Log"] = "log";
-    LogLevel["Warn"] = "warn";
-    LogLevel["Error"] = "error";
-    LogLevel["Fatal"] = "fatal";
+  LogLevel['Verbose'] = 'verbose';
+  LogLevel['Debug'] = 'debug';
+  LogLevel['Log'] = 'log';
+  LogLevel['Warn'] = 'warn';
+  LogLevel['Error'] = 'error';
+  LogLevel['Fatal'] = 'fatal';
 })(LogLevel || (LogLevel = {}));
 export var OAuthTokenEndpointAuthMethod;
 (function (OAuthTokenEndpointAuthMethod) {
-    OAuthTokenEndpointAuthMethod["ClientSecretPost"] = "client_secret_post";
-    OAuthTokenEndpointAuthMethod["ClientSecretBasic"] = "client_secret_basic";
+  OAuthTokenEndpointAuthMethod['ClientSecretPost'] = 'client_secret_post';
+  OAuthTokenEndpointAuthMethod['ClientSecretBasic'] = 'client_secret_basic';
 })(OAuthTokenEndpointAuthMethod || (OAuthTokenEndpointAuthMethod = {}));
+export var Color;
+(function (Color) {
+  Color['Primary'] = 'primary';
+  Color['Pink'] = 'pink';
+  Color['Red'] = 'red';
+  Color['Yellow'] = 'yellow';
+  Color['Blue'] = 'blue';
+  Color['Green'] = 'green';
+  Color['Purple'] = 'purple';
+  Color['Orange'] = 'orange';
+  Color['Gray'] = 'gray';
+  Color['Amber'] = 'amber';
+})(Color || (Color = {}));
 export var UserMetadataKey;
 (function (UserMetadataKey) {
-    UserMetadataKey["Preferences"] = "preferences";
-    UserMetadataKey["License"] = "license";
-    UserMetadataKey["Onboarding"] = "onboarding";
+  UserMetadataKey['Preferences'] = 'preferences';
+  UserMetadataKey['License'] = 'license';
+  UserMetadataKey['Onboarding'] = 'onboarding';
 })(UserMetadataKey || (UserMetadataKey = {}));
