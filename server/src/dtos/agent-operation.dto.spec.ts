@@ -193,26 +193,29 @@ describe('Agent operation DTOs', () => {
     it.each([
       ['selectionHandle', { kind: 'selectionHandle', selectionHandleId: factory.uuid() }],
       ['explicitAssets', { kind: 'explicitAssets', assetIds: [factory.uuid()] }],
-    ])('rejects %s assetSource in operation planning until that source kind is supported here', (_label, assetSource) => {
-      const result = parsePlan({
-        summary: 'Unsupported source kind',
-        operations: [
-          {
-            type: AgentOperationType.AlbumAddAssets,
-            summary: 'Add selected photos',
-            targetKind: AgentOperationTargetKind.ExistingAlbum,
-            targetId: factory.uuid(),
-            assetSource,
-            riskLevel: AgentOperationRiskLevel.Medium,
-            enabled: true,
-            payload: {},
-          },
-        ],
-      });
+    ])(
+      'rejects %s assetSource in operation planning until that source kind is supported here',
+      (_label, assetSource) => {
+        const result = parsePlan({
+          summary: 'Unsupported source kind',
+          operations: [
+            {
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add selected photos',
+              targetKind: AgentOperationTargetKind.ExistingAlbum,
+              targetId: factory.uuid(),
+              assetSource,
+              riskLevel: AgentOperationRiskLevel.Medium,
+              enabled: true,
+              payload: {},
+            },
+          ],
+        });
 
-      expect(result.success).toBe(false);
-      expectIssue(result, ['operations', 0, 'assetSource', 'kind'], 'Invalid input');
-    });
+        expect(result.success).toBe(false);
+        expectIssue(result, ['operations', 0, 'assetSource', 'kind'], 'Invalid input');
+      },
+    );
 
     it('rejects asset-bearing operations that provide assetSource and assetIds', () => {
       const result = parsePlan({
