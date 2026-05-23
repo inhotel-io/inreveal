@@ -55,7 +55,7 @@ void main() {
 
       expect(find.byType(TimelineGroupingSelector), findsOneWidget);
       expect(find.byKey(const Key('timeline-grouping-compact-selector')), findsOneWidget);
-      expect(tester.getSize(find.byKey(const Key('timeline-grouping-compact-selector'))).width, lessThanOrEqualTo(116));
+      expect(tester.getSize(find.byKey(const Key('timeline-grouping-compact-selector'))).width, lessThanOrEqualTo(92));
       expect(find.byIcon(Icons.search), findsNothing);
       expect(find.byIcon(Icons.filter_alt_outlined), findsNothing);
       expect(find.byType(FilterIconButton), findsNothing);

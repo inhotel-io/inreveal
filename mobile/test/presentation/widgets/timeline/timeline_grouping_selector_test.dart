@@ -293,8 +293,9 @@ void main() {
       expect(find.byKey(const Key('timeline-grouping-year')), findsNothing);
       expect(find.byKey(const Key('timeline-grouping-month')), findsNothing);
       expect(find.byKey(const Key('timeline-grouping-day')), findsNothing);
-      expect(find.text('Days'), findsOneWidget);
-      expect(tester.getSize(find.byKey(const Key('timeline-grouping-compact-selector'))).width, lessThanOrEqualTo(116));
+      expect(find.text('Day'), findsOneWidget);
+      expect(find.text('Days'), findsNothing);
+      expect(tester.getSize(find.byKey(const Key('timeline-grouping-compact-selector'))).width, lessThanOrEqualTo(92));
     });
 
     testWidgets('compact mode cycles to the next grouping on tap', (tester) async {
@@ -307,7 +308,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.year.index);
-      expect(find.text('Years'), findsOneWidget);
+      expect(find.text('Year'), findsOneWidget);
+      expect(find.text('Years'), findsNothing);
     });
 
     testWidgets('compact mode opens a direct selection menu on long press', (tester) async {
@@ -322,7 +324,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.month.index);
-      expect(find.text('Months'), findsOneWidget);
+      expect(find.text('Month'), findsOneWidget);
+      expect(find.text('Months'), findsNothing);
     });
   });
 }

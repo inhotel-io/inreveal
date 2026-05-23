@@ -33,8 +33,8 @@ class TimelineGroupingSelector extends ConsumerWidget {
 
   static const double _maxWidth = 218;
   static const double _height = 48;
-  static const double _compactWidth = 104;
-  static const double _compactHeight = 44;
+  static const double _compactWidth = 84;
+  static const double _compactHeight = 40;
 
   final bool enabled;
   final bool compact;
@@ -113,7 +113,7 @@ class _TimelineGroupingCompactSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final label = _label(context, selected);
+    final label = _compactLabel(context, selected);
     final foreground = enabled ? colors.onPrimary : colors.onSurface.withValues(alpha: 0.5);
 
     return Semantics(
@@ -146,7 +146,7 @@ class _TimelineGroupingCompactSelector extends StatelessWidget {
                 onLongPress: enabled ? () => unawaited(_showMenu(context)) : null,
                 borderRadius: BorderRadius.circular(999),
                 child: Padding(
-                  padding: const EdgeInsetsDirectional.only(start: 16, end: 10),
+                  padding: const EdgeInsetsDirectional.only(start: 12, end: 8),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
@@ -270,6 +270,15 @@ String _label(BuildContext context, GroupAssetsBy groupBy) {
     GroupAssetsBy.month => _translated('timeline_grouping_months', 'Months'),
     GroupAssetsBy.day => _translated('timeline_grouping_days', 'Days'),
     GroupAssetsBy.auto || GroupAssetsBy.none => _translated('timeline_grouping_days', 'Days'),
+  };
+}
+
+String _compactLabel(BuildContext context, GroupAssetsBy groupBy) {
+  return switch (groupBy) {
+    GroupAssetsBy.year => _translated('timeline_grouping_year', 'Year'),
+    GroupAssetsBy.month => _translated('timeline_grouping_month', 'Month'),
+    GroupAssetsBy.day => _translated('timeline_grouping_day', 'Day'),
+    GroupAssetsBy.auto || GroupAssetsBy.none => _translated('timeline_grouping_day', 'Day'),
   };
 }
 
