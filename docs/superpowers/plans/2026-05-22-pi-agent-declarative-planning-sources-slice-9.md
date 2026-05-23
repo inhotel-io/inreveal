@@ -275,10 +275,12 @@ it('rejects proposeAssetBatchFromSearch raw id and selection-handle sources', ()
 });
 
 it('keeps asset batch action payload validation aligned with low-level asset operations', () => {
-  const invalidRotateAction = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
-    action: { type: AgentOperationType.AssetRotate, angle: 45 },
-    assetSource: { kind: 'search', filters: {} },
-  });
+  const invalidRotateAction = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse(
+    {
+      action: { type: AgentOperationType.AssetRotate, angle: 45 },
+      assetSource: { kind: 'search', filters: {} },
+    },
+  );
   const invalidRotateOperation = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse({
     summary: 'Rotate.',
     operations: [
@@ -493,7 +495,11 @@ it.each([
     const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
     const assetIds = [newUuid(), newUuid()];
     sessionRepository.getById.mockResolvedValue(session);
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
     sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({
       items: assetIds.map((id) => ({ id })),
@@ -781,36 +787,39 @@ it.each([
     action: { type: AgentOperationType.AssetRotate, angle: 90 },
     error: 'Agent permission policy does not allow editing assets',
   },
-])('proposeAssetBatchFromSearch denies $label before materializing source when write scope is disabled', async ({ writeScopeOverride, action, error }) => {
-  const auth = AuthFactory.create();
-  const session = makeSession({
-    userId: auth.user.id,
-    permissionPlanSnapshot: {
-      ...expandedPermissionPlanSnapshot,
-      writeScope: { ...expandedPermissionPlanSnapshot.writeScope, ...writeScopeOverride },
-    },
-  });
-  sessionRepository.getById.mockResolvedValue(session);
+])(
+  'proposeAssetBatchFromSearch denies $label before materializing source when write scope is disabled',
+  async ({ writeScopeOverride, action, error }) => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, ...writeScopeOverride },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
 
-  await expect(
-    sut.proposeAssetBatchFromSearch(auth, session.id, {
-      action,
-      assetSource: { kind: 'search', filters: { rating: 5 } },
-    }),
-  ).rejects.toThrow(error);
+    await expect(
+      sut.proposeAssetBatchFromSearch(auth, session.id, {
+        action,
+        assetSource: { kind: 'search', filters: { rating: 5 } },
+      }),
+    ).rejects.toThrow(error);
 
-  expect(assetSearchFilterResolverService.resolveDeclarativeFilters).not.toHaveBeenCalled();
-  expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
-  expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
-  expect(toolCallRepository.create).toHaveBeenCalledWith(
-    expect.objectContaining({
-      toolName: AgentToolName.ProposeAssetBatchFromSearch,
-      status: AgentToolCallStatus.Denied,
-      approvalDecision: AgentToolApprovalDecision.Denied,
-      error,
-    }),
-  );
-});
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters).not.toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: AgentToolName.ProposeAssetBatchFromSearch,
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        error,
+      }),
+    );
+  },
+);
 ```
 
 - [ ] **Step 3: Write failing empty and over-broad source tests**
@@ -822,7 +831,11 @@ it('proposeAssetBatchFromSearch does not create a plan for an empty search sourc
   const auth = AuthFactory.create();
   const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
   sessionRepository.getById.mockResolvedValue(session);
-  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
+  });
   sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
   searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false } as never);
 
@@ -849,7 +862,11 @@ it('proposeAssetBatchFromSearch does not create a plan for an over-broad all-mat
   const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
   const assetIds = Array.from({ length: AgentOperationPlanService.maxAssetSelectionHandleAssets + 1 }, () => newUuid());
   sessionRepository.getById.mockResolvedValue(session);
-  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
+  });
   sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
   searchRepository.searchMetadata.mockResolvedValue({
     items: assetIds.map((id) => ({ id })),
@@ -988,7 +1005,8 @@ it('lists the high-level asset batch workflow tool with valid examples', () => {
   expect(tool?.inputSchema.examples).toEqual(contract.examples.map((example) => example.arguments));
 
   for (const exampleArguments of tool?.inputSchema.examples as Record<string, unknown>[]) {
-    const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse(exampleArguments);
+    const result =
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse(exampleArguments);
     expect(result.success, `${AgentToolName.ProposeAssetBatchFromSearch} example should parse`).toBe(true);
   }
 });
@@ -1159,7 +1177,8 @@ Add the contract:
 const proposeAssetBatchFromSearchContract: AgentMcpPlanningToolContract = {
   name: AgentToolName.ProposeAssetBatchFromSearch,
   title: 'Propose asset batch from search',
-  description: 'preferred tool for favoriting, archiving, tagging, or rotating matching photos from a declarative or previous search source.',
+  description:
+    'preferred tool for favoriting, archiving, tagging, or rotating matching photos from a declarative or previous search source.',
   usage:
     'Use this before low-level proposeAlbumOperations when the user asks to favorite, archive, unarchive, tag, or rotate photos matching a search. Gallery resolves names, materializes the source, and creates a reviewable plan; nothing is applied until the user approves.',
   argumentModes: [
@@ -1168,7 +1187,8 @@ const proposeAssetBatchFromSearchContract: AgentMcpPlanningToolContract = {
       description: 'Create one reviewable asset batch operation from matching search results.',
       requiredFields: ['action', 'assetSource'],
       forbiddenFields: ['operations', 'assetIds', 'assetSelectionHandleId', 'targetKind'],
-      whenToUse: 'Use for requests like favorite matching photos, archive these search results, tag receipt photos, or rotate previously found sideways images.',
+      whenToUse:
+        'Use for requests like favorite matching photos, archive these search results, tag receipt photos, or rotate previously found sideways images.',
     },
   ],
   examples: proposeAssetBatchFromSearchExamples,

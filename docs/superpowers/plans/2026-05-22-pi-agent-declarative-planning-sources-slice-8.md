@@ -425,7 +425,11 @@ it('proposeAddAssetsToSpaceFromSearch creates only an add-assets operation for a
   const spaceId = newUuid();
   const assetIds = [newUuid()];
   sessionRepository.getById.mockResolvedValue(session);
-  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
+  });
   sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
   searchRepository.searchMetadata.mockResolvedValue({
     items: assetIds.map((id) => ({ id })),
@@ -674,9 +678,19 @@ it('proposeAddAssetsToSpaceFromSearch resolves a unique visible space name befor
   const assetIds = [newUuid()];
   sessionRepository.getById.mockResolvedValue(session);
   sharedSpaceRepository.getAllByUserId.mockResolvedValue([
-    { id: spaceId, name: 'Family South Africa', description: null, color: UserAvatarColor.Blue, createdById: auth.user.id },
+    {
+      id: spaceId,
+      name: 'Family South Africa',
+      description: null,
+      color: UserAvatarColor.Blue,
+      createdById: auth.user.id,
+    },
   ] as never);
-  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
+  });
   sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
   searchRepository.searchMetadata.mockResolvedValue({
     items: assetIds.map((id) => ({ id })),
@@ -869,7 +883,11 @@ it('proposeAddAssetsToSpaceFromSearch enforces add-assets-to-space scope and edi
   const allowedSession = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
   sessionRepository.getById.mockResolvedValue(allowedSession);
   accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set());
-  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
+  });
   sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
   searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: newUuid() }], hasNextPage: false } as never);
   assetRepository.getAgentReadableIds.mockResolvedValue(new Set());
@@ -895,7 +913,11 @@ it('proposeAddAssetsToSpaceFromSearch keeps existing membership semantics by pre
   const existingAssetId = newUuid();
   const newAssetId = newUuid();
   sessionRepository.getById.mockResolvedValue(session);
-  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
+  });
   sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
   searchRepository.searchMetadata.mockResolvedValue({
     items: [existingAssetId, newAssetId].map((id) => ({ id })),
@@ -1262,7 +1284,8 @@ const proposeSpaceFromSearchContract: AgentMcpPlanningToolContract = {
       description: 'Create a new shared space and add matching search results.',
       requiredFields: ['spaceName', 'assetSource'],
       forbiddenFields: ['operations', 'assetIds', 'assetSelectionHandleId'],
-      whenToUse: 'Use for requests like create a shared space from photos matching date, place, people, tags, or a previous search.',
+      whenToUse:
+        'Use for requests like create a shared space from photos matching date, place, people, tags, or a previous search.',
     },
   ],
   examples: proposeSpaceFromSearchExamples,
@@ -1280,7 +1303,8 @@ const proposeSpaceFromSearchContract: AgentMcpPlanningToolContract = {
 const proposeAddAssetsToSpaceFromSearchContract: AgentMcpPlanningToolContract = {
   name: AgentToolName.ProposeAddAssetsToSpaceFromSearch,
   title: 'Propose add assets to space from search',
-  description: 'preferred tool for adding matching photos to an existing shared space from a declarative or previous search source.',
+  description:
+    'preferred tool for adding matching photos to an existing shared space from a declarative or previous search source.',
   usage:
     'Use this before low-level proposeAlbumOperations when the user asks to add matching photos to an existing shared space. Provide spaceId when known, or a uniquely visible spaceName. Gallery creates a reviewable plan only.',
   argumentModes: [
@@ -1312,7 +1336,7 @@ Add both to `planningToolContracts` before `proposeAlbumOperationsContract`, aft
 In `server/src/services/agent-mcp-prompt.service.ts`, keep the prompt under `<= 3800` by changing the write guidance line to something short that includes all four high-level workflow tool names via the existing `Tool:` line and a concise instruction, for example:
 
 ```ts
-`Write: album/space search use high-level fromSearch tools first; other plans use ${this.toPiToolName(planContract.name)}.`
+`Write: album/space search use high-level fromSearch tools first; other plans use ${this.toPiToolName(planContract.name)}.`;
 ```
 
 If this exceeds the prompt budget after the new tool names enlarge the `Tool:` line, trim nearby prose without removing tested semantics. Preferred trim targets:
