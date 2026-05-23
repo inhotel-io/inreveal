@@ -39,6 +39,7 @@ import { MachineLearningRepository } from 'src/repositories/machine-learning.rep
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
+import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import { AgentMcpService } from 'src/services/agent-mcp.service';
@@ -49,7 +50,6 @@ import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-toke
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
-import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
 import { AgentMcpSuccessResponse, AgentMcpToolCallResult } from 'src/types/agent-mcp.types';
 import { AgentMessageContent } from 'src/types/agent-message.types';
 import { AgentAlbumOperationInput } from 'src/types/agent-operation.types';
