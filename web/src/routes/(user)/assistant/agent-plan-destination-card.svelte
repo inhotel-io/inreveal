@@ -9,10 +9,6 @@
     canChangeSelection: boolean;
     onToggleGroup: (group: OperationReviewGroup, checked: boolean) => void;
     onToggleOperation: (operationId: string, checked: boolean) => void;
-    onToggleItem: (operationId: string, assetId: string, selected: boolean) => void;
-    onBulkSetItems: (operationId: string, assetIds: string[], selected: boolean) => void;
-    onSetOnlyItems: (operationId: string, assetIds: string[]) => void;
-    onResetItemSelection: (operationId: string) => void;
     onSetFieldOverride: (operationId: string, fieldKey: string, value: string | undefined) => void;
     onResetFieldOverride: (operationId: string, fieldKey: string) => void;
     onOpenItemReview?: (operationId: string) => void;
@@ -23,10 +19,6 @@
     canChangeSelection,
     onToggleGroup,
     onToggleOperation,
-    onToggleItem,
-    onBulkSetItems,
-    onSetOnlyItems,
-    onResetItemSelection,
     onSetFieldOverride,
     onResetFieldOverride,
     onOpenItemReview = () => {},
@@ -119,10 +111,6 @@
         {item}
         {canChangeSelection}
         {onToggleOperation}
-        {onToggleItem}
-        {onBulkSetItems}
-        {onSetOnlyItems}
-        {onResetItemSelection}
         {onSetFieldOverride}
         {onResetFieldOverride}
         {onOpenItemReview}
