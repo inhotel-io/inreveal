@@ -20,6 +20,13 @@ describe(AgentMcpDocsService.name, () => {
     sut = new AgentMcpDocsService(contractService);
   });
 
+  const section = (markdown: string, title: string) => {
+    const start = markdown.indexOf(title);
+    expect(start, `${title} should exist`).toBeGreaterThanOrEqual(0);
+    const next = markdown.indexOf('\n## ', start + title.length);
+    return markdown.slice(start, next === -1 ? undefined : next);
+  };
+
   it('generates the required MCP guide sections from the contract', () => {
     const markdown = sut.generateMarkdown();
 
@@ -391,6 +398,37 @@ describe(AgentMcpDocsService.name, () => {
     expect(markdown).not.toContain('MCP tool name: `execute');
     expect(markdown).not.toContain('MCP tool name: `write');
     expect(markdown).not.toContain('MCP tool name: `delete');
+  });
+
+  it('documents source-backed planning defaults before the tool catalog', () => {
+    const markdown = sut.generateMarkdown();
+    const defaults = section(markdown, '## Source-Backed Planning Defaults');
+
+    expect(markdown.indexOf('## Source-Backed Planning Defaults')).toBeLessThan(markdown.indexOf('## Tools'));
+    expect(defaults).toContain('Use high-level workflow tools first');
+    expect(defaults).toContain('assetSource.search');
+    expect(defaults).toContain('previousSearch.sourceRef');
+    expect(defaults).toContain('explicit IDs');
+    expect(defaults).toContain('small inspected sets');
+    expect(defaults).toContain('wrong_id_domain');
+    expect(defaults).toContain('needs_clarification');
+    expect(defaults).toContain('choiceRefs');
+  });
+
+  it('documents end-to-end source-backed album, space, and batch examples without raw UUID copying', () => {
+    const markdown = sut.generateMarkdown();
+    const defaults = section(markdown, '## Source-Backed Planning Defaults');
+
+    expect(defaults).toContain('create-south-africa-pierre-aurelia-album');
+    expect(defaults).toContain('proposeAlbumFromSearch');
+    expect(defaults).toContain('proposeSpaceFromSearch');
+    expect(defaults).toContain('proposeAssetBatchFromSearch');
+    expect(defaults).toContain('"people": {');
+    expect(defaults).toContain('"names": ["Pierre", "Aurelia"]');
+    expect(defaults).toContain('"sourceRef": "<sourceRef from searchAssets>"');
+    expect(defaults).not.toContain('00000000-0000-4000-8000');
+    expect(defaults).not.toContain('"personIds"');
+    expect(defaults).not.toContain('"assetIds"');
   });
 
   it('keeps the committed generated guide in sync with the renderer', () => {
