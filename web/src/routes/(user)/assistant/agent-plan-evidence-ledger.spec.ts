@@ -304,7 +304,8 @@ describe('AgentPlanEvidenceLedger', () => {
 
     const applyRegion = screen.getByTestId('agent-operation-plan-sticky-actions');
 
-    expect(applyRegion).toHaveClass('sticky', 'bottom-0', 'flex', 'flex-col', 'gap-3');
+    expect(applyRegion).toHaveClass('sticky', 'bottom-3', 'flex', 'flex-col', 'gap-3', 'rounded-3xl');
+    expect(applyRegion).not.toHaveClass('border-t');
     expect(applyRegion).toHaveClass('sm:flex-row');
     expect(screen.getByRole('button', { name: 'Apply 3 selected' })).toBeInTheDocument();
   });
