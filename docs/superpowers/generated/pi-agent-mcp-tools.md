@@ -121,6 +121,105 @@ Use the smallest useful payload first. Resolve names before search. Search compa
 - If `hasMore` is true, page or narrow before claiming the handle covers every matching photo.
 - Plan review still shows counts and samples; Gallery applies only after user approval.
 
+## Source-Backed Planning Defaults
+
+Use high-level workflow tools first for album, space, and asset batch requests. Prefer `assetSource.search` when the user already gave the filter intent. Prefer `previousSearch.sourceRef` after an inspection search. Use explicit IDs only for small inspected sets where the user is selecting exact assets.
+
+Treat `wrong_id_domain` as recoverable: retry with `assetSource.search`, `previousSearch.sourceRef`, or exact IDs from the correct tool domain. Treat `needs_clarification` as recoverable: ask the user to choose one Gallery-provided option, then pass the selected `choiceRefs` in the next declarative named filter.
+
+### Regression: create an album for South Africa in January 2026 with Pierre OR Aurelia using declarative people names.
+
+MCP tool name: `proposeAlbumFromSearch`
+
+Example: `create-south-africa-pierre-aurelia-album`
+
+```json
+{
+  "summary": "Create South Africa January 2026 album for Pierre or Aurelia.",
+  "albumName": "South Africa with Pierre & Aurelia",
+  "description": "January 2026 South Africa photos featuring Pierre or Aurelia.",
+  "assetSource": {
+    "kind": "search",
+    "filters": {
+      "country": "South Africa",
+      "takenAfter": "2026-01-01T00:00:00.000Z",
+      "takenBefore": "2026-02-01T00:00:00.000Z",
+      "people": {
+        "match": "any",
+        "names": ["Pierre", "Aurelia"]
+      }
+    },
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
+
+### Create a new album from a previous search source reference.
+
+MCP tool name: `proposeAlbumFromSearch`
+
+Example: `create-album-from-previous-search`
+
+```json
+{
+  "summary": "Create album from the previous search.",
+  "albumName": "Recent favorites",
+  "assetSource": {
+    "kind": "previousSearch",
+    "sourceRef": "<sourceRef from searchAssets>"
+  }
+}
+```
+
+### Create a new shared space directly from user-facing search filters.
+
+MCP tool name: `proposeSpaceFromSearch`
+
+Example: `create-space-from-declarative-search`
+
+```json
+{
+  "summary": "Create family South Africa space.",
+  "spaceName": "Family South Africa",
+  "description": "Shared January 2026 South Africa photos.",
+  "color": "blue",
+  "assetSource": {
+    "kind": "search",
+    "filters": {
+      "country": "South Africa",
+      "takenAfter": "2026-01-01T00:00:00.000Z",
+      "takenBefore": "2026-02-01T00:00:00.000Z"
+    },
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
+
+### Favorite all photos matching a declarative search.
+
+MCP tool name: `proposeAssetBatchFromSearch`
+
+Example: `favorite-search-results`
+
+```json
+{
+  "summary": "Favorite matching Berlin receipt photos.",
+  "action": {
+    "type": "asset.setFavorite",
+    "favorite": true
+  },
+  "assetSource": {
+    "kind": "search",
+    "mode": "ocr",
+    "query": "receipt",
+    "filters": {
+      "city": "Berlin"
+    },
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
+
 ## Tools
 
 ### Resolve asset search filters
@@ -1017,6 +1116,33 @@ Argument modes:
 - `new-album-from-search`: Use for requests like create an album from photos matching date, place, people, tags, or a previous search.
   Required fields: `albumName`, `assetSource`.
   Forbidden fields: `operations`, `assetIds`, `assetSelectionHandleId`.
+
+#### create-south-africa-pierre-aurelia-album
+
+Regression: create an album for South Africa in January 2026 with Pierre OR Aurelia using declarative people names.
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumFromSearch" example="create-south-africa-pierre-aurelia-album" -->
+
+```json
+{
+  "summary": "Create South Africa January 2026 album for Pierre or Aurelia.",
+  "albumName": "South Africa with Pierre & Aurelia",
+  "description": "January 2026 South Africa photos featuring Pierre or Aurelia.",
+  "assetSource": {
+    "kind": "search",
+    "filters": {
+      "country": "South Africa",
+      "takenAfter": "2026-01-01T00:00:00.000Z",
+      "takenBefore": "2026-02-01T00:00:00.000Z",
+      "people": {
+        "match": "any",
+        "names": ["Pierre", "Aurelia"]
+      }
+    },
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
 
 #### create-album-from-declarative-search
 
@@ -2579,6 +2705,7 @@ Summarize plan risks and selected changes.
 
 ### Propose add assets to album from search
 
+- `album-add-workflow-raw-asset-ids`: Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.
 - `album-workflow-missing-target`: Provide albumId from listAlbums/readAlbum, or provide one exact visible albumName.
 
 ### Propose space from search
@@ -2587,6 +2714,7 @@ Summarize plan risks and selected changes.
 
 ### Propose add assets to space from search
 
+- `space-add-workflow-raw-asset-ids`: Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.
 - `space-workflow-missing-target`: Provide spaceId from listSpaces/readSpace, or provide one exact visible spaceName.
 
 ### Propose asset batch from search
