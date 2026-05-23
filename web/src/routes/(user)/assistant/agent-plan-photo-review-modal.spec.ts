@@ -97,6 +97,15 @@ describe('AgentPlanPhotoReviewModal', () => {
     expect(within(summary).getByText('1 excluded')).toBeInTheDocument();
   });
 
+  it('uses an expanded review surface for large photo selections', () => {
+    render(AgentPlanPhotoReviewModal, { props: defaultProps() });
+
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+
+    expect(dialog).toHaveClass('max-w-[96rem]');
+    expect(dialog).toHaveClass('h-[min(92vh,58rem)]');
+  });
+
   it('focuses the close button on open, closes from Done reviewing and Escape, and restores focus', async () => {
     const trigger = document.createElement('button');
     trigger.textContent = 'Open review';
