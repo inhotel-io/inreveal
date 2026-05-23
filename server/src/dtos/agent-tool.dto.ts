@@ -1,5 +1,5 @@
 import { createZodDto, type ZodDto } from 'nestjs-zod';
-import { AgentSearchSourceRefSchema } from 'src/dtos/agent-asset-source.dto';
+import { AgentChoiceRefSchema, AgentSearchSourceRefSchema } from 'src/dtos/agent-asset-source.dto';
 import {
   AgentToolApprovalDecision,
   AgentToolCallStatus,
@@ -710,6 +710,7 @@ const AgentSearchAssetsToolResponseSchema = z
 export const AgentResolvedAssetSearchFilterChoiceSchema = z
   .object({
     id: uuid.optional(),
+    choiceRef: AgentChoiceRefSchema.optional(),
     value: z.string(),
     label: z.string(),
     searchFilter: AgentPartialSearchAssetsFiltersSchema.optional(),

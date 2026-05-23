@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import type { AgentSession } from 'src/database';
 import type { AgentResolveAssetSearchFiltersToolRequestDto } from 'src/dtos/agent-tool.dto';
 import type { AuthDto } from 'src/dtos/auth.dto';
@@ -62,9 +63,15 @@ export class AgentAssetSearchFilterResolverService {
       const visibleSpaces = await this.sharedSpaceRepository.getAllByUserId(auth.user.id);
       const spaces = visibleSpaces.map((space) => ({ id: space.id, value: space.name }));
       for (const query of request.spaces) {
-        const matched = this.matchVisibleCandidates(spaces, query, 'space', (candidate) => ({
-          spaceId: candidate.id,
-        }));
+        const matched = this.matchVisibleCandidates(
+          spaces,
+          query,
+          'space',
+          (candidate) => ({
+            spaceId: candidate.id,
+          }),
+          session.id,
+        );
         if (matched.status === 'matched') {
           if (resolvedFilters.spaceId && resolvedFilters.spaceId !== matched.id) {
             results.push({
@@ -115,7 +122,7 @@ export class AgentAssetSearchFilterResolverService {
         : null;
 
     if (request.people?.length) {
-      this.resolvePersonFilters(results, resolvedFilters, request.people, suggestions?.people ?? []);
+      this.resolvePersonFilters(results, resolvedFilters, request.people, suggestions?.people ?? [], session.id);
     }
 
     if (request.tags?.length) {
@@ -126,6 +133,7 @@ export class AgentAssetSearchFilterResolverService {
         request.tags,
         suggestions?.tags.map((tag) => ({ id: tag.id, value: tag.value })) ?? [],
         'tagIds',
+        session.id,
       );
     }
 
@@ -139,7 +147,7 @@ export class AgentAssetSearchFilterResolverService {
             : session.permissionPlanSnapshot.assetScope.sharedSpaces;
         })
         .map((album) => ({ id: album.id, value: album.albumName }));
-      this.resolveIdFilters(results, resolvedFilters, 'album', request.albums, albums, 'albumIds');
+      this.resolveIdFilters(results, resolvedFilters, 'album', request.albums, albums, 'albumIds', session.id);
     }
 
     if (request.cameraMakes?.length) {
@@ -149,6 +157,7 @@ export class AgentAssetSearchFilterResolverService {
           query,
           'cameraMake',
           (candidate) => ({ make: candidate.value }),
+          session.id,
         );
         if (matched.status === 'matched') {
           resolvedFilters.make = matched.value;
@@ -179,6 +188,7 @@ export class AgentAssetSearchFilterResolverService {
           query,
           'cameraModel',
           (candidate) => ({ model: candidate.value }),
+          session.id,
         );
         if (matched.status === 'matched') {
           resolvedFilters.model = matched.value;
@@ -201,6 +211,7 @@ export class AgentAssetSearchFilterResolverService {
           query,
           'lensModel',
           (candidate) => ({ lensModel: candidate.value }),
+          session.id,
         );
         if (matched.status === 'matched') {
           resolvedFilters.lensModel = matched.value;
@@ -238,7 +249,12 @@ export class AgentAssetSearchFilterResolverService {
       return { status: 'success', filters: scalarFilters, results: [] };
     }
 
-    const { resolvedFilters, results } = await this.resolveToolFilters(auth, session, resolverRequest);
+    const { resolvedFilters, results } = await this.resolveDeclarativeToolFilters(
+      auth,
+      session,
+      resolverRequest,
+      filters,
+    );
     const mergedFilters = { ...scalarFilters, ...resolvedFilters };
     this.applyDeclarativeMatchFlags(filters, mergedFilters);
     const blockingResults = results.filter((result) => result.status !== 'matched');
@@ -322,7 +338,9 @@ export class AgentAssetSearchFilterResolverService {
     return resolvedFilters;
   }
 
-  private toResolveToolRequest(filters: AgentDeclarativeAssetFilters): AgentResolveAssetSearchFiltersToolRequestDto | null {
+  private toResolveToolRequest(
+    filters: AgentDeclarativeAssetFilters,
+  ): AgentResolveAssetSearchFiltersToolRequestDto | null {
     const request: AgentResolveAssetSearchFiltersToolRequestDto = {
       ...(filters.people ? { people: filters.people.names } : {}),
       ...(filters.tags ? { tags: filters.tags.names } : {}),
@@ -380,6 +398,8 @@ export class AgentAssetSearchFilterResolverService {
       name: string;
       primaryProfile?: { type: 'user-person' | 'space-person'; id: string; spaceId?: string };
     }>,
+    sessionId: string,
+    choiceRefs?: string[],
   ) {
     const candidates = people.map((person) => ({
       id: person.primaryProfile?.id ?? person.id,
@@ -388,7 +408,14 @@ export class AgentAssetSearchFilterResolverService {
     }));
 
     for (const query of queries) {
-      const matched = this.matchVisibleCandidates(candidates, query, 'person', (candidate) => candidate.searchFilter);
+      const matched = this.matchVisibleCandidates(
+        candidates,
+        query,
+        'person',
+        (candidate) => candidate.searchFilter,
+        sessionId,
+        choiceRefs,
+      );
       if (matched.status === 'matched') {
         this.mergeResolvedPersonFilter(resolvedFilters, matched.searchFilter);
       }
@@ -451,13 +478,23 @@ export class AgentAssetSearchFilterResolverService {
     queries: string[],
     candidates: Array<{ id: string; value: string }>,
     filterKey: 'personIds' | 'tagIds' | 'albumIds',
+    sessionId: string,
+    choiceRefs?: string[],
   ) {
     for (const query of queries) {
-      const matched = this.matchVisibleCandidates(candidates, query, kind, (candidate) => ({
-        [filterKey]: [candidate.id],
-      }));
+      const matched = this.matchVisibleCandidates(
+        candidates,
+        query,
+        kind,
+        (candidate) => ({
+          [filterKey]: [candidate.id],
+        }),
+        sessionId,
+        choiceRefs,
+      );
       if (matched.status === 'matched' && matched.id) {
-        resolvedFilters[filterKey] = [...new Set([...(resolvedFilters[filterKey] ?? []), matched.id])];
+        const ids = (matched.searchFilter?.[filterKey] as string[] | undefined) ?? [matched.id];
+        resolvedFilters[filterKey] = [...new Set([...(resolvedFilters[filterKey] ?? []), ...ids])];
       }
       results.push(matched);
     }
@@ -468,8 +505,40 @@ export class AgentAssetSearchFilterResolverService {
     query: string,
     kind: AgentResolvedAssetSearchFilterKind,
     getSearchFilter: (candidate: T) => Partial<AgentSearchAssetsFilters>,
+    sessionId: string,
+    choiceRefs?: string[],
   ): AgentResolvedAssetSearchFilterResult {
     const exactMatches = candidates.filter((candidate) => this.isExactMatch(candidate.value, query));
+    if (choiceRefs?.length) {
+      const choices = exactMatches.flatMap((candidate) => {
+        const searchFilter = getSearchFilter(candidate);
+        return this.hasSearchFilter(searchFilter)
+          ? [this.choiceForIdCandidate(candidate, kind, searchFilter, sessionId, query)]
+          : [];
+      });
+      const selected = choices.filter((choice) => choice.choiceRef && choiceRefs.includes(choice.choiceRef));
+      if (selected.length === 0) {
+        return {
+          kind,
+          query,
+          status: 'not_found',
+          choices,
+          message: `Selected ${kind} choice is no longer available; choose again`,
+        };
+      }
+
+      return {
+        kind,
+        query,
+        status: 'matched',
+        id: selected[0].id,
+        value: selected[0].value,
+        searchFilter: this.mergeChoiceSearchFilters(selected.map((choice) => choice.searchFilter ?? {})),
+        choices: [],
+        message: `Matched selected ${kind} choice "${query}"`,
+      };
+    }
+
     if (exactMatches.length === 1) {
       const candidate = exactMatches[0];
       return {
@@ -491,7 +560,9 @@ export class AgentAssetSearchFilterResolverService {
         status: 'ambiguous',
         choices: exactMatches.flatMap((candidate) => {
           const searchFilter = getSearchFilter(candidate);
-          return this.hasSearchFilter(searchFilter) ? [this.choiceForIdCandidate(candidate, kind, searchFilter)] : [];
+          return this.hasSearchFilter(searchFilter)
+            ? [this.choiceForIdCandidate(candidate, kind, searchFilter, sessionId, query)]
+            : [];
         }),
         message: `Multiple visible ${kind} matches found`,
       };
@@ -504,7 +575,9 @@ export class AgentAssetSearchFilterResolverService {
       choices: this.getNotFoundSuggestionCandidates(candidates, query)
         .flatMap((candidate) => {
           const searchFilter = getSearchFilter(candidate);
-          return this.hasSearchFilter(searchFilter) ? [this.choiceForIdCandidate(candidate, kind, searchFilter)] : [];
+          return this.hasSearchFilter(searchFilter)
+            ? [this.choiceForIdCandidate(candidate, kind, searchFilter, sessionId, query)]
+            : [];
         })
         .slice(0, 5),
       message: `No visible ${kind} match found`,
@@ -526,15 +599,168 @@ export class AgentAssetSearchFilterResolverService {
 
   private choiceForIdCandidate<T extends { id?: string; value: string }>(
     candidate: T,
-    _kind: AgentResolvedAssetSearchFilterKind,
+    kind: AgentResolvedAssetSearchFilterKind,
     searchFilter: Partial<AgentSearchAssetsFilters>,
+    sessionId?: string,
+    query?: string,
   ): AgentResolvedAssetSearchFilterChoice {
     return {
       ...(candidate.id ? { id: candidate.id } : {}),
+      ...(sessionId && query
+        ? { choiceRef: this.buildChoiceRef(sessionId, kind, query, candidate, searchFilter) }
+        : {}),
       value: candidate.value,
       label: candidate.value,
       searchFilter,
     };
+  }
+
+  private async resolveDeclarativeToolFilters(
+    auth: AuthDto,
+    session: AgentSession,
+    request: AgentResolveAssetSearchFiltersToolRequestDto,
+    filters: AgentDeclarativeAssetFilters,
+  ): Promise<{
+    resolvedFilters: AgentSearchAssetsFilters;
+    results: AgentResolvedAssetSearchFilterResult[];
+  }> {
+    const selected = {
+      people: filters.people?.choiceRefs,
+      tags: filters.tags?.choiceRefs,
+      albums: filters.albums?.choiceRefs,
+    };
+    if (!selected.people?.length && !selected.tags?.length && !selected.albums?.length) {
+      return this.resolveToolFilters(auth, session, request);
+    }
+
+    return this.resolveToolFiltersWithSelectedChoices(auth, session, request, selected);
+  }
+
+  private async resolveToolFiltersWithSelectedChoices(
+    auth: AuthDto,
+    session: AgentSession,
+    request: AgentResolveAssetSearchFiltersToolRequestDto,
+    selected: { people?: string[]; tags?: string[]; albums?: string[] },
+  ): Promise<{
+    resolvedFilters: AgentSearchAssetsFilters;
+    results: AgentResolvedAssetSearchFilterResult[];
+  }> {
+    const result = await this.resolveToolFilters(auth, session, {
+      ...request,
+      people: selected.people?.length ? undefined : request.people,
+      tags: selected.tags?.length ? undefined : request.tags,
+      albums: selected.albums?.length ? undefined : request.albums,
+    });
+    const resolvedFilters = result.resolvedFilters;
+    const results = [...result.results];
+    const repositoryScope = request.scope ?? {};
+    const canUseRepositoryCandidates = this.canUseResolverRepositoryCandidates(session, repositoryScope);
+    const suggestions =
+      (selected.people?.length || selected.tags?.length) && canUseRepositoryCandidates
+        ? await this.searchRepository.getFilterSuggestions([auth.user.id], repositoryScope)
+        : null;
+
+    if (selected.people?.length && request.people?.length) {
+      this.resolvePersonFilters(
+        results,
+        resolvedFilters,
+        request.people,
+        suggestions?.people ?? [],
+        session.id,
+        selected.people,
+      );
+    }
+
+    if (selected.tags?.length && request.tags?.length) {
+      this.resolveIdFilters(
+        results,
+        resolvedFilters,
+        'tag',
+        request.tags,
+        suggestions?.tags.map((tag) => ({ id: tag.id, value: tag.value })) ?? [],
+        'tagIds',
+        session.id,
+        selected.tags,
+      );
+    }
+
+    if (selected.albums?.length && request.albums?.length) {
+      const visibleAlbums = await this.albumRepository.getAgentAlbums(auth.user.id);
+      const albums = visibleAlbums
+        .filter((album) => {
+          const isOwned = album.ownerId === auth.user.id;
+          return isOwned
+            ? session.permissionPlanSnapshot.assetScope.owned
+            : session.permissionPlanSnapshot.assetScope.sharedSpaces;
+        })
+        .map((album) => ({ id: album.id, value: album.albumName }));
+      this.resolveIdFilters(
+        results,
+        resolvedFilters,
+        'album',
+        request.albums,
+        albums,
+        'albumIds',
+        session.id,
+        selected.albums,
+      );
+    }
+
+    return { resolvedFilters, results };
+  }
+
+  private mergeChoiceSearchFilters(
+    searchFilters: Array<Partial<AgentSearchAssetsFilters>>,
+  ): Partial<AgentSearchAssetsFilters> {
+    const merged: Partial<AgentSearchAssetsFilters> = {};
+    for (const searchFilter of searchFilters) {
+      for (const [key, value] of Object.entries(searchFilter)) {
+        if (Array.isArray(value)) {
+          const existing = (merged as Record<string, unknown[]>)[key] ?? [];
+          (merged as Record<string, unknown[]>)[key] = [...new Set([...existing, ...value])];
+        } else if (value !== undefined) {
+          (merged as Record<string, unknown>)[key] = value;
+        }
+      }
+    }
+    return merged;
+  }
+
+  private buildChoiceRef(
+    sessionId: string,
+    kind: AgentResolvedAssetSearchFilterKind,
+    query: string,
+    candidate: { id?: string; value: string },
+    searchFilter: Partial<AgentSearchAssetsFilters>,
+  ): string {
+    const token = createHash('sha256')
+      .update(
+        JSON.stringify({
+          sessionId,
+          kind,
+          query: this.normalizeResolverTerm(query),
+          candidateId: candidate.id ?? '',
+          candidateValue: candidate.value,
+          searchFilter: this.sortObject(searchFilter),
+        }),
+      )
+      .digest('base64url')
+      .slice(0, 22);
+    return `choice:${kind}:${token}`;
+  }
+
+  private sortObject(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.sortObject(item));
+    }
+    if (!value || typeof value !== 'object') {
+      return value;
+    }
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, this.sortObject(item)]),
+    );
   }
 
   private isExactMatch(candidate: string, query: string): boolean {

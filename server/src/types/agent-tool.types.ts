@@ -239,6 +239,7 @@ export type AgentResolvedAssetSearchFilterStatus = 'matched' | 'ambiguous' | 'no
 
 export type AgentResolvedAssetSearchFilterChoice = {
   id?: string;
+  choiceRef?: string;
   value: string;
   label: string;
   searchFilter?: Partial<AgentSearchAssetsFilters>;
